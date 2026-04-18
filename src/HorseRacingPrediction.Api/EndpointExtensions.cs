@@ -1,11 +1,12 @@
 using EventFlow;
-using EventFlow.Aggregates;
 using EventFlow.Commands;
-using EventFlow.Core;
+using EventFlow.Queries;
+using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using Swashbuckle.AspNetCore.Annotations;
@@ -129,37 +130,27 @@ public static class EndpointExtensions
             .WithOpenApi();
 
         app.MapGet("/api/races/{raceId}",
-            [SwaggerOperation(Summary = "Get race", Description = "Loads race aggregate and returns current snapshot view")]
-            async (string raceId, IAggregateStore aggregateStore, CancellationToken cancellationToken) =>
+            [SwaggerOperation(Summary = "Get race", Description = "Returns race read model with current status and result information")]
+            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var aggregate = await TryLoadAggregate<RaceAggregate, RaceId>(
-                    aggregateStore,
-                    new RaceId(raceId),
-                    cancellationToken)
-                    .ConfigureAwait(false);
+                var query = new ReadModelByIdQuery<RaceResultViewReadModel>(raceId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
-                if (aggregate is null)
-                {
+                if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
-                }
 
-                var details = aggregate.GetDetails();
                 var response = new RaceResponse(
-                    details.RaceId,
-                    details.RaceDate,
-                    details.RacecourseCode,
-                    details.RaceNumber,
-                    details.RaceName,
-                    details.Status,
-                    details.MeetingNumber,
-                    details.DayNumber,
-                    details.GradeCode,
-                    details.SurfaceCode,
-                    details.DistanceMeters,
-                    details.DirectionCode,
-                    details.EntryCount,
-                    details.WinningHorseName,
-                    details.ResultDeclaredAt);
+                    readModel.RaceId,
+                    readModel.RaceDate,
+                    readModel.RacecourseCode,
+                    readModel.RaceNumber,
+                    readModel.RaceName,
+                    readModel.Status,
+                    null, null,
+                    null, null, null, null,
+                    readModel.EntryCount,
+                    readModel.WinningHorseName,
+                    readModel.ResultDeclaredAt);
 
                 return Results.Ok(response);
             })
@@ -168,31 +159,59 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
-        app.MapGet("/api/predictions/{predictionTicketId}",
-            [SwaggerOperation(Summary = "Get prediction ticket", Description = "Loads prediction aggregate and returns marks")]
-            async (string predictionTicketId, IAggregateStore aggregateStore, CancellationToken cancellationToken) =>
+        app.MapGet("/api/races/{raceId}/context",
+            [SwaggerOperation(Summary = "Get race prediction context", Description = "Returns prediction context read model including entries, weather and track conditions")]
+            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var aggregate = await TryLoadAggregate<PredictionTicketAggregate, PredictionTicketId>(
-                    aggregateStore,
-                    new PredictionTicketId(predictionTicketId),
-                    cancellationToken)
-                    .ConfigureAwait(false);
+                var query = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
-                if (aggregate is null)
-                {
+                if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
-                }
 
-                var details = aggregate.GetDetails();
+                return Results.Ok(readModel);
+            })
+            .WithName("GetRacePredictionContext")
+            .Produces<RacePredictionContextReadModel>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/races/{raceId}/comparison",
+            [SwaggerOperation(Summary = "Get prediction comparison view", Description = "Returns prediction vs result comparison for a race")]
+            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<PredictionComparisonViewReadModel>(raceId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
+                    return Results.NotFound();
+
+                return Results.Ok(readModel);
+            })
+            .WithName("GetPredictionComparison")
+            .Produces<PredictionComparisonViewReadModel>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/predictions/{predictionTicketId}",
+            [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
+            async (string predictionTicketId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<PredictionTicketReadModel>(predictionTicketId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.PredictionTicketId))
+                    return Results.NotFound();
+
                 var response = new PredictionTicketResponse(
-                    details.PredictionTicketId,
-                    details.RaceId,
-                    details.PredictorType,
-                    details.PredictorId,
-                    details.ConfidenceScore,
-                    details.SummaryComment,
-                    details.PredictedAt,
-                    details.Marks
+                    readModel.PredictionTicketId,
+                    readModel.RaceId,
+                    readModel.PredictorType,
+                    readModel.PredictorId,
+                    readModel.ConfidenceScore,
+                    readModel.SummaryComment,
+                    readModel.PredictedAt,
+                    readModel.Marks
                         .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment))
                         .ToList());
 
@@ -203,23 +222,109 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
-        return app;
-    }
+        app.MapGet("/api/horses/{horseId}",
+            [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
+            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<HorseReadModel>(horseId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
-    private static async Task<TAggregate?> TryLoadAggregate<TAggregate, TIdentity>(
-        IAggregateStore aggregateStore,
-        TIdentity aggregateId,
-        CancellationToken cancellationToken)
-        where TAggregate : class, IAggregateRoot<TIdentity>
-        where TIdentity : IIdentity
-    {
-        try
-        {
-            return await aggregateStore.LoadAsync<TAggregate, TIdentity>(aggregateId, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            return null;
-        }
+                if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
+                    return Results.NotFound();
+
+                var response = new HorseProfileResponse(
+                    readModel.HorseId,
+                    readModel.RegisteredName,
+                    readModel.NormalizedName,
+                    readModel.SexCode,
+                    readModel.BirthDate,
+                    readModel.Aliases
+                        .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
+                        .ToList());
+
+                return Results.Ok(response);
+            })
+            .WithName("GetHorseProfile")
+            .Produces<HorseProfileResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/horses/{horseId}/weight-history",
+            [SwaggerOperation(Summary = "Get horse weight history", Description = "Returns horse body weight history across races")]
+            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<HorseWeightHistoryReadModel>(horseId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
+                    return Results.NotFound();
+
+                var response = new HorseWeightHistoryResponse(
+                    readModel.HorseId,
+                    readModel.WeightHistory
+                        .OrderByDescending(w => w.RecordedAt)
+                        .Select(w => new HorseWeightEntryResponse(w.RaceId, w.EntryId, w.RecordedAt, w.DeclaredWeight, w.DeclaredWeightDiff))
+                        .ToList());
+
+                return Results.Ok(response);
+            })
+            .WithName("GetHorseWeightHistory")
+            .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/jockeys/{jockeyId}",
+            [SwaggerOperation(Summary = "Get jockey profile", Description = "Returns jockey profile read model")]
+            async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<JockeyReadModel>(jockeyId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
+                    return Results.NotFound();
+
+                var response = new JockeyProfileResponse(
+                    readModel.JockeyId,
+                    readModel.DisplayName,
+                    readModel.NormalizedName,
+                    readModel.AffiliationCode,
+                    readModel.Aliases
+                        .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
+                        .ToList());
+
+                return Results.Ok(response);
+            })
+            .WithName("GetJockeyProfile")
+            .Produces<JockeyProfileResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/trainers/{trainerId}",
+            [SwaggerOperation(Summary = "Get trainer profile", Description = "Returns trainer profile read model")]
+            async (string trainerId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<TrainerReadModel>(trainerId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.TrainerId))
+                    return Results.NotFound();
+
+                var response = new TrainerProfileResponse(
+                    readModel.TrainerId,
+                    readModel.DisplayName,
+                    readModel.NormalizedName,
+                    readModel.AffiliationCode,
+                    readModel.Aliases
+                        .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
+                        .ToList());
+
+                return Results.Ok(response);
+            })
+            .WithName("GetTrainerProfile")
+            .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        return app;
     }
 }

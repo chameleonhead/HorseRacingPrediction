@@ -3,6 +3,7 @@ using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Races;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 
@@ -27,12 +28,23 @@ var connectionString = builder.Configuration.GetConnectionString("EventStore")
 
 builder.Services.AddSqliteDbContextProvider(connectionString);
 
+builder.Services.AddSingleton<HorseWeightHistoryLocator>();
+builder.Services.AddSingleton<PredictionComparisonViewLocator>();
+
 builder.Services.AddEventFlow(options =>
 {
     options
     .AddDefaults(typeof(RaceAggregate).Assembly)
     .AddDefaults(typeof(CreateRaceCommand).Assembly)
-    .UseEntityFrameworkSqliteEventStore(connectionString);
+    .UseEntityFrameworkSqliteEventStore(connectionString)
+    .UseInMemoryReadStoreFor<HorseReadModel>()
+    .UseInMemoryReadStoreFor<JockeyReadModel>()
+    .UseInMemoryReadStoreFor<TrainerReadModel>()
+    .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
+    .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
+    .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
+    .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
+    .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>();
 });
 
 var app = builder.Build();

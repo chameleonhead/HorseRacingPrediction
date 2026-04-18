@@ -4,6 +4,7 @@ using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Races;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.TestHost;
@@ -31,13 +32,24 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton(dbContextProvider);
         builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(dbContextProvider);
 
+        builder.Services.AddSingleton<HorseWeightHistoryLocator>();
+        builder.Services.AddSingleton<PredictionComparisonViewLocator>();
+
         builder.Services.AddEventFlow(options =>
         {
             options
                 .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
                 .AddDefaults(typeof(RaceAggregate).Assembly)
                 .AddDefaults(typeof(CreateRaceCommand).Assembly)
-                .UseEntityFrameworkEventStore<EventStoreDbContext>();
+                .UseEntityFrameworkEventStore<EventStoreDbContext>()
+                .UseInMemoryReadStoreFor<HorseReadModel>()
+                .UseInMemoryReadStoreFor<JockeyReadModel>()
+                .UseInMemoryReadStoreFor<TrainerReadModel>()
+                .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
+                .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
+                .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
+                .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
+                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>();
         });
 
         var app = builder.Build();

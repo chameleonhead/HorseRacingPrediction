@@ -7,4 +7,8 @@ public sealed record RacePredictionContextEntry(
     string? JockeyId,
     string? TrainerId,
     int? GateNumber,
-    decimal? AssignedWeight);
+    decimal? AssignedWeight,
+    string? SexCode,
+    int? Age,
+    decimal? DeclaredWeight,
+    decimal? DeclaredWeightDiff);
