@@ -27,6 +27,7 @@ public static class EndpointExtensions
     {
         app.MapGet("/health", () => Results.Ok(new { Status = "ok" }))
             .WithName("Health")
+            .WithTags("Health")
             .WithSummary("Health check")
             .WithOpenApi();
 
@@ -51,6 +52,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterHorse")
+            .WithTags("Horse API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -73,6 +75,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("UpdateHorseProfile")
+            .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -95,6 +98,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("MergeHorseAlias")
+            .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -118,6 +122,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CorrectHorseData")
+            .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -140,6 +145,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterJockey")
+            .WithTags("Jockey API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -161,6 +167,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("UpdateJockeyProfile")
+            .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -183,6 +190,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("MergeJockeyAlias")
+            .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -205,6 +213,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CorrectJockeyData")
+            .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -227,6 +236,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterTrainer")
+            .WithTags("Trainer API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -248,6 +258,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("UpdateTrainerProfile")
+            .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -270,6 +281,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("MergeTrainerAlias")
+            .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -292,6 +304,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CorrectTrainerData")
+            .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -315,6 +328,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreateRace")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -331,6 +345,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("PublishRaceCard")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -351,6 +366,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("DeclareRaceResult")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -381,6 +397,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterEntry")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -406,6 +423,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RecordWeatherObservation")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -428,6 +446,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RecordTrackCondition")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -444,6 +463,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("OpenPreRace")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -460,6 +480,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("StartRace")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -485,6 +506,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("DeclareEntryResult")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -512,6 +534,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("DeclarePayoutResult")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -528,6 +551,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CloseRaceLifecycle")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -554,6 +578,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CorrectRaceData")
+            .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -579,6 +604,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreatePredictionTicket")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -602,6 +628,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("AddPredictionMark")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -624,6 +651,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("AddBettingSuggestion")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -647,6 +675,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("AddPredictionRationale")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -663,6 +692,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("FinalizePredictionTicket")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -682,6 +712,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("WithdrawPredictionTicket")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -703,6 +734,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CorrectPredictionMetadata")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -728,6 +760,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("EvaluatePredictionTicket")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -753,6 +786,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RecalculatePredictionEvaluation")
+            .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -784,6 +818,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetRace")
+            .WithTags("Race API")
             .Produces<RaceResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -801,6 +836,7 @@ public static class EndpointExtensions
                 return Results.Ok(readModel);
             })
             .WithName("GetRacePredictionContext")
+            .WithTags("Race API")
             .Produces<RacePredictionContextReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -818,6 +854,7 @@ public static class EndpointExtensions
                 return Results.Ok(readModel);
             })
             .WithName("GetPredictionComparison")
+            .WithTags("Race API")
             .Produces<PredictionComparisonViewReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -847,6 +884,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetPredictionTicket")
+            .WithTags("Prediction API")
             .Produces<PredictionTicketResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -874,6 +912,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetHorseProfile")
+            .WithTags("Horse API")
             .Produces<HorseProfileResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -898,6 +937,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetHorseWeightHistory")
+            .WithTags("Horse API")
             .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -924,6 +964,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetJockeyProfile")
+            .WithTags("Jockey API")
             .Produces<JockeyProfileResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -950,6 +991,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetTrainerProfile")
+            .WithTags("Trainer API")
             .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
@@ -987,6 +1029,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreateMemo")
+            .WithTags("Memo API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -1007,6 +1050,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("UpdateMemo")
+            .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -1023,6 +1067,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("DeleteMemo")
+            .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -1046,6 +1091,7 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("ChangeMemoSubjects")
+            .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -1074,6 +1120,7 @@ public static class EndpointExtensions
                 return Results.Ok(response);
             })
             .WithName("GetMemosBySubject")
+            .WithTags("Memo API")
             .Produces<IReadOnlyList<MemoResponse>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
