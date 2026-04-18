@@ -1,0 +1,25 @@
+namespace HorseRacingPrediction.Domain.Races;
+
+public sealed record RaceDetails(
+    string RaceId,
+    DateOnly? RaceDate,
+    string? RacecourseCode,
+    int? RaceNumber,
+    string? RaceName,
+    RaceStatus Status,
+    int? MeetingNumber,
+    int? DayNumber,
+    string? GradeCode,
+    string? SurfaceCode,
+    int? DistanceMeters,
+    string? DirectionCode,
+    int? EntryCount,
+    IReadOnlyList<EntryDetails> Entries,
+    IReadOnlyList<WeatherObservationDetails> WeatherObservations,
+    IReadOnlyList<TrackConditionObservationDetails> TrackConditionObservations,
+    string? WinningHorseName,
+    string? WinningHorseId,
+    string? StewardReportText,
+    DateTimeOffset? ResultDeclaredAt,
+    IReadOnlyList<EntryResultDetails> EntryResults,
+    PayoutResultDetails? PayoutResult);
