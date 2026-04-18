@@ -1,0 +1,6 @@
+@HorseRacingPrediction.Api_HostAddress = http://localhost:5177
+
+GET {{HorseRacingPrediction.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
