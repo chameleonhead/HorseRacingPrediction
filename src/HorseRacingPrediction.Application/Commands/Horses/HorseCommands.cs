@@ -1,6 +1,7 @@
 using EventFlow.Commands;
+using HorseRacingPrediction.Domain.Horses;
 
-namespace HorseRacingPrediction.Domain.Horses;
+namespace HorseRacingPrediction.Application.Commands.Horses;
 
 public sealed class RegisterHorseCommand : Command<HorseAggregate, HorseId>
 {

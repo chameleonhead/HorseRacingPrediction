@@ -2,6 +2,7 @@ using EventFlow;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 
@@ -30,6 +31,7 @@ builder.Services.AddEventFlow(options =>
 {
     options
     .AddDefaults(typeof(RaceAggregate).Assembly)
+    .AddDefaults(typeof(CreateRaceCommand).Assembly)
     .UseEntityFrameworkSqliteEventStore(connectionString);
 });
 

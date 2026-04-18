@@ -16,9 +16,10 @@
 
 ```
 src/
-  HorseRacingPrediction.Domain/       # 集約・イベント・コマンド（EventFlow）
+  HorseRacingPrediction.Domain/         # 集約・イベント・状態・値オブジェクト（EventFlow）
+  HorseRacingPrediction.Application/    # コマンド・ハンドラー・ReadModel 定義
   HorseRacingPrediction.Infrastructure/ # EF永続化・DbContext・サービス拡張
-  HorseRacingPrediction.Api/          # Minimal API エンドポイント・認証・コントラクト
+  HorseRacingPrediction.Api/            # Minimal API エンドポイント・認証・コントラクト
 tests/
   HorseRacingPrediction.Domain.Tests/       # 集約の単体テスト
   HorseRacingPrediction.Application.Tests/  # コマンド発行→状態検証テスト
@@ -26,9 +27,11 @@ tests/
   HorseRacingPrediction.Api.Tests/          # APIエンドポイント統合テスト
 ```
 
-- **Domain層**: EventFlow の `AggregateRoot`、`IAggregateEvent`、`Command` / `CommandHandler` で構成。外部依存なし。
+- **Domain層**: EventFlow の `AggregateRoot`、`IAggregateEvent`、状態管理、値オブジェクト、列挙型。外部依存なし（EventFlow のみ）。
+- **Application層**: `Commands/{AggregateRoot}/` にコマンド・ハンドラー、`Queries/ReadModels/` に ReadModel 定義。Domain への参照を持つ。
 - **Infrastructure層**: `IDbContextProvider<EventStoreDbContext>` と `SqliteDbContextProvider` で SQLite インメモリ／ファイルベースの Event Store を提供。
 - **Api層**: エンドポイント定義は `EndpointExtensions.cs` に集約。`Program.cs` は DI 設定と `app.MapApiEndpoints()` のみ。
+- **EventFlow 登録**: `AddDefaults` は Domain アセンブリと Application アセンブリの両方をスキャンする。
 
 設計ドキュメント: [docs/domain-design.md](docs/domain-design.md), [docs/automation-design.md](docs/automation-design.md)
 

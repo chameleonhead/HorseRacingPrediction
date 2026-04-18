@@ -4,6 +4,8 @@ using EventFlow.Commands;
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
+using HorseRacingPrediction.Application.Commands.Predictions;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -33,6 +35,7 @@ public class EventPersistenceTests
             options
                 .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
                 .AddDefaults(typeof(RaceAggregate).Assembly)
+                .AddDefaults(typeof(CreateRaceCommand).Assembly)
                 .UseEntityFrameworkEventStore<EventStoreDbContext>();
         });
         _serviceProvider = services.BuildServiceProvider();

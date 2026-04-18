@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Infra
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Api.Tests", "tests\HorseRacingPrediction.Api.Tests\HorseRacingPrediction.Api.Tests.csproj", "{BEB3A4CC-99BA-4CE5-B945-3A5B57962022}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Application", "src\HorseRacingPrediction.Application\HorseRacingPrediction.Application.csproj", "{AD6E3049-7D57-4734-BD8F-C69132F959CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,10 @@ Global
 		{BEB3A4CC-99BA-4CE5-B945-3A5B57962022}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BEB3A4CC-99BA-4CE5-B945-3A5B57962022}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BEB3A4CC-99BA-4CE5-B945-3A5B57962022}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD6E3049-7D57-4734-BD8F-C69132F959CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD6E3049-7D57-4734-BD8F-C69132F959CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD6E3049-7D57-4734-BD8F-C69132F959CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD6E3049-7D57-4734-BD8F-C69132F959CC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{1CADF828-8F70-4A57-9573-D8AFD4082FD3} = {01FEC711-9F75-4D0C-8675-19927808A35D}
@@ -67,5 +73,6 @@ Global
 		{1357F8DA-10B3-4925-BEBF-1ABE239C951A} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{4F2D5D81-A538-4CE5-AC0A-4289247B231C} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{BEB3A4CC-99BA-4CE5-B945-3A5B57962022} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
+		{AD6E3049-7D57-4734-BD8F-C69132F959CC} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 	EndGlobalSection
 EndGlobal

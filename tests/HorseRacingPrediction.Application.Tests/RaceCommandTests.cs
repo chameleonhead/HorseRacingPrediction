@@ -2,6 +2,7 @@ using EventFlow;
 using EventFlow.Aggregates;
 using EventFlow.Commands;
 using EventFlow.Extensions;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Races;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,6 +23,7 @@ public class RaceCommandTests
         services.AddEventFlow(options =>
         {
             options.AddDefaults(typeof(RaceAggregate).Assembly);
+            options.AddDefaults(typeof(CreateRaceCommand).Assembly);
         });
         _serviceProvider = services.BuildServiceProvider();
         _commandBus = _serviceProvider.GetRequiredService<ICommandBus>();

@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Application\HorseRacingPrediction.Application.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Domain\HorseRacingPrediction.Domain.csproj" />
   </ItemGroup>
 

@@ -3,6 +3,7 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.TestHost;
@@ -35,6 +36,7 @@ internal static class TestApplicationFactory
             options
                 .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
                 .AddDefaults(typeof(RaceAggregate).Assembly)
+                .AddDefaults(typeof(CreateRaceCommand).Assembly)
                 .UseEntityFrameworkEventStore<EventStoreDbContext>();
         });
 

@@ -1,10 +1,11 @@
 using EventFlow.Commands;
+using HorseRacingPrediction.Domain.Jockeys;
 
-namespace HorseRacingPrediction.Domain.Trainers;
+namespace HorseRacingPrediction.Application.Commands.Jockeys;
 
-public sealed class RegisterTrainerCommand : Command<TrainerAggregate, TrainerId>
+public sealed class RegisterJockeyCommand : Command<JockeyAggregate, JockeyId>
 {
-    public RegisterTrainerCommand(TrainerId aggregateId, string displayName, string normalizedName,
+    public RegisterJockeyCommand(JockeyId aggregateId, string displayName, string normalizedName,
         string? affiliationCode = null)
         : base(aggregateId)
     {
@@ -18,18 +19,18 @@ public sealed class RegisterTrainerCommand : Command<TrainerAggregate, TrainerId
     public string? AffiliationCode { get; }
 }
 
-public sealed class RegisterTrainerCommandHandler : CommandHandler<TrainerAggregate, TrainerId, RegisterTrainerCommand>
+public sealed class RegisterJockeyCommandHandler : CommandHandler<JockeyAggregate, JockeyId, RegisterJockeyCommand>
 {
-    public override Task ExecuteAsync(TrainerAggregate aggregate, RegisterTrainerCommand command, CancellationToken cancellationToken)
+    public override Task ExecuteAsync(JockeyAggregate aggregate, RegisterJockeyCommand command, CancellationToken cancellationToken)
     {
-        aggregate.RegisterTrainer(command.DisplayName, command.NormalizedName, command.AffiliationCode);
+        aggregate.RegisterJockey(command.DisplayName, command.NormalizedName, command.AffiliationCode);
         return Task.CompletedTask;
     }
 }
 
-public sealed class UpdateTrainerProfileCommand : Command<TrainerAggregate, TrainerId>
+public sealed class UpdateJockeyProfileCommand : Command<JockeyAggregate, JockeyId>
 {
-    public UpdateTrainerProfileCommand(TrainerId aggregateId, string? displayName = null,
+    public UpdateJockeyProfileCommand(JockeyId aggregateId, string? displayName = null,
         string? normalizedName = null, string? affiliationCode = null)
         : base(aggregateId)
     {
@@ -43,18 +44,18 @@ public sealed class UpdateTrainerProfileCommand : Command<TrainerAggregate, Trai
     public string? AffiliationCode { get; }
 }
 
-public sealed class UpdateTrainerProfileCommandHandler : CommandHandler<TrainerAggregate, TrainerId, UpdateTrainerProfileCommand>
+public sealed class UpdateJockeyProfileCommandHandler : CommandHandler<JockeyAggregate, JockeyId, UpdateJockeyProfileCommand>
 {
-    public override Task ExecuteAsync(TrainerAggregate aggregate, UpdateTrainerProfileCommand command, CancellationToken cancellationToken)
+    public override Task ExecuteAsync(JockeyAggregate aggregate, UpdateJockeyProfileCommand command, CancellationToken cancellationToken)
     {
         aggregate.UpdateProfile(command.DisplayName, command.NormalizedName, command.AffiliationCode);
         return Task.CompletedTask;
     }
 }
 
-public sealed class MergeTrainerAliasCommand : Command<TrainerAggregate, TrainerId>
+public sealed class MergeJockeyAliasCommand : Command<JockeyAggregate, JockeyId>
 {
-    public MergeTrainerAliasCommand(TrainerId aggregateId, string aliasType, string aliasValue, string sourceName, bool isPrimary)
+    public MergeJockeyAliasCommand(JockeyId aggregateId, string aliasType, string aliasValue, string sourceName, bool isPrimary)
         : base(aggregateId)
     {
         AliasType = aliasType;
@@ -69,18 +70,18 @@ public sealed class MergeTrainerAliasCommand : Command<TrainerAggregate, Trainer
     public bool IsPrimary { get; }
 }
 
-public sealed class MergeTrainerAliasCommandHandler : CommandHandler<TrainerAggregate, TrainerId, MergeTrainerAliasCommand>
+public sealed class MergeJockeyAliasCommandHandler : CommandHandler<JockeyAggregate, JockeyId, MergeJockeyAliasCommand>
 {
-    public override Task ExecuteAsync(TrainerAggregate aggregate, MergeTrainerAliasCommand command, CancellationToken cancellationToken)
+    public override Task ExecuteAsync(JockeyAggregate aggregate, MergeJockeyAliasCommand command, CancellationToken cancellationToken)
     {
         aggregate.MergeAlias(command.AliasType, command.AliasValue, command.SourceName, command.IsPrimary);
         return Task.CompletedTask;
     }
 }
 
-public sealed class CorrectTrainerDataCommand : Command<TrainerAggregate, TrainerId>
+public sealed class CorrectJockeyDataCommand : Command<JockeyAggregate, JockeyId>
 {
-    public CorrectTrainerDataCommand(TrainerId aggregateId, string? displayName = null,
+    public CorrectJockeyDataCommand(JockeyId aggregateId, string? displayName = null,
         string? normalizedName = null, string? affiliationCode = null, string? reason = null)
         : base(aggregateId)
     {
@@ -96,9 +97,9 @@ public sealed class CorrectTrainerDataCommand : Command<TrainerAggregate, Traine
     public string? Reason { get; }
 }
 
-public sealed class CorrectTrainerDataCommandHandler : CommandHandler<TrainerAggregate, TrainerId, CorrectTrainerDataCommand>
+public sealed class CorrectJockeyDataCommandHandler : CommandHandler<JockeyAggregate, JockeyId, CorrectJockeyDataCommand>
 {
-    public override Task ExecuteAsync(TrainerAggregate aggregate, CorrectTrainerDataCommand command, CancellationToken cancellationToken)
+    public override Task ExecuteAsync(JockeyAggregate aggregate, CorrectJockeyDataCommand command, CancellationToken cancellationToken)
     {
         aggregate.CorrectData(command.DisplayName, command.NormalizedName, command.AffiliationCode, command.Reason);
         return Task.CompletedTask;

@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HorseRacingPrediction.Application\HorseRacingPrediction.Application.csproj" />
     <ProjectReference Include="..\HorseRacingPrediction.Domain\HorseRacingPrediction.Domain.csproj" />
     <ProjectReference Include="..\HorseRacingPrediction.Infrastructure\HorseRacingPrediction.Infrastructure.csproj" />
   </ItemGroup>

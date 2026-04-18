@@ -4,6 +4,8 @@ using EventFlow.Commands;
 using EventFlow.Core;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Application.Commands.Predictions;
+using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using Swashbuckle.AspNetCore.Annotations;

@@ -1,6 +1,7 @@
 using EventFlow.Commands;
+using HorseRacingPrediction.Domain.Predictions;
 
-namespace HorseRacingPrediction.Domain.Predictions;
+namespace HorseRacingPrediction.Application.Commands.Predictions;
 
 public sealed class CreatePredictionTicketCommand : Command<PredictionTicketAggregate, PredictionTicketId>
 {
