@@ -34,9 +34,10 @@ public class MemoEndpointsTests
             MemoType: "Note",
             Content: "テストメモ",
             CreatedAt: DateTimeOffset.UtcNow,
-            Subjects: new[] { new MemoSubjectDto("Horse", "horse-001") });
+            Subjects: new[] { new MemoSubjectDto("Horse", "horse-001") },
+            MemoId: memoId);
 
-        var response = await _client.PostAsJsonAsync($"/api/memos/{memoId}", request);
+        var response = await _client.PostAsJsonAsync("/api/memos", request);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
@@ -54,9 +55,10 @@ public class MemoEndpointsTests
             {
                 new MemoSubjectDto("Horse", "horse-combo-1"),
                 new MemoSubjectDto("Trainer", "trainer-combo-1")
-            });
+            },
+            MemoId: memoId);
 
-        var response = await _client.PostAsJsonAsync($"/api/memos/{memoId}", request);
+        var response = await _client.PostAsJsonAsync("/api/memos", request);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
@@ -71,9 +73,10 @@ public class MemoEndpointsTests
             MemoType: "TrainingNote",
             Content: "調教コメント",
             CreatedAt: DateTimeOffset.UtcNow,
-            Subjects: new[] { new MemoSubjectDto("Horse", horseId) });
+            Subjects: new[] { new MemoSubjectDto("Horse", horseId) },
+            MemoId: memoId);
 
-        await _client.PostAsJsonAsync($"/api/memos/{memoId}", request);
+        await _client.PostAsJsonAsync("/api/memos", request);
 
         var getResponse = await _client.GetAsync($"/api/memos/by-subject/Horse/{horseId}");
         Assert.AreEqual(HttpStatusCode.OK, getResponse.StatusCode);
@@ -98,9 +101,10 @@ public class MemoEndpointsTests
     public async Task UpdateMemo_AfterCreate_ReturnsOk()
     {
         var memoId = $"memo-{Guid.NewGuid()}";
-        await _client.PostAsJsonAsync($"/api/memos/{memoId}", new CreateMemoRequest(
+        await _client.PostAsJsonAsync("/api/memos", new CreateMemoRequest(
             null, "Note", "初期内容", DateTimeOffset.UtcNow,
-            new[] { new MemoSubjectDto("Horse", "horse-update-1") }));
+            new[] { new MemoSubjectDto("Horse", "horse-update-1") },
+            MemoId: memoId));
 
         var updateRequest = new UpdateMemoRequest(Content: "更新された内容");
         var response = await _client.PutAsJsonAsync($"/api/memos/{memoId}", updateRequest);
@@ -112,9 +116,10 @@ public class MemoEndpointsTests
     public async Task DeleteMemo_AfterCreate_ReturnsOk()
     {
         var memoId = $"memo-{Guid.NewGuid()}";
-        await _client.PostAsJsonAsync($"/api/memos/{memoId}", new CreateMemoRequest(
+        await _client.PostAsJsonAsync("/api/memos", new CreateMemoRequest(
             null, "Note", "削除対象", DateTimeOffset.UtcNow,
-            new[] { new MemoSubjectDto("Jockey", "jockey-del-1") }));
+            new[] { new MemoSubjectDto("Jockey", "jockey-del-1") },
+            MemoId: memoId));
 
         var response = await _client.DeleteAsync($"/api/memos/{memoId}");
 
@@ -128,9 +133,10 @@ public class MemoEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         var trainerId = $"trainer-{Guid.NewGuid()}";
 
-        await _client.PostAsJsonAsync($"/api/memos/{memoId}", new CreateMemoRequest(
+        await _client.PostAsJsonAsync("/api/memos", new CreateMemoRequest(
             null, "Note", "馬のメモ", DateTimeOffset.UtcNow,
-            new[] { new MemoSubjectDto("Horse", horseId) }));
+            new[] { new MemoSubjectDto("Horse", horseId) },
+            MemoId: memoId));
 
         var changeRequest = new ChangeMemoSubjectsRequest(new[]
         {

@@ -31,10 +31,10 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         var request = new CreatePredictionTicketRequest(
-            "race-abc", "AI", "model-v1", 0.85m, "高確率予想");
+            "race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId);
 
         var response = await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}", request, JsonOptions);
+            "/api/predictions", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         Assert.IsTrue(response.Headers.Location?.ToString().Contains($"/api/predictions/{ticketId}"));
@@ -45,8 +45,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, "高確率予想"),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, "高確率予想", ticketId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
@@ -65,8 +65,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -83,8 +83,8 @@ public class PredictionEndpointsTests
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
 
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.92m, "精密予測"),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.92m, "精密予測", ticketId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
@@ -109,8 +109,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -126,8 +126,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -143,8 +143,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsync(
@@ -158,8 +158,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -175,8 +175,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-xyz", "AI", "model-v1", 0.8m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(
@@ -192,8 +192,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-eval", "AI", "model-v1", 0.9m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-eval", "AI", "model-v1", 0.9m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -216,8 +216,8 @@ public class PredictionEndpointsTests
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/predictions/{ticketId}",
-            new CreatePredictionTicketRequest("race-recalc", "AI", "model-v1", 0.9m, null),
+            "/api/predictions",
+            new CreatePredictionTicketRequest("race-recalc", "AI", "model-v1", 0.9m, null, ticketId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/evaluate",

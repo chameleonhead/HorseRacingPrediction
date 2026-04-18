@@ -30,9 +30,9 @@ public class TrainerEndpointsTests
     public async Task RegisterTrainer_ReturnsCreated()
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
-        var request = new RegisterTrainerRequest("池江泰寿", "ikejayasutoshi", "JRA");
+        var request = new RegisterTrainerRequest("池江泰寿", "ikejayasutoshi", "JRA", trainerId);
 
-        var response = await _client.PostAsJsonAsync($"/api/trainers/{trainerId}", request, JsonOptions);
+        var response = await _client.PostAsJsonAsync("/api/trainers", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
@@ -42,8 +42,8 @@ public class TrainerEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/trainers/{trainerId}",
-            new RegisterTrainerRequest("国枝栄", "kunieda", "JRA"),
+            "/api/trainers",
+            new RegisterTrainerRequest("国枝栄", "kunieda", "JRA", trainerId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/trainers/{trainerId}");
@@ -62,8 +62,8 @@ public class TrainerEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/trainers/{trainerId}",
-            new RegisterTrainerRequest("テスト調教師", "testtrainer", null),
+            "/api/trainers",
+            new RegisterTrainerRequest("テスト調教師", "testtrainer", null, trainerId),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
@@ -79,8 +79,8 @@ public class TrainerEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/trainers/{trainerId}",
-            new RegisterTrainerRequest("藤沢和雄", "fujisawakatsuo", "JRA"),
+            "/api/trainers",
+            new RegisterTrainerRequest("藤沢和雄", "fujisawakatsuo", "JRA", trainerId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -96,8 +96,8 @@ public class TrainerEndpointsTests
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/trainers/{trainerId}",
-            new RegisterTrainerRequest("テスト調教師", "testtrainer", null),
+            "/api/trainers",
+            new RegisterTrainerRequest("テスト調教師", "testtrainer", null, trainerId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(

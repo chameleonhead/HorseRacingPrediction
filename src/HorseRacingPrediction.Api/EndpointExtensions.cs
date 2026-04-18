@@ -33,12 +33,13 @@ public static class EndpointExtensions
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<ApiKeyEndpointFilter>();
 
-        writeGroup.MapPost("/horses/{horseId}",
+        writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]
-            async (string horseId, RegisterHorseRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (RegisterHorseRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var horseId = string.IsNullOrWhiteSpace(request.HorseId) ? HorseId.New : new HorseId(request.HorseId);
                 var command = new RegisterHorseCommand(
-                    new HorseId(horseId),
+                    horseId,
                     request.RegisteredName,
                     request.NormalizedName,
                     request.SexCode,
@@ -46,7 +47,7 @@ public static class EndpointExtensions
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/horses/{horseId}", new { HorseId = horseId })
+                    ? Results.Created($"/api/horses/{horseId.Value}", new { HorseId = horseId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterHorse")
@@ -122,19 +123,20 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
-        writeGroup.MapPost("/jockeys/{jockeyId}",
+        writeGroup.MapPost("/jockeys",
             [SwaggerOperation(Summary = "Register jockey", Description = "Registers a new jockey")]
-            async (string jockeyId, RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var jockeyId = string.IsNullOrWhiteSpace(request.JockeyId) ? JockeyId.New : new JockeyId(request.JockeyId);
                 var command = new RegisterJockeyCommand(
-                    new JockeyId(jockeyId),
+                    jockeyId,
                     request.DisplayName,
                     request.NormalizedName,
                     request.AffiliationCode);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/jockeys/{jockeyId}", new { JockeyId = jockeyId })
+                    ? Results.Created($"/api/jockeys/{jockeyId.Value}", new { JockeyId = jockeyId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterJockey")
@@ -208,19 +210,20 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
-        writeGroup.MapPost("/trainers/{trainerId}",
+        writeGroup.MapPost("/trainers",
             [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
-            async (string trainerId, RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var trainerId = string.IsNullOrWhiteSpace(request.TrainerId) ? TrainerId.New : new TrainerId(request.TrainerId);
                 var command = new RegisterTrainerCommand(
-                    new TrainerId(trainerId),
+                    trainerId,
                     request.DisplayName,
                     request.NormalizedName,
                     request.AffiliationCode);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/trainers/{trainerId}", new { TrainerId = trainerId })
+                    ? Results.Created($"/api/trainers/{trainerId.Value}", new { TrainerId = trainerId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("RegisterTrainer")
@@ -294,12 +297,13 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
-        writeGroup.MapPost("/races/{raceId}",
+        writeGroup.MapPost("/races",
             [SwaggerOperation(Summary = "Create race", Description = "Creates a race aggregate in Draft state")]
-            async (string raceId, CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var raceId = string.IsNullOrWhiteSpace(request.RaceId) ? RaceId.New : new RaceId(request.RaceId);
                 var command = new CreateRaceCommand(
-                    new RaceId(raceId),
+                    raceId,
                     request.RaceDate,
                     request.RacecourseCode,
                     request.RaceNumber,
@@ -307,7 +311,7 @@ public static class EndpointExtensions
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/races/{raceId}", new { RaceId = raceId })
+                    ? Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreateRace")
@@ -352,10 +356,11 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
-        writeGroup.MapPost("/races/{raceId}/entries/{entryId}",
+        writeGroup.MapPost("/races/{raceId}/entries",
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
-            async (string raceId, string entryId, RegisterEntryRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var entryId = string.IsNullOrWhiteSpace(request.EntryId) ? $"entry-{Guid.NewGuid()}" : request.EntryId;
                 var command = new RegisterEntryCommand(
                     new RaceId(raceId),
                     entryId,
@@ -554,12 +559,14 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
-        writeGroup.MapPost("/predictions/{predictionTicketId}",
+        writeGroup.MapPost("/predictions",
             [SwaggerOperation(Summary = "Create prediction ticket", Description = "Creates one prediction ticket for a race")]
-            async (string predictionTicketId, CreatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (CreatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
+                var predictionTicketId = string.IsNullOrWhiteSpace(request.PredictionTicketId)
+                    ? PredictionTicketId.New : new PredictionTicketId(request.PredictionTicketId);
                 var command = new CreatePredictionTicketCommand(
-                    new PredictionTicketId(predictionTicketId),
+                    predictionTicketId,
                     request.RaceId,
                     request.PredictorType,
                     request.PredictorId,
@@ -568,7 +575,7 @@ public static class EndpointExtensions
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/predictions/{predictionTicketId}", new { PredictionTicketId = predictionTicketId })
+                    ? Results.Created($"/api/predictions/{predictionTicketId.Value}", new { PredictionTicketId = predictionTicketId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreatePredictionTicket")
@@ -947,12 +954,15 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
-        writeGroup.MapPost("/memos/{memoId}",
+        writeGroup.MapPost("/memos",
             [SwaggerOperation(Summary = "Create memo", Description = "Creates a memo that can be attached to any combination of subjects (horse, trainer, jockey, race)")]
-            async (string memoId, CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 if (request.Subjects is null || request.Subjects.Count == 0)
                     return Results.BadRequest(new[] { "At least one subject is required." });
+
+                var memoId = string.IsNullOrWhiteSpace(request.MemoId)
+                    ? MemoId.New : new MemoId(request.MemoId);
 
                 var subjects = request.Subjects
                     .Select(s => new MemoSubject(Enum.Parse<MemoSubjectType>(s.SubjectType, ignoreCase: true), s.SubjectId))
@@ -963,7 +973,7 @@ public static class EndpointExtensions
                     .ToList();
 
                 var command = new CreateMemoCommand(
-                    new MemoId(memoId),
+                    memoId,
                     request.AuthorId,
                     request.MemoType,
                     request.Content,
@@ -973,7 +983,7 @@ public static class EndpointExtensions
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
-                    ? Results.Created($"/api/memos/{memoId}", new { MemoId = memoId })
+                    ? Results.Created($"/api/memos/{memoId.Value}", new { MemoId = memoId.Value })
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("CreateMemo")

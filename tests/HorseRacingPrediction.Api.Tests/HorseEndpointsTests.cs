@@ -30,9 +30,9 @@ public class HorseEndpointsTests
     public async Task RegisterHorse_ReturnsCreated()
     {
         var horseId = $"horse-{Guid.NewGuid()}";
-        var request = new RegisterHorseRequest("ディープインパクト", "deepimpact", "M", new DateOnly(2002, 3, 25));
+        var request = new RegisterHorseRequest("ディープインパクト", "deepimpact", "M", new DateOnly(2002, 3, 25), horseId);
 
-        var response = await _client.PostAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions);
+        var response = await _client.PostAsJsonAsync("/api/horses", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
@@ -42,8 +42,8 @@ public class HorseEndpointsTests
     {
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/horses/{horseId}",
-            new RegisterHorseRequest("オルフェーヴル", "orfevr", "M", null),
+            "/api/horses",
+            new RegisterHorseRequest("オルフェーヴル", "orfevr", "M", null, horseId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/horses/{horseId}");
@@ -61,8 +61,8 @@ public class HorseEndpointsTests
     {
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/horses/{horseId}",
-            new RegisterHorseRequest("テスト馬", "testuma", null, null),
+            "/api/horses",
+            new RegisterHorseRequest("テスト馬", "testuma", null, null, horseId),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
@@ -78,8 +78,8 @@ public class HorseEndpointsTests
     {
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/horses/{horseId}",
-            new RegisterHorseRequest("キタサンブラック", "kitasanblack", "M", null),
+            "/api/horses",
+            new RegisterHorseRequest("キタサンブラック", "kitasanblack", "M", null, horseId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -95,8 +95,8 @@ public class HorseEndpointsTests
     {
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/horses/{horseId}",
-            new RegisterHorseRequest("テスト馬", "testuma", null, null),
+            "/api/horses",
+            new RegisterHorseRequest("テスト馬", "testuma", null, null, horseId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(

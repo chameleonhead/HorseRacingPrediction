@@ -12,4 +12,5 @@ public sealed record RegisterEntryRequest(
     string? SexCode,
     int? Age,
     decimal? DeclaredWeight,
-    decimal? DeclaredWeightDiff);
+    decimal? DeclaredWeightDiff,
+    string? EntryId = null);

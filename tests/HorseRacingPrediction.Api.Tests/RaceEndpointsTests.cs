@@ -32,9 +32,9 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         var request = new CreateRaceRequest(
-            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
 
-        var response = await _client.PostAsJsonAsync($"/api/races/{raceId}", request, JsonOptions);
+        var response = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         Assert.IsTrue(response.Headers.Location?.ToString().Contains($"/api/races/{raceId}"));
@@ -45,8 +45,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         var request = new CreateRaceRequest(
-            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
-        await _client.PostAsJsonAsync($"/api/races/{raceId}", request, JsonOptions);
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
+        await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
 
         var response = await _client.GetAsync($"/api/races/{raceId}");
 
@@ -65,8 +65,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -82,8 +82,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -107,8 +107,8 @@ public class RaceEndpointsTests
         var declaredAt = DateTimeOffset.UtcNow;
 
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -116,8 +116,8 @@ public class RaceEndpointsTests
             JsonOptions);
 
         var entryResponse = await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}/entries/{entryId}",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m),
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
             JsonOptions);
         Assert.AreEqual(HttpStatusCode.Created, entryResponse.StatusCode);
 
@@ -156,8 +156,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -173,8 +173,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -190,8 +190,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "東京優駿", raceId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -216,8 +216,8 @@ public class RaceEndpointsTests
     {
         var raceId = $"race-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/races/{raceId}",
-            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "誤ったレース名"),
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "誤ったレース名", raceId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(

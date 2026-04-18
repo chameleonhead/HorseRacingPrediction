@@ -30,9 +30,9 @@ public class JockeyEndpointsTests
     public async Task RegisterJockey_ReturnsCreated()
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
-        var request = new RegisterJockeyRequest("武豊", "takeyutaka", "JRA");
+        var request = new RegisterJockeyRequest("武豊", "takeyutaka", "JRA", jockeyId);
 
-        var response = await _client.PostAsJsonAsync($"/api/jockeys/{jockeyId}", request, JsonOptions);
+        var response = await _client.PostAsJsonAsync("/api/jockeys", request, JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
@@ -42,8 +42,8 @@ public class JockeyEndpointsTests
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/jockeys/{jockeyId}",
-            new RegisterJockeyRequest("川田将雅", "kawadamasaya", "JRA"),
+            "/api/jockeys",
+            new RegisterJockeyRequest("川田将雅", "kawadamasaya", "JRA", jockeyId),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/jockeys/{jockeyId}");
@@ -62,8 +62,8 @@ public class JockeyEndpointsTests
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/jockeys/{jockeyId}",
-            new RegisterJockeyRequest("テスト騎手", "testjockey", null),
+            "/api/jockeys",
+            new RegisterJockeyRequest("テスト騎手", "testjockey", null, jockeyId),
             JsonOptions);
 
         var response = await _client.PutAsJsonAsync(
@@ -79,8 +79,8 @@ public class JockeyEndpointsTests
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/jockeys/{jockeyId}",
-            new RegisterJockeyRequest("福永祐一", "fukunagayuichi", "JRA"),
+            "/api/jockeys",
+            new RegisterJockeyRequest("福永祐一", "fukunagayuichi", "JRA", jockeyId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
@@ -96,8 +96,8 @@ public class JockeyEndpointsTests
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
-            $"/api/jockeys/{jockeyId}",
-            new RegisterJockeyRequest("テスト騎手", "testjockey", null),
+            "/api/jockeys",
+            new RegisterJockeyRequest("テスト騎手", "testjockey", null, jockeyId),
             JsonOptions);
 
         var response = await _client.PatchAsJsonAsync(

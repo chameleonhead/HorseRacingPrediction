@@ -6,4 +6,5 @@ public sealed record CreateMemoRequest(
     string Content,
     DateTimeOffset CreatedAt,
     IReadOnlyList<MemoSubjectDto> Subjects,
-    IReadOnlyList<MemoLinkDto>? Links = null);
+    IReadOnlyList<MemoLinkDto>? Links = null,
+    string? MemoId = null);
