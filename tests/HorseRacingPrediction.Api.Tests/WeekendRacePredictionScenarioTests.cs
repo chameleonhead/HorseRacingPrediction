@@ -293,11 +293,14 @@ public class WeekendRacePredictionScenarioTests
         // 【土曜日】調教最終確認・天気・馬場観測
         // ═══════════════════════════════════════════════════
 
+        // 土曜日の観測時刻（レース前日を表す固定オフセット）
+        var saturdayObservationTime = DateTimeOffset.UtcNow.AddDays(-1);
+
         // --- 天気を観測する（土曜朝） ---
         var satWeather = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
             new RecordWeatherObservationRequest(
-                DateTimeOffset.UtcNow.AddDays(-1),
+                saturdayObservationTime,
                 WeatherCode: "CLOUDY",
                 WeatherText: "曇り",
                 TemperatureCelsius: 19.5m,
@@ -311,7 +314,7 @@ public class WeekendRacePredictionScenarioTests
         var satTrack = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/track-condition",
             new RecordTrackConditionRequest(
-                DateTimeOffset.UtcNow.AddDays(-1),
+                saturdayObservationTime,
                 TurfConditionCode: "GOOD",
                 DirtConditionCode: null,
                 GoingDescriptionText: "良"),
@@ -324,7 +327,7 @@ public class WeekendRacePredictionScenarioTests
                 AuthorId: "analyst-1",
                 MemoType: "TrainingNote",
                 Content: "サニーブレイズ最終追い切りで馬なりで余裕十分。状態は申し分なし。当日は晴れ予報で馬場は良が続く見込み。",
-                CreatedAt: DateTimeOffset.UtcNow.AddDays(-1),
+                CreatedAt: saturdayObservationTime,
                 Subjects: new[]
                 {
                     new MemoSubjectDto("Horse", horse1Id),
