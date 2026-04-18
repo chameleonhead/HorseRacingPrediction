@@ -149,6 +149,12 @@ public static class EndpointExtensions
                     details.RaceNumber,
                     details.RaceName,
                     details.Status,
+                    details.MeetingNumber,
+                    details.DayNumber,
+                    details.GradeCode,
+                    details.SurfaceCode,
+                    details.DistanceMeters,
+                    details.DirectionCode,
                     details.EntryCount,
                     details.WinningHorseName,
                     details.ResultDeclaredAt);

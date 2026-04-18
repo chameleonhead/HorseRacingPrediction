@@ -23,6 +23,12 @@ public sealed record RaceResponse(
     int? RaceNumber,
     string? RaceName,
     RaceStatus Status,
+    int? MeetingNumber,
+    int? DayNumber,
+    string? GradeCode,
+    string? SurfaceCode,
+    int? DistanceMeters,
+    string? DirectionCode,
     int? EntryCount,
     string? WinningHorseName,
     DateTimeOffset? ResultDeclaredAt);
