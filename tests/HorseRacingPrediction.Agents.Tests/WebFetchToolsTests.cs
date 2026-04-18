@@ -179,6 +179,72 @@ public class WebFetchToolsTests
     }
 
     // ------------------------------------------------------------------ //
+    // FetchTrainerStats
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task FetchTrainerStats_ReturnsMarkdownWithHeading()
+    {
+        _fakeBrowser.ResponseText = "調教師成績データ";
+
+        var result = await _sut.FetchTrainerStats("友道康夫");
+
+        StringAssert.Contains(result, "## 調教師「友道康夫」", "見出しが含まれること");
+        StringAssert.Contains(result, "調教師成績データ", "本文が含まれること");
+    }
+
+    [TestMethod]
+    public async Task FetchTrainerStats_UsesNetkeibaUrl()
+    {
+        _fakeBrowser.ResponseText = "dummy";
+
+        await _sut.FetchTrainerStats("友道康夫");
+
+        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "db.netkeiba.com",
+            "netkeiba の URL が使われること");
+        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "trainer",
+            "trainer の URL が使われること");
+    }
+
+    // ------------------------------------------------------------------ //
+    // FetchRaceResults
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task FetchRaceResults_WithYear_ReturnsMarkdownWithHeading()
+    {
+        _fakeBrowser.ResponseText = "レース結果データ";
+
+        var result = await _sut.FetchRaceResults("天皇賞秋", "2024");
+
+        StringAssert.Contains(result, "## レース「天皇賞秋」", "レース名が含まれること");
+        StringAssert.Contains(result, "2024年", "年度が含まれること");
+        StringAssert.Contains(result, "レース結果データ", "本文が含まれること");
+    }
+
+    [TestMethod]
+    public async Task FetchRaceResults_WithoutYear_ReturnsMarkdownWithHeading()
+    {
+        _fakeBrowser.ResponseText = "レース結果データ";
+
+        var result = await _sut.FetchRaceResults("天皇賞秋");
+
+        StringAssert.Contains(result, "## レース「天皇賞秋」", "レース名が含まれること");
+        StringAssert.Contains(result, "レース結果データ", "本文が含まれること");
+    }
+
+    [TestMethod]
+    public async Task FetchRaceResults_UsesSearchUrl()
+    {
+        _fakeBrowser.ResponseText = "dummy";
+
+        await _sut.FetchRaceResults("天皇賞秋", "2024");
+
+        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "www.bing.com",
+            "Bing 検索 URL が使われること");
+    }
+
+    // ------------------------------------------------------------------ //
     // AllowedDomains = empty
     // ------------------------------------------------------------------ //
 
@@ -213,6 +279,8 @@ public class WebFetchToolsTests
         Assert.IsTrue(tools.Any(t => t.Name == "FetchRaceCard"), "FetchRaceCard が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchHorseHistory"), "FetchHorseHistory が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchJockeyStats"), "FetchJockeyStats が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchTrainerStats"), "FetchTrainerStats が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchRaceResults"), "FetchRaceResults が登録されていること");
     }
 
     // ------------------------------------------------------------------ //

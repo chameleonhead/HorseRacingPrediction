@@ -99,9 +99,40 @@ public sealed class WebFetchTools
         return FormatSection($"騎手「{jockeyName}」の成績", rawText);
     }
 
-    // ------------------------------------------------------------------ //
-    // AI tools factory
-    // ------------------------------------------------------------------ //
+    /// <summary>
+    /// 指定した調教師名の成績・厩舎情報を取得する。
+    /// </summary>
+    [Description("指定した調教師名（厩舎）の成績・勝率・管理馬情報を取得します。")]
+    public async Task<string> FetchTrainerStats(
+        [Description("調教師名（日本語可）")] string trainerName,
+        CancellationToken cancellationToken = default)
+    {
+        var encoded = HttpUtility.UrlEncode(trainerName);
+        var url = $"https://db.netkeiba.com/trainer/search/?name={encoded}";
+        ValidateDomain(url);
+        var rawText = await _browser.FetchTextAsync(url, cancellationToken);
+        return FormatSection($"調教師「{trainerName}」の成績・厩舎情報", rawText);
+    }
+
+    /// <summary>
+    /// 指定したレース名・年度の過去レース結果を取得する。
+    /// </summary>
+    [Description("指定したレース名・年度の過去レース結果（着順・タイム・配当）を取得します。")]
+    public async Task<string> FetchRaceResults(
+        [Description("レース名（日本語可、例: 天皇賞秋）")] string raceName,
+        [Description("年度（例: 2024、省略時は最新）")] string? year = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = string.IsNullOrWhiteSpace(year)
+            ? $"{raceName} レース結果"
+            : $"{raceName} {year}年 レース結果";
+        var encoded = HttpUtility.UrlEncode(query);
+        var searchUrl = _options.SearchBaseUrl + encoded + " site:db.netkeiba.com";
+        var rawText = await _browser.FetchTextAsync(searchUrl, cancellationToken);
+        return FormatSection($"レース「{raceName}」{(year != null ? year + "年" : "")}の結果", rawText);
+    }
+
+
 
     /// <summary>
     /// このプラグインのメソッドを <see cref="AITool"/> 一覧として返す。
@@ -112,7 +143,9 @@ public sealed class WebFetchTools
         AIFunctionFactory.Create(SearchAndFetch),
         AIFunctionFactory.Create(FetchRaceCard),
         AIFunctionFactory.Create(FetchHorseHistory),
-        AIFunctionFactory.Create(FetchJockeyStats)
+        AIFunctionFactory.Create(FetchJockeyStats),
+        AIFunctionFactory.Create(FetchTrainerStats),
+        AIFunctionFactory.Create(FetchRaceResults)
     ];
 
     // ------------------------------------------------------------------ //
