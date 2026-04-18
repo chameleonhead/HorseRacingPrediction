@@ -1,7 +1,7 @@
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -200,21 +200,19 @@ public class WebFetchToolsTests
     }
 
     // ------------------------------------------------------------------ //
-    // KernelFunction registration
+    // GetAITools registration
     // ------------------------------------------------------------------ //
 
     [TestMethod]
-    public void WebFetchTools_RegisteredAsKernelPlugin_HasExpectedFunctions()
+    public void WebFetchTools_GetAITools_HasExpectedFunctions()
     {
-        var kernel = Kernel.CreateBuilder().Build();
-        kernel.Plugins.AddFromObject(_sut, pluginName: "WebFetch");
+        var tools = _sut.GetAITools();
 
-        var plugin = kernel.Plugins["WebFetch"];
-        Assert.IsTrue(plugin.Contains("FetchPageContent"), "FetchPageContent が登録されていること");
-        Assert.IsTrue(plugin.Contains("SearchAndFetch"), "SearchAndFetch が登録されていること");
-        Assert.IsTrue(plugin.Contains("FetchRaceCard"), "FetchRaceCard が登録されていること");
-        Assert.IsTrue(plugin.Contains("FetchHorseHistory"), "FetchHorseHistory が登録されていること");
-        Assert.IsTrue(plugin.Contains("FetchJockeyStats"), "FetchJockeyStats が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchPageContent"), "FetchPageContent が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "SearchAndFetch"), "SearchAndFetch が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchRaceCard"), "FetchRaceCard が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchHorseHistory"), "FetchHorseHistory が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FetchJockeyStats"), "FetchJockeyStats が登録されていること");
     }
 
     // ------------------------------------------------------------------ //

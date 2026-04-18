@@ -1,6 +1,5 @@
-using System.Text;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Agents;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Agents;
 
@@ -18,9 +17,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class PredictionAgent
 {
-    private const string AgentName = "PredictionAgent";
+    internal const string AgentName = "PredictionAgent";
 
-    private const string SystemPrompt = """
+    internal const string SystemPrompt = """
         あなたは競馬の予測票を作成する専門エージェントです。
         提供されたレースコンテキストと馬分析レポートをもとに、
         予測票を作成・確定してください。
@@ -48,16 +47,15 @@ public sealed class PredictionAgent
         確定した予測票の ID と予測結果の概要を Markdown 形式で返してください。
         """;
 
-    private readonly ChatCompletionAgent _innerAgent;
+    private readonly ChatClientAgent _innerAgent;
 
-    public PredictionAgent(Kernel kernel)
+    public PredictionAgent(IChatClient chatClient, IList<AITool> tools)
     {
-        _innerAgent = new ChatCompletionAgent
-        {
-            Name = AgentName,
-            Instructions = SystemPrompt,
-            Kernel = kernel
-        };
+        _innerAgent = new ChatClientAgent(
+            chatClient,
+            name: AgentName,
+            instructions: SystemPrompt,
+            tools: tools);
     }
 
     /// <summary>
@@ -85,16 +83,7 @@ public sealed class PredictionAgent
             {horseAnalysis}
             """;
 
-        var sb = new StringBuilder();
-        await foreach (var response in _innerAgent.InvokeAsync(
-            prompt,
-            thread: null,
-            options: null,
-            cancellationToken: cancellationToken))
-        {
-            sb.Append(response.Message.Content);
-        }
-
-        return sb.ToString();
+        var result = await _innerAgent.RunAsync(prompt, cancellationToken: cancellationToken);
+        return result.Text;
     }
 }

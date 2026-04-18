@@ -3,15 +3,15 @@ using EventFlow;
 using EventFlow.Commands;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Domain.Predictions;
-using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
 /// EventFlow の <see cref="ICommandBus"/> を使って予測票を作成・更新する
-/// Semantic Kernel プラグイン（書き込み系）。
-/// 各エージェントの Kernel に <c>AddFromObject</c> で登録することで、
-/// <c>[KernelFunction]</c> メソッドがツールとして利用可能になる。
+/// Microsoft Agent Framework プラグイン（書き込み系）。
+/// <see cref="GetAITools"/> で <see cref="AITool"/> 一覧を取得し、
+/// <see cref="Microsoft.Agents.AI.ChatClientAgent"/> に渡すことで利用可能になる。
 /// </summary>
 public sealed class PredictionWriteTools
 {
@@ -25,7 +25,6 @@ public sealed class PredictionWriteTools
     /// <summary>
     /// 新しい予測票を作成し、その ID を返す。
     /// </summary>
-    [KernelFunction]
     [Description("新しい予測票を作成します。作成された予測票の ID を返します。")]
     public async Task<string> CreatePredictionTicket(
         [Description("対象レース ID")] string raceId,
@@ -49,7 +48,6 @@ public sealed class PredictionWriteTools
     /// <summary>
     /// 予測票に出走馬の予測印を追加する。
     /// </summary>
-    [KernelFunction]
     [Description("予測票に出走馬の予測印（◎○▲△）を追加します。")]
     public async Task<string> AddPredictionMark(
         [Description("予測票 ID")] string predictionTicketId,
@@ -74,7 +72,6 @@ public sealed class PredictionWriteTools
     /// <summary>
     /// 予測票に根拠・シグナルを追加する。
     /// </summary>
-    [KernelFunction]
     [Description("予測票に特定の馬・騎手・コースなどを対象とした予測根拠シグナルを追加します。")]
     public async Task<string> AddPredictionRationale(
         [Description("予測票 ID")] string predictionTicketId,
@@ -100,7 +97,6 @@ public sealed class PredictionWriteTools
     /// <summary>
     /// 予測票を確定（ファイナライズ）する。確定後は変更不可。
     /// </summary>
-    [KernelFunction]
     [Description("予測票を確定します。確定後は予測印・根拠の追加ができなくなります。")]
     public async Task<string> FinalizePredictionTicket(
         [Description("確定する予測票 ID")] string predictionTicketId,
@@ -116,4 +112,15 @@ public sealed class PredictionWriteTools
 
         return $"予測票 {predictionTicketId} を確定しました。";
     }
+
+    /// <summary>
+    /// このプラグインのメソッドを <see cref="AITool"/> 一覧として返す。
+    /// </summary>
+    public IList<AITool> GetAITools() =>
+    [
+        AIFunctionFactory.Create(CreatePredictionTicket),
+        AIFunctionFactory.Create(AddPredictionMark),
+        AIFunctionFactory.Create(AddPredictionRationale),
+        AIFunctionFactory.Create(FinalizePredictionTicket)
+    ];
 }

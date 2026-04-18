@@ -4,7 +4,7 @@ using EventFlow.Aggregates.ExecutionResults;
 using EventFlow.Commands;
 using EventFlow.Core;
 using HorseRacingPrediction.Agents.Plugins;
-using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -158,20 +158,18 @@ public class PredictionWriteToolsTests
     }
 
     // ------------------------------------------------------------------ //
-    // KernelFunction registration
+    // GetAITools registration
     // ------------------------------------------------------------------ //
 
     [TestMethod]
-    public void PredictionWriteTools_RegisteredAsKernelPlugin_HasExpectedFunctions()
+    public void PredictionWriteTools_GetAITools_HasExpectedFunctions()
     {
-        var kernel = Kernel.CreateBuilder().Build();
-        kernel.Plugins.AddFromObject(_sut, pluginName: "PredictionWrite");
+        var tools = _sut.GetAITools();
 
-        var plugin = kernel.Plugins["PredictionWrite"];
-        Assert.IsTrue(plugin.Contains("CreatePredictionTicket"), "CreatePredictionTicket が登録されていること");
-        Assert.IsTrue(plugin.Contains("AddPredictionMark"), "AddPredictionMark が登録されていること");
-        Assert.IsTrue(plugin.Contains("AddPredictionRationale"), "AddPredictionRationale が登録されていること");
-        Assert.IsTrue(plugin.Contains("FinalizePredictionTicket"), "FinalizePredictionTicket が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "CreatePredictionTicket"), "CreatePredictionTicket が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "AddPredictionMark"), "AddPredictionMark が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "AddPredictionRationale"), "AddPredictionRationale が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "FinalizePredictionTicket"), "FinalizePredictionTicket が登録されていること");
     }
 
     // ------------------------------------------------------------------ //

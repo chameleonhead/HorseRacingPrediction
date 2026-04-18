@@ -1,6 +1,5 @@
-using System.Text;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Agents;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Agents;
 
@@ -17,9 +16,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class HorseAnalysisAgent
 {
-    private const string AgentName = "HorseAnalysisAgent";
+    internal const string AgentName = "HorseAnalysisAgent";
 
-    private const string SystemPrompt = """
+    internal const string SystemPrompt = """
         あなたは競馬の出走馬・騎手を分析する専門エージェントです。
         提供されたレースコンテキストをもとに、各出走馬の詳細分析を行い
         Markdown 形式で評価レポートを作成してください。
@@ -46,16 +45,15 @@ public sealed class HorseAnalysisAgent
         - **総合評価**: 強み・弱みを箇条書きで
         """;
 
-    private readonly ChatCompletionAgent _innerAgent;
+    private readonly ChatClientAgent _innerAgent;
 
-    public HorseAnalysisAgent(Kernel kernel)
+    public HorseAnalysisAgent(IChatClient chatClient, IList<AITool> tools)
     {
-        _innerAgent = new ChatCompletionAgent
-        {
-            Name = AgentName,
-            Instructions = SystemPrompt,
-            Kernel = kernel
-        };
+        _innerAgent = new ChatClientAgent(
+            chatClient,
+            name: AgentName,
+            instructions: SystemPrompt,
+            tools: tools);
     }
 
     /// <summary>
@@ -73,16 +71,7 @@ public sealed class HorseAnalysisAgent
             {raceContext}
             """;
 
-        var sb = new StringBuilder();
-        await foreach (var response in _innerAgent.InvokeAsync(
-            prompt,
-            thread: null,
-            options: null,
-            cancellationToken: cancellationToken))
-        {
-            sb.Append(response.Message.Content);
-        }
-
-        return sb.ToString();
+        var result = await _innerAgent.RunAsync(prompt, cancellationToken: cancellationToken);
+        return result.Text;
     }
 }

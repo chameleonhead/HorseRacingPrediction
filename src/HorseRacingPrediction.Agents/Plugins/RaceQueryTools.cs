@@ -4,15 +4,15 @@ using System.Text.Json;
 using EventFlow.Queries;
 using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
 /// EventFlow の <see cref="IQueryProcessor"/> を使って既存の ReadModel を照会する
-/// Semantic Kernel プラグイン（読み取り系）。
-/// 各エージェントの Kernel に <c>AddFromObject</c> で登録することで、
-/// <c>[KernelFunction]</c> メソッドがツールとして利用可能になる。
+/// Microsoft Agent Framework プラグイン（読み取り系）。
+/// <see cref="GetAITools"/> で <see cref="AITool"/> 一覧を取得し、
+/// <see cref="Microsoft.Agents.AI.ChatClientAgent"/> に渡すことで利用可能になる。
 /// </summary>
 public sealed class RaceQueryTools
 {
@@ -32,7 +32,6 @@ public sealed class RaceQueryTools
     /// <summary>
     /// 指定したレース ID の予測コンテキスト（出馬表・天候・馬場状態）を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定したレース ID の予測コンテキスト（出馬表・天候・馬場状態）を Markdown 形式で取得します。")]
     public async Task<string> GetRacePredictionContext(
         [Description("レース ID")] string raceId,
@@ -50,7 +49,6 @@ public sealed class RaceQueryTools
     /// <summary>
     /// 指定した馬 ID のプロフィール情報を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した馬 ID のプロフィール情報（名前・性別・生年月日・エイリアス）を取得します。")]
     public async Task<string> GetHorseProfile(
         [Description("馬 ID")] string horseId,
@@ -81,7 +79,6 @@ public sealed class RaceQueryTools
     /// <summary>
     /// 指定した騎手 ID のプロフィール情報を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した騎手 ID のプロフィール情報（名前・所属・エイリアス）を取得します。")]
     public async Task<string> GetJockeyProfile(
         [Description("騎手 ID")] string jockeyId,
@@ -111,7 +108,6 @@ public sealed class RaceQueryTools
     /// <summary>
     /// 指定した対象（馬・騎手・レースなど）に紐付くメモ一覧を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した対象種別と対象IDに紐付くメモ一覧を Markdown 形式で取得します。" +
                  "subjectType には 'Horse', 'Jockey', 'Race' などを指定してください。")]
     public async Task<string> GetMemosBySubject(
@@ -138,6 +134,21 @@ public sealed class RaceQueryTools
         }
         return sb.ToString();
     }
+
+    // ------------------------------------------------------------------ //
+    // AI tools factory
+    // ------------------------------------------------------------------ //
+
+    /// <summary>
+    /// このプラグインのメソッドを <see cref="AITool"/> 一覧として返す。
+    /// </summary>
+    public IList<AITool> GetAITools() =>
+    [
+        AIFunctionFactory.Create(GetRacePredictionContext),
+        AIFunctionFactory.Create(GetHorseProfile),
+        AIFunctionFactory.Create(GetJockeyProfile),
+        AIFunctionFactory.Create(GetMemosBySubject)
+    ];
 
     // ------------------------------------------------------------------ //
     // private helpers

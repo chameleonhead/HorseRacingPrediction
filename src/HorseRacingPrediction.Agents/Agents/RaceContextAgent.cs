@@ -1,6 +1,5 @@
-using System.Text;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Agents;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Agents;
 
@@ -17,9 +16,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class RaceContextAgent
 {
-    private const string AgentName = "RaceContextAgent";
+    internal const string AgentName = "RaceContextAgent";
 
-    private const string SystemPrompt = """
+    internal const string SystemPrompt = """
         あなたは競馬レースの予測コンテキスト収集エージェントです。
         指定されたレース ID に対して、以下の情報を収集・整理して Markdown 形式で返してください。
 
@@ -39,16 +38,15 @@ public sealed class RaceContextAgent
         必ず Markdown 形式で返してください。情報が取得できなかった項目は「不明」と記載してください。
         """;
 
-    private readonly ChatCompletionAgent _innerAgent;
+    private readonly ChatClientAgent _innerAgent;
 
-    public RaceContextAgent(Kernel kernel)
+    public RaceContextAgent(IChatClient chatClient, IList<AITool> tools)
     {
-        _innerAgent = new ChatCompletionAgent
-        {
-            Name = AgentName,
-            Instructions = SystemPrompt,
-            Kernel = kernel
-        };
+        _innerAgent = new ChatClientAgent(
+            chatClient,
+            name: AgentName,
+            instructions: SystemPrompt,
+            tools: tools);
     }
 
     /// <summary>
@@ -58,18 +56,10 @@ public sealed class RaceContextAgent
         string raceId,
         CancellationToken cancellationToken = default)
     {
-        var prompt = $"レース ID '{raceId}' の予測コンテキストを収集してください。";
-        var sb = new StringBuilder();
+        var result = await _innerAgent.RunAsync(
+            $"レース ID '{raceId}' の予測コンテキストを収集してください。",
+            cancellationToken: cancellationToken);
 
-        await foreach (var response in _innerAgent.InvokeAsync(
-            prompt,
-            thread: null,
-            options: null,
-            cancellationToken: cancellationToken))
-        {
-            sb.Append(response.Message.Content);
-        }
-
-        return sb.ToString();
+        return result.Text;
     }
 }

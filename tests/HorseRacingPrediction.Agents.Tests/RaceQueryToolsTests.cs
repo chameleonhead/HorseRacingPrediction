@@ -1,7 +1,7 @@
 using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using Microsoft.SemanticKernel;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -119,20 +119,18 @@ public class RaceQueryToolsTests
     }
 
     // ------------------------------------------------------------------ //
-    // KernelFunction registration
+    // GetAITools registration
     // ------------------------------------------------------------------ //
 
     [TestMethod]
-    public void RaceQueryTools_RegisteredAsKernelPlugin_HasExpectedFunctions()
+    public void RaceQueryTools_GetAITools_HasExpectedFunctions()
     {
-        var kernel = Kernel.CreateBuilder().Build();
-        kernel.Plugins.AddFromObject(_sut, pluginName: "RaceQuery");
+        var tools = _sut.GetAITools();
 
-        var plugin = kernel.Plugins["RaceQuery"];
-        Assert.IsTrue(plugin.Contains("GetRacePredictionContext"), "GetRacePredictionContext が登録されていること");
-        Assert.IsTrue(plugin.Contains("GetHorseProfile"), "GetHorseProfile が登録されていること");
-        Assert.IsTrue(plugin.Contains("GetJockeyProfile"), "GetJockeyProfile が登録されていること");
-        Assert.IsTrue(plugin.Contains("GetMemosBySubject"), "GetMemosBySubject が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetRacePredictionContext"), "GetRacePredictionContext が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetHorseProfile"), "GetHorseProfile が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetJockeyProfile"), "GetJockeyProfile が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetMemosBySubject"), "GetMemosBySubject が登録されていること");
     }
 
     // ------------------------------------------------------------------ //

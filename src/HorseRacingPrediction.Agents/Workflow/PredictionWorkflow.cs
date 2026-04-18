@@ -4,30 +4,33 @@ using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
 /// <summary>
 /// 競馬予測のエンド・ツー・エンドワークフロー。
+/// Microsoft Agent Framework の <see cref="WorkflowBuilder"/> を使用し、
 /// <list type="number">
 ///   <item><see cref="RaceContextAgent"/> — レース情報の収集</item>
 ///   <item><see cref="HorseAnalysisAgent"/> — 出走馬の分析</item>
 ///   <item><see cref="PredictionAgent"/> — 予測票の作成・確定</item>
 /// </list>
-/// の 3 ステップで予測を行い、確定した予測票の情報を返す。
+/// の 3 ステップを順次実行して予測を行い、確定した予測票の情報を返す。
 /// </summary>
 public sealed class PredictionWorkflow
 {
-    private readonly RaceContextAgent _raceContextAgent;
-    private readonly HorseAnalysisAgent _horseAnalysisAgent;
-    private readonly PredictionAgent _predictionAgent;
+    private readonly ChatClientAgent _raceContextAgent;
+    private readonly ChatClientAgent _horseAnalysisAgent;
+    private readonly ChatClientAgent _predictionAgent;
 
     public PredictionWorkflow(
-        RaceContextAgent raceContextAgent,
-        HorseAnalysisAgent horseAnalysisAgent,
-        PredictionAgent predictionAgent)
+        ChatClientAgent raceContextAgent,
+        ChatClientAgent horseAnalysisAgent,
+        ChatClientAgent predictionAgent)
     {
         _raceContextAgent = raceContextAgent;
         _horseAnalysisAgent = horseAnalysisAgent;
@@ -44,30 +47,64 @@ public sealed class PredictionWorkflow
         string raceId,
         CancellationToken cancellationToken = default)
     {
-        // Step 1: レースコンテキストを収集する
-        var raceContext = await _raceContextAgent.CollectContextAsync(raceId, cancellationToken);
+        var workflow = new WorkflowBuilder(_raceContextAgent)
+            .AddEdge(_raceContextAgent, _horseAnalysisAgent)
+            .AddEdge(_horseAnalysisAgent, _predictionAgent)
+            .Build();
 
-        // Step 2: 出走馬を分析する
-        var horseAnalysis = await _horseAnalysisAgent.AnalyzeHorsesAsync(raceContext, cancellationToken);
+        var outputs = new Dictionary<string, System.Text.StringBuilder>
+        {
+            [_raceContextAgent.Id] = new(),
+            [_horseAnalysisAgent.Id] = new(),
+            [_predictionAgent.Id] = new()
+        };
 
-        // Step 3: 予測票を作成・確定する
-        var predictionResult = await _predictionAgent.CreatePredictionAsync(
-            raceId, raceContext, horseAnalysis, cancellationToken);
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            new ChatMessage(ChatRole.User, $"レース ID '{raceId}' の予測コンテキストを収集してください。"),
+            cancellationToken: cancellationToken);
 
-        return new PredictionWorkflowResult(raceId, raceContext, horseAnalysis, predictionResult);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            if (evt is AgentResponseUpdateEvent agentUpdate &&
+                outputs.TryGetValue(agentUpdate.ExecutorId, out var sb))
+            {
+                sb.Append(agentUpdate.Update.Text);
+            }
+            else if (evt is WorkflowErrorEvent workflowError)
+            {
+                throw new InvalidOperationException(
+                    "ワークフローエラーが発生しました。",
+                    workflowError.Exception);
+            }
+            else if (evt is ExecutorFailedEvent executorFailed)
+            {
+                throw new InvalidOperationException(
+                    $"エグゼキュータ '{executorFailed.ExecutorId}' が失敗しました。",
+                    executorFailed.Data);
+            }
+        }
+
+        return new PredictionWorkflowResult(
+            raceId,
+            outputs[_raceContextAgent.Id].ToString(),
+            outputs[_horseAnalysisAgent.Id].ToString(),
+            outputs[_predictionAgent.Id].ToString());
     }
 
     /// <summary>
     /// <see cref="PredictionWorkflow"/> を DI なしで構築するファクトリメソッド。
-    /// 各エージェントのカーネルにプラグインを個別に登録する。
+    /// 各エージェントに必要なツールを個別に設定する。
     /// </summary>
-    /// <param name="baseKernel">共通設定済みの Semantic Kernel インスタンス</param>
+    /// <param name="chatClient">共通の <see cref="IChatClient"/> インスタンス</param>
     /// <param name="queryProcessor">EventFlow クエリプロセッサー</param>
     /// <param name="commandBus">EventFlow コマンドバス</param>
     /// <param name="browser">Web ブラウザ抽象</param>
     /// <param name="webFetchOptions">Web 取得オプション（許可ドメインなど）</param>
     public static PredictionWorkflow Create(
-        Kernel baseKernel,
+        IChatClient chatClient,
         IQueryProcessor queryProcessor,
         ICommandBus commandBus,
         IWebBrowser browser,
@@ -77,25 +114,28 @@ public sealed class PredictionWorkflow
         var predictionWriteTools = new PredictionWriteTools(commandBus);
         var webFetchTools = new WebFetchTools(browser, webFetchOptions);
 
-        // RaceContextAgent: RaceQuery + WebFetch
-        var raceContextKernel = baseKernel.Clone();
-        raceContextKernel.Plugins.AddFromObject(raceQueryTools, "RaceQuery");
-        raceContextKernel.Plugins.AddFromObject(webFetchTools, "WebFetch");
+        var raceQueryAiTools = raceQueryTools.GetAITools();
+        var predictionWriteAiTools = predictionWriteTools.GetAITools();
+        var webFetchAiTools = webFetchTools.GetAITools();
 
-        // HorseAnalysisAgent: RaceQuery + WebFetch
-        var horseAnalysisKernel = baseKernel.Clone();
-        horseAnalysisKernel.Plugins.AddFromObject(raceQueryTools, "RaceQuery");
-        horseAnalysisKernel.Plugins.AddFromObject(webFetchTools, "WebFetch");
+        var raceContextAgent = new ChatClientAgent(
+            chatClient,
+            name: RaceContextAgent.AgentName,
+            instructions: RaceContextAgent.SystemPrompt,
+            tools: [.. raceQueryAiTools, .. webFetchAiTools]);
 
-        // PredictionAgent: RaceQuery + PredictionWrite + WebFetch
-        var predictionKernel = baseKernel.Clone();
-        predictionKernel.Plugins.AddFromObject(raceQueryTools, "RaceQuery");
-        predictionKernel.Plugins.AddFromObject(predictionWriteTools, "PredictionWrite");
-        predictionKernel.Plugins.AddFromObject(webFetchTools, "WebFetch");
+        var horseAnalysisAgent = new ChatClientAgent(
+            chatClient,
+            name: HorseAnalysisAgent.AgentName,
+            instructions: HorseAnalysisAgent.SystemPrompt,
+            tools: [.. raceQueryAiTools, .. webFetchAiTools]);
 
-        return new PredictionWorkflow(
-            new RaceContextAgent(raceContextKernel),
-            new HorseAnalysisAgent(horseAnalysisKernel),
-            new PredictionAgent(predictionKernel));
+        var predictionAgent = new ChatClientAgent(
+            chatClient,
+            name: PredictionAgent.AgentName,
+            instructions: PredictionAgent.SystemPrompt,
+            tools: [.. raceQueryAiTools, .. predictionWriteAiTools, .. webFetchAiTools]);
+
+        return new PredictionWorkflow(raceContextAgent, horseAnalysisAgent, predictionAgent);
     }
 }

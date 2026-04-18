@@ -2,15 +2,15 @@ using System.ComponentModel;
 using System.Text;
 using System.Web;
 using HorseRacingPrediction.Agents.Browser;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
-/// Playwright を使ってインターネットから競馬情報を取得する Semantic Kernel プラグイン。
-/// 各エージェントの Kernel に <c>AddFromObject</c> で登録すると、
-/// <c>[KernelFunction]</c> メソッドがツールとして使用可能になる。
+/// Playwright を使ってインターネットから競馬情報を取得する Microsoft Agent Framework プラグイン。
+/// <see cref="GetAITools"/> で <see cref="AITool"/> 一覧を取得し、
+/// <see cref="Microsoft.Agents.AI.ChatClientAgent"/> に渡すことで利用可能になる。
 /// </summary>
 public sealed class WebFetchTools
 {
@@ -27,7 +27,6 @@ public sealed class WebFetchTools
     /// 指定した URL のページ本文を取得する。
     /// 許可ドメイン一覧に含まれない URL はアクセスを拒否する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した URL のページ本文テキストを取得します。競馬情報サイトの URL を指定してください。")]
     public async Task<string> FetchPageContent(
         [Description("取得対象のページ URL")] string url,
@@ -40,7 +39,6 @@ public sealed class WebFetchTools
     /// <summary>
     /// 検索クエリで Bing を検索し、上位ページの本文を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("検索クエリで Bing 検索を実行し、上位の検索結果ページの本文テキストを取得します。")]
     public async Task<string> SearchAndFetch(
         [Description("検索クエリ文字列")] string query,
@@ -58,7 +56,6 @@ public sealed class WebFetchTools
     /// <summary>
     /// 指定した競馬場・日付・レース番号の出馬表を取得して Markdown 形式で返す。
     /// </summary>
-    [KernelFunction]
     [Description("指定した競馬場・日付・レース番号の出馬表（出走馬情報）を Markdown 表形式で取得します。")]
     public async Task<string> FetchRaceCard(
         [Description("競馬場コード（例: 05 = 東京、06 = 中山）")] string racecourseCode,
@@ -75,7 +72,6 @@ public sealed class WebFetchTools
     /// <summary>
     /// 指定した馬名で netkeiba を検索し、過去の出走・成績情報を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した馬名の過去の出走成績（戦績）を取得します。")]
     public async Task<string> FetchHorseHistory(
         [Description("馬名（日本語可）")] string horseName,
@@ -91,7 +87,6 @@ public sealed class WebFetchTools
     /// <summary>
     /// 指定した騎手名の最近の成績・勝率を取得する。
     /// </summary>
-    [KernelFunction]
     [Description("指定した騎手名の最近の成績・騎乗数・勝率を取得します。")]
     public async Task<string> FetchJockeyStats(
         [Description("騎手名（日本語可）")] string jockeyName,
@@ -103,6 +98,22 @@ public sealed class WebFetchTools
         var rawText = await _browser.FetchTextAsync(url, cancellationToken);
         return FormatSection($"騎手「{jockeyName}」の成績", rawText);
     }
+
+    // ------------------------------------------------------------------ //
+    // AI tools factory
+    // ------------------------------------------------------------------ //
+
+    /// <summary>
+    /// このプラグインのメソッドを <see cref="AITool"/> 一覧として返す。
+    /// </summary>
+    public IList<AITool> GetAITools() =>
+    [
+        AIFunctionFactory.Create(FetchPageContent),
+        AIFunctionFactory.Create(SearchAndFetch),
+        AIFunctionFactory.Create(FetchRaceCard),
+        AIFunctionFactory.Create(FetchHorseHistory),
+        AIFunctionFactory.Create(FetchJockeyStats)
+    ];
 
     // ------------------------------------------------------------------ //
     // private helpers
