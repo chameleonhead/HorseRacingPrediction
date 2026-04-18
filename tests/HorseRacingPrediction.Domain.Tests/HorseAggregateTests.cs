@@ -119,4 +119,91 @@ public class HorseAggregateTests
         Assert.AreEqual("M", details.SexCode);
         Assert.AreEqual(2, details.Aliases.Count);
     }
+
+    [TestMethod]
+    public void AddMemo_WhenRegistered_AddsSuccessfully()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+        var memoId = MemoId.New.Value;
+
+        sut.AddMemo(memoId, "trainer-1", "TrainingComment", "好調です", DateTimeOffset.UtcNow);
+
+        // 同じ ID のメモが削除後には UpdateMemo で例外になることで存在確認できる
+        sut.DeleteMemo(memoId);
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            sut.UpdateMemo(memoId, content: "削除済みなので例外になるはず"));
+    }
+
+    [TestMethod]
+    public void AddMemo_WhenNotRegistered_ThrowsInvalidOperationException()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            sut.AddMemo(MemoId.New.Value, null, "GeneralNote", "テスト", DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
+    public void AddMemo_WithLinks_DoesNotThrow()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+        var memoId = MemoId.New.Value;
+        var links = new List<HorseMemoLink>
+        {
+            new("link-1", HorseMemoLinkType.Url, "参考記事", "https://example.com/article", null),
+            new("link-2", HorseMemoLinkType.Attachment, "調教動画", null, "videos/training-2024-01-01.mp4")
+        };
+
+        sut.AddMemo(memoId, "trainer-1", "TrainingComment", "参考リンク付きメモ", DateTimeOffset.UtcNow, links);
+
+        // 存在しているので UpdateMemo は例外にならない
+        sut.UpdateMemo(memoId, content: "更新OK");
+    }
+
+    [TestMethod]
+    public void UpdateMemo_WhenMemoExists_DoesNotThrow()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+        var memoId = MemoId.New.Value;
+        sut.AddMemo(memoId, "trainer-1", "TrainingComment", "初期内容", DateTimeOffset.UtcNow);
+
+        sut.UpdateMemo(memoId, content: "更新された内容");
+    }
+
+    [TestMethod]
+    public void UpdateMemo_WhenMemoNotFound_ThrowsInvalidOperationException()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            sut.UpdateMemo("non-existent-memo-id", content: "更新"));
+    }
+
+    [TestMethod]
+    public void DeleteMemo_WhenMemoExists_RemovesSuccessfully()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+        var memoId = MemoId.New.Value;
+        sut.AddMemo(memoId, "trainer-1", "GeneralNote", "削除対象メモ", DateTimeOffset.UtcNow);
+
+        sut.DeleteMemo(memoId);
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            sut.DeleteMemo(memoId));
+    }
+
+    [TestMethod]
+    public void DeleteMemo_WhenMemoNotFound_ThrowsInvalidOperationException()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト");
+
+        Assert.ThrowsException<InvalidOperationException>(() =>
+            sut.DeleteMemo("non-existent-memo-id"));
+    }
 }

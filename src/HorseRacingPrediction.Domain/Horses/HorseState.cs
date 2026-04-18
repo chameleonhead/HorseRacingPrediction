@@ -6,9 +6,13 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
     IApply<HorseRegistered>,
     IApply<HorseProfileUpdated>,
     IApply<HorseAliasMerged>,
-    IApply<HorseDataCorrected>
+    IApply<HorseDataCorrected>,
+    IApply<HorseMemoAdded>,
+    IApply<HorseMemoUpdated>,
+    IApply<HorseMemoDeleted>
 {
     private readonly List<AliasDetails> _aliases = new();
+    private readonly HashSet<string> _activeMemoIds = new();
 
     public bool IsRegistered { get; private set; }
     public string? RegisteredName { get; private set; }
@@ -16,6 +20,8 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
     public string? SexCode { get; private set; }
     public DateOnly? BirthDate { get; private set; }
     public IReadOnlyCollection<AliasDetails> Aliases => _aliases.AsReadOnly();
+
+    public bool MemoExists(string memoId) => _activeMemoIds.Contains(memoId);
 
     public void Apply(HorseRegistered e)
     {
@@ -46,4 +52,10 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
         if (e.SexCode != null) SexCode = e.SexCode;
         if (e.BirthDate.HasValue) BirthDate = e.BirthDate;
     }
+
+    public void Apply(HorseMemoAdded e) => _activeMemoIds.Add(e.MemoId);
+
+    public void Apply(HorseMemoUpdated e) { }
+
+    public void Apply(HorseMemoDeleted e) => _activeMemoIds.Remove(e.MemoId);
 }
