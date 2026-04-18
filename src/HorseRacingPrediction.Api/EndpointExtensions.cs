@@ -99,6 +99,29 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
+        writeGroup.MapPatch("/horses/{horseId}",
+            [SwaggerOperation(Summary = "Correct horse data", Description = "Corrects horse master data with an optional audit reason")]
+            async (string horseId, CorrectHorseDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new CorrectHorseDataCommand(
+                    new HorseId(horseId),
+                    request.RegisteredName,
+                    request.NormalizedName,
+                    request.SexCode,
+                    request.BirthDate,
+                    request.Reason);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("CorrectHorseData")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
         writeGroup.MapPost("/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Register jockey", Description = "Registers a new jockey")]
             async (string jockeyId, RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
@@ -163,6 +186,28 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
 
+        writeGroup.MapPatch("/jockeys/{jockeyId}",
+            [SwaggerOperation(Summary = "Correct jockey data", Description = "Corrects jockey master data with an optional audit reason")]
+            async (string jockeyId, CorrectJockeyDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new CorrectJockeyDataCommand(
+                    new JockeyId(jockeyId),
+                    request.DisplayName,
+                    request.NormalizedName,
+                    request.AffiliationCode,
+                    request.Reason);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("CorrectJockeyData")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
         writeGroup.MapPost("/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
             async (string trainerId, RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
@@ -222,6 +267,28 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("MergeTrainerAlias")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPatch("/trainers/{trainerId}",
+            [SwaggerOperation(Summary = "Correct trainer data", Description = "Corrects trainer master data with an optional audit reason")]
+            async (string trainerId, CorrectTrainerDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new CorrectTrainerDataCommand(
+                    new TrainerId(trainerId),
+                    request.DisplayName,
+                    request.NormalizedName,
+                    request.AffiliationCode,
+                    request.Reason);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("CorrectTrainerData")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -528,6 +595,157 @@ public static class EndpointExtensions
                     : Results.BadRequest(new[] { "Command execution failed." });
             })
             .WithName("AddPredictionMark")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/betting-suggestions",
+            [SwaggerOperation(Summary = "Add betting suggestion", Description = "Appends a betting suggestion to prediction ticket")]
+            async (string predictionTicketId, AddBettingSuggestionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new AddBettingSuggestionCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.BetTypeCode,
+                    request.SelectionExpression,
+                    request.StakeAmount,
+                    request.ExpectedValue);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("AddBettingSuggestion")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/rationales",
+            [SwaggerOperation(Summary = "Add prediction rationale", Description = "Appends a rationale entry to prediction ticket")]
+            async (string predictionTicketId, AddPredictionRationaleRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new AddPredictionRationaleCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.SubjectType,
+                    request.SubjectId,
+                    request.SignalType,
+                    request.SignalValue,
+                    request.ExplanationText);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("AddPredictionRationale")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/finalize",
+            [SwaggerOperation(Summary = "Finalize prediction ticket", Description = "Moves prediction ticket from Draft to Finalized")]
+            async (string predictionTicketId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new FinalizePredictionTicketCommand(new PredictionTicketId(predictionTicketId));
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("FinalizePredictionTicket")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/withdraw",
+            [SwaggerOperation(Summary = "Withdraw prediction ticket", Description = "Withdraws a prediction ticket with an optional reason")]
+            async (string predictionTicketId, WithdrawPredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new WithdrawPredictionTicketCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.Reason);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("WithdrawPredictionTicket")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPatch("/predictions/{predictionTicketId}",
+            [SwaggerOperation(Summary = "Correct prediction metadata", Description = "Corrects confidence score or summary comment of a prediction ticket")]
+            async (string predictionTicketId, CorrectPredictionMetadataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new CorrectPredictionMetadataCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.ConfidenceScore,
+                    request.SummaryComment,
+                    request.Reason);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("CorrectPredictionMetadata")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/evaluate",
+            [SwaggerOperation(Summary = "Evaluate prediction ticket", Description = "Records evaluation result by comparing prediction against actual race result")]
+            async (string predictionTicketId, EvaluatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new EvaluatePredictionTicketCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.RaceId,
+                    request.EvaluatedAt,
+                    request.EvaluationRevision,
+                    request.HitTypeCodes,
+                    request.ScoreSummary,
+                    request.ReturnAmount,
+                    request.Roi);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("EvaluatePredictionTicket")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/predictions/{predictionTicketId}/recalculate-evaluation",
+            [SwaggerOperation(Summary = "Recalculate prediction evaluation", Description = "Recalculates evaluation of a prediction ticket with updated data")]
+            async (string predictionTicketId, RecalculatePredictionEvaluationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new RecalculatePredictionEvaluationCommand(
+                    new PredictionTicketId(predictionTicketId),
+                    request.RaceId,
+                    request.EvaluatedAt,
+                    request.EvaluationRevision,
+                    request.HitTypeCodes,
+                    request.ScoreSummary,
+                    request.ReturnAmount,
+                    request.Roi);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("RecalculatePredictionEvaluation")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

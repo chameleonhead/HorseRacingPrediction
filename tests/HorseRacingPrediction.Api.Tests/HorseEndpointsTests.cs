@@ -89,4 +89,21 @@ public class HorseEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [TestMethod]
+    public async Task CorrectHorseData_AfterRegister_ReturnsOk()
+    {
+        var horseId = $"horse-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            $"/api/horses/{horseId}",
+            new RegisterHorseRequest("テスト馬", "testuma", null, null),
+            JsonOptions);
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/horses/{horseId}",
+            new CorrectHorseDataRequest(null, "testuma-fixed", "M", null, "データ誤り修正"),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
 }

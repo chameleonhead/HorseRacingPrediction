@@ -90,4 +90,21 @@ public class TrainerEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [TestMethod]
+    public async Task CorrectTrainerData_AfterRegister_ReturnsOk()
+    {
+        var trainerId = $"trainer-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            $"/api/trainers/{trainerId}",
+            new RegisterTrainerRequest("テスト調教師", "testtrainer", null),
+            JsonOptions);
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/trainers/{trainerId}",
+            new CorrectTrainerDataRequest(null, "testtrainer-fixed", "JRA", "名前誤り修正"),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
 }

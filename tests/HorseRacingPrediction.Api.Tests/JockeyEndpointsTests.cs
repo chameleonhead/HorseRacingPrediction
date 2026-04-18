@@ -90,4 +90,21 @@ public class JockeyEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [TestMethod]
+    public async Task CorrectJockeyData_AfterRegister_ReturnsOk()
+    {
+        var jockeyId = $"jockey-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            $"/api/jockeys/{jockeyId}",
+            new RegisterJockeyRequest("テスト騎手", "testjockey", null),
+            JsonOptions);
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/jockeys/{jockeyId}",
+            new CorrectJockeyDataRequest(null, "testjockey-fixed", "JRA", "名前誤り修正"),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
 }
