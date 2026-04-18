@@ -1,9 +1,10 @@
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
-public sealed record HorseMemoSnapshot(
+public sealed record MemoSnapshot(
     string MemoId,
     string? AuthorId,
     string MemoType,
     string Content,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<HorseMemoLinkSnapshot> Links);
+    IReadOnlyList<MemoSubjectSnapshot> Subjects,
+    IReadOnlyList<MemoLinkSnapshot> Links);

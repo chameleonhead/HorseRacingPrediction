@@ -4,9 +4,11 @@ using EventFlow.Queries;
 using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Application.Commands.Memos;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Domain.Memos;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using Swashbuckle.AspNetCore.Annotations;
@@ -322,6 +324,127 @@ public static class EndpointExtensions
             })
             .WithName("GetTrainerProfile")
             .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        writeGroup.MapPost("/memos/{memoId}",
+            [SwaggerOperation(Summary = "Create memo", Description = "Creates a memo that can be attached to any combination of subjects (horse, trainer, jockey, race)")]
+            async (string memoId, CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                if (request.Subjects is null || request.Subjects.Count == 0)
+                    return Results.BadRequest(new[] { "At least one subject is required." });
+
+                var subjects = request.Subjects
+                    .Select(s => new MemoSubject(Enum.Parse<MemoSubjectType>(s.SubjectType, ignoreCase: true), s.SubjectId))
+                    .ToList();
+
+                var links = (request.Links ?? Array.Empty<MemoLinkDto>())
+                    .Select(l => new MemoLink(l.LinkId, Enum.Parse<MemoLinkType>(l.LinkType, ignoreCase: true), l.Title, l.Url, l.StorageKey))
+                    .ToList();
+
+                var command = new CreateMemoCommand(
+                    new MemoId(memoId),
+                    request.AuthorId,
+                    request.MemoType,
+                    request.Content,
+                    request.CreatedAt,
+                    subjects,
+                    links);
+
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Created($"/api/memos/{memoId}", new { MemoId = memoId })
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("CreateMemo")
+            .Produces(StatusCodes.Status201Created)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPut("/memos/{memoId}",
+            [SwaggerOperation(Summary = "Update memo", Description = "Updates content or links of an existing memo")]
+            async (string memoId, UpdateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var links = request.Links?.Select(l =>
+                    new MemoLink(l.LinkId, Enum.Parse<MemoLinkType>(l.LinkType, ignoreCase: true), l.Title, l.Url, l.StorageKey))
+                    .ToList();
+
+                var command = new UpdateMemoCommand(new MemoId(memoId), request.MemoType, request.Content, links);
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("UpdateMemo")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapDelete("/memos/{memoId}",
+            [SwaggerOperation(Summary = "Delete memo", Description = "Deletes a memo")]
+            async (string memoId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                var command = new DeleteMemoCommand(new MemoId(memoId));
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("DeleteMemo")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        writeGroup.MapPut("/memos/{memoId}/subjects",
+            [SwaggerOperation(Summary = "Change memo subjects", Description = "Replaces the full list of subjects for a memo")]
+            async (string memoId, ChangeMemoSubjectsRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                if (request.Subjects is null || request.Subjects.Count == 0)
+                    return Results.BadRequest(new[] { "At least one subject is required." });
+
+                var subjects = request.Subjects
+                    .Select(s => new MemoSubject(Enum.Parse<MemoSubjectType>(s.SubjectType, ignoreCase: true), s.SubjectId))
+                    .ToList();
+
+                var command = new ChangeMemoSubjectsCommand(new MemoId(memoId), subjects);
+                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                return result.IsSuccess
+                    ? Results.Ok()
+                    : Results.BadRequest(new[] { "Command execution failed." });
+            })
+            .WithName("ChangeMemoSubjects")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        app.MapGet("/api/memos/by-subject/{subjectType}/{subjectId}",
+            [SwaggerOperation(Summary = "Get memos by subject", Description = "Returns all memos for a given subject (e.g. Horse, Trainer, Jockey, Race). Use subjectType=Horse and subjectId=<horseId>.")]
+            async (string subjectType, string subjectId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                if (!Enum.TryParse<MemoSubjectType>(subjectType, ignoreCase: true, out var parsedType))
+                    return Results.BadRequest(new[] { $"Unknown subjectType '{subjectType}'." });
+
+                var key = MemoBySubjectLocator.MakeKey(parsedType, subjectId);
+                var query = new ReadModelByIdQuery<MemoBySubjectReadModel>(key);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.SubjectKey))
+                    return Results.NotFound();
+
+                var response = readModel.Memos.Select(m => new MemoResponse(
+                    m.MemoId, m.AuthorId, m.MemoType, m.Content, m.CreatedAt,
+                    m.Subjects.Select(s => new MemoSubjectDto(s.SubjectType, s.SubjectId)).ToList(),
+                    m.Links.Select(l => new MemoLinkDto(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList()))
+                    .ToList();
+
+                return Results.Ok(response);
+            })
+            .WithName("GetMemosBySubject")
+            .Produces<IReadOnlyList<MemoResponse>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 

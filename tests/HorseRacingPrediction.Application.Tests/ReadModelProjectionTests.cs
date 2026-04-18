@@ -5,12 +5,14 @@ using EventFlow.Queries;
 using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
+using HorseRacingPrediction.Application.Commands.Memos;
 using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
+using HorseRacingPrediction.Domain.Memos;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
@@ -32,6 +34,7 @@ public class ReadModelProjectionTests
         services.AddLogging();
         services.AddSingleton<HorseWeightHistoryLocator>();
         services.AddSingleton<PredictionComparisonViewLocator>();
+        services.AddSingleton<MemoBySubjectLocator>();
         services.AddEventFlow(options =>
         {
             options
@@ -44,7 +47,8 @@ public class ReadModelProjectionTests
                 .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
                 .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
                 .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>();
+                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
+                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
         });
         _serviceProvider = services.BuildServiceProvider();
         _commandBus = _serviceProvider.GetRequiredService<ICommandBus>();
@@ -271,5 +275,91 @@ public class ReadModelProjectionTests
         Assert.AreEqual("ドウデュース", readModel.WinningHorseName);
         Assert.AreEqual(1, readModel.PredictionTickets.Count);
         Assert.AreEqual(1, readModel.PredictionTickets[0].Marks.Count);
+    }
+
+    [TestMethod]
+    public async Task MemoBySubjectReadModel_AfterCreate_AppearsForEachSubject()
+    {
+        var memoId = MemoId.New;
+        var horseId = HorseId.New.Value;
+        var trainerId = TrainerId.New.Value;
+        var subjects = new[]
+        {
+            new MemoSubject(MemoSubjectType.Horse, horseId),
+            new MemoSubject(MemoSubjectType.Trainer, trainerId)
+        };
+
+        await _commandBus.PublishAsync(
+            new CreateMemoCommand(memoId, "author-1", "Observation", "調教師×馬のメモ",
+                DateTimeOffset.UtcNow, subjects),
+            CancellationToken.None);
+
+        var horseKey = MemoBySubjectLocator.MakeKey(MemoSubjectType.Horse, horseId);
+        var horseReadModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<MemoBySubjectReadModel>(horseKey), CancellationToken.None);
+
+        Assert.IsNotNull(horseReadModel);
+        Assert.AreEqual(1, horseReadModel.Memos.Count);
+        Assert.AreEqual(memoId.Value, horseReadModel.Memos[0].MemoId);
+        Assert.AreEqual("Observation", horseReadModel.Memos[0].MemoType);
+
+        var trainerKey = MemoBySubjectLocator.MakeKey(MemoSubjectType.Trainer, trainerId);
+        var trainerReadModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<MemoBySubjectReadModel>(trainerKey), CancellationToken.None);
+
+        Assert.IsNotNull(trainerReadModel);
+        Assert.AreEqual(1, trainerReadModel.Memos.Count);
+        Assert.AreEqual(memoId.Value, trainerReadModel.Memos[0].MemoId);
+    }
+
+    [TestMethod]
+    public async Task MemoBySubjectReadModel_AfterDelete_MemoIsRemoved()
+    {
+        var memoId = MemoId.New;
+        var horseId = HorseId.New.Value;
+        var subjects = new[] { new MemoSubject(MemoSubjectType.Horse, horseId) };
+
+        await _commandBus.PublishAsync(
+            new CreateMemoCommand(memoId, null, "Note", "内容", DateTimeOffset.UtcNow, subjects),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeleteMemoCommand(memoId),
+            CancellationToken.None);
+
+        var key = MemoBySubjectLocator.MakeKey(MemoSubjectType.Horse, horseId);
+        var readModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<MemoBySubjectReadModel>(key), CancellationToken.None);
+
+        Assert.IsNotNull(readModel);
+        Assert.AreEqual(0, readModel.Memos.Count);
+    }
+
+    [TestMethod]
+    public async Task MemoBySubjectReadModel_AfterChangeSubjects_ReflectsNewSubjects()
+    {
+        var memoId = MemoId.New;
+        var horseId = HorseId.New.Value;
+        var jockeyId = JockeyId.New.Value;
+
+        await _commandBus.PublishAsync(
+            new CreateMemoCommand(memoId, null, "Note", "馬のメモ", DateTimeOffset.UtcNow,
+                new[] { new MemoSubject(MemoSubjectType.Horse, horseId) }),
+            CancellationToken.None);
+
+        await _commandBus.PublishAsync(
+            new ChangeMemoSubjectsCommand(memoId, new[]
+            {
+                new MemoSubject(MemoSubjectType.Horse, horseId),
+                new MemoSubject(MemoSubjectType.Jockey, jockeyId)
+            }),
+            CancellationToken.None);
+
+        var jockeyKey = MemoBySubjectLocator.MakeKey(MemoSubjectType.Jockey, jockeyId);
+        var jockeyReadModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<MemoBySubjectReadModel>(jockeyKey), CancellationToken.None);
+
+        Assert.IsNotNull(jockeyReadModel);
+        Assert.AreEqual(1, jockeyReadModel.Memos.Count);
+        Assert.AreEqual(memoId.Value, jockeyReadModel.Memos[0].MemoId);
     }
 }

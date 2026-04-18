@@ -34,6 +34,7 @@ internal static class TestApplicationFactory
 
         builder.Services.AddSingleton<HorseWeightHistoryLocator>();
         builder.Services.AddSingleton<PredictionComparisonViewLocator>();
+        builder.Services.AddSingleton<MemoBySubjectLocator>();
 
         builder.Services.AddEventFlow(options =>
         {
@@ -49,7 +50,8 @@ internal static class TestApplicationFactory
                 .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
                 .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
                 .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>();
+                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
+                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
         });
 
         var app = builder.Build();

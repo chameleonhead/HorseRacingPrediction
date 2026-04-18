@@ -6,10 +6,7 @@ public class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     IEmit<HorseRegistered>,
     IEmit<HorseProfileUpdated>,
     IEmit<HorseAliasMerged>,
-    IEmit<HorseDataCorrected>,
-    IEmit<HorseMemoAdded>,
-    IEmit<HorseMemoUpdated>,
-    IEmit<HorseMemoDeleted>
+    IEmit<HorseDataCorrected>
 {
     private readonly HorseState _state = new();
 
@@ -69,41 +66,4 @@ public class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     public void Apply(HorseProfileUpdated e) { }
     public void Apply(HorseAliasMerged e) { }
     public void Apply(HorseDataCorrected e) { }
-
-    public void AddMemo(string memoId, string? authorId, string memoType, string content,
-        DateTimeOffset createdAt, IReadOnlyList<HorseMemoLink>? links = null)
-    {
-        if (!_state.IsRegistered)
-            throw new InvalidOperationException("Horse is not registered.");
-
-        Emit(new HorseMemoAdded(memoId, authorId, memoType, content, createdAt,
-            links ?? Array.Empty<HorseMemoLink>()));
-    }
-
-    public void UpdateMemo(string memoId, string? memoType = null, string? content = null,
-        IReadOnlyList<HorseMemoLink>? links = null)
-    {
-        if (!_state.IsRegistered)
-            throw new InvalidOperationException("Horse is not registered.");
-
-        if (!_state.MemoExists(memoId))
-            throw new InvalidOperationException($"Memo '{memoId}' not found.");
-
-        Emit(new HorseMemoUpdated(memoId, memoType, content, links));
-    }
-
-    public void DeleteMemo(string memoId)
-    {
-        if (!_state.IsRegistered)
-            throw new InvalidOperationException("Horse is not registered.");
-
-        if (!_state.MemoExists(memoId))
-            throw new InvalidOperationException($"Memo '{memoId}' not found.");
-
-        Emit(new HorseMemoDeleted(memoId));
-    }
-
-    public void Apply(HorseMemoAdded e) { }
-    public void Apply(HorseMemoUpdated e) { }
-    public void Apply(HorseMemoDeleted e) { }
 }

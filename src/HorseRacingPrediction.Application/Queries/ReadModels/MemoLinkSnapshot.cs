@@ -1,6 +1,6 @@
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
-public sealed record HorseMemoLinkSnapshot(
+public sealed record MemoLinkSnapshot(
     string LinkId,
     string LinkType,
     string Title,

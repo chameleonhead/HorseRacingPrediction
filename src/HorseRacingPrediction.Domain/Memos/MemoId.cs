@@ -1,6 +1,6 @@
 using EventFlow.Core;
 
-namespace HorseRacingPrediction.Domain.Horses;
+namespace HorseRacingPrediction.Domain.Memos;
 
 public class MemoId : Identity<MemoId>
 {
