@@ -67,11 +67,3 @@ public class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     public void Apply(HorseAliasMerged e) { }
     public void Apply(HorseDataCorrected e) { }
 }
-
-public sealed record HorseDetails(
-    string HorseId,
-    string? RegisteredName,
-    string? NormalizedName,
-    string? SexCode,
-    DateOnly? BirthDate,
-    IReadOnlyCollection<AliasDetails> Aliases);

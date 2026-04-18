@@ -64,10 +64,3 @@ public class TrainerAggregate : AggregateRoot<TrainerAggregate, TrainerId>,
     public void Apply(TrainerAliasMerged e) { }
     public void Apply(TrainerDataCorrected e) { }
 }
-
-public sealed record TrainerDetails(
-    string TrainerId,
-    string? DisplayName,
-    string? NormalizedName,
-    string? AffiliationCode,
-    IReadOnlyCollection<AliasDetails> Aliases);

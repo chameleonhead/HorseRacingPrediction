@@ -64,10 +64,3 @@ public class JockeyAggregate : AggregateRoot<JockeyAggregate, JockeyId>,
     public void Apply(JockeyAliasMerged e) { }
     public void Apply(JockeyDataCorrected e) { }
 }
-
-public sealed record JockeyDetails(
-    string JockeyId,
-    string? DisplayName,
-    string? NormalizedName,
-    string? AffiliationCode,
-    IReadOnlyCollection<AliasDetails> Aliases);
