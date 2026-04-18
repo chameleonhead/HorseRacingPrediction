@@ -74,9 +74,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(TimeoutMs);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeoutMs);
-
         try
         {
             await page.GotoAsync(url, new PageGotoOptions

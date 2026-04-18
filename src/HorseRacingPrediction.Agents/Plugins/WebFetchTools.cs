@@ -136,7 +136,13 @@ public sealed class WebFetchTools
 
     private static string BuildJraRaceCardUrl(string racecourseCode, string raceDate, int raceNumber)
     {
-        // JRA の出馬表 URL パターン (参考: https://www.jra.go.jp/)
+        // JRA の出馬表 URL パターン
+        // CNAME 形式: pw01sde0203_{raceDate}{racecourseCode}{raceNumber:00}01
+        //   pw01sde0203_ : JRA の出馬表画面識別子（固定値）
+        //   raceDate      : 開催日（YYYYMMDD）
+        //   racecourseCode: 競馬場コード（例: 05=東京, 06=中山）
+        //   raceNumber    : レース番号（2桁ゼロ埋め）
+        //   01            : 回次・日次（参照用固定値）
         return $"https://www.jra.go.jp/JRADB/accessD.html?" +
                $"CNAME=pw01sde0203_{raceDate}{racecourseCode}{raceNumber:D2}01&sub=";
     }

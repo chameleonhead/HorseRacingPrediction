@@ -1,3 +1,4 @@
+using System.Text;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,7 +61,7 @@ public sealed class WebBrowserAgent
         string userMessage,
         CancellationToken cancellationToken = default)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         await foreach (var response in _innerAgent.InvokeAsync(
             userMessage,
             thread: null,
