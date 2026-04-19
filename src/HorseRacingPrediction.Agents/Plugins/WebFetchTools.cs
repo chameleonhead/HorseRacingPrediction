@@ -81,7 +81,8 @@ public sealed class WebFetchTools
         sb.AppendLine("次の URL を起点にサイト内を探索し、情報を日本語の Markdown で返してください。");
         sb.AppendLine($"起点 URL: {entryUrl}");
         sb.AppendLine($"調査目的: {objective}");
-        sb.AppendLine("サイト内のリンクをたどり、目的に関連するページを順に読んでください。");
+        sb.AppendLine("検索エンジンは使わず、まず起点 URL を直接開くか、そのページのリンク一覧を確認してください。");
+        sb.AppendLine("その後はサイト内の関連リンクだけをたどり、目的に関連するページを順に読んでください。");
         sb.AppendLine("参照した URL を明記してください。URL は自分で推測せず、ツールが返した URL だけを使ってください。");
         return await _invokeAgent(sb.ToString(), cancellationToken);
     }

@@ -152,15 +152,28 @@ public class DataCollectionWorkflowTests
 
     private sealed class FakeWebBrowser : IWebBrowser
     {
-        public Task<string> FetchTextAsync(string url, CancellationToken cancellationToken = default)
+        public string? CurrentUrl => "https://www.jra.go.jp";
+
+        public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
             => Task.FromResult($"ページ本文: {url}");
 
-        public Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
-            string url, int maxResults = 10, CancellationToken cancellationToken = default)
+        public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
+            int maxResults = 10, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
 
-        public Task<IReadOnlyList<SearchResultLink>> SearchAsync(
-            string query, int maxResults = 10, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
+        public Task<string> SearchAsync(
+            string query, CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public Task<string> GoBackAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

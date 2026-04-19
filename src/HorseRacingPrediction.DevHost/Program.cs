@@ -41,7 +41,8 @@ builder.AddAIAgent(
         var chatClient = sp.GetRequiredService<IChatClient>();
         var browser = sp.GetRequiredService<IWebBrowser>();
         var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
-        var playwrightTools = new PlaywrightTools(browser, options);
+        var extractionAgent = sp.GetService<PageDataExtractionAgent>();
+        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
         return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: playwrightTools.GetAITools());
     });
 

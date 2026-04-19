@@ -484,9 +484,14 @@ public sealed class LMStudioChatClient : IChatClient, IDisposable
         _options.ConfigureRequest?.Invoke(httpRequest);
         HttpResponseMessage response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         _options.ConfigureResponse?.Invoke(response);
-        response.EnsureSuccessStatusCode();
 
         string responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"LM Studio request failed with {(int)response.StatusCode} {response.ReasonPhrase}. Body: {responseText}");
+        }
+
         // Console.WriteLine("LM Studio response:\n" + responseText);
 
         using var document = JsonDocument.Parse(responseText);
@@ -686,9 +691,14 @@ public sealed class LMStudioChatClient : IChatClient, IDisposable
         _options.ConfigureRequest?.Invoke(httpRequest);
         HttpResponseMessage response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         _options.ConfigureResponse?.Invoke(response);
-        response.EnsureSuccessStatusCode();
 
         string responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"LM Studio OpenAI request failed with {(int)response.StatusCode} {response.ReasonPhrase}. Body: {responseText}");
+        }
+
         // Console.WriteLine("LM Studio OpenAI-compat response:\n" + responseText);
 
         using var document = JsonDocument.Parse(responseText);

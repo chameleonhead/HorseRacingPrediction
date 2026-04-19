@@ -10,10 +10,10 @@ Console.OutputEncoding = Encoding.UTF8;
 
 var prompt = args.Length > 0
     ? string.Join(' ', args)
-    : "2026年の皐月賞について、JRA公式サイトを優先して出走馬情報を調べてください。必要ならサイト内を追加探索し、確認できた事実だけを整理して返してください。";
+    : "2026年皐月賞の出走馬一覧をJRAのサイトで検索してください。";
 
-var searchQuery = Environment.GetEnvironmentVariable("WEB_AGENT_QUERY") ?? "2026 皐月賞";
-var objective = Environment.GetEnvironmentVariable("WEB_AGENT_OBJECTIVE") ?? "出走馬情報を確認する";
+var searchQuery = Environment.GetEnvironmentVariable("WEB_AGENT_QUERY") ?? "2026 皐月賞 出走馬一覧";
+var objective = Environment.GetEnvironmentVariable("WEB_AGENT_OBJECTIVE") ?? "出走馬一覧を取得する";
 var entryUrl = Environment.GetEnvironmentVariable("WEB_AGENT_ENTRY_URL");
 
 var baseUri = Environment.GetEnvironmentVariable("LMSTUDIO_BASEURI") ?? "http://127.0.0.1:1234";
@@ -26,6 +26,8 @@ IChatClient chatClient = new LMStudioChatClient(new LMStudioChatClientOptions()
 });
 
 await using var browser = await PlaywrightWebBrowser.CreateAsync();
+
+var extractionAgent = new PageDataExtractionAgent(chatClient);
 var options = Options.Create(new WebFetchOptions
 {
     AllowedDomains =
@@ -40,7 +42,7 @@ var options = Options.Create(new WebFetchOptions
     SearchResultsToFetch = 3
 });
 
-var playwrightTools = new PlaywrightTools(browser, options);
+var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
 var webFetchTools = new WebFetchTools(new WebBrowserAgent(chatClient, playwrightTools.GetAITools()));
 var agent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
 
@@ -50,18 +52,39 @@ Console.WriteLine($"Prompt  : {prompt}");
 Console.WriteLine();
 
 Console.WriteLine("--- Tool-level SearchWeb ---");
-var toolResult = await webFetchTools.SearchWeb(searchQuery, objective, "www.jra.go.jp");
-Console.WriteLine(toolResult);
+try
+{
+    var toolResult = await webFetchTools.SearchWeb(searchQuery, objective, "www.jra.go.jp");
+    Console.WriteLine(toolResult);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"SearchWeb failed: {ex.Message}");
+}
 Console.WriteLine();
 
 if (!string.IsNullOrWhiteSpace(entryUrl))
 {
     Console.WriteLine("--- Tool-level ExploreFromEntryPoint ---");
-    var exploreResult = await webFetchTools.ExploreFromEntryPoint(entryUrl, objective);
-    Console.WriteLine(exploreResult);
+    try
+    {
+        var exploreResult = await webFetchTools.ExploreFromEntryPoint(entryUrl, objective);
+        Console.WriteLine(exploreResult);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"ExploreFromEntryPoint failed: {ex.Message}");
+    }
     Console.WriteLine();
 }
 
 Console.WriteLine("--- Agent result ---");
-var result = await agent.InvokeAsync(prompt);
-Console.WriteLine(result);
+try
+{
+    var result = await agent.InvokeAsync(prompt);
+    Console.WriteLine(result);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Agent invocation failed: {ex.Message}");
+}

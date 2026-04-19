@@ -16,12 +16,6 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// </summary>
 public sealed class RaceQueryTools
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
     private readonly IQueryProcessor _queryProcessor;
 
     public RaceQueryTools(IQueryProcessor queryProcessor)

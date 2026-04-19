@@ -34,14 +34,20 @@ public static class AgentServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddWebBrowserAgent(this IServiceCollection services)
     {
+        services.AddSingleton<PageDataExtractionAgent>(sp =>
+        {
+            var chatClient = sp.GetRequiredService<IChatClient>();
+            return new PageDataExtractionAgent(chatClient);
+        });
         services.AddTransient<PlaywrightTools>();
         services.AddTransient<WebBrowserAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var browser = sp.GetRequiredService<IWebBrowser>();
             var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
+            var extractionAgent = sp.GetRequiredService<PageDataExtractionAgent>();
 
-            var playwrightTools = new PlaywrightTools(browser, options);
+            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
             return new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
         });
         services.AddTransient<WebFetchTools>(sp =>

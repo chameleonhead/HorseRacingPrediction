@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -7,136 +8,147 @@ using Microsoft.Extensions.Options;
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
-/// Playwright ベースのブラウザ操作プリミティブを提供するプラグイン。
-/// Microsoft Playwright MCP のインターフェースを参考に、
-/// ページ移動・テキスト取得・リンク抽出・検索エンジン利用の各操作を公開する。
+/// セッションベースの Playwright ブラウザ操作ツールを提供するプラグイン。
+/// ブラウザのページはセッション中ずっと開いたままで、エージェントが
+/// ナビゲーション・クリック・テキスト取得・リンク抽出・検索・戻るなどの
+/// 操作を逐次実行してインタラクティブに Web ページを閲覧する。
 /// <see cref="WebBrowserAgent"/> のツールとして使用することを想定している。
 /// </summary>
 public sealed class PlaywrightTools
 {
     private readonly IWebBrowser _browser;
     private readonly WebFetchOptions _options;
+    private readonly PageDataExtractionAgent? _extractionAgent;
 
-    public PlaywrightTools(IWebBrowser browser, IOptions<WebFetchOptions> options)
+    public PlaywrightTools(IWebBrowser browser, IOptions<WebFetchOptions> options, PageDataExtractionAgent? extractionAgent = null)
     {
         _browser = browser;
         _options = options.Value;
+        _extractionAgent = extractionAgent;
     }
 
     /// <summary>
     /// 指定した URL に移動してページの本文テキストを取得する。
-    /// Playwright MCP の <c>browser_navigate</c> に相当する。
+    /// ページはセッション中開いたままになる。
     /// </summary>
-    [Description("指定した URL に移動してページの本文テキストを取得します。")]
+    [Description("サイトのトップページなど入口 URL を直接開きます。検索結果のリンクは BrowserClick で開いてください。")]
     public async Task<string> BrowserNavigate(
-        [Description("移動先の URL")] string url,
+        [Description("移動先の入口 URL（サイトのトップページなど。検索結果の URL には使わない）")] string url,
         CancellationToken cancellationToken = default)
     {
         ValidateDomain(url);
-        return await _browser.FetchTextAsync(url, cancellationToken);
+        var rawText = await _browser.NavigateAsync(url, cancellationToken);
+        var formatted = await FormatIfAvailableAsync(rawText, url, cancellationToken);
+        return WithCurrentUrl(formatted);
     }
 
     /// <summary>
-    /// 指定した URL のページ内リンク一覧を抽出する。
-    /// 検索結果ページや一般ページの両方に対応し、リンクを Markdown リスト形式で返す。
-    /// Playwright MCP の <c>browser_snapshot</c> からリンク情報を抽出する操作に相当する。
+    /// 現在のページで指定テキストの要素をクリックし、遷移・更新後のテキストを取得する。
+    /// リンク・ボタン・タブなどあらゆるクリック可能な要素に対応する。
     /// </summary>
-    [Description("指定した URL のページ内リンク一覧を抽出します。検索結果ページや一般ページに対して使用します。")]
-    public async Task<string> BrowserGetLinks(
-        [Description("リンクを抽出するページの URL")] string url,
-        [Description("抽出する最大リンク数（既定値 10）")] int maxResults = 10,
+    [Description("現在のページで指定テキストの要素をクリックし、結果のページ本文を返します。リンク・ボタン・タブなどに使えます。")]
+    public async Task<string> BrowserClick(
+        [Description("クリック対象の表示テキスト（リンク文字列やボタンのラベル）")] string text,
         CancellationToken cancellationToken = default)
     {
-        ValidateDomain(url);
-        var links = await _browser.ExtractLinksAsync(url, maxResults, cancellationToken);
+        string rawText;
+        try
+        {
+            rawText = await _browser.ClickAsync(text, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return $"クリック失敗: {ex.Message}\n別のテキストを指定するか、BrowserGetLinks でリンク一覧を確認してください。";
+        }
+
+        var url = _browser.CurrentUrl ?? "";
+        if (!string.IsNullOrEmpty(url) && !IsDomainAllowed(url))
+        {
+            // 許可外ドメインに遷移した場合は戻る
+            try { await _browser.GoBackAsync(cancellationToken); } catch { /* best effort */ }
+            return $"クリック先のドメインは許可されていません: {url}\nBrowserGoBack で戻りました。別のリンクを選んでください。";
+        }
+
+        var formatted = await FormatIfAvailableAsync(rawText, url, cancellationToken);
+        return WithCurrentUrl(formatted);
+    }
+
+    /// <summary>
+    /// 現在のページの本文テキストを再取得する。
+    /// 動的コンテンツの再読み込みやクリック後の確認に使う。
+    /// </summary>
+    [Description("現在開いているページの本文テキストを再取得します。")]
+    public async Task<string> BrowserGetPageContent(
+        CancellationToken cancellationToken = default)
+    {
+        var rawText = await _browser.GetPageContentAsync(cancellationToken);
+        var url = _browser.CurrentUrl ?? "";
+        var formatted = await FormatIfAvailableAsync(rawText, url, cancellationToken);
+        return WithCurrentUrl(formatted);
+    }
+
+    /// <summary>
+    /// 現在のページ内のリンク一覧を抽出する。
+    /// </summary>
+    [Description("現在のページ内のリンク一覧を取得します。遷移先候補を確認するときに使います。")]
+    public async Task<string> BrowserGetLinks(
+        [Description("抽出する最大リンク数（既定値 20）")] int maxResults = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var links = await _browser.GetLinksAsync(maxResults, cancellationToken);
 
         if (links.Count == 0)
             return "リンクが見つかりませんでした。";
 
         var sb = new StringBuilder();
+        sb.AppendLine($"現在のページ: {_browser.CurrentUrl ?? "(不明)"}");
+        sb.AppendLine();
         foreach (var link in links)
             sb.AppendLine($"- [{link.Title}]({link.Url})");
         return sb.ToString();
     }
 
     /// <summary>
-    /// 検索エンジンでクエリを実行し、検索結果のリンク一覧を取得する。
-    /// site パラメータでドメイン絞り込みが可能。
+    /// 検索エンジン（Bing）でクエリを実行し、検索結果ページのテキストを取得する。
+    /// 検索後、ブラウザは検索結果ページを表示した状態になるため、
+    /// BrowserClick で検索結果のリンクをクリックしてページを開ける。
     /// </summary>
-    [Description("検索エンジンでクエリを実行し、検索結果のリンク一覧を取得します。")]
+    [Description("Bing で検索し、結果ページのテキストを返します。検索後はそのページに留まるので BrowserClick でリンクを開けます。")]
     public async Task<string> BrowserSearch(
-        [Description("検索クエリ文字列")] string query,
-        [Description("検索対象を絞り込むサイトドメイン（省略可）")] string? site = null,
-        [Description("取得する最大リンク数（既定値 10）")] int maxResults = 10,
+        [Description("検索クエリ（スペース区切りのキーワード）")] string query,
+        [Description("検索対象サイトのドメイン（例: www.jra.go.jp）省略可")] string? site = null,
         CancellationToken cancellationToken = default)
     {
         var searchQuery = string.IsNullOrWhiteSpace(site)
             ? query
             : $"{query} site:{site}";
 
-        var links = await _browser.SearchAsync(searchQuery, maxResults, cancellationToken);
+        var rawText = await _browser.SearchAsync(searchQuery, cancellationToken);
 
-        if (links.Count == 0)
-        {
-            return "検索結果リンクを取得できませんでした。";
-        }
+        if (string.IsNullOrWhiteSpace(rawText))
+            return "検索結果が見つかりませんでした。";
+
+        var formatted = await FormatIfAvailableAsync(rawText, _browser.CurrentUrl ?? "", cancellationToken);
 
         var sb = new StringBuilder();
-        foreach (var link in links)
-            sb.AppendLine($"- [{link.Title}]({link.Url})");
+        sb.AppendLine($"検索: {searchQuery}");
+        sb.AppendLine("※ 結果を開くには BrowserClick(\"リンクのタイトル\") を使ってください。");
+        sb.AppendLine();
+        sb.AppendLine(formatted);
         return sb.ToString();
     }
 
     /// <summary>
-    /// 検索エンジンでクエリを実行し、上位ページに実際にアクセスして本文テキストを取得する。
-    /// 検索 → ページ読み込みを 1 回のツール呼び出しで行う複合操作。
-    /// 小規模モデルで検索後にページ読み込みを忘れる問題を防ぐ。
+    /// ブラウザの「戻る」を実行し、前のページのテキストを返す。
     /// </summary>
-    [Description("検索して上位ページの本文テキストを一括取得します。検索結果のリンク先を実際に開いて内容を読みます。")]
-    public async Task<string> BrowserSearchAndRead(
-        [Description("検索クエリ文字列")] string query,
-        [Description("検索対象を絞り込むサイトドメイン（省略可）")] string? site = null,
-        [Description("読み込むページ数（既定値 3）")] int maxPages = 3,
+    [Description("前のページに戻り、その本文テキストを返します。")]
+    public async Task<string> BrowserGoBack(
         CancellationToken cancellationToken = default)
     {
-        var searchQuery = string.IsNullOrWhiteSpace(site)
-            ? query
-            : $"{query} site:{site}";
-
-        var links = await _browser.SearchAsync(searchQuery, maxPages * 3, cancellationToken);
-
-        if (links.Count == 0)
-        {
-            return "検索結果が見つかりませんでした。";
-        }
-
-        var sb = new StringBuilder();
-        var fetched = 0;
-        foreach (var link in links)
-        {
-            if (fetched >= maxPages) break;
-            try
-            {
-                var content = await _browser.FetchTextAsync(link.Url, cancellationToken);
-                sb.AppendLine($"### {link.Title}");
-                sb.AppendLine($"URL: {link.Url}");
-                sb.AppendLine();
-                sb.AppendLine(TrimContent(content));
-                sb.AppendLine();
-                fetched++;
-            }
-            catch
-            {
-                // skip inaccessible pages
-            }
-        }
-
-        if (fetched == 0)
-        {
-            return "検索結果ページを読み込めませんでした。";
-        }
-
-        return sb.ToString();
+        var rawText = await _browser.GoBackAsync(cancellationToken);
+        var url = _browser.CurrentUrl ?? "";
+        var formatted = await FormatIfAvailableAsync(rawText, url, cancellationToken);
+        return WithCurrentUrl(formatted);
     }
 
     /// <summary>
@@ -145,29 +157,34 @@ public sealed class PlaywrightTools
     public IList<AITool> GetAITools() =>
     [
         AIFunctionFactory.Create(BrowserNavigate),
+        AIFunctionFactory.Create(BrowserClick),
+        AIFunctionFactory.Create(BrowserGetPageContent),
         AIFunctionFactory.Create(BrowserGetLinks),
         AIFunctionFactory.Create(BrowserSearch),
-        AIFunctionFactory.Create(BrowserSearchAndRead),
+        AIFunctionFactory.Create(BrowserGoBack),
     ];
 
     // ------------------------------------------------------------------ //
     // helpers
     // ------------------------------------------------------------------ //
 
-    private static string TrimContent(string content)
+    private string WithCurrentUrl(string content)
     {
-        if (string.IsNullOrWhiteSpace(content))
-            return string.Empty;
+        var url = _browser.CurrentUrl;
+        if (string.IsNullOrEmpty(url))
+            return content;
 
-        const int maxLength = 8_000;
-        return content.Length <= maxLength
-            ? content
-            : content[..maxLength] + "\n\n（以下省略）";
+        return $"[現在のページ: {url}]\n\n{content}";
     }
 
-    // ------------------------------------------------------------------ //
-    // domain validation
-    // ------------------------------------------------------------------ //
+    private async Task<string> FormatIfAvailableAsync(
+        string rawText, string url, CancellationToken cancellationToken)
+    {
+        if (_extractionAgent is null)
+            return rawText;
+
+        return await _extractionAgent.FormatPageContentAsync(rawText, url, cancellationToken);
+    }
 
     private void ValidateDomain(string url)
     {
@@ -183,9 +200,36 @@ public sealed class PlaywrightTools
             throw new ArgumentException($"URL の形式が不正です: {url}", nameof(url));
         }
 
-        var host = uri.Host.ToLowerInvariant();
+        ValidateHost(uri.Host);
+    }
+
+    private void ValidateDomainIfAbsolute(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            uri.Scheme is "http" or "https")
+        {
+            ValidateHost(uri.Host);
+        }
+    }
+
+    private bool IsDomainAllowed(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https"))
+        {
+            return true; // 相対 URL やスキーム不明は許可
+        }
+
+        var lower = uri.Host.ToLowerInvariant();
+        return _options.AllowedDomains
+            .Any(d => lower == d.ToLowerInvariant() || lower.EndsWith("." + d.ToLowerInvariant()));
+    }
+
+    private void ValidateHost(string host)
+    {
+        var lower = host.ToLowerInvariant();
         var allowed = _options.AllowedDomains
-            .Any(d => host == d.ToLowerInvariant() || host.EndsWith("." + d.ToLowerInvariant()));
+            .Any(d => lower == d.ToLowerInvariant() || lower.EndsWith("." + d.ToLowerInvariant()));
 
         if (!allowed)
         {

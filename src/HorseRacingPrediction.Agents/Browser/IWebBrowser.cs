@@ -1,43 +1,64 @@
 namespace HorseRacingPrediction.Agents.Browser;
 
 /// <summary>
-/// ブラウザを使ってウェブページのコンテンツを取得するインターフェース。
+/// セッションベースのブラウザインターフェース。
+/// ページはセッション中ずっと開いたままで、エージェントが
+/// ナビゲーション・クリック・テキスト取得などの操作を逐次実行する。
 /// テスト時にモックへ差し替えられるよう DI で注入する。
 /// </summary>
-public interface IWebBrowser
+public interface IWebBrowser : IAsyncDisposable
 {
     /// <summary>
-    /// 指定した URL のページを JavaScript レンダリング後にテキスト本文として取得する。
+    /// 現在表示しているページの URL。初期状態では <c>null</c>。
     /// </summary>
-    /// <param name="url">取得対象の URL</param>
-    /// <param name="cancellationToken">キャンセルトークン</param>
-    /// <returns>ページの本文テキスト</returns>
-    Task<string> FetchTextAsync(string url, CancellationToken cancellationToken = default);
+    string? CurrentUrl { get; }
 
     /// <summary>
-    /// 指定した URL のページからリンク（&lt;a&gt; 要素の href）を抽出する。
-    /// Bing・Google 等の検索結果ページに対応し、検索結果リンクを返す。
+    /// 指定した URL に移動し、ページの本文テキストを返す。
+    /// ページはセッション中再利用される。
     /// </summary>
-    /// <param name="url">リンクを抽出するページの URL</param>
+    Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 現在のページで指定テキストを持つ要素をクリックし、
+    /// 遷移・更新後のページ本文テキストを返す。
+    /// リンク・ボタン・タブなどインタラクティブ要素を操作できる。
+    /// </summary>
+    /// <param name="text">クリック対象の表示テキスト（部分一致）</param>
+    /// <param name="cancellationToken">キャンセルトークン</param>
+    /// <returns>クリック後のページ本文テキスト</returns>
+    Task<string> ClickAsync(string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 現在のページの本文テキストを取得する。
+    /// 動的コンテンツの再読み込みや、クリック後の確認に使用する。
+    /// </summary>
+    Task<string> GetPageContentAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 現在のページからリンク（&lt;a&gt; 要素の href）を抽出する。
+    /// </summary>
     /// <param name="maxResults">抽出する最大リンク数</param>
     /// <param name="cancellationToken">キャンセルトークン</param>
     /// <returns>抽出されたリンク一覧</returns>
-    Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
-        string url,
+    Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
         int maxResults = 10,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// ブラウザのアドレスバーから検索を行い、検索結果のリンク一覧を返す。
-    /// 検索エンジンの URL を直接構築するのではなく、実際にブラウザの検索ボックスに
-    /// クエリを入力して検索するため、ボット検知を回避しやすい。
+    /// 検索エンジン（Bing）でクエリを実行し、検索結果ページのテキストを返す。
+    /// 検索後、ブラウザは検索結果ページを表示した状態になるため、
+    /// <see cref="ClickAsync"/> で検索結果のリンクをクリックできる。
     /// </summary>
-    /// <param name="query">検索クエリ文字列（URL エンコード不要）</param>
-    /// <param name="maxResults">抽出する最大リンク数</param>
+    /// <param name="query">検索クエリ文字列</param>
     /// <param name="cancellationToken">キャンセルトークン</param>
-    /// <returns>検索結果のリンク一覧</returns>
-    Task<IReadOnlyList<SearchResultLink>> SearchAsync(
+    /// <returns>検索結果ページの本文テキスト</returns>
+    Task<string> SearchAsync(
         string query,
-        int maxResults = 10,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ブラウザの「戻る」を実行し、前のページの本文テキストを返す。
+    /// </summary>
+    Task<string> GoBackAsync(CancellationToken cancellationToken = default);
 }

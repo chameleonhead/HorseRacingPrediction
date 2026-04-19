@@ -4,13 +4,14 @@ using Microsoft.Playwright;
 namespace HorseRacingPrediction.Agents.Browser;
 
 /// <summary>
-/// Microsoft.Playwright を使って実際のブラウザを操作し、ページ本文を取得する実装。
-/// JavaScript レンダリングが必要なページにも対応する。
+/// Microsoft.Playwright を使ったセッションベースのブラウザ実装。
+/// セッション中は同一の <see cref="IPage"/> を維持し、ナビゲーション・クリック・
+/// テキスト取得などの操作を逐次実行する。
 /// </summary>
-public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
+public sealed class PlaywrightWebBrowser : IWebBrowser
 {
-    private const int MaxContentLength = 30_000;
-    private const int TimeoutMs = 30_000;
+    private const int MaxContentLength = 12_000;
+    private const int DefaultTimeoutMs = 30_000;
     private const int MaxRetries = 2;
 
     private const string UserAgentString =
@@ -18,8 +19,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
     /// <summary>
-    /// 検索結果ページからリンクを抽出する JavaScript。
-    /// Bing と Google の両方に対応し、Bing のリダイレクト URL をデコードする。
+    /// ページからリンクを抽出する JavaScript。
+    /// 検索結果ページ（Bing / Google）と一般ページの両方に対応する。
     /// </summary>
     private const string ExtractLinksScript = """
         (maxResults) => {
@@ -65,7 +66,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
                 }
             }
 
-            // Generic page links fallback for on-site exploration
+            // Generic page links fallback
             if (results.length === 0) {
                 const ignore = ['ログイン', 'サインイン', 'privacy', 'cookie', '利用規約', 'お問い合わせ'];
                 for (const anchor of document.querySelectorAll('a[href]')) {
@@ -84,15 +85,25 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
 
     private readonly IPlaywright _playwright;
     private readonly IBrowser _browser;
+    private readonly IBrowserContext _context;
+    private readonly IPage _page;
 
-    private PlaywrightWebBrowser(IPlaywright playwright, IBrowser browser)
+    private PlaywrightWebBrowser(
+        IPlaywright playwright, IBrowser browser, IBrowserContext context, IPage page)
     {
         _playwright = playwright;
         _browser = browser;
+        _context = context;
+        _page = page;
+        _page.SetDefaultTimeout(DefaultTimeoutMs);
     }
+
+    /// <inheritdoc />
+    public string? CurrentUrl => _page.Url is "about:blank" ? null : _page.Url;
 
     /// <summary>
     /// PlaywrightWebBrowser のインスタンスを非同期で生成する。
+    /// ブラウザ・コンテキスト・ページをすべて初期化する。
     /// </summary>
     public static async Task<PlaywrightWebBrowser> CreateAsync()
     {
@@ -102,11 +113,19 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
             Headless = true,
             Args = ["--disable-blink-features=AutomationControlled"]
         });
-        return new PlaywrightWebBrowser(playwright, browser);
+        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            UserAgent = UserAgentString,
+            Locale = "ja-JP",
+            TimezoneId = "Asia/Tokyo",
+            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+        });
+        var page = await context.NewPageAsync();
+        return new PlaywrightWebBrowser(playwright, browser, context, page);
     }
 
     /// <inheritdoc />
-    public async Task<string> FetchTextAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
     {
         var lastException = default(Exception);
         for (var attempt = 0; attempt <= MaxRetries; attempt++)
@@ -114,7 +133,22 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                return await FetchOnceAsync(url, cancellationToken);
+                var response = await _page.GotoAsync(url, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = DefaultTimeoutMs
+                });
+
+                // HTTP エラーステータスをチェックし、エージェントに明確なメッセージを返す
+                if (response is not null && response.Status >= 400)
+                {
+                    return $"HTTP {response.Status} エラー: {url} へのアクセスが拒否されました。" +
+                           $"この URL は直接アクセスできません。" +
+                           $"別のページからリンクをたどってください。";
+                }
+
+                await WaitForNetworkIdleAsync();
+                return await ReadPageTextAsync();
             }
             catch (OperationCanceledException)
             {
@@ -130,153 +164,194 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
             }
         }
 
+        return $"ページの読み込みに失敗しました: {url} — " +
+               $"{lastException?.Message ?? "不明なエラー"}。" +
+               $"別の URL を試すか、リンク一覧から別のページを選んでください。";
+    }
+
+    /// <inheritdoc />
+    public async Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // まずリンク、次にボタン、最後に任意の要素を試す
+        var selectors = new[]
+        {
+            $"a:has-text(\"{EscapeSelector(text)}\")",
+            $"button:has-text(\"{EscapeSelector(text)}\")",
+            $"[role=\"tab\"]:has-text(\"{EscapeSelector(text)}\")",
+            $"[role=\"button\"]:has-text(\"{EscapeSelector(text)}\")",
+            $"text=\"{EscapeSelector(text)}\"",
+        };
+
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                var locator = _page.Locator(selector).First;
+                if (await locator.CountAsync() == 0) continue;
+                if (!await locator.IsVisibleAsync()) continue;
+
+                await locator.ScrollIntoViewIfNeededAsync();
+                await locator.ClickAsync(new LocatorClickOptions { Timeout = 10_000 });
+
+                // クリック後の状態安定を待つ
+                await WaitForStableStateAsync();
+                return await ReadPageTextAsync();
+            }
+            catch
+            {
+                // 次のセレクタを試す
+            }
+        }
+
         throw new InvalidOperationException(
-            $"URL の取得に失敗しました: {url}",
-            lastException);
+            $"クリック可能な要素が見つかりませんでした: \"{text}\"");
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
-        string url,
-        int maxResults = 10,
-        CancellationToken cancellationToken = default)
+    public async Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await CreateContextAsync();
-
-        var page = await context.NewPageAsync();
-        page.SetDefaultTimeout(TimeoutMs);
-
-        try
-        {
-            await page.GotoAsync(url, new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.DOMContentLoaded,
-                Timeout = TimeoutMs
-            });
-
-            return await ExtractSearchResultsAsync(page, maxResults);
-        }
-        finally
-        {
-            await page.CloseAsync();
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return await ReadPageTextAsync();
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SearchResultLink>> SearchAsync(
-        string query,
-        int maxResults = 10,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
+        int maxResults = 10, CancellationToken cancellationToken = default)
     {
-        await using var context = await CreateContextAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        return await ExtractLinksFromCurrentPageAsync(maxResults);
+    }
 
-        var page = await context.NewPageAsync();
-        page.SetDefaultTimeout(TimeoutMs);
+    /// <inheritdoc />
+    public async Task<string> SearchAsync(
+        string query, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        var isAlreadyOnBing = _page.Url?.Contains("bing.com/search", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (isAlreadyOnBing)
         {
-            // Bing トップページに移動
-            await page.GotoAsync("https://www.bing.com", new PageGotoOptions
+            // 既に Bing 上にいる場合は検索ボックスを使う（URL 直接遷移は Bot 判定されやすい）
+            var delay = Random.Shared.Next(2_000, 5_000);
+            await Task.Delay(delay, cancellationToken);
+
+            var searchBox = _page.Locator("#sb_form_q, input[name='q']").First;
+            await searchBox.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
+            await searchBox.ClearAsync();
+            await searchBox.TypeAsync(query, new LocatorTypeOptions { Delay = 50 });
+            await searchBox.PressAsync("Enter");
+        }
+        else
+        {
+            // 初回検索: URL 直接遷移で Bing に移動
+            var encodedQuery = Uri.EscapeDataString(query);
+            var searchUrl = $"https://www.bing.com/search?q={encodedQuery}&setlang=ja&cc=JP";
+
+            await _page.GotoAsync(searchUrl, new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded,
-                Timeout = TimeoutMs
+                Timeout = DefaultTimeoutMs
             });
 
-            // 検索ボックスを探してクエリを入力
-            var searchBox = page.Locator("textarea[name='q'], input[name='q']").First;
-            await searchBox.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
-            await searchBox.ClickAsync();
-            await searchBox.FillAsync(query);
-            await page.Keyboard.PressAsync("Enter");
-
-            // 検索結果が表示されるまで待機
+            // 同意ダイアログが表示された場合は承認する
             try
             {
-                await page.WaitForSelectorAsync(".b_algo, #rso", new PageWaitForSelectorOptions
+                var consentButton = _page.Locator("#bnp_btn_accept, button[id*='accept'], #bnp_ttc_close").First;
+                if (await consentButton.IsVisibleAsync())
                 {
-                    Timeout = 15_000
-                });
+                    await consentButton.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
+                    await Task.Delay(1_000, cancellationToken);
+                }
             }
-            catch (TimeoutException)
+            catch
             {
-                // セレクタが見つからなくても続行
+                // 同意ダイアログがない場合は無視
             }
-
-            return await ExtractSearchResultsAsync(page, maxResults);
         }
-        finally
-        {
-            await page.CloseAsync();
-        }
-    }
 
-    private async Task<string> FetchOnceAsync(string url, CancellationToken cancellationToken)
-    {
-        await using var context = await CreateContextAsync();
-
-        var page = await context.NewPageAsync();
-        page.SetDefaultTimeout(TimeoutMs);
-
+        // 検索結果の表示を待つ
         try
         {
-            await page.GotoAsync(url, new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.DOMContentLoaded,
-                Timeout = TimeoutMs
-            });
-
-            // コンテンツが読み込まれるまで少し待つ
-            try
-            {
-                await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
-                    new PageWaitForLoadStateOptions { Timeout = 10_000 });
-            }
-            catch (TimeoutException)
-            {
-                // NetworkIdle に達しなくても続行（検索エンジン等）
-            }
-
-            await PreparePageForExtractionAsync(page);
-
-            var text = await page.EvaluateAsync<string>(
-                "() => document.body ? document.body.innerText : ''");
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return string.Empty;
-            }
-
-            return text.Length > MaxContentLength
-                ? text[..MaxContentLength]
-                : text;
-        }
-        finally
-        {
-            await page.CloseAsync();
-        }
-    }
-
-    /// <summary>
-    /// 検索結果ページからリンクを抽出する共通メソッド。
-    /// </summary>
-    private static async Task<IReadOnlyList<SearchResultLink>> ExtractSearchResultsAsync(
-        IPage page, int maxResults)
-    {
-        // 検索結果が描画されるまで待機
-        try
-        {
-            await page.WaitForSelectorAsync(".b_algo, #rso", new PageWaitForSelectorOptions
-            {
-                Timeout = 10_000
-            });
+            await _page.WaitForSelectorAsync(".b_algo, #b_results .b_algo, #rso",
+                new PageWaitForSelectorOptions { Timeout = 15_000 });
         }
         catch (TimeoutException)
         {
             // セレクタが見つからなくても続行
         }
 
-        var json = await page.EvaluateAsync<JsonElement>(
-            ExtractLinksScript, maxResults);
+        await WaitForNetworkIdleAsync();
+
+        // 検索結果ページのテキストをそのまま返す（AI がリンクを判断する）
+        return await ReadPageTextAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GoBackAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await _page.GoBackAsync(new PageGoBackOptions
+        {
+            WaitUntil = WaitUntilState.DOMContentLoaded,
+            Timeout = DefaultTimeoutMs
+        });
+
+        await WaitForNetworkIdleAsync();
+        return await ReadPageTextAsync();
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await _context.CloseAsync();
+        await _browser.CloseAsync();
+        _playwright.Dispose();
+    }
+
+    // ------------------------------------------------------------------ //
+    // private helpers
+    // ------------------------------------------------------------------ //
+
+    private async Task<string> ReadPageTextAsync()
+    {
+        // main/article 要素があればそちらを優先し、ナビゲーションノイズを減らす
+        var text = await _page.EvaluateAsync<string>("""
+            () => {
+                const main = document.querySelector('main, article, [role="main"], #main, #content, .main-content');
+                if (main && main.innerText && main.innerText.trim().length > 200) {
+                    return main.innerText;
+                }
+                return document.body ? document.body.innerText : '';
+            }
+            """);
+
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        // 連続空行を圧縮
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"(\r?\n){3,}", "\n\n");
+
+        return text.Length > MaxContentLength ? text[..MaxContentLength] : text;
+    }
+
+    private async Task<IReadOnlyList<SearchResultLink>> ExtractLinksFromCurrentPageAsync(int maxResults)
+    {
+        // 検索結果がある場合は少し待つ
+        try
+        {
+            await _page.WaitForSelectorAsync(".b_algo, #rso",
+                new PageWaitForSelectorOptions { Timeout = 3_000 });
+        }
+        catch (TimeoutException)
+        {
+            // 検索結果ページでない場合もある
+        }
+
+        var json = await _page.EvaluateAsync<JsonElement>(ExtractLinksScript, maxResults);
 
         var links = new List<SearchResultLink>();
         if (json.ValueKind == JsonValueKind.Array)
@@ -295,120 +370,38 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         return links;
     }
 
-    private static async Task<bool> TryClickFirstVisibleAsync(IPage page, IEnumerable<string> selectors)
+    private async Task WaitForNetworkIdleAsync()
     {
-        foreach (var selector in selectors)
-        {
-            try
-            {
-                var locator = page.Locator(selector).First;
-                if (await locator.CountAsync() == 0 || !await locator.IsVisibleAsync())
-                {
-                    continue;
-                }
-
-                await locator.ScrollIntoViewIfNeededAsync();
-                await locator.ClickAsync(new LocatorClickOptions
-                {
-                    Timeout = 5_000
-                });
-                return true;
-            }
-            catch
-            {
-                // 次の候補を試す
-            }
-        }
-
-        return false;
-    }
-
-    private static async Task PreparePageForExtractionAsync(IPage page)
-    {
-        var bodyText = await page.EvaluateAsync<string>("() => document.body ? document.body.innerText : ''");
-        if (HasInformativeContent(bodyText))
-        {
-            return;
-        }
-
-        var clicked = await TryClickFirstVisibleAsync(page,
-        [
-            "a:has-text(\"続きを読む\")",
-            "button:has-text(\"続きを読む\")",
-            "a:has-text(\"もっと見る\")",
-            "button:has-text(\"もっと見る\")",
-            "a:has-text(\"詳細\")",
-            "button:has-text(\"詳細\")",
-            "a:has-text(\"More\")",
-            "button:has-text(\"More\")",
-            "a:has-text(\"Read more\")",
-            "button:has-text(\"Read more\")",
-            "a:has-text(\"出走馬\")",
-            "button:has-text(\"出走馬\")",
-            "a:has-text(\"出馬表\")",
-            "button:has-text(\"出馬表\")",
-            "a:has-text(\"枠順\")",
-            "button:has-text(\"枠順\")"
-        ]);
-
-        if (!clicked)
-        {
-            return;
-        }
-
         try
         {
-            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded,
-                new PageWaitForLoadStateOptions { Timeout = 5_000 });
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+                new PageWaitForLoadStateOptions { Timeout = 10_000 });
         }
         catch (TimeoutException)
         {
-            // DOMContentLoaded を待てなくても続行
+            // NetworkIdle に達しなくても続行
         }
+    }
+
+    private async Task WaitForStableStateAsync()
+    {
+        try
+        {
+            await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded,
+                new PageWaitForLoadStateOptions { Timeout = 5_000 });
+        }
+        catch (TimeoutException) { }
 
         try
         {
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle,
                 new PageWaitForLoadStateOptions { Timeout = 5_000 });
         }
-        catch (TimeoutException)
-        {
-            // 非同期通信継続中でも本文抽出へ進む
-        }
+        catch (TimeoutException) { }
     }
 
-    private static bool HasInformativeContent(string text)
+    private static string EscapeSelector(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        return text.Length >= 1500 ||
-            ContainsAny(text, "価格", "料金", "概要", "詳細", "手順", "インストール", "馬名", "騎手", "斤量", "枠番");
-    }
-
-    private static bool ContainsAny(string text, params string[] keywords) =>
-        keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// ボット検知を回避するためのリアルなブラウザコンテキストを作成する。
-    /// </summary>
-    private async Task<IBrowserContext> CreateContextAsync()
-    {
-        return await _browser.NewContextAsync(new BrowserNewContextOptions
-        {
-            UserAgent = UserAgentString,
-            Locale = "ja-JP",
-            TimezoneId = "Asia/Tokyo",
-            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-        });
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await _browser.CloseAsync();
-        _playwright.Dispose();
+        return text.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
