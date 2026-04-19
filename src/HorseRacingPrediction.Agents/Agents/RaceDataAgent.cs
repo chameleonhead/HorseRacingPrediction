@@ -37,10 +37,11 @@ public sealed class RaceDataAgent
         6. **注目馬・事前情報**: 調教評価・陣営コメント・除外・取消情報
 
         ## 行動方針
-        - `FetchRaceCard` で JRA 公式の出馬表ページを取得する
-        - `FetchRaceResults` で過去の同レース結果を取得する
-        - `SearchAndFetch` で「レース名 傾向」「レース名 過去結果」などを検索して補完する
-        - `FetchPageContent` で JRA・netkeiba の詳細ページを取得する（必要な場合）
+        - `BrowseWeb` ツールに取得したい情報を自然言語で依頼してインターネットから情報を取得する
+          - JRA 公式（www.jra.go.jp）の出馬表ページ
+          - 過去の同レース結果
+          - 「レース名 傾向」「レース名 過去結果」などの検索
+          - netkeiba の詳細ページ
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式

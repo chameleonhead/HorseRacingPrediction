@@ -15,9 +15,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class WebBrowserAgent
 {
-    private const string AgentName = "WebBrowserAgent";
+    public const string AgentName = "WebBrowserAgent";
 
-    private const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは競馬情報収集の専門エージェントです。
         Playwright ツールを使ってインターネットから競馬に関する情報を取得し、
         構造化された Markdown 形式で回答します。

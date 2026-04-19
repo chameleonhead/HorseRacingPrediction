@@ -1,8 +1,6 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
@@ -127,20 +125,25 @@ public sealed class WeeklyScheduleWorkflow
     /// <see cref="WeeklyScheduleWorkflow"/> を DI なしで構築するファクトリメソッド。
     /// </summary>
     /// <param name="chatClient">共通の <see cref="IChatClient"/> インスタンス</param>
-    /// <param name="browser">Web ブラウザ抽象</param>
-    /// <param name="webFetchOptions">Web 取得オプション（許可ドメインなど）</param>
+    /// <param name="webBrowserAgent">Web 検索を委譲する <see cref="Agents.WebBrowserAgent"/></param>
+    /// <param name="calendarTools">日時・カレンダーツール（省略時は既定値で生成）</param>
     public static WeeklyScheduleWorkflow Create(
         IChatClient chatClient,
-        IWebBrowser browser,
-        IOptions<WebFetchOptions> webFetchOptions)
+        WebBrowserAgent webBrowserAgent,
+        CalendarTools? calendarTools = null)
     {
-        var webFetchTools = new WebFetchTools(browser, webFetchOptions);
-        var tools = webFetchTools.GetAITools();
+        calendarTools ??= new CalendarTools();
+        var browseWebTool = webBrowserAgent.CreateAIFunction();
+
+        var discoveryTools = new List<AITool> { browseWebTool };
+        discoveryTools.AddRange(calendarTools.GetAITools());
+
+        var dataTools = new List<AITool> { browseWebTool };
 
         return new WeeklyScheduleWorkflow(
-            new WeekendRaceDiscoveryAgent(chatClient, tools),
-            DataCollectionWorkflow.Create(chatClient, browser, webFetchOptions),
-            new PostPositionPredictionAgent(chatClient, tools));
+            new WeekendRaceDiscoveryAgent(chatClient, discoveryTools),
+            DataCollectionWorkflow.Create(chatClient, webBrowserAgent),
+            new PostPositionPredictionAgent(chatClient, dataTools));
     }
 
     // ------------------------------------------------------------------ //

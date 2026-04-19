@@ -31,7 +31,7 @@ public sealed class RaceContextAgent
         ## 行動方針
         - まず `GetRacePredictionContext` ツールで既存データを取得する
         - 出走馬の馬 ID・騎手 ID が取得できた場合は `GetHorseProfile`・`GetJockeyProfile` で名前を補完する
-        - 最新の出馬表情報が必要な場合は `FetchRaceCard` で補完する
+        - 最新の出馬表情報が必要な場合は `BrowseWeb` ツールで補完する
         - 取得できた情報だけを整理して返す（情報が不足していてもエラーにしない）
 
         ## 出力形式

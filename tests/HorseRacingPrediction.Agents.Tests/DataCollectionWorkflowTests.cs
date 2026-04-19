@@ -28,7 +28,9 @@ public class DataCollectionWorkflowTests
             AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.bing.com"],
             SearchBaseUrl = "https://www.bing.com/search?q="
         });
-        _sut = DataCollectionWorkflow.Create(_fakeChatClient, browser, options);
+        var webFetchTools = new WebFetchTools(browser, options);
+        var webBrowserAgent = new WebBrowserAgent(_fakeChatClient, webFetchTools.GetAITools());
+        _sut = DataCollectionWorkflow.Create(_fakeChatClient, webBrowserAgent);
     }
 
     // ------------------------------------------------------------------ //

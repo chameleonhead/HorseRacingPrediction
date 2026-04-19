@@ -35,9 +35,10 @@ public sealed class HorseDataAgent
         7. **近走特記事項**: 出遅れ・不利・馬体重増減などの注目点
 
         ## 行動方針
-        - `FetchHorseHistory` で netkeiba の戦績ページを取得する
-        - `SearchAndFetch` で「馬名 血統」「馬名 調教」などを検索して補完する
-        - `FetchPageContent` で JRA 公式の馬情報ページを取得する（必要な場合）
+        - `BrowseWeb` ツールに取得したい情報を自然言語で依頼してインターネットから情報を取得する
+          - netkeiba の馬戦績ページ
+          - 「馬名 血統」「馬名 調教」などの検索
+          - JRA 公式の馬情報ページ
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式

@@ -33,7 +33,7 @@ public sealed class HorseAnalysisAgent
         ## 行動方針
         - `GetHorseProfile` / `GetJockeyProfile` で既存プロフィールを確認する
         - `GetMemosBySubject` で馬・騎手に紐付くメモを取得する
-        - `FetchHorseHistory` / `FetchJockeyStats` で netkeiba の最新成績を補完する
+        - `BrowseWeb` ツールで netkeiba の最新成績を補完する
         - 分析できなかった馬はその旨を記載して次の馬に進む
 
         ## 出力形式

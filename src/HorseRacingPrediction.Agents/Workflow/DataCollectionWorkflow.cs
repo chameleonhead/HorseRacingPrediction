@@ -1,8 +1,5 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
-using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
@@ -105,15 +102,12 @@ public sealed class DataCollectionWorkflow
     /// <see cref="DataCollectionWorkflow"/> を DI なしで構築するファクトリメソッド。
     /// </summary>
     /// <param name="chatClient">共通の <see cref="IChatClient"/> インスタンス</param>
-    /// <param name="browser">Web ブラウザ抽象</param>
-    /// <param name="webFetchOptions">Web 取得オプション（許可ドメインなど）</param>
+    /// <param name="webBrowserAgent">Web 検索を委譲する <see cref="WebBrowserAgent"/></param>
     public static DataCollectionWorkflow Create(
         IChatClient chatClient,
-        IWebBrowser browser,
-        IOptions<WebFetchOptions> webFetchOptions)
+        WebBrowserAgent webBrowserAgent)
     {
-        var webFetchTools = new WebFetchTools(browser, webFetchOptions);
-        var tools = webFetchTools.GetAITools();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
 
         return new DataCollectionWorkflow(
             new RaceDataAgent(chatClient, tools),

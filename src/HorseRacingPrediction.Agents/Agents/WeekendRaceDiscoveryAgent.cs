@@ -42,9 +42,13 @@ public sealed class WeekendRaceDiscoveryAgent
         ```
 
         ## 行動方針
-        - `SearchAndFetch` で「JRA YYYY年MM月DD日 開催レース一覧」などを検索する
-        - `FetchPageContent` で JRA 公式スケジュールページを取得する
-        - `FetchRaceCard` で出馬表を取得し、馬名・騎手名・調教師名を抽出する
+        - まず `GetCurrentDateTime` で現在の日時を確認する
+        - `GetWeekendDates` で対象の週末日付を取得する
+        - `BrowseWeb` ツールに取得したい情報を自然言語で依頼してインターネットから情報を取得する
+          - 「JRA YYYY年MM月DD日 開催レース一覧」などの検索
+          - JRA 公式スケジュールページの取得
+          - 出馬表を取得して馬名・騎手名・調教師名を抽出
+        - 競馬場名が判明したら `GetJraRacecourseCode` で競馬場コードを取得できる
         - 木曜時点では出走馬が確定していない場合があるため、登録馬情報を可能な限り収集する
         - 取得できなかった項目（馬名・騎手名・調教師名）は空配列 [] を設定する
         """;

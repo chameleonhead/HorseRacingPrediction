@@ -26,10 +26,26 @@ builder.Services.AddSingleton<IWebBrowser>(await PlaywrightWebBrowser.CreateAsyn
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
 builder.Services.AddTransient<WebFetchTools>();
+builder.Services.AddTransient<WebBrowserAgent>(sp =>
+{
+    var chatClient = sp.GetRequiredService<IChatClient>();
+    var webFetchTools = sp.GetRequiredService<WebFetchTools>();
+    return new WebBrowserAgent(chatClient, webFetchTools.GetAITools());
+});
 
 // -------------------------------------------------------------------
 // 競馬予測エージェントを DevUI に登録
 // -------------------------------------------------------------------
+
+// WebBrowserAgent（汎用 Web 情報取得）
+builder.AddAIAgent(
+    WebBrowserAgent.AgentName,
+    (sp, name) =>
+    {
+        var chatClient = sp.GetRequiredService<IChatClient>();
+        var webFetchTools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: webFetchTools);
+    });
 
 // 週末レース発見エージェント（木曜フェーズ）
 builder.AddAIAgent(
@@ -37,7 +53,10 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var calendarTools = new CalendarTools();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
+        tools.AddRange(calendarTools.GetAITools());
         return new ChatClientAgent(chatClient, name: name, instructions: WeekendRaceDiscoveryAgent.SystemPrompt, tools: tools);
     });
 
@@ -47,7 +66,8 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
         return new ChatClientAgent(chatClient, name: name, instructions: RaceDataAgent.SystemPrompt, tools: tools);
     });
 
@@ -57,7 +77,8 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
         return new ChatClientAgent(chatClient, name: name, instructions: HorseDataAgent.SystemPrompt, tools: tools);
     });
 
@@ -67,7 +88,8 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
         return new ChatClientAgent(chatClient, name: name, instructions: JockeyDataAgent.SystemPrompt, tools: tools);
     });
 
@@ -77,7 +99,8 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
         return new ChatClientAgent(chatClient, name: name, instructions: StableDataAgent.SystemPrompt, tools: tools);
     });
 
@@ -87,7 +110,8 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
         return new ChatClientAgent(chatClient, name: name, instructions: PostPositionPredictionAgent.SystemPrompt, tools: tools);
     });
 
@@ -101,7 +125,8 @@ builder.AddWorkflow(
     (sp, workflowName) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
 
         var raceContextAgent = new ChatClientAgent(
             chatClient,
@@ -130,7 +155,8 @@ builder.AddWorkflow(
     (sp, workflowName) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
 
         var raceDataAgent = new ChatClientAgent(
             chatClient,

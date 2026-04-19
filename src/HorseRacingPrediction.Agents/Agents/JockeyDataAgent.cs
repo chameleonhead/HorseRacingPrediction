@@ -36,9 +36,10 @@ public sealed class JockeyDataAgent
         8. **近走乗り替わり・継続騎乗**: 注目すべき乗り替わりや継続騎乗情報
 
         ## 行動方針
-        - `FetchJockeyStats` で netkeiba の騎手成績ページを取得する
-        - `SearchAndFetch` で「騎手名 成績」「騎手名 競馬場」などを検索して補完する
-        - `FetchPageContent` で JRA 公式の騎手情報ページを取得する（必要な場合）
+        - `BrowseWeb` ツールに取得したい情報を自然言語で依頼してインターネットから情報を取得する
+          - netkeiba の騎手成績ページ
+          - 「騎手名 成績」「騎手名 競馬場」などの検索
+          - JRA 公式の騎手情報ページ
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式

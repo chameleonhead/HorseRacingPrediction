@@ -42,40 +42,42 @@ public static class AgentServiceCollectionExtensions
     /// <see cref="DataCollectionWorkflow"/> および 4 つのデータ収集エージェントを
     /// DI コンテナに登録する。
     /// <para>
+    /// 各データ収集エージェントは <see cref="WebBrowserAgent"/> を介して
+    /// Web 情報にアクセスする。
+    /// </para>
+    /// <para>
     /// 使用例（Program.cs または テスト初期化）:
     /// <code>
+    /// builder.Services.AddWebBrowserAgent();
     /// builder.Services.AddDataCollectionWorkflow();
-    /// builder.Services.Configure&lt;WebFetchOptions&gt;(
-    ///     builder.Configuration.GetSection(WebFetchOptions.SectionName));
     /// </code>
     /// </para>
     /// </summary>
     public static IServiceCollection AddDataCollectionWorkflow(this IServiceCollection services)
     {
-        services.AddTransient<WebFetchTools>();
         services.AddTransient<RaceDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
-            return new RaceDataAgent(chatClient, tools);
+            var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+            return new RaceDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
         });
         services.AddTransient<HorseDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
-            return new HorseDataAgent(chatClient, tools);
+            var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+            return new HorseDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
         });
         services.AddTransient<JockeyDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
-            return new JockeyDataAgent(chatClient, tools);
+            var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+            return new JockeyDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
         });
         services.AddTransient<StableDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
-            return new StableDataAgent(chatClient, tools);
+            var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+            return new StableDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
         });
         services.AddTransient<DataCollectionWorkflow>();
         return services;
@@ -86,9 +88,8 @@ public static class AgentServiceCollectionExtensions
     /// <para>
     /// 使用例（Program.cs または テスト初期化）:
     /// <code>
+    /// builder.Services.AddWebBrowserAgent();
     /// builder.Services.AddWeeklyScheduleWorkflow();
-    /// builder.Services.Configure&lt;WebFetchOptions&gt;(
-    ///     builder.Configuration.GetSection(WebFetchOptions.SectionName));
     /// </code>
     /// </para>
     /// </summary>
@@ -97,9 +98,8 @@ public static class AgentServiceCollectionExtensions
         services.AddTransient<WeeklyScheduleWorkflow>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            var browser = sp.GetRequiredService<IWebBrowser>();
-            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
-            return WeeklyScheduleWorkflow.Create(chatClient, browser, options);
+            var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
+            return WeeklyScheduleWorkflow.Create(chatClient, webBrowserAgent);
         });
         return services;
     }
