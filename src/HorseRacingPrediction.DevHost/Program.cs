@@ -2,11 +2,9 @@ using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Workflow;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
-using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -16,7 +14,7 @@ builder.Services.AddSingleton<IChatClient>(
     new LMStudioChatClient(new LMStudioChatClientOptions()
     {
         BaseUri = new Uri("http://127.0.0.1:1234"),
-        DefaultModel = "google/gemma-4-e2b",
+        DefaultModel = "google/gemma-3n-e4b",
     }));
 
 // -------------------------------------------------------------------

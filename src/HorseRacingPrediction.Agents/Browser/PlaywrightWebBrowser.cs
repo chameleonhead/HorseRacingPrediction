@@ -26,6 +26,18 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
             const results = [];
             const seen = new Set();
 
+            const pushLink = (href, title) => {
+                if (!href) return;
+                try {
+                    const resolved = new URL(href, location.href);
+                    if (!/^https?:$/i.test(resolved.protocol)) return;
+                    const url = resolved.href;
+                    if (seen.has(url)) return;
+                    seen.add(url);
+                    results.push({ url, title: (title || '').trim() });
+                } catch (e) {}
+            };
+
             // Bing organic results
             for (const item of document.querySelectorAll('.b_algo')) {
                 if (results.length >= maxResults) break;
@@ -39,26 +51,34 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
                         url = atob(enc.substring(2));
                     }
                 } catch (e) {}
-                if (!url.startsWith('http') || seen.has(url)) continue;
-                seen.add(url);
-                results.push({ url, title: (anchor.textContent || '').trim() });
+                pushLink(url, anchor.textContent || '');
             }
 
-            // Google organic results (fallback)
+            // Google organic results
             if (results.length === 0) {
-                for (const item of document.querySelectorAll('#rso > div')) {
+                for (const item of document.querySelectorAll('#rso a[href]')) {
                     if (results.length >= maxResults) break;
-                    const a = item.querySelector('a[href^="http"]');
-                    if (!a || a.href.includes('google.')) continue;
-                    const h3 = a.querySelector('h3');
-                    const url = a.href;
-                    if (seen.has(url)) continue;
-                    seen.add(url);
-                    results.push({ url, title: (h3 ? h3.textContent : '').trim() });
+                    const href = item.getAttribute('href') || '';
+                    if (href.includes('google.')) continue;
+                    const h3 = item.querySelector('h3');
+                    pushLink(href, (h3 ? h3.textContent : item.textContent) || '');
                 }
             }
 
-            return results;
+            // Generic page links fallback for on-site exploration
+            if (results.length === 0) {
+                const ignore = ['ログイン', 'サインイン', 'privacy', 'cookie', '利用規約', 'お問い合わせ'];
+                for (const anchor of document.querySelectorAll('a[href]')) {
+                    if (results.length >= maxResults) break;
+                    const title = (anchor.textContent || anchor.getAttribute('aria-label') || anchor.title || '').trim();
+                    if (title.length < 2) continue;
+                    const lower = title.toLowerCase();
+                    if (ignore.some(x => lower.includes(x.toLowerCase()))) continue;
+                    pushLink(anchor.getAttribute('href'), title);
+                }
+            }
+
+            return results.slice(0, maxResults);
         }
         """;
 
@@ -134,12 +154,47 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
                 Timeout = TimeoutMs
             });
 
-            // 検索結果が描画されるまで待機（Bing: .b_algo, Google: #rso）
+            return await ExtractSearchResultsAsync(page, maxResults);
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SearchResultLink>> SearchAsync(
+        string query,
+        int maxResults = 10,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await CreateContextAsync();
+
+        var page = await context.NewPageAsync();
+        page.SetDefaultTimeout(TimeoutMs);
+
+        try
+        {
+            // Bing トップページに移動
+            await page.GotoAsync("https://www.bing.com", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+                Timeout = TimeoutMs
+            });
+
+            // 検索ボックスを探してクエリを入力
+            var searchBox = page.Locator("textarea[name='q'], input[name='q']").First;
+            await searchBox.WaitForAsync(new LocatorWaitForOptions { Timeout = 10_000 });
+            await searchBox.ClickAsync();
+            await searchBox.FillAsync(query);
+            await page.Keyboard.PressAsync("Enter");
+
+            // 検索結果が表示されるまで待機
             try
             {
                 await page.WaitForSelectorAsync(".b_algo, #rso", new PageWaitForSelectorOptions
                 {
-                    Timeout = 10_000
+                    Timeout = 15_000
                 });
             }
             catch (TimeoutException)
@@ -147,24 +202,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
                 // セレクタが見つからなくても続行
             }
 
-            var json = await page.EvaluateAsync<JsonElement>(
-                ExtractLinksScript, maxResults);
-
-            var links = new List<SearchResultLink>();
-            if (json.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in json.EnumerateArray())
-                {
-                    var linkUrl = item.GetProperty("url").GetString();
-                    var title = item.GetProperty("title").GetString();
-                    if (!string.IsNullOrEmpty(linkUrl))
-                    {
-                        links.Add(new SearchResultLink(linkUrl, title ?? ""));
-                    }
-                }
-            }
-
-            return links;
+            return await ExtractSearchResultsAsync(page, maxResults);
         }
         finally
         {
@@ -198,6 +236,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
                 // NetworkIdle に達しなくても続行（検索エンジン等）
             }
 
+            await PreparePageForExtractionAsync(page);
+
             var text = await page.EvaluateAsync<string>(
                 "() => document.body ? document.body.innerText : ''");
 
@@ -215,6 +255,141 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
             await page.CloseAsync();
         }
     }
+
+    /// <summary>
+    /// 検索結果ページからリンクを抽出する共通メソッド。
+    /// </summary>
+    private static async Task<IReadOnlyList<SearchResultLink>> ExtractSearchResultsAsync(
+        IPage page, int maxResults)
+    {
+        // 検索結果が描画されるまで待機
+        try
+        {
+            await page.WaitForSelectorAsync(".b_algo, #rso", new PageWaitForSelectorOptions
+            {
+                Timeout = 10_000
+            });
+        }
+        catch (TimeoutException)
+        {
+            // セレクタが見つからなくても続行
+        }
+
+        var json = await page.EvaluateAsync<JsonElement>(
+            ExtractLinksScript, maxResults);
+
+        var links = new List<SearchResultLink>();
+        if (json.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in json.EnumerateArray())
+            {
+                var linkUrl = item.GetProperty("url").GetString();
+                var title = item.GetProperty("title").GetString();
+                if (!string.IsNullOrEmpty(linkUrl))
+                {
+                    links.Add(new SearchResultLink(linkUrl, title ?? ""));
+                }
+            }
+        }
+
+        return links;
+    }
+
+    private static async Task<bool> TryClickFirstVisibleAsync(IPage page, IEnumerable<string> selectors)
+    {
+        foreach (var selector in selectors)
+        {
+            try
+            {
+                var locator = page.Locator(selector).First;
+                if (await locator.CountAsync() == 0 || !await locator.IsVisibleAsync())
+                {
+                    continue;
+                }
+
+                await locator.ScrollIntoViewIfNeededAsync();
+                await locator.ClickAsync(new LocatorClickOptions
+                {
+                    Timeout = 5_000
+                });
+                return true;
+            }
+            catch
+            {
+                // 次の候補を試す
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task PreparePageForExtractionAsync(IPage page)
+    {
+        var bodyText = await page.EvaluateAsync<string>("() => document.body ? document.body.innerText : ''");
+        if (HasInformativeContent(bodyText))
+        {
+            return;
+        }
+
+        var clicked = await TryClickFirstVisibleAsync(page,
+        [
+            "a:has-text(\"続きを読む\")",
+            "button:has-text(\"続きを読む\")",
+            "a:has-text(\"もっと見る\")",
+            "button:has-text(\"もっと見る\")",
+            "a:has-text(\"詳細\")",
+            "button:has-text(\"詳細\")",
+            "a:has-text(\"More\")",
+            "button:has-text(\"More\")",
+            "a:has-text(\"Read more\")",
+            "button:has-text(\"Read more\")",
+            "a:has-text(\"出走馬\")",
+            "button:has-text(\"出走馬\")",
+            "a:has-text(\"出馬表\")",
+            "button:has-text(\"出馬表\")",
+            "a:has-text(\"枠順\")",
+            "button:has-text(\"枠順\")"
+        ]);
+
+        if (!clicked)
+        {
+            return;
+        }
+
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded,
+                new PageWaitForLoadStateOptions { Timeout = 5_000 });
+        }
+        catch (TimeoutException)
+        {
+            // DOMContentLoaded を待てなくても続行
+        }
+
+        try
+        {
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+                new PageWaitForLoadStateOptions { Timeout = 5_000 });
+        }
+        catch (TimeoutException)
+        {
+            // 非同期通信継続中でも本文抽出へ進む
+        }
+    }
+
+    private static bool HasInformativeContent(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Length >= 1500 ||
+            ContainsAny(text, "価格", "料金", "概要", "詳細", "手順", "インストール", "馬名", "騎手", "斤量", "枠番");
+    }
+
+    private static bool ContainsAny(string text, params string[] keywords) =>
+        keywords.Any(keyword => text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// ボット検知を回避するためのリアルなブラウザコンテキストを作成する。

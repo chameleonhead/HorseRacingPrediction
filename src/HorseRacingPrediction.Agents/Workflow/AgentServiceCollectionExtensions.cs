@@ -13,7 +13,16 @@ namespace HorseRacingPrediction.Agents.Workflow;
 public static class AgentServiceCollectionExtensions
 {
     /// <summary>
-    /// WebBrowserAgent および WebFetchTools を DI コンテナに登録する。
+    /// PlaywrightTools、WebBrowserAgent、WebFetchTools、および HorseRacingTools を DI コンテナに登録する。
+    /// <para>
+    /// PlaywrightTools は Playwright ベースの低レベルブラウザ操作（ページ移動・リンク抽出・検索）を提供し、
+    /// WebBrowserAgent はこれらを AI ツールとして使用して自律的に Web 調査を行う。
+    /// WebFetchTools は WebBrowserAgent に委譲する高レベル API を提供し、
+    /// HorseRacingTools は競馬固有の情報取得ツールを提供する。
+    /// </para>
+    /// <para>
+    /// 依存チェーン: IWebBrowser → PlaywrightTools → WebBrowserAgent → WebFetchTools → HorseRacingTools
+    /// </para>
     /// <para>
     /// 使用例（Program.cs または テスト初期化）:
     /// <code>
@@ -25,15 +34,25 @@ public static class AgentServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddWebBrowserAgent(this IServiceCollection services)
     {
-        services.AddTransient<WebFetchTools>();
+        services.AddTransient<PlaywrightTools>();
         services.AddTransient<WebBrowserAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var browser = sp.GetRequiredService<IWebBrowser>();
             var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
 
-            var webFetchTools = new WebFetchTools(browser, options);
-            return new WebBrowserAgent(chatClient, webFetchTools.GetAITools());
+            var playwrightTools = new PlaywrightTools(browser, options);
+            return new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
+        });
+        services.AddTransient<WebFetchTools>(sp =>
+        {
+            var agent = sp.GetRequiredService<WebBrowserAgent>();
+            return new WebFetchTools(agent);
+        });
+        services.AddTransient<HorseRacingTools>(sp =>
+        {
+            var webFetchTools = sp.GetRequiredService<WebFetchTools>();
+            return new HorseRacingTools(webFetchTools);
         });
         return services;
     }
@@ -42,8 +61,8 @@ public static class AgentServiceCollectionExtensions
     /// <see cref="DataCollectionWorkflow"/> および 4 つのデータ収集エージェントを
     /// DI コンテナに登録する。
     /// <para>
-    /// 各データ収集エージェントは <see cref="WebBrowserAgent"/> を介して
-    /// Web 情報にアクセスする。
+    /// 各データ収集エージェントは <see cref="HorseRacingTools"/> の競馬固有ツールと、
+    /// <see cref="WebBrowserAgent"/> 経由の汎用 Web 検索機能を併用する。
     /// </para>
     /// <para>
     /// 使用例（Program.cs または テスト初期化）:
@@ -59,25 +78,45 @@ public static class AgentServiceCollectionExtensions
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-            return new RaceDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
+            var horseRacingTools = sp.GetRequiredService<HorseRacingTools>();
+            var tools = new List<AITool>(horseRacingTools.GetAITools())
+            {
+                webBrowserAgent.CreateAIFunction()
+            };
+            return new RaceDataAgent(chatClient, tools);
         });
         services.AddTransient<HorseDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-            return new HorseDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
+            var horseRacingTools = sp.GetRequiredService<HorseRacingTools>();
+            var tools = new List<AITool>(horseRacingTools.GetAITools())
+            {
+                webBrowserAgent.CreateAIFunction()
+            };
+            return new HorseDataAgent(chatClient, tools);
         });
         services.AddTransient<JockeyDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-            return new JockeyDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
+            var horseRacingTools = sp.GetRequiredService<HorseRacingTools>();
+            var tools = new List<AITool>(horseRacingTools.GetAITools())
+            {
+                webBrowserAgent.CreateAIFunction()
+            };
+            return new JockeyDataAgent(chatClient, tools);
         });
         services.AddTransient<StableDataAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
             var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-            return new StableDataAgent(chatClient, [webBrowserAgent.CreateAIFunction()]);
+            var horseRacingTools = sp.GetRequiredService<HorseRacingTools>();
+            var tools = new List<AITool>(horseRacingTools.GetAITools())
+            {
+                webBrowserAgent.CreateAIFunction()
+            };
+            return new StableDataAgent(chatClient, tools);
         });
         services.AddTransient<DataCollectionWorkflow>();
         return services;

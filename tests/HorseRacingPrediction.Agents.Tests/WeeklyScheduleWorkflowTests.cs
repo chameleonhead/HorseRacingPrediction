@@ -27,11 +27,11 @@ public class WeeklyScheduleWorkflowTests
         var browser = new FakeWebBrowser();
         var options = Options.Create(new WebFetchOptions
         {
-            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.google.co.jp"],
-            SearchBaseUrl = "https://www.google.co.jp/search?hl=ja&q="
+            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.bing.com"],
+            SearchBaseUrl = "https://www.bing.com/search?q="
         });
-        var webFetchTools = new WebFetchTools(browser, options);
-        var webBrowserAgent = new WebBrowserAgent(_fakeChatClient, webFetchTools.GetAITools());
+        var playwrightTools = new PlaywrightTools(browser, options);
+        var webBrowserAgent = new WebBrowserAgent(_fakeChatClient, playwrightTools.GetAITools());
         _sut = WeeklyScheduleWorkflow.Create(_fakeChatClient, webBrowserAgent);
     }
 
@@ -288,6 +288,10 @@ public class WeeklyScheduleWorkflowTests
 
         public Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
             string url, int maxResults = 10, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
+
+        public Task<IReadOnlyList<SearchResultLink>> SearchAsync(
+            string query, int maxResults = 10, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
     }
 }

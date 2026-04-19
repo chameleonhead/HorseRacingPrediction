@@ -112,7 +112,9 @@ public sealed class PredictionWorkflow
     {
         var raceQueryTools = new RaceQueryTools(queryProcessor);
         var predictionWriteTools = new PredictionWriteTools(commandBus);
-        var webFetchTools = new WebFetchTools(browser, webFetchOptions);
+        var playwrightTools = new PlaywrightTools(browser, webFetchOptions);
+        var webBrowserAgent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
+        var webFetchTools = new WebFetchTools(webBrowserAgent);
 
         var raceQueryAiTools = raceQueryTools.GetAITools();
         var predictionWriteAiTools = predictionWriteTools.GetAITools();

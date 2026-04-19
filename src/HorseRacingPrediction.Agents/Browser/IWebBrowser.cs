@@ -26,4 +26,18 @@ public interface IWebBrowser
         string url,
         int maxResults = 10,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ブラウザのアドレスバーから検索を行い、検索結果のリンク一覧を返す。
+    /// 検索エンジンの URL を直接構築するのではなく、実際にブラウザの検索ボックスに
+    /// クエリを入力して検索するため、ボット検知を回避しやすい。
+    /// </summary>
+    /// <param name="query">検索クエリ文字列（URL エンコード不要）</param>
+    /// <param name="maxResults">抽出する最大リンク数</param>
+    /// <param name="cancellationToken">キャンセルトークン</param>
+    /// <returns>検索結果のリンク一覧</returns>
+    Task<IReadOnlyList<SearchResultLink>> SearchAsync(
+        string query,
+        int maxResults = 10,
+        CancellationToken cancellationToken = default);
 }

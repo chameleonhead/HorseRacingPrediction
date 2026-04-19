@@ -17,8 +17,17 @@ public sealed class WebFetchOptions
     public List<string> AllowedDomains { get; set; } = [];
 
     /// <summary>検索に使用するベース URL（Google 等）</summary>
-    public string SearchBaseUrl { get; set; } = "https://www.google.co.jp/search?hl=ja&q=";
+    public string SearchBaseUrl { get; set; } = "https://www.bing.com/search?q=";
 
     /// <summary>検索結果からフェッチするページの最大件数</summary>
     public int SearchResultsToFetch { get; set; } = 3;
+
+    /// <summary>1回の調査で探索する最大ページ数</summary>
+    public int MaxPagesToExplore { get; set; } = 6;
+
+    /// <summary>サイト内リンクをたどる最大深さ</summary>
+    public int MaxExplorationDepth { get; set; } = 2;
+
+    /// <summary>1ページあたり次候補として保持するリンク数</summary>
+    public int MaxLinksPerPage { get; set; } = 5;
 }
