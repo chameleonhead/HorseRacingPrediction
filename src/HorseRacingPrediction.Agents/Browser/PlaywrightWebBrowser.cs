@@ -79,7 +79,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         var playwright = await Playwright.CreateAsync();
         var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
-            Headless = true
+            Headless = true,
+            Args = ["--disable-blink-features=AutomationControlled"]
         });
         return new PlaywrightWebBrowser(playwright, browser);
     }
@@ -120,10 +121,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         int maxResults = 10,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _browser.NewContextAsync(new BrowserNewContextOptions
-        {
-            UserAgent = UserAgentString
-        });
+        await using var context = await CreateContextAsync();
 
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(TimeoutMs);
@@ -132,9 +130,22 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         {
             await page.GotoAsync(url, new PageGotoOptions
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
+                WaitUntil = WaitUntilState.DOMContentLoaded,
                 Timeout = TimeoutMs
             });
+
+            // 検索結果が描画されるまで待機（Bing: .b_algo, Google: #rso）
+            try
+            {
+                await page.WaitForSelectorAsync(".b_algo, #rso", new PageWaitForSelectorOptions
+                {
+                    Timeout = 10_000
+                });
+            }
+            catch (TimeoutException)
+            {
+                // セレクタが見つからなくても続行
+            }
 
             var json = await page.EvaluateAsync<JsonElement>(
                 ExtractLinksScript, maxResults);
@@ -163,10 +174,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
 
     private async Task<string> FetchOnceAsync(string url, CancellationToken cancellationToken)
     {
-        await using var context = await _browser.NewContextAsync(new BrowserNewContextOptions
-        {
-            UserAgent = UserAgentString
-        });
+        await using var context = await CreateContextAsync();
 
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(TimeoutMs);
@@ -175,9 +183,20 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         {
             await page.GotoAsync(url, new PageGotoOptions
             {
-                WaitUntil = WaitUntilState.NetworkIdle,
+                WaitUntil = WaitUntilState.DOMContentLoaded,
                 Timeout = TimeoutMs
             });
+
+            // コンテンツが読み込まれるまで少し待つ
+            try
+            {
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle,
+                    new PageWaitForLoadStateOptions { Timeout = 10_000 });
+            }
+            catch (TimeoutException)
+            {
+                // NetworkIdle に達しなくても続行（検索エンジン等）
+            }
 
             var text = await page.EvaluateAsync<string>(
                 "() => document.body ? document.body.innerText : ''");
@@ -195,6 +214,20 @@ public sealed class PlaywrightWebBrowser : IWebBrowser, IAsyncDisposable
         {
             await page.CloseAsync();
         }
+    }
+
+    /// <summary>
+    /// ボット検知を回避するためのリアルなブラウザコンテキストを作成する。
+    /// </summary>
+    private async Task<IBrowserContext> CreateContextAsync()
+    {
+        return await _browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            UserAgent = UserAgentString,
+            Locale = "ja-JP",
+            TimezoneId = "Asia/Tokyo",
+            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+        });
     }
 
     /// <inheritdoc />

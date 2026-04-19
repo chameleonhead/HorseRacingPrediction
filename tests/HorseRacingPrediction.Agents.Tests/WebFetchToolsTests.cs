@@ -21,8 +21,8 @@ public class WebFetchToolsTests
         _fakeBrowser = new FakeWebBrowser();
         var options = Options.Create(new WebFetchOptions
         {
-            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.bing.com"],
-            SearchBaseUrl = "https://www.bing.com/search?q="
+            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.google.co.jp"],
+            SearchBaseUrl = "https://www.google.co.jp/search?hl=ja&q="
         });
         _sut = new WebFetchTools(_fakeBrowser, options);
     }
@@ -85,8 +85,8 @@ public class WebFetchToolsTests
             "フォールバック時は検索ページのテキストが含まれること");
         Assert.IsNotNull(_fakeBrowser.LastExtractLinksUrl,
             "ExtractLinksAsync が呼ばれること");
-        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "bing.com",
-            "Bing の URL で検索されること");
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "google.co.jp",
+            "Google の URL で検索されること");
         StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "%e5%a4%a9%e7%9a%87%e8%b3%9e",
             "クエリが URL エンコードされること");
     }
@@ -155,7 +155,7 @@ public class WebFetchToolsTests
             "許可ドメインがない場合は検索ページのテキストが返されること");
         Assert.AreEqual(1, _fakeBrowser.FetchedUrls.Count,
             "検索ページのフォールバック1回のみ");
-        StringAssert.Contains(_fakeBrowser.FetchedUrls[0], "bing.com",
+        StringAssert.Contains(_fakeBrowser.FetchedUrls[0], "google.co.jp",
             "フォールバックは検索URLであること");
     }
 
@@ -321,8 +321,8 @@ public class WebFetchToolsTests
 
         Assert.IsNotNull(_fakeBrowser.LastExtractLinksUrl,
             "検索エンジン経由で検索されること");
-        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "www.bing.com",
-            "Bing 検索 URL が使われること");
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "www.google.co.jp",
+            "Google 検索 URL が使われること");
     }
 
     // ------------------------------------------------------------------ //

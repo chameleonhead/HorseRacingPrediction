@@ -25,8 +25,8 @@ public class DataCollectionWorkflowTests
         var browser = new FakeWebBrowser();
         var options = Options.Create(new WebFetchOptions
         {
-            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.bing.com"],
-            SearchBaseUrl = "https://www.bing.com/search?q="
+            AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.google.co.jp"],
+            SearchBaseUrl = "https://www.google.co.jp/search?hl=ja&q="
         });
         var webFetchTools = new WebFetchTools(browser, options);
         var webBrowserAgent = new WebBrowserAgent(_fakeChatClient, webFetchTools.GetAITools());
