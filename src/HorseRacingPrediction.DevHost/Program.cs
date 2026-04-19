@@ -7,6 +7,7 @@ using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,16 +21,13 @@ builder.Services.AddSingleton<IChatClient>(
 // -------------------------------------------------------------------
 // WebBrowser + WebFetchTools（Playwright）
 // -------------------------------------------------------------------
-builder.Services.AddSingleton<IWebBrowser>(await PlaywrightWebBrowser.CreateAsync());
+builder.Services.AddSingleton<IWebBrowser>(_ =>
+    PlaywrightWebBrowser.CreateAsync().GetAwaiter().GetResult());
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
-builder.Services.AddTransient<WebFetchTools>();
 builder.Services.AddTransient<WebBrowserAgent>(sp =>
-{
-    var chatClient = sp.GetRequiredService<IChatClient>();
-    var webFetchTools = sp.GetRequiredService<WebFetchTools>();
-    return new WebBrowserAgent(chatClient, webFetchTools.GetAITools());
-});
+    WebBrowserAgent.CreateFromServices(sp));
+builder.Services.AddTransient<WebFetchTools>();
 
 // -------------------------------------------------------------------
 // 競馬予測エージェントを DevUI に登録
@@ -41,8 +39,10 @@ builder.AddAIAgent(
     (sp, name) =>
     {
         var chatClient = sp.GetRequiredService<IChatClient>();
-        var webFetchTools = sp.GetRequiredService<WebFetchTools>().GetAITools();
-        return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: webFetchTools);
+        var browser = sp.GetRequiredService<IWebBrowser>();
+        var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
+        var playwrightTools = new PlaywrightTools(browser, options);
+        return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: playwrightTools.GetAITools());
     });
 
 // 週末レース発見エージェント（木曜フェーズ）
