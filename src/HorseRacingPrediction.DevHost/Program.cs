@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Workflow;
 using Microsoft.Agents.AI;
@@ -8,31 +9,20 @@ using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Hosting.OpenAI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// -------------------------------------------------------------------
-// OpenAI IChatClient
-// -------------------------------------------------------------------
-var openAIApiKey = builder.Configuration["OpenAI:ApiKey"]
-    ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-    ?? throw new InvalidOperationException(
-        "OpenAI API キーが設定されていません。" +
-        "appsettings.Development.json の \"OpenAI:ApiKey\" または " +
-        "環境変数 OPENAI_API_KEY を設定してください。");
-
-var openAIModel = builder.Configuration["OpenAI:Model"] ?? "gpt-4o";
-
 builder.Services.AddSingleton<IChatClient>(
-    new OpenAIClient(openAIApiKey)
-        .GetChatClient(openAIModel)
-        .AsIChatClient());
+    new LMStudioChatClient(new LMStudioChatClientOptions()
+    {
+        BaseUri = new Uri("http://127.0.0.1:1234"),
+        DefaultModel = "google/gemma-4-e2b",
+    }));
 
 // -------------------------------------------------------------------
 // WebBrowser + WebFetchTools（Playwright）
 // -------------------------------------------------------------------
-builder.Services.AddSingleton<IWebBrowser, PlaywrightWebBrowser>();
+builder.Services.AddSingleton<IWebBrowser>(await PlaywrightWebBrowser.CreateAsync());
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
 builder.Services.AddTransient<WebFetchTools>();
