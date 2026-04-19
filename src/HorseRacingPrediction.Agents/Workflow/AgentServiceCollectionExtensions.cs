@@ -80,5 +80,28 @@ public static class AgentServiceCollectionExtensions
         services.AddTransient<DataCollectionWorkflow>();
         return services;
     }
+
+    /// <summary>
+    /// <see cref="WeeklyScheduleWorkflow"/> を DI コンテナに登録する。
+    /// <para>
+    /// 使用例（Program.cs または テスト初期化）:
+    /// <code>
+    /// builder.Services.AddWeeklyScheduleWorkflow();
+    /// builder.Services.Configure&lt;WebFetchOptions&gt;(
+    ///     builder.Configuration.GetSection(WebFetchOptions.SectionName));
+    /// </code>
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddWeeklyScheduleWorkflow(this IServiceCollection services)
+    {
+        services.AddTransient<WeeklyScheduleWorkflow>(sp =>
+        {
+            var chatClient = sp.GetRequiredService<IChatClient>();
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
+            return WeeklyScheduleWorkflow.Create(chatClient, browser, options);
+        });
+        return services;
+    }
 }
 
