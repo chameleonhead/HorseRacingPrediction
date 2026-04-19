@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Hosting.OpenAI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
@@ -99,6 +100,74 @@ builder.AddAIAgent(
         var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
         return new ChatClientAgent(chatClient, name: name, instructions: PostPositionPredictionAgent.SystemPrompt, tools: tools);
     });
+
+// -------------------------------------------------------------------
+// ワークフローを DevUI に登録
+// -------------------------------------------------------------------
+
+// PredictionWorkflow: レースコンテキスト収集 → 馬分析 → 予測票作成 の順次ワークフロー
+builder.AddWorkflow(
+    "PredictionWorkflow",
+    (sp, workflowName) =>
+    {
+        var chatClient = sp.GetRequiredService<IChatClient>();
+        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+
+        var raceContextAgent = new ChatClientAgent(
+            chatClient,
+            name: RaceContextAgent.AgentName,
+            instructions: RaceContextAgent.SystemPrompt,
+            tools: tools);
+        var horseAnalysisAgent = new ChatClientAgent(
+            chatClient,
+            name: HorseAnalysisAgent.AgentName,
+            instructions: HorseAnalysisAgent.SystemPrompt,
+            tools: tools);
+        var predictionAgent = new ChatClientAgent(
+            chatClient,
+            name: PredictionAgent.AgentName,
+            instructions: PredictionAgent.SystemPrompt,
+            tools: tools);
+
+        return AgentWorkflowBuilder.BuildSequential(
+            workflowName,
+            [raceContextAgent, horseAnalysisAgent, predictionAgent]);
+    }).AddAsAIAgent();
+
+// DataCollectionWorkflow: レース・馬・騎手・厩舎データを並列収集するワークフロー
+builder.AddWorkflow(
+    "DataCollectionWorkflow",
+    (sp, workflowName) =>
+    {
+        var chatClient = sp.GetRequiredService<IChatClient>();
+        var tools = sp.GetRequiredService<WebFetchTools>().GetAITools();
+
+        var raceDataAgent = new ChatClientAgent(
+            chatClient,
+            name: RaceDataAgent.AgentName,
+            instructions: RaceDataAgent.SystemPrompt,
+            tools: tools);
+        var horseDataAgent = new ChatClientAgent(
+            chatClient,
+            name: HorseDataAgent.AgentName,
+            instructions: HorseDataAgent.SystemPrompt,
+            tools: tools);
+        var jockeyDataAgent = new ChatClientAgent(
+            chatClient,
+            name: JockeyDataAgent.AgentName,
+            instructions: JockeyDataAgent.SystemPrompt,
+            tools: tools);
+        var stableDataAgent = new ChatClientAgent(
+            chatClient,
+            name: StableDataAgent.AgentName,
+            instructions: StableDataAgent.SystemPrompt,
+            tools: tools);
+
+        return AgentWorkflowBuilder.BuildConcurrent(
+            workflowName,
+            [raceDataAgent, horseDataAgent, jockeyDataAgent, stableDataAgent],
+            aggregator: null);
+    }).AddAsAIAgent();
 
 // -------------------------------------------------------------------
 // OpenAI Responses / Conversations エンドポイント（DevUI 必須）
