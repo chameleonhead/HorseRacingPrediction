@@ -36,17 +36,26 @@ public interface IWebBrowser : IAsyncDisposable
     Task<string> GetPageContentAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 現在のページをモデル向けの構造化スナップショットとして取得する。
+    /// 既定実装は本文とリンク一覧のみを利用する。
+    /// </summary>
+    Task<PageSnapshot> GetPageSnapshotAsync(
+        int maxLinks = 0,
+        CancellationToken cancellationToken = default)
+        => GetDefaultPageSnapshotAsync(maxLinks, cancellationToken);
+
+    /// <summary>
     /// 現在のページからリンク（&lt;a&gt; 要素の href）を抽出する。
     /// </summary>
     /// <param name="maxResults">抽出する最大リンク数</param>
     /// <param name="cancellationToken">キャンセルトークン</param>
     /// <returns>抽出されたリンク一覧</returns>
     Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
-        int maxResults = 10,
+        int maxResults = 0,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 検索エンジン（Bing）でクエリを実行し、検索結果ページのテキストを返す。
+    /// ブラウザの既定検索エンジンでクエリを実行し、検索結果ページのテキストを返す。
     /// 検索後、ブラウザは検索結果ページを表示した状態になるため、
     /// <see cref="ClickAsync"/> で検索結果のリンクをクリックできる。
     /// </summary>
@@ -61,4 +70,14 @@ public interface IWebBrowser : IAsyncDisposable
     /// ブラウザの「戻る」を実行し、前のページの本文テキストを返す。
     /// </summary>
     Task<string> GoBackAsync(CancellationToken cancellationToken = default);
+
+    private async Task<PageSnapshot> GetDefaultPageSnapshotAsync(
+        int maxLinks,
+        CancellationToken cancellationToken)
+    {
+        var url = CurrentUrl ?? string.Empty;
+        var mainText = await GetPageContentAsync(cancellationToken);
+        var links = await GetLinksAsync(maxLinks, cancellationToken);
+        return new PageSnapshot(url, null, mainText, [], links, [], []);
+    }
 }

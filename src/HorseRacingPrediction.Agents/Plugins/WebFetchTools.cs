@@ -42,7 +42,7 @@ public sealed class WebFetchTools
         CancellationToken cancellationToken = default)
     {
         return await _invokeAgent(
-            $"次の URL のページ本文テキストをそのまま返してください。要約や補足は不要です。\nURL: {url}",
+            $"次の URL のページ本文を取得してください。単一ページの取得で完結させ、ヘッダーやフッターなどの不要部分は除去しつつ本文はできるだけ元の表現を保ってください。\nURL: {url}",
             cancellationToken);
     }
 
@@ -63,7 +63,10 @@ public sealed class WebFetchTools
             sb.AppendLine($"調査目的: {objective}");
         if (!string.IsNullOrWhiteSpace(site))
             sb.AppendLine($"対象サイト: {site}");
-        sb.AppendLine("検索結果のリンクから関連度の高いページを順に読み、十分な情報が得られるまで探索してください。");
+        sb.AppendLine("URL が明示されていない場合は、対象サイト名やドメイン名が含まれていても、そのサイトをいきなり開かず必ず最初に検索結果一覧を取得してください。");
+        sb.AppendLine("検索はブラウザのアドレスバー相当の検索を使ってください。");
+        sb.AppendLine("検索結果のリンク一覧から関連度の高いページを選び、ページ取得は単一ページごとに完結させてください。");
+        sb.AppendLine("詳細本文が同一ページ内の『詳細を表示』等のクリックでしか見えない場合だけ、その追加クリックを許可します。");
         sb.AppendLine("参照した URL を明記してください。URL は自分で推測せず、ツールが返した URL だけを使ってください。");
         return await _invokeAgent(sb.ToString(), cancellationToken);
     }
@@ -81,8 +84,9 @@ public sealed class WebFetchTools
         sb.AppendLine("次の URL を起点にサイト内を探索し、情報を日本語の Markdown で返してください。");
         sb.AppendLine($"起点 URL: {entryUrl}");
         sb.AppendLine($"調査目的: {objective}");
-        sb.AppendLine("検索エンジンは使わず、まず起点 URL を直接開くか、そのページのリンク一覧を確認してください。");
-        sb.AppendLine("その後はサイト内の関連リンクだけをたどり、目的に関連するページを順に読んでください。");
+        sb.AppendLine("検索エンジンは使わず、まず起点 URL の単一ページを取得してください。");
+        sb.AppendLine("そのページだけで不足する場合に限り、関連リンク URL を使って別ページを 1 ページずつ読んでください。");
+        sb.AppendLine("詳細本文が同一ページ内の『詳細を表示』等のクリックでしか見えない場合だけ、その追加クリックを許可します。");
         sb.AppendLine("参照した URL を明記してください。URL は自分で推測せず、ツールが返した URL だけを使ってください。");
         return await _invokeAgent(sb.ToString(), cancellationToken);
     }
@@ -116,7 +120,10 @@ public sealed class WebFetchTools
             sb.AppendLine($"対象サイト: {site}");
         if (maxLinksToFetch.HasValue)
             sb.AppendLine($"最大 {maxLinksToFetch} ページまで読んでください。");
-        sb.AppendLine("要約せず、ページの内容をできるだけそのまま返してください。URL は自分で推測せず、ツールが返した URL だけを使ってください。");
+        sb.AppendLine("URL が明示されていない場合は、対象サイト名やドメイン名が含まれていても、そのサイトをいきなり開かず必ず最初に検索結果一覧を取得してください。");
+        sb.AppendLine("検索はブラウザのアドレスバー相当の検索を使い、検索結果リンクから対象 URL を選んでください。");
+        sb.AppendLine("ページ取得は 1 ページずつ完結させ、不要部分だけ除去して本文はできるだけ元の表現を保ってください。");
+        sb.AppendLine("URL は自分で推測せず、ツールが返した URL だけを使ってください。");
         return await _invokeAgent(sb.ToString(), cancellationToken);
     }
 

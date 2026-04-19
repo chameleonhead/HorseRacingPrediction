@@ -51,8 +51,10 @@ public class WebFetchToolsTests
         await _sut.FetchPageContent("https://www.jra.go.jp/race");
 
         Assert.IsNotNull(_lastPrompt);
-        StringAssert.Contains(_lastPrompt, "そのまま返してください",
-            "生テキストを要求するプロンプトであること");
+        StringAssert.Contains(_lastPrompt, "単一ページの取得で完結",
+            "単一ページ完結を要求するプロンプトであること");
+        StringAssert.Contains(_lastPrompt, "不要部分は除去",
+            "ノイズ除去を要求するプロンプトであること");
     }
 
     // ------------------------------------------------------------------ //
@@ -90,6 +92,16 @@ public class WebFetchToolsTests
         Assert.IsNotNull(_lastPrompt);
         StringAssert.Contains(_lastPrompt, "www.jra.go.jp",
             "プロンプトにサイトドメインが含まれること");
+    }
+
+    [TestMethod]
+    public async Task SearchWeb_WithSite_RequiresSearchResultListBeforeDirectSiteAccess()
+    {
+        await _sut.SearchWeb("皐月賞", site: "www.jra.go.jp");
+
+        Assert.IsNotNull(_lastPrompt);
+        StringAssert.Contains(_lastPrompt, "そのサイトをいきなり開かず必ず最初に検索結果一覧を取得してください",
+            "サイト指定があっても最初に検索結果一覧を取ることを要求すること");
     }
 
     [TestMethod]
@@ -179,8 +191,18 @@ public class WebFetchToolsTests
         await _sut.SearchAndFetchContentAsync("テスト");
 
         Assert.IsNotNull(_lastPrompt);
-        StringAssert.Contains(_lastPrompt, "そのまま返してください",
-            "生テキストを要求するプロンプトであること");
+        StringAssert.Contains(_lastPrompt, "ページ取得は 1 ページずつ完結",
+            "単一ページ完結を要求するプロンプトであること");
+    }
+
+    [TestMethod]
+    public async Task SearchAndFetchContentAsync_RequiresSearchResultListBeforeDirectSiteAccess()
+    {
+        await _sut.SearchAndFetchContentAsync("テスト", "www.jra.go.jp");
+
+        Assert.IsNotNull(_lastPrompt);
+        StringAssert.Contains(_lastPrompt, "そのサイトをいきなり開かず必ず最初に検索結果一覧を取得してください",
+            "SearchAndFetch 系でも URL 未指定なら検索結果一覧から始めることを要求すること");
     }
 
     // ------------------------------------------------------------------ //

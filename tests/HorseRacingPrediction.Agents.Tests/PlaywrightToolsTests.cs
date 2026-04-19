@@ -1,3 +1,4 @@
+using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
@@ -7,7 +8,7 @@ namespace HorseRacingPrediction.Agents.Tests;
 
 /// <summary>
 /// PlaywrightTools のモックブラウザを使ったユニットテスト。
-/// セッションベースのブラウザ操作（ナビゲーション・クリック・リンク取得・検索・戻る）を検証する。
+/// 単一ページ完結の検索・取得フローを検証する。
 /// </summary>
 [TestClass]
 public class PlaywrightToolsTests
@@ -22,32 +23,39 @@ public class PlaywrightToolsTests
         var options = Options.Create(new WebFetchOptions
         {
             AllowedDomains = ["www.jra.go.jp", "db.netkeiba.com", "www.bing.com"],
-            SearchBaseUrl = "https://www.bing.com/search?q="
+            SearchBaseUrl = "https://www.bing.com/search?q=",
+            SearchResultsToFetch = 3,
+            MaxLinksPerPage = 5,
         });
-        _sut = new PlaywrightTools(_fakeBrowser, options);
+                var extractionAgent = new PageDataExtractionAgent(new StaticChatClient(
+                        """
+                        {
+                            "contentMarkdown": "整形済み本文",
+                            "shouldFollowDetailLink": false,
+                            "detailLinkText": null
+                        }
+                        """));
+        _sut = new PlaywrightTools(_fakeBrowser, options, extractionAgent);
     }
 
-    // ------------------------------------------------------------------ //
-    // BrowserNavigate
-    // ------------------------------------------------------------------ //
-
     [TestMethod]
-    public async Task BrowserNavigate_AllowedDomain_ReturnsPageText()
+    public async Task BrowserReadPage_AllowedDomain_ReturnsFormattedPageText()
     {
         _fakeBrowser.ResponseText = "ページ本文テキスト";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
 
-        var result = await _sut.BrowserNavigate("https://www.jra.go.jp/race");
+        var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race");
 
-        StringAssert.Contains(result, "ページ本文テキスト");
+        StringAssert.Contains(result, "整形済み本文");
         Assert.AreEqual("https://www.jra.go.jp/race", _fakeBrowser.LastNavigatedUrl);
     }
 
     [TestMethod]
-    public async Task BrowserNavigate_BlockedDomain_ThrowsInvalidOperationException()
+    public async Task BrowserReadPage_BlockedDomain_ThrowsInvalidOperationException()
     {
         try
         {
-            await _sut.BrowserNavigate("https://example.com/page");
+            await _sut.BrowserReadPage("https://example.com/page");
             Assert.Fail("InvalidOperationException が発生すべきです");
         }
         catch (InvalidOperationException ex)
@@ -57,11 +65,11 @@ public class PlaywrightToolsTests
     }
 
     [TestMethod]
-    public async Task BrowserNavigate_InvalidUrl_ThrowsArgumentException()
+    public async Task BrowserReadPage_InvalidUrl_ThrowsArgumentException()
     {
         try
         {
-            await _sut.BrowserNavigate("not-a-valid-url");
+            await _sut.BrowserReadPage("not-a-valid-url");
             Assert.Fail("ArgumentException が発生すべきです");
         }
         catch (ArgumentException)
@@ -71,14 +79,14 @@ public class PlaywrightToolsTests
     }
 
     [TestMethod]
-    public async Task BrowserNavigate_EmptyAllowedDomains_ThrowsInvalidOperationException()
+    public async Task BrowserReadPage_EmptyAllowedDomains_ThrowsInvalidOperationException()
     {
         var options = Options.Create(new WebFetchOptions { AllowedDomains = [] });
         var sut = new PlaywrightTools(_fakeBrowser, options);
 
         try
         {
-            await sut.BrowserNavigate("https://www.jra.go.jp/race");
+            await sut.BrowserReadPage("https://www.jra.go.jp/race");
             Assert.Fail("InvalidOperationException が発生すべきです");
         }
         catch (InvalidOperationException)
@@ -88,129 +96,72 @@ public class PlaywrightToolsTests
     }
 
     [TestMethod]
-    public async Task BrowserNavigate_SubdomainOfAllowedDomain_Allowed()
+    public async Task BrowserReadPage_SubdomainOfAllowedDomain_Allowed()
     {
         _fakeBrowser.ResponseText = "サブドメインページ";
 
-        var result = await _sut.BrowserNavigate("https://sub.www.jra.go.jp/page");
+        var result = await _sut.BrowserReadPage("https://sub.www.jra.go.jp/page");
 
-        StringAssert.Contains(result, "サブドメインページ");
+        StringAssert.Contains(result, "整形済み本文");
     }
 
     [TestMethod]
-    public async Task BrowserNavigate_IncludesCurrentUrlInOutput()
+    public async Task BrowserReadPage_IncludesCurrentUrlAndLinksInOutput()
     {
         _fakeBrowser.ResponseText = "本文";
         _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/home", "ホーム", "header"),
+            new SearchResultLink("https://www.jra.go.jp/detail", "詳細ページ"),
+            new SearchResultLink("https://www.jra.go.jp/contact", "お問い合わせ", "footer")
+        ];
 
-        var result = await _sut.BrowserNavigate("https://www.jra.go.jp/race");
+        var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race");
 
         StringAssert.Contains(result, "[現在のページ: https://www.jra.go.jp/race]");
+        StringAssert.Contains(result, "## ヘッダーリンク");
+        StringAssert.Contains(result, "[ホーム](https://www.jra.go.jp/home)");
+        StringAssert.Contains(result, "## フッターリンク");
+        StringAssert.Contains(result, "[お問い合わせ](https://www.jra.go.jp/contact)");
+        StringAssert.Contains(result, "## リンク");
+        StringAssert.Contains(result, "[詳細ページ](https://www.jra.go.jp/detail)");
     }
-
-    // ------------------------------------------------------------------ //
-    // BrowserClick
-    // ------------------------------------------------------------------ //
-
-    [TestMethod]
-    public async Task BrowserClick_ReturnsPageTextAfterClick()
-    {
-        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
-        _fakeBrowser.ClickResponseText = "クリック後のページ本文";
-
-        var result = await _sut.BrowserClick("出馬表を見る");
-
-        StringAssert.Contains(result, "クリック後のページ本文");
-        Assert.AreEqual("出馬表を見る", _fakeBrowser.LastClickedText);
-    }
-
-    [TestMethod]
-    public async Task BrowserClick_IncludesCurrentUrlInOutput()
-    {
-        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race/detail";
-        _fakeBrowser.ClickResponseText = "詳細ページ";
-
-        var result = await _sut.BrowserClick("詳細");
-
-        StringAssert.Contains(result, "[現在のページ: https://www.jra.go.jp/race/detail]");
-    }
-
-    // ------------------------------------------------------------------ //
-    // BrowserGetPageContent
-    // ------------------------------------------------------------------ //
-
-    [TestMethod]
-    public async Task BrowserGetPageContent_ReturnsCurrentPageText()
-    {
-        _fakeBrowser.ResponseText = "現在のページ内容";
-        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/page";
-
-        var result = await _sut.BrowserGetPageContent();
-
-        StringAssert.Contains(result, "現在のページ内容");
-    }
-
-    // ------------------------------------------------------------------ //
-    // BrowserGetLinks
-    // ------------------------------------------------------------------ //
-
-    [TestMethod]
-    public async Task BrowserGetLinks_ReturnsFormattedMarkdownLinks()
-    {
-        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/index.html";
-        _fakeBrowser.CurrentPageLinks =
-        [
-            new SearchResultLink("https://www.jra.go.jp/race", "レース情報"),
-            new SearchResultLink("https://www.jra.go.jp/news", "ニュース"),
-        ];
-
-        var result = await _sut.BrowserGetLinks();
-
-        StringAssert.Contains(result, "[レース情報](https://www.jra.go.jp/race)");
-        StringAssert.Contains(result, "[ニュース](https://www.jra.go.jp/news)");
-    }
-
-    [TestMethod]
-    public async Task BrowserGetLinks_NoLinks_ReturnsNotFoundMessage()
-    {
-        _fakeBrowser.CurrentPageLinks = [];
-
-        var result = await _sut.BrowserGetLinks();
-
-        StringAssert.Contains(result, "リンクが見つかりませんでした");
-    }
-
-    [TestMethod]
-    public async Task BrowserGetLinks_RespectsMaxResults()
-    {
-        _fakeBrowser.CurrentPageLinks =
-        [
-            new SearchResultLink("https://www.jra.go.jp/page1", "Page 1"),
-            new SearchResultLink("https://www.jra.go.jp/page2", "Page 2"),
-            new SearchResultLink("https://www.jra.go.jp/page3", "Page 3"),
-        ];
-
-        var result = await _sut.BrowserGetLinks(maxResults: 2);
-
-        StringAssert.Contains(result, "Page 1");
-        StringAssert.Contains(result, "Page 2");
-        Assert.IsFalse(result.Contains("Page 3"), "maxResults を超えるリンクは含まれないこと");
-    }
-
-    // ------------------------------------------------------------------ //
-    // BrowserSearch
-    // ------------------------------------------------------------------ //
 
     [TestMethod]
     public async Task BrowserSearch_ReturnsSearchResultText()
     {
         _fakeBrowser.SearchResponseText = "JRA レース情報 - www.jra.go.jp\nnetkeiba レース - db.netkeiba.com";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/race", "JRA レース情報"),
+            new SearchResultLink("https://db.netkeiba.com/race", "netkeiba レース"),
+        ];
 
         var result = await _sut.BrowserSearch("皐月賞");
 
         StringAssert.Contains(result, "JRA レース情報");
         StringAssert.Contains(result, "netkeiba レース");
         StringAssert.Contains(_fakeBrowser.LastSearchQuery!, "皐月賞");
+        StringAssert.Contains(result, "## 検索結果リンク");
+    }
+
+    [TestMethod]
+    public async Task BrowserSearch_NormalizesRelativeLinksBeforeFormatting()
+    {
+        _fakeBrowser.SearchResponseText = "検索結果本文";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("/race", "JRA レース情報"),
+            new SearchResultLink("https://db.netkeiba.com/race", "netkeiba レース"),
+        ];
+
+        var result = await _sut.BrowserSearch("皐月賞");
+
+        StringAssert.Contains(result, "[JRA レース情報](https://www.bing.com/race)");
+        Assert.IsFalse(result.Contains("](/race)"), "相対 URL のまま出力されないこと");
     }
 
     [TestMethod]
@@ -226,50 +177,131 @@ public class PlaywrightToolsTests
     [TestMethod]
     public async Task BrowserSearch_NoResults_ReturnsNotFoundMessage()
     {
-        _fakeBrowser.SearchResponseText = "";
+        _fakeBrowser.SearchResponseText = string.Empty;
+        _fakeBrowser.CurrentPageLinks = [];
 
         var result = await _sut.BrowserSearch("存在しない検索");
 
         StringAssert.Contains(result, "検索結果が見つかりませんでした");
     }
 
-    // ------------------------------------------------------------------ //
-    // BrowserGoBack
-    // ------------------------------------------------------------------ //
-
     [TestMethod]
-    public async Task BrowserGoBack_ReturnsPreviousPageText()
+    public async Task BrowserSearch_UsesMaxSearchLinksPerPageForDisplayedLinks()
     {
-        _fakeBrowser.GoBackResponseText = "前のページの内容";
-        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/prev";
+        _fakeBrowser.SearchResponseText = "検索結果本文";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
+        _fakeBrowser.CurrentPageLinks = Enumerable.Range(1, 120)
+            .Select(index => new SearchResultLink($"https://example.com/{index}", $"結果 {index}"))
+            .ToList();
 
-        var result = await _sut.BrowserGoBack();
+        var result = await _sut.BrowserSearch("皐月賞");
 
-        StringAssert.Contains(result, "前のページの内容");
-        Assert.IsTrue(_fakeBrowser.GoBackCalled, "GoBackAsync が呼ばれること");
+        StringAssert.Contains(result, "[結果 30](https://example.com/30)");
+        Assert.IsFalse(result.Contains("[結果 31](https://example.com/31)"), "30件を超えるリンクは表示しないこと");
     }
 
-    // ------------------------------------------------------------------ //
-    // GetAITools registration
-    // ------------------------------------------------------------------ //
+    [TestMethod]
+    public async Task BrowserReadPage_WhenExtractionRequestsDetail_ClicksOnce()
+    {
+        var agent = new PageDataExtractionAgent(new SequencedChatClient(
+            """
+            {
+              "contentMarkdown": "概要ページ",
+              "shouldFollowDetailLink": true,
+              "detailLinkText": "詳細を表示"
+            }
+            """,
+            """
+            {
+              "contentMarkdown": "詳細ページ本文",
+              "shouldFollowDetailLink": false,
+              "detailLinkText": null
+            }
+            """));
+        var options = Options.Create(new WebFetchOptions
+        {
+            AllowedDomains = ["www.jra.go.jp", "www.bing.com"],
+            SearchResultsToFetch = 3,
+            MaxLinksPerPage = 5,
+        });
+        _sut = new PlaywrightTools(_fakeBrowser, options, agent);
+
+        _fakeBrowser.ResponseText = "概要ページ 詳細を表示";
+        _fakeBrowser.ClickResponseText = "詳細ページ本文";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/race/detail", "詳細を表示")
+        ];
+
+        var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race", "詳細を取得する");
+
+        Assert.AreEqual("詳細を表示", _fakeBrowser.LastClickedText);
+        StringAssert.Contains(result, "詳細ページ本文");
+    }
+
+    [TestMethod]
+    public async Task BrowserReadPage_WhenDetailLinkTextIsAmbiguous_DoesNotClick()
+    {
+        var agent = new PageDataExtractionAgent(new StaticChatClient(
+            """
+            {
+              "contentMarkdown": "概要ページ",
+              "shouldFollowDetailLink": true,
+              "detailLinkText": "詳細"
+            }
+            """));
+        var options = Options.Create(new WebFetchOptions
+        {
+            AllowedDomains = ["www.jra.go.jp", "www.bing.com"],
+            SearchResultsToFetch = 3,
+            MaxLinksPerPage = 5,
+        });
+        _sut = new PlaywrightTools(_fakeBrowser, options, agent);
+
+        _fakeBrowser.ResponseText = "概要ページ 詳細 詳細";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/race/detail-1", "詳細"),
+            new SearchResultLink("https://www.jra.go.jp/race/detail-2", "詳細")
+        ];
+
+        var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race", "詳細を取得する");
+
+        Assert.IsNull(_fakeBrowser.LastClickedText);
+        StringAssert.Contains(result, "概要ページ");
+    }
+
+    [TestMethod]
+    public async Task BrowserReadPage_NormalizesRelativeLinksBeforeFormatting()
+    {
+        _fakeBrowser.ResponseText = "本文";
+        _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
+        _fakeBrowser.CurrentPageLinks =
+        [
+            new SearchResultLink("/home", "ホーム", "header"),
+            new SearchResultLink("./detail", "詳細ページ"),
+            new SearchResultLink("../contact", "お問い合わせ", "footer")
+        ];
+
+        var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race");
+
+        StringAssert.Contains(result, "[ホーム](https://www.jra.go.jp/home)");
+        StringAssert.Contains(result, "[詳細ページ](https://www.jra.go.jp/detail)");
+        StringAssert.Contains(result, "[お問い合わせ](https://www.jra.go.jp/contact)");
+        Assert.IsFalse(result.Contains("](./detail)"), "相対 URL のまま出力されないこと");
+    }
 
     [TestMethod]
     public void PlaywrightTools_GetAITools_HasExpectedFunctions()
     {
         var tools = _sut.GetAITools();
 
-        Assert.AreEqual(6, tools.Count, "PlaywrightTools は 6 つ登録されていること");
-        Assert.IsTrue(tools.Any(t => t.Name == "BrowserNavigate"), "BrowserNavigate が登録されていること");
-        Assert.IsTrue(tools.Any(t => t.Name == "BrowserClick"), "BrowserClick が登録されていること");
-        Assert.IsTrue(tools.Any(t => t.Name == "BrowserGetPageContent"), "BrowserGetPageContent が登録されていること");
-        Assert.IsTrue(tools.Any(t => t.Name == "BrowserGetLinks"), "BrowserGetLinks が登録されていること");
+        Assert.AreEqual(2, tools.Count, "PlaywrightTools は 2 つ登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "BrowserSearch"), "BrowserSearch が登録されていること");
-        Assert.IsTrue(tools.Any(t => t.Name == "BrowserGoBack"), "BrowserGoBack が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "BrowserReadPage"), "BrowserReadPage が登録されていること");
     }
-
-    // ------------------------------------------------------------------ //
-    // Fake browser implementation
-    // ------------------------------------------------------------------ //
 
     private sealed class FakeWebBrowser : IWebBrowser
     {
@@ -327,5 +359,63 @@ public class PlaywrightToolsTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class StaticChatClient : IChatClient
+    {
+        private readonly string _response;
+
+        public StaticChatClient(string response) => _response = response;
+
+        public ChatOptions? DefaultOptions { get; set; }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, _response)));
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public void Dispose() { }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    }
+
+    private sealed class SequencedChatClient : IChatClient
+    {
+        private readonly Queue<string> _responses;
+
+        public SequencedChatClient(params string[] responses)
+        {
+            _responses = new Queue<string>(responses);
+        }
+
+        public ChatOptions? DefaultOptions { get; set; }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            var response = _responses.Count > 0 ? _responses.Dequeue() : string.Empty;
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, response)));
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public void Dispose() { }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
     }
 }

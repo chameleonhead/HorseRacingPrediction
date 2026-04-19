@@ -3,6 +3,7 @@ using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Agents.Workflow;
@@ -46,8 +47,9 @@ public static class AgentServiceCollectionExtensions
             var browser = sp.GetRequiredService<IWebBrowser>();
             var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
             var extractionAgent = sp.GetRequiredService<PageDataExtractionAgent>();
+            var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
 
-            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
+            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
             return new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
         });
         services.AddTransient<WebFetchTools>(sp =>

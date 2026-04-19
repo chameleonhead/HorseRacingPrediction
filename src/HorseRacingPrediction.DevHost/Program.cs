@@ -7,6 +7,7 @@ using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,11 +18,13 @@ builder.Services.AddSingleton<IChatClient>(
         BaseUri = new Uri("http://127.0.0.1:1234"),
         DefaultModel = "google/gemma-3n-e4b",
     }));
+builder.Services.AddSingleton(sp =>
+    new PageDataExtractionAgent(sp.GetRequiredService<IChatClient>()));
 
 // -------------------------------------------------------------------
 // WebBrowser + WebFetchTools（Playwright）
 // -------------------------------------------------------------------
-builder.Services.AddSingleton<IWebBrowser>(_ =>
+builder.Services.AddSingleton<IWebBrowser>(sp =>
     PlaywrightWebBrowser.CreateAsync().GetAwaiter().GetResult());
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
@@ -42,7 +45,8 @@ builder.AddAIAgent(
         var browser = sp.GetRequiredService<IWebBrowser>();
         var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
         var extractionAgent = sp.GetService<PageDataExtractionAgent>();
-        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
+        var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
+        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
         return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: playwrightTools.GetAITools());
     });
 

@@ -1,407 +1,714 @@
-using System.Text.Json;
+using System.Text.RegularExpressions;
+using HorseRacingPrediction.Agents.Agents;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
 
 namespace HorseRacingPrediction.Agents.Browser;
 
 /// <summary>
-/// Microsoft.Playwright を使ったセッションベースのブラウザ実装。
+/// Microsoft.Playwright を使った汎用ブラウザ実装。
 /// セッション中は同一の <see cref="IPage"/> を維持し、ナビゲーション・クリック・
-/// テキスト取得などの操作を逐次実行する。
+/// テキスト取得・リンク抽出などの操作を逐次実行する。
 /// </summary>
 public sealed class PlaywrightWebBrowser : IWebBrowser
 {
-    private const int MaxContentLength = 12_000;
-    private const int DefaultTimeoutMs = 30_000;
-    private const int MaxRetries = 2;
+    private const string DefaultSearchBaseUrl = "https://www.google.com/search?q=";
 
-    private const string UserAgentString =
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-
-    /// <summary>
-    /// ページからリンクを抽出する JavaScript。
-    /// 検索結果ページ（Bing / Google）と一般ページの両方に対応する。
-    /// </summary>
-    private const string ExtractLinksScript = """
-        (maxResults) => {
-            const results = [];
-            const seen = new Set();
-
-            const pushLink = (href, title) => {
-                if (!href) return;
-                try {
-                    const resolved = new URL(href, location.href);
-                    if (!/^https?:$/i.test(resolved.protocol)) return;
-                    const url = resolved.href;
-                    if (seen.has(url)) return;
-                    seen.add(url);
-                    results.push({ url, title: (title || '').trim() });
-                } catch (e) {}
-            };
-
-            // Bing organic results
-            for (const item of document.querySelectorAll('.b_algo')) {
-                if (results.length >= maxResults) break;
-                const anchor = item.querySelector('h2 a');
-                if (!anchor) continue;
-                let url = anchor.href;
-                try {
-                    const u = new URL(url);
-                    const enc = u.searchParams.get('u');
-                    if (enc && enc.startsWith('a1')) {
-                        url = atob(enc.substring(2));
-                    }
-                } catch (e) {}
-                pushLink(url, anchor.textContent || '');
-            }
-
-            // Google organic results
-            if (results.length === 0) {
-                for (const item of document.querySelectorAll('#rso a[href]')) {
-                    if (results.length >= maxResults) break;
-                    const href = item.getAttribute('href') || '';
-                    if (href.includes('google.')) continue;
-                    const h3 = item.querySelector('h3');
-                    pushLink(href, (h3 ? h3.textContent : item.textContent) || '');
-                }
-            }
-
-            // Generic page links fallback
-            if (results.length === 0) {
-                const ignore = ['ログイン', 'サインイン', 'privacy', 'cookie', '利用規約', 'お問い合わせ'];
-                for (const anchor of document.querySelectorAll('a[href]')) {
-                    if (results.length >= maxResults) break;
-                    const title = (anchor.textContent || anchor.getAttribute('aria-label') || anchor.title || '').trim();
-                    if (title.length < 2) continue;
-                    const lower = title.toLowerCase();
-                    if (ignore.some(x => lower.includes(x.toLowerCase()))) continue;
-                    pushLink(anchor.getAttribute('href'), title);
-                }
-            }
-
-            return results.slice(0, maxResults);
-        }
-        """;
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
     private readonly IPlaywright _playwright;
     private readonly IBrowser _browser;
     private readonly IBrowserContext _context;
     private readonly IPage _page;
+    private readonly string _searchBaseUrl;
+    private readonly ILogger<PlaywrightWebBrowser> _logger;
+    private bool _disposed;
 
     private PlaywrightWebBrowser(
-        IPlaywright playwright, IBrowser browser, IBrowserContext context, IPage page)
+        IPlaywright playwright,
+        IBrowser browser,
+        IBrowserContext context,
+        IPage page,
+        string searchBaseUrl,
+        ILogger<PlaywrightWebBrowser>? logger)
     {
         _playwright = playwright;
         _browser = browser;
         _context = context;
         _page = page;
-        _page.SetDefaultTimeout(DefaultTimeoutMs);
+        _searchBaseUrl = string.IsNullOrWhiteSpace(searchBaseUrl)
+            ? DefaultSearchBaseUrl
+            : searchBaseUrl;
+        _logger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
     }
 
-    /// <inheritdoc />
-    public string? CurrentUrl => _page.Url is "about:blank" ? null : _page.Url;
-
-    /// <summary>
-    /// PlaywrightWebBrowser のインスタンスを非同期で生成する。
-    /// ブラウザ・コンテキスト・ページをすべて初期化する。
-    /// </summary>
-    public static async Task<PlaywrightWebBrowser> CreateAsync()
+    public string? CurrentUrl
     {
+        get
+        {
+            ThrowIfDisposed();
+
+            var currentUrl = _page.Url;
+            return string.IsNullOrWhiteSpace(currentUrl) ||
+                   string.Equals(currentUrl, "about:blank", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : currentUrl;
+        }
+    }
+
+    public static async Task<PlaywrightWebBrowser> CreateAsync(
+        string searchBaseUrl = DefaultSearchBaseUrl,
+        BrowserTypeLaunchOptions? launchOptions = null,
+        BrowserNewContextOptions? contextOptions = null,
+        ILogger<PlaywrightWebBrowser>? logger = null)
+    {
+        var resolvedLogger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
         var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        var browser = await playwright.Chromium.LaunchAsync(launchOptions ?? new BrowserTypeLaunchOptions
         {
-            Headless = true,
-            Args = ["--disable-blink-features=AutomationControlled"]
+            Headless = false,
+            Args = [
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-setuid-sandbox",
+                "--disable-web-security",
+                "--ignore-certificate-errors",
+            ]
         });
-        var context = await browser.NewContextAsync(new BrowserNewContextOptions
+
+        var context = await browser.NewContextAsync(contextOptions ?? new BrowserNewContextOptions
         {
-            UserAgent = UserAgentString,
             Locale = "ja-JP",
             TimezoneId = "Asia/Tokyo",
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
         });
+
         var page = await context.NewPageAsync();
-        return new PlaywrightWebBrowser(playwright, browser, context, page);
+        resolvedLogger.LogInformation(
+            "Playwright browser created. SearchBaseUrl={SearchBaseUrl} Headless={Headless}",
+            string.IsNullOrWhiteSpace(searchBaseUrl) ? DefaultSearchBaseUrl : searchBaseUrl,
+            (launchOptions ?? new BrowserTypeLaunchOptions { Headless = false }).Headless);
+
+        return new PlaywrightWebBrowser(playwright, browser, context, page, searchBaseUrl, resolvedLogger);
     }
 
-    /// <inheritdoc />
     public async Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
     {
-        var lastException = default(Exception);
-        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateAbsoluteUrl(url, nameof(url));
+
+        _logger.LogInformation("Browser navigate start. Url={Url}", url);
+
+        await _page.GotoAsync(url, new PageGotoOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                var response = await _page.GotoAsync(url, new PageGotoOptions
-                {
-                    WaitUntil = WaitUntilState.DOMContentLoaded,
-                    Timeout = DefaultTimeoutMs
-                });
+            WaitUntil = WaitUntilState.DOMContentLoaded,
+        });
 
-                // HTTP エラーステータスをチェックし、エージェントに明確なメッセージを返す
-                if (response is not null && response.Status >= 400)
-                {
-                    return $"HTTP {response.Status} エラー: {url} へのアクセスが拒否されました。" +
-                           $"この URL は直接アクセスできません。" +
-                           $"別のページからリンクをたどってください。";
-                }
-
-                await WaitForNetworkIdleAsync();
-                return await ReadPageTextAsync();
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                lastException = ex;
-                if (attempt < MaxRetries)
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-                }
-            }
-        }
-
-        return $"ページの読み込みに失敗しました: {url} — " +
-               $"{lastException?.Message ?? "不明なエラー"}。" +
-               $"別の URL を試すか、リンク一覧から別のページを選んでください。";
+        await WaitForPageSettledAsync(cancellationToken);
+        var content = await GetPageContentAsync(cancellationToken);
+        _logger.LogInformation(
+            "Browser navigate complete. Url={Url} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
+            url,
+            CurrentUrl,
+            content.Length);
+        return content;
     }
 
-    /// <inheritdoc />
     public async Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        // まずリンク、次にボタン、最後に任意の要素を試す
-        var selectors = new[]
+        if (string.IsNullOrWhiteSpace(text))
         {
-            $"a:has-text(\"{EscapeSelector(text)}\")",
-            $"button:has-text(\"{EscapeSelector(text)}\")",
-            $"[role=\"tab\"]:has-text(\"{EscapeSelector(text)}\")",
-            $"[role=\"button\"]:has-text(\"{EscapeSelector(text)}\")",
-            $"text=\"{EscapeSelector(text)}\"",
-        };
-
-        foreach (var selector in selectors)
-        {
-            try
-            {
-                var locator = _page.Locator(selector).First;
-                if (await locator.CountAsync() == 0) continue;
-                if (!await locator.IsVisibleAsync()) continue;
-
-                await locator.ScrollIntoViewIfNeededAsync();
-                await locator.ClickAsync(new LocatorClickOptions { Timeout = 10_000 });
-
-                // クリック後の状態安定を待つ
-                await WaitForStableStateAsync();
-                return await ReadPageTextAsync();
-            }
-            catch
-            {
-                // 次のセレクタを試す
-            }
+            throw new ArgumentException("クリック対象のテキストを指定してください。", nameof(text));
         }
 
-        throw new InvalidOperationException(
-            $"クリック可能な要素が見つかりませんでした: \"{text}\"");
+        _logger.LogInformation("Browser click start. Text={Text} CurrentUrl={CurrentUrl}", text, CurrentUrl);
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var target = await FindClickableLocatorAsync(text, cancellationToken);
+        if (target is null)
+        {
+            throw new InvalidOperationException($"テキスト '{text}' に一致するクリック可能要素が見つかりませんでした。");
+        }
+
+        await target.ScrollIntoViewIfNeededAsync();
+        await target.ClickAsync();
+
+        await WaitForPageSettledAsync(cancellationToken);
+        var content = await GetPageContentAsync(cancellationToken);
+        _logger.LogInformation(
+            "Browser click complete. Text={Text} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
+            text,
+            CurrentUrl,
+            content.Length);
+        return content;
     }
 
-    /// <inheritdoc />
     public async Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        return await ReadPageTextAsync();
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var rawText = await ReadPageTextAsync();
+        return NormalizeText(rawText);
     }
 
-    /// <inheritdoc />
     public async Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
-        int maxResults = 10, CancellationToken cancellationToken = default)
+        int maxResults = 0,
+        CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        return await ExtractLinksFromCurrentPageAsync(maxResults);
-    }
-
-    /// <inheritdoc />
-    public async Task<string> SearchAsync(
-        string query, CancellationToken cancellationToken = default)
-    {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        var isAlreadyOnBing = _page.Url?.Contains("bing.com/search", StringComparison.OrdinalIgnoreCase) == true;
+        await WaitForPageSettledAsync(cancellationToken);
 
-        if (isAlreadyOnBing)
-        {
-            // 既に Bing 上にいる場合は検索ボックスを使う（URL 直接遷移は Bot 判定されやすい）
-            var delay = Random.Shared.Next(2_000, 5_000);
-            await Task.Delay(delay, cancellationToken);
-
-            var searchBox = _page.Locator("#sb_form_q, input[name='q']").First;
-            await searchBox.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
-            await searchBox.ClearAsync();
-            await searchBox.TypeAsync(query, new LocatorTypeOptions { Delay = 50 });
-            await searchBox.PressAsync("Enter");
-        }
-        else
-        {
-            // 初回検索: URL 直接遷移で Bing に移動
-            var encodedQuery = Uri.EscapeDataString(query);
-            var searchUrl = $"https://www.bing.com/search?q={encodedQuery}&setlang=ja&cc=JP";
-
-            await _page.GotoAsync(searchUrl, new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.DOMContentLoaded,
-                Timeout = DefaultTimeoutMs
-            });
-
-            // 同意ダイアログが表示された場合は承認する
-            try
-            {
-                var consentButton = _page.Locator("#bnp_btn_accept, button[id*='accept'], #bnp_ttc_close").First;
-                if (await consentButton.IsVisibleAsync())
-                {
-                    await consentButton.ClickAsync(new LocatorClickOptions { Timeout = 5_000 });
-                    await Task.Delay(1_000, cancellationToken);
-                }
-            }
-            catch
-            {
-                // 同意ダイアログがない場合は無視
-            }
-        }
-
-        // 検索結果の表示を待つ
-        try
-        {
-            await _page.WaitForSelectorAsync(".b_algo, #b_results .b_algo, #rso",
-                new PageWaitForSelectorOptions { Timeout = 15_000 });
-        }
-        catch (TimeoutException)
-        {
-            // セレクタが見つからなくても続行
-        }
-
-        await WaitForNetworkIdleAsync();
-
-        // 検索結果ページのテキストをそのまま返す（AI がリンクを判断する）
-        return await ReadPageTextAsync();
+        var limit = maxResults > 0 ? maxResults : int.MaxValue;
+        var links = await ExtractLinksAsync(limit, cancellationToken);
+        _logger.LogInformation(
+            "Browser links extracted. CurrentUrl={CurrentUrl} LinkCount={LinkCount} Limit={Limit}",
+            CurrentUrl,
+            links.Count,
+            maxResults);
+        return links;
     }
 
-    /// <inheritdoc />
+    public async Task<PageSnapshot> GetPageSnapshotAsync(
+        int maxLinks = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var limit = maxLinks > 0 ? maxLinks : int.MaxValue;
+        var url = CurrentUrl ?? string.Empty;
+        var title = await TryGetPageTitleAsync();
+        var mainText = NormalizeText(await ReadPageTextAsync());
+        var headings = await ExtractHeadingsAsync(cancellationToken);
+        var links = await ExtractLinksAsync(limit, cancellationToken);
+        var actions = await ExtractActionsAsync(cancellationToken);
+        var tables = await ExtractTablesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Browser snapshot extracted. CurrentUrl={CurrentUrl} Title={Title} Headings={HeadingCount} Links={LinkCount} Actions={ActionCount} Tables={TableCount} TextLength={TextLength}",
+            url,
+            title,
+            headings.Count,
+            links.Count,
+            actions.Count,
+            tables.Count,
+            mainText.Length);
+
+        return new PageSnapshot(url, title, mainText, headings, links, actions, tables);
+    }
+
+    public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            throw new ArgumentException("検索クエリを指定してください。", nameof(query));
+        }
+
+        var searchUrl = BuildSearchUrl(query);
+        _logger.LogInformation("Browser search. Query={Query} SearchUrl={SearchUrl}", query, searchUrl);
+        return NavigateAsync(searchUrl, cancellationToken);
+    }
+
     public async Task<string> GoBackAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
         await _page.GoBackAsync(new PageGoBackOptions
         {
             WaitUntil = WaitUntilState.DOMContentLoaded,
-            Timeout = DefaultTimeoutMs
         });
 
-        await WaitForNetworkIdleAsync();
-        return await ReadPageTextAsync();
+        await WaitForPageSettledAsync(cancellationToken);
+        var content = await GetPageContentAsync(cancellationToken);
+        _logger.LogInformation("Browser go back complete. CurrentUrl={CurrentUrl} ContentLength={ContentLength}", CurrentUrl, content.Length);
+        return content;
     }
 
-    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        await _context.CloseAsync();
-        await _browser.CloseAsync();
-        _playwright.Dispose();
-    }
+        if (_disposed)
+        {
+            return;
+        }
 
-    // ------------------------------------------------------------------ //
-    // private helpers
-    // ------------------------------------------------------------------ //
+        _disposed = true;
+        _logger.LogInformation("Playwright browser disposing. CurrentUrl={CurrentUrl}", CurrentUrl);
 
-    private async Task<string> ReadPageTextAsync()
-    {
-        // main/article 要素があればそちらを優先し、ナビゲーションノイズを減らす
-        var text = await _page.EvaluateAsync<string>("""
-            () => {
-                const main = document.querySelector('main, article, [role="main"], #main, #content, .main-content');
-                if (main && main.innerText && main.innerText.trim().length > 200) {
-                    return main.innerText;
-                }
-                return document.body ? document.body.innerText : '';
-            }
-            """);
-
-        if (string.IsNullOrWhiteSpace(text))
-            return string.Empty;
-
-        // 連続空行を圧縮
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"(\r?\n){3,}", "\n\n");
-
-        return text.Length > MaxContentLength ? text[..MaxContentLength] : text;
-    }
-
-    private async Task<IReadOnlyList<SearchResultLink>> ExtractLinksFromCurrentPageAsync(int maxResults)
-    {
-        // 検索結果がある場合は少し待つ
         try
         {
-            await _page.WaitForSelectorAsync(".b_algo, #rso",
-                new PageWaitForSelectorOptions { Timeout = 3_000 });
+            await _context.CloseAsync();
+        }
+        finally
+        {
+            try
+            {
+                await _browser.CloseAsync();
+            }
+            finally
+            {
+                _playwright.Dispose();
+            }
+        }
+    }
+
+    private string BuildSearchUrl(string query)
+    {
+        var encodedQuery = Uri.EscapeDataString(query);
+        return _searchBaseUrl.Contains('?', StringComparison.Ordinal)
+            ? $"{_searchBaseUrl}{encodedQuery}"
+            : $"{_searchBaseUrl}?q={encodedQuery}";
+    }
+
+    private async Task WaitForPageSettledAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await TryWaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        await TryWaitForLoadStateAsync(LoadState.Load);
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private async Task TryWaitForLoadStateAsync(LoadState state)
+    {
+        try
+        {
+            await _page.WaitForLoadStateAsync(state, new PageWaitForLoadStateOptions
+            {
+                Timeout = 3_000,
+            });
         }
         catch (TimeoutException)
         {
-            // 検索結果ページでない場合もある
+            // 継続的に通信するページでも本文取得とリンク抽出を続行できるようにする。
         }
-
-        var json = await _page.EvaluateAsync<JsonElement>(ExtractLinksScript, maxResults);
-
-        var links = new List<SearchResultLink>();
-        if (json.ValueKind == JsonValueKind.Array)
+        catch (PlaywrightException)
         {
-            foreach (var item in json.EnumerateArray())
+            // ナビゲーション直後の一時状態では待機に失敗しうるため、そのまま続行する。
+        }
+    }
+
+    private async Task<string> ReadPageTextAsync()
+    {
+        var main = _page.Locator("main, article, [role='main']");
+        if (await main.CountAsync() > 0)
+        {
+            for (var index = 0; index < await main.CountAsync(); index++)
             {
-                var linkUrl = item.GetProperty("url").GetString();
-                var title = item.GetProperty("title").GetString();
-                if (!string.IsNullOrEmpty(linkUrl))
+                var candidate = main.Nth(index);
+                if (await candidate.IsVisibleAsync())
                 {
-                    links.Add(new SearchResultLink(linkUrl, title ?? ""));
+                    return await candidate.InnerTextAsync();
                 }
             }
+        }
+
+        var body = _page.Locator("body");
+        if (await body.CountAsync() > 0)
+        {
+            return await body.Nth(0).InnerTextAsync();
+        }
+
+        var html = _page.Locator("html");
+        if (await html.CountAsync() > 0)
+        {
+            return await html.Nth(0).TextContentAsync() ?? string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private async Task<string?> TryGetPageTitleAsync()
+    {
+        try
+        {
+            return NormalizeText(await _page.TitleAsync());
+        }
+        catch (PlaywrightException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> ExtractHeadingsAsync(CancellationToken cancellationToken)
+    {
+        var headings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var locator = _page.Locator("h1, h2, h3");
+        var count = await locator.CountAsync();
+
+        for (var index = 0; index < count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var text = await GetLocatorTextAsync(locator.Nth(index));
+            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text))
+            {
+                continue;
+            }
+
+            headings.Add(text);
+            if (headings.Count >= 20)
+            {
+                break;
+            }
+        }
+
+        return headings;
+    }
+
+    private async Task<IReadOnlyList<PageActionSnapshot>> ExtractActionsAsync(CancellationToken cancellationToken)
+    {
+        var actions = new List<PageActionSnapshot>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var actionSelectors = new (string Selector, string Kind)[]
+        {
+            ("button", "button"),
+            ("[role='button']", "button"),
+            ("[role='tab']", "tab"),
+            ("summary", "summary"),
+            ("input[type='button'], input[type='submit']", "input")
+        };
+
+        foreach (var (selector, kind) in actionSelectors)
+        {
+            var locator = _page.Locator(selector);
+            var count = await locator.CountAsync();
+            for (var index = 0; index < count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var item = locator.Nth(index);
+                if (!await item.IsVisibleAsync())
+                {
+                    continue;
+                }
+
+                var text = await GetLocatorTextAsync(item);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                var key = $"{kind}:{text}";
+                if (!seen.Add(key))
+                {
+                    continue;
+                }
+
+                actions.Add(new PageActionSnapshot(text, kind));
+                if (actions.Count >= 50)
+                {
+                    return actions;
+                }
+            }
+        }
+
+        return actions;
+    }
+
+    private async Task<IReadOnlyList<PageTableSnapshot>> ExtractTablesAsync(CancellationToken cancellationToken)
+    {
+        var tables = new List<PageTableSnapshot>();
+        var tableLocator = _page.Locator("table");
+        var tableCount = await tableLocator.CountAsync();
+
+        for (var tableIndex = 0; tableIndex < tableCount && tables.Count < 10; tableIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var table = tableLocator.Nth(tableIndex);
+            if (!await table.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var headers = await ExtractTableHeadersAsync(table, cancellationToken);
+            var rows = await ExtractTableRowsAsync(table, cancellationToken);
+            if (headers.Count == 0 && rows.Count == 0)
+            {
+                continue;
+            }
+
+            tables.Add(new PageTableSnapshot(headers, rows));
+        }
+
+        return tables;
+    }
+
+    private async Task<IReadOnlyList<string>> ExtractTableHeadersAsync(ILocator table, CancellationToken cancellationToken)
+    {
+        var headers = new List<string>();
+        var headerLocator = table.Locator("thead th");
+        if (await headerLocator.CountAsync() == 0)
+        {
+            headerLocator = table.Locator("tr").First.Locator("th, td");
+        }
+
+        var count = await headerLocator.CountAsync();
+        for (var index = 0; index < count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var text = await GetLocatorTextAsync(headerLocator.Nth(index));
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                headers.Add(text);
+            }
+        }
+
+        return headers;
+    }
+
+    private async Task<IReadOnlyList<IReadOnlyList<string>>> ExtractTableRowsAsync(ILocator table, CancellationToken cancellationToken)
+    {
+        var rows = new List<IReadOnlyList<string>>();
+        var rowLocator = table.Locator("tr");
+        var rowCount = await rowLocator.CountAsync();
+
+        for (var rowIndex = 0; rowIndex < rowCount && rows.Count < 10; rowIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var row = rowLocator.Nth(rowIndex);
+            var cellLocator = row.Locator("th, td");
+            var cellCount = await cellLocator.CountAsync();
+            if (cellCount == 0)
+            {
+                continue;
+            }
+
+            var cells = new List<string>();
+            for (var cellIndex = 0; cellIndex < cellCount; cellIndex++)
+            {
+                var text = await GetLocatorTextAsync(cellLocator.Nth(cellIndex));
+                cells.Add(text);
+            }
+
+            if (cells.All(string.IsNullOrWhiteSpace))
+            {
+                continue;
+            }
+
+            rows.Add(cells);
+        }
+
+        return rows;
+    }
+
+    private async Task<ILocator?> FindClickableLocatorAsync(string text, CancellationToken cancellationToken)
+    {
+        var target = NormalizeForMatch(text);
+        var candidates = _page.Locator("a[href], button, [role='button'], [role='link'], [role='tab'], input[type='button'], input[type='submit'], summary, [onclick]");
+        var candidateCount = await candidates.CountAsync();
+
+        ILocator? bestLocator = null;
+        var bestScore = int.MaxValue;
+        var bestTextLength = int.MaxValue;
+
+        for (var index = 0; index < candidateCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var candidate = candidates.Nth(index);
+            if (!await candidate.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var candidateText = await GetLocatorTextAsync(candidate);
+            var normalizedCandidateText = NormalizeForMatch(candidateText);
+            if (!normalizedCandidateText.Contains(target, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var score = normalizedCandidateText == target
+                ? 0
+                : normalizedCandidateText.StartsWith(target, StringComparison.Ordinal)
+                    ? 1
+                    : 2;
+
+            if (score < bestScore || (score == bestScore && normalizedCandidateText.Length < bestTextLength))
+            {
+                bestLocator = candidate;
+                bestScore = score;
+                bestTextLength = normalizedCandidateText.Length;
+            }
+        }
+
+        return bestLocator;
+    }
+
+    private async Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(int limit, CancellationToken cancellationToken)
+    {
+        var links = new List<SearchResultLink>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await AddLinksFromSearchResultsAsync(links, seenUrls, limit, cancellationToken);
+        if (links.Count >= limit)
+        {
+            return links;
+        }
+
+        var anchors = _page.Locator("a[href]");
+        var anchorCount = await anchors.CountAsync();
+        for (var index = 0; index < anchorCount && links.Count < limit; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var anchor = anchors.Nth(index);
+            var link = await CreateLinkAsync(anchor);
+            if (link is null || !seenUrls.Add(link.Url))
+            {
+                continue;
+            }
+
+            links.Add(link);
         }
 
         return links;
     }
 
-    private async Task WaitForNetworkIdleAsync()
+    private async Task AddLinksFromSearchResultsAsync(
+        List<SearchResultLink> links,
+        HashSet<string> seenUrls,
+        int limit,
+        CancellationToken cancellationToken)
     {
-        try
+        var currentUrl = CurrentUrl;
+        if (!Uri.TryCreate(currentUrl, UriKind.Absolute, out var currentUri))
         {
-            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle,
-                new PageWaitForLoadStateOptions { Timeout = 10_000 });
+            return;
         }
-        catch (TimeoutException)
+
+        ILocator? resultAnchors = currentUri.Host.ToLowerInvariant() switch
         {
-            // NetworkIdle に達しなくても続行
+            var host when host.Contains("google.", StringComparison.Ordinal) => _page.Locator("#search a[href]:has(h3), #search a[href] h3").Locator("xpath=ancestor-or-self::a[1]"),
+            var host when host.Contains("bing.", StringComparison.Ordinal) => _page.Locator("#b_results h2 a[href]"),
+            _ => null,
+        };
+
+        if (resultAnchors is null)
+        {
+            return;
+        }
+
+        var resultCount = await resultAnchors.CountAsync();
+        for (var index = 0; index < resultCount && links.Count < limit; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var link = await CreateLinkAsync(resultAnchors.Nth(index));
+            if (link is null || !seenUrls.Add(link.Url))
+            {
+                continue;
+            }
+
+            links.Add(link);
         }
     }
 
-    private async Task WaitForStableStateAsync()
+    private async Task<SearchResultLink?> CreateLinkAsync(ILocator anchor)
     {
-        try
+        var url = await anchor.GetAttributeAsync("href") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(url))
         {
-            await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded,
-                new PageWaitForLoadStateOptions { Timeout = 5_000 });
+            return null;
         }
-        catch (TimeoutException) { }
 
-        try
-        {
-            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle,
-                new PageWaitForLoadStateOptions { Timeout = 5_000 });
-        }
-        catch (TimeoutException) { }
+        var title = await GetLocatorTextAsync(anchor);
+        var region = await DetermineRegionAsync(anchor);
+        return new SearchResultLink(
+            url,
+            string.IsNullOrWhiteSpace(title) ? url : title,
+            region);
     }
 
-    private static string EscapeSelector(string text)
+    private static string NormalizeForMatch(string? text)
     {
-        return text.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return WhitespaceRegex.Replace(text, " ").Trim().ToLowerInvariant();
+    }
+
+    private async Task<string> GetLocatorTextAsync(ILocator locator)
+    {
+        string? text = null;
+
+        try
+        {
+            text = await locator.InnerTextAsync();
+        }
+        catch (PlaywrightException)
+        {
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            text = await locator.TextContentAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            text = await locator.GetAttributeAsync("aria-label")
+                ?? await locator.GetAttributeAsync("title")
+                ?? await locator.GetAttributeAsync("value");
+        }
+
+        return NormalizeText(text);
+    }
+
+    private async Task<string> DetermineRegionAsync(ILocator locator)
+    {
+        if (await locator.Locator("xpath=ancestor::header | ancestor::*[@role='banner']").CountAsync() > 0)
+        {
+            return "header";
+        }
+
+        if (await locator.Locator("xpath=ancestor::footer | ancestor::*[@role='contentinfo']").CountAsync() > 0)
+        {
+            return "footer";
+        }
+
+        return "content";
+    }
+
+    private static string NormalizeText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return WhitespaceRegex.Replace(text, " ").Trim();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    private static void ValidateAbsoluteUrl(string url, string parameterName)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https" or "file"))
+        {
+            throw new ArgumentException($"URL の形式が不正です: {url}", parameterName);
+        }
     }
 }

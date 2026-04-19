@@ -20,7 +20,10 @@ public sealed class WebFetchOptions
     public string SearchBaseUrl { get; set; } = "https://www.bing.com/search?q=";
 
     /// <summary>検索結果からフェッチするページの最大件数</summary>
-    public int SearchResultsToFetch { get; set; } = 3;
+    public int SearchResultsToFetch { get; set; } = 10;
+
+    /// <summary>検索結果ページで保持するリンク一覧の最大件数</summary>
+    public int MaxSearchLinksPerPage { get; set; } = 30;
 
     /// <summary>1回の調査で探索する最大ページ数</summary>
     public int MaxPagesToExplore { get; set; } = 6;

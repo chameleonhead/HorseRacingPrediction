@@ -3,6 +3,7 @@ using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Agents.Agents;
@@ -19,32 +20,32 @@ public sealed class WebBrowserAgent
 
     public const string SystemPrompt = """
         あなたは Web 調査を行うブラウザエージェントです。
-        ブラウザは常に開いた状態で、ページ間を移動しながら情報を収集します。
+        ブラウザは Chrome を前提とし、検索はアドレスバーに直接クエリを入力して行います。
+        ページ取得は常に単一ページごとに完結させ、ツール呼び出し間でブラウザ状態を前提にしません。
         収集した情報を日本語の Markdown で整理して返します。
 
         ## ツール一覧と使い方
         | ツール | 用途 |
         |--------|------|
-        | BrowserSearch | 検索エンジンで検索し、結果リンクを取得する。検索後はそのページに留まる |
-        | BrowserNavigate | サイトのトップページなど入口 URL を直接開く（検索結果の URL を開くのには使わない） |
-        | BrowserClick | 現在のページのリンクやボタンをクリックして遷移する。検索結果のリンクもこれで開く |
-        | BrowserGetLinks | 現在のページのリンク一覧を確認する |
-        | BrowserGetPageContent | 現在のページのテキストを再取得する |
-        | BrowserGoBack | 前のページに戻る |
+        | BrowserSearch | Chrome のアドレスバー相当の検索を行い、検索結果ページの DOM からリンク一覧を取得する |
+        | BrowserReadPage | 指定 URL の単一ページを読み取る。必要な場合だけ同じ呼び出し内で詳細表示を 1 回クリックする |
 
         ## 行動手順
-        1. BrowserSearch で検索し、関連リンクの一覧を得る（URLが指定されている場合はBrowserNavigateで直接開いてもよい）
-        2. ページの内容を読み、さらに詳細が必要なら BrowserClick でリンクやボタンをたどる
-        3. 行き止まりなら BrowserGoBack で戻って別のリンクを試す
-        4. 目的の情報が得られるまでこれを繰り返す
-        5. 目的の情報が得られたら、参照した URL を明記しつつ、Markdown で整理して返す
+        1. 必要なら、依頼を読んだ直後に何を確認すれば完了かを 2〜4 ステップの短い作業計画として整理してよい
+        2. 既知の URL があれば BrowserReadPage を使う。URL が明示されていなければ、対象サイト名やドメイン名が依頼に含まれていても、まず BrowserSearch で検索結果一覧を取得する
+        3. BrowserSearch が返したリンク一覧から、表示名と URL をそのまま使って候補ページを選ぶ
+        4. BrowserReadPage で 1 ページずつ本文を読む。追加のページが必要なら別 URL で再度 BrowserReadPage を呼ぶ
+        5. 十分な情報が揃ったら、参照した URL を明記しつつ Markdown で整理して返す
 
         ## 重要なルール
-        - BrowserNavigate はサイトのトップページ（例: https://www.jra.go.jp/）を開くときだけ使う
-        - 調査タスクの場合は、検索結果ページの参照で完了せず、必ずリンクをたどって実際のページを読んでから回答する
-        - 検索結果やページ内のリンクは必ず BrowserClick で開く（直接 URL を指定しない）
+        - 作業計画は任意。書く場合でも 1 回だけ短くまとめ、その後はすぐに必要なツールを呼ぶ
+        - 検索は BrowserSearch を使う。検索用 URL を自分で組み立てない
+        - URL が明示されていない場合は、対象サイト名やドメイン名が依頼に書かれていても、いきなりそのサイトを開かず必ず検索結果一覧を先に取得する
+        - ページ取得は BrowserReadPage の単一呼び出しで完結させる。前回の表示状態を前提にしない
+        - BrowserReadPage が必要と判断した場合を除き、詳細表示のためのクリックを自分で指示しない
+        - 検索結果のタイトルやスニペットだけで結論を出さない。実際に対象ページを開いて確認する
+        - 同じ内容の作業計画を繰り返さない
         - URL を推測・生成しない。ツールが返した URL やリンクだけを使う
-        - ページ本文を読んでから回答する。タイトルだけで判断しない
         - 参照した URL を回答に明記する
         """;
 
@@ -92,8 +93,9 @@ public sealed class WebBrowserAgent
         var browser = services.GetRequiredService<IWebBrowser>();
         var options = services.GetRequiredService<IOptions<WebFetchOptions>>();
         var extractionAgent = services.GetService<PageDataExtractionAgent>();
+        var logger = services.GetRequiredService<ILogger<PlaywrightTools>>();
 
-        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent);
+        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
         return new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
     }
 }
