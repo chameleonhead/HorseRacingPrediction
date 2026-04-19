@@ -37,20 +37,22 @@ public sealed class WebFetchTools
     }
 
     /// <summary>
-    /// 検索クエリで Bing を検索し、上位ページの本文を取得する。
+    /// 検索クエリで検索エンジンを使い、上位ページの本文を取得する。
+    /// 検索結果からリンクを抽出し、許可ドメインの上位ページを実際にフェッチして返す。
     /// </summary>
-    [Description("検索クエリで Bing 検索を実行し、上位の検索結果ページの本文テキストを取得します。")]
+    [Description("検索クエリで検索エンジンを使い、上位の検索結果ページを実際に開いて本文テキストを取得します。")]
     public async Task<string> SearchAndFetch(
         [Description("検索クエリ文字列")] string query,
-        [Description("検索対象を絞り込むサイト名（省略可。例: site:www.jra.go.jp）")] string? site = null,
+        [Description("検索対象を絞り込むサイト名（省略可。例: www.jra.go.jp）")] string? site = null,
         CancellationToken cancellationToken = default)
     {
-        var q = string.IsNullOrWhiteSpace(site)
-            ? HttpUtility.UrlEncode(query)
-            : HttpUtility.UrlEncode($"{query} site:{site}");
+        var content = await SearchAndFetchPagesAsync(query, site, cancellationToken);
 
-        var searchUrl = _options.SearchBaseUrl + q;
-        return await _browser.FetchTextAsync(searchUrl, cancellationToken);
+        var sb = new StringBuilder();
+        sb.AppendLine($"# 検索結果: {query}");
+        sb.AppendLine();
+        sb.Append(content);
+        return sb.ToString();
     }
 
     /// <summary>
@@ -126,10 +128,8 @@ public sealed class WebFetchTools
         var query = string.IsNullOrWhiteSpace(year)
             ? $"{raceName} レース結果"
             : $"{raceName} {year}年 レース結果";
-        var encoded = HttpUtility.UrlEncode(query);
-        var searchUrl = _options.SearchBaseUrl + encoded + " site:db.netkeiba.com";
-        var rawText = await _browser.FetchTextAsync(searchUrl, cancellationToken);
-        return FormatSection($"レース「{raceName}」{(year != null ? year + "年" : "")}の結果", rawText);
+        var content = await SearchAndFetchPagesAsync(query, "db.netkeiba.com", cancellationToken);
+        return FormatSection($"レース「{raceName}」{(year != null ? year + "年" : "")}の結果", content);
     }
 
 
@@ -151,6 +151,74 @@ public sealed class WebFetchTools
     // ------------------------------------------------------------------ //
     // private helpers
     // ------------------------------------------------------------------ //
+
+    /// <summary>
+    /// 検索エンジンで検索し、上位ページの本文を取得して結合する共通ロジック。
+    /// </summary>
+    private async Task<string> SearchAndFetchPagesAsync(
+        string query,
+        string? site,
+        CancellationToken cancellationToken)
+    {
+        var q = string.IsNullOrWhiteSpace(site)
+            ? HttpUtility.UrlEncode(query)
+            : HttpUtility.UrlEncode($"{query} site:{site}");
+
+        var searchUrl = _options.SearchBaseUrl + q;
+
+        // 検索結果ページからリンクを抽出
+        var links = await _browser.ExtractLinksAsync(searchUrl, cancellationToken: cancellationToken);
+
+        if (links.Count == 0)
+        {
+            // フォールバック: 検索ページのテキストをそのまま返す
+            return await _browser.FetchTextAsync(searchUrl, cancellationToken);
+        }
+
+        // 許可ドメインのリンクをフィルタして上位N件を取得
+        var targetLinks = links
+            .Where(l => IsAllowedDomain(l.Url))
+            .Take(_options.SearchResultsToFetch)
+            .ToList();
+
+        if (targetLinks.Count == 0)
+        {
+            // 許可ドメインのリンクがない場合は検索ページのテキストを返す
+            return await _browser.FetchTextAsync(searchUrl, cancellationToken);
+        }
+
+        // 各リンクのページコンテンツを取得して結合
+        var sb = new StringBuilder();
+        for (var i = 0; i < targetLinks.Count; i++)
+        {
+            var link = targetLinks[i];
+            sb.AppendLine($"### {link.Title}");
+            sb.AppendLine($"URL: {link.Url}");
+            sb.AppendLine();
+            try
+            {
+                var content = await _browser.FetchTextAsync(link.Url, cancellationToken);
+                sb.AppendLine(content);
+            }
+            catch
+            {
+                sb.AppendLine("（ページの取得に失敗しました）");
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    private bool IsAllowedDomain(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return false;
+
+        var host = uri.Host.ToLowerInvariant();
+        return _options.AllowedDomains
+            .Any(d => host == d.ToLowerInvariant() || host.EndsWith("." + d.ToLowerInvariant()));
+    }
 
     private void ValidateDomain(string url)
     {

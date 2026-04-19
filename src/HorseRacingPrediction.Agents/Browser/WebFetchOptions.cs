@@ -18,4 +18,7 @@ public sealed class WebFetchOptions
 
     /// <summary>検索に使用するベース URL（Bing 等）</summary>
     public string SearchBaseUrl { get; set; } = "https://www.bing.com/search?q=";
+
+    /// <summary>検索結果からフェッチするページの最大件数</summary>
+    public int SearchResultsToFetch { get; set; } = 3;
 }

@@ -77,14 +77,17 @@ public class WebFetchToolsTests
     [TestMethod]
     public async Task SearchAndFetch_NoSite_UsesQueryOnly()
     {
-        _fakeBrowser.ResponseText = "検索結果";
+        _fakeBrowser.ResponseText = "検索結果テキスト";
 
         var result = await _sut.SearchAndFetch("天皇賞 出馬表");
 
-        Assert.AreEqual("検索結果", result);
-        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "bing.com",
-            "Bing の URL が使われること");
-        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "%e5%a4%a9%e7%9a%87%e8%b3%9e",
+        StringAssert.Contains(result, "検索結果テキスト",
+            "フォールバック時は検索ページのテキストが含まれること");
+        Assert.IsNotNull(_fakeBrowser.LastExtractLinksUrl,
+            "ExtractLinksAsync が呼ばれること");
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "bing.com",
+            "Bing の URL で検索されること");
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "%e5%a4%a9%e7%9a%87%e8%b3%9e",
             "クエリが URL エンコードされること");
     }
 
@@ -95,8 +98,84 @@ public class WebFetchToolsTests
 
         await _sut.SearchAndFetch("天皇賞", "www.jra.go.jp");
 
-        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "site%3awww.jra.go.jp",
+        Assert.IsNotNull(_fakeBrowser.LastExtractLinksUrl);
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "site%3awww.jra.go.jp",
             "site: フィルタが URL エンコードされて付加されること");
+    }
+
+    [TestMethod]
+    public async Task SearchAndFetch_WithLinks_FetchesLinkedPages()
+    {
+        _fakeBrowser.SearchResultLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/race/page1", "JRA レース情報"),
+            new SearchResultLink("https://db.netkeiba.com/race/123", "netkeiba レース"),
+        ];
+        _fakeBrowser.ResponseText = "ページ本文";
+
+        var result = await _sut.SearchAndFetch("皐月賞 出走馬");
+
+        Assert.AreEqual(2, _fakeBrowser.FetchedUrls.Count,
+            "許可ドメインの2件がフェッチされること");
+        StringAssert.Contains(result, "JRA レース情報",
+            "リンクタイトルが含まれること");
+        StringAssert.Contains(result, "ページ本文",
+            "ページ本文が含まれること");
+    }
+
+    [TestMethod]
+    public async Task SearchAndFetch_WithLinks_FiltersToAllowedDomains()
+    {
+        _fakeBrowser.SearchResultLinks =
+        [
+            new SearchResultLink("https://example.com/page", "外部サイト"),
+            new SearchResultLink("https://www.jra.go.jp/race", "JRA レース"),
+        ];
+        _fakeBrowser.ResponseText = "JRAページ本文";
+
+        await _sut.SearchAndFetch("皐月賞");
+
+        Assert.AreEqual(1, _fakeBrowser.FetchedUrls.Count,
+            "許可ドメインのリンクのみフェッチされること");
+        Assert.AreEqual("https://www.jra.go.jp/race", _fakeBrowser.FetchedUrls[0]);
+    }
+
+    [TestMethod]
+    public async Task SearchAndFetch_NoAllowedDomainLinks_FallsBackToSearchPage()
+    {
+        _fakeBrowser.SearchResultLinks =
+        [
+            new SearchResultLink("https://example.com/page", "外部サイト"),
+        ];
+        _fakeBrowser.ResponseText = "検索ページテキスト";
+
+        var result = await _sut.SearchAndFetch("皐月賞");
+
+        StringAssert.Contains(result, "検索ページテキスト",
+            "許可ドメインがない場合は検索ページのテキストが返されること");
+        Assert.AreEqual(1, _fakeBrowser.FetchedUrls.Count,
+            "検索ページのフォールバック1回のみ");
+        StringAssert.Contains(_fakeBrowser.FetchedUrls[0], "bing.com",
+            "フォールバックは検索URLであること");
+    }
+
+    [TestMethod]
+    public async Task SearchAndFetch_RespectsSearchResultsToFetchLimit()
+    {
+        // SearchResultsToFetch はデフォルト 3
+        _fakeBrowser.SearchResultLinks =
+        [
+            new SearchResultLink("https://www.jra.go.jp/page1", "Page 1"),
+            new SearchResultLink("https://www.jra.go.jp/page2", "Page 2"),
+            new SearchResultLink("https://www.jra.go.jp/page3", "Page 3"),
+            new SearchResultLink("https://www.jra.go.jp/page4", "Page 4"),
+        ];
+        _fakeBrowser.ResponseText = "ページ本文";
+
+        await _sut.SearchAndFetch("テスト");
+
+        Assert.AreEqual(3, _fakeBrowser.FetchedUrls.Count,
+            "SearchResultsToFetch の件数までフェッチされること");
     }
 
     // ------------------------------------------------------------------ //
@@ -240,7 +319,9 @@ public class WebFetchToolsTests
 
         await _sut.FetchRaceResults("天皇賞秋", "2024");
 
-        StringAssert.Contains(_fakeBrowser.LastFetchedUrl, "www.bing.com",
+        Assert.IsNotNull(_fakeBrowser.LastExtractLinksUrl,
+            "検索エンジン経由で検索されること");
+        StringAssert.Contains(_fakeBrowser.LastExtractLinksUrl, "www.bing.com",
             "Bing 検索 URL が使われること");
     }
 
@@ -291,11 +372,24 @@ public class WebFetchToolsTests
     {
         public string ResponseText { get; set; } = string.Empty;
         public string? LastFetchedUrl { get; private set; }
+        public List<string> FetchedUrls { get; } = [];
+
+        public IReadOnlyList<SearchResultLink> SearchResultLinks { get; set; } = [];
+        public string? LastExtractLinksUrl { get; private set; }
 
         public Task<string> FetchTextAsync(string url, CancellationToken cancellationToken = default)
         {
             LastFetchedUrl = url;
+            FetchedUrls.Add(url);
             return Task.FromResult(ResponseText);
+        }
+
+        public Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
+            string url, int maxResults = 10, CancellationToken cancellationToken = default)
+        {
+            LastExtractLinksUrl = url;
+            IReadOnlyList<SearchResultLink> result = SearchResultLinks.Take(maxResults).ToList();
+            return Task.FromResult(result);
         }
     }
 }

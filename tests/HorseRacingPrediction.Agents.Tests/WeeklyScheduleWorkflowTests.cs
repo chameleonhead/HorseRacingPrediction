@@ -285,5 +285,9 @@ public class WeeklyScheduleWorkflowTests
     {
         public Task<string> FetchTextAsync(string url, CancellationToken cancellationToken = default)
             => Task.FromResult($"ページ本文: {url}");
+
+        public Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(
+            string url, int maxResults = 10, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
     }
 }
