@@ -18,9 +18,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class StableDataAgent
 {
-    internal const string AgentName = "StableDataAgent";
+    public const string AgentName = "StableDataAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは厩舎（調教師）の情報を収集する専門エージェントです。
         指定された調教師・厩舎について、インターネット（netkeiba・JRA 公式など）から
         以下の情報を収集し、Markdown 形式で返してください。

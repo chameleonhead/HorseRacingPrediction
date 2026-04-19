@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Agent
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Agents.Tests", "tests\HorseRacingPrediction.Agents.Tests\HorseRacingPrediction.Agents.Tests.csproj", "{EA73CB0A-EF49-41DF-A13C-C4C2D4C2EB83}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.DevHost", "src\HorseRacingPrediction.DevHost\HorseRacingPrediction.DevHost.csproj", "{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -157,6 +159,18 @@ Global
 		{EA73CB0A-EF49-41DF-A13C-C4C2D4C2EB83}.Release|x64.Build.0 = Release|Any CPU
 		{EA73CB0A-EF49-41DF-A13C-C4C2D4C2EB83}.Release|x86.ActiveCfg = Release|Any CPU
 		{EA73CB0A-EF49-41DF-A13C-C4C2D4C2EB83}.Release|x86.Build.0 = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|x64.Build.0 = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Debug|x86.Build.0 = Debug|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|x64.ActiveCfg = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|x64.Build.0 = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|x86.ActiveCfg = Release|Any CPU
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -172,5 +186,6 @@ Global
 		{AD6E3049-7D57-4734-BD8F-C69132F959CC} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 		{D3A3D784-2EAD-4211-BE44-17BD7DC384C2} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 		{EA73CB0A-EF49-41DF-A13C-C4C2D4C2EB83} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
+		{86741636-5BE3-4E1A-AE29-6CA85BD78AF5} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 	EndGlobalSection
 EndGlobal

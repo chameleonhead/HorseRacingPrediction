@@ -17,9 +17,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class PredictionAgent
 {
-    internal const string AgentName = "PredictionAgent";
+    public const string AgentName = "PredictionAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは競馬の予測票を作成する専門エージェントです。
         提供されたレースコンテキストと馬分析レポートをもとに、
         予測票を作成・確定してください。

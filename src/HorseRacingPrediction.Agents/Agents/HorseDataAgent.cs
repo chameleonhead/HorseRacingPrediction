@@ -18,9 +18,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class HorseDataAgent
 {
-    internal const string AgentName = "HorseDataAgent";
+    public const string AgentName = "HorseDataAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは競走馬の情報を収集する専門エージェントです。
         指定された馬について、インターネット（netkeiba・JRA 公式など）から
         以下の情報を収集し、Markdown 形式で返してください。

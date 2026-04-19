@@ -17,9 +17,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class WeekendRaceDiscoveryAgent
 {
-    internal const string AgentName = "WeekendRaceDiscoveryAgent";
+    public const string AgentName = "WeekendRaceDiscoveryAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは週末の競馬レーススケジュールを調査する専門エージェントです。
         指定された週末（土・日）に開催されるレースの一覧を JRA 公式サイトや
         netkeiba などから収集し、**必ず** 以下の JSON 配列形式のみで返してください。

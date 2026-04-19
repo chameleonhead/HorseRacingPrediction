@@ -22,9 +22,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class PostPositionPredictionAgent
 {
-    internal const string AgentName = "PostPositionPredictionAgent";
+    public const string AgentName = "PostPositionPredictionAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは枠順確定後のレースを予測する専門エージェントです。
         提供された収集データ（レース情報・馬情報・騎手情報・厩舎情報）を総合的に分析し、
         予測結果を Markdown 形式で返してください。

@@ -16,9 +16,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class RaceContextAgent
 {
-    internal const string AgentName = "RaceContextAgent";
+    public const string AgentName = "RaceContextAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは競馬レースの予測コンテキスト収集エージェントです。
         指定されたレース ID に対して、以下の情報を収集・整理して Markdown 形式で返してください。
 

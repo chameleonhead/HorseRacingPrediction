@@ -16,9 +16,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// </summary>
 public sealed class HorseAnalysisAgent
 {
-    internal const string AgentName = "HorseAnalysisAgent";
+    public const string AgentName = "HorseAnalysisAgent";
 
-    internal const string SystemPrompt = """
+    public const string SystemPrompt = """
         あなたは競馬の出走馬・騎手を分析する専門エージェントです。
         提供されたレースコンテキストをもとに、各出走馬の詳細分析を行い
         Markdown 形式で評価レポートを作成してください。
