@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
@@ -101,6 +102,16 @@ public static class AgentServiceCollectionExtensions
         {
             var webFetchTools = sp.GetRequiredService<WebFetchTools>();
             return new HorseRacingTools(webFetchTools);
+        });
+        services.AddTransient<JraRaceCardScraper>(sp =>
+        {
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            return new JraRaceCardScraper(browser);
+        });
+        services.AddTransient<JraScrapingTools>(sp =>
+        {
+            var scraper = sp.GetRequiredService<JraRaceCardScraper>();
+            return new JraScrapingTools(scraper);
         });
         return services;
     }
