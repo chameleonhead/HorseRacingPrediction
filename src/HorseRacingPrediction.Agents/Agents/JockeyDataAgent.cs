@@ -40,6 +40,7 @@ public sealed class JockeyDataAgent
           - netkeiba の騎手成績ページ
           - 「騎手名 成績」「騎手名 競馬場」などの検索
           - JRA 公式の騎手情報ページ
+                - 収集後は `UpsertJockey` を使ってドメインの騎手プロフィールを更新する
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式

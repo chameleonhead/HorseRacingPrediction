@@ -215,4 +215,19 @@ internal static class ReadModelTestExtensions
             .GetProperty(nameof(JockeyReadModel.NormalizedName))!
             .SetValue(model, normalizedName);
     }
+
+    public static void SetTestData(
+        this TrainerReadModel model,
+        string trainerId, string displayName, string normalizedName)
+    {
+        typeof(TrainerReadModel)
+            .GetProperty(nameof(TrainerReadModel.TrainerId))!
+            .SetValue(model, trainerId);
+        typeof(TrainerReadModel)
+            .GetProperty(nameof(TrainerReadModel.DisplayName))!
+            .SetValue(model, displayName);
+        typeof(TrainerReadModel)
+            .GetProperty(nameof(TrainerReadModel.NormalizedName))!
+            .SetValue(model, normalizedName);
+    }
 }

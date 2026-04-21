@@ -40,6 +40,7 @@ public sealed class StableDataAgent
           - netkeiba の調教師成績ページ
           - 「調教師名 成績」「厩舎名 管理馬」などの検索
           - JRA 公式の調教師情報ページ
+                - 収集後は `UpsertTrainer` を使ってドメインの調教師プロフィールを更新する
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式

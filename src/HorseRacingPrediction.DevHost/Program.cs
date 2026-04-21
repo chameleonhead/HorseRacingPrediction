@@ -2,6 +2,7 @@ using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.Agents.Workflow;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
@@ -9,9 +10,26 @@ using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// // -------------------------------------------------------------------
+// // OpenAI IChatClient
+// // -------------------------------------------------------------------
+// var openAIApiKey = builder.Configuration["OpenAI:ApiKey"]
+//     ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+//     ?? throw new InvalidOperationException(
+//         "OpenAI API キーが設定されていません。" +
+//         "appsettings.Development.json の \"OpenAI:ApiKey\" または " +
+//         "環境変数 OPENAI_API_KEY を設定してください。");
+
+// var openAIModel = builder.Configuration["OpenAI:Model"] ?? "gpt-4o";
+
+// builder.Services.AddSingleton<IChatClient>(
+//     new OpenAIClient(openAIApiKey)
+//         .GetChatClient(openAIModel)
+//         .AsIChatClient());
 builder.Services.AddSingleton<IChatClient>(
     new LMStudioChatClient(new LMStudioChatClientOptions()
     {
@@ -21,6 +39,11 @@ builder.Services.AddSingleton<IChatClient>(
 builder.Services.AddSingleton(sp =>
     new PageDataExtractionAgent(sp.GetRequiredService<IChatClient>()));
 
+var connectionString = builder.Configuration.GetConnectionString("EventStore")
+    ?? "Data Source=eventstore-devui.db";
+
+builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
+
 // -------------------------------------------------------------------
 // WebBrowser + WebFetchTools（Playwright）
 // -------------------------------------------------------------------
@@ -28,9 +51,10 @@ builder.Services.AddSingleton<IWebBrowser>(sp =>
     PlaywrightWebBrowser.CreateAsync().GetAwaiter().GetResult());
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
-builder.Services.AddTransient<WebBrowserAgent>(sp =>
-    WebBrowserAgent.CreateFromServices(sp));
-builder.Services.AddTransient<WebFetchTools>();
+builder.Services.AddWebBrowserAgent();
+builder.Services.AddPredictionWorkflow();
+builder.Services.AddDataCollectionWorkflow();
+builder.Services.AddWeeklyScheduleWorkflow();
 
 // -------------------------------------------------------------------
 // 競馬予測エージェントを DevUI に登録
@@ -39,84 +63,49 @@ builder.Services.AddTransient<WebFetchTools>();
 // WebBrowserAgent（汎用 Web 情報取得）
 builder.AddAIAgent(
     WebBrowserAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var browser = sp.GetRequiredService<IWebBrowser>();
-        var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
-        var extractionAgent = sp.GetService<PageDataExtractionAgent>();
-        var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
-        var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
-        return new ChatClientAgent(chatClient, name: name, instructions: WebBrowserAgent.SystemPrompt, tools: playwrightTools.GetAITools());
-    });
+    (sp, name) => sp.CreateWebBrowserChatAgent(name));
 
 // 週末レース発見エージェント（木曜フェーズ）
 builder.AddAIAgent(
     WeekendRaceDiscoveryAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var calendarTools = new CalendarTools();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        tools.AddRange(calendarTools.GetAITools());
-        return new ChatClientAgent(chatClient, name: name, instructions: WeekendRaceDiscoveryAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreateWeekendRaceDiscoveryChatAgent(name));
 
 // レース情報収集エージェント
 builder.AddAIAgent(
     RaceDataAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        return new ChatClientAgent(chatClient, name: name, instructions: RaceDataAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreateRaceDataChatAgent(name));
 
 // 馬情報収集エージェント
 builder.AddAIAgent(
     HorseDataAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        return new ChatClientAgent(chatClient, name: name, instructions: HorseDataAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreateHorseDataChatAgent(name));
 
 // 騎手情報収集エージェント
 builder.AddAIAgent(
     JockeyDataAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        return new ChatClientAgent(chatClient, name: name, instructions: JockeyDataAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreateJockeyDataChatAgent(name));
 
 // 厩舎（調教師）情報収集エージェント
 builder.AddAIAgent(
     StableDataAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        return new ChatClientAgent(chatClient, name: name, instructions: StableDataAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreateStableDataChatAgent(name));
 
 // 枠順確定後予測エージェント（金曜フェーズ）
 builder.AddAIAgent(
     PostPositionPredictionAgent.AgentName,
-    (sp, name) =>
-    {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        return new ChatClientAgent(chatClient, name: name, instructions: PostPositionPredictionAgent.SystemPrompt, tools: tools);
-    });
+    (sp, name) => sp.CreatePostPositionPredictionChatAgent(name));
+
+builder.AddAIAgent(
+    RaceContextAgent.AgentName,
+    (sp, name) => sp.CreateRaceContextChatAgent(name));
+
+builder.AddAIAgent(
+    HorseAnalysisAgent.AgentName,
+    (sp, name) => sp.CreateHorseAnalysisChatAgent(name));
+
+builder.AddAIAgent(
+    PredictionAgent.AgentName,
+    (sp, name) => sp.CreatePredictionChatAgent(name));
 
 // -------------------------------------------------------------------
 // ワークフローを DevUI に登録
@@ -127,25 +116,9 @@ builder.AddWorkflow(
     "PredictionWorkflow",
     (sp, workflowName) =>
     {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-
-        var raceContextAgent = new ChatClientAgent(
-            chatClient,
-            name: RaceContextAgent.AgentName,
-            instructions: RaceContextAgent.SystemPrompt,
-            tools: tools);
-        var horseAnalysisAgent = new ChatClientAgent(
-            chatClient,
-            name: HorseAnalysisAgent.AgentName,
-            instructions: HorseAnalysisAgent.SystemPrompt,
-            tools: tools);
-        var predictionAgent = new ChatClientAgent(
-            chatClient,
-            name: PredictionAgent.AgentName,
-            instructions: PredictionAgent.SystemPrompt,
-            tools: tools);
+        var raceContextAgent = sp.CreateRaceContextChatAgent();
+        var horseAnalysisAgent = sp.CreateHorseAnalysisChatAgent();
+        var predictionAgent = sp.CreatePredictionChatAgent();
 
         return AgentWorkflowBuilder.BuildSequential(
             workflowName,
@@ -157,30 +130,10 @@ builder.AddWorkflow(
     "DataCollectionWorkflow",
     (sp, workflowName) =>
     {
-        var chatClient = sp.GetRequiredService<IChatClient>();
-        var webBrowserAgent = sp.GetRequiredService<WebBrowserAgent>();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-
-        var raceDataAgent = new ChatClientAgent(
-            chatClient,
-            name: RaceDataAgent.AgentName,
-            instructions: RaceDataAgent.SystemPrompt,
-            tools: tools);
-        var horseDataAgent = new ChatClientAgent(
-            chatClient,
-            name: HorseDataAgent.AgentName,
-            instructions: HorseDataAgent.SystemPrompt,
-            tools: tools);
-        var jockeyDataAgent = new ChatClientAgent(
-            chatClient,
-            name: JockeyDataAgent.AgentName,
-            instructions: JockeyDataAgent.SystemPrompt,
-            tools: tools);
-        var stableDataAgent = new ChatClientAgent(
-            chatClient,
-            name: StableDataAgent.AgentName,
-            instructions: StableDataAgent.SystemPrompt,
-            tools: tools);
+        var raceDataAgent = sp.CreateRaceDataChatAgent();
+        var horseDataAgent = sp.CreateHorseDataChatAgent();
+        var jockeyDataAgent = sp.CreateJockeyDataChatAgent();
+        var stableDataAgent = sp.CreateStableDataChatAgent();
 
         return AgentWorkflowBuilder.BuildConcurrent(
             workflowName,

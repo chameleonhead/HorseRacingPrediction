@@ -54,24 +54,46 @@ public sealed class DataCollectionWorkflow
         IReadOnlyList<string> trainerNames,
         CancellationToken cancellationToken = default)
     {
-        // レースデータは単一エージェントで収集
-        var raceDataTask = _raceDataAgent.CollectAsync(raceQuery, cancellationToken);
+        // まずレース情報を取得し、出馬表を整理して収集対象を確定する。
+        var raceData = await _raceDataAgent.CollectAsync(raceQuery, cancellationToken);
+        var raceCardEntries = RaceCardTableParser.Parse(raceData);
 
-        // 馬・騎手・厩舎はそれぞれ複数あるため、各名前について並列収集
-        var horseTasks = horseNames
+        var effectiveHorseNames = raceCardEntries
+            .Select(entry => entry.HorseName)
+            .Concat(horseNames)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var effectiveJockeyNames = raceCardEntries
+            .Select(entry => entry.JockeyName)
+            .Concat(jockeyNames)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var effectiveTrainerNames = raceCardEntries
+            .Select(entry => entry.TrainerName)
+            .Concat(trainerNames)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var horseTasks = effectiveHorseNames
             .Select(name => (name, task: _horseDataAgent.CollectAsync(name, cancellationToken)))
             .ToList();
 
-        var jockeyTasks = jockeyNames
+        var jockeyTasks = effectiveJockeyNames
             .Select(name => (name, task: _jockeyDataAgent.CollectAsync(name, cancellationToken)))
             .ToList();
 
-        var trainerTasks = trainerNames
+        var trainerTasks = effectiveTrainerNames
             .Select(name => (name, task: _stableDataAgent.CollectAsync(name, cancellationToken)))
             .ToList();
 
-        // すべて並列実行
-        var allTasks = new List<Task> { raceDataTask };
+        var allTasks = new List<Task>();
         allTasks.AddRange(horseTasks.Select(t => t.task));
         allTasks.AddRange(jockeyTasks.Select(t => t.task));
         allTasks.AddRange(trainerTasks.Select(t => t.task));
@@ -92,7 +114,7 @@ public sealed class DataCollectionWorkflow
 
         return new DataCollectionResult(
             raceQuery,
-            raceDataTask.Result,
+            raceData,
             horseDataByName,
             jockeyDataByName,
             stableDataByName);

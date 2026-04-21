@@ -50,9 +50,9 @@ public class DataCollectionWorkflowTests
 
         Assert.AreEqual("2024年天皇賞秋", result.RaceQuery, "RaceQuery が設定されること");
         Assert.IsFalse(string.IsNullOrEmpty(result.RaceData), "RaceData が返されること");
-        Assert.AreEqual(0, result.HorseDataByName.Count, "馬データが空であること");
-        Assert.AreEqual(0, result.JockeyDataByName.Count, "騎手データが空であること");
-        Assert.AreEqual(0, result.StableDataByName.Count, "厩舎データが空であること");
+        Assert.IsEmpty(result.HorseDataByName, "馬データが空であること");
+        Assert.IsEmpty(result.JockeyDataByName, "騎手データが空であること");
+        Assert.IsEmpty(result.StableDataByName, "厩舎データが空であること");
     }
 
     [TestMethod]
@@ -113,9 +113,39 @@ public class DataCollectionWorkflowTests
 
         Assert.AreEqual("2024年天皇賞秋", result.RaceQuery);
         Assert.IsFalse(string.IsNullOrEmpty(result.RaceData));
-        Assert.AreEqual(1, result.HorseDataByName.Count, "馬データが1件");
-        Assert.AreEqual(1, result.JockeyDataByName.Count, "騎手データが1件");
-        Assert.AreEqual(1, result.StableDataByName.Count, "厩舎データが1件");
+        Assert.HasCount(1, result.HorseDataByName, "馬データが1件");
+        Assert.HasCount(1, result.JockeyDataByName, "騎手データが1件");
+        Assert.HasCount(1, result.StableDataByName, "厩舎データが1件");
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_RaceCardIsParsed_DeduplicatesJockeysAndTrainers()
+    {
+        _fakeChatClient.ResponseFactory = messages =>
+        {
+            var lastMessage = messages.Last().Text;
+            return lastMessage.Contains("レース「2024年天皇賞秋」", StringComparison.Ordinal)
+                ? """
+## 出馬表
+| 枠番 | 馬番 | 馬名 | 騎手 | 斤量 | 性齢 | 馬体重 | 調教師 |
+|------|------|------|------|------|------|--------|--------|
+| 1 | 1 | 馬A | 騎手A | 56.0 | 牡3 | 480(+2) | 厩舎A |
+| 2 | 2 | 馬B | 騎手B | 55.0 | 牝4 | 470(-1) | 厩舎A |
+| 3 | 3 | 馬C | 騎手A | 57.0 | 牡5 | 500(+0) | 厩舎B |
+"""
+                : "個別データ";
+        };
+
+        var result = await _sut.CollectAsync(
+            raceQuery: "2024年天皇賞秋",
+            horseNames: [],
+            jockeyNames: [],
+            trainerNames: []);
+
+        Assert.HasCount(3, result.HorseDataByName, "馬は出馬表から3件抽出されること");
+        Assert.HasCount(2, result.JockeyDataByName, "騎手は重複排除されること");
+        Assert.HasCount(2, result.StableDataByName, "厩舎は重複排除されること");
+        Assert.AreEqual(1, _fakeChatClient.Messages.Count(message => message.Contains("調教師・厩舎「厩舎A」", StringComparison.Ordinal)), "厩舎A は1回だけ調査されること");
     }
 
     // ------------------------------------------------------------------ //
@@ -125,6 +155,8 @@ public class DataCollectionWorkflowTests
     private sealed class FakeChatClient : IChatClient
     {
         public string ResponseText { get; set; } = "テスト応答";
+        public Func<IReadOnlyList<ChatMessage>, string>? ResponseFactory { get; set; }
+        public List<string> Messages { get; } = [];
 
         public ChatClientMetadata Metadata => new("fake-provider", null, "fake-model");
 
@@ -133,7 +165,11 @@ public class DataCollectionWorkflowTests
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
         {
-            var response = new ChatResponse([new ChatMessage(ChatRole.Assistant, ResponseText)]);
+            var materializedMessages = messages.ToList();
+            var lastText = materializedMessages.LastOrDefault()?.Text ?? string.Empty;
+            Messages.Add(lastText);
+            var responseText = ResponseFactory?.Invoke(materializedMessages) ?? ResponseText;
+            var response = new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]);
             return Task.FromResult(response);
         }
 

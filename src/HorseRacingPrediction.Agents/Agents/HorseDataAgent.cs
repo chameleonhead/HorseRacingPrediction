@@ -39,6 +39,7 @@ public sealed class HorseDataAgent
           - netkeiba の馬戦績ページ
           - 「馬名 血統」「馬名 調教」などの検索
           - JRA 公式の馬情報ページ
+          - 収集後は `UpsertHorse` を使ってドメインの馬プロフィールを更新する
         - 取得できなかった項目は「不明」と記載し、他の項目を続ける
 
         ## 出力形式
