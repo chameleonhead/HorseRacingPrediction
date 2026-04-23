@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
@@ -102,6 +103,53 @@ public static class AgentServiceCollectionExtensions
             var webFetchTools = sp.GetRequiredService<WebFetchTools>();
             return new HorseRacingTools(webFetchTools);
         });
+        services.AddTransient<JraRaceCardScraper>(sp =>
+        {
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            return new JraRaceCardScraper(browser);
+        });
+        services.AddTransient<JraScrapingTools>(sp =>
+        {
+            var scraper = sp.GetRequiredService<JraRaceCardScraper>();
+            return new JraScrapingTools(scraper);
+        });
+        return services;
+    }
+
+    /// <summary>
+    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraUrlDiscoveryAgent"/>、
+    /// および <see cref="JraRaceCardScraper"/> を DI コンテナに登録する。
+    /// <para>
+    /// このワークフローは AI が出馬表 URL を発見し、
+    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
+    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
+    /// </para>
+    /// <para>
+    /// 使用例（Program.cs または テスト初期化）:
+    /// <code>
+    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
+    /// builder.Services.AddWebBrowserAgent();
+    /// builder.Services.AddJraRaceCardCollectionWorkflow();
+    /// </code>
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddJraRaceCardCollectionWorkflow(this IServiceCollection services)
+    {
+        services.AddTransient<JraUrlDiscoveryAgent>(sp =>
+        {
+            var chatClient = sp.GetRequiredService<IChatClient>();
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
+            var extractionAgent = sp.GetService<PageDataExtractionAgent>();
+            var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
+            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
+            return new JraUrlDiscoveryAgent(chatClient, playwrightTools.GetAITools());
+        });
+        services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
+            new JraRaceCardCollectionWorkflow(
+                sp.GetRequiredService<JraUrlDiscoveryAgent>(),
+                sp.GetRequiredService<JraRaceCardScraper>(),
+                sp.GetRequiredService<DataCollectionWriteTools>()));
         return services;
     }
 
