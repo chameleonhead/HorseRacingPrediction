@@ -117,23 +117,6 @@ public static class AgentServiceCollectionExtensions
     }
 
     /// <summary>
-    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraUrlDiscoveryAgent"/>、
-    /// および <see cref="JraRaceCardScraper"/> を DI コンテナに登録する。
-    /// <para>
-    /// このワークフローは AI が出馬表 URL を発見し、
-    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
-    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
-    /// </para>
-    /// <para>
-    /// 使用例（Program.cs または テスト初期化）:
-    /// <code>
-    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
-    /// builder.Services.AddWebBrowserAgent();
-    /// builder.Services.AddJraRaceCardCollectionWorkflow();
-    /// </code>
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// <see cref="JraRaceResultCollectionWorkflow"/>、<see cref="JraResultUrlDiscoveryAgent"/>、
     /// および <see cref="JraRaceResultScraper"/> を DI コンテナに登録する。
     /// <para>
@@ -175,6 +158,23 @@ public static class AgentServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraUrlDiscoveryAgent"/>、
+    /// および <see cref="JraRaceCardScraper"/> を DI コンテナに登録する。
+    /// <para>
+    /// このワークフローは AI が出馬表 URL を発見し、
+    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
+    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
+    /// </para>
+    /// <para>
+    /// 使用例（Program.cs または テスト初期化）:
+    /// <code>
+    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
+    /// builder.Services.AddWebBrowserAgent();
+    /// builder.Services.AddJraRaceCardCollectionWorkflow();
+    /// </code>
+    /// </para>
+    /// </summary>
     public static IServiceCollection AddJraRaceCardCollectionWorkflow(this IServiceCollection services)
     {
         services.AddTransient<JraUrlDiscoveryAgent>(sp =>
