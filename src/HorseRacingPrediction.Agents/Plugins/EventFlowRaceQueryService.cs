@@ -16,48 +16,48 @@ public sealed class EventFlowRaceQueryService : IRaceQueryService
         _queryProcessor = queryProcessor;
     }
 
-    public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
+    public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
         string raceId, CancellationToken cancellationToken = default)
     {
         var query = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 
-    public Task<HorseReadModel?> GetHorseAsync(
+    public async Task<HorseReadModel?> GetHorseAsync(
         string horseId, CancellationToken cancellationToken = default)
     {
         var query = new ReadModelByIdQuery<HorseReadModel>(horseId);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 
-    public Task<JockeyReadModel?> GetJockeyAsync(
+    public async Task<JockeyReadModel?> GetJockeyAsync(
         string jockeyId, CancellationToken cancellationToken = default)
     {
         var query = new ReadModelByIdQuery<JockeyReadModel>(jockeyId);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 
-    public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(
+    public async Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(
         string subjectType, string subjectId, CancellationToken cancellationToken = default)
     {
         var key = MemoBySubjectLocator.MakeKey(
             Enum.Parse<HorseRacingPrediction.Domain.Memos.MemoSubjectType>(subjectType, ignoreCase: true),
             subjectId);
         var query = new ReadModelByIdQuery<MemoBySubjectReadModel>(key);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 
-    public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(
+    public async Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(
         string horseId, CancellationToken cancellationToken = default)
     {
         var query = new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 
-    public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
+    public async Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
         string jockeyId, CancellationToken cancellationToken = default)
     {
         var query = new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId);
-        return _queryProcessor.ProcessAsync(query, cancellationToken)!;
+        return await _queryProcessor.ProcessAsync(query, cancellationToken);
     }
 }
