@@ -11,4 +11,5 @@ public sealed record RacePredictionContextEntry(
     string? SexCode,
     int? Age,
     decimal? DeclaredWeight,
-    decimal? DeclaredWeightDiff);
+    decimal? DeclaredWeightDiff,
+    string? RunningStyleCode);

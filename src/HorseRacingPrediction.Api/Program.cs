@@ -6,6 +6,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
+using HorseRacingPrediction.MachineLearning;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,6 +56,9 @@ builder.Services.AddSqliteDbContextProvider(connectionString);
 builder.Services.AddSingleton<HorseWeightHistoryLocator>();
 builder.Services.AddSingleton<PredictionComparisonViewLocator>();
 builder.Services.AddSingleton<MemoBySubjectLocator>();
+builder.Services.AddSingleton<HorseRaceHistoryLocator>();
+builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
+builder.Services.AddRacePredictor();
 
 builder.Services.AddEventFlow(options =>
 {
@@ -70,7 +74,9 @@ builder.Services.AddEventFlow(options =>
     .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
     .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
     .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-    .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
+    .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
+    .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
+    .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
 });
 
 var app = builder.Build();

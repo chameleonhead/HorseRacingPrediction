@@ -8,7 +8,8 @@ public sealed class DeclareEntryResultCommandHandler : CommandHandler<RaceAggreg
     public override Task ExecuteAsync(RaceAggregate aggregate, DeclareEntryResultCommand command, CancellationToken cancellationToken)
     {
         aggregate.DeclareEntryResult(command.EntryId, command.FinishPosition, command.OfficialTime,
-            command.MarginText, command.LastThreeFurlongTime, command.AbnormalResultCode, command.PrizeMoney);
+            command.MarginText, command.LastThreeFurlongTime, command.AbnormalResultCode, command.PrizeMoney,
+            command.CornerPositions);
         return Task.CompletedTask;
     }
 }

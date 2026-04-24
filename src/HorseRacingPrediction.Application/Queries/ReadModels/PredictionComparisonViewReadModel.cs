@@ -80,7 +80,7 @@ public class PredictionComparisonViewReadModel : IReadModel,
             entryInfo.HorseNumber,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
         return Task.CompletedTask;
     }
 

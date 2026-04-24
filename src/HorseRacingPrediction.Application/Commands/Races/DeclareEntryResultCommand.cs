@@ -8,7 +8,8 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
     public DeclareEntryResultCommand(RaceId aggregateId, string entryId,
         int? finishPosition = null, string? officialTime = null,
         string? marginText = null, string? lastThreeFurlongTime = null,
-        string? abnormalResultCode = null, decimal? prizeMoney = null)
+        string? abnormalResultCode = null, decimal? prizeMoney = null,
+        string? cornerPositions = null)
         : base(aggregateId)
     {
         EntryId = entryId;
@@ -18,6 +19,7 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
         LastThreeFurlongTime = lastThreeFurlongTime;
         AbnormalResultCode = abnormalResultCode;
         PrizeMoney = prizeMoney;
+        CornerPositions = cornerPositions;
     }
 
     public string EntryId { get; }
@@ -27,4 +29,5 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
     public string? LastThreeFurlongTime { get; }
     public string? AbnormalResultCode { get; }
     public decimal? PrizeMoney { get; }
+    public string? CornerPositions { get; }
 }

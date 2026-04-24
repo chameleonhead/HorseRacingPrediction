@@ -35,6 +35,8 @@ public class ReadModelProjectionTests
         services.AddSingleton<HorseWeightHistoryLocator>();
         services.AddSingleton<PredictionComparisonViewLocator>();
         services.AddSingleton<MemoBySubjectLocator>();
+        services.AddSingleton<HorseRaceHistoryLocator>();
+        services.AddSingleton<JockeyRaceHistoryLocator>();
         services.AddEventFlow(options =>
         {
             options
@@ -48,7 +50,9 @@ public class ReadModelProjectionTests
                 .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
                 .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
                 .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
+                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
+                .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
+                .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
         });
         _serviceProvider = services.BuildServiceProvider();
         _commandBus = _serviceProvider.GetRequiredService<ICommandBus>();
@@ -361,5 +365,140 @@ public class ReadModelProjectionTests
         Assert.IsNotNull(jockeyReadModel);
         Assert.AreEqual(1, jockeyReadModel.Memos.Count);
         Assert.AreEqual(memoId.Value, jockeyReadModel.Memos[0].MemoId);
+    }
+
+    [TestMethod]
+    public async Task HorseRaceHistoryReadModel_AfterRegisterAndDeclareResult_ComputesStats()
+    {
+        var raceId = RaceId.New;
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var jockeyId = $"jockey-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+
+        await _commandBus.PublishAsync(
+            new CreateRaceCommand(raceId, new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿",
+                surfaceCode: "芝", distanceMeters: 2400, directionCode: "左"),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 18), CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new RegisterEntryCommand(raceId, entryId, horseId, 1,
+                jockeyId: jockeyId, gateNumber: 3, assignedWeight: 57m,
+                declaredWeight: 460m, declaredWeightDiff: -2m, runningStyleCode: "先"),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareRaceResultCommand(raceId, horseId, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareEntryResultCommand(raceId, entryId,
+                finishPosition: 1, lastThreeFurlongTime: "34.5",
+                cornerPositions: "3-3-2-1", prizeMoney: 200000000m),
+            CancellationToken.None);
+
+        var readModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), CancellationToken.None);
+
+        Assert.IsNotNull(readModel);
+        Assert.AreEqual(horseId, readModel.HorseId);
+        Assert.AreEqual(1, readModel.TotalRaceCount);
+        Assert.AreEqual(1, readModel.WinCount);
+        Assert.AreEqual(1.0, readModel.WinRate, 0.001);
+        Assert.AreEqual(1.0, readModel.PlaceRate, 0.001);
+        Assert.AreEqual(1.0, readModel.RecentAvgFinishPosition, 0.001);
+        Assert.AreEqual(34.5, readModel.AvgLastThreeFurlongTime, 0.001);
+        Assert.AreEqual(1, readModel.GetAvgCornerPosition(), 0.001);
+        var surfaceScore = readModel.GetSurfaceWinRate("芝");
+        Assert.AreEqual(1.0, surfaceScore, 0.001);
+    }
+
+    [TestMethod]
+    public async Task JockeyRaceHistoryReadModel_AfterRegisterEntry_ComputesComboStats()
+    {
+        var raceId = RaceId.New;
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var jockeyId = $"jockey-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+
+        await _commandBus.PublishAsync(
+            new CreateRaceCommand(raceId, new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿",
+                surfaceCode: "芝", distanceMeters: 2400),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 18), CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new RegisterEntryCommand(raceId, entryId, horseId, 1, jockeyId: jockeyId),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareRaceResultCommand(raceId, horseId, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareEntryResultCommand(raceId, entryId, finishPosition: 2),
+            CancellationToken.None);
+
+        var readModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), CancellationToken.None);
+
+        Assert.IsNotNull(readModel);
+        Assert.AreEqual(jockeyId, readModel.JockeyId);
+        Assert.AreEqual(1, readModel.TotalRaceCount);
+        Assert.AreEqual(0, readModel.WinCount);
+        Assert.AreEqual(1, readModel.PlaceCount);
+        Assert.AreEqual(0.0, readModel.WinRate, 0.001);
+        Assert.AreEqual(1.0, readModel.PlaceRate, 0.001);
+        Assert.AreEqual(1, readModel.GetHorseComboCount(horseId));
+        Assert.AreEqual(0.0, readModel.GetHorseComboWinRate(horseId), 0.001);
+    }
+
+    [TestMethod]
+    public async Task RacePredictionContextEntry_WithRunningStyleCode_IsReflected()
+    {
+        var raceId = RaceId.New;
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+
+        await _commandBus.PublishAsync(
+            new CreateRaceCommand(raceId, new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿"),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 18), CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new RegisterEntryCommand(raceId, entryId, horseId, 5, runningStyleCode: "逃"),
+            CancellationToken.None);
+
+        var readModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId.Value), CancellationToken.None);
+
+        Assert.IsNotNull(readModel);
+        var entry = readModel.Entries.FirstOrDefault(e => e.EntryId == entryId);
+        Assert.IsNotNull(entry);
+        Assert.AreEqual("逃", entry.RunningStyleCode);
+    }
+
+    [TestMethod]
+    public async Task EntryResultSnapshot_WithCornerPositions_IsReflected()
+    {
+        var raceId = RaceId.New;
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+
+        await _commandBus.PublishAsync(
+            new CreateRaceCommand(raceId, new DateOnly(2025, 6, 1), "TOKYO", 11, "東京優駿"),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 18), CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new RegisterEntryCommand(raceId, entryId, horseId, 1),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareRaceResultCommand(raceId, horseId, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+        await _commandBus.PublishAsync(
+            new DeclareEntryResultCommand(raceId, entryId,
+                finishPosition: 1, cornerPositions: "2-2-1-1"),
+            CancellationToken.None);
+
+        var readModel = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<RaceResultViewReadModel>(raceId.Value), CancellationToken.None);
+
+        Assert.IsNotNull(readModel);
+        var result = readModel.EntryResults.FirstOrDefault(r => r.EntryId == entryId);
+        Assert.IsNotNull(result);
+        Assert.AreEqual("2-2-1-1", result.CornerPositions);
     }
 }

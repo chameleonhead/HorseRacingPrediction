@@ -69,7 +69,8 @@ public class RacePredictionContextReadModel : IReadModel,
         _entries.Add(new RacePredictionContextEntry(
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
-            e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff));
+            e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff,
+            e.RunningStyleCode));
         return Task.CompletedTask;
     }
 
