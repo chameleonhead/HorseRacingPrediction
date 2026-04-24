@@ -72,7 +72,8 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber,
             e.AssignedWeight, e.SexCode, e.Age,
-            e.DeclaredWeight, e.DeclaredWeightDiff));
+            e.DeclaredWeight, e.DeclaredWeightDiff,
+            e.RunningStyleCode));
     }
 
     public void Apply(RaceWeatherObserved e)
@@ -114,7 +115,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
         _entryResults.Add(new EntryResultDetails(
             e.EntryId, e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
     }
 
     public void Apply(PayoutResultDeclared e)

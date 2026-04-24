@@ -6,4 +6,5 @@ public sealed record DeclareEntryResultRequest(
     string? MarginText,
     string? LastThreeFurlongTime,
     string? AbnormalResultCode,
-    decimal? PrizeMoney);
+    decimal? PrizeMoney,
+    string? CornerPositions = null);

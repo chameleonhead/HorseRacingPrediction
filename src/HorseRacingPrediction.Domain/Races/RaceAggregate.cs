@@ -58,7 +58,8 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         string? jockeyId = null, string? trainerId = null,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
-        decimal? declaredWeight = null, decimal? declaredWeightDiff = null)
+        decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
+        string? runningStyleCode = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -68,7 +69,10 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
 
         Emit(new EntryRegistered(entryId, horseId, horseNumber,
             jockeyId, trainerId, gateNumber, assignedWeight,
-            sexCode, age, declaredWeight, declaredWeightDiff));
+            sexCode, age, declaredWeight, declaredWeightDiff,
+            runningStyleCode,
+            _state.RaceDate, _state.RacecourseCode, _state.SurfaceCode,
+            _state.DistanceMeters, _state.DirectionCode, _state.GradeCode));
     }
 
     public void RecordWeatherObservation(DateTimeOffset observationTime,
@@ -134,7 +138,8 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     public void DeclareEntryResult(string entryId,
         int? finishPosition = null, string? officialTime = null,
         string? marginText = null, string? lastThreeFurlongTime = null,
-        string? abnormalResultCode = null, decimal? prizeMoney = null)
+        string? abnormalResultCode = null, decimal? prizeMoney = null,
+        string? cornerPositions = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -143,7 +148,7 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             throw new InvalidOperationException("Entry result can only be declared after race result.");
 
         Emit(new EntryResultDeclared(entryId, finishPosition, officialTime,
-            marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney));
+            marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney, cornerPositions));
     }
 
     public void DeclarePayoutResult(DateTimeOffset declaredAt,

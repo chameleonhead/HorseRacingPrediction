@@ -389,7 +389,8 @@ public static class EndpointExtensions
                     request.SexCode,
                     request.Age,
                     request.DeclaredWeight,
-                    request.DeclaredWeightDiff);
+                    request.DeclaredWeightDiff,
+                    request.RunningStyleCode);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -498,7 +499,8 @@ public static class EndpointExtensions
                     request.MarginText,
                     request.LastThreeFurlongTime,
                     request.AbnormalResultCode,
-                    request.PrizeMoney);
+                    request.PrizeMoney,
+                    request.CornerPositions);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess

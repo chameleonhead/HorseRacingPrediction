@@ -131,6 +131,93 @@ public class RaceQueryToolsTests
         Assert.IsTrue(tools.Any(t => t.Name == "GetHorseProfile"), "GetHorseProfile が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "GetJockeyProfile"), "GetJockeyProfile が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "GetMemosBySubject"), "GetMemosBySubject が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetHorseRaceStats"), "GetHorseRaceStats が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetJockeyRaceStats"), "GetJockeyRaceStats が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetRaceFieldAnalysis"), "GetRaceFieldAnalysis が登録されていること");
+    }
+
+    // ------------------------------------------------------------------ //
+    // GetHorseRaceStats
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task GetHorseRaceStats_ExistingHorse_ReturnsMarkdown()
+    {
+        var model = new HorseRaceHistoryReadModel();
+        model.SetTestData("horse-001");
+        _fakeQP.HorseHistoryModel = model;
+
+        var result = await _sut.GetHorseRaceStats("horse-001");
+
+        StringAssert.Contains(result, "horse-001", "馬IDが含まれること");
+        StringAssert.Contains(result, "勝率", "勝率が含まれること");
+    }
+
+    [TestMethod]
+    public async Task GetHorseRaceStats_NotFound_ReturnsNotFoundMessage()
+    {
+        _fakeQP.HorseHistoryModel = null;
+
+        var result = await _sut.GetHorseRaceStats("horse-999");
+
+        StringAssert.Contains(result, "horse-999", "検索IDが含まれること");
+        StringAssert.Contains(result, "ありません", "履歴なしメッセージが含まれること");
+    }
+
+    // ------------------------------------------------------------------ //
+    // GetJockeyRaceStats
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task GetJockeyRaceStats_ExistingJockey_ReturnsMarkdown()
+    {
+        var model = new JockeyRaceHistoryReadModel();
+        model.SetTestData("jockey-001");
+        _fakeQP.JockeyHistoryModel = model;
+
+        var result = await _sut.GetJockeyRaceStats("jockey-001");
+
+        StringAssert.Contains(result, "jockey-001", "騎手IDが含まれること");
+        StringAssert.Contains(result, "勝率", "勝率が含まれること");
+    }
+
+    [TestMethod]
+    public async Task GetJockeyRaceStats_NotFound_ReturnsNotFoundMessage()
+    {
+        _fakeQP.JockeyHistoryModel = null;
+
+        var result = await _sut.GetJockeyRaceStats("jockey-999");
+
+        StringAssert.Contains(result, "jockey-999", "検索IDが含まれること");
+        StringAssert.Contains(result, "ありません", "履歴なしメッセージが含まれること");
+    }
+
+    // ------------------------------------------------------------------ //
+    // GetRaceFieldAnalysis
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task GetRaceFieldAnalysis_ExistingRace_ReturnsMarkdown()
+    {
+        _fakeQP.RaceContext = new RacePredictionContextReadModel();
+        _fakeQP.RaceContext.SetTestData("race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
+
+        var result = await _sut.GetRaceFieldAnalysis("race-001");
+
+        StringAssert.Contains(result, "race-001", "レースIDが含まれること");
+        StringAssert.Contains(result, "FieldLeaderCount", "逃げ馬頭数が含まれること");
+        StringAssert.Contains(result, "FavoredPaceType", "ペースタイプが含まれること");
+    }
+
+    [TestMethod]
+    public async Task GetRaceFieldAnalysis_NotFound_ReturnsNotFoundMessage()
+    {
+        _fakeQP.RaceContext = null;
+
+        var result = await _sut.GetRaceFieldAnalysis("race-999");
+
+        StringAssert.Contains(result, "race-999", "検索IDが含まれること");
+        StringAssert.Contains(result, "見つかりませんでした", "見つからないメッセージが含まれること");
     }
 
     // ------------------------------------------------------------------ //
@@ -143,6 +230,8 @@ public class RaceQueryToolsTests
         public HorseReadModel? HorseModel { get; set; }
         public JockeyReadModel? JockeyModel { get; set; }
         public MemoBySubjectReadModel? MemoBySubjectModel { get; set; }
+        public HorseRaceHistoryReadModel? HorseHistoryModel { get; set; }
+        public JockeyRaceHistoryReadModel? JockeyHistoryModel { get; set; }
 
         public Task<TResult> ProcessAsync<TResult>(IQuery<TResult> query, CancellationToken cancellationToken)
         {
@@ -152,6 +241,8 @@ public class RaceQueryToolsTests
                 IQuery<HorseReadModel> => HorseModel,
                 IQuery<JockeyReadModel> => JockeyModel,
                 IQuery<MemoBySubjectReadModel> => MemoBySubjectModel,
+                IQuery<HorseRaceHistoryReadModel> => HorseHistoryModel,
+                IQuery<JockeyRaceHistoryReadModel> => JockeyHistoryModel,
                 _ => null
             };
             return Task.FromResult((TResult)result!);
@@ -229,5 +320,23 @@ internal static class ReadModelTestExtensions
         typeof(TrainerReadModel)
             .GetProperty(nameof(TrainerReadModel.NormalizedName))!
             .SetValue(model, normalizedName);
+    }
+
+    public static void SetTestData(
+        this HorseRaceHistoryReadModel model,
+        string horseId)
+    {
+        typeof(HorseRaceHistoryReadModel)
+            .GetProperty(nameof(HorseRaceHistoryReadModel.HorseId))!
+            .SetValue(model, horseId);
+    }
+
+    public static void SetTestData(
+        this JockeyRaceHistoryReadModel model,
+        string jockeyId)
+    {
+        typeof(JockeyRaceHistoryReadModel)
+            .GetProperty(nameof(JockeyRaceHistoryReadModel.JockeyId))!
+            .SetValue(model, jockeyId);
     }
 }

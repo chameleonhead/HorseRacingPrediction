@@ -13,4 +13,5 @@ public sealed record RegisterEntryRequest(
     int? Age,
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
+    string? RunningStyleCode = null,
     string? EntryId = null);

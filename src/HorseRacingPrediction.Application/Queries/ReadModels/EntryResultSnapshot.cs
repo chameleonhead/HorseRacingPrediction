@@ -9,4 +9,5 @@ public sealed record EntryResultSnapshot(
     string? MarginText,
     string? LastThreeFurlongTime,
     string? AbnormalResultCode,
-    decimal? PrizeMoney);
+    decimal? PrizeMoney,
+    string? CornerPositions);

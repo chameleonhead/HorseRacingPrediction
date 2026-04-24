@@ -55,6 +55,8 @@ builder.Services.AddSqliteDbContextProvider(connectionString);
 builder.Services.AddSingleton<HorseWeightHistoryLocator>();
 builder.Services.AddSingleton<PredictionComparisonViewLocator>();
 builder.Services.AddSingleton<MemoBySubjectLocator>();
+builder.Services.AddSingleton<HorseRaceHistoryLocator>();
+builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
 
 builder.Services.AddEventFlow(options =>
 {
@@ -70,7 +72,9 @@ builder.Services.AddEventFlow(options =>
     .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
     .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
     .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-    .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
+    .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
+    .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
+    .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
 });
 
 var app = builder.Build();
