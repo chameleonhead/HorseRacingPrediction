@@ -133,6 +133,48 @@ public static class AgentServiceCollectionExtensions
     /// </code>
     /// </para>
     /// </summary>
+    /// <summary>
+    /// <see cref="JraRaceResultCollectionWorkflow"/>、<see cref="JraResultUrlDiscoveryAgent"/>、
+    /// および <see cref="JraRaceResultScraper"/> を DI コンテナに登録する。
+    /// <para>
+    /// このワークフローは AI が成績 URL を発見し、
+    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
+    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
+    /// </para>
+    /// <para>
+    /// 使用例（Program.cs または テスト初期化）:
+    /// <code>
+    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
+    /// builder.Services.AddWebBrowserAgent();
+    /// builder.Services.AddJraRaceResultCollectionWorkflow();
+    /// </code>
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddJraRaceResultCollectionWorkflow(this IServiceCollection services)
+    {
+        services.AddTransient<JraRaceResultScraper>(sp =>
+        {
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            return new JraRaceResultScraper(browser);
+        });
+        services.AddTransient<JraResultUrlDiscoveryAgent>(sp =>
+        {
+            var chatClient = sp.GetRequiredService<IChatClient>();
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
+            var extractionAgent = sp.GetService<PageDataExtractionAgent>();
+            var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
+            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
+            return new JraResultUrlDiscoveryAgent(chatClient, playwrightTools.GetAITools());
+        });
+        services.AddTransient<JraRaceResultCollectionWorkflow>(sp =>
+            new JraRaceResultCollectionWorkflow(
+                sp.GetRequiredService<JraResultUrlDiscoveryAgent>(),
+                sp.GetRequiredService<JraRaceResultScraper>(),
+                sp.GetRequiredService<DataCollectionWriteTools>()));
+        return services;
+    }
+
     public static IServiceCollection AddJraRaceCardCollectionWorkflow(this IServiceCollection services)
     {
         services.AddTransient<JraUrlDiscoveryAgent>(sp =>

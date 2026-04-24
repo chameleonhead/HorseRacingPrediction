@@ -229,14 +229,123 @@ public sealed class DataCollectionWriteTools
         return $"レース {raceId} に馬番 {horseNumber} の出走登録を行いました。";
     }
 
+    [Description("レース全体の確定結果（勝ち馬）を宣言します。成績収集後に呼び出してください。")]
+    public async Task<string> DeclareRaceResult(
+        [Description("レース ID")] string raceId,
+        [Description("勝ち馬の馬名")] string winningHorseName,
+        [Description("結果確定日時。省略時は現在時刻を使います")] string? declaredAt = null,
+        [Description("勝ち馬の馬 ID。省略可")] string? winningHorseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var race = await _queryProcessor.ProcessAsync(
+            new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId),
+            cancellationToken);
+
+        if (race is null || string.IsNullOrEmpty(race.RaceId))
+            throw new InvalidOperationException($"レースが存在しません: {raceId}");
+
+        // Draft 状態のときは出馬表公開まで進める
+        if (race.Status == RaceStatus.Draft)
+        {
+            var publishCardCommand = new PublishRaceCardCommand(new RaceId(raceId), race.Entries.Count > 0 ? race.Entries.Count : 1);
+            await PublishOrThrowAsync(publishCardCommand, $"出馬表公開に失敗しました: {raceId}", cancellationToken);
+        }
+
+        var parsedAt = declaredAt is not null
+            ? DateTimeOffset.Parse(declaredAt, System.Globalization.CultureInfo.InvariantCulture)
+            : DateTimeOffset.UtcNow;
+
+        var command = new DeclareRaceResultCommand(new RaceId(raceId), winningHorseName, parsedAt, winningHorseId);
+        await PublishOrThrowAsync(command, $"レース結果宣言に失敗しました: {raceId}", cancellationToken);
+        return $"レース {raceId} の確定結果（勝ち馬: {winningHorseName}）を記録しました。";
+    }
+
+    [Description("出走馬1頭分の着順・タイムなどの成績を記録します。DeclareRaceResult の後に呼び出してください。")]
+    public async Task<string> DeclareRaceEntryResult(
+        [Description("レース ID")] string raceId,
+        [Description("馬番")] int horseNumber,
+        [Description("着順。取消・除外時は null")] int? finishPosition = null,
+        [Description("タイム（例: 1:59.8）")] string? officialTime = null,
+        [Description("着差テキスト（例: ハナ, 1/2, 1）")] string? marginText = null,
+        [Description("後3F タイム（例: 34.2）")] string? lastThreeFurlongTime = null,
+        [Description("異常コード（取消, 除外, 中止, 降着, 失格 など）")] string? abnormalResultCode = null,
+        [Description("賞金（万円）")] decimal? prizeMoney = null,
+        CancellationToken cancellationToken = default)
+    {
+        var entryId = BuildRaceEntryId(raceId, horseNumber);
+        var command = new DeclareEntryResultCommand(
+            new RaceId(raceId),
+            entryId,
+            finishPosition,
+            officialTime,
+            marginText,
+            lastThreeFurlongTime,
+            abnormalResultCode,
+            prizeMoney);
+        await PublishOrThrowAsync(command, $"エントリ結果記録に失敗しました: raceId={raceId}, horseNumber={horseNumber}", cancellationToken);
+        return $"レース {raceId} の馬番 {horseNumber} の成績を記録しました。";
+    }
+
+    [Description("払い戻しデータを記録します。DeclareRaceResult の後に呼び出してください。")]
+    public async Task<string> DeclareRacePayouts(
+        [Description("レース ID")] string raceId,
+        [Description("単勝払い戻し。馬番と金額のペアのリスト（JSON 配列: [{\"combination\":\"3\",\"amount\":430}]）")] string? winPayoutsJson = null,
+        [Description("複勝払い戻し。馬番と金額のペアのリスト")] string? placePayoutsJson = null,
+        [Description("馬連払い戻し。組み合わせと金額のペアのリスト")] string? quinellaPayoutsJson = null,
+        [Description("馬単払い戻し。組み合わせと金額のペアのリスト")] string? exactaPayoutsJson = null,
+        [Description("三連単払い戻し。組み合わせと金額のペアのリスト")] string? trifectaPayoutsJson = null,
+        CancellationToken cancellationToken = default)
+    {
+        static IReadOnlyList<PayoutEntry>? ParsePayouts(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                var dtos = System.Text.Json.JsonSerializer.Deserialize<List<PayoutDto>>(json);
+                return dtos?.Select(d => new PayoutEntry(d.Combination ?? string.Empty, d.Amount)).ToList();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null;
+            }
+        }
+
+        var command = new DeclarePayoutResultCommand(
+            new RaceId(raceId),
+            DateTimeOffset.UtcNow,
+            ParsePayouts(winPayoutsJson),
+            ParsePayouts(placePayoutsJson),
+            ParsePayouts(quinellaPayoutsJson),
+            ParsePayouts(exactaPayoutsJson),
+            ParsePayouts(trifectaPayoutsJson));
+        await PublishOrThrowAsync(command, $"払い戻し記録に失敗しました: {raceId}", cancellationToken);
+        return $"レース {raceId} の払い戻しを記録しました。";
+    }
+
     public IList<AITool> GetAITools() =>
     [
         AIFunctionFactory.Create(UpsertRace),
         AIFunctionFactory.Create(UpsertHorse),
         AIFunctionFactory.Create(UpsertJockey),
         AIFunctionFactory.Create(UpsertTrainer),
-        AIFunctionFactory.Create(UpsertRaceEntry)
+        AIFunctionFactory.Create(UpsertRaceEntry),
+        AIFunctionFactory.Create(DeclareRaceResult),
+        AIFunctionFactory.Create(DeclareRaceEntryResult),
+        AIFunctionFactory.Create(DeclareRacePayouts),
     ];
+
+    private sealed class PayoutDto
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("combination")]
+        public string? Combination { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("amount")]
+        public decimal Amount { get; init; }
+    }
 
     private async Task PublishOrThrowAsync<TAggregate, TIdentity>(
         Command<TAggregate, TIdentity> command,

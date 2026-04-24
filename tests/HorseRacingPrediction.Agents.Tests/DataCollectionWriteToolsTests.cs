@@ -71,6 +71,9 @@ public class DataCollectionWriteToolsTests
         Assert.IsTrue(tools.Any(tool => tool.Name == "UpsertJockey"));
         Assert.IsTrue(tools.Any(tool => tool.Name == "UpsertTrainer"));
         Assert.IsTrue(tools.Any(tool => tool.Name == "UpsertRaceEntry"));
+        Assert.IsTrue(tools.Any(tool => tool.Name == "DeclareRaceResult"));
+        Assert.IsTrue(tools.Any(tool => tool.Name == "DeclareRaceEntryResult"));
+        Assert.IsTrue(tools.Any(tool => tool.Name == "DeclareRacePayouts"));
     }
 
     private sealed class FakeCommandBus : ICommandBus
