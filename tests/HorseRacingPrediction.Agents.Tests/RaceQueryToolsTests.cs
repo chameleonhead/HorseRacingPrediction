@@ -1,4 +1,3 @@
-using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.Extensions.AI;
@@ -6,19 +5,19 @@ using Microsoft.Extensions.AI;
 namespace HorseRacingPrediction.Agents.Tests;
 
 /// <summary>
-/// RaceQueryTools のモック IQueryProcessor を使ったユニットテスト。
+/// RaceQueryTools の FakeRaceQueryService を使ったユニットテスト。
 /// </summary>
 [TestClass]
 public class RaceQueryToolsTests
 {
     private RaceQueryTools _sut = null!;
-    private FakeQueryProcessor _fakeQP = null!;
+    private FakeRaceQueryService _fakeService = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _fakeQP = new FakeQueryProcessor();
-        _sut = new RaceQueryTools(_fakeQP);
+        _fakeService = new FakeRaceQueryService();
+        _sut = new RaceQueryTools(_fakeService);
     }
 
     // ------------------------------------------------------------------ //
@@ -28,8 +27,8 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRacePredictionContext_ExistingRace_ReturnsMarkdown()
     {
-        _fakeQP.RaceContext = new RacePredictionContextReadModel();
-        _fakeQP.RaceContext.SetTestData(
+        _fakeService.RaceContext = new RacePredictionContextReadModel();
+        _fakeService.RaceContext.SetTestData(
             "race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
 
         var result = await _sut.GetRacePredictionContext("race-001");
@@ -41,7 +40,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRacePredictionContext_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.RaceContext = null;
+        _fakeService.RaceContext = null;
 
         var result = await _sut.GetRacePredictionContext("race-999");
 
@@ -56,8 +55,8 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseProfile_ExistingHorse_ReturnsMarkdown()
     {
-        _fakeQP.HorseModel = new HorseReadModel();
-        _fakeQP.HorseModel.SetTestData("horse-001", "イクイノックス", "イクイノックス");
+        _fakeService.HorseModel = new HorseReadModel();
+        _fakeService.HorseModel.SetTestData("horse-001", "イクイノックス", "イクイノックス");
 
         var result = await _sut.GetHorseProfile("horse-001");
 
@@ -68,7 +67,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseProfile_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.HorseModel = null;
+        _fakeService.HorseModel = null;
 
         var result = await _sut.GetHorseProfile("horse-999");
 
@@ -83,8 +82,8 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetJockeyProfile_ExistingJockey_ReturnsMarkdown()
     {
-        _fakeQP.JockeyModel = new JockeyReadModel();
-        _fakeQP.JockeyModel.SetTestData("jockey-001", "川田将雅", "川田将雅");
+        _fakeService.JockeyModel = new JockeyReadModel();
+        _fakeService.JockeyModel.SetTestData("jockey-001", "川田将雅", "川田将雅");
 
         var result = await _sut.GetJockeyProfile("jockey-001");
 
@@ -95,7 +94,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetJockeyProfile_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.JockeyModel = null;
+        _fakeService.JockeyModel = null;
 
         var result = await _sut.GetJockeyProfile("jockey-999");
 
@@ -110,7 +109,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetMemosBySubject_NoMemos_ReturnsEmptyMessage()
     {
-        _fakeQP.MemoBySubjectModel = null;
+        _fakeService.MemoBySubjectModel = null;
 
         var result = await _sut.GetMemosBySubject("Horse", "horse-001");
 
@@ -145,7 +144,7 @@ public class RaceQueryToolsTests
     {
         var model = new HorseRaceHistoryReadModel();
         model.SetTestData("horse-001");
-        _fakeQP.HorseHistoryModel = model;
+        _fakeService.HorseHistoryModel = model;
 
         var result = await _sut.GetHorseRaceStats("horse-001");
 
@@ -156,7 +155,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetHorseRaceStats_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.HorseHistoryModel = null;
+        _fakeService.HorseHistoryModel = null;
 
         var result = await _sut.GetHorseRaceStats("horse-999");
 
@@ -173,7 +172,7 @@ public class RaceQueryToolsTests
     {
         var model = new JockeyRaceHistoryReadModel();
         model.SetTestData("jockey-001");
-        _fakeQP.JockeyHistoryModel = model;
+        _fakeService.JockeyHistoryModel = model;
 
         var result = await _sut.GetJockeyRaceStats("jockey-001");
 
@@ -184,7 +183,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetJockeyRaceStats_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.JockeyHistoryModel = null;
+        _fakeService.JockeyHistoryModel = null;
 
         var result = await _sut.GetJockeyRaceStats("jockey-999");
 
@@ -199,8 +198,8 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRaceFieldAnalysis_ExistingRace_ReturnsMarkdown()
     {
-        _fakeQP.RaceContext = new RacePredictionContextReadModel();
-        _fakeQP.RaceContext.SetTestData("race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
+        _fakeService.RaceContext = new RacePredictionContextReadModel();
+        _fakeService.RaceContext.SetTestData("race-001", DateOnly.Parse("2024-10-27"), "05", 11, "天皇賞秋");
 
         var result = await _sut.GetRaceFieldAnalysis("race-001");
 
@@ -212,7 +211,7 @@ public class RaceQueryToolsTests
     [TestMethod]
     public async Task GetRaceFieldAnalysis_NotFound_ReturnsNotFoundMessage()
     {
-        _fakeQP.RaceContext = null;
+        _fakeService.RaceContext = null;
 
         var result = await _sut.GetRaceFieldAnalysis("race-999");
 
@@ -221,10 +220,10 @@ public class RaceQueryToolsTests
     }
 
     // ------------------------------------------------------------------ //
-    // Fake IQueryProcessor
+    // Fake IRaceQueryService
     // ------------------------------------------------------------------ //
 
-    private sealed class FakeQueryProcessor : IQueryProcessor
+    private sealed class FakeRaceQueryService : IRaceQueryService
     {
         public RacePredictionContextReadModel? RaceContext { get; set; }
         public HorseReadModel? HorseModel { get; set; }
@@ -233,20 +232,23 @@ public class RaceQueryToolsTests
         public HorseRaceHistoryReadModel? HorseHistoryModel { get; set; }
         public JockeyRaceHistoryReadModel? JockeyHistoryModel { get; set; }
 
-        public Task<TResult> ProcessAsync<TResult>(IQuery<TResult> query, CancellationToken cancellationToken)
-        {
-            object? result = query switch
-            {
-                IQuery<RacePredictionContextReadModel> => RaceContext,
-                IQuery<HorseReadModel> => HorseModel,
-                IQuery<JockeyReadModel> => JockeyModel,
-                IQuery<MemoBySubjectReadModel> => MemoBySubjectModel,
-                IQuery<HorseRaceHistoryReadModel> => HorseHistoryModel,
-                IQuery<JockeyRaceHistoryReadModel> => JockeyHistoryModel,
-                _ => null
-            };
-            return Task.FromResult((TResult)result!);
-        }
+        public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
+            => Task.FromResult(RaceContext);
+
+        public Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult(HorseModel);
+
+        public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult(JockeyModel);
+
+        public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
+            => Task.FromResult(MemoBySubjectModel);
+
+        public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult(HorseHistoryModel);
+
+        public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult(JockeyHistoryModel);
     }
 }
 

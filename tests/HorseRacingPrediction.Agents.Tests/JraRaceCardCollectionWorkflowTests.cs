@@ -38,7 +38,8 @@ public class JraRaceCardCollectionWorkflowTests
 
         var discoveryAgent = new JraUrlDiscoveryAgent(_fakeChatClient, []);
         var scraper = new JraRaceCardScraper(_fakeWebBrowser);
-        var writeTools = new DataCollectionWriteTools(_fakeCommandBus, _fakeQueryProcessor);
+        var writeTools = new DataCollectionWriteTools(
+            new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
 
         _sut = new JraRaceCardCollectionWorkflow(discoveryAgent, scraper, writeTools);
     }
