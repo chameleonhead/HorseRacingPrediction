@@ -110,8 +110,8 @@ public sealed class PredictionWorkflow
         IWebBrowser browser,
         IOptions<WebFetchOptions> webFetchOptions)
     {
-        var raceQueryTools = new RaceQueryTools(queryProcessor);
-        var predictionWriteTools = new PredictionWriteTools(commandBus);
+        var raceQueryTools = new RaceQueryTools(new EventFlowRaceQueryService(queryProcessor));
+        var predictionWriteTools = new PredictionWriteTools(new EventFlowPredictionWriteService(commandBus));
         var playwrightTools = new PlaywrightTools(browser, webFetchOptions);
         var webBrowserAgent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
         var webFetchTools = new WebFetchTools(webBrowserAgent);

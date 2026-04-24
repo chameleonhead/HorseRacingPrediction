@@ -1,26 +1,23 @@
 using System.ComponentModel;
 using System.Text;
-using System.Text.Json;
-using EventFlow.Queries;
-using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
-/// EventFlow の <see cref="IQueryProcessor"/> を使って既存の ReadModel を照会する
+/// <see cref="IRaceQueryService"/> を使って既存の ReadModel を照会する
 /// Microsoft Agent Framework プラグイン（読み取り系）。
 /// <see cref="GetAITools"/> で <see cref="AITool"/> 一覧を取得し、
 /// <see cref="Microsoft.Agents.AI.ChatClientAgent"/> に渡すことで利用可能になる。
 /// </summary>
 public sealed class RaceQueryTools
 {
-    private readonly IQueryProcessor _queryProcessor;
+    private readonly IRaceQueryService _queryService;
 
-    public RaceQueryTools(IQueryProcessor queryProcessor)
+    public RaceQueryTools(IRaceQueryService queryService)
     {
-        _queryProcessor = queryProcessor;
+        _queryService = queryService;
     }
 
     /// <summary>
@@ -31,8 +28,7 @@ public sealed class RaceQueryTools
         [Description("レース ID")] string raceId,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetRacePredictionContextAsync(raceId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.RaceId))
             return $"レース ID '{raceId}' は見つかりませんでした。";
@@ -48,8 +44,7 @@ public sealed class RaceQueryTools
         [Description("馬 ID")] string horseId,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<HorseReadModel>(horseId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetHorseAsync(horseId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.HorseId))
             return $"馬 ID '{horseId}' は見つかりませんでした。";
@@ -78,8 +73,7 @@ public sealed class RaceQueryTools
         [Description("騎手 ID")] string jockeyId,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<JockeyReadModel>(jockeyId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetJockeyAsync(jockeyId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.JockeyId))
             return $"騎手 ID '{jockeyId}' は見つかりませんでした。";
@@ -109,11 +103,7 @@ public sealed class RaceQueryTools
         [Description("対象の ID")] string subjectId,
         CancellationToken cancellationToken = default)
     {
-        var key = MemoBySubjectLocator.MakeKey(
-            Enum.Parse<HorseRacingPrediction.Domain.Memos.MemoSubjectType>(subjectType, ignoreCase: true),
-            subjectId);
-        var query = new ReadModelByIdQuery<MemoBySubjectReadModel>(key);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetMemosBySubjectAsync(subjectType, subjectId, cancellationToken);
 
         if (model is null || model.Memos.Count == 0)
             return $"{subjectType}:{subjectId} に紐付くメモはありません。";
@@ -164,8 +154,7 @@ public sealed class RaceQueryTools
         [Description("現在のレース開催日（yyyy-MM-dd）")] string? currentRaceDate = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetHorseRaceHistoryAsync(horseId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.HorseId))
             return $"馬 ID '{horseId}' の出走履歴はありません。";
@@ -218,8 +207,7 @@ public sealed class RaceQueryTools
         [Description("現在のレースの距離（メートル）")] int? distanceMeters = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetJockeyRaceHistoryAsync(jockeyId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.JockeyId))
             return $"騎手 ID '{jockeyId}' の出走履歴はありません。";
@@ -259,8 +247,7 @@ public sealed class RaceQueryTools
         [Description("レース ID")] string raceId,
         CancellationToken cancellationToken = default)
     {
-        var query = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
-        var model = await _queryProcessor.ProcessAsync(query, cancellationToken);
+        var model = await _queryService.GetRacePredictionContextAsync(raceId, cancellationToken);
 
         if (model is null || string.IsNullOrEmpty(model.RaceId))
             return $"レース ID '{raceId}' は見つかりませんでした。";

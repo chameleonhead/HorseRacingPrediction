@@ -48,6 +48,10 @@ public static class AgentServiceCollectionExtensions
                 .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
         });
 
+        services.AddTransient<IRaceQueryService, EventFlowRaceQueryService>();
+        services.AddTransient<IPredictionWriteService, EventFlowPredictionWriteService>();
+        services.AddTransient<IDataCollectionWriteService, EventFlowDataCollectionWriteService>();
+
         services.AddTransient<RaceQueryTools>();
         services.AddTransient<PredictionWriteTools>();
         services.AddTransient<DataCollectionWriteTools>();
