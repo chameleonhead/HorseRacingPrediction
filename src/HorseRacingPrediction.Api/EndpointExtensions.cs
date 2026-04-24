@@ -17,6 +17,8 @@ using HorseRacingPrediction.Domain.Memos;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
+using HorseRacingPrediction.MachineLearning;
+using HorseRacingPrediction.MachineLearning.Prediction;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace HorseRacingPrediction.Api;
@@ -1125,6 +1127,70 @@ public static class EndpointExtensions
             .WithTags("Memo API")
             .Produces<IReadOnlyList<MemoResponse>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        // ------------------------------------------------------------------ //
+        // ML予測 API
+        // ------------------------------------------------------------------ //
+
+        app.MapGet("/races/{raceId}/ml-prediction",
+            [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
+            async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
+            {
+                var raceQuery = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
+                var raceContext = await queryProcessor.ProcessAsync(raceQuery, cancellationToken).ConfigureAwait(false);
+
+                if (raceContext is null || string.IsNullOrEmpty(raceContext.RaceId))
+                    return Results.NotFound();
+
+                var result = await predictor.PredictAsync(
+                    raceContext,
+                    (horseId, ct) => queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct),
+                    (jockeyId, ct) => queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct),
+                    cancellationToken).ConfigureAwait(false);
+
+                var response = new MlPredictionResponse(
+                    result.RaceId,
+                    result.Rankings.Select(r => new MlHorsePredictionDto(
+                        r.EntryId, r.HorseId, r.HorseNumber, r.PredictedScore, r.PredictedRank)).ToList());
+
+                return Results.Ok(response);
+            })
+            .WithName("GetMlPrediction")
+            .WithTags("Race API")
+            .Produces<MlPredictionResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapPost("/ml/train",
+            [SwaggerOperation(Summary = "ML再訓練", Description = "過去レース結果を使ってML.NETモデルを再訓練します。")]
+            async (IQueryProcessor queryProcessor, IInMemoryReadStore<RaceResultViewReadModel> raceResultStore,
+                IRacePredictor predictor, CancellationToken cancellationToken) =>
+            {
+                var allRaces = await raceResultStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                var finishedRaces = allRaces.Where(r => r.Status == RaceStatus.ResultDeclared).ToList();
+
+                if (finishedRaces.Count == 0)
+                    return Results.BadRequest(new[] { "訓練に使用できる完了済みレースがありません。" });
+
+                await predictor.TrainAsync(
+                    finishedRaces,
+                    (raceId, ct) => queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), ct),
+                    (horseId, ct) => queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct),
+                    (jockeyId, ct) => queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct),
+                    cancellationToken).ConfigureAwait(false);
+
+                return Results.Ok(new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained });
+            })
+            .WithName("TrainMlModel")
+            .WithTags("Race API")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
             .WithOpenApi();
 
         return app;

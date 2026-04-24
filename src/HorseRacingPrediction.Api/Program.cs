@@ -6,6 +6,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
+using HorseRacingPrediction.MachineLearning;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +58,7 @@ builder.Services.AddSingleton<PredictionComparisonViewLocator>();
 builder.Services.AddSingleton<MemoBySubjectLocator>();
 builder.Services.AddSingleton<HorseRaceHistoryLocator>();
 builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
+builder.Services.AddRacePredictor();
 
 builder.Services.AddEventFlow(options =>
 {

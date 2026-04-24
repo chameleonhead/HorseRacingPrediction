@@ -7,6 +7,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -35,6 +36,9 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<HorseWeightHistoryLocator>();
         builder.Services.AddSingleton<PredictionComparisonViewLocator>();
         builder.Services.AddSingleton<MemoBySubjectLocator>();
+        builder.Services.AddSingleton<HorseRaceHistoryLocator>();
+        builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
+        builder.Services.AddRacePredictor();
 
         builder.Services.AddEventFlow(options =>
         {
@@ -51,7 +55,9 @@ internal static class TestApplicationFactory
                 .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
                 .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
                 .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
+                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
+                .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
+                .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
         });
 
         var app = builder.Build();

@@ -227,11 +227,30 @@ public class HorseRaceHistoryReadModel : IReadModel,
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// 上がり3Fタイム文字列を秒に変換する。
+    /// "34.5" → 34.5、"1:23.4" → 83.4、解析不能 → 0
+    /// </summary>
     private static double ParseTimeToSeconds(string timeStr)
     {
+        // "M:SS.f" 形式（例: "1:23.4"）
+        var colonIdx = timeStr.IndexOf(':', StringComparison.Ordinal);
+        if (colonIdx > 0)
+        {
+            var minutesPart = timeStr[..colonIdx];
+            var secondsPart = timeStr[(colonIdx + 1)..];
+            if (double.TryParse(minutesPart, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var min)
+                && double.TryParse(secondsPart, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var sec))
+                return min * 60.0 + sec;
+        }
+
+        // "SS.f" 形式（例: "34.5"）
         if (double.TryParse(timeStr, System.Globalization.NumberStyles.Any,
             System.Globalization.CultureInfo.InvariantCulture, out var d))
             return d;
+
         return 0;
     }
 
