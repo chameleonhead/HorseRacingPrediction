@@ -1,4 +1,5 @@
 using HorseRacingPrediction.AgentClient.Http;
+using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
@@ -156,6 +157,14 @@ builder.AddWorkflow(
             [raceDataAgent, horseDataAgent, jockeyDataAgent, stableDataAgent],
             aggregator: null);
     }).AddAsAIAgent();
+
+// -------------------------------------------------------------------
+// 週次自動スケジューラー
+// -------------------------------------------------------------------
+builder.Services.Configure<WeeklySchedulerOptions>(
+    builder.Configuration.GetSection(WeeklySchedulerOptions.SectionName));
+builder.Services.AddSingleton<WeeklyStateStore>();
+builder.Services.AddHostedService<WeeklySchedulerService>();
 
 // -------------------------------------------------------------------
 // OpenAI Responses / Conversations エンドポイント（DevUI 必須）

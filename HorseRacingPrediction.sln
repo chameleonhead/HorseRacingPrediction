@@ -37,6 +37,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Machi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.AgentClient", "src\HorseRacingPrediction.AgentClient\HorseRacingPrediction.AgentClient.csproj", "{3CA39FB6-16BF-4AD4-821A-C49BE155DC75}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.AgentClient.Tests", "tests\HorseRacingPrediction.AgentClient.Tests\HorseRacingPrediction.AgentClient.Tests.csproj", "{0D6FB21C-13E7-46F8-A466-602882A967B7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -227,6 +229,18 @@ Global
 		{3CA39FB6-16BF-4AD4-821A-C49BE155DC75}.Release|x64.Build.0 = Release|Any CPU
 		{3CA39FB6-16BF-4AD4-821A-C49BE155DC75}.Release|x86.ActiveCfg = Release|Any CPU
 		{3CA39FB6-16BF-4AD4-821A-C49BE155DC75}.Release|x86.Build.0 = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|x64.Build.0 = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Debug|x86.Build.0 = Debug|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|x64.ActiveCfg = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|x64.Build.0 = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|x86.ActiveCfg = Release|Any CPU
+		{0D6FB21C-13E7-46F8-A466-602882A967B7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -247,5 +261,6 @@ Global
 		{0B1BEF19-A20D-4D89-A207-716C59228603} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 		{EFE01332-7B07-4169-8FB7-70C3B948B934} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{3CA39FB6-16BF-4AD4-821A-C49BE155DC75} = {01FEC711-9F75-4D0C-8675-19927808A35D}
+		{0D6FB21C-13E7-46F8-A466-602882A967B7} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 	EndGlobalSection
 EndGlobal
