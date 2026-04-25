@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.Agents.Plugins;
@@ -42,7 +41,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var parsedRaceDate = DateOnly.Parse(raceDate, CultureInfo.InvariantCulture);
-        var raceId = BuildRaceId(parsedRaceDate, racecourseCode, raceNumber);
+        var raceId = DeterministicIdGenerator.BuildRaceId(parsedRaceDate, racecourseCode, raceNumber).Value;
 
         var existing = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
 
@@ -103,8 +102,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? birthDate,
         CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeDisplayName(normalizedName ?? registeredName);
-        var horseId = BuildEntityId("horse", normalized);
+        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
+        var horseId = DeterministicIdGenerator.BuildEntityId("horse", normalized);
         var parsedBirthDate = TryParseDateOnly(birthDate);
 
         var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
@@ -148,8 +147,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeDisplayName(normalizedName ?? displayName);
-        var jockeyId = BuildEntityId("jockey", normalized);
+        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+        var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
 
         var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
 
@@ -190,8 +189,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        var normalized = NormalizeDisplayName(normalizedName ?? displayName);
-        var trainerId = BuildEntityId("trainer", normalized);
+        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+        var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", normalized);
 
         var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
 
@@ -256,7 +255,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             ? null
             : await UpsertTrainerAsync(trainerName, null, null, cancellationToken).ConfigureAwait(false);
 
-        var entryId = BuildRaceEntryId(raceId, horseNumber);
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseNumber);
         var registerRequest = new
         {
             EntryId = entryId,
@@ -327,7 +326,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? prizeMoney,
         CancellationToken cancellationToken = default)
     {
-        var entryId = BuildRaceEntryId(raceId, horseNumber);
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseNumber);
         var request = new
         {
             FinishPosition = finishPosition,
@@ -421,84 +420,14 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     }
 
     // ------------------------------------------------------------------ //
-    // private helpers — ID building (EventFlowDataCollectionWriteService と同一ロジック)
+    // private helpers — date parsing
     // ------------------------------------------------------------------ //
-
-    private static readonly Guid HorseNamespaceId = new("1c86504c-11bb-4e95-b997-94d64f0569f3");
-    private static readonly Guid JockeyNamespaceId = new("ec7d5b11-f383-4860-88b7-37ef25e4cc81");
-    private static readonly Guid TrainerNamespaceId = new("36d7318f-bf48-488f-b0d8-0e2c942b36d2");
-    private static readonly Guid RaceNamespaceId = new("d54c5101-305d-42aa-a8df-3c52ca96a6ef");
-
-    private static string BuildRaceId(DateOnly raceDate, string racecourseCode, int raceNumber)
-    {
-        var normalizedRacecourse = NormalizeKey(racecourseCode);
-        var guid = CreateDeterministicGuid(RaceNamespaceId, $"{raceDate:yyyy-MM-dd}|{normalizedRacecourse}|{raceNumber:D2}");
-        return $"race-{guid:D}";
-    }
-
-    private static string BuildRaceEntryId(string raceId, int horseNumber) =>
-        $"{raceId}-entry-{horseNumber:D2}";
-
-    private static string BuildEntityId(string prefix, string normalizedName)
-    {
-        var namespaceId = prefix switch
-        {
-            "horse" => HorseNamespaceId,
-            "jockey" => JockeyNamespaceId,
-            "trainer" => TrainerNamespaceId,
-            _ => throw new InvalidOperationException($"未知の ID prefix です: {prefix}")
-        };
-
-        var guid = CreateDeterministicGuid(namespaceId, normalizedName);
-        return $"{prefix}-{guid:D}";
-    }
-
-    private static string NormalizeDisplayName(string value) => value.Trim();
-
-    private static string NormalizeKey(string value)
-    {
-        var builder = new StringBuilder(value.Length);
-        foreach (var character in value.Trim().ToLowerInvariant())
-        {
-            if (char.IsLetterOrDigit(character))
-                builder.Append(character);
-        }
-
-        return builder.Length == 0 ? "unknown" : builder.ToString();
-    }
 
     private static DateOnly? TryParseDateOnly(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
         return DateOnly.TryParse(value, CultureInfo.InvariantCulture, out var d) ? d : null;
-    }
-
-    private static Guid CreateDeterministicGuid(Guid namespaceId, string name)
-    {
-        var namespaceBytes = namespaceId.ToByteArray();
-        SwapByteOrder(namespaceBytes);
-
-        var nameBytes = Encoding.UTF8.GetBytes(name);
-        var data = new byte[namespaceBytes.Length + nameBytes.Length];
-        Buffer.BlockCopy(namespaceBytes, 0, data, 0, namespaceBytes.Length);
-        Buffer.BlockCopy(nameBytes, 0, data, namespaceBytes.Length, nameBytes.Length);
-
-        var hash = System.Security.Cryptography.SHA1.HashData(data);
-        hash[6] = (byte)((hash[6] & 0x0F) | 0x50);
-        hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
-
-        var guidBytes = hash[..16].ToArray();
-        SwapByteOrder(guidBytes);
-        return new Guid(guidBytes);
-    }
-
-    private static void SwapByteOrder(byte[] guid)
-    {
-        (guid[0], guid[3]) = (guid[3], guid[0]);
-        (guid[1], guid[2]) = (guid[2], guid[1]);
-        (guid[4], guid[5]) = (guid[5], guid[4]);
-        (guid[6], guid[7]) = (guid[7], guid[6]);
     }
 
     // ------------------------------------------------------------------ //

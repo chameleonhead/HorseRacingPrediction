@@ -132,9 +132,11 @@ internal static class ReadModelMapper
 
     private static void SetProp<T>(T obj, string propertyName, object? value)
     {
-        typeof(T)
-            .GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
-            .SetValue(obj, value);
+        var prop = typeof(T)
+            .GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"{typeof(T).Name} にプロパティ '{propertyName}' が見つかりません。ReadModel の構造変更を確認してください。");
+        prop.SetValue(obj, value);
     }
 
     private static void AddToList<TModel, TItem>(TModel obj, string fieldName, IEnumerable<TItem>? items)
@@ -142,8 +144,12 @@ internal static class ReadModelMapper
         if (items is null)
             return;
 
-        var field = typeof(TModel).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var list = (List<TItem>)field.GetValue(obj)!;
+        var field = typeof(TModel).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"{typeof(TModel).Name} にフィールド '{fieldName}' が見つかりません。ReadModel の構造変更を確認してください。");
+        var list = field.GetValue(obj) as List<TItem>
+            ?? throw new InvalidOperationException(
+                $"{typeof(TModel).Name}.{fieldName} を List<{typeof(TItem).Name}> として取得できません。");
         list.AddRange(items);
     }
 }
