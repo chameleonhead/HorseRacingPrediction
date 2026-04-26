@@ -1,25 +1,21 @@
 using System.ComponentModel;
-using EventFlow;
-using EventFlow.Commands;
-using HorseRacingPrediction.Application.Commands.Predictions;
-using HorseRacingPrediction.Domain.Predictions;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
 /// <summary>
-/// EventFlow の <see cref="ICommandBus"/> を使って予測票を作成・更新する
+/// <see cref="IPredictionWriteService"/> を使って予測票を作成・更新する
 /// Microsoft Agent Framework プラグイン（書き込み系）。
 /// <see cref="GetAITools"/> で <see cref="AITool"/> 一覧を取得し、
 /// <see cref="Microsoft.Agents.AI.ChatClientAgent"/> に渡すことで利用可能になる。
 /// </summary>
 public sealed class PredictionWriteTools
 {
-    private readonly ICommandBus _commandBus;
+    private readonly IPredictionWriteService _service;
 
-    public PredictionWriteTools(ICommandBus commandBus)
+    public PredictionWriteTools(IPredictionWriteService service)
     {
-        _commandBus = commandBus;
+        _service = service;
     }
 
     /// <summary>
@@ -34,15 +30,8 @@ public sealed class PredictionWriteTools
         [Description("予測のサマリーコメント（省略可）")] string? summaryComment = null,
         CancellationToken cancellationToken = default)
     {
-        var ticketId = PredictionTicketId.New;
-        var command = new CreatePredictionTicketCommand(
-            ticketId, raceId, predictorType, predictorId, confidenceScore, summaryComment);
-
-        var result = await _commandBus.PublishAsync(command, cancellationToken);
-        if (!result.IsSuccess)
-            throw new InvalidOperationException($"予測票の作成に失敗しました: raceId={raceId}");
-
-        return ticketId.Value;
+        return await _service.CreatePredictionTicketAsync(
+            raceId, predictorType, predictorId, confidenceScore, summaryComment, cancellationToken);
     }
 
     /// <summary>
@@ -58,14 +47,8 @@ public sealed class PredictionWriteTools
         [Description("コメント（省略可）")] string? comment = null,
         CancellationToken cancellationToken = default)
     {
-        var ticketId = new PredictionTicketId(predictionTicketId);
-        var command = new AddPredictionMarkCommand(ticketId, entryId, markCode, predictedRank, score, comment);
-
-        var result = await _commandBus.PublishAsync(command, cancellationToken);
-        if (!result.IsSuccess)
-            throw new InvalidOperationException(
-                $"予測印の追加に失敗しました: ticketId={predictionTicketId}, entryId={entryId}");
-
+        await _service.AddPredictionMarkAsync(
+            predictionTicketId, entryId, markCode, predictedRank, score, comment, cancellationToken);
         return $"エントリー {entryId} に予測印 {markCode}（予測{predictedRank}着）を追加しました。";
     }
 
@@ -82,15 +65,8 @@ public sealed class PredictionWriteTools
         [Description("シグナルの説明テキスト（省略可）")] string? explanationText = null,
         CancellationToken cancellationToken = default)
     {
-        var ticketId = new PredictionTicketId(predictionTicketId);
-        var command = new AddPredictionRationaleCommand(
-            ticketId, subjectType, subjectId, signalType, signalValue, explanationText);
-
-        var result = await _commandBus.PublishAsync(command, cancellationToken);
-        if (!result.IsSuccess)
-            throw new InvalidOperationException(
-                $"予測根拠の追加に失敗しました: ticketId={predictionTicketId}");
-
+        await _service.AddPredictionRationaleAsync(
+            predictionTicketId, subjectType, subjectId, signalType, signalValue, explanationText, cancellationToken);
         return $"予測根拠 ({subjectType}:{subjectId} / {signalType}) を追加しました。";
     }
 
@@ -102,14 +78,7 @@ public sealed class PredictionWriteTools
         [Description("確定する予測票 ID")] string predictionTicketId,
         CancellationToken cancellationToken = default)
     {
-        var ticketId = new PredictionTicketId(predictionTicketId);
-        var command = new FinalizePredictionTicketCommand(ticketId);
-
-        var result = await _commandBus.PublishAsync(command, cancellationToken);
-        if (!result.IsSuccess)
-            throw new InvalidOperationException(
-                $"予測票の確定に失敗しました: ticketId={predictionTicketId}");
-
+        await _service.FinalizePredictionTicketAsync(predictionTicketId, cancellationToken);
         return $"予測票 {predictionTicketId} を確定しました。";
     }
 

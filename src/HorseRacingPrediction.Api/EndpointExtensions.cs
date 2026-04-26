@@ -921,6 +921,24 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        app.MapGet("/api/horses/{horseId}/race-history",
+            [SwaggerOperation(Summary = "Get horse race history", Description = "Returns race history read model for a horse")]
+            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
+                    return Results.NotFound();
+
+                return Results.Ok(readModel);
+            })
+            .WithName("GetHorseRaceHistory")
+            .WithTags("Horse API")
+            .Produces<HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
         app.MapGet("/api/horses/{horseId}/weight-history",
             [SwaggerOperation(Summary = "Get horse weight history", Description = "Returns horse body weight history across races")]
             async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
@@ -943,6 +961,24 @@ public static class EndpointExtensions
             .WithName("GetHorseWeightHistory")
             .WithTags("Horse API")
             .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/jockeys/{jockeyId}/race-history",
+            [SwaggerOperation(Summary = "Get jockey race history", Description = "Returns race history read model for a jockey")]
+            async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                var query = new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId);
+                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
+                    return Results.NotFound();
+
+                return Results.Ok(readModel);
+            })
+            .WithName("GetJockeyRaceHistory")
+            .WithTags("Jockey API")
+            .Produces<JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 

@@ -1,27 +1,22 @@
-using EventFlow;
-using EventFlow.Aggregates;
-using EventFlow.Aggregates.ExecutionResults;
-using EventFlow.Commands;
-using EventFlow.Core;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
 /// <summary>
-/// PredictionWriteTools のモック ICommandBus を使ったユニットテスト。
+/// PredictionWriteTools の FakePredictionWriteService を使ったユニットテスト。
 /// </summary>
 [TestClass]
 public class PredictionWriteToolsTests
 {
     private PredictionWriteTools _sut = null!;
-    private FakeCommandBus _fakeBus = null!;
+    private FakePredictionWriteService _fakeService = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _fakeBus = new FakeCommandBus();
-        _sut = new PredictionWriteTools(_fakeBus);
+        _fakeService = new FakePredictionWriteService();
+        _sut = new PredictionWriteTools(_fakeService);
     }
 
     // ------------------------------------------------------------------ //
@@ -33,7 +28,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task CreatePredictionTicket_Success_ReturnsTicketId()
     {
-        _fakeBus.IsSuccess = true;
+        _fakeService.IsSuccess = true;
 
         var result = await _sut.CreatePredictionTicket(
             raceId: "race-001",
@@ -49,7 +44,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task CreatePredictionTicket_Failure_ThrowsInvalidOperationException()
     {
-        _fakeBus.IsSuccess = false;
+        _fakeService.IsSuccess = false;
 
         try
         {
@@ -69,7 +64,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task AddPredictionMark_Success_ReturnsConfirmationMessage()
     {
-        _fakeBus.IsSuccess = true;
+        _fakeService.IsSuccess = true;
         var ticketId = ValidTicketId;
 
         var result = await _sut.AddPredictionMark(
@@ -87,7 +82,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task AddPredictionMark_Failure_ThrowsInvalidOperationException()
     {
-        _fakeBus.IsSuccess = false;
+        _fakeService.IsSuccess = false;
         var ticketId = ValidTicketId;
 
         try
@@ -108,7 +103,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task AddPredictionRationale_Success_ReturnsConfirmationMessage()
     {
-        _fakeBus.IsSuccess = true;
+        _fakeService.IsSuccess = true;
         var ticketId = ValidTicketId;
 
         var result = await _sut.AddPredictionRationale(
@@ -131,7 +126,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task FinalizePredictionTicket_Success_ReturnsConfirmationMessage()
     {
-        _fakeBus.IsSuccess = true;
+        _fakeService.IsSuccess = true;
         var ticketId = ValidTicketId;
 
         var result = await _sut.FinalizePredictionTicket(ticketId);
@@ -143,7 +138,7 @@ public class PredictionWriteToolsTests
     [TestMethod]
     public async Task FinalizePredictionTicket_Failure_ThrowsInvalidOperationException()
     {
-        _fakeBus.IsSuccess = false;
+        _fakeService.IsSuccess = false;
         var ticketId = ValidTicketId;
 
         try
@@ -173,24 +168,50 @@ public class PredictionWriteToolsTests
     }
 
     // ------------------------------------------------------------------ //
-    // Fake ICommandBus
+    // Fake IPredictionWriteService
     // ------------------------------------------------------------------ //
 
-    private sealed class FakeCommandBus : ICommandBus
+    private sealed class FakePredictionWriteService : IPredictionWriteService
     {
         public bool IsSuccess { get; set; } = true;
 
-        public Task<TExecutionResult> PublishAsync<TAggregate, TIdentity, TExecutionResult>(
-            ICommand<TAggregate, TIdentity, TExecutionResult> command,
-            CancellationToken cancellationToken)
-            where TAggregate : IAggregateRoot<TIdentity>
-            where TIdentity : IIdentity
-            where TExecutionResult : IExecutionResult
+        public Task<string> CreatePredictionTicketAsync(
+            string raceId, string predictorType, string predictorId,
+            decimal confidenceScore, string? summaryComment,
+            CancellationToken cancellationToken = default)
         {
-            var result = IsSuccess
-                ? ExecutionResult.Success()
-                : ExecutionResult.Failed();
-            return Task.FromResult((TExecutionResult)(IExecutionResult)result);
+            if (!IsSuccess)
+                throw new InvalidOperationException($"予測票の作成に失敗しました: raceId={raceId}");
+            return Task.FromResult($"predictionticket-{Guid.NewGuid()}");
+        }
+
+        public Task AddPredictionMarkAsync(
+            string predictionTicketId, string entryId, string markCode,
+            int predictedRank, decimal score, string? comment,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsSuccess)
+                throw new InvalidOperationException($"予測印の追加に失敗しました: ticketId={predictionTicketId}");
+            return Task.CompletedTask;
+        }
+
+        public Task AddPredictionRationaleAsync(
+            string predictionTicketId, string subjectType, string subjectId,
+            string signalType, string? signalValue, string? explanationText,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsSuccess)
+                throw new InvalidOperationException($"予測根拠の追加に失敗しました: ticketId={predictionTicketId}");
+            return Task.CompletedTask;
+        }
+
+        public Task FinalizePredictionTicketAsync(
+            string predictionTicketId,
+            CancellationToken cancellationToken = default)
+        {
+            if (!IsSuccess)
+                throw new InvalidOperationException($"予測票の確定に失敗しました: ticketId={predictionTicketId}");
+            return Task.CompletedTask;
         }
     }
 }

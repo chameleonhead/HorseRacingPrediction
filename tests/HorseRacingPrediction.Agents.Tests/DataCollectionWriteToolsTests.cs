@@ -1,11 +1,4 @@
-using EventFlow;
-using EventFlow.Aggregates;
-using EventFlow.Aggregates.ExecutionResults;
-using EventFlow.Commands;
-using EventFlow.Core;
-using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Application.Queries.ReadModels;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -13,52 +6,48 @@ namespace HorseRacingPrediction.Agents.Tests;
 public class DataCollectionWriteToolsTests
 {
     private DataCollectionWriteTools _sut = null!;
-    private FakeCommandBus _fakeBus = null!;
-    private FakeQueryProcessor _fakeQueryProcessor = null!;
+    private FakeDataCollectionWriteService _fakeService = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _fakeBus = new FakeCommandBus();
-        _fakeQueryProcessor = new FakeQueryProcessor();
-        _sut = new DataCollectionWriteTools(_fakeBus, _fakeQueryProcessor);
+        _fakeService = new FakeDataCollectionWriteService();
+        _sut = new DataCollectionWriteTools(_fakeService);
     }
 
     [TestMethod]
-    public async Task UpsertHorse_NewHorse_PublishesRegisterCommand()
+    public async Task UpsertHorse_CallsServiceWithCorrectName()
     {
-        var horseId = await _sut.UpsertHorse("イクイノックス");
-
-        StringAssert.StartsWith(horseId, "horse-");
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "RegisterHorseCommand");
-    }
-
-    [TestMethod]
-    public async Task UpsertHorse_ExistingHorse_PublishesUpdateCommand()
-    {
-        var existingModel = new HorseReadModel();
-        existingModel.SetTestData("horse-11111111-1111-1111-1111-111111111111", "イクイノックス", "イクイノックス");
-        _fakeQueryProcessor.HorseModelFactory = _ => existingModel;
-
         await _sut.UpsertHorse("イクイノックス");
 
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "UpdateHorseProfileCommand");
+        Assert.AreEqual(1, _fakeService.UpsertHorseCalls.Count, "UpsertHorseAsync が1回呼ばれること");
+        Assert.AreEqual("イクイノックス", _fakeService.UpsertHorseCalls[0].RegisteredName, "馬名が正しく渡されること");
     }
 
     [TestMethod]
-    public async Task UpsertRaceEntry_ExistingRace_PublishesRegisterEntryCommand()
+    public async Task UpsertHorse_ReturnsServiceResult()
+    {
+        _fakeService.HorseIdToReturn = "horse-test-id";
+
+        var result = await _sut.UpsertHorse("イクイノックス");
+
+        Assert.AreEqual("horse-test-id", result, "サービスが返した ID がそのまま返されること");
+    }
+
+    [TestMethod]
+    public async Task UpsertRaceEntry_CallsServiceWithCorrectParameters()
     {
         const string raceId = "race-22222222-2222-2222-2222-222222222222";
-        var raceModel = new RacePredictionContextReadModel();
-        raceModel.SetTestData(raceId, DateOnly.Parse("2024-10-27"), "TOKYO", 11, "天皇賞秋");
-        _fakeQueryProcessor.RaceContextFactory = _ => raceModel;
 
         await _sut.UpsertRaceEntry(raceId, 1, "イクイノックス", "川田将雅", "木村哲也");
 
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "RegisterEntryCommand");
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "RegisterHorseCommand");
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "RegisterJockeyCommand");
-        CollectionAssert.Contains(_fakeBus.PublishedCommandNames, "RegisterTrainerCommand");
+        Assert.AreEqual(1, _fakeService.UpsertRaceEntryCalls.Count, "UpsertRaceEntryAsync が1回呼ばれること");
+        var call = _fakeService.UpsertRaceEntryCalls[0];
+        Assert.AreEqual(raceId, call.RaceId);
+        Assert.AreEqual(1, call.HorseNumber);
+        Assert.AreEqual("イクイノックス", call.HorseName);
+        Assert.AreEqual("川田将雅", call.JockeyName);
+        Assert.AreEqual("木村哲也", call.TrainerName);
     }
 
     [TestMethod]
@@ -76,41 +65,60 @@ public class DataCollectionWriteToolsTests
         Assert.IsTrue(tools.Any(tool => tool.Name == "DeclareRacePayouts"));
     }
 
-    private sealed class FakeCommandBus : ICommandBus
+    // ------------------------------------------------------------------ //
+    // Fake IDataCollectionWriteService
+    // ------------------------------------------------------------------ //
+
+    private sealed class FakeDataCollectionWriteService : IDataCollectionWriteService
     {
-        public List<string> PublishedCommandNames { get; } = [];
+        public string HorseIdToReturn { get; set; } = "horse-fake-id";
 
-        public Task<TExecutionResult> PublishAsync<TAggregate, TIdentity, TExecutionResult>(
-            ICommand<TAggregate, TIdentity, TExecutionResult> command,
-            CancellationToken cancellationToken)
-            where TAggregate : IAggregateRoot<TIdentity>
-            where TIdentity : IIdentity
-            where TExecutionResult : IExecutionResult
+        public record UpsertHorseCall(string RegisteredName, string? NormalizedName, string? SexCode, string? BirthDate);
+        public List<UpsertHorseCall> UpsertHorseCalls { get; } = [];
+
+        public record UpsertRaceEntryCall(string RaceId, int HorseNumber, string HorseName, string? JockeyName, string? TrainerName);
+        public List<UpsertRaceEntryCall> UpsertRaceEntryCalls { get; } = [];
+
+        public Task<string> UpsertRaceAsync(string raceDate, string racecourseCode, int raceNumber, string raceName,
+            int? entryCount, string? gradeCode, string? surfaceCode, int? distanceMeters, string? directionCode,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult($"race-fake-{raceDate}");
+
+        public Task<string> UpsertHorseAsync(string registeredName, string? normalizedName, string? sexCode, string? birthDate,
+            CancellationToken cancellationToken = default)
         {
-            PublishedCommandNames.Add(command.GetType().Name);
-            return Task.FromResult((TExecutionResult)(IExecutionResult)ExecutionResult.Success());
+            UpsertHorseCalls.Add(new(registeredName, normalizedName, sexCode, birthDate));
+            return Task.FromResult(HorseIdToReturn);
         }
-    }
 
-    private sealed class FakeQueryProcessor : IQueryProcessor
-    {
-        public Func<string, RacePredictionContextReadModel?>? RaceContextFactory { get; set; }
-        public Func<string, HorseReadModel?>? HorseModelFactory { get; set; }
-        public Func<string, JockeyReadModel?>? JockeyModelFactory { get; set; }
-        public Func<string, TrainerReadModel?>? TrainerModelFactory { get; set; }
+        public Task<string> UpsertJockeyAsync(string displayName, string? normalizedName, string? affiliationCode,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult($"jockey-fake");
 
-        public Task<TResult> ProcessAsync<TResult>(IQuery<TResult> query, CancellationToken cancellationToken)
+        public Task<string> UpsertTrainerAsync(string displayName, string? normalizedName, string? affiliationCode,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult($"trainer-fake");
+
+        public Task<string> UpsertRaceEntryAsync(string raceId, int horseNumber, string horseName, string? jockeyName,
+            string? trainerName, int? gateNumber, decimal? assignedWeight, string? sexCode, int? age,
+            decimal? declaredWeight, decimal? declaredWeightDiff, CancellationToken cancellationToken = default)
         {
-            object? result = query switch
-            {
-                ReadModelByIdQuery<RacePredictionContextReadModel> raceQuery => RaceContextFactory?.Invoke(raceQuery.Id),
-                ReadModelByIdQuery<HorseReadModel> horseQuery => HorseModelFactory?.Invoke(horseQuery.Id),
-                ReadModelByIdQuery<JockeyReadModel> jockeyQuery => JockeyModelFactory?.Invoke(jockeyQuery.Id),
-                ReadModelByIdQuery<TrainerReadModel> trainerQuery => TrainerModelFactory?.Invoke(trainerQuery.Id),
-                _ => null
-            };
-
-            return Task.FromResult((TResult)result!);
+            UpsertRaceEntryCalls.Add(new(raceId, horseNumber, horseName, jockeyName, trainerName));
+            return Task.FromResult($"レース {raceId} に馬番 {horseNumber} の出走登録を行いました。");
         }
+
+        public Task<string> DeclareRaceResultAsync(string raceId, string winningHorseName, string? declaredAt,
+            string? winningHorseId, CancellationToken cancellationToken = default)
+            => Task.FromResult($"レース {raceId} の確定結果を記録しました。");
+
+        public Task<string> DeclareRaceEntryResultAsync(string raceId, int horseNumber, int? finishPosition,
+            string? officialTime, string? marginText, string? lastThreeFurlongTime, string? abnormalResultCode,
+            decimal? prizeMoney, CancellationToken cancellationToken = default)
+            => Task.FromResult($"レース {raceId} の馬番 {horseNumber} の成績を記録しました。");
+
+        public Task<string> DeclareRacePayoutsAsync(string raceId, string? winPayoutsJson, string? placePayoutsJson,
+            string? quinellaPayoutsJson, string? exactaPayoutsJson, string? trifectaPayoutsJson,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult($"レース {raceId} の払い戻しを記録しました。");
     }
 }
