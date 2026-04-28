@@ -7,10 +7,10 @@ using Microsoft.Extensions.Options;
 namespace HorseRacingPrediction.AgentClient.Scheduling;
 
 /// <summary>
-/// フェーズ間（木曜→金曜など）で <see cref="WeekendRaceInfo"/> リストを永続化するストア。
+/// フェーズ間で <see cref="WeekendRaceInfo"/> リストを永続化するストア。
 /// <para>
-/// 状態は JSON ファイルに保存する。ファイル名は対象週末の土曜日日付で決まる。
-/// アプリ再起動後も状態が復元されるため、木曜に発見したレース情報を金曜の予測で再利用できる。
+/// 状態は JSON ファイルに保存する。ファイル名は第1開催日の日付で決まる。
+/// アプリ再起動後も状態が復元されるため、発見フェーズで取得したレース情報を後続フェーズで再利用できる。
 /// </para>
 /// </summary>
 public sealed class WeeklyStateStore
@@ -32,18 +32,18 @@ public sealed class WeeklyStateStore
         _logger = logger;
     }
 
-    /// <summary>指定した週末のレース発見結果をファイルへ保存する。</summary>
+    /// <summary>指定した第1開催日のレース発見結果をファイルへ保存する。</summary>
     public async Task SaveRacesAsync(
-        DateOnly weekendSaturday,
+        DateOnly firstRaceDay,
         IReadOnlyList<WeekendRaceInfo> races,
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(_stateDirectory);
-        var filePath = GetFilePath(weekendSaturday);
+        var filePath = GetFilePath(firstRaceDay);
 
         var dto = new WeeklyStateDto
         {
-            WeekendSaturday = weekendSaturday,
+            FirstRaceDay = firstRaceDay,
             Races = races.Select(r => new WeekendRaceInfoDto(r)).ToList()
         };
 
@@ -52,12 +52,12 @@ public sealed class WeeklyStateStore
         _logger.LogInformation("状態を保存しました: {FilePath} ({Count} レース)", filePath, races.Count);
     }
 
-    /// <summary>指定した週末のレース発見結果をファイルから読み込む。存在しない場合は null を返す。</summary>
+    /// <summary>指定した第1開催日のレース発見結果をファイルから読み込む。存在しない場合は null を返す。</summary>
     public async Task<IReadOnlyList<WeekendRaceInfo>?> LoadRacesAsync(
-        DateOnly weekendSaturday,
+        DateOnly firstRaceDay,
         CancellationToken cancellationToken = default)
     {
-        var filePath = GetFilePath(weekendSaturday);
+        var filePath = GetFilePath(firstRaceDay);
         if (!File.Exists(filePath))
         {
             _logger.LogWarning("状態ファイルが見つかりません: {FilePath}", filePath);
@@ -82,10 +82,10 @@ public sealed class WeeklyStateStore
         }
     }
 
-    /// <summary>指定した週末の状態ファイルを削除する（翌週への引き継ぎ防止）。</summary>
-    public void DeleteState(DateOnly weekendSaturday)
+    /// <summary>指定した第1開催日の状態ファイルを削除する（次サイクルへの引き継ぎ防止）。</summary>
+    public void DeleteState(DateOnly firstRaceDay)
     {
-        var filePath = GetFilePath(weekendSaturday);
+        var filePath = GetFilePath(firstRaceDay);
         if (File.Exists(filePath))
         {
             File.Delete(filePath);
@@ -97,8 +97,8 @@ public sealed class WeeklyStateStore
     // private helpers
     // ------------------------------------------------------------------ //
 
-    private string GetFilePath(DateOnly weekendSaturday) =>
-        Path.Combine(_stateDirectory, $"races-{weekendSaturday:yyyy-MM-dd}.json");
+    private string GetFilePath(DateOnly firstRaceDay) =>
+        Path.Combine(_stateDirectory, $"races-{firstRaceDay:yyyy-MM-dd}.json");
 
     // ------------------------------------------------------------------ //
     // DTOs for serialization
@@ -106,7 +106,7 @@ public sealed class WeeklyStateStore
 
     private sealed class WeeklyStateDto
     {
-        public DateOnly WeekendSaturday { get; set; }
+        public DateOnly FirstRaceDay { get; set; }
         public List<WeekendRaceInfoDto> Races { get; set; } = new();
     }
 
