@@ -1,3 +1,4 @@
+using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
@@ -14,30 +15,38 @@ using OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// // -------------------------------------------------------------------
-// // OpenAI IChatClient
-// // -------------------------------------------------------------------
-// var openAIApiKey = builder.Configuration["OpenAI:ApiKey"]
-//     ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-//     ?? throw new InvalidOperationException(
-//         "OpenAI API キーが設定されていません。" +
-//         "appsettings.Development.json の \"OpenAI:ApiKey\" または " +
-//         "環境変数 OPENAI_API_KEY を設定してください。");
+// -------------------------------------------------------------------
+// IChatClient — OpenAI または LMStudio を切り替え可能
+// -------------------------------------------------------------------
+var openAIApiKey = builder.Configuration["OpenAI:ApiKey"];
+var lmStudioBaseUrl = builder.Configuration["LMStudio:BaseUrl"] ?? "http://localhost:1234";
 
-// var openAIModel = builder.Configuration["OpenAI:Model"] ?? "gpt-4o";
+if (string.IsNullOrWhiteSpace(openAIApiKey))
+{
+    var lmStudioModel = builder.Configuration["LMStudio:Model"] ?? "default";
+    builder.Services.AddSingleton<IChatClient>(
+        new LMStudioChatClient(new LMStudioChatClientOptions
+        {
+            BaseUri = new Uri(lmStudioBaseUrl),
+            DefaultModel = lmStudioModel
+        }));
+}
+else
+{
+    var apiKey = openAIApiKey
+        ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+        ?? throw new InvalidOperationException(
+            "OpenAI API キーが設定されていません。" +
+            "appsettings.json の \"OpenAI:ApiKey\" または " +
+            "環境変数 OPENAI_API_KEY を設定してください。");
 
-// builder.Services.AddSingleton<IChatClient>(
-//     new OpenAIClient(openAIApiKey)
-//         .GetChatClient(openAIModel)
-//         .AsIChatClient());
-builder.Services.AddSingleton<IChatClient>(
-    new LMStudioChatClient(new LMStudioChatClientOptions()
-    {
-        BaseUri = new Uri("http://127.0.0.1:1234"),
-        DefaultModel = "google/gemma-3n-e4b",
-    }));
-builder.Services.AddSingleton(sp =>
-    new PageDataExtractionAgent(sp.GetRequiredService<IChatClient>()));
+    var model = builder.Configuration["OpenAI:Model"] ?? "gpt-4o";
+
+    builder.Services.AddSingleton<IChatClient>(
+        new OpenAIClient(apiKey)
+            .GetChatClient(model)
+            .AsIChatClient());
+}
 
 var connectionString = builder.Configuration.GetConnectionString("EventStore")
     ?? "Data Source=eventstore-devui.db";
@@ -55,6 +64,8 @@ builder.Services.AddWebBrowserAgent();
 builder.Services.AddPredictionWorkflow();
 builder.Services.AddDataCollectionWorkflow();
 builder.Services.AddWeeklyScheduleWorkflow();
+builder.Services.AddJraRaceCardCollectionWorkflow();
+builder.Services.AddJraRaceResultCollectionWorkflow();
 
 // -------------------------------------------------------------------
 // 競馬予測エージェントを DevUI に登録
@@ -140,6 +151,14 @@ builder.AddWorkflow(
             [raceDataAgent, horseDataAgent, jockeyDataAgent, stableDataAgent],
             aggregator: null);
     }).AddAsAIAgent();
+
+// -------------------------------------------------------------------
+// 週次自動スケジューラー
+// -------------------------------------------------------------------
+builder.Services.Configure<WeeklySchedulerOptions>(
+    builder.Configuration.GetSection(WeeklySchedulerOptions.SectionName));
+builder.Services.AddSingleton<WeeklyStateStore>();
+builder.Services.AddHostedService<WeeklySchedulerService>();
 
 // -------------------------------------------------------------------
 // OpenAI Responses / Conversations エンドポイント（DevUI 必須）

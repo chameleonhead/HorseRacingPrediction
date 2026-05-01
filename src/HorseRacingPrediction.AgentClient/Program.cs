@@ -20,9 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 // IChatClient — OpenAI または LMStudio を切り替え可能
 // -------------------------------------------------------------------
 var openAIApiKey = builder.Configuration["OpenAI:ApiKey"];
-var lmStudioBaseUrl = builder.Configuration["LMStudio:BaseUrl"];
+var lmStudioBaseUrl = builder.Configuration["LMStudio:BaseUrl"] ?? "http://localhost:1234";
 
-if (!string.IsNullOrWhiteSpace(lmStudioBaseUrl))
+if (string.IsNullOrWhiteSpace(openAIApiKey))
 {
     var lmStudioModel = builder.Configuration["LMStudio:Model"] ?? "default";
     builder.Services.AddSingleton<IChatClient>(
@@ -48,9 +48,6 @@ else
             .GetChatClient(model)
             .AsIChatClient());
 }
-
-builder.Services.AddSingleton(sp =>
-    new PageDataExtractionAgent(sp.GetRequiredService<IChatClient>()));
 
 // -------------------------------------------------------------------
 // クラウド API への HTTP 接続設定
