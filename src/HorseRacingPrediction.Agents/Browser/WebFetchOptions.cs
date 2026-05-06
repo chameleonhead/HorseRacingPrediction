@@ -17,7 +17,7 @@ public sealed class WebFetchOptions
     public List<string> AllowedDomains { get; set; } = [];
 
     /// <summary>検索に使用するベース URL（Google 等）</summary>
-    public string SearchBaseUrl { get; set; } = "https://www.bing.com/search?q=";
+    public string SearchBaseUrl { get; set; } = "https://duckduckgo.com/?q=";
 
     /// <summary>検索結果からフェッチするページの最大件数</summary>
     public int SearchResultsToFetch { get; set; } = 10;

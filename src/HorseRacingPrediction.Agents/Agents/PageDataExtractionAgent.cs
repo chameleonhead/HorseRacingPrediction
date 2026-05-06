@@ -21,9 +21,6 @@ namespace HorseRacingPrediction.Agents.Agents;
 public sealed class PageDataExtractionAgent
 {
     private const int MaxLoggedTextLength = 8_000;
-    private const int MaxInputLength = 12_000;
-    private const int MaxPromptLinks = 20;
-    private const int MaxSearchResultLinks = 12;
 
     private const string AnalysisPrompt = """
         あなたはWebページの生テキストを読みやすく整形し、必要なら詳細表示への1回だけの追加入力が必要かを判定する専門エージェントです。
@@ -77,13 +74,24 @@ public sealed class PageDataExtractionAgent
 
     private readonly IChatClient _chatClient;
     private readonly ILogger<PageDataExtractionAgent> _logger;
+    private readonly PageExtractionProfile _profile;
 
     public PageDataExtractionAgent(
         IChatClient chatClient,
-        ILogger<PageDataExtractionAgent>? logger = null)
+        ILogger<PageDataExtractionAgent>? logger = null,
+        string? modelId = null,
+        string? profileOverride = null)
     {
         _chatClient = chatClient;
         _logger = logger ?? NullLogger<PageDataExtractionAgent>.Instance;
+        _profile = PageExtractionProfileResolver.Resolve(modelId, profileOverride);
+
+        _logger.LogInformation(
+            "PageDataExtractionAgent profile resolved. Profile={Profile} Model={Model} MaxInputLength={MaxInputLength} IncludeSnapshot={IncludeSnapshot}",
+            _profile.Name,
+            modelId ?? "(auto)",
+            _profile.MaxInputLength,
+            _profile.IncludeSnapshotInPrompt);
     }
 
     /// <summary>
@@ -109,8 +117,8 @@ public sealed class PageDataExtractionAgent
             return BuildSearchResultLinkCollection(pageLinks);
         }
 
-        var truncatedText = rawPageText.Length > MaxInputLength
-            ? rawPageText[..MaxInputLength]
+        var truncatedText = rawPageText.Length > _profile.MaxInputLength
+            ? rawPageText[.._profile.MaxInputLength]
             : rawPageText;
 
         var linksText = pageLinks is { Count: > 0 }
@@ -173,8 +181,8 @@ public sealed class PageDataExtractionAgent
             return new PageExtractionResult(string.Empty, false, null);
         }
 
-        var truncatedText = rawPageText.Length > MaxInputLength
-            ? rawPageText[..MaxInputLength]
+        var truncatedText = rawPageText.Length > _profile.MaxInputLength
+            ? rawPageText[.._profile.MaxInputLength]
             : rawPageText;
 
         var linksText = pageLinks.Count == 0
@@ -267,8 +275,8 @@ public sealed class PageDataExtractionAgent
             return BuildSearchResultLinkCollection(pageLinks);
         }
 
-        var truncatedText = rawPageText.Length > MaxInputLength
-            ? rawPageText[..MaxInputLength]
+        var truncatedText = rawPageText.Length > _profile.MaxInputLength
+            ? rawPageText[.._profile.MaxInputLength]
             : rawPageText;
 
         var linksText = pageLinks is { Count: > 0 }
@@ -277,7 +285,9 @@ public sealed class PageDataExtractionAgent
 
         var snapshotText = snapshot is null
             ? "(スナップショットなし)"
-            : BuildSnapshotJson(snapshot);
+            : _profile.IncludeSnapshotInPrompt
+                ? BuildSnapshotJson(snapshot)
+                : "(スナップショット省略: 小型モデル用プロファイル)";
 
         var userMessage = $"""
             以下のWebページの内容を整形してください。
@@ -338,8 +348,8 @@ public sealed class PageDataExtractionAgent
             return new PageExtractionResult(string.Empty, false, null);
         }
 
-        var truncatedText = rawPageText.Length > MaxInputLength
-            ? rawPageText[..MaxInputLength]
+        var truncatedText = rawPageText.Length > _profile.MaxInputLength
+            ? rawPageText[.._profile.MaxInputLength]
             : rawPageText;
 
         var linksText = pageLinks.Count == 0
@@ -348,7 +358,9 @@ public sealed class PageDataExtractionAgent
 
         var snapshotText = snapshot is null
             ? "(スナップショットなし)"
-            : BuildSnapshotJson(snapshot);
+            : _profile.IncludeSnapshotInPrompt
+                ? BuildSnapshotJson(snapshot)
+                : "(スナップショット省略: 小型モデル用プロファイル)";
 
         var userMessage = $"""
             以下のWebページを分析してください。
@@ -420,7 +432,7 @@ public sealed class PageDataExtractionAgent
         return false;
     }
 
-    private static string BuildSearchResultLinkCollection(IReadOnlyList<SearchResultLink> pageLinks)
+    private string BuildSearchResultLinkCollection(IReadOnlyList<SearchResultLink> pageLinks)
     {
         var primaryLinks = SelectSearchResultLinks(pageLinks);
         var sb = new StringBuilder();
@@ -451,11 +463,11 @@ public sealed class PageDataExtractionAgent
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildLinksPromptText(IReadOnlyList<SearchResultLink> pageLinks)
+    private string BuildLinksPromptText(IReadOnlyList<SearchResultLink> pageLinks)
     {
         var selectedLinks = pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
-            .Take(MaxPromptLinks)
+            .Take(_profile.MaxPromptLinks)
             .Select(link => $"- {link.Title} | {link.Url}")
             .ToList();
 
@@ -472,7 +484,7 @@ public sealed class PageDataExtractionAgent
         return string.Join(Environment.NewLine, selectedLinks);
     }
 
-    private static List<SearchResultLink> SelectSearchResultLinks(IReadOnlyList<SearchResultLink> pageLinks)
+    private List<SearchResultLink> SelectSearchResultLinks(IReadOnlyList<SearchResultLink> pageLinks)
     {
         return pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
@@ -480,7 +492,7 @@ public sealed class PageDataExtractionAgent
             .DistinctBy(link => link.Url)
             .OrderByDescending(GetSearchResultPriority)
             .ThenBy(link => link.Title.Length)
-            .Take(MaxSearchResultLinks)
+            .Take(_profile.MaxSearchResultLinks)
             .ToList();
     }
 
@@ -542,7 +554,7 @@ public sealed class PageDataExtractionAgent
                url.Contains("policies.google.com", StringComparison.Ordinal);
     }
 
-    private static string BuildSnapshotJson(PageSnapshot snapshot)
+    private string BuildSnapshotJson(PageSnapshot snapshot)
     {
         var compactSnapshot = new
         {
@@ -550,12 +562,12 @@ public sealed class PageDataExtractionAgent
             snapshot.Title,
             snapshot.Headings,
             MainText = TruncateSnapshotText(snapshot.MainText),
-            Links = snapshot.Links.Take(50).Select(link => new { link.Title, link.Url, link.Region }),
-            Actions = snapshot.Actions.Take(30).Select(action => new { action.Text, action.Kind }),
-            Tables = snapshot.Tables.Take(5).Select(table => new
+            Links = snapshot.Links.Take(_profile.SnapshotLinks).Select(link => new { link.Title, link.Url, link.Region }),
+            Actions = snapshot.Actions.Take(_profile.SnapshotActions).Select(action => new { action.Text, action.Kind }),
+            Tables = snapshot.Tables.Take(_profile.SnapshotTables).Select(table => new
             {
                 Headers = table.Headers,
-                Rows = table.Rows.Take(10)
+                Rows = table.Rows.Take(_profile.SnapshotRows)
             })
         };
 
@@ -565,11 +577,11 @@ public sealed class PageDataExtractionAgent
         });
     }
 
-    private static string TruncateSnapshotText(string text)
+    private string TruncateSnapshotText(string text)
     {
-        return text.Length <= 4_000
+        return text.Length <= _profile.SnapshotTextLength
             ? text
-            : text[..4_000];
+            : text[.._profile.SnapshotTextLength];
     }
 
     private static string ExtractJsonObject(string responseText)

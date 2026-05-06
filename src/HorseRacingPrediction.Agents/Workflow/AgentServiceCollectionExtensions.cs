@@ -83,7 +83,10 @@ public static class AgentServiceCollectionExtensions
         services.AddSingleton<PageDataExtractionAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();
-            return new PageDataExtractionAgent(chatClient);
+            var configuration = sp.GetService<IConfiguration>();
+            var modelId = ResolveConfiguredModelId(configuration);
+            var profileOverride = configuration?["Agents:PageExtraction:Profile"];
+            return new PageDataExtractionAgent(chatClient, modelId: modelId, profileOverride: profileOverride);
         });
         services.AddTransient<PlaywrightTools>();
         services.AddTransient<WebBrowserAgent>(sp =>
@@ -118,6 +121,15 @@ public static class AgentServiceCollectionExtensions
             return new JraScrapingTools(scraper);
         });
         return services;
+    }
+
+    private static string? ResolveConfiguredModelId(IConfiguration? configuration)
+    {
+        return configuration?["LMStudio:Model"]
+            ?? configuration?["OpenAI:Model"]
+            ?? Environment.GetEnvironmentVariable("LMSTUDIO_MODEL")
+            ?? Environment.GetEnvironmentVariable("OPENAI_MODEL")
+            ?? Environment.GetEnvironmentVariable("LLM_MODEL");
     }
 
     /// <summary>

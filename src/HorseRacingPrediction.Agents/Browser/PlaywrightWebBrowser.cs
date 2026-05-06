@@ -13,7 +13,7 @@ namespace HorseRacingPrediction.Agents.Browser;
 /// </summary>
 public sealed class PlaywrightWebBrowser : IWebBrowser
 {
-    private const string DefaultSearchBaseUrl = "https://www.google.com/search?q=";
+    private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
 
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
@@ -249,8 +249,9 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             return;
         }
 
+        var currentUrl = CurrentUrl;
         _disposed = true;
-        _logger.LogInformation("Playwright browser disposing. CurrentUrl={CurrentUrl}", CurrentUrl);
+        _logger.LogInformation("Playwright browser disposing. CurrentUrl={CurrentUrl}", currentUrl);
 
         try
         {
