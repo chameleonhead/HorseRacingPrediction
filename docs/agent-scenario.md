@@ -2,229 +2,213 @@
 
 ## 概要
 
-エージェントはサービスプログラムとして任意の PC 上で動作し、クラウド上のデータサーバー（API）と API キーで通信しながら、木曜から日曜にかけての競馬予測サイクルを自動実行する。
+当初は AI エージェントに進行の大部分を任せる設計だったが、実運用で必要なのは「再現性の高い定常収集」であるため、方針を変更する。
+
+このドキュメントは、JRA レース結果を網羅的に DB へ格納することを最優先に、機械的スクレイピング中心の運用に再設計した内容を定義する。
 
 ---
 
-## システム構成
+## 見直し背景
 
-```
-┌──────────────────────────────────────┐
-│  エージェント PC（ローカルサービス）      │
-│                                      │
-│  WeeklyScheduleWorkflow              │
-│  ├─ WeekendRaceDiscoveryAgent        │
-│  ├─ DataCollectionWorkflow           │
-│  │   ├─ RaceDataAgent                │
-│  │   ├─ HorseDataAgent               │
-│  │   ├─ JockeyDataAgent              │
-│  │   └─ StableDataAgent              │
-│  ├─ PostPositionPredictionAgent      │
-│  └─ PredictionWorkflow               │
-│      ├─ RaceContextAgent             │
-│      ├─ HorseAnalysisAgent           │
-│      └─ PredictionAgent              │
-│                                      │
-│  WebBrowserAgent（Playwright）        │
-└────────────────┬─────────────────────┘
-                 │  X-Api-Key（HTTPS）
-                 ▼
-┌──────────────────────────────────────┐
-│  クラウド（データサーバー）               │
-│                                      │
-│  HorseRacingPrediction.Api           │
-│  ├─ CQRS コマンドエンドポイント          │
-│  ├─ クエリ（ReadModel）エンドポイント    │
-│  └─ ML 予測エンドポイント               │
-│                                      │
-│  HorseRacingPrediction.MachineLearning│
-│  └─ IRacePredictor（ML.NET）          │
-└──────────────────────────────────────┘
-```
-
-### 通信方式
-
-| 方向 | プロトコル | 認証 |
-|------|-----------|------|
-| エージェント → サーバー（書き込み） | HTTPS REST | `X-Api-Key` ヘッダー |
-| エージェント → サーバー（読み込み） | HTTPS REST | `X-Api-Key` ヘッダー |
-| ML 予測（サーバーサイド） | サーバー内部呼び出し | — |
+- 週末中心の運用では、平日開催や祝日開催、振替開催の取りこぼしが発生しうる
+- LLM 主導の探索は柔軟だが、同条件での再実行性と監査性が弱い
+- JRA サイトはセッション依存と画面遷移依存が強く、URL 合成方式は失敗率が高い
 
 ---
 
-## 週次スケジュール
+## 検討内容と結論
+
+| 検討項目 | 候補 | 結論 | 理由 |
+|---|---|---|---|
+| 収集の主方式 | AI 主導探索 | 不採用 | 再現性、運用監査、再試行制御が難しい |
+| 収集の主方式 | 機械的スクレイピング | 採用 | 手順固定化で成功率と監査性を確保できる |
+| スケジュール | 木曜から日曜の週次固定 | 不採用 | 非週末開催を拾いきれない |
+| スケジュール | 毎日実行 + 開催日の高頻度化 | 採用 | 取りこぼしを減らし、運用を単純化できる |
+| JRA 遷移 | URL 解析/生成 | 不採用 | パラメータエラーや遷移不整合が発生する |
+| JRA 遷移 | 要素クリック中心 | 採用 | 実ブラウザー状態を維持して安定遷移できる |
+
+---
+
+## システム構成（改訂後）
 
 ```
-月  火  水  木          金              土              日
-               │          │              │              │
-               ▼          ▼              ▼              ▼
-           DiscoverRaces  PostPositions  RaceDay(土)    RaceDay(日)
-           CollectData    +Predict初回   CollectData    CollectData
-           (定期更新)     (定期更新)     Predict(1h前)  Predict(1h前)
-                                        CollectResult  CollectResult
-                                        Evaluate       Evaluate
+┌─────────────────────────────────────────────┐
+│  Agent Runner（ローカルサービス）            │
+│                                             │
+│  DailyIngestionWorkflow                     │
+│  ├─ DiscoverHoldingDaysTask                 │
+│  ├─ DiscoverRaceNumbersTask                 │
+│  ├─ ScrapeRaceResultTask                    │
+│  ├─ PersistRaceResultTask                   │
+│  └─ ReconcileAndRetryTask                   │
+│                                             │
+│  JRA Scrapers（Playwright）                  │
+│  ├─ JraResultTopPageScraper                 │
+│  ├─ JraResultRaceListScraper                │
+│  └─ JraRaceResultScraper                    │
+│                                             │
+│  HorseRacingPrediction.WebBrowserAgentVerifier│
+│   （デバッグ・シナリオ検証・最小再現）        │
+└──────────────────────┬──────────────────────┘
+                       │ HTTPS + X-Api-Key
+                       ▼
+┌─────────────────────────────────────────────┐
+│  HorseRacingPrediction.Api                  │
+│  ├─ 書き込みエンドポイント                  │
+│  ├─ ReadModel クエリ                        │
+│  └─ ML 予測エンドポイント（別系統）          │
+└─────────────────────────────────────────────┘
 ```
 
 ---
 
-## フェーズ詳細
+## 運用方針（週次固定から日次ローリングへ）
 
-### フェーズ 1：木曜（レース発見 + データ収集）
+### 1. 基本方針
 
-**目的**: 今週末のレースを特定し、過去情報・基本情報を収集する。
+- ジョブは毎日実行する
+- 対象期間はローリング窓で管理する（例: D-2 から D+14）
+- 開催日が判明した日は実行頻度を上げる
+- 非開催日は軽量チェックのみ実行する
 
-```
-WeeklyScheduleWorkflow.DiscoverRacesAsync()
-  └─ WeekendRaceDiscoveryAgent
-       ├─ CalendarTools.GetCurrentDateTime / GetWeekendDates
-       └─ WebBrowserAgent（JRA 公式・netkeiba）
-            → [WeekendRaceInfo] レース一覧（レース名・競馬場・出走馬・騎手・調教師）
+### 2. 1日の実行フェーズ
 
-WeeklyScheduleWorkflow.CollectDataAsync()  ← 数時間おきに繰り返し実行
-  └─ DataCollectionWorkflow（複数レースを並列実行）
-       ├─ RaceDataAgent    → レース基本情報・過去傾向（Markdown）
-       ├─ HorseDataAgent   → 出走馬の戦績・血統・適性（Markdown）
-       ├─ JockeyDataAgent  → 騎手の成績・傾向（Markdown）
-       └─ StableDataAgent  → 厩舎・調教師の傾向（Markdown）
-            ↓
-       DataCollectionWriteTools → サーバー API（SourceDocument 保存）
-```
+1. 早朝フェーズ
+- 開催選択ページから開催日と開催場を再同期する
+- 当日と近日の対象レースをキュー化する
 
----
+2. 日中フェーズ
+- キュー対象の開催を順次巡回し、公開済み情報を更新する
+- 未取得と失敗レースを優先的に再試行する
 
-### フェーズ 2：金曜（枠順確定 + 初回予測）
+3. 夜間フェーズ
+- 当日終了レースの結果と払戻を収集する
+- DB 保存後に欠損チェックを実行する
 
-**目的**: 枠順確定後にデータを再収集し、ML 予測と AI 予測を組み合わせた初回予測を作成する。
+4. 深夜フェーズ
+- 未確定、取得失敗、保存失敗の再処理を行う
+- 翌日向けの再試行キューを確定する
 
-```
-WeeklyScheduleWorkflow.CollectPostPositionsAndPredictAsync()
-  └─ [各レース並列]
-       ├─ DataCollectionWorkflow.CollectAsync()  ← 枠番を含む最新データ再収集
-       │
-       └─ PostPositionPredictionAgent
-            入力: レース情報 + 馬情報 + 騎手情報 + 厩舎情報
-            分析: 枠番有利不利 / 脚質展開 / コース適性 / 騎手相性 / 厩舎仕上がり
-            出力: 予測レポート（◎○▲△ + 推奨馬券）Markdown
+### 3. 週次の役割
 
-     ＊ ML 予測はサーバーサイドで実行（IRacePredictor）
-        エージェントは ML 結果を参照して最終予測を調整できる
-```
-
-定期的に再実行することで予測を更新する。
+- 週次ジョブは主処理ではなく監査専用とする
+- 直近 14 日の欠損、重複、整合性を検証する
+- 必要なら再収集キューを生成する
 
 ---
 
-### フェーズ 3：土曜・日曜（当日予測 + 結果収集）
+## JRA スクレイピング制約（必須）
 
-**目的**: レース 1 時間前に最新情報で予測を更新し、レース後に結果を収集・評価する。
+- JRA サイトでは URL の推測、生成、手組みを行わない
+- ページ遷移は必ずブラウザー操作で実行する
+- 使用する遷移操作はクリック、フォーム入力、戻る/進むに限定する
+- href 解析からの遷移再構築は行わない
 
-#### 当日の定期データ更新（継続）
+### 補足
 
-```
-WeeklyScheduleWorkflow.CollectDataAsync()  ← 当日も定期実行
-  └─ DataCollectionWorkflow
-       └─ RaceDataAgent など
-            → 馬場状態・天候・オッズ変動・前日比の調教情報
-```
-
-#### レース 1 時間前：予測実行
-
-```
-PredictionWorkflow.RunAsync(raceId)
-  ├─ Step 1: RaceContextAgent
-  │    ツール: RaceQueryTools（ReadModel 参照）+ WebFetchTools
-  │    出力: レースコンテキスト（最新馬場・天候・オッズ）
-  │
-  ├─ Step 2: HorseAnalysisAgent
-  │    ツール: RaceQueryTools + WebFetchTools
-  │    入力: Step 1 の出力
-  │    出力: 各馬の総合評価
-  │
-  └─ Step 3: PredictionAgent
-       ツール: RaceQueryTools + PredictionWriteTools + WebFetchTools
-       入力: Step 1〜2 の出力
-       出力: PredictionTicket（DB 保存）+ 予測サマリー
-```
-
-#### レース後：結果収集と評価
-
-```
-JraRaceResultCollectionWorkflow
-  ├─ JraResultUrlDiscoveryAgent → 結果ページ URL 特定
-  ├─ JraRaceCardScraper        → Playwright で結果スクレイピング
-  └─ DataCollectionWriteTools  → RaceResult / EntryResult / PayoutResult 保存
-
-評価: EvaluatePredictionTicket コマンド発行
-  └─ PredictionEvaluation（的中区分・ROI）を PredictionTicket に記録
-```
+- スクレーピング対策が弱いサイトでは、直接 URL 遷移を許容する
+- ただし利用規約、robots、レート制限を遵守する
 
 ---
 
-## エージェント一覧
+## データ収集パイプライン
 
-| エージェント | 役割 | パターン |
-|------------|------|---------|
-| `WeekendRaceDiscoveryAgent` | 週末レース一覧を発見、JSON で返す | 構造化出力（C） |
-| `RaceDataAgent` | レース基本情報・過去傾向を収集 | テキスト出力（A） |
-| `HorseDataAgent` | 出走馬の戦績・血統・適性を収集 | テキスト出力（A） |
-| `JockeyDataAgent` | 騎手の成績・傾向を収集 | テキスト出力（A） |
-| `StableDataAgent` | 厩舎・調教師の成績・傾向を収集 | テキスト出力（A） |
-| `PostPositionPredictionAgent` | 枠順確定後の予測レポート生成 | テキスト出力（A） |
-| `RaceContextAgent` | レースコンテキスト（馬場・天候）収集 | テキスト出力（A） |
-| `HorseAnalysisAgent` | 各馬の総合評価 | テキスト出力（A） |
-| `PredictionAgent` | 予測票の作成・DB 保存 | テキスト出力（A） |
-| `WebBrowserAgent` | Playwright を使ったブラウザ操作 | Agent-as-Tool（B） |
+### Layer 1: 開催選択収集
 
----
+- 入力: JRA keiba トップ
+- 処理: レース結果導線をクリックし、開催ボタンを抽出
+- 出力: 開催ラベル、開催場、開催日
 
-## ツール一覧
+### Layer 2: レース番号収集
 
-| ツール | 提供する機能 | 使用エージェント |
-|-------|------------|---------------|
-| `PlaywrightTools` | ブラウザプリミティブ（検索・ナビゲート・リンク取得） | WebBrowserAgent |
-| `WebFetchTools` | 自然言語での Web 検索委譲 | データ収集系エージェント全般 |
-| `CalendarTools` | 現在日時・週末日付の取得 | WeekendRaceDiscoveryAgent |
-| `RaceQueryTools` | EventFlow ReadModel クエリ | RaceContextAgent, HorseAnalysisAgent, PredictionAgent |
-| `PredictionWriteTools` | 予測票の作成・確定 API 呼び出し | PredictionAgent |
-| `DataCollectionWriteTools` | SourceDocument 保存 API 呼び出し | データ収集系ワークフロー |
+- 入力: 開催ラベル
+- 処理: 開催ボタンをクリックし、レース番号リンクを抽出
+- 出力: レース番号一覧
+
+### Layer 3: レース結果収集
+
+- 入力: レース番号
+- 処理: 該当レースをクリックし、メタデータ、着順、払戻を解析
+- 出力: レース結果エンティティ
+
+### Layer 4: 永続化
+
+- 入力: Layer 3 の結果
+- 処理: API 経由で冪等保存
+- 出力: 保存結果、失敗理由、再試行可否
 
 ---
 
-## ワークフロー一覧
+## 状態管理（レース単位）
 
-| ワークフロー | ステップ | 実行パターン |
-|------------|---------|------------|
-| `WeeklyScheduleWorkflow` | Discover → CollectData → Predict | Orchestrator（週次スケジュール管理） |
-| `DataCollectionWorkflow` | Race + Horse + Jockey + Stable 収集 | Parallelization（4 エージェント並列） |
-| `PredictionWorkflow` | RaceContext → HorseAnalysis → Prediction | Prompt chaining（3 ステップ順次） |
-| `JraRaceCardCollectionWorkflow` | URL 発見 → スクレイピング → 保存 | Prompt chaining |
-| `JraRaceResultCollectionWorkflow` | URL 発見 → スクレイピング → 保存 | Prompt chaining |
-
----
-
-## ML との役割分担
-
-| 処理 | 実行場所 | 方式 |
-|------|---------|------|
-| 統計モデルによる着順予測 | サーバーサイド | `IRacePredictor`（ML.NET FastTree） |
-| 情報収集・自然言語処理 | エージェント（ローカル） | LLM（ChatClientAgent） |
-| 枠順・展開・印判断 | エージェント（ローカル） | `PostPositionPredictionAgent` |
-| 最終予測票の作成 | エージェント（ローカル） | `PredictionWorkflow` |
-
-エージェントは ML 予測を `RaceQueryTools` 経由でサーバーから取得し、AI 予測の根拠の一つとして活用する。
+| 状態 | 意味 | 次状態 |
+|---|---|---|
+| `Discovered` | 開催とレース番号を認識済み | `ResultPending` |
+| `ResultPending` | 結果ページ未取得 | `ResultFetched` |
+| `ResultFetched` | 結果を取得済み | `Persisted` |
+| `Persisted` | DB 保存済み | `Verified` |
+| `Verified` | 欠損・重複チェック済み | 完了 |
+| `Failed` | 取得または保存失敗 | `ResultPending` または `PersistRetry` |
 
 ---
 
-## レースライフサイクルとエージェント処理の対応
+## 障害時の運用
 
-```
-Race ライフサイクル          エージェント処理
-─────────────────────────────────────────────
-Draft                     ← WeekendRaceDiscoveryAgent がレース登録
-CardPublished             ← JraRaceCardCollectionWorkflow が出馬表登録
-PreRaceOpen               ← PredictionWorkflow が PredictionTicket 作成
-InProgress                ← 発走（自動遷移）
-ResultDeclared            ← JraRaceResultCollectionWorkflow が結果登録
-PayoutDeclared            ← 払戻登録
-Closed                    ← EvaluatePredictionTicket で評価完了
-```
+1. 取得失敗
+- 失敗レイヤー、対象開催、対象レース番号、例外種別を記録する
+- 指数バックオフで再試行する
+
+2. 保存失敗
+- 永続化 API の応答を記録し、同一データで再送する
+- 冪等キーで重複登録を防止する
+
+3. サイト仕様変更
+- Verifier で最小再現シナリオを作る
+- 必要に応じて `HorseRacingPrediction.WebBrowserAgentVerifier` を変更し、切り分けを優先する
+- 一時デバッグコードは修正完了後に削除または無効化する
+
+---
+
+## AI エージェントの役割（改訂後）
+
+AI を主オーケストレータとして使うのではなく、補助用途に限定する。
+
+- 収集失敗時の原因要約
+- 仕様変更時の抽出ルール提案
+- 監査結果の要約レポート生成
+
+定常のページ遷移、収集、保存、再試行は機械的ワークフローで実行する。
+
+---
+
+## 既存コンポーネントとの対応
+
+| 区分 | 主コンポーネント | 役割 |
+|---|---|---|
+| 収集 | `JraResultTopPageScraper` | 開催日、開催場の抽出 |
+| 収集 | `JraResultRaceListScraper` | レース番号抽出 |
+| 収集 | `JraRaceResultScraper` | 結果、着順、払戻抽出 |
+| 検証 | `HorseRacingPrediction.WebBrowserAgentVerifier` | シナリオ実行、デバッグ、最小再現 |
+| 保存 | API + WriteTools | 結果の冪等保存 |
+| 監査 | 週次監査ジョブ | 欠損、重複、再収集キュー生成 |
+
+---
+
+## KPI（運用評価）
+
+- 日次結果取得率
+- 当日公開レースの当日内保存率
+- 再試行成功率
+- 重複登録率
+- 欠損検知から復旧までの平均時間
+
+---
+
+## 今後の実装優先順位
+
+1. `DailyIngestionWorkflow` の新設
+2. レース単位状態管理テーブルの導入
+3. 冪等保存キーの標準化
+4. 週次監査ジョブの実装
+5. Verifier シナリオの拡充
+

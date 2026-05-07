@@ -53,7 +53,7 @@ public sealed class JraResultTopPageScraper : IScraper<IReadOnlyList<JraResultDa
         await _browser.NavigateAsync(url, cancellationToken);
         await _browser.ClickAsync("レース結果", cancellationToken);
 
-        var snapshot = await _browser.GetPageSnapshotAsync(cancellationToken: cancellationToken);
+        var snapshot = await _browser.GetPageSnapshotAsync(maxLinks: 1, cancellationToken: cancellationToken);
 
         var results = ExtractHoldings(snapshot);
 
@@ -72,6 +72,7 @@ public sealed class JraResultTopPageScraper : IScraper<IReadOnlyList<JraResultDa
         var sourceText = string.Join(" ",
             snapshot.Headings
                 .Concat(new[] { snapshot.MainText ?? string.Empty })
+                .Concat(snapshot.Actions.Select(a => a.Text))
                 .Concat(snapshot.Links.Select(l => l.Title)));
 
         var matches = HoldingButtonRegex.Matches(sourceText);

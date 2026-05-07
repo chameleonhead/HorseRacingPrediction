@@ -60,7 +60,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     public async Task<JraRaceResultData?> ScrapeCurrentPageAsync(
         CancellationToken cancellationToken = default)
     {
-        var snapshot = await _browser.GetPageSnapshotAsync(0, cancellationToken);
+        var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken);
         var url = _browser.CurrentUrl ?? string.Empty;
 
         var metadata = ParseRaceMetadata(snapshot);

@@ -38,8 +38,11 @@ public sealed class JraResultRaceListScraper : IScraper<IReadOnlyList<int>>
         await _browser.ClickAsync(holdingLabel, cancellationToken);
         var snapshot = await _browser.GetPageSnapshotAsync(cancellationToken: cancellationToken);
 
-        // Links.Title に "Xレース" が含まれる（<a><img alt="Xレース">）リンクをカウント
-        var combined = string.Join(" ", snapshot.Links.Select(l => l.Title));
+        // Actions (button/tab) のテキスト → Links.Title → MainText の順に "Xレース" を探す
+        var combined = string.Join(" ",
+            snapshot.Actions.Select(a => a.Text)
+                .Concat(snapshot.Links.Select(l => l.Title))
+                .Append(snapshot.MainText ?? string.Empty));
         var raceNumbers = RaceNumberRegex.Matches(combined)
             .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
             .Distinct()

@@ -21,6 +21,7 @@ public static class AgentHttpServiceCollectionExtensions
         services.AddHttpClient<IRaceQueryService, HttpRaceQueryService>(ConfigureClient);
         services.AddHttpClient<IPredictionWriteService, HttpPredictionWriteService>(ConfigureClient);
         services.AddHttpClient<IDataCollectionWriteService, HttpDataCollectionWriteService>(ConfigureClient);
+        services.AddHttpClient<IMemoWriteService, HttpMemoWriteService>(ConfigureClient);
 
         services.AddTransient<RaceQueryTools>();
         services.AddTransient<PredictionWriteTools>();

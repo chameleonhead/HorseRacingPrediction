@@ -1,12 +1,16 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -20,6 +24,7 @@ var scrapeCards = HasArg(args, "--scrape-cards");
 var maxScrapesArg = GetArgValue(args, "--max-scrapes");
 var targetUrlArg = GetArgValue(args, "--url");
 var extractionProfileArg = GetArgValue(args, "--extraction-profile");
+var dbPathArg = GetArgValue(args, "--db-path");
 
 var prompt = args.Length > 0
     ? string.Join(' ', args)
@@ -311,6 +316,149 @@ try
             await browser.GoBackAsync();
         }
     }
+    else if (string.Equals(scenario, "jra-race-results-eventflow-save", StringComparison.OrdinalIgnoreCase))
+    {
+        var entryUrl = targetUrlArg ?? JraResultTopPageScraper.DefaultEntryUrl;
+        var maxScrapes = maxScrapesArg is null
+            ? 1
+            : int.Parse(maxScrapesArg, CultureInfo.InvariantCulture);
+        var dbPath = string.IsNullOrWhiteSpace(dbPathArg)
+            ? Path.Combine(AppContext.BaseDirectory, "eventstore-verifier.db")
+            : dbPathArg;
+        var connectionString = $"Data Source={dbPath}";
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHorseRacingAgentDomainSupport(connectionString);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var writeTools = serviceProvider.GetRequiredService<DataCollectionWriteTools>();
+        var queryProcessor = serviceProvider.GetRequiredService<IQueryProcessor>();
+
+        var topScraper = new JraResultTopPageScraper(browser);
+        var raceListScraper = new JraResultRaceListScraper(browser);
+        var raceScraper = new JraRaceResultScraper(browser);
+
+        Console.WriteLine($"Entry   : {entryUrl}");
+        Console.WriteLine($"DB      : {dbPath}");
+        Console.WriteLine();
+
+        Console.WriteLine("[Layer 1] keiba/ → レース結果クリック → 開催日+開催ボタンを取得中...");
+        var dayCourseLinks = await topScraper.ScrapeAsync(entryUrl);
+
+        if (dayCourseLinks is null || dayCourseLinks.Count == 0)
+        {
+            Console.WriteLine("[Layer 1] 開催ボタンが見つかりませんでした。");
+            return;
+        }
+
+        Console.WriteLine($"[Layer 1] {dayCourseLinks.Count} 件");
+        foreach (var link in dayCourseLinks)
+        {
+            Console.WriteLine($"  {link.RaceDate:yyyy-MM-dd} {link.Racecourse ?? "-"} [{link.Label}]");
+        }
+
+        Console.WriteLine();
+
+        foreach (var dayCourse in dayCourseLinks.Take(maxScrapes))
+        {
+            Console.WriteLine($"[Layer 2] '{dayCourse.Label}' をクリック → レース番号取得中...");
+
+            IReadOnlyList<int>? raceNumbers;
+            try
+            {
+                raceNumbers = await raceListScraper.ScrapeAsync(dayCourse.Label);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Layer 2] クリック失敗: {ex.Message}");
+                continue;
+            }
+
+            if (raceNumbers is null || raceNumbers.Count == 0)
+            {
+                Console.WriteLine("[Layer 2] レース番号が見つかりませんでした。");
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            Console.WriteLine($"[Layer 2] {raceNumbers.Count} 件: {string.Join(", ", raceNumbers.Select(n => $"{n}R"))}");
+
+            var firstRaceNumber = raceNumbers.OrderBy(n => n).First();
+            var raceButtonText = $"{firstRaceNumber}レース";
+            Console.WriteLine($"[Layer 3] '{raceButtonText}' をクリック → 結果取得中...");
+
+            try
+            {
+                await browser.ClickAsync(raceButtonText);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Layer 3] クリック失敗: {ex.Message}");
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            JraRaceResultData? result;
+            try
+            {
+                result = await raceScraper.ScrapeCurrentPageAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Layer 3] スクレイプ失敗: {ex.Message}");
+                await browser.GoBackAsync();
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            if (result is null)
+            {
+                Console.WriteLine("[Layer 3] 取得失敗。");
+                await browser.GoBackAsync();
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            var sourceUrl = string.IsNullOrWhiteSpace(browser.CurrentUrl) ? result.Url : browser.CurrentUrl;
+            var source = JraRaceResultUrl.ParseFromUrl(sourceUrl, result.Racecourse ?? dayCourse.Racecourse);
+
+            var raceId = await SaveScrapedResultToEventFlowAsync(writeTools, source, result);
+            if (string.IsNullOrWhiteSpace(raceId))
+            {
+                Console.WriteLine("[Save] 保存スキップ: レース同定に必要な情報が不足しています。");
+                await browser.GoBackAsync();
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            var readModel = await queryProcessor.ProcessAsync(
+                new ReadModelByIdQuery<RaceResultViewReadModel>(raceId),
+                CancellationToken.None);
+            if (readModel is null || string.IsNullOrWhiteSpace(readModel.RaceId))
+            {
+                Console.WriteLine($"[Verify] NG: RaceId={raceId} のReadModelが取得できません。");
+            }
+            else
+            {
+                var winner = result.Entries.FirstOrDefault(e => e.FinishPosition == 1)?.HorseName;
+                var winnerMatched = !string.IsNullOrWhiteSpace(winner)
+                    && string.Equals(winner, readModel.WinningHorseName, StringComparison.Ordinal);
+
+                Console.WriteLine($"[Verify] RaceId={raceId}");
+                Console.WriteLine($"  ステータス: {readModel.Status}");
+                Console.WriteLine($"  着順件数: scraped={result.Entries.Count} db={readModel.EntryResults.Count}");
+                Console.WriteLine($"  勝ち馬一致: {(winnerMatched ? "OK" : "NG")} (scraped={winner ?? "-"} / db={readModel.WinningHorseName ?? "-"})");
+                Console.WriteLine($"  払戻登録: {(readModel.PayoutResult is null ? "なし" : "あり")}");
+            }
+
+            Console.WriteLine();
+
+            // 結果ページ → レース一覧ページ → 開催選択ページへ戻す
+            await browser.GoBackAsync();
+            await browser.GoBackAsync();
+        }
+    }
     else if (string.Equals(scenario, "monthly-race-discovery", StringComparison.OrdinalIgnoreCase))
     {
         var runDate = runDateArg is null
@@ -429,6 +577,148 @@ static string GetJapaneseDayOfWeek(DayOfWeek dayOfWeek)
         DayOfWeek.Friday => "金",
         DayOfWeek.Saturday => "土",
         _ => dayOfWeek.ToString()
+    };
+}
+
+static async Task<string?> SaveScrapedResultToEventFlowAsync(
+    DataCollectionWriteTools writeTools,
+    JraRaceResultUrl source,
+    JraRaceResultData data)
+{
+    var raceDate = data.RaceDate ?? source.RaceDate;
+    var raceNumber = data.RaceNumber ?? source.RaceNumber;
+    var racecourseCode = ResolveRacecourseCode(data.Racecourse, source.RacecourseCode, source.Racecourse);
+
+    if (raceDate is null || raceNumber is null || string.IsNullOrWhiteSpace(racecourseCode))
+    {
+        return null;
+    }
+
+    var raceName = string.IsNullOrWhiteSpace(data.RaceName)
+        ? $"R{raceNumber.Value}"
+        : data.RaceName;
+
+    var raceId = await writeTools.UpsertRace(
+        raceDate: raceDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        racecourseCode: racecourseCode,
+        raceNumber: raceNumber.Value,
+        raceName: raceName,
+        entryCount: data.Entries.Count > 0 ? data.Entries.Count : null,
+        gradeCode: data.Grade,
+        surfaceCode: data.CourseType,
+        distanceMeters: data.Distance);
+
+    foreach (var entry in data.Entries)
+    {
+        var (sexCode, age) = ParseSexAge(entry.SexAge);
+
+        await writeTools.UpsertRaceEntry(
+            raceId: raceId,
+            horseNumber: entry.HorseNumber,
+            horseName: entry.HorseName,
+            jockeyName: entry.JockeyName,
+            trainerName: entry.TrainerName,
+            gateNumber: entry.GateNumber,
+            assignedWeight: entry.Weight,
+            sexCode: sexCode,
+            age: age,
+            declaredWeight: entry.BodyWeight,
+            declaredWeightDiff: entry.BodyWeightDiff);
+    }
+
+    var winner = data.Entries.FirstOrDefault(e => e.FinishPosition == 1);
+    if (winner is null)
+    {
+        return raceId;
+    }
+
+    await writeTools.DeclareRaceResult(
+        raceId: raceId,
+        winningHorseName: winner.HorseName);
+
+    foreach (var entry in data.Entries)
+    {
+        await writeTools.DeclareRaceEntryResult(
+            raceId: raceId,
+            horseNumber: entry.HorseNumber,
+            finishPosition: entry.FinishPosition,
+            officialTime: entry.OfficialTime,
+            marginText: entry.MarginText,
+            lastThreeFurlongTime: entry.LastThreeFurlongTime,
+            abnormalResultCode: entry.AbnormalResultCode,
+            prizeMoney: null);
+    }
+
+    if (data.Payouts is not null)
+    {
+        await writeTools.DeclareRacePayouts(
+            raceId: raceId,
+            winPayoutsJson: ToPayoutJson(data.Payouts.WinPayouts),
+            placePayoutsJson: ToPayoutJson(data.Payouts.PlacePayouts),
+            quinellaPayoutsJson: ToPayoutJson(data.Payouts.QuinellaPayouts),
+            exactaPayoutsJson: ToPayoutJson(data.Payouts.ExactaPayouts),
+            trifectaPayoutsJson: ToPayoutJson(data.Payouts.TrifectaPayouts));
+    }
+
+    return raceId;
+}
+
+static string? ToPayoutJson(IReadOnlyList<JraPayoutEntry> entries)
+{
+    if (entries.Count == 0)
+    {
+        return null;
+    }
+
+    var payload = entries.Select(e => new { combination = e.Combination, amount = e.Amount });
+    return JsonSerializer.Serialize(payload);
+}
+
+static (string? sexCode, int? age) ParseSexAge(string? sexAge)
+{
+    if (string.IsNullOrWhiteSpace(sexAge))
+    {
+        return (null, null);
+    }
+
+    var trimmed = sexAge.Trim();
+    var sexCode = trimmed.Length > 0 ? trimmed[0].ToString() : null;
+    var digits = new string(trimmed.Skip(1).Where(char.IsDigit).ToArray());
+    var age = int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedAge)
+        ? parsedAge
+        : (int?)null;
+    return (sexCode, age);
+}
+
+static string? ResolveRacecourseCode(string? racecourse, string? racecourseCode, string? fallbackRacecourse)
+{
+    if (!string.IsNullOrWhiteSpace(racecourseCode))
+    {
+        return racecourseCode;
+    }
+
+    var key = !string.IsNullOrWhiteSpace(racecourse)
+        ? racecourse.Trim()
+        : fallbackRacecourse?.Trim();
+
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        return null;
+    }
+
+    return key switch
+    {
+        "札幌" => "01",
+        "函館" => "02",
+        "福島" => "03",
+        "新潟" => "04",
+        "東京" => "05",
+        "中山" => "06",
+        "中京" => "07",
+        "京都" => "08",
+        "阪神" => "09",
+        "小倉" => "10",
+        _ => key,
     };
 }
 

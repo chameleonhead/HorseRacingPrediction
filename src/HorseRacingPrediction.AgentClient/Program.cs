@@ -66,7 +66,6 @@ builder.Services.Configure<WebFetchOptions>(
 builder.Services.AddWebBrowserAgent();
 builder.Services.AddPredictionWorkflow();
 builder.Services.AddDataCollectionWorkflow();
-builder.Services.AddWeeklyScheduleWorkflow();
 builder.Services.AddJraRaceCardCollectionWorkflow();
 builder.Services.AddJraRaceResultCollectionWorkflow();
 
@@ -78,11 +77,6 @@ builder.Services.AddJraRaceResultCollectionWorkflow();
 builder.AddAIAgent(
     WebBrowserAgent.AgentName,
     (sp, name) => sp.CreateWebBrowserChatAgent(name));
-
-// 週末レース発見エージェント（木曜フェーズ）
-builder.AddAIAgent(
-    WeekendRaceDiscoveryAgent.AgentName,
-    (sp, name) => sp.CreateWeekendRaceDiscoveryChatAgent(name));
 
 // レース情報収集エージェント
 builder.AddAIAgent(
@@ -156,12 +150,14 @@ builder.AddWorkflow(
     }).AddAsAIAgent();
 
 // -------------------------------------------------------------------
-// 週次自動スケジューラー
+// 収集登録処理 / 予想処理（分離）
 // -------------------------------------------------------------------
-builder.Services.Configure<WeeklySchedulerOptions>(
-    builder.Configuration.GetSection(WeeklySchedulerOptions.SectionName));
-builder.Services.AddSingleton<WeeklyStateStore>();
-builder.Services.AddHostedService<WeeklySchedulerService>();
+builder.Services.Configure<AgentProcessingOptions>(
+    builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
+builder.Services.AddSingleton<ProcessingStateStore>();
+builder.Services.AddTransient<RaceTextInsightCollector>();
+builder.Services.AddHostedService<ScrapingRegistrationService>();
+builder.Services.AddHostedService<PredictionExecutionService>();
 
 // -------------------------------------------------------------------
 // OpenAI Responses / Conversations エンドポイント（DevUI 必須）
