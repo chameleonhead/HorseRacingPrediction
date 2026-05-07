@@ -216,6 +216,101 @@ try
             Console.WriteLine($"  結果URL: {race.ResultUrl ?? "-"}");
         }
     }
+    else if (string.Equals(scenario, "jra-race-results", StringComparison.OrdinalIgnoreCase))
+    {
+        var entryUrl = targetUrlArg ?? JraResultTopPageScraper.DefaultEntryUrl;
+        var maxScrapes = maxScrapesArg is null
+            ? 1
+            : int.Parse(maxScrapesArg, CultureInfo.InvariantCulture);
+
+        var topScraper = new JraResultTopPageScraper(browser);
+        var raceListScraper = new JraResultRaceListScraper(browser);
+        var raceScraper = new JraRaceResultScraper(browser);
+
+        Console.WriteLine($"Entry   : {entryUrl}");
+        Console.WriteLine();
+
+        Console.WriteLine("[Layer 1] keiba/ → レース結果クリック → 開催日+開催ボタンを取得中...");
+        var dayCourseLinks = await topScraper.ScrapeAsync(entryUrl);
+
+        if (dayCourseLinks is null || dayCourseLinks.Count == 0)
+        {
+            Console.WriteLine("[Layer 1] 開催ボタンが見つかりませんでした。");
+            return;
+        }
+
+        Console.WriteLine($"[Layer 1] {dayCourseLinks.Count} 件");
+        foreach (var link in dayCourseLinks)
+        {
+            Console.WriteLine($"  {link.RaceDate:yyyy-MM-dd} {link.Racecourse ?? "-"} [{link.Label}]");
+        }
+
+        Console.WriteLine();
+
+        foreach (var dayCourse in dayCourseLinks.Take(maxScrapes))
+        {
+            Console.WriteLine($"[Layer 2] '{dayCourse.Label}' をクリック → レース番号取得中...");
+
+            IReadOnlyList<int>? raceNumbers;
+            try
+            {
+                raceNumbers = await raceListScraper.ScrapeAsync(dayCourse.Label);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Layer 2] クリック失敗: {ex.Message}");
+                continue;
+            }
+
+            if (raceNumbers is null || raceNumbers.Count == 0)
+            {
+                Console.WriteLine("[Layer 2] レース番号が見つかりませんでした。");
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            Console.WriteLine($"[Layer 2] {raceNumbers.Count} 件: {string.Join(", ", raceNumbers.Select(n => $"{n}R"))}");
+            Console.WriteLine();
+
+            var firstRaceNumber = raceNumbers.OrderBy(n => n).First();
+            var raceButtonText = $"{firstRaceNumber}レース";
+            Console.WriteLine($"[Layer 3] '{raceButtonText}' をクリック → 結果取得中...");
+
+            try
+            {
+                await browser.ClickAsync(raceButtonText);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Layer 3] クリック失敗: {ex.Message}");
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            var result = await raceScraper.ScrapeCurrentPageAsync();
+            if (result is null)
+            {
+                Console.WriteLine("[Layer 3] 取得失敗。");
+                await browser.GoBackAsync();
+                await browser.GoBackAsync();
+                continue;
+            }
+
+            Console.WriteLine($"[Layer 3] {result.RaceDate:yyyy-MM-dd} {result.Racecourse} {result.RaceNumber}R {result.RaceName}");
+            Console.WriteLine($"  コース: {result.CourseType}{result.Distance}m / グレード: {result.Grade ?? "-"}");
+            Console.WriteLine($"  着順結果 ({result.Entries.Count} 頭):");
+            foreach (var entry in result.Entries.OrderBy(e => e.FinishPosition).Take(5))
+            {
+                Console.WriteLine($"    {entry.FinishPosition}着 {entry.HorseNumber}番 {entry.HorseName} ({entry.JockeyName}) {entry.OfficialTime}");
+            }
+
+            Console.WriteLine();
+
+            // 結果ページ → レース一覧ページ → 開催選択ページへ戻す
+            await browser.GoBackAsync();
+            await browser.GoBackAsync();
+        }
+    }
     else if (string.Equals(scenario, "monthly-race-discovery", StringComparison.OrdinalIgnoreCase))
     {
         var runDate = runDateArg is null

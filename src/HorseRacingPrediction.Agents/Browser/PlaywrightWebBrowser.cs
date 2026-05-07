@@ -671,6 +671,16 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 ?? await locator.GetAttributeAsync("value");
         }
 
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            // 子 <img> の alt テキストをフォールバックとして使う（例: <a><img alt="1レース"></a>）
+            var img = locator.Locator("img[alt]");
+            if (await img.CountAsync() > 0)
+            {
+                text = await img.First.GetAttributeAsync("alt");
+            }
+        }
+
         return NormalizeText(text);
     }
 

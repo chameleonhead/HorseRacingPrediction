@@ -50,7 +50,18 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         CancellationToken cancellationToken = default)
     {
         await _browser.NavigateAsync(url, cancellationToken);
+        return await ScrapeCurrentPageAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// ブラウザが既にレース結果ページを表示している状態でページを解析する。
+    /// クリックで遷移した直後に呼び出すことで URL ナビゲーションを省略できる。
+    /// </summary>
+    public async Task<JraRaceResultData?> ScrapeCurrentPageAsync(
+        CancellationToken cancellationToken = default)
+    {
         var snapshot = await _browser.GetPageSnapshotAsync(0, cancellationToken);
+        var url = _browser.CurrentUrl ?? string.Empty;
 
         var metadata = ParseRaceMetadata(snapshot);
         var entries = ParseResultEntries(snapshot.Tables);
@@ -79,9 +90,10 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         var searchText = $"{snapshot.Title}\n{headingsText}\n{snapshot.MainText}";
 
         var raceName = ExtractRaceName(snapshot);
-        var racecourse = ExtractRacecourse(searchText);
+        // 競馬場・レース番号はヘッダー優先（MainText に他開催名が混入するため）
+        var racecourse = ExtractRacecourse(headingsText) ?? ExtractRacecourse(searchText);
         var raceDate = ExtractDate(searchText);
-        var raceNumber = ExtractRaceNumber(searchText);
+        var raceNumber = ExtractRaceNumber(headingsText) ?? ExtractRaceNumber(searchText);
         var courseType = ExtractCourseType(searchText);
         var distance = ExtractDistance(searchText);
         var grade = ExtractGrade(searchText);
@@ -141,6 +153,12 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         if (!match.Success)
         {
             match = Regex.Match(text, @"第(\d{1,2})レース");
+        }
+
+        if (!match.Success)
+        {
+            // "1レース" 形式（JRA ページ見出しの alt テキスト由来）
+            match = Regex.Match(text, @"(\d{1,2})レース");
         }
 
         if (!match.Success)
@@ -543,7 +561,16 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (candidates.Any(c => headers[i].Contains(c, StringComparison.OrdinalIgnoreCase)))
+            // ページから取得したヘッダーに空白が混入する場合があるため空白除去後に比較する
+            var normalizedHeader = headers[i]
+                .Replace(" ", string.Empty, StringComparison.Ordinal)
+                .Replace("\u3000", string.Empty, StringComparison.Ordinal);
+            if (candidates.Any(c =>
+            {
+                var nc = c.Replace(" ", string.Empty, StringComparison.Ordinal)
+                           .Replace("\u3000", string.Empty, StringComparison.Ordinal);
+                return normalizedHeader.Contains(nc, StringComparison.OrdinalIgnoreCase);
+            }))
             {
                 return i;
             }
