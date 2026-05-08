@@ -317,6 +317,32 @@ try
         Console.WriteLine($"  Status       : {readModel.Status}");
         Console.WriteLine($"  EntryResults : {readModel.EntryResults.Count}");
     }
+    else if (string.Equals(scenario, "jra-structured-thisweek", StringComparison.OrdinalIgnoreCase))
+    {
+        var url = string.IsNullOrWhiteSpace(targetUrlArg)
+            ? "https://www.jra.go.jp/keiba/thisweek/"
+            : targetUrlArg;
+
+        await using var jraAgent = await JraTaskAgent.CreateAsync();
+        await jraAgent.NavigateAsync(url);
+        var structured = await jraAgent.ExtractCurrentStructuredPageAsync();
+
+        Console.WriteLine($"URL        : {url}");
+        PrintStructuredPageEnvelope(structured);
+    }
+    else if (string.Equals(scenario, "jra-structured-g1", StringComparison.OrdinalIgnoreCase))
+    {
+        var url = string.IsNullOrWhiteSpace(targetUrlArg)
+            ? "https://www.jra.go.jp/keiba/g1/nmc.html"
+            : targetUrlArg;
+
+        await using var jraAgent = await JraTaskAgent.CreateAsync();
+        await jraAgent.NavigateAsync(url);
+        var structured = await jraAgent.ExtractCurrentStructuredPageAsync();
+
+        Console.WriteLine($"URL        : {url}");
+        PrintStructuredPageEnvelope(structured);
+    }
     else if (string.Equals(scenario, "jra-race-result-collection-debug", StringComparison.OrdinalIgnoreCase))
     {
         var runDate = runDateArg is null
@@ -524,6 +550,53 @@ static string GetJapaneseDayOfWeek(DayOfWeek dayOfWeek)
         DayOfWeek.Saturday => "土",
         _ => dayOfWeek.ToString()
     };
+}
+
+static void PrintStructuredPageEnvelope(JraStructuredPageEnvelope envelope)
+{
+    Console.WriteLine($"Success    : {envelope.Success}");
+    Console.WriteLine($"PageKind   : {envelope.PageKind}");
+    Console.WriteLine($"SourceUrl  : {envelope.SourceUrl}");
+    Console.WriteLine($"Confidence : {envelope.Confidence}");
+
+    if (!string.IsNullOrWhiteSpace(envelope.Error))
+    {
+        Console.WriteLine($"Error      : {envelope.Error}");
+    }
+
+    if (envelope.Issues.Count > 0)
+    {
+        Console.WriteLine("Issues     :");
+        foreach (var issue in envelope.Issues)
+        {
+            Console.WriteLine($"  - [{issue.Severity}] {issue.Code}: {issue.Message}");
+        }
+    }
+
+    if (envelope.RecommendedNextLinks.Count > 0)
+    {
+        Console.WriteLine("NextLinks  :");
+        foreach (var nextLink in envelope.RecommendedNextLinks)
+        {
+            Console.WriteLine($"  - {nextLink.Relation} | {nextLink.Label} | {nextLink.NavigationMode} | {nextLink.Url}");
+        }
+    }
+
+    if (envelope.Data is JraThisWeekPage thisWeekPage)
+    {
+        Console.WriteLine("Featured   :");
+        foreach (var race in thisWeekPage.FeaturedRaces)
+        {
+            Console.WriteLine($"  - {race.RaceDate:yyyy-MM-dd} {race.RaceName} {race.Grade} {race.Racecourse} {race.Distance}");
+        }
+    }
+    else if (envelope.Data is JraGradeOneSpecialPage gradeOnePage)
+    {
+        Console.WriteLine($"RaceName   : {gradeOnePage.RaceName}");
+        Console.WriteLine($"RaceDate   : {gradeOnePage.RaceDate:yyyy-MM-dd}");
+        Console.WriteLine($"Racecourse : {gradeOnePage.Racecourse}");
+        Console.WriteLine($"Distance   : {gradeOnePage.Distance}");
+    }
 }
 
 static (string? sexCode, int? age) ParseSexAge(string? sexAge)

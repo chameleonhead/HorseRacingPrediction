@@ -90,7 +90,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         var searchText = $"{snapshot.Title}\n{headingsText}\n{snapshot.MainText}";
 
         var raceName = ExtractRaceName(snapshot);
-        var racecourse = ExtractRacecourse(searchText);
+        var racecourse = ExtractRacecourse(snapshot) ?? ExtractRacecourse(searchText);
         var raceDate = ExtractDate(searchText);
         var raceNumber = ExtractRaceNumber(searchText);
         var courseType = ExtractCourseType(searchText);
@@ -102,9 +102,37 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
     private static string ExtractRaceName(PageSnapshot snapshot)
     {
+        var headingRaceName = snapshot.Headings
+            .Select(CleanRaceName)
+            .FirstOrDefault(IsLikelyRaceName);
+        if (!string.IsNullOrWhiteSpace(headingRaceName))
+        {
+            return headingRaceName;
+        }
+
+        var combinedText = string.Join("\n", snapshot.Headings.Append(snapshot.MainText));
+        var raceLikeMatch = Regex.Match(
+            combinedText,
+            @"(?:第\d+回\s*)?(?<name>[^\s\r\n]+?)\s+G[ⅠⅡⅢ1-3]",
+            RegexOptions.CultureInvariant);
+        if (raceLikeMatch.Success && IsLikelyRaceName(raceLikeMatch.Groups["name"].Value))
+        {
+            return CleanRaceName(raceLikeMatch.Groups["name"].Value);
+        }
+
+        var namedRaceMatch = Regex.Match(
+            combinedText,
+            @"(?:第\d+回\s*)?(?<name>[^\s\r\n]+(?:記念|カップ|ステークス|賞|S))",
+            RegexOptions.CultureInvariant);
+        if (namedRaceMatch.Success && IsLikelyRaceName(namedRaceMatch.Groups["name"].Value))
+        {
+            return CleanRaceName(namedRaceMatch.Groups["name"].Value);
+        }
+
         var candidates = snapshot.Headings
             .Select(h => h.Trim())
             .Where(h => h.Length > 1)
+            .Where(h => !IsBoilerplateHeading(h))
             .Where(h => !IsCourseLine(h))
             .Where(h => !IsDateRaceNumberLine(h))
             .ToList();
@@ -119,6 +147,13 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     private static string? ExtractRacecourse(string text)
     {
         return RacecourseNames.FirstOrDefault(rc => text.Contains(rc, StringComparison.Ordinal));
+    }
+
+    private static string? ExtractRacecourse(PageSnapshot snapshot)
+    {
+        var source = string.Join("\n", snapshot.Headings.Append(snapshot.MainText));
+        var match = Regex.Match(source, @"\d+回(?<racecourse>東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)\d+日");
+        return match.Success ? match.Groups["racecourse"].Value : null;
     }
 
     private static DateOnly? ExtractDate(string text)
@@ -231,8 +266,43 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     private static bool ContainsKanji(string text) =>
         text.Any(c => c >= '\u4e00' && c <= '\u9fff');
 
+    private static bool IsBoilerplateHeading(string text)
+        => text.Contains("JRA 日本中央競馬会", StringComparison.Ordinal)
+           || text.StartsWith("出馬表", StringComparison.Ordinal)
+           || text.Contains("検索ウィンドウ", StringComparison.Ordinal)
+           || text.Contains("競馬メニュー", StringComparison.Ordinal)
+           || text.Contains("ニュース", StringComparison.Ordinal);
+
+    private static bool IsLikelyRaceName(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var cleaned = CleanRaceName(text);
+        if (string.IsNullOrWhiteSpace(cleaned)
+            || IsBoilerplateHeading(cleaned)
+            || cleaned.StartsWith("本賞", StringComparison.Ordinal)
+            || cleaned.StartsWith("付加賞", StringComparison.Ordinal)
+            || cleaned == "更新")
+        {
+            return false;
+        }
+
+        return cleaned.EndsWith("記念", StringComparison.Ordinal)
+            || cleaned.EndsWith("カップ", StringComparison.Ordinal)
+            || cleaned.EndsWith("ステークス", StringComparison.Ordinal)
+            || cleaned.EndsWith("新聞杯", StringComparison.Ordinal)
+            || cleaned.EndsWith("賞", StringComparison.Ordinal)
+            || cleaned.EndsWith("S", StringComparison.Ordinal);
+    }
+
     private static string CleanRaceName(string name)
     {
+        name = Regex.Replace(name, @"^第\d+回\s*", string.Empty, RegexOptions.CultureInvariant).Trim();
+        name = Regex.Replace(name, @"\s+G[ⅠⅡⅢ1-3]$", string.Empty, RegexOptions.CultureInvariant).Trim();
+
         // グレード表記（GⅠ等）が混入している場合はスペースで分割して先頭部分を使う
         var parts = name.Split([' ', '\u3000', '\t'], StringSplitOptions.RemoveEmptyEntries);
         return parts.Length > 0 ? string.Join(" ", parts) : name;

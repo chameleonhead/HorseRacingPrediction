@@ -90,7 +90,11 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
 
             var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 40, cancellationToken: cancellationToken);
             var extracted = await browser.ExtractCurrentPageAsync(cancellationToken);
+            var structuredPage = await browser.ExtractCurrentStructuredPageAsync(cancellationToken);
             var structured = extracted.Success ? extracted.Data : null;
+            var directNextLinks = structuredPage.RecommendedNextLinks
+                .Where(link => link.NavigationMode == JraStructuredLinkNavigationMode.DirectUrl && !string.IsNullOrWhiteSpace(link.Url))
+                .ToArray();
 
             var result = new
             {
@@ -101,7 +105,9 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
                 page = BuildPageSummary(snapshot),
                 pageKind = extracted.PageKind.ToString(),
                 extractionError = extracted.Error,
-                structured
+                structured,
+                structuredPage,
+                directNextLinks
             };
 
             return Serialize(result);

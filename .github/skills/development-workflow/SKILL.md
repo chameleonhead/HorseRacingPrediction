@@ -16,6 +16,12 @@ HorseRacingPrediction プロジェクトの開発手順。変更を加える際�
 
 ## 開発フロー
 
+### 実装共通規約
+
+- **原則: 1クラス1ファイル**
+- `class`, `record`, `enum`, `interface` は、ネストした補助型などの例外を除き、1型ごとに独立ファイルへ配置する
+- リファクタリング時も「ついでに同じファイルへ追加」は避け、型追加と同時にファイルを分ける
+
 ### 1. 影響範囲の確認
 
 変更対象のレイヤーを特定する。
@@ -32,12 +38,12 @@ HorseRacingPrediction プロジェクトの開発手順。変更を加える際�
 
 #### Domain 層の変更
 
-**原則: 1ファイル1クラス**
+**原則: 1クラス1ファイル**
 
 ```
 src/HorseRacingPrediction.Domain/
 ├── {AggregateRoot}/
-│   ├── {Name}Aggregate.cs          # 集約ルート（1ファイル1クラス）
+│   ├── {Name}Aggregate.cs          # 集約ルート（1クラス1ファイル）
 │   ├── {Name}State.cs              # 状態管理
 │   ├── {Name}Id.cs                 # Identity 型
 │   ├── {Name}Details.cs            # 集約の詳細 DTO
@@ -53,21 +59,21 @@ src/HorseRacingPrediction.Domain/
 
 #### Application 層の変更
 
-**原則: 1ファイル1クラス**
+**原則: 1クラス1ファイル**
 
 ```
 src/HorseRacingPrediction.Application/
 ├── Commands/
 │   └── {AggregateRoot}/
-│       ├── {Name}Command.cs            # コマンド（1ファイル1クラス）
-│       ├── {Name}CommandHandler.cs     # ハンドラー（1ファイル1クラス）
+│       ├── {Name}Command.cs            # コマンド（1クラス1ファイル）
+│       ├── {Name}CommandHandler.cs     # ハンドラー（1クラス1ファイル）
 │       └── ...                         # 各コマンド・ハンドラーを個別ファイルに
 └── Queries/
     └── ReadModels/
         ├── {Name}ReadModel.cs          # メイン ReadModel
-        ├── {Name}Snapshot.cs           # スナップショット DTO（1ファイル1クラス）
-        ├── {Name}Entry.cs              # サブ DTO（1ファイル1クラス）
-        └── {Name}Status.cs             # enum（1ファイル1クラス）
+        ├── {Name}Snapshot.cs           # スナップショット DTO（1クラス1ファイル）
+        ├── {Name}Entry.cs              # サブ DTO（1クラス1ファイル）
+        └── {Name}Status.cs             # enum（1クラス1ファイル）
 ```
 
 - コマンドとコマンドハンドラーはそれぞれ独立したファイルに配置
@@ -89,8 +95,8 @@ src/HorseRacingPrediction.Application/
 ```
 src/HorseRacingPrediction.Api/
 ├── Contracts/
-│   ├── {Name}Request.cs        # リクエスト DTO（1ファイル1クラス）
-│   └── {Name}Response.cs       # レスポンス DTO（1ファイル1クラス）
+│   ├── {Name}Request.cs        # リクエスト DTO（1クラス1ファイル）
+│   └── {Name}Response.cs       # レスポンス DTO（1クラス1ファイル）
 ├── Security/
 │   ├── ApiKeyEndpointFilter.cs
 │   └── ApiKeyOptions.cs

@@ -137,6 +137,17 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             throw new InvalidOperationException($"テキスト '{text}' に一致するクリック可能要素が見つかりませんでした。");
         }
 
+        var href = await target.GetAttributeAsync("href");
+        if (TryResolveNavigableHref(CurrentUrl, href, out var resolvedHref))
+        {
+            _logger.LogInformation(
+                "Browser click resolved to direct navigation. Text={Text} Href={Href} ResolvedHref={ResolvedHref}",
+                text,
+                href,
+                resolvedHref);
+            return await NavigateAsync(resolvedHref!, cancellationToken);
+        }
+
         await target.ScrollIntoViewIfNeededAsync();
         await target.ClickAsync();
 
@@ -742,4 +753,40 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             throw new ArgumentException($"URL の形式が不正です: {url}", parameterName);
         }
     }
+
+    private static bool TryResolveNavigableHref(string? currentUrl, string? href, out string? resolvedHref)
+    {
+        resolvedHref = null;
+
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return false;
+        }
+
+        var trimmedHref = href.Trim();
+        if (trimmedHref.StartsWith('#')
+            || trimmedHref.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (Uri.TryCreate(trimmedHref, UriKind.Absolute, out var absoluteUri)
+            && absoluteUri.Scheme is "http" or "https")
+        {
+            resolvedHref = absoluteUri.ToString();
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentUrl)
+            && Uri.TryCreate(currentUrl, UriKind.Absolute, out var currentUri)
+            && Uri.TryCreate(currentUri, trimmedHref, out var resolvedUri)
+            && resolvedUri.Scheme is "http" or "https")
+        {
+            resolvedHref = resolvedUri.ToString();
+            return true;
+        }
+
+        return false;
+    }
+
 }

@@ -51,6 +51,12 @@ dotnet test tests/HorseRacingPrediction.Api.Tests
 
 ## Conventions
 
+### File Organization
+
+- 原則として 1ファイル1クラスを守る
+- `class`, `record`, `enum`, `interface` は、ネストした補助型や言語仕様上やむを得ない例外を除き、1型ごとに独立ファイルへ配置する
+- 一時的な実装都合で複数型を同居させず、追加時点で対応ファイルを分割する
+
 ### Domain
 
 - 集約IDは `EventFlow.Core.Identity<T>` を継承した専用型を使用（`RaceId`, `PredictionTicketId`）

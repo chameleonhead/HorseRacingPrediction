@@ -22,6 +22,14 @@ public sealed class JraTaskAgent : IAsyncDisposable
         @"(?<!\d)(?<month>\d{1,2})\s*月\s*(?<day>\d{1,2})\s*日",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex CompactDateRegex = new(
+        @"(?<!\d)(?<date>20\d{6})(?!\d)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex HeadingDateRegex = new(
+        @"(?<month>\d{1,2})月(?<day>\d{1,2})日（[^）]+）",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private PlaywrightWebBrowser? _browser;
     private readonly JraSessionMemory _memory;
     private readonly JraNavigationPlanner _planner;
@@ -97,66 +105,89 @@ public sealed class JraTaskAgent : IAsyncDisposable
             await Browser.NavigateAsync(EntryUrl, cancellationToken);
             steps.Add($"navigate: {EntryUrl}");
 
-            await Browser.ClickAsync("出馬表", cancellationToken);
-            steps.Add("click: 出馬表");
+            var menuSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 80, cancellationToken: cancellationToken);
+            var menuPage = new JraKeibaMenuParser().Parse(menuSnapshot);
+            if (!menuPage.Success || menuPage.Data is null)
+            {
+                return JraExtractionEnvelope<JraRaceScheduleCalendar>.Failure(
+                    JraPageKind.KeibaMenu,
+                    Browser.CurrentUrl ?? EntryUrl,
+                    new JraNavigationTrace(steps, sw.Elapsed),
+                    menuPage.Error ?? "競馬メニューの解析に失敗しました。");
+            }
+
+            var scheduleLabel = menuPage.Data.ScheduleEntryText ?? "開催日程";
+            await Browser.ClickAsync(scheduleLabel, cancellationToken);
+            steps.Add($"click: {scheduleLabel}");
             SyncMemoryFromUrl();
 
-            var raceDates = new HashSet<DateOnly>();
-            var firstSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: cancellationToken);
-            ExtractScheduleDates(firstSnapshot, referenceDate, raceDates);
+            var collectedDays = new Dictionary<DateOnly, JraRaceScheduleDay>();
+            var issues = new List<JraPageParseIssue>();
+            var visitedMonths = new HashSet<int>();
 
-            var holdings = ExtractHoldingLabels(firstSnapshot)
-                .Distinct(StringComparer.Ordinal)
-                .Take(10)
-                .ToList();
-
-            var shouldStop = false;
-
-            foreach (var holding in holdings)
+            while (true)
             {
-                if (shouldStop)
+                var calendarSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: cancellationToken);
+                var calendarPage = new JraScheduleCalendarParser().Parse(calendarSnapshot);
+                if (calendarPage.Data is null)
                 {
                     break;
                 }
 
-                var clicked = false;
-                try
+                issues.AddRange(calendarPage.Issues);
+                if (calendarPage.Data.Month is int currentMonth)
                 {
-                    await Browser.ClickAsync(holding, cancellationToken);
-                    clicked = true;
-                    steps.Add($"click: {holding}");
+                    visitedMonths.Add(currentMonth);
+                }
 
-                    var detailSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: cancellationToken);
-                    ExtractScheduleDates(detailSnapshot, referenceDate, raceDates);
-                }
-                catch
+                foreach (var day in calendarPage.Data.ScheduledDays.Where(day => day.Date >= referenceDate))
                 {
-                    // クリックできない候補は次へ進む。
+                    collectedDays[day.Date] = day;
                 }
-                finally
+
+                var nextMonthLink = calendarPage.Data.AvailableMonths
+                    .Where(link => !visitedMonths.Contains(link.Month) && link.Month >= referenceDate.Month)
+                    .OrderBy(link => link.Month)
+                    .FirstOrDefault();
+
+                if (nextMonthLink is null)
                 {
-                    if (clicked)
-                    {
-                        try
-                        {
-                            await Browser.GoBackAsync(cancellationToken);
-                            steps.Add("back");
-                        }
-                        catch
-                        {
-                            // GoBack 失敗時は後続候補を諦める。
-                            shouldStop = true;
-                        }
-                    }
+                    break;
                 }
+
+                if (!string.IsNullOrWhiteSpace(nextMonthLink.Url))
+                {
+                    await Browser.NavigateAsync(nextMonthLink.Url, cancellationToken);
+                    steps.Add($"navigate: {nextMonthLink.Url}");
+                }
+                else
+                {
+                    await Browser.ClickAsync(nextMonthLink.Text, cancellationToken);
+                    steps.Add($"click: {nextMonthLink.Text}");
+                }
+
+                SyncMemoryFromUrl();
             }
 
-            var ordered = raceDates.OrderBy(d => d).ToList();
+            var orderedDays = collectedDays.Values.OrderBy(day => day.Date).ToList();
+            var ordered = orderedDays.Select(day => day.Date).ToList();
             var sourceUrl = Browser.CurrentUrl ?? EntryUrl;
-            var data = new JraRaceScheduleCalendar(referenceDate, ordered, sourceUrl);
+
+            if (ordered.Count == 0)
+            {
+                return JraExtractionEnvelope<JraRaceScheduleCalendar>.Failure(
+                    JraPageKind.ScheduleCalendar,
+                    sourceUrl,
+                    new JraNavigationTrace(steps, sw.Elapsed),
+                    issues.Count > 0
+                        ? string.Join(" / ", issues.Select(issue => issue.Message).Distinct(StringComparer.Ordinal))
+                        : "開催日程カレンダーから有効な開催日を抽出できませんでした。");
+            }
+
+            var data = new JraRaceScheduleCalendar(referenceDate, ordered, sourceUrl, orderedDays, issues);
             return new JraExtractionEnvelope<JraRaceScheduleCalendar>(
                 true,
-                JraPageKind.Unknown,
+                JraPageKind.ScheduleCalendar,
                 sourceUrl,
                 new JraNavigationTrace(steps, sw.Elapsed),
                 data,
@@ -176,6 +207,15 @@ public sealed class JraTaskAgent : IAsyncDisposable
     {
         var sw = Stopwatch.StartNew();
         return await ExtractCurrentAsync(new List<string>(), sw, cancellationToken);
+    }
+
+    public async Task<JraStructuredPageEnvelope> ExtractCurrentStructuredPageAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken);
+        var kind = JraPageKindDetector.Detect(Browser.CurrentUrl, snapshot);
+        _memory.RecordNavigation(Browser.CurrentUrl ?? snapshot.Url, kind);
+        return JraStructuredPageParserRegistry.Parse(kind, snapshot);
     }
 
     public async Task NavigateAsync(string url, CancellationToken cancellationToken = default)
@@ -389,7 +429,33 @@ public sealed class JraTaskAgent : IAsyncDisposable
         steps.Add("click: 出馬表");
 
         var holdingsUrl      = Browser.CurrentUrl;
-        var holdingsSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 30, cancellationToken: ct);
+        var holdingsSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: ct);
+
+        if (await TryNavigateDirectRaceLinkFromHoldingSelectionAsync(holdingsSnapshot, date, racecourse, raceNumber, steps, ct))
+        {
+            _memory.SetRaceContext(date, racecourse, raceNumber);
+            SyncMemoryFromUrl();
+            if (!string.IsNullOrWhiteSpace(Browser.CurrentUrl))
+                _memory.SetRaceCardUrl(Browser.CurrentUrl);
+            return;
+        }
+
+        var scopedHolding = FindHoldingLabelForDate(holdingsSnapshot, date, racecourse);
+        if (!string.IsNullOrWhiteSpace(scopedHolding))
+        {
+            await Browser.ClickAsync(scopedHolding, ct);
+            steps.Add($"click: {scopedHolding}");
+
+            if (await TryClickRaceNumberAsync(raceNumber, steps, ct))
+            {
+                _memory.SetRaceContext(date, racecourse, raceNumber);
+                SyncMemoryFromUrl();
+                if (!string.IsNullOrWhiteSpace(Browser.CurrentUrl))
+                    _memory.SetRaceCardUrl(Browser.CurrentUrl);
+                return;
+            }
+        }
+
         var holdings         = ExtractHoldingLabels(holdingsSnapshot);
 
         if (holdings.Count == 0)
@@ -416,7 +482,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
             await Browser.ClickAsync(holding, ct);
             steps.Add($"click: {holding}");
 
-            var raceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
+            var raceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: ct);
             var hasTargetDate =
                 raceListSnapshot.MainText.Contains(dateText, StringComparison.Ordinal)
                 || raceListSnapshot.Headings.Any(h => h.Contains(dateText, StringComparison.Ordinal));
@@ -447,6 +513,39 @@ public sealed class JraTaskAgent : IAsyncDisposable
             return true;
         }
         catch { return false; }
+    }
+
+    private async Task<bool> TryNavigateDirectRaceLinkFromHoldingSelectionAsync(
+        PageSnapshot snapshot,
+        DateOnly date,
+        string racecourse,
+        int raceNumber,
+        List<string> steps,
+        CancellationToken ct)
+    {
+        var directRaceLink = snapshot.Links
+            .Select(link => new
+            {
+                link.Title,
+                Url = ResolveUrl(snapshot.Url, link.Url),
+                MatchesHeadingDate = IsLinkScopedUnderDateHeading(snapshot.MainText, link.Title, date),
+                MatchesCompactDate = UrlContainsDate(link.Url, date.ToString("yyyyMMdd", CultureInfo.InvariantCulture)),
+            })
+            .Where(link => !string.IsNullOrWhiteSpace(link.Url)
+                && ContainsNormalized(link.Title, racecourse)
+                && ContainsNormalized(link.Title, $"{raceNumber}R"))
+            .OrderByDescending(link => link.MatchesHeadingDate)
+            .ThenByDescending(link => link.MatchesCompactDate)
+            .FirstOrDefault(link => link.MatchesHeadingDate || link.MatchesCompactDate);
+
+        if (directRaceLink is null)
+        {
+            return false;
+        }
+
+        await Browser.NavigateAsync(directRaceLink.Url!, ct);
+        steps.Add($"navigate: {directRaceLink.Url}");
+        return true;
     }
 
     private async Task<JraExtractionEnvelope> ExtractCurrentAsync(
@@ -497,6 +596,22 @@ public sealed class JraTaskAgent : IAsyncDisposable
             .SelectMany(s => HoldingLabelRegex.Matches(s!).Select(m => m.Value))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static string? FindHoldingLabelForDate(PageSnapshot snapshot, DateOnly date, string racecourse)
+    {
+        return snapshot.Links
+            .Select(link => new
+            {
+                link.Title,
+                Label = HoldingLabelRegex.Match(link.Title ?? string.Empty) is { Success: true } match ? match.Value : null,
+                MatchesDate = IsLinkScopedUnderDateHeading(snapshot.MainText, link.Title, date),
+            })
+            .Where(link => !string.IsNullOrWhiteSpace(link.Label)
+                && link.MatchesDate
+                && ContainsNormalized(link.Label!, racecourse))
+            .Select(link => link.Label)
+            .FirstOrDefault();
     }
 
     private static IReadOnlyList<string> BuildEntityClickCandidates(string rawName)
@@ -560,6 +675,91 @@ public sealed class JraTaskAgent : IAsyncDisposable
             }
         }
     }
+
+    private static bool IsLinkScopedUnderDateHeading(string mainText, string linkTitle, DateOnly date)
+    {
+        if (string.IsNullOrWhiteSpace(mainText) || string.IsNullOrWhiteSpace(linkTitle))
+        {
+            return false;
+        }
+
+        var normalizedText = NormalizeLoose(mainText);
+        var normalizedTitle = NormalizeLoose(linkTitle);
+        if (string.IsNullOrWhiteSpace(normalizedText) || string.IsNullOrWhiteSpace(normalizedTitle))
+        {
+            return false;
+        }
+
+        var matches = HeadingDateRegex.Matches(normalizedText);
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var heading = matches[index];
+            if (!int.TryParse(heading.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month)
+                || !int.TryParse(heading.Groups["day"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day)
+                || month != date.Month
+                || day != date.Day)
+            {
+                continue;
+            }
+
+            var start = heading.Index;
+            var end = index + 1 < matches.Count ? matches[index + 1].Index : normalizedText.Length;
+            if (end <= start)
+            {
+                continue;
+            }
+
+            if (normalizedText.Substring(start, end - start).Contains(normalizedTitle, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool UrlContainsDate(string? url, string dateToken)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        var match = CompactDateRegex.Match(url);
+        return match.Success && string.Equals(match.Groups["date"].Value, dateToken, StringComparison.Ordinal);
+    }
+
+    private static string? ResolveUrl(string? sourceUrl, string? candidateUrl)
+    {
+        if (string.IsNullOrWhiteSpace(candidateUrl))
+        {
+            return candidateUrl;
+        }
+
+        if (Uri.TryCreate(candidateUrl, UriKind.Absolute, out var absoluteUri)
+            && absoluteUri.IsAbsoluteUri
+            && absoluteUri.Scheme is "http" or "https")
+        {
+            return absoluteUri.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceUrl)
+            || !Uri.TryCreate(sourceUrl, UriKind.Absolute, out var sourceUri)
+            || !Uri.TryCreate(sourceUri, candidateUrl, out var resolvedUri))
+        {
+            return candidateUrl;
+        }
+
+        return resolvedUri.ToString();
+    }
+
+    private static bool ContainsNormalized(string source, string target)
+        => NormalizeLoose(source).Contains(NormalizeLoose(target), StringComparison.Ordinal);
+
+    private static string NormalizeLoose(string value)
+        => value.Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("　", string.Empty, StringComparison.Ordinal)
+            .Trim();
 
     private static string? TryBuildDirectRacePageUrl(string? currentUrl, JraPageKind target)
     {

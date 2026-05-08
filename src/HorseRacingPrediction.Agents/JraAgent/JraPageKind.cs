@@ -9,6 +9,18 @@ public enum JraPageKind
     /// <summary>判定不能 / 未分類</summary>
     Unknown,
 
+    /// <summary>競馬メニュートップ（/keiba/）</summary>
+    KeibaMenu,
+
+    /// <summary>開催日程カレンダーページ（/keiba/calendar/）</summary>
+    ScheduleCalendar,
+
+    /// <summary>今週の注目レース一覧（/keiba/thisweek/）</summary>
+    ThisWeekFeature,
+
+    /// <summary>G1 特設トップ（/keiba/g1/{slug}.html）</summary>
+    GradeOneSpecial,
+
     /// <summary>出馬表ページ（accessD.html / /syutsuba など）</summary>
     RaceCard,
 
