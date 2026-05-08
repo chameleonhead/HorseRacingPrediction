@@ -154,19 +154,27 @@ public static class AgentServiceCollectionExtensions
         });
         services.AddTransient<JraResultUrlDiscoveryAgent>(sp =>
         {
-            var chatClient = sp.GetRequiredService<IChatClient>();
             var browser = sp.GetRequiredService<IWebBrowser>();
-            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
-            var extractionAgent = sp.GetService<PageDataExtractionAgent>();
-            var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
-            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
-            return new JraResultUrlDiscoveryAgent(chatClient, playwrightTools.GetAITools());
+            var discoveryLogger = sp.GetRequiredService<ILogger<JraResultUrlDiscoveryAgent>>();
+            return new JraResultUrlDiscoveryAgent(browser, discoveryLogger);
         });
         services.AddTransient<JraRaceResultCollectionWorkflow>(sp =>
             new JraRaceResultCollectionWorkflow(
                 sp.GetRequiredService<JraResultUrlDiscoveryAgent>(),
                 sp.GetRequiredService<JraRaceResultScraper>(),
                 sp.GetRequiredService<DataCollectionWriteTools>()));
+        return services;
+    }
+
+    /// <summary>
+    /// <see cref="JraRaceScheduleCollectionWorkflow"/> を DI コンテナに登録する。
+    /// <para>
+    /// JRA サイト構成に沿ったクリック遷移で、今後開催予定の開催日一覧を収集する。
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddJraRaceScheduleCollectionWorkflow(this IServiceCollection services)
+    {
+        services.AddTransient<JraRaceScheduleCollectionWorkflow>();
         return services;
     }
 
@@ -197,7 +205,7 @@ public static class AgentServiceCollectionExtensions
             var extractionAgent = sp.GetService<PageDataExtractionAgent>();
             var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
             var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
-            return new JraUrlDiscoveryAgent(chatClient, playwrightTools.GetAITools());
+            return new JraUrlDiscoveryAgent(chatClient, playwrightTools.GetReadPageOnlyAITools());
         });
         services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
             new JraRaceCardCollectionWorkflow(

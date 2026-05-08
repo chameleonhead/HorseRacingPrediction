@@ -11,7 +11,6 @@ using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -23,7 +22,6 @@ namespace HorseRacingPrediction.Agents.Tests;
 public class JraRaceResultCollectionWorkflowTests
 {
     private JraRaceResultCollectionWorkflow _sut = null!;
-    private FakeChatClient _fakeChatClient = null!;
     private FakeWebBrowser _fakeWebBrowser = null!;
     private FakeCommandBus _fakeCommandBus = null!;
     private CollaboratingFakeQueryProcessor _fakeQueryProcessor = null!;
@@ -31,12 +29,11 @@ public class JraRaceResultCollectionWorkflowTests
     [TestInitialize]
     public void Setup()
     {
-        _fakeChatClient = new FakeChatClient();
         _fakeWebBrowser = new FakeWebBrowser();
         _fakeCommandBus = new FakeCommandBus();
         _fakeQueryProcessor = new CollaboratingFakeQueryProcessor(_fakeCommandBus);
 
-        var discoveryAgent = new JraResultUrlDiscoveryAgent(_fakeChatClient, []);
+        var discoveryAgent = new JraResultUrlDiscoveryAgent(_fakeWebBrowser);
         var scraper = new JraRaceResultScraper(_fakeWebBrowser);
         var writeTools = new DataCollectionWriteTools(
             new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
@@ -55,32 +52,41 @@ public class JraRaceResultCollectionWorkflowTests
     // ------------------------------------------------------------------ //
 
     [TestMethod]
-    public async Task DiscoverUrlsAsync_ReturnsUrlsFromAgentResponse()
+    public async Task DiscoverUrlsAsync_ReturnsUrlsFromScrapedLinks()
     {
-        _fakeChatClient.ResponseText = """
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/",
+            Title: "JRA 競馬",
+            MainText: "",
+            Headings: [],
+            Links:
             [
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-10-26",
-                "raceNumber": 11
-              }
-            ]
-            """;
+                new SearchResultLink(
+                    "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
+                    "11R 結果")
+            ],
+            Actions: [],
+            Tables: []);
 
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 10, 26));
 
         Assert.HasCount(1, result);
-        Assert.AreEqual("東京", result[0].Racecourse);
         Assert.AreEqual("05", result[0].RacecourseCode, "CNAME から競馬場コードが解析されること");
         Assert.AreEqual(new DateOnly(2025, 10, 26), result[0].RaceDate);
         Assert.AreEqual(11, result[0].RaceNumber);
     }
 
     [TestMethod]
-    public async Task DiscoverUrlsAsync_EmptyResponse_ReturnsEmptyList()
+    public async Task DiscoverUrlsAsync_NoResultLinks_ReturnsEmptyList()
     {
-        _fakeChatClient.ResponseText = "[]";
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/",
+            Title: "JRA 競馬",
+            MainText: "",
+            Headings: [],
+            Links: [new SearchResultLink("https://www.jra.go.jp/keiba/thisweek/", "今週の開催")],
+            Actions: [],
+            Tables: []);
 
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 10, 26));
 
@@ -299,40 +305,17 @@ public class JraRaceResultCollectionWorkflowTests
     // Fake implementations
     // ------------------------------------------------------------------ //
 
-    private sealed class FakeChatClient : IChatClient
-    {
-        public string ResponseText { get; set; } = "[]";
-
-        public ChatClientMetadata Metadata => new("fake", null, "fake");
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            var response = new ChatResponse([new ChatMessage(ChatRole.Assistant, ResponseText)]);
-            return Task.FromResult(response);
-        }
-
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
-
-        public object? GetService(Type serviceType, object? key = null) => null;
-
-        public void Dispose() { }
-    }
-
     private sealed class FakeWebBrowser : IWebBrowser
     {
         public PageSnapshot? Snapshot { get; set; }
 
-        public string? CurrentUrl => "https://www.jra.go.jp";
+        public string? CurrentUrl { get; private set; } = "https://www.jra.go.jp/keiba/";
 
         public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            CurrentUrl = url;
+            return Task.FromResult(string.Empty);
+        }
 
         public Task<PageSnapshot> GetPageSnapshotAsync(
             int maxLinks = 0,

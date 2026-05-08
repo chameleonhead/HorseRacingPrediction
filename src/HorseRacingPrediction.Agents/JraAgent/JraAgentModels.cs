@@ -171,3 +171,13 @@ public sealed record JraEntityProfile(
     string? TrainerName,
     IReadOnlyDictionary<string, string> Facts,
     string SourceUrl);
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 開催日一覧
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// <summary>JRA サイトから抽出した開催日一覧。</summary>
+public sealed record JraRaceScheduleCalendar(
+    DateOnly ReferenceDate,
+    IReadOnlyList<DateOnly> RaceDates,
+    string SourceUrl);

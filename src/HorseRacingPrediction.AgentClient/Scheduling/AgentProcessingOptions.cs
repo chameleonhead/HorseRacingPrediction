@@ -31,6 +31,12 @@ public sealed class AgentProcessingOptions
     /// <summary>結果収集対象日付の先行日数（JST基準）。通常は0。</summary>
     public int ResultLookaheadDays { get; set; } = 0;
 
+    /// <summary>予定収集を有効化するかどうか。</summary>
+    public bool EnableScheduleCollection { get; set; } = true;
+
+    /// <summary>予定収集対象の先行日数（JST基準）。</summary>
+    public int ScheduleLookaheadDays { get; set; } = 14;
+
     /// <summary>任意テキスト収集（Memo登録）を有効化するかどうか。</summary>
     public bool EnableTextInsightCollection { get; set; } = true;
 

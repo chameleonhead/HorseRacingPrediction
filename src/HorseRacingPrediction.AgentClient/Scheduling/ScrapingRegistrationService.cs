@@ -11,6 +11,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
+    private readonly JraRaceScheduleCollectionWorkflow _scheduleCollectionWorkflow;
     private readonly JraRaceResultCollectionWorkflow _resultCollectionWorkflow;
     private readonly ProcessingStateStore _stateStore;
     private readonly RaceTextInsightCollector _insightCollector;
@@ -18,12 +19,14 @@ public sealed class ScrapingRegistrationService : BackgroundService
 
     public ScrapingRegistrationService(
         IOptions<AgentProcessingOptions> options,
+        JraRaceScheduleCollectionWorkflow scheduleCollectionWorkflow,
         JraRaceResultCollectionWorkflow resultCollectionWorkflow,
         ProcessingStateStore stateStore,
         RaceTextInsightCollector insightCollector,
         ILogger<ScrapingRegistrationService> logger)
     {
         _options = options.Value;
+        _scheduleCollectionWorkflow = scheduleCollectionWorkflow;
         _resultCollectionWorkflow = resultCollectionWorkflow;
         _stateStore = stateStore;
         _insightCollector = insightCollector;
@@ -71,6 +74,30 @@ public sealed class ScrapingRegistrationService : BackgroundService
     {
         var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
         var today = DateOnly.FromDateTime(now.Date);
+
+        if (_options.EnableScheduleCollection)
+        {
+            _logger.LogInformation("[収集登録] 予定収集開始: ReferenceDate={Date} LookaheadDays={LookaheadDays}",
+                today,
+                _options.ScheduleLookaheadDays);
+
+            var schedule = await _scheduleCollectionWorkflow
+                .CollectAsync(today, _options.ScheduleLookaheadDays, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(schedule.Error))
+            {
+                _logger.LogWarning("[収集登録] 予定収集失敗: {Error}", schedule.Error);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "[収集登録] 予定収集完了: Collected={Collected} Upcoming={Upcoming}",
+                    schedule.RaceDates.Count,
+                    schedule.UpcomingRaceDates.Count);
+            }
+        }
+
         var start = today.AddDays(-Math.Max(0, _options.ResultLookbackDays));
         var end = today.AddDays(Math.Max(0, _options.ResultLookaheadDays));
 

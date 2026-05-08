@@ -68,6 +68,7 @@ builder.Services.AddPredictionWorkflow();
 builder.Services.AddDataCollectionWorkflow();
 builder.Services.AddJraRaceCardCollectionWorkflow();
 builder.Services.AddJraRaceResultCollectionWorkflow();
+builder.Services.AddJraRaceScheduleCollectionWorkflow();
 
 // -------------------------------------------------------------------
 // エージェントを DevUI に登録

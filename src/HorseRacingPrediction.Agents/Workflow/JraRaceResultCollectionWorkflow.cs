@@ -1,6 +1,8 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
@@ -26,15 +28,18 @@ public sealed class JraRaceResultCollectionWorkflow
     private readonly JraResultUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceResultScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
+    private readonly ILogger<JraRaceResultCollectionWorkflow> _logger;
 
     public JraRaceResultCollectionWorkflow(
         JraResultUrlDiscoveryAgent discoveryAgent,
         JraRaceResultScraper scraper,
-        DataCollectionWriteTools writeTools)
+        DataCollectionWriteTools writeTools,
+        ILogger<JraRaceResultCollectionWorkflow>? logger = null)
     {
         _discoveryAgent = discoveryAgent;
         _scraper = scraper;
         _writeTools = writeTools;
+        _logger = logger ?? NullLogger<JraRaceResultCollectionWorkflow>.Instance;
     }
 
     /// <summary>
@@ -116,14 +121,29 @@ public sealed class JraRaceResultCollectionWorkflow
         DateOnly raceDate,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("JRA race result collection started. RaceDate={RaceDate}", raceDate);
+
         // Step 1: AI による URL 発見（少ないページ閲覧でトークン節約）
         var discoveredUrls = await DiscoverUrlsAsync(raceDate, cancellationToken);
+        _logger.LogInformation(
+            "JRA race result collection discovery done. RaceDate={RaceDate} DiscoveredCount={DiscoveredCount}",
+            raceDate,
+            discoveredUrls.Count);
 
         // Step 2: 決定的なスクレイピング（AI 不使用）
         var scraped = await ScrapeAllAsync(discoveredUrls, cancellationToken);
+        _logger.LogInformation(
+            "JRA race result collection scraping done. RaceDate={RaceDate} ScrapedCount={ScrapedCount}",
+            raceDate,
+            scraped.Count);
 
         // Step 3: DB 保存（AI 不使用、EventFlow コマンド経由）
         var (savedRaceIds, errors) = await SaveAllAsync(scraped, cancellationToken);
+        _logger.LogInformation(
+            "JRA race result collection save done. RaceDate={RaceDate} SavedCount={SavedCount} ErrorCount={ErrorCount}",
+            raceDate,
+            savedRaceIds.Count,
+            errors.Count);
 
         return new JraRaceResultCollectionResult(
             RaceDate: raceDate,

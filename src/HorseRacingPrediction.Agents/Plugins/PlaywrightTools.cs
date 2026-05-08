@@ -172,6 +172,15 @@ public sealed class PlaywrightTools
         AIFunctionFactory.Create(BrowserReadPage),
     ];
 
+    /// <summary>
+    /// BrowserReadPage のみを公開する最小ツールセットを返す。
+    /// URL 発見専用エージェントで検索エンジン利用を禁止したい場合に使用する。
+    /// </summary>
+    public IList<AITool> GetReadPageOnlyAITools() =>
+    [
+        AIFunctionFactory.Create(BrowserReadPage),
+    ];
+
     // ------------------------------------------------------------------ //
     // helpers
     // ------------------------------------------------------------------ //

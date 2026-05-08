@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
@@ -11,6 +12,14 @@ public sealed class JraTaskAgent : IAsyncDisposable
 
     private static readonly Regex HoldingLabelRegex = new(
         @"\d+回(東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)\d+日",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex FullDateRegex = new(
+        @"(?<year>\d{4})\s*年\s*(?<month>\d{1,2})\s*月\s*(?<day>\d{1,2})\s*日",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex MonthDayRegex = new(
+        @"(?<!\d)(?<month>\d{1,2})\s*月\s*(?<day>\d{1,2})\s*日",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private PlaywrightWebBrowser? _browser;
@@ -70,6 +79,98 @@ public sealed class JraTaskAgent : IAsyncDisposable
     public async Task<JraExtractionEnvelope<JraEntityProfile>> RequestTrainerProfileAsync(
         string trainerName, CancellationToken cancellationToken = default)
         => await RequestProfileTypedAsync(trainerName, JraPageKind.TrainerProfile, cancellationToken);
+
+    /// <summary>
+    /// JRA サイトをクリック遷移して、開催日一覧を抽出する。
+    /// URL 推測・直生成は行わない。
+    /// </summary>
+    public async Task<JraExtractionEnvelope<JraRaceScheduleCalendar>> RequestRaceScheduleDatesAsync(
+        DateOnly referenceDate,
+        CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var steps = new List<string>();
+        ThrowIfDisposed();
+
+        try
+        {
+            await Browser.NavigateAsync(EntryUrl, cancellationToken);
+            steps.Add($"navigate: {EntryUrl}");
+
+            await Browser.ClickAsync("出馬表", cancellationToken);
+            steps.Add("click: 出馬表");
+            SyncMemoryFromUrl();
+
+            var raceDates = new HashSet<DateOnly>();
+            var firstSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: cancellationToken);
+            ExtractScheduleDates(firstSnapshot, referenceDate, raceDates);
+
+            var holdings = ExtractHoldingLabels(firstSnapshot)
+                .Distinct(StringComparer.Ordinal)
+                .Take(10)
+                .ToList();
+
+            var shouldStop = false;
+
+            foreach (var holding in holdings)
+            {
+                if (shouldStop)
+                {
+                    break;
+                }
+
+                var clicked = false;
+                try
+                {
+                    await Browser.ClickAsync(holding, cancellationToken);
+                    clicked = true;
+                    steps.Add($"click: {holding}");
+
+                    var detailSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: cancellationToken);
+                    ExtractScheduleDates(detailSnapshot, referenceDate, raceDates);
+                }
+                catch
+                {
+                    // クリックできない候補は次へ進む。
+                }
+                finally
+                {
+                    if (clicked)
+                    {
+                        try
+                        {
+                            await Browser.GoBackAsync(cancellationToken);
+                            steps.Add("back");
+                        }
+                        catch
+                        {
+                            // GoBack 失敗時は後続候補を諦める。
+                            shouldStop = true;
+                        }
+                    }
+                }
+            }
+
+            var ordered = raceDates.OrderBy(d => d).ToList();
+            var sourceUrl = Browser.CurrentUrl ?? EntryUrl;
+            var data = new JraRaceScheduleCalendar(referenceDate, ordered, sourceUrl);
+            return new JraExtractionEnvelope<JraRaceScheduleCalendar>(
+                true,
+                JraPageKind.Unknown,
+                sourceUrl,
+                new JraNavigationTrace(steps, sw.Elapsed),
+                data,
+                null);
+        }
+        catch (Exception ex)
+        {
+            return JraExtractionEnvelope<JraRaceScheduleCalendar>.Failure(
+                JraPageKind.Unknown,
+                _browser?.CurrentUrl ?? EntryUrl,
+                new JraNavigationTrace(steps, sw.Elapsed),
+                ex.Message);
+        }
+    }
 
     public async Task<JraExtractionEnvelope> ExtractCurrentPageAsync(CancellationToken cancellationToken = default)
     {
@@ -410,6 +511,54 @@ public sealed class JraTaskAgent : IAsyncDisposable
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static void ExtractScheduleDates(
+        PageSnapshot snapshot,
+        DateOnly referenceDate,
+        ISet<DateOnly> output)
+    {
+        static void AddIfValid(int year, int month, int day, ISet<DateOnly> target)
+        {
+            try
+            {
+                target.Add(new DateOnly(year, month, day));
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // 不正日付は無視する。
+            }
+        }
+
+        var texts = snapshot.Headings
+            .Concat(snapshot.Actions.Select(a => a.Text))
+            .Concat(snapshot.Links.Select(l => l.Title))
+            .Append(snapshot.MainText)
+            .Where(t => !string.IsNullOrWhiteSpace(t));
+
+        foreach (var text in texts)
+        {
+            var value = text!;
+
+            foreach (Match match in FullDateRegex.Matches(value))
+            {
+                if (int.TryParse(match.Groups["year"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year)
+                    && int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month)
+                    && int.TryParse(match.Groups["day"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day))
+                {
+                    AddIfValid(year, month, day, output);
+                }
+            }
+
+            foreach (Match match in MonthDayRegex.Matches(value))
+            {
+                if (int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month)
+                    && int.TryParse(match.Groups["day"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day))
+                {
+                    AddIfValid(referenceDate.Year, month, day, output);
+                }
+            }
+        }
     }
 
     private static string? TryBuildDirectRacePageUrl(string? currentUrl, JraPageKind target)
