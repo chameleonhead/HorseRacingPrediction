@@ -479,43 +479,40 @@ try
                 ?? JraRaceCardTopPageScraper.ThisWeekEntryUrl;
 
             Console.WriteLine($"[Navigate] エントリーURL: {entryUrl}");
-            var topPageScraper = new JraRaceCardTopPageScraper(browser);
-            var raceListScraper = new JraRaceCardRaceListScraper(browser);
-
-            var holdingLabels = await topPageScraper.ScrapeAsync(entryUrl);
-            if (holdingLabels is null || holdingLabels.Count == 0)
+            var navigationScraper = new JraRaceCardEntryNavigationScraper(browser);
+            var navigation = await navigationScraper.ScrapeAsync(entryUrl);
+            if (navigation is null)
             {
-                Console.WriteLine("開催ボタンが見つかりませんでした。--url で出馬表URLを直接指定してください。");
+                Console.WriteLine("出馬表ページへの遷移に失敗しました。--url で出馬表URLを直接指定してください。");
                 return;
             }
 
-            Console.WriteLine($"[Holdings] {holdingLabels.Count} 件: {string.Join(", ", holdingLabels)}");
-
-            var holdingLabel = holdingLabels[0];
-            Console.WriteLine($"[Select] 開催: {holdingLabel}");
-
-            var raceNumbers = await raceListScraper.ScrapeAsync(holdingLabel);
-            if (raceNumbers is null || raceNumbers.Count == 0)
+            if (navigation.IsDirectFromThisWeek)
             {
-                Console.WriteLine("レース番号が見つかりませんでした。--url で出馬表URLを直接指定してください。");
-                return;
+                Console.WriteLine("[Fallback] thisweek 直リンク: 出馬表 をクリックします。");
             }
 
-            Console.WriteLine($"[Races] {raceNumbers.Count} 件: {string.Join(", ", raceNumbers.Select(n => $"{n}R"))}");
-
-            var targetRaceNumber = raceNumbers[0];
-            Console.WriteLine($"[Select] レース: {targetRaceNumber}R");
-
-            // レース番号をクリックして出馬表ページへ遷移
-            await browser.ClickAsync($"{targetRaceNumber}レース");
-            raceCardUrl = browser.CurrentUrl ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(raceCardUrl))
+            if (navigation.HoldingLabels.Count > 0)
             {
-                Console.WriteLine("出馬表ページへの遷移後にURLが取得できませんでした。");
-                return;
+                Console.WriteLine($"[Holdings] {navigation.HoldingLabels.Count} 件: {string.Join(", ", navigation.HoldingLabels)}");
             }
 
+            if (!string.IsNullOrWhiteSpace(navigation.SelectedHoldingLabel))
+            {
+                Console.WriteLine($"[Select] 開催: {navigation.SelectedHoldingLabel}");
+            }
+
+            if (navigation.RaceNumbers.Count > 0)
+            {
+                Console.WriteLine($"[Races] {navigation.RaceNumbers.Count} 件: {string.Join(", ", navigation.RaceNumbers.Select(n => $"{n}R"))}");
+            }
+
+            if (navigation.SelectedRaceNumber.HasValue)
+            {
+                Console.WriteLine($"[Select] レース: {navigation.SelectedRaceNumber.Value}R");
+            }
+
+            raceCardUrl = navigation.RaceCardUrl;
             Console.WriteLine($"[RaceCard URL] {raceCardUrl}");
         }
 
@@ -625,19 +622,14 @@ try
     {
         // 診断シナリオ: 出馬表ページから馬名をクリックしてプロフィールページのスナップショットを表示する
         var entryUrl = GetArgValue(args, "--entry-url") ?? JraRaceCardTopPageScraper.ThisWeekEntryUrl;
-        var topPageScraper = new JraRaceCardTopPageScraper(browser);
-        var raceListScraper = new JraRaceCardRaceListScraper(browser);
+        var navigationScraper = new JraRaceCardEntryNavigationScraper(browser);
         var raceCardScraper = new JraRaceCardScraper(browser);
 
-        var holdings = await topPageScraper.ScrapeAsync(entryUrl);
-        Console.WriteLine($"Holdings: {string.Join(", ", holdings ?? [])}");
-        if (holdings is null || holdings.Count == 0) return;
+        var navigation = await navigationScraper.ScrapeAsync(entryUrl);
+        Console.WriteLine($"Holdings: {string.Join(", ", navigation?.HoldingLabels ?? [])}");
+        Console.WriteLine($"Races: {string.Join(", ", navigation?.RaceNumbers.Select(n => $"{n}R") ?? [])}");
+        if (navigation is null) return;
 
-        var races = await raceListScraper.ScrapeAsync(holdings[0]);
-        Console.WriteLine($"Races: {string.Join(", ", races?.Select(n => $"{n}R") ?? [])}");
-        if (races is null || races.Count == 0) return;
-
-        await browser.ClickAsync($"{races[0]}レース");
         var raceCard = await raceCardScraper.ScrapeCurrentPageAsync();
         Console.WriteLine($"RaceCard: {raceCard?.RaceName} Entries={raceCard?.Entries.Count}");
         if (raceCard is null || raceCard.Entries.Count == 0) return;
