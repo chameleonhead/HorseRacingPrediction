@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.Agents.Browser;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Agents.JraAgent;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
@@ -36,8 +36,7 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     private static readonly string[] RaceCardKeywords = ["出馬表"];
 
     private readonly SemaphoreSlim _lock = new(1, 1);
-    private PlaywrightWebBrowser? _browser;
-    private JraRaceCardScraper? _raceCardScraper;
+    private JraTaskAgent? _taskAgent;
 
     [Description("JRA専用セッションを開始してURLを開きます。以後の操作は同じPlaywrightセッションで継続されます。")]
     public async Task<string> OpenJraPage(
@@ -90,13 +89,8 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
             }
 
             var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 40, cancellationToken: cancellationToken);
-
-            object? structured = null;
-            if (normalizedTarget == "race_card")
-            {
-                _raceCardScraper ??= new JraRaceCardScraper(browser);
-                structured = await _raceCardScraper.ScrapeCurrentPageAsync(cancellationToken);
-            }
+            var extracted = await browser.ExtractCurrentPageAsync(cancellationToken);
+            var structured = extracted.Success ? extracted.Data : null;
 
             var result = new
             {
@@ -105,6 +99,8 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
                 currentUrl = browser.CurrentUrl,
                 route,
                 page = BuildPageSummary(snapshot),
+                pageKind = extracted.PageKind.ToString(),
+                extractionError = extracted.Error,
                 structured
             };
 
@@ -132,11 +128,10 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         await _lock.WaitAsync();
         try
         {
-            if (_browser is not null)
+            if (_taskAgent is not null)
             {
-                await _browser.DisposeAsync();
-                _browser = null;
-                _raceCardScraper = null;
+                await _taskAgent.DisposeAsync();
+                _taskAgent = null;
             }
         }
         finally
@@ -161,11 +156,10 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         await _lock.WaitAsync();
         try
         {
-            if (_browser is not null)
+            if (_taskAgent is not null)
             {
-                await _browser.DisposeAsync();
-                _browser = null;
-                _raceCardScraper = null;
+                await _taskAgent.DisposeAsync();
+                _taskAgent = null;
             }
         }
         finally
@@ -175,13 +169,13 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         }
     }
 
-    private async Task<string> WithSessionAsync(Func<PlaywrightWebBrowser, Task<string>> action)
+    private async Task<string> WithSessionAsync(Func<JraTaskAgent, Task<string>> action)
     {
         await _lock.WaitAsync();
         try
         {
-            _browser ??= await PlaywrightWebBrowser.CreateAsync();
-            return await action(_browser);
+            _taskAgent ??= await JraTaskAgent.CreateAsync();
+            return await action(_taskAgent);
         }
         finally
         {
@@ -190,7 +184,7 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     }
 
     private static async Task NavigateByKeywordsAsync(
-        IWebBrowser browser,
+        JraTaskAgent taskAgent,
         IReadOnlyList<string> keywords,
         int maxSteps,
         List<string> route,
@@ -198,14 +192,14 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     {
         for (var i = 0; i < maxSteps; i++)
         {
-            var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 60, cancellationToken: cancellationToken);
+            var snapshot = await taskAgent.GetPageSnapshotAsync(maxLinks: 60, cancellationToken: cancellationToken);
             var candidate = SelectBestClickableText(snapshot, keywords);
             if (string.IsNullOrWhiteSpace(candidate))
             {
                 return;
             }
 
-            await browser.ClickAsync(candidate, cancellationToken);
+            await taskAgent.FollowAsync(candidate, cancellationToken);
             route.Add(candidate);
         }
     }

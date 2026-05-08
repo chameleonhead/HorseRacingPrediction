@@ -116,18 +116,6 @@ public static class AgentServiceCollectionExtensions
             var browser = sp.GetRequiredService<IWebBrowser>();
             return new JraRaceCardScraper(browser);
         });
-        services.AddTransient<JraScrapingTools>(sp =>
-        {
-            var scraper = sp.GetRequiredService<JraRaceCardScraper>();
-            var pageExtractionTools = sp.GetRequiredService<JraPageExtractionTools>();
-            return new JraScrapingTools(scraper, pageExtractionTools);
-        });
-        services.AddTransient<JraRaceEntryDetailScraper>(sp =>
-        {
-            var browser = sp.GetRequiredService<IWebBrowser>();
-            var raceCardScraper = sp.GetRequiredService<JraRaceCardScraper>();
-            return new JraRaceEntryDetailScraper(browser, raceCardScraper);
-        });
         return services;
     }
 

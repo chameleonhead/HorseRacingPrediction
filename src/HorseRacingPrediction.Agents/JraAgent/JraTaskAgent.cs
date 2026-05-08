@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.Scrapers.Jra;
 
 namespace HorseRacingPrediction.Agents.JraAgent;
 
@@ -46,34 +47,49 @@ public sealed class JraTaskAgent : IAsyncDisposable
     public JraPageKind CurrentPageKind => _memory.CurrentPageKind;
     public string? CurrentUrl => _browser?.CurrentUrl;
 
-    public async Task<JraExtractionEnvelope> RequestRaceCardAsync(
+    public async Task<JraExtractionEnvelope<JraRaceCardData>> RequestRaceCardAsync(
         DateOnly date, string racecourse, int raceNumber, CancellationToken cancellationToken = default)
-        => await RequestRacePageAsync(date, racecourse, raceNumber, JraPageKind.RaceCard, cancellationToken);
+        => await RequestRacePageTypedAsync<JraRaceCardData>(date, racecourse, raceNumber, JraPageKind.RaceCard, cancellationToken);
 
-    public async Task<JraExtractionEnvelope> RequestOddsAsync(
+    public async Task<JraExtractionEnvelope<JraOddsResult>> RequestOddsAsync(
         DateOnly date, string racecourse, int raceNumber, CancellationToken cancellationToken = default)
-        => await RequestRacePageAsync(date, racecourse, raceNumber, JraPageKind.Odds, cancellationToken);
+        => await RequestRacePageTypedAsync<JraOddsResult>(date, racecourse, raceNumber, JraPageKind.Odds, cancellationToken);
 
-    public async Task<JraExtractionEnvelope> RequestRaceResultAsync(
+    public async Task<JraExtractionEnvelope<JraRaceResultSummary>> RequestRaceResultAsync(
         DateOnly date, string racecourse, int raceNumber, CancellationToken cancellationToken = default)
-        => await RequestRacePageAsync(date, racecourse, raceNumber, JraPageKind.Result, cancellationToken);
+        => await RequestRacePageTypedAsync<JraRaceResultSummary>(date, racecourse, raceNumber, JraPageKind.Result, cancellationToken);
 
-    public async Task<JraExtractionEnvelope> RequestHorseProfileAsync(
+    public async Task<JraExtractionEnvelope<JraEntityProfile>> RequestHorseProfileAsync(
         string horseName, CancellationToken cancellationToken = default)
-        => await RequestProfileAsync(horseName, JraPageKind.HorseProfile, cancellationToken);
+        => await RequestProfileTypedAsync(horseName, JraPageKind.HorseProfile, cancellationToken);
 
-    public async Task<JraExtractionEnvelope> RequestJockeyProfileAsync(
+    public async Task<JraExtractionEnvelope<JraEntityProfile>> RequestJockeyProfileAsync(
         string jockeyName, CancellationToken cancellationToken = default)
-        => await RequestProfileAsync(jockeyName, JraPageKind.JockeyProfile, cancellationToken);
+        => await RequestProfileTypedAsync(jockeyName, JraPageKind.JockeyProfile, cancellationToken);
 
-    public async Task<JraExtractionEnvelope> RequestTrainerProfileAsync(
+    public async Task<JraExtractionEnvelope<JraEntityProfile>> RequestTrainerProfileAsync(
         string trainerName, CancellationToken cancellationToken = default)
-        => await RequestProfileAsync(trainerName, JraPageKind.TrainerProfile, cancellationToken);
+        => await RequestProfileTypedAsync(trainerName, JraPageKind.TrainerProfile, cancellationToken);
 
     public async Task<JraExtractionEnvelope> ExtractCurrentPageAsync(CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         return await ExtractCurrentAsync(new List<string>(), sw, cancellationToken);
+    }
+
+    public async Task NavigateAsync(string url, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await Browser.NavigateAsync(url, cancellationToken);
+        SyncMemoryFromUrl();
+    }
+
+    public async Task<PageSnapshot> GetPageSnapshotAsync(
+        int maxLinks = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return await Browser.GetPageSnapshotAsync(maxLinks, cancellationToken);
     }
 
     public async Task FollowAsync(string linkHint, CancellationToken cancellationToken = default)
@@ -121,6 +137,15 @@ public sealed class JraTaskAgent : IAsyncDisposable
                 _browser?.CurrentUrl ?? string.Empty,
                 new JraNavigationTrace(steps, sw.Elapsed), ex.Message);
         }
+    }
+
+    private async Task<JraExtractionEnvelope<T>> RequestRacePageTypedAsync<T>(
+        DateOnly date, string racecourse, int raceNumber,
+        JraPageKind targetKind, CancellationToken ct)
+        where T : class
+    {
+        var envelope = await RequestRacePageAsync(date, racecourse, raceNumber, targetKind, ct);
+        return envelope.ToTyped<T>();
     }
 
     private async Task<JraExtractionEnvelope> RequestProfileAsync(
@@ -196,6 +221,13 @@ public sealed class JraTaskAgent : IAsyncDisposable
                 _browser?.CurrentUrl ?? string.Empty,
                 new JraNavigationTrace(steps, sw.Elapsed), ex.Message);
         }
+    }
+
+    private async Task<JraExtractionEnvelope<JraEntityProfile>> RequestProfileTypedAsync(
+        string entityName, JraPageKind expectedKind, CancellationToken ct)
+    {
+        var envelope = await RequestProfileAsync(entityName, expectedKind, ct);
+        return envelope.ToTyped<JraEntityProfile>();
     }
 
     private async Task EnsureOnRacePageAsync(
@@ -283,7 +315,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
             await Browser.ClickAsync(holding, ct);
             steps.Add($"click: {holding}");
 
-            var raceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 0, cancellationToken: ct);
+            var raceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
             var hasTargetDate =
                 raceListSnapshot.MainText.Contains(dateText, StringComparison.Ordinal)
                 || raceListSnapshot.Headings.Any(h => h.Contains(dateText, StringComparison.Ordinal));
@@ -321,7 +353,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
     {
         ThrowIfDisposed();
         var url      = Browser.CurrentUrl ?? string.Empty;
-        var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 0, cancellationToken: ct);
+        var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
         var kind     = JraPageKindDetector.Detect(url, snapshot);
         _memory.RecordNavigation(url, kind);
 

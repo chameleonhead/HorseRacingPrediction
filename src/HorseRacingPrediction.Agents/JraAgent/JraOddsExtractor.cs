@@ -16,7 +16,7 @@ public sealed class JraOddsExtractor : IPageExtractor
 
     public async Task<object?> ExtractAsync(IWebBrowser browser, CancellationToken cancellationToken = default)
     {
-        var snapshot = await browser.GetPageSnapshotAsync(cancellationToken: cancellationToken);
+        var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: cancellationToken);
         var url = browser.CurrentUrl ?? string.Empty;
         return ParseOdds(snapshot, url);
     }

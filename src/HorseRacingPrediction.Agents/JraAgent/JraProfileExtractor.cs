@@ -18,7 +18,7 @@ public sealed class JraProfileExtractor : IPageExtractor
 
     public async Task<object?> ExtractAsync(IWebBrowser browser, CancellationToken cancellationToken = default)
     {
-        var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 0, cancellationToken: cancellationToken);
+        var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: cancellationToken);
         var url = browser.CurrentUrl ?? string.Empty;
         var kind = JraPageKindDetector.Detect(url, snapshot);
         return ParseProfile(snapshot, url, kind);
