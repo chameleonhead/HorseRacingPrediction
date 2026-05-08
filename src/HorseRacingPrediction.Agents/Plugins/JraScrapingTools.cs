@@ -26,10 +26,12 @@ public sealed class JraScrapingTools
     };
 
     private readonly JraRaceCardScraper _raceCardScraper;
+    private readonly JraPageExtractionTools _pageExtractionTools;
 
-    public JraScrapingTools(JraRaceCardScraper raceCardScraper)
+    public JraScrapingTools(JraRaceCardScraper raceCardScraper, JraPageExtractionTools pageExtractionTools)
     {
         _raceCardScraper = raceCardScraper;
+        _pageExtractionTools = pageExtractionTools;
     }
 
     /// <summary>
@@ -50,10 +52,49 @@ public sealed class JraScrapingTools
     }
 
     /// <summary>
+    /// JRA 専用セッションを開始してページを開く。
+    /// </summary>
+    [Description("JRA専用セッションを開始してURLを開きます。以後の操作は同一セッションで継続されます。")]
+    public Task<string> OpenJraPage(
+        [Description("開くURL（例: https://www.jra.go.jp/keiba/thisweek/）")] string url,
+        CancellationToken cancellationToken = default)
+        => _pageExtractionTools.OpenJraPage(url, cancellationToken);
+
+    /// <summary>
+    /// 現在ページから最短導線でターゲット情報を抽出する。
+    /// </summary>
+    [Description("現在ページから最短導線で target の情報を抽出します。target=odds/race_card/snapshot。")]
+    public Task<string> ExtractFromCurrentPage(
+        [Description("抽出ターゲット。odds / race_card / snapshot")] string target = "snapshot",
+        [Description("最大クリック回数。既定2")] int maxSteps = 2,
+        CancellationToken cancellationToken = default)
+        => _pageExtractionTools.ExtractFromCurrentPage(target, maxSteps, cancellationToken);
+
+    /// <summary>
+    /// 現在ページからオッズ画面への最短遷移を行う。
+    /// </summary>
+    [Description("現在ページからオッズ画面へ最短遷移し、ページ要約を返します。")]
+    public Task<string> NavigateToOddsFromCurrentPage(
+        [Description("最大クリック回数。既定2")] int maxSteps = 2,
+        CancellationToken cancellationToken = default)
+        => _pageExtractionTools.NavigateToOddsFromCurrentPage(maxSteps, cancellationToken);
+
+    /// <summary>
+    /// JRA専用セッションを終了する。
+    /// </summary>
+    [Description("JRA専用Playwrightセッションを終了します。")]
+    public Task<string> CloseJraSession()
+        => _pageExtractionTools.CloseJraSession();
+
+    /// <summary>
     /// このプラグインのメソッドを <see cref="AITool"/> 一覧として返す。
     /// </summary>
     public IList<AITool> GetAITools() =>
     [
-        AIFunctionFactory.Create(ScrapeJraRaceCard)
+        AIFunctionFactory.Create(ScrapeJraRaceCard),
+        AIFunctionFactory.Create(OpenJraPage),
+        AIFunctionFactory.Create(ExtractFromCurrentPage),
+        AIFunctionFactory.Create(NavigateToOddsFromCurrentPage),
+        AIFunctionFactory.Create(CloseJraSession)
     ];
 }

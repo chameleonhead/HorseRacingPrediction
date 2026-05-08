@@ -110,6 +110,7 @@ public static class AgentServiceCollectionExtensions
             var webFetchTools = sp.GetRequiredService<WebFetchTools>();
             return new HorseRacingTools(webFetchTools);
         });
+        services.AddSingleton<JraPageExtractionTools>();
         services.AddTransient<JraRaceCardScraper>(sp =>
         {
             var browser = sp.GetRequiredService<IWebBrowser>();
@@ -118,7 +119,8 @@ public static class AgentServiceCollectionExtensions
         services.AddTransient<JraScrapingTools>(sp =>
         {
             var scraper = sp.GetRequiredService<JraRaceCardScraper>();
-            return new JraScrapingTools(scraper);
+            var pageExtractionTools = sp.GetRequiredService<JraPageExtractionTools>();
+            return new JraScrapingTools(scraper, pageExtractionTools);
         });
         services.AddTransient<JraRaceEntryDetailScraper>(sp =>
         {
@@ -438,11 +440,13 @@ public static class AgentServiceCollectionExtensions
     {
         var webBrowserAgent = services.GetRequiredService<WebBrowserAgent>();
         var horseRacingTools = services.GetRequiredService<HorseRacingTools>();
+        var jraPageExtractionTools = services.GetRequiredService<JraPageExtractionTools>();
         var writeTools = services.GetRequiredService<DataCollectionWriteTools>();
         var tools = new List<AITool>(horseRacingTools.GetAITools())
         {
             webBrowserAgent.CreateAIFunction()
         };
+        tools.AddRange(jraPageExtractionTools.GetAITools());
         tools.AddRange(writeTools.GetAITools());
         return tools;
     }
@@ -457,6 +461,7 @@ public static class AgentServiceCollectionExtensions
     {
         var tools = new List<AITool>(services.GetRequiredService<RaceQueryTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<WebFetchTools>().GetAITools());
+        tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
         return tools;
     }
 
@@ -465,6 +470,7 @@ public static class AgentServiceCollectionExtensions
         var tools = new List<AITool>(services.GetRequiredService<RaceQueryTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<PredictionWriteTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<WebFetchTools>().GetAITools());
+        tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
         return tools;
     }
 }

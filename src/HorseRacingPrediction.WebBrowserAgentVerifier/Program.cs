@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Agents;
+using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
@@ -658,6 +659,116 @@ try
         catch (Exception ex)
         {
             Console.WriteLine($"馬名クリック失敗: {ex.Message}");
+        }
+    }
+    else if (string.Equals(scenario, "jra-task-agent", StringComparison.OrdinalIgnoreCase))
+    {
+        // -----------------------------------------------------------
+        // JraTaskAgent 動作確認シナリオ
+        //   --run-date yyyy-MM-dd  (省略時: 今日)
+        //   --url <racecourse>     競馬場名 (省略時: 東京)
+        //   --max-scrapes N        取得するレース番号 (省略時: 1)
+        // -----------------------------------------------------------
+        var runDate = runDateArg is null
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : DateOnly.ParseExact(runDateArg, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var racecourse = targetUrlArg ?? "東京";
+        var raceNumber = maxScrapesArg is null
+            ? 1
+            : int.Parse(maxScrapesArg, CultureInfo.InvariantCulture);
+        var maxEntries = maxEntriesArg is null
+            ? 3
+            : int.Parse(maxEntriesArg, CultureInfo.InvariantCulture);
+
+        Console.WriteLine($"Date       : {runDate:yyyy-MM-dd}");
+        Console.WriteLine($"Racecourse : {racecourse}");
+        Console.WriteLine($"RaceNumber : {raceNumber}R");
+        Console.WriteLine();
+
+        await using var jraAgent = await JraTaskAgent.CreateAsync();
+
+        // ── 出馬表取得 ──
+        Console.WriteLine("[1] 出馬表を取得中...");
+        var cardResult = await jraAgent.RequestRaceCardAsync(runDate, racecourse, raceNumber);
+        Console.WriteLine($"  Success : {cardResult.Success}");
+        Console.WriteLine($"  PageKind: {cardResult.PageKind}");
+        Console.WriteLine($"  URL     : {cardResult.SourceUrl}");
+        Console.WriteLine($"  Steps   : {string.Join(" → ", cardResult.Trace.Steps)}");
+        Console.WriteLine($"  Elapsed : {cardResult.Trace.Elapsed.TotalSeconds:F1}s");
+        if (!cardResult.Success)
+        {
+            Console.WriteLine($"  Error   : {cardResult.Error}");
+        }
+        else
+        {
+            var raceCard = cardResult.GetData<HorseRacingPrediction.Agents.Scrapers.Jra.JraRaceCardData>();
+            if (raceCard is not null)
+            {
+                Console.WriteLine($"  RaceName: {raceCard.RaceName ?? "-"}");
+                Console.WriteLine($"  Entries : {raceCard.Entries.Count}");
+                Console.WriteLine();
+
+                // ── オッズ取得 ──
+                Console.WriteLine("[2] オッズを取得中...");
+                var oddsResult = await jraAgent.RequestOddsAsync(runDate, racecourse, raceNumber);
+                Console.WriteLine($"  Success : {oddsResult.Success}");
+                Console.WriteLine($"  PageKind: {oddsResult.PageKind}");
+                Console.WriteLine($"  Steps   : {string.Join(" → ", oddsResult.Trace.Steps)}");
+                if (oddsResult.Success)
+                {
+                    var odds = oddsResult.GetData<JraOddsResult>();
+                    if (odds is not null)
+                    {
+                        Console.WriteLine($"  WinOdds : {odds.WinOdds.Count} 件");
+                        foreach (var o in odds.WinOdds.Take(5))
+                            Console.WriteLine($"    {o.HorseNumber}番 {o.HorseName ?? "-"} : {o.Odds?.ToString("F1") ?? "-"} ({o.Popularity}人気)");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  Error   : {oddsResult.Error}");
+                }
+
+                Console.WriteLine();
+
+                // ── プロフィール取得（先頭 N 頭分）──
+                Console.WriteLine($"[3] プロフィールを取得中（最大 {maxEntries} 頭）...");
+                // 出馬表ページに戻す
+                await jraAgent.RequestRaceCardAsync(runDate, racecourse, raceNumber);
+
+                foreach (var entry in raceCard.Entries.Take(maxEntries))
+                {
+                    if (string.IsNullOrWhiteSpace(entry.HorseName)) continue;
+                    Console.WriteLine($"  [{entry.HorseNumber}番] {entry.HorseName}");
+
+                    var horseResult = await jraAgent.RequestHorseProfileAsync(entry.HorseName);
+                    if (horseResult.Success)
+                    {
+                        var p = horseResult.GetData<JraEntityProfile>();
+                        Console.WriteLine($"    Horse : 性別={p?.SexCode ?? "-"} 生年月日={p?.BirthDate?.ToString("yyyy-MM-dd") ?? "-"} 父={p?.SireName ?? "-"}");
+                        Console.WriteLine($"            馬主={p?.OwnerName ?? "-"} 生産={p?.BreederName ?? "-"}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"    Horse : 失敗 - {horseResult.Error}");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(entry.JockeyName))
+                    {
+                        var jockeyResult = await jraAgent.RequestJockeyProfileAsync(entry.JockeyName);
+                        if (jockeyResult.Success)
+                        {
+                            var jp = jockeyResult.GetData<JraEntityProfile>();
+                            Console.WriteLine($"    Jockey: {entry.JockeyName} 所属={jp?.Affiliation ?? "-"} デビュー={jp?.DebutYear?.ToString(CultureInfo.InvariantCulture) ?? "-"}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"    Jockey: 失敗 - {jockeyResult.Error}");
+                        }
+                    }
+                    Console.WriteLine();
+                }
+            }
         }
     }
     else if (string.Equals(scenario, "monthly-race-discovery", StringComparison.OrdinalIgnoreCase))
