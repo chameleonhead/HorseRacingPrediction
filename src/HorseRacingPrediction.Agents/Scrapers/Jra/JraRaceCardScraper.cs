@@ -38,7 +38,32 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         CancellationToken cancellationToken = default)
     {
         await _browser.NavigateAsync(url, cancellationToken);
-        var snapshot = await _browser.GetPageSnapshotAsync(0, cancellationToken);
+        var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken);
+
+        var metadata = ParseRaceMetadata(snapshot);
+        var entries = ParseEntries(snapshot.Tables);
+
+        return new JraRaceCardData(
+            Url: url,
+            RaceName: metadata.RaceName,
+            Racecourse: metadata.Racecourse,
+            RaceDate: metadata.RaceDate,
+            RaceNumber: metadata.RaceNumber,
+            CourseType: metadata.CourseType,
+            Distance: metadata.Distance,
+            Grade: metadata.Grade,
+            Entries: entries);
+    }
+
+    /// <summary>
+    /// ブラウザが既に出馬表ページを表示している状態でページを解析する。
+    /// クリックで遷移した直後に呼び出すことで URL ナビゲーションを省略できる。
+    /// </summary>
+    public async Task<JraRaceCardData?> ScrapeCurrentPageAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken);
+        var url = _browser.CurrentUrl ?? string.Empty;
 
         var metadata = ParseRaceMetadata(snapshot);
         var entries = ParseEntries(snapshot.Tables);
@@ -244,13 +269,33 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             return [];
         }
 
-        var gateNumberIndex = FindHeaderIndex(headers, "枠番");
+        var gateNumberIndex = FindHeaderIndex(headers, "枠番", "枠");
         var jockeyIndex = FindHeaderIndex(headers, "騎手");
-        var weightIndex = FindHeaderIndex(headers, "斤量");
+        var weightIndex = FindHeaderIndex(headers, "斤量", "負担重量");
         var sexAgeIndex = FindHeaderIndex(headers, "性齢");
         var bodyWeightIndex = FindHeaderIndex(headers, "馬体重");
         var trainerIndex = FindHeaderIndex(headers, "厩舎", "調教師");
         var ownerIndex = FindHeaderIndex(headers, "馬主");
+
+        // JRA の出馬表は複合列ヘッダを持つことがある。
+        // horseNameIndex と同一列になった場合は -1 に下げてセル内容から個別に抽出する。
+        if (trainerIndex == horseNameIndex) trainerIndex = -1;
+        if (bodyWeightIndex == horseNameIndex) bodyWeightIndex = -1;
+        if (ownerIndex == horseNameIndex) ownerIndex = -1;
+        if (weightIndex == horseNameIndex) weightIndex = -1;
+        if (sexAgeIndex == horseNameIndex) sexAgeIndex = -1;
+
+        // 騎手列が複合列 (性齢/毛色 負担重量 騎手名) かどうか判定
+        var jockeyCellIsCombined = jockeyIndex >= 0
+            && (headers[jockeyIndex].Contains("性齢", StringComparison.OrdinalIgnoreCase)
+                || headers[jockeyIndex].Contains("負担重量", StringComparison.OrdinalIgnoreCase));
+
+        // 複合騎手列が個別列の代わりになっている場合はそちらも -1 に下げて複合列で解決する
+        if (jockeyCellIsCombined)
+        {
+            if (sexAgeIndex < 0 || sexAgeIndex == jockeyIndex) sexAgeIndex = jockeyIndex;
+            if (weightIndex < 0 || weightIndex == jockeyIndex) weightIndex = jockeyIndex;
+        }
 
         var entries = new List<JraRaceEntryData>();
         foreach (var row in table.Rows)
@@ -260,8 +305,8 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 continue;
             }
 
-            var horseName = GetCell(row, horseNameIndex)?.Trim();
-            if (string.IsNullOrWhiteSpace(horseName))
+            var horseCellText = GetCell(row, horseNameIndex)?.Trim();
+            if (string.IsNullOrWhiteSpace(horseCellText))
             {
                 continue;
             }
@@ -273,6 +318,29 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 continue;
             }
 
+            // 複合列から個別フィールドを抽出
+            var horseName = ExtractHorseName(horseCellText);
+            var trainerName = trainerIndex >= 0
+                ? NullIfEmpty(GetCell(row, trainerIndex))
+                : ExtractTrainerFromHorseCell(horseCellText);
+
+            var jockeyCellText = GetCell(row, jockeyIndex)?.Trim();
+            string? jockeyName;
+            string? sexAge;
+            decimal? weight;
+            if (jockeyCellIsCombined && jockeyCellText is not null)
+            {
+                jockeyName = ExtractJockeyFromCombinedCell(jockeyCellText);
+                sexAge = NullIfEmpty(ExtractSexAgeFromCombinedCell(jockeyCellText));
+                weight = ExtractWeightFromCombinedCell(jockeyCellText);
+            }
+            else
+            {
+                jockeyName = NullIfEmpty(jockeyCellText);
+                sexAge = NullIfEmpty(GetCell(row, sexAgeIndex));
+                weight = ParseDecimal(GetCell(row, weightIndex));
+            }
+
             var bodyWeightCell = GetCell(row, bodyWeightIndex);
             var (bodyWeight, bodyWeightDiff) = ParseBodyWeight(bodyWeightCell);
 
@@ -280,16 +348,69 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 HorseNumber: horseNumber.Value,
                 GateNumber: ParseInt(GetCell(row, gateNumberIndex)),
                 HorseName: horseName,
-                JockeyName: NullIfEmpty(GetCell(row, jockeyIndex)),
-                Weight: ParseDecimal(GetCell(row, weightIndex)),
-                SexAge: NullIfEmpty(GetCell(row, sexAgeIndex)),
+                JockeyName: jockeyName,
+                Weight: weight,
+                SexAge: sexAge,
                 BodyWeight: bodyWeight,
                 BodyWeightDiff: bodyWeightDiff,
-                TrainerName: NullIfEmpty(GetCell(row, trainerIndex)),
+                TrainerName: trainerName,
                 OwnerName: NullIfEmpty(GetCell(row, ownerIndex))));
         }
 
         return entries;
+    }
+
+    // ------------------------------------------------------------------ //
+    // 複合セルからの個別フィールド抽出
+    // ------------------------------------------------------------------ //
+
+    // 馬名複合セル "デアトゥバトル (0.0.0.2) コウトミックレーシング..." → "デアトゥバトル"
+    private static string ExtractHorseName(string cellText)
+    {
+        var first = cellText.TrimStart()
+            .Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+        return first ?? cellText.Trim();
+    }
+
+    // 馬名複合セルから調教師名を抽出: "水野 貴広(美浦)" → "水野 貴広"
+    // JRA の出馬表では厩舎所属が (美浦)/(栗東)/(地方) の形で括弧内に入る
+    private static readonly Regex TrainerInHorseCellRegex =
+        new(@"([\p{L}]+\s+[\p{L}]+|[\p{L}]+)\((?:美浦|栗東|地方|JRA)\)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static string? ExtractTrainerFromHorseCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText)) return null;
+        var m = TrainerInHorseCellRegex.Match(cellText);
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    // 複合騎手セル "牡3/黒鹿 57.0kg 松若 風馬" → "松若 風馬"
+    private static string? ExtractJockeyFromCombinedCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText)) return null;
+        // "XXXkg " の後の文字列が騎手名
+        var m = Regex.Match(cellText, @"\d+\.?\d*\s*kg\s+(.+)$", RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    // 複合騎手セル "牡3/黒鹿 57.0kg ..." → "牡3"
+    private static string? ExtractSexAgeFromCombinedCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText)) return null;
+        var m = Regex.Match(cellText, @"^([牡牝騸セ]\d+)");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    // 複合騎手セル "牡3/黒鹿 57.0kg ..." → 57.0
+    private static decimal? ExtractWeightFromCombinedCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText)) return null;
+        var m = Regex.Match(cellText, @"(\d+\.?\d*)\s*kg", RegexOptions.IgnoreCase);
+        return m.Success
+            && decimal.TryParse(m.Groups[1].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var w)
+            ? w : null;
     }
 
     private static int FindHeaderIndex(IReadOnlyList<string> headers, params string[] candidates)

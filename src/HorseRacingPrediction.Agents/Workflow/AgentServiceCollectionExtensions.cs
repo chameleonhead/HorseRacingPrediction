@@ -120,6 +120,12 @@ public static class AgentServiceCollectionExtensions
             var scraper = sp.GetRequiredService<JraRaceCardScraper>();
             return new JraScrapingTools(scraper);
         });
+        services.AddTransient<JraRaceEntryDetailScraper>(sp =>
+        {
+            var browser = sp.GetRequiredService<IWebBrowser>();
+            var raceCardScraper = sp.GetRequiredService<JraRaceCardScraper>();
+            return new JraRaceEntryDetailScraper(browser, raceCardScraper);
+        });
         return services;
     }
 

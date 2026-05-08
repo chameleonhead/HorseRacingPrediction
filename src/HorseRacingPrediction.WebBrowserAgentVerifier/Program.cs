@@ -22,9 +22,11 @@ var allowAnyDay = HasArg(args, "--allow-any-day");
 var maxWeekendsArg = GetArgValue(args, "--max-weekends");
 var scrapeCards = HasArg(args, "--scrape-cards");
 var maxScrapesArg = GetArgValue(args, "--max-scrapes");
+var maxEntriesArg = GetArgValue(args, "--max-entries");
 var targetUrlArg = GetArgValue(args, "--url");
 var extractionProfileArg = GetArgValue(args, "--extraction-profile");
 var dbPathArg = GetArgValue(args, "--db-path");
+var saveProfiles = HasArg(args, "--save-profiles");
 
 var prompt = args.Length > 0
     ? string.Join(' ', args)
@@ -459,6 +461,213 @@ try
             await browser.GoBackAsync();
         }
     }
+    else if (string.Equals(scenario, "jra-race-card-entry-details", StringComparison.OrdinalIgnoreCase))
+    {
+        var maxEntries = maxEntriesArg is null
+            ? 3
+            : int.Parse(maxEntriesArg, CultureInfo.InvariantCulture);
+        var raceCardUrl = targetUrlArg;
+
+        var raceCardScraper = new JraRaceCardScraper(browser);
+        var detailScraper = new JraRaceEntryDetailScraper(browser, raceCardScraper);
+
+        if (string.IsNullOrWhiteSpace(raceCardUrl))
+        {
+            // メニューナビゲーションで出馬表URLを探索する
+            // --entry-url で keiba/ か thisweek/ を切り替え可能（既定: thisweek/）
+            var entryUrl = GetArgValue(args, "--entry-url")
+                ?? JraRaceCardTopPageScraper.ThisWeekEntryUrl;
+
+            Console.WriteLine($"[Navigate] エントリーURL: {entryUrl}");
+            var topPageScraper = new JraRaceCardTopPageScraper(browser);
+            var raceListScraper = new JraRaceCardRaceListScraper(browser);
+
+            var holdingLabels = await topPageScraper.ScrapeAsync(entryUrl);
+            if (holdingLabels is null || holdingLabels.Count == 0)
+            {
+                Console.WriteLine("開催ボタンが見つかりませんでした。--url で出馬表URLを直接指定してください。");
+                return;
+            }
+
+            Console.WriteLine($"[Holdings] {holdingLabels.Count} 件: {string.Join(", ", holdingLabels)}");
+
+            var holdingLabel = holdingLabels[0];
+            Console.WriteLine($"[Select] 開催: {holdingLabel}");
+
+            var raceNumbers = await raceListScraper.ScrapeAsync(holdingLabel);
+            if (raceNumbers is null || raceNumbers.Count == 0)
+            {
+                Console.WriteLine("レース番号が見つかりませんでした。--url で出馬表URLを直接指定してください。");
+                return;
+            }
+
+            Console.WriteLine($"[Races] {raceNumbers.Count} 件: {string.Join(", ", raceNumbers.Select(n => $"{n}R"))}");
+
+            var targetRaceNumber = raceNumbers[0];
+            Console.WriteLine($"[Select] レース: {targetRaceNumber}R");
+
+            // レース番号をクリックして出馬表ページへ遷移
+            await browser.ClickAsync($"{targetRaceNumber}レース");
+            raceCardUrl = browser.CurrentUrl ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(raceCardUrl))
+            {
+                Console.WriteLine("出馬表ページへの遷移後にURLが取得できませんでした。");
+                return;
+            }
+
+            Console.WriteLine($"[RaceCard URL] {raceCardUrl}");
+        }
+
+        Console.WriteLine($"Target  : {raceCardUrl}");
+        Console.WriteLine($"Entries : {maxEntries}");
+        Console.WriteLine();
+
+        // ナビゲーションで到達した場合はすでにページが表示されているため再ナビゲーション不要
+        // --url 直指定の場合はURLから改めてナビゲーションする
+        JraRaceCardDetailData? detail;
+        JraRaceCardData? currentCard;
+        if (targetUrlArg is not null)
+        {
+            detail = await detailScraper.ScrapeAsync(raceCardUrl, maxEntries);
+            currentCard = detail?.RaceCard;
+        }
+        else
+        {
+            currentCard = await raceCardScraper.ScrapeCurrentPageAsync();
+            detail = currentCard is not null
+                ? await detailScraper.ScrapeAsync(currentCard, maxEntries)
+                : null;
+        }
+
+        // テーブル構造デバッグ: --debug-tables フラグで出力
+        if (HasArg(args, "--debug-tables") && currentCard is not null)
+        {
+            var debugSnapshot = await browser.GetPageSnapshotAsync(maxLinks: 1);
+            Console.WriteLine("=== [Debug] Tables ===");
+            for (var ti = 0; ti < debugSnapshot.Tables.Count; ti++)
+            {
+                var tbl = debugSnapshot.Tables[ti];
+                Console.WriteLine($"Table[{ti}] Headers: [{string.Join(" | ", tbl.Headers)}]");
+                if (tbl.Rows.Count > 0)
+                {
+                    Console.WriteLine($"  Row[0]: [{string.Join(" | ", tbl.Rows[0].Select(c => c.Length > 30 ? c[..30] + "..." : c))}]");
+                }
+            }
+            Console.WriteLine("===");
+        }
+        if (detail is null)
+        {
+            Console.WriteLine("出馬表詳細の取得に失敗しました。");
+            return;
+        }
+
+        Console.WriteLine($"[RaceCard] {detail.RaceCard.RaceDate:yyyy-MM-dd} {detail.RaceCard.Racecourse}{detail.RaceCard.RaceNumber}R {detail.RaceCard.RaceName}");
+        Console.WriteLine($"  Entries: {detail.RaceCard.Entries.Count}");
+        Console.WriteLine();
+
+        foreach (var profile in detail.EntryProfiles)
+        {
+            Console.WriteLine($"[Entry] {profile.Entry.HorseNumber}番 {profile.Entry.HorseName}");
+            Console.WriteLine($"  騎手: {profile.Entry.JockeyName ?? "-"}");
+            Console.WriteLine($"  調教師: {profile.Entry.TrainerName ?? "-"}");
+
+            if (profile.HorseProfile is not null)
+            {
+                Console.WriteLine($"  Horse: 性別={profile.HorseProfile.SexCode ?? "-"} 生年月日={profile.HorseProfile.BirthDate?.ToString("yyyy-MM-dd") ?? "-"} 馬主={profile.HorseProfile.OwnerName ?? "-"} 生産者={profile.HorseProfile.BreederName ?? "-"}");
+                Console.WriteLine($"         父={profile.HorseProfile.SireName ?? "-"} 母={profile.HorseProfile.DamName ?? "-"}");
+            }
+            else
+            {
+                Console.WriteLine("  Horse: 取得失敗");
+            }
+
+            if (profile.JockeyProfile is not null)
+            {
+                Console.WriteLine($"  Jockey: 所属={profile.JockeyProfile.AffiliationCode ?? "-"} 生年月日={profile.JockeyProfile.BirthDate?.ToString("yyyy-MM-dd") ?? "-"} デビュー年={profile.JockeyProfile.DebutYear?.ToString(CultureInfo.InvariantCulture) ?? "-"}");
+            }
+            else
+            {
+                Console.WriteLine("  Jockey: 取得失敗");
+            }
+
+            if (profile.TrainerProfile is not null)
+            {
+                Console.WriteLine($"  Trainer: 所属={profile.TrainerProfile.AffiliationCode ?? "-"} デビュー年={profile.TrainerProfile.DebutYear?.ToString(CultureInfo.InvariantCulture) ?? "-"}");
+            }
+            else
+            {
+                Console.WriteLine("  Trainer: 取得失敗");
+            }
+
+            Console.WriteLine();
+        }
+
+        if (saveProfiles)
+        {
+            var dbPath = string.IsNullOrWhiteSpace(dbPathArg)
+                ? Path.Combine(AppContext.BaseDirectory, "eventstore-verifier.db")
+                : dbPathArg;
+            var connectionString = $"Data Source={dbPath}";
+
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddHorseRacingAgentDomainSupport(connectionString);
+
+            using var serviceProvider = services.BuildServiceProvider();
+            var writeTools = serviceProvider.GetRequiredService<DataCollectionWriteTools>();
+            await SaveScrapedProfilesAsync(writeTools, detail);
+
+            Console.WriteLine($"[Save] プロフィール更新を保存しました: {dbPath}");
+        }
+    }
+    else if (string.Equals(scenario, "jra-profile-page-debug", StringComparison.OrdinalIgnoreCase))
+    {
+        // 診断シナリオ: 出馬表ページから馬名をクリックしてプロフィールページのスナップショットを表示する
+        var entryUrl = GetArgValue(args, "--entry-url") ?? JraRaceCardTopPageScraper.ThisWeekEntryUrl;
+        var topPageScraper = new JraRaceCardTopPageScraper(browser);
+        var raceListScraper = new JraRaceCardRaceListScraper(browser);
+        var raceCardScraper = new JraRaceCardScraper(browser);
+
+        var holdings = await topPageScraper.ScrapeAsync(entryUrl);
+        Console.WriteLine($"Holdings: {string.Join(", ", holdings ?? [])}");
+        if (holdings is null || holdings.Count == 0) return;
+
+        var races = await raceListScraper.ScrapeAsync(holdings[0]);
+        Console.WriteLine($"Races: {string.Join(", ", races?.Select(n => $"{n}R") ?? [])}");
+        if (races is null || races.Count == 0) return;
+
+        await browser.ClickAsync($"{races[0]}レース");
+        var raceCard = await raceCardScraper.ScrapeCurrentPageAsync();
+        Console.WriteLine($"RaceCard: {raceCard?.RaceName} Entries={raceCard?.Entries.Count}");
+        if (raceCard is null || raceCard.Entries.Count == 0) return;
+
+        var firstEntry = raceCard.Entries[0];
+        Console.WriteLine($"FirstEntry: {firstEntry.HorseNumber}番 {firstEntry.HorseName} 騎手={firstEntry.JockeyName} 調教師={firstEntry.TrainerName}");
+        Console.WriteLine();
+        Console.WriteLine("--- 馬名クリック後のスナップショット ---");
+        try
+        {
+            await browser.ClickAsync(firstEntry.HorseName);
+            var snap = await browser.GetPageSnapshotAsync(maxLinks: 1);
+            Console.WriteLine($"URL: {browser.CurrentUrl}");
+            Console.WriteLine($"Title: {snap.Title}");
+            Console.WriteLine($"MainText (先頭800文字): {(snap.MainText?.Length > 800 ? snap.MainText[..800] : snap.MainText)}");
+            Console.WriteLine($"Tables: {snap.Tables.Count}");
+            for (var ti = 0; ti < Math.Min(snap.Tables.Count, 3); ti++)
+            {
+                var t = snap.Tables[ti];
+                Console.WriteLine($"  Table[{ti}] Headers=[{string.Join(" | ", t.Headers)}] Rows={t.Rows.Count}");
+                foreach (var row in t.Rows.Take(5))
+                    Console.WriteLine($"    [{string.Join(" | ", row.Select(c => c.Length > 40 ? c[..40] + "..." : c))}]");
+            }
+            await browser.GoBackAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"馬名クリック失敗: {ex.Message}");
+        }
+    }
     else if (string.Equals(scenario, "monthly-race-discovery", StringComparison.OrdinalIgnoreCase))
     {
         var runDate = runDateArg is null
@@ -578,6 +787,43 @@ static string GetJapaneseDayOfWeek(DayOfWeek dayOfWeek)
         DayOfWeek.Saturday => "土",
         _ => dayOfWeek.ToString()
     };
+}
+
+static async Task SaveScrapedProfilesAsync(
+    DataCollectionWriteTools writeTools,
+    JraRaceCardDetailData detail)
+{
+    var savedHorses = new HashSet<string>(StringComparer.Ordinal);
+    var savedJockeys = new HashSet<string>(StringComparer.Ordinal);
+    var savedTrainers = new HashSet<string>(StringComparer.Ordinal);
+
+    foreach (var profile in detail.EntryProfiles)
+    {
+        var horse = profile.HorseProfile;
+        if (horse is not null && savedHorses.Add(horse.RegisteredName))
+        {
+            await writeTools.UpsertHorse(
+                registeredName: horse.RegisteredName,
+                sexCode: horse.SexCode,
+                birthDate: horse.BirthDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        }
+
+        var jockey = profile.JockeyProfile;
+        if (jockey is not null && savedJockeys.Add(jockey.DisplayName))
+        {
+            await writeTools.UpsertJockey(
+                displayName: jockey.DisplayName,
+                affiliationCode: jockey.AffiliationCode);
+        }
+
+        var trainer = profile.TrainerProfile;
+        if (trainer is not null && savedTrainers.Add(trainer.DisplayName))
+        {
+            await writeTools.UpsertTrainer(
+                displayName: trainer.DisplayName,
+                affiliationCode: trainer.AffiliationCode);
+        }
+    }
 }
 
 static async Task<string?> SaveScrapedResultToEventFlowAsync(

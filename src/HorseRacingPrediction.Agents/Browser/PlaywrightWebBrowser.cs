@@ -653,31 +653,51 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         try
         {
-            text = await locator.InnerTextAsync();
+            // 短いタイムアウト (3 秒) を設定し、非表示要素で 30 秒ハングするのを防ぐ
+            text = await locator.InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3000 });
         }
-        catch (PlaywrightException)
+        catch (Exception)
         {
         }
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            text = await locator.TextContentAsync();
+            try
+            {
+                text = await locator.TextContentAsync(new LocatorTextContentOptions { Timeout = 3000 });
+            }
+            catch (Exception)
+            {
+            }
         }
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            text = await locator.GetAttributeAsync("aria-label")
-                ?? await locator.GetAttributeAsync("title")
-                ?? await locator.GetAttributeAsync("value");
+            try
+            {
+                var opts = new LocatorGetAttributeOptions { Timeout = 3000 };
+                text = await locator.GetAttributeAsync("aria-label", opts)
+                    ?? await locator.GetAttributeAsync("title", opts)
+                    ?? await locator.GetAttributeAsync("value", opts);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         if (string.IsNullOrWhiteSpace(text))
         {
             // 子 <img> の alt テキストをフォールバックとして使う（例: <a><img alt="1レース"></a>）
-            var img = locator.Locator("img[alt]");
-            if (await img.CountAsync() > 0)
+            try
             {
-                text = await img.First.GetAttributeAsync("alt");
+                var img = locator.Locator("img[alt]");
+                if (await img.CountAsync() > 0)
+                {
+                    text = await img.First.GetAttributeAsync("alt");
+                }
+            }
+            catch (Exception)
+            {
             }
         }
 
