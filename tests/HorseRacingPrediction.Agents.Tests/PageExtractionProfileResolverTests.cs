@@ -12,7 +12,7 @@ public class PageExtractionProfileResolverTests
 
         Assert.AreEqual("tiny", profile.Name);
         Assert.IsFalse(profile.IncludeSnapshotInPrompt);
-        Assert.IsTrue(profile.MaxInputLength < PageExtractionProfile.Standard.MaxInputLength);
+        Assert.IsLessThan(PageExtractionProfile.Standard.MaxInputLength, profile.MaxInputLength);
     }
 
     [TestMethod]
@@ -22,7 +22,7 @@ public class PageExtractionProfileResolverTests
 
         Assert.AreEqual("small", profile.Name);
         Assert.IsTrue(profile.IncludeSnapshotInPrompt);
-        Assert.IsTrue(profile.MaxInputLength < PageExtractionProfile.Standard.MaxInputLength);
+        Assert.IsLessThan(PageExtractionProfile.Standard.MaxInputLength, profile.MaxInputLength);
     }
 
     [TestMethod]

@@ -20,7 +20,7 @@ public class DataCollectionWriteToolsTests
     {
         await _sut.UpsertHorse("イクイノックス");
 
-        Assert.AreEqual(1, _fakeService.UpsertHorseCalls.Count, "UpsertHorseAsync が1回呼ばれること");
+        Assert.HasCount(1, _fakeService.UpsertHorseCalls, "UpsertHorseAsync が1回呼ばれること");
         Assert.AreEqual("イクイノックス", _fakeService.UpsertHorseCalls[0].RegisteredName, "馬名が正しく渡されること");
     }
 
@@ -41,7 +41,7 @@ public class DataCollectionWriteToolsTests
 
         await _sut.UpsertRaceEntry(raceId, 1, "イクイノックス", "川田将雅", "木村哲也");
 
-        Assert.AreEqual(1, _fakeService.UpsertRaceEntryCalls.Count, "UpsertRaceEntryAsync が1回呼ばれること");
+        Assert.HasCount(1, _fakeService.UpsertRaceEntryCalls, "UpsertRaceEntryAsync が1回呼ばれること");
         var call = _fakeService.UpsertRaceEntryCalls[0];
         Assert.AreEqual(raceId, call.RaceId);
         Assert.AreEqual(1, call.HorseNumber);

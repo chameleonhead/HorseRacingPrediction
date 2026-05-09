@@ -215,7 +215,52 @@ public sealed class JraTaskAgent : IAsyncDisposable
         var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken);
         var kind = JraPageKindDetector.Detect(Browser.CurrentUrl, snapshot);
         _memory.RecordNavigation(Browser.CurrentUrl ?? snapshot.Url, kind);
-        return JraStructuredPageParserRegistry.Parse(kind, snapshot);
+        var structured = JraStructuredPageParserRegistry.Parse(kind, snapshot);
+        if (structured.Success || _registry.GetFor(kind) is not { } extractor)
+        {
+            return structured;
+        }
+
+        var extracted = await extractor.ExtractAsync(Browser, cancellationToken);
+        return new JraStructuredPageEnvelope(
+            extracted is not null,
+            kind,
+            Browser.CurrentUrl ?? snapshot.Url,
+            extracted,
+            [],
+            extracted is not null ? JraPageParseConfidence.Medium : JraPageParseConfidence.Low,
+            [],
+            extracted is not null ? null : structured.Error);
+    }
+
+    public async Task<JraStructuredPageEnvelope> FollowStructuredNextLinkAsync(
+        string relationOrLabel,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        if (string.IsNullOrWhiteSpace(relationOrLabel))
+        {
+            throw new ArgumentException("relation または label を指定してください。", nameof(relationOrLabel));
+        }
+
+        var currentPage = await ExtractCurrentStructuredPageAsync(cancellationToken);
+        var nextLink = SelectRecommendedNextLink(currentPage.RecommendedNextLinks, relationOrLabel)
+            ?? throw new InvalidOperationException(
+                $"structured next link が見つかりませんでした: {relationOrLabel}");
+
+        if (nextLink.NavigationMode == JraStructuredLinkNavigationMode.DirectUrl
+            && !string.IsNullOrWhiteSpace(nextLink.Url))
+        {
+            await Browser.NavigateAsync(nextLink.Url, cancellationToken);
+        }
+        else
+        {
+            await Browser.ClickAsync(nextLink.Label, cancellationToken);
+        }
+
+        SyncMemoryFromUrl();
+        return await ExtractCurrentStructuredPageAsync(cancellationToken);
     }
 
     public async Task NavigateAsync(string url, CancellationToken cancellationToken = default)
@@ -605,7 +650,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
             {
                 link.Title,
                 Label = HoldingLabelRegex.Match(link.Title ?? string.Empty) is { Success: true } match ? match.Value : null,
-                MatchesDate = IsLinkScopedUnderDateHeading(snapshot.MainText, link.Title, date),
+                MatchesDate = IsLinkScopedUnderDateHeading(snapshot.MainText, link.Title ?? string.Empty, date),
             })
             .Where(link => !string.IsNullOrWhiteSpace(link.Label)
                 && link.MatchesDate
@@ -755,6 +800,18 @@ public sealed class JraTaskAgent : IAsyncDisposable
 
     private static bool ContainsNormalized(string source, string target)
         => NormalizeLoose(source).Contains(NormalizeLoose(target), StringComparison.Ordinal);
+
+    private static JraStructuredPageNextLink? SelectRecommendedNextLink(
+        IReadOnlyList<JraStructuredPageNextLink> links,
+        string relationOrLabel)
+    {
+        var target = NormalizeLoose(relationOrLabel);
+
+        return links.FirstOrDefault(link => string.Equals(NormalizeLoose(link.Relation), target, StringComparison.Ordinal))
+            ?? links.FirstOrDefault(link => NormalizeLoose(link.Relation).StartsWith(target + ":", StringComparison.Ordinal))
+            ?? links.FirstOrDefault(link => string.Equals(NormalizeLoose(link.Label), target, StringComparison.Ordinal))
+            ?? links.FirstOrDefault(link => NormalizeLoose(link.Label).Contains(target, StringComparison.Ordinal));
+    }
 
     private static string NormalizeLoose(string value)
         => value.Replace(" ", string.Empty, StringComparison.Ordinal)

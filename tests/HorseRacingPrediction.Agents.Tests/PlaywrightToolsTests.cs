@@ -161,7 +161,7 @@ public class PlaywrightToolsTests
         var result = await _sut.BrowserSearch("皐月賞");
 
         StringAssert.Contains(result, "[JRA レース情報](https://www.bing.com/race)");
-        Assert.IsFalse(result.Contains("](/race)"), "相対 URL のまま出力されないこと");
+        Assert.DoesNotContain(result, "](/race)", "相対 URL のまま出力されないこと");
     }
 
     [TestMethod]
@@ -197,7 +197,7 @@ public class PlaywrightToolsTests
         var result = await _sut.BrowserSearch("皐月賞");
 
         StringAssert.Contains(result, "[結果 30](https://example.com/30)");
-        Assert.IsFalse(result.Contains("[結果 31](https://example.com/31)"), "30件を超えるリンクは表示しないこと");
+        Assert.DoesNotContain(result, "[結果 31](https://example.com/31)", "30件を超えるリンクは表示しないこと");
     }
 
     [TestMethod]
@@ -290,7 +290,7 @@ public class PlaywrightToolsTests
         StringAssert.Contains(result, "[ホーム](https://www.jra.go.jp/home)");
         StringAssert.Contains(result, "[詳細ページ](https://www.jra.go.jp/detail)");
         StringAssert.Contains(result, "[お問い合わせ](https://www.jra.go.jp/contact)");
-        Assert.IsFalse(result.Contains("](./detail)"), "相対 URL のまま出力されないこと");
+        Assert.DoesNotContain(result, "](./detail)", "相対 URL のまま出力されないこと");
     }
 
     [TestMethod]
@@ -298,7 +298,7 @@ public class PlaywrightToolsTests
     {
         var tools = _sut.GetAITools();
 
-        Assert.AreEqual(2, tools.Count, "PlaywrightTools は 2 つ登録されていること");
+        Assert.HasCount(2, tools, "PlaywrightTools は 2 つ登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "BrowserSearch"), "BrowserSearch が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "BrowserReadPage"), "BrowserReadPage が登録されていること");
     }

@@ -208,7 +208,7 @@ public class HorseRacingToolsTests
     {
         var tools = _sut.GetAITools();
 
-        Assert.AreEqual(6, tools.Count, "競馬ツールは6つ登録されていること");
+        Assert.HasCount(6, tools, "競馬ツールは6つ登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchRaceCard"), "FetchRaceCard が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchJraEntryList"), "FetchJraEntryList が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchHorseHistory"), "FetchHorseHistory が登録されていること");

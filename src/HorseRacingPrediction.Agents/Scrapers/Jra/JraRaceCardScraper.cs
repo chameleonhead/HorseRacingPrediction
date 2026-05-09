@@ -281,6 +281,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         }
 
         var cleaned = CleanRaceName(text);
+        var normalizedForSuffix = Regex.Replace(cleaned, @"（[^）]+）$", string.Empty, RegexOptions.CultureInvariant);
         if (string.IsNullOrWhiteSpace(cleaned)
             || IsBoilerplateHeading(cleaned)
             || cleaned.StartsWith("本賞", StringComparison.Ordinal)
@@ -290,12 +291,12 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             return false;
         }
 
-        return cleaned.EndsWith("記念", StringComparison.Ordinal)
-            || cleaned.EndsWith("カップ", StringComparison.Ordinal)
-            || cleaned.EndsWith("ステークス", StringComparison.Ordinal)
-            || cleaned.EndsWith("新聞杯", StringComparison.Ordinal)
-            || cleaned.EndsWith("賞", StringComparison.Ordinal)
-            || cleaned.EndsWith("S", StringComparison.Ordinal);
+        return normalizedForSuffix.EndsWith("記念", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("カップ", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("ステークス", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("新聞杯", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("賞", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("S", StringComparison.Ordinal);
     }
 
     private static string CleanRaceName(string name)

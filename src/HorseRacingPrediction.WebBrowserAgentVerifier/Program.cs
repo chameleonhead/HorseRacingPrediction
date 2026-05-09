@@ -25,6 +25,7 @@ var maxEntriesArg = GetArgValue(args, "--max-entries");
 var targetUrlArg = GetArgValue(args, "--url");
 var extractionProfileArg = GetArgValue(args, "--extraction-profile");
 var dbPathArg = GetArgValue(args, "--db-path");
+var relationArg = GetArgValue(args, "--relation") ?? GetArgValue(args, "--label");
 
 var prompt = args.Length > 0
     ? string.Join(' ', args)
@@ -343,6 +344,23 @@ try
         Console.WriteLine($"URL        : {url}");
         PrintStructuredPageEnvelope(structured);
     }
+    else if (string.Equals(scenario, "jra-follow-structured-next-link", StringComparison.OrdinalIgnoreCase))
+    {
+        var url = string.IsNullOrWhiteSpace(targetUrlArg)
+            ? "https://www.jra.go.jp/keiba/thisweek/"
+            : targetUrlArg;
+        var relationOrLabel = string.IsNullOrWhiteSpace(relationArg)
+            ? JraStructuredLinkRelations.OpenRaceCard
+            : relationArg;
+
+        await using var jraAgent = await JraTaskAgent.CreateAsync();
+        await jraAgent.NavigateAsync(url);
+        var structured = await jraAgent.FollowStructuredNextLinkAsync(relationOrLabel);
+
+        Console.WriteLine($"URL        : {url}");
+        Console.WriteLine($"Relation   : {relationOrLabel}");
+        PrintStructuredPageEnvelope(structured);
+    }
     else if (string.Equals(scenario, "jra-race-result-collection-debug", StringComparison.OrdinalIgnoreCase))
     {
         var runDate = runDateArg is null
@@ -596,6 +614,13 @@ static void PrintStructuredPageEnvelope(JraStructuredPageEnvelope envelope)
         Console.WriteLine($"RaceDate   : {gradeOnePage.RaceDate:yyyy-MM-dd}");
         Console.WriteLine($"Racecourse : {gradeOnePage.Racecourse}");
         Console.WriteLine($"Distance   : {gradeOnePage.Distance}");
+    }
+    else if (envelope.Data is JraRaceCardPage raceCardPage)
+    {
+        Console.WriteLine($"RaceName   : {raceCardPage.RaceName}");
+        Console.WriteLine($"RaceDate   : {raceCardPage.RaceDate:yyyy-MM-dd}");
+        Console.WriteLine($"Racecourse : {raceCardPage.Racecourse}");
+        Console.WriteLine($"Distance   : {raceCardPage.Distance}");
     }
 }
 

@@ -128,6 +128,28 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         return await ExtractFromCurrentPage("snapshot", 0, cancellationToken);
     }
 
+    [Description("structuredPage が返す recommendedNextLinks から relation または label を指定して次ページへ遷移します。例: open_race_card, open_special:NHKマイルカップ, 出馬表")]
+    public async Task<string> FollowStructuredNextLink(
+        [Description("recommendedNextLinks の relation または label")] string relationOrLabel,
+        CancellationToken cancellationToken = default)
+    {
+        return await WithSessionAsync(async browser =>
+        {
+            var structuredPage = await browser.FollowStructuredNextLinkAsync(relationOrLabel, cancellationToken);
+            var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 40, cancellationToken: cancellationToken);
+
+            return Serialize(new
+            {
+                status = "ok",
+                action = "follow_structured_next_link",
+                relationOrLabel,
+                currentUrl = browser.CurrentUrl,
+                page = BuildPageSummary(snapshot),
+                structuredPage
+            });
+        });
+    }
+
     [Description("JRA専用Playwrightセッションを終了します。次回呼び出し時に新しいセッションが開始されます。")]
     public async Task<string> CloseJraSession()
     {
@@ -152,6 +174,7 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     [
         AIFunctionFactory.Create(OpenJraPage),
         AIFunctionFactory.Create(ExtractFromCurrentPage),
+        AIFunctionFactory.Create(FollowStructuredNextLink),
         AIFunctionFactory.Create(NavigateToOddsFromCurrentPage),
         AIFunctionFactory.Create(GetCurrentPageSnapshot),
         AIFunctionFactory.Create(CloseJraSession)

@@ -61,14 +61,14 @@ public class WeeklyScheduleWorkflowTests
 
         var races = await _sut.DiscoverRacesAsync(SampleWeekend);
 
-        Assert.AreEqual(1, races.Count, "1 レースが返されること");
+        Assert.HasCount(1, races, "1 レースが返されること");
         Assert.AreEqual("天皇賞秋", races[0].RaceName);
         Assert.AreEqual(new DateOnly(2024, 10, 27), races[0].RaceDate);
         Assert.AreEqual("東京", races[0].Racecourse);
         Assert.AreEqual(11, races[0].RaceNumber);
-        Assert.AreEqual(2, races[0].HorseNames.Count, "馬名が 2 件");
-        Assert.AreEqual(2, races[0].JockeyNames.Count, "騎手名が 2 件");
-        Assert.AreEqual(2, races[0].TrainerNames.Count, "調教師名が 2 件");
+        Assert.HasCount(2, races[0].HorseNames, "馬名が 2 件");
+        Assert.HasCount(2, races[0].JockeyNames, "騎手名が 2 件");
+        Assert.HasCount(2, races[0].TrainerNames, "調教師名が 2 件");
     }
 
     [TestMethod]
@@ -89,7 +89,7 @@ public class WeeklyScheduleWorkflowTests
 
         var races = await _sut.DiscoverRacesAsync(SampleWeekend);
 
-        Assert.AreEqual(0, races.Count, "空リストが返されること");
+        Assert.IsEmpty(races, "空リストが返されること");
     }
 
     [TestMethod]
@@ -99,7 +99,7 @@ public class WeeklyScheduleWorkflowTests
 
         var races = await _sut.DiscoverRacesAsync(SampleWeekend);
 
-        Assert.AreEqual(0, races.Count, "解析失敗時は空リストを返すこと");
+        Assert.IsEmpty(races, "解析失敗時は空リストを返すこと");
     }
 
     [TestMethod]
@@ -132,7 +132,7 @@ public class WeeklyScheduleWorkflowTests
 
         var races = await _sut.DiscoverRacesAsync(SampleWeekend);
 
-        Assert.AreEqual(2, races.Count, "複数レースが返されること");
+        Assert.HasCount(2, races, "複数レースが返されること");
         Assert.AreEqual("天皇賞秋", races[0].RaceName);
         Assert.AreEqual("スワンS", races[1].RaceName);
     }
@@ -149,7 +149,7 @@ public class WeeklyScheduleWorkflowTests
         var result = await _sut.CollectDataAsync(SampleWeekend, []);
 
         Assert.AreEqual(SampleWeekend, result.TargetWeekend, "TargetWeekend が設定されること");
-        Assert.AreEqual(0, result.RaceCollections.Count, "レースが空の場合は空リスト");
+        Assert.IsEmpty(result.RaceCollections, "レースが空の場合は空リスト");
     }
 
     [TestMethod]
@@ -173,7 +173,7 @@ public class WeeklyScheduleWorkflowTests
         var result = await _sut.CollectDataAsync(SampleWeekend, races);
 
         Assert.AreEqual(SampleWeekend, result.TargetWeekend);
-        Assert.AreEqual(1, result.RaceCollections.Count, "1 レース分の収集結果");
+        Assert.HasCount(1, result.RaceCollections, "1 レース分の収集結果");
         Assert.AreEqual("2024年天皇賞秋 東京11R", result.RaceCollections[0].RaceQuery);
     }
 
@@ -190,7 +190,7 @@ public class WeeklyScheduleWorkflowTests
 
         var result = await _sut.CollectDataAsync(SampleWeekend, races);
 
-        Assert.AreEqual(2, result.RaceCollections.Count, "2 レース分の収集結果");
+        Assert.HasCount(2, result.RaceCollections, "2 レース分の収集結果");
     }
 
     // ------------------------------------------------------------------ //
@@ -204,7 +204,7 @@ public class WeeklyScheduleWorkflowTests
 
         var results = await _sut.CollectPostPositionsAndPredictAsync([]);
 
-        Assert.AreEqual(0, results.Count, "レースが空の場合は空リスト");
+        Assert.IsEmpty(results, "レースが空の場合は空リスト");
     }
 
     [TestMethod]
@@ -227,7 +227,7 @@ public class WeeklyScheduleWorkflowTests
 
         var results = await _sut.CollectPostPositionsAndPredictAsync(races);
 
-        Assert.AreEqual(1, results.Count, "1 件の予測結果");
+        Assert.HasCount(1, results, "1 件の予測結果");
         Assert.AreEqual("天皇賞秋", results[0].RaceInfo.RaceName, "レース名が設定されること");
         Assert.IsFalse(string.IsNullOrEmpty(results[0].PredictionSummary), "予測レポートが返されること");
         Assert.IsNotNull(results[0].CollectionResult, "収集結果が設定されること");
@@ -246,7 +246,7 @@ public class WeeklyScheduleWorkflowTests
 
         var results = await _sut.CollectPostPositionsAndPredictAsync(races);
 
-        Assert.AreEqual(2, results.Count, "2 件の予測結果");
+        Assert.HasCount(2, results, "2 件の予測結果");
     }
 
     // ------------------------------------------------------------------ //

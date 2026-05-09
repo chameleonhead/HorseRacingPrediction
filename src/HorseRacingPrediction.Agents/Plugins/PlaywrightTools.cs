@@ -449,13 +449,11 @@ public sealed class PlaywrightTools
         var linkMatches = links
             .Where(link => string.Equals(NormalizeMatchText(link.Title), candidate, StringComparison.Ordinal))
             .Select(link => link.Title)
-            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         var actionMatches = snapshot?.Actions
             .Where(action => string.Equals(NormalizeMatchText(action.Text), candidate, StringComparison.Ordinal))
             .Select(action => action.Text)
-            .Distinct(StringComparer.Ordinal)
             .ToList()
             ?? [];
 

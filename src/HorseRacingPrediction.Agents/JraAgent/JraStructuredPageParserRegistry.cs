@@ -14,6 +14,7 @@ public static class JraStructuredPageParserRegistry
             JraPageKind.RaceList => ToEnvelope(kind, snapshot.Url, new JraRaceListParser().Parse(snapshot)),
             JraPageKind.ThisWeekFeature => ToEnvelope(kind, snapshot.Url, new JraThisWeekFeatureParser().Parse(snapshot)),
             JraPageKind.GradeOneSpecial => ToEnvelope(kind, snapshot.Url, new JraGradeOneSpecialParser().Parse(snapshot)),
+            JraPageKind.RaceCard => ToEnvelope(kind, snapshot.Url, new JraRaceCardParser().Parse(snapshot)),
             _ => new JraStructuredPageEnvelope(false, kind, snapshot.Url, null, [], JraPageParseConfidence.Low, [], "ページ種別に対応する structured parser が登録されていません。"),
         };
     }

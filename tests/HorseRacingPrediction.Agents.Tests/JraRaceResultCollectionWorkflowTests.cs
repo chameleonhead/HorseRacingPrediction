@@ -265,23 +265,17 @@ public class JraRaceResultCollectionWorkflowTests
     [TestMethod]
     public async Task CollectAsync_EndToEnd_ReturnsPopulatedResult()
     {
-        _fakeChatClient.ResponseText = """
-            [
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-10-26",
-                "raceNumber": 11
-              }
-            ]
-            """;
-
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
+            Url: "https://www.jra.go.jp/keiba/",
             Title: "天皇賞（秋） 成績 | JRA",
             MainText: "2025年10月26日 東京 11R 天皇賞（秋） 芝・右 2000m GⅠ",
             Headings: ["天皇賞（秋）", "2025年10月26日 東京 11R"],
-            Links: [],
+            Links:
+            [
+                new SearchResultLink(
+                    "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
+                    "11R 結果")
+            ],
             Actions: [],
             Tables:
             [

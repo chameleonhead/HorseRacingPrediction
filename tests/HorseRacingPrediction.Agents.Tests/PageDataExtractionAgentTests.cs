@@ -63,7 +63,7 @@ public class PageDataExtractionAgentTests
             "https://example.com/page",
             [new SearchResultLink("https://example.com/allowed", "正規リンク")]);
 
-        Assert.IsFalse(result.Contains("https://invalid.example.com/path"), "未検証 URL は除去されること");
+        Assert.DoesNotContain(result, "https://invalid.example.com/path", "未検証 URL は除去されること");
         StringAssert.Contains(result, "偽リンク");
         StringAssert.Contains(result, "[正規リンク](https://example.com/allowed)");
     }
@@ -110,8 +110,8 @@ public class PageDataExtractionAgentTests
         StringAssert.Contains(result, "## 検索結果候補");
         StringAssert.Contains(result, "[皐月賞 - 出馬表 JRA日本中央競馬会](https://www.jra.go.jp/keiba/satsuki/syutsuba.html)");
         StringAssert.Contains(result, "[皐月賞2026特集 | netkeiba](https://race.netkeiba.com/special/index.html)");
-        Assert.IsFalse(result.Contains("設定"), "検索結果ページでは周辺UIリンクを省くこと");
-        Assert.IsFalse(result.Contains("検索結果の生テキスト"), "検索結果ページでは生テキストをそのまま返さないこと");
+        Assert.DoesNotContain(result, "設定", "検索結果ページでは周辺UIリンクを省くこと");
+        Assert.DoesNotContain(result, "検索結果の生テキスト", "検索結果ページでは生テキストをそのまま返さないこと");
     }
 
     [TestMethod]
@@ -128,7 +128,7 @@ public class PageDataExtractionAgentTests
         Assert.IsNotNull(chatClient.CapturedMessages, "LLM が呼ばれていること");
         var userMsg = chatClient.CapturedMessages!.Last(m => m.Role == ChatRole.User);
         StringAssert.Contains(userMsg.Text!, "... 他 10 件");
-        Assert.IsFalse(userMsg.Text!.Contains("候補 21 | https://example.com/21"), "プロンプトに過剰なリンクを渡さないこと");
+        Assert.DoesNotContain(userMsg.Text!, "候補 21 | https://example.com/21", "プロンプトに過剰なリンクを渡さないこと");
     }
 
     [TestMethod]
@@ -142,8 +142,9 @@ public class PageDataExtractionAgentTests
 
         Assert.IsNotNull(chatClient.CapturedMessages, "LLM が呼ばれていること");
         var userMsg = chatClient.CapturedMessages!.Last(m => m.Role == ChatRole.User);
-        Assert.IsTrue(
-            userMsg.Text!.Length < longText.Length,
+        Assert.IsLessThan(
+            longText.Length,
+            userMsg.Text!.Length,
             "入力テキストが切り詰められていること");
     }
 

@@ -318,10 +318,15 @@ public class JraRaceResultScraperTests
     {
         public PageSnapshot? Snapshot { get; set; }
 
-        public string? CurrentUrl => "https://www.jra.go.jp/test";
+        private string? _currentUrl = "https://www.jra.go.jp/test";
+
+        public string? CurrentUrl => _currentUrl;
 
         public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            _currentUrl = url;
+            return Task.FromResult(string.Empty);
+        }
 
         public Task<PageSnapshot> GetPageSnapshotAsync(
             int maxLinks = 0,

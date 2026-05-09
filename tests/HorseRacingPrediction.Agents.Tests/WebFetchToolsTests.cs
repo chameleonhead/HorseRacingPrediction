@@ -110,9 +110,9 @@ public class WebFetchToolsTests
         await _sut.SearchWeb("テストクエリ");
 
         Assert.IsNotNull(_lastPrompt);
-        Assert.IsFalse(_lastPrompt.Contains("調査目的:"),
+        Assert.DoesNotContain(_lastPrompt, "調査目的:",
             "目的省略時は目的フィールドが含まれないこと");
-        Assert.IsFalse(_lastPrompt.Contains("対象サイト:"),
+        Assert.DoesNotContain(_lastPrompt, "対象サイト:",
             "サイト省略時はサイトフィールドが含まれないこと");
     }
 
@@ -214,12 +214,12 @@ public class WebFetchToolsTests
     {
         var tools = _sut.GetAITools();
 
-        Assert.AreEqual(4, tools.Count, "汎用ツールは4つ登録されていること");
+        Assert.HasCount(4, tools, "汎用ツールは4つ登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "FetchPageContent"), "FetchPageContent が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "SearchWeb"), "SearchWeb が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "ExploreFromEntryPoint"), "ExploreFromEntryPoint が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "SearchAndFetch"), "SearchAndFetch が登録されていること");
-        Assert.IsFalse(tools.Any(t => t.Name == "FetchRaceCard"), "競馬ツールは含まれないこと");
-        Assert.IsFalse(tools.Any(t => t.Name == "FetchJraEntryList"), "競馬ツールは含まれないこと");
+        Assert.DoesNotContain(tools.Select(t => t.Name), "FetchRaceCard", "競馬ツールは含まれないこと");
+        Assert.DoesNotContain(tools.Select(t => t.Name), "FetchJraEntryList", "競馬ツールは含まれないこと");
     }
 }

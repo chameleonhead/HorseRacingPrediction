@@ -172,7 +172,7 @@ public class CalendarToolsTests
 
         var tools = sut.GetAITools();
 
-        Assert.AreEqual(3, tools.Count, "3 つのツールが返されること");
+        Assert.HasCount(3, tools, "3 つのツールが返されること");
     }
 
     // ------------------------------------------------------------------ //

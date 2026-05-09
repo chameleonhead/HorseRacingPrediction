@@ -120,7 +120,7 @@ public class JraStructuredPageParserTests
         Assert.IsNotNull(result.Data);
         Assert.AreEqual(2026, result.Data.Year);
         Assert.AreEqual(5, result.Data.Month);
-        Assert.AreEqual(2, result.Data.ScheduledDays.Count);
+        Assert.HasCount(2, result.Data.ScheduledDays);
         CollectionAssert.AreEquivalent(new[] { "東京", "京都", "新潟" }, result.Data.ScheduledDays[0].Racecourses.ToList());
     }
 
@@ -147,7 +147,7 @@ public class JraStructuredPageParserTests
 
         Assert.IsTrue(result.Success);
         Assert.IsNotNull(result.Data);
-        Assert.AreEqual(1, result.Data.FeaturedRaces.Count);
+        Assert.HasCount(1, result.Data.FeaturedRaces);
         Assert.AreEqual("NHKマイルカップ", result.Data.FeaturedRaces[0].RaceName);
         Assert.AreEqual("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", result.Data.FeaturedRaces[0].RaceCardUrl);
     }
@@ -178,5 +178,30 @@ public class JraStructuredPageParserTests
         Assert.AreEqual("GⅠ", result.Data.Grade);
         Assert.AreEqual("東京", result.Data.Racecourse);
         Assert.IsTrue(result.Data.Tabs.Any(tab => tab.Label == "出馬表"));
+    }
+
+    [TestMethod]
+    public void GradeOneSpecialParser_NormalizesRaceNameOnHorseInfoPage()
+    {
+        var snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/g1/nmc/horse.html",
+            Title: "出走馬情報 2026年NHKマイルカップ（GⅠ） JRA",
+            MainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 出馬表 出走馬情報 データ分析",
+            Headings: ["NHKマイルカップ"],
+            Links:
+            [
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+            ],
+            Actions: [],
+            Tables: []);
+
+        var result = new JraGradeOneSpecialParser().Parse(snapshot);
+
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Data);
+        Assert.AreEqual("NHKマイルカップ", result.Data.RaceName);
     }
 }

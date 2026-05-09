@@ -310,6 +310,12 @@ internal static class JraPageParserText
 
         normalized = Regex.Replace(normalized, @"^\d{4}年", string.Empty).Trim();
         normalized = Regex.Replace(normalized, @"（G[ⅠⅡⅢ123]）$", string.Empty).Trim();
+        normalized = Regex.Replace(
+                normalized,
+                @"^(出馬表|出走馬情報|データ分析|レーストップ|オッズ|払戻金|レース結果)\s*",
+                string.Empty)
+            .Trim();
+        normalized = Regex.Replace(normalized, @"^\d{4}年", string.Empty).Trim();
 
         var separators = new[] { "|", "｜", "-", "－" };
         foreach (var separator in separators)
