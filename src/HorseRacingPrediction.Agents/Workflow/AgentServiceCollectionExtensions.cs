@@ -216,47 +216,6 @@ public static class AgentServiceCollectionExtensions
     }
 
     /// <summary>
-    /// <see cref="DataCollectionWorkflow"/> および 4 つのデータ収集エージェントを
-    /// DI コンテナに登録する。
-    /// <para>
-    /// 各データ収集エージェントは <see cref="HorseRacingTools"/> の競馬固有ツールと、
-    /// <see cref="WebBrowserAgent"/> 経由の汎用 Web 検索機能を併用する。
-    /// </para>
-    /// <para>
-    /// 使用例（Program.cs または テスト初期化）:
-    /// <code>
-    /// builder.Services.AddWebBrowserAgent();
-    /// builder.Services.AddDataCollectionWorkflow();
-    /// </code>
-    /// </para>
-    /// </summary>
-    public static IServiceCollection AddDataCollectionWorkflow(this IServiceCollection services)
-    {
-        services.AddTransient<RaceDataAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new RaceDataAgent(chatClient, CreateDataCollectionTools(sp));
-        });
-        services.AddTransient<HorseDataAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new HorseDataAgent(chatClient, CreateDataCollectionTools(sp));
-        });
-        services.AddTransient<JockeyDataAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new JockeyDataAgent(chatClient, CreateDataCollectionTools(sp));
-        });
-        services.AddTransient<StableDataAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new StableDataAgent(chatClient, CreateDataCollectionTools(sp));
-        });
-        services.AddTransient<DataCollectionWorkflow>();
-        return services;
-    }
-
-    /// <summary>
     /// <see cref="PredictionWorkflow"/> および 3 つの予測エージェントを
     /// DI コンテナに登録する。
     /// </summary>
@@ -285,38 +244,6 @@ public static class AgentServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>
-    /// <see cref="WeeklyScheduleWorkflow"/> を DI コンテナに登録する。
-    /// <para>
-    /// 使用例（Program.cs または テスト初期化）:
-    /// <code>
-    /// builder.Services.AddWebBrowserAgent();
-    /// builder.Services.AddWeeklyScheduleWorkflow();
-    /// </code>
-    /// </para>
-    /// </summary>
-    public static IServiceCollection AddWeeklyScheduleWorkflow(this IServiceCollection services)
-    {
-        services.AddTransient<WeekendRaceDiscoveryAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new WeekendRaceDiscoveryAgent(chatClient, CreateWeekendRaceDiscoveryTools(sp));
-        });
-        services.AddTransient<PostPositionPredictionAgent>(sp =>
-        {
-            var chatClient = sp.GetRequiredService<IChatClient>();
-            return new PostPositionPredictionAgent(chatClient, CreatePostPositionPredictionTools(sp));
-        });
-        services.AddTransient<WeeklyScheduleWorkflow>(sp =>
-        {
-            return new WeeklyScheduleWorkflow(
-                sp.GetRequiredService<WeekendRaceDiscoveryAgent>(),
-                sp.GetRequiredService<DataCollectionWorkflow>(),
-                sp.GetRequiredService<PostPositionPredictionAgent>());
-        });
-        return services;
-    }
-
     public static ChatClientAgent CreateWebBrowserChatAgent(this IServiceProvider services, string? name = null)
     {
         var chatClient = services.GetRequiredService<IChatClient>();
@@ -333,64 +260,14 @@ public static class AgentServiceCollectionExtensions
             tools: playwrightTools.GetAITools());
     }
 
-    public static ChatClientAgent CreateWeekendRaceDiscoveryChatAgent(this IServiceProvider services, string? name = null)
+    public static ChatClientAgent CreateJraNavigationChatAgent(this IServiceProvider services, string? name = null)
     {
         var chatClient = services.GetRequiredService<IChatClient>();
         return new ChatClientAgent(
             chatClient,
-            name: name ?? WeekendRaceDiscoveryAgent.AgentName,
-            instructions: WeekendRaceDiscoveryAgent.SystemPrompt,
-            tools: CreateWeekendRaceDiscoveryTools(services));
-    }
-
-    public static ChatClientAgent CreateRaceDataChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? RaceDataAgent.AgentName,
-            instructions: RaceDataAgent.SystemPrompt,
-            tools: CreateDataCollectionTools(services));
-    }
-
-    public static ChatClientAgent CreateHorseDataChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? HorseDataAgent.AgentName,
-            instructions: HorseDataAgent.SystemPrompt,
-            tools: CreateDataCollectionTools(services));
-    }
-
-    public static ChatClientAgent CreateJockeyDataChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? JockeyDataAgent.AgentName,
-            instructions: JockeyDataAgent.SystemPrompt,
-            tools: CreateDataCollectionTools(services));
-    }
-
-    public static ChatClientAgent CreateStableDataChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? StableDataAgent.AgentName,
-            instructions: StableDataAgent.SystemPrompt,
-            tools: CreateDataCollectionTools(services));
-    }
-
-    public static ChatClientAgent CreatePostPositionPredictionChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? PostPositionPredictionAgent.AgentName,
-            instructions: PostPositionPredictionAgent.SystemPrompt,
-            tools: CreatePostPositionPredictionTools(services));
+            name: name ?? JraNavigationAgent.AgentName,
+            instructions: JraNavigationAgent.SystemPrompt,
+            tools: services.GetRequiredService<JraPageExtractionTools>().GetAITools());
     }
 
     public static ChatClientAgent CreateRaceContextChatAgent(this IServiceProvider services, string? name = null)
@@ -421,36 +298,6 @@ public static class AgentServiceCollectionExtensions
             name: name ?? PredictionAgent.AgentName,
             instructions: PredictionAgent.SystemPrompt,
             tools: CreatePredictionTools(services));
-    }
-
-    private static List<AITool> CreateWeekendRaceDiscoveryTools(IServiceProvider services)
-    {
-        var webBrowserAgent = services.GetRequiredService<WebBrowserAgent>();
-        var calendarTools = new CalendarTools();
-        var tools = new List<AITool> { webBrowserAgent.CreateAIFunction() };
-        tools.AddRange(calendarTools.GetAITools());
-        return tools;
-    }
-
-    private static List<AITool> CreateDataCollectionTools(IServiceProvider services)
-    {
-        var webBrowserAgent = services.GetRequiredService<WebBrowserAgent>();
-        var horseRacingTools = services.GetRequiredService<HorseRacingTools>();
-        var jraPageExtractionTools = services.GetRequiredService<JraPageExtractionTools>();
-        var writeTools = services.GetRequiredService<DataCollectionWriteTools>();
-        var tools = new List<AITool>(horseRacingTools.GetAITools())
-        {
-            webBrowserAgent.CreateAIFunction()
-        };
-        tools.AddRange(jraPageExtractionTools.GetAITools());
-        tools.AddRange(writeTools.GetAITools());
-        return tools;
-    }
-
-    private static List<AITool> CreatePostPositionPredictionTools(IServiceProvider services)
-    {
-        var webBrowserAgent = services.GetRequiredService<WebBrowserAgent>();
-        return [webBrowserAgent.CreateAIFunction()];
     }
 
     private static List<AITool> CreateRaceQueryAndWebFetchTools(IServiceProvider services)

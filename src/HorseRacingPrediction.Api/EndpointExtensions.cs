@@ -1181,10 +1181,10 @@ public static class EndpointExtensions
 
                 var result = await predictor.PredictAsync(
                     raceContext,
-                    (horseId, ct) => queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct),
-                    (jockeyId, ct) => queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct),
+                    async (horseId, ct) => await queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
+                    async (jockeyId, ct) => await queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                     cancellationToken).ConfigureAwait(false);
 
                 var response = new MlPredictionResponse(
@@ -1213,12 +1213,12 @@ public static class EndpointExtensions
 
                 await predictor.TrainAsync(
                     finishedRaces,
-                    (raceId, ct) => queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), ct),
-                    (horseId, ct) => queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct),
-                    (jockeyId, ct) => queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct),
+                    async (raceId, ct) => await queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), ct).ConfigureAwait(false),
+                    async (horseId, ct) => await queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
+                    async (jockeyId, ct) => await queryProcessor.ProcessAsync(
+                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                     cancellationToken).ConfigureAwait(false);
 
                 return Results.Ok(new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained });

@@ -65,8 +65,6 @@ builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
 builder.Services.AddWebBrowserAgent();
 builder.Services.AddPredictionWorkflow();
-builder.Services.AddDataCollectionWorkflow();
-builder.Services.AddJraRaceCardCollectionWorkflow();
 builder.Services.AddJraRaceResultCollectionWorkflow();
 builder.Services.AddJraRaceScheduleCollectionWorkflow();
 
@@ -79,30 +77,9 @@ builder.AddAIAgent(
     WebBrowserAgent.AgentName,
     (sp, name) => sp.CreateWebBrowserChatAgent(name));
 
-// レース情報収集エージェント
 builder.AddAIAgent(
-    RaceDataAgent.AgentName,
-    (sp, name) => sp.CreateRaceDataChatAgent(name));
-
-// 馬情報収集エージェント
-builder.AddAIAgent(
-    HorseDataAgent.AgentName,
-    (sp, name) => sp.CreateHorseDataChatAgent(name));
-
-// 騎手情報収集エージェント
-builder.AddAIAgent(
-    JockeyDataAgent.AgentName,
-    (sp, name) => sp.CreateJockeyDataChatAgent(name));
-
-// 厩舎（調教師）情報収集エージェント
-builder.AddAIAgent(
-    StableDataAgent.AgentName,
-    (sp, name) => sp.CreateStableDataChatAgent(name));
-
-// 枠順確定後予測エージェント（金曜フェーズ）
-builder.AddAIAgent(
-    PostPositionPredictionAgent.AgentName,
-    (sp, name) => sp.CreatePostPositionPredictionChatAgent(name));
+    JraNavigationAgent.AgentName,
+    (sp, name) => sp.CreateJraNavigationChatAgent(name));
 
 builder.AddAIAgent(
     RaceContextAgent.AgentName,
@@ -132,22 +109,6 @@ builder.AddWorkflow(
         return AgentWorkflowBuilder.BuildSequential(
             workflowName,
             [raceContextAgent, horseAnalysisAgent, predictionAgent]);
-    }).AddAsAIAgent();
-
-// DataCollectionWorkflow: レース・馬・騎手・厩舎データを並列収集するワークフロー
-builder.AddWorkflow(
-    "DataCollectionWorkflow",
-    (sp, workflowName) =>
-    {
-        var raceDataAgent = sp.CreateRaceDataChatAgent();
-        var horseDataAgent = sp.CreateHorseDataChatAgent();
-        var jockeyDataAgent = sp.CreateJockeyDataChatAgent();
-        var stableDataAgent = sp.CreateStableDataChatAgent();
-
-        return AgentWorkflowBuilder.BuildConcurrent(
-            workflowName,
-            [raceDataAgent, horseDataAgent, jockeyDataAgent, stableDataAgent],
-            aggregator: null);
     }).AddAsAIAgent();
 
 // -------------------------------------------------------------------
