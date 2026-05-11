@@ -36,12 +36,11 @@ public class JraRaceCardCollectionWorkflowTests
         _fakeCommandBus = new FakeCommandBus();
         _fakeQueryProcessor = new CollaboratingFakeQueryProcessor(_fakeCommandBus);
 
-        var discoveryAgent = new JraUrlDiscoveryAgent(_fakeChatClient, []);
         var scraper = new JraRaceCardScraper(_fakeWebBrowser);
         var writeTools = new DataCollectionWriteTools(
             new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
 
-        _sut = new JraRaceCardCollectionWorkflow(discoveryAgent, scraper, writeTools);
+        _sut = new JraRaceCardCollectionWorkflow(_fakeChatClient, [], scraper, writeTools);
     }
 
     [TestCleanup]

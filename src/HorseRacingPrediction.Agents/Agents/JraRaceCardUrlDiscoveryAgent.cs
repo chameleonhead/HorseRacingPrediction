@@ -20,9 +20,9 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// 使用ツール: <see cref="PlaywrightTools.BrowserReadPage"/>（スケジュールページへの直接アクセス）
 /// </para>
 /// </summary>
-public sealed class JraUrlDiscoveryAgent
+internal sealed class JraRaceCardUrlDiscoveryAgent
 {
-    public const string AgentName = "JraUrlDiscoveryAgent";
+    public const string AgentName = "JraRaceCardUrlDiscoveryAgent";
 
     public const string SystemPrompt = """
         あなたはJRA公式サイトから出馬表ページのURLを収集する専門エージェントです。
@@ -63,7 +63,7 @@ public sealed class JraUrlDiscoveryAgent
 
     private readonly ChatClientAgent _innerAgent;
 
-    public JraUrlDiscoveryAgent(IChatClient chatClient, IList<AITool> tools)
+    public JraRaceCardUrlDiscoveryAgent(IChatClient chatClient, IList<AITool> tools)
     {
         _innerAgent = new ChatClientAgent(
             chatClient,
@@ -72,12 +72,6 @@ public sealed class JraUrlDiscoveryAgent
             tools: tools);
     }
 
-    /// <summary>
-    /// 指定した週末の開催日に対応する出馬表 URL 一覧を返す。
-    /// </summary>
-    /// <param name="weekendDate">対象の週末日付（土曜または日曜）</param>
-    /// <param name="cancellationToken">キャンセルトークン</param>
-    /// <returns>発見された出馬表 URL の一覧</returns>
     public async Task<IReadOnlyList<JraRaceCardUrl>> DiscoverUrlsAsync(
         DateOnly weekendDate,
         CancellationToken cancellationToken = default)
@@ -88,10 +82,6 @@ public sealed class JraUrlDiscoveryAgent
 
         return ParseJsonResponse(result.Text, weekendDate);
     }
-
-    // ------------------------------------------------------------------ //
-    // private helpers
-    // ------------------------------------------------------------------ //
 
     private static IReadOnlyList<JraRaceCardUrl> ParseJsonResponse(string responseText, DateOnly requestedDate)
     {
@@ -120,14 +110,12 @@ public sealed class JraUrlDiscoveryAgent
                 {
                     var url = JraRaceCardUrl.ParseFromUrl(dto.Url!, dto.Racecourse);
 
-                    // raceDate が未解析の場合はエージェントが返した値を使う
                     if (url.RaceDate is null && dto.RaceDate is not null &&
                         DateOnly.TryParse(dto.RaceDate, out var parsedDate))
                     {
                         url = url with { RaceDate = parsedDate };
                     }
 
-                    // raceNumber が未解析の場合はエージェントが返した値を使う
                     if (url.RaceNumber is null && dto.RaceNumber is not null)
                     {
                         url = url with { RaceNumber = dto.RaceNumber };

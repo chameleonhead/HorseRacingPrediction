@@ -127,4 +127,50 @@ public class EventPersistenceTests
         Assert.AreEqual("東京優駿", loaded1.GetDetails().RaceName);
         Assert.AreEqual("天皇賞", loaded2.GetDetails().RaceName);
     }
+
+    [TestMethod]
+    public async Task InfrastructureExtension_PersistsEventsAcrossCommands()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"eventstore-extension-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSqliteDbContextProvider($"Data Source={databasePath}");
+            services.AddEventFlow(options =>
+            {
+                options
+                    .AddDefaults(typeof(RaceAggregate).Assembly)
+                    .AddDefaults(typeof(CreateRaceCommand).Assembly)
+                    .UseEntityFrameworkSqliteEventStore($"Data Source={databasePath}");
+            });
+
+            using var serviceProvider = services.BuildServiceProvider();
+            var commandBus = serviceProvider.GetRequiredService<ICommandBus>();
+            var aggregateStore = serviceProvider.GetRequiredService<IAggregateStore>();
+            var raceId = RaceId.New;
+
+            await commandBus.PublishAsync(
+                new CreateRaceCommand(raceId, new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞"),
+                CancellationToken.None);
+            await commandBus.PublishAsync(
+                new PublishRaceCardCommand(raceId, 18),
+                CancellationToken.None);
+
+            var loaded = await aggregateStore.LoadAsync<RaceAggregate, RaceId>(
+                raceId,
+                CancellationToken.None);
+
+            Assert.AreEqual(RaceStatus.CardPublished, loaded.GetDetails().Status);
+            Assert.AreEqual(18, loaded.GetDetails().EntryCount);
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+            {
+                File.Delete(databasePath);
+            }
+        }
+    }
 }

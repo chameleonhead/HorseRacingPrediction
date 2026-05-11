@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using EventFlow.Queries;
+using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
@@ -26,6 +27,10 @@ var targetUrlArg = GetArgValue(args, "--url");
 var extractionProfileArg = GetArgValue(args, "--extraction-profile");
 var dbPathArg = GetArgValue(args, "--db-path");
 var relationArg = GetArgValue(args, "--relation") ?? GetArgValue(args, "--label");
+var apiBaseUrlArg = GetArgValue(args, "--api-base-url");
+var apiKeyArg = GetArgValue(args, "--api-key");
+var lookaheadDaysArg = GetArgValue(args, "--lookahead-days");
+var raceNumberArg = GetArgValue(args, "--race-number") ?? maxScrapesArg;
 
 var prompt = args.Length > 0
     ? string.Join(' ', args)
@@ -318,6 +323,156 @@ try
         Console.WriteLine($"  Status       : {readModel.Status}");
         Console.WriteLine($"  EntryResults : {readModel.EntryResults.Count}");
     }
+    else if (string.Equals(scenario, "agent-client-api-roundtrip", StringComparison.OrdinalIgnoreCase))
+    {
+        var apiBaseUrl = apiBaseUrlArg ?? "http://127.0.0.1:5081";
+        var apiKey = apiKeyArg ?? "dev-api-key";
+        var runDate = runDateArg is null
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : DateOnly.ParseExact(runDateArg, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var racecourse = targetUrlArg ?? "東京";
+        var raceNumber = raceNumberArg is null
+            ? 11
+            : int.Parse(raceNumberArg, CultureInfo.InvariantCulture);
+
+        using var serviceProvider = BuildAgentClientApiServiceProvider(apiBaseUrl, apiKey);
+        var writeService = serviceProvider.GetRequiredService<IDataCollectionWriteService>();
+        var queryService = serviceProvider.GetRequiredService<IRaceQueryService>();
+
+        Console.WriteLine($"ApiBaseUrl : {apiBaseUrl}");
+        Console.WriteLine($"Date       : {runDate:yyyy-MM-dd}");
+        Console.WriteLine($"Racecourse : {racecourse}");
+        Console.WriteLine($"RaceNumber : {raceNumber}R");
+        Console.WriteLine();
+
+        var raceId = await writeService.UpsertRaceAsync(
+            raceDate: runDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            racecourseCode: racecourse,
+            raceNumber: raceNumber,
+            raceName: $"Verifier {runDate:yyyyMMdd} {racecourse} {raceNumber}R",
+            entryCount: 1,
+            gradeCode: null,
+            surfaceCode: "T",
+            distanceMeters: 1600,
+            directionCode: null);
+
+        await writeService.UpsertRaceEntryAsync(
+            raceId: raceId,
+            horseNumber: 1,
+            horseName: "Verifier Horse",
+            jockeyName: "Verifier Jockey",
+            trainerName: "Verifier Trainer",
+            gateNumber: 1,
+            assignedWeight: 55m,
+            sexCode: "牡",
+            age: 3,
+            declaredWeight: 480m,
+            declaredWeightDiff: 0m);
+
+        var raceContext = await queryService.GetRacePredictionContextAsync(raceId);
+        if (raceContext is null)
+        {
+            Console.WriteLine("NG: API roundtrip 後に RacePredictionContext が取得できませんでした。");
+            return;
+        }
+
+        Console.WriteLine("OK: AgentClient HTTP roundtrip 成功");
+        Console.WriteLine($"RaceId     : {raceContext.RaceId}");
+        Console.WriteLine($"RaceName   : {raceContext.RaceName}");
+        Console.WriteLine($"Entries    : {raceContext.Entries.Count}");
+        foreach (var entry in raceContext.Entries.Take(3))
+        {
+            Console.WriteLine($"  - {entry.HorseNumber}番 HorseId={entry.HorseId} / JockeyId={entry.JockeyId ?? "-"}");
+        }
+    }
+    else if (string.Equals(scenario, "agent-client-jra-schedule-workflow", StringComparison.OrdinalIgnoreCase))
+    {
+        var referenceDate = runDateArg is null
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : DateOnly.ParseExact(runDateArg, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var lookaheadDays = lookaheadDaysArg is null
+            ? 14
+            : int.Parse(lookaheadDaysArg, CultureInfo.InvariantCulture);
+
+        var workflow = new JraRaceScheduleCollectionWorkflow();
+        var result = await workflow.CollectAsync(referenceDate, lookaheadDays);
+
+        Console.WriteLine($"ReferenceDate : {referenceDate:yyyy-MM-dd}");
+        Console.WriteLine($"LookaheadDays : {lookaheadDays}");
+        Console.WriteLine($"Collected     : {result.RaceDates.Count}");
+        Console.WriteLine($"Upcoming      : {result.UpcomingRaceDates.Count}");
+        if (!string.IsNullOrWhiteSpace(result.Error))
+        {
+            Console.WriteLine($"Error         : {result.Error}");
+            return;
+        }
+
+        foreach (var date in result.UpcomingRaceDates.Take(20))
+        {
+            Console.WriteLine($"  - {date:yyyy-MM-dd} ({GetJapaneseDayOfWeek(date.DayOfWeek)})");
+        }
+    }
+    else if (string.Equals(scenario, "agent-client-jra-result-workflow", StringComparison.OrdinalIgnoreCase))
+    {
+        var apiBaseUrl = apiBaseUrlArg ?? "http://127.0.0.1:5081";
+        var apiKey = apiKeyArg ?? "dev-api-key";
+        var runDate = runDateArg is null
+            ? DateOnly.FromDateTime(DateTime.Today.AddDays(-1))
+            : DateOnly.ParseExact(runDateArg, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        using var serviceProvider = BuildAgentClientApiServiceProvider(apiBaseUrl, apiKey);
+        var writeTools = serviceProvider.GetRequiredService<DataCollectionWriteTools>();
+        var queryService = serviceProvider.GetRequiredService<IRaceQueryService>();
+
+        await using var resultBrowser = await PlaywrightWebBrowser.CreateAsync(searchBaseUrl: options.Value.SearchBaseUrl);
+        var scraper = new JraRaceResultScraper(resultBrowser);
+        var workflow = new JraRaceResultCollectionWorkflow(
+            resultBrowser,
+            scraper,
+            writeTools,
+            loggerFactory.CreateLogger<JraRaceResultCollectionWorkflow>(),
+            loggerFactory);
+
+        Console.WriteLine($"ApiBaseUrl : {apiBaseUrl}");
+        Console.WriteLine($"RaceDate   : {runDate:yyyy-MM-dd}");
+        Console.WriteLine();
+
+        var result = await workflow.CollectAsync(runDate);
+        Console.WriteLine($"Discovered : {result.DiscoveredUrls.Count}");
+        Console.WriteLine($"Scraped    : {result.ScrapedResults.Count}");
+        Console.WriteLine($"Saved      : {result.SavedRaceIds.Count}");
+        Console.WriteLine($"Errors     : {result.Errors.Count}");
+
+        foreach (var raceId in result.SavedRaceIds.Take(5))
+        {
+            var raceContext = await queryService.GetRacePredictionContextAsync(raceId);
+            Console.WriteLine($"  - Saved RaceId={raceId} Context={(raceContext is null ? "missing" : "ok")}");
+        }
+
+        foreach (var error in result.Errors.Take(10))
+        {
+            Console.WriteLine($"  - Error: {error}");
+        }
+    }
+    else if (string.Equals(scenario, "agent-client-jra-navigation-agent", StringComparison.OrdinalIgnoreCase))
+    {
+        var targetUrl = targetUrlArg ?? "https://www.jra.go.jp/keiba/thisweek/";
+        await using var jraTools = new JraPageExtractionTools();
+        var navigationAgent = new JraNavigationAgent(chatClient, jraTools.GetAITools());
+        var navigationPrompt = relationArg is null
+            ? $"{targetUrl} を開き、現在ページの pageKind、主要な structured 情報、次に利用できる relation を簡潔に要約してください。最後にセッションを閉じてください。"
+            : $"{targetUrl} を開き、relation '{relationArg}' で次ページへ進み、到達ページの pageKind と主要情報を要約してください。最後にセッションを閉じてください。";
+
+        Console.WriteLine($"TargetUrl : {targetUrl}");
+        if (!string.IsNullOrWhiteSpace(relationArg))
+        {
+            Console.WriteLine($"Relation  : {relationArg}");
+        }
+        Console.WriteLine();
+
+        var result = await navigationAgent.InvokeAsync(navigationPrompt);
+        Console.WriteLine(result);
+    }
     else if (string.Equals(scenario, "monthly-jra-race-schedule", StringComparison.OrdinalIgnoreCase)
              || string.Equals(scenario, "jra-graded-races", StringComparison.OrdinalIgnoreCase)
              || string.Equals(scenario, "jra-race-results", StringComparison.OrdinalIgnoreCase)
@@ -368,6 +523,19 @@ static (string? sexCode, int? age) ParseSexAge(string? sexAge)
         ? parsedAge
         : (int?)null;
     return (sexCode, age);
+}
+
+static ServiceProvider BuildAgentClientApiServiceProvider(string apiBaseUrl, string apiKey)
+{
+    var services = new ServiceCollection();
+    services.AddLogging();
+    services.Configure<ApiClientOptions>(options =>
+    {
+        options.BaseUrl = apiBaseUrl;
+        options.ApiKey = apiKey;
+    });
+    services.AddHttpAgentServices();
+    return services.BuildServiceProvider();
 }
 
 static bool HasArg(string[] args, string key) =>

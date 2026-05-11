@@ -1,4 +1,5 @@
 using HorseRacingPrediction.Agents.Agents;
+using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// <summary>
 /// JRA 成績データを収集して DB へ保存するワークフロー。
 /// <para>
-/// AI（<see cref="JraResultUrlDiscoveryAgent"/>）は成績 URL の「発見」のみを担当し、
+/// AI（<see cref="JraRaceResultUrlDiscoveryAgent"/>）は成績 URL の「発見」のみを担当し、
 /// 各ページの詳細スクレイピングは Playwright ベースの <see cref="JraRaceResultScraper"/> が行う。
 /// 最後に <see cref="DataCollectionWriteTools"/> で EventFlow 経由でドメインへ保存する。
 /// </para>
@@ -25,13 +26,13 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
 {
-    private readonly JraResultUrlDiscoveryAgent _discoveryAgent;
+    private readonly JraRaceResultUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceResultScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
     private readonly ILogger<JraRaceResultCollectionWorkflow> _logger;
 
-    public JraRaceResultCollectionWorkflow(
-        JraResultUrlDiscoveryAgent discoveryAgent,
+    internal JraRaceResultCollectionWorkflow(
+        JraRaceResultUrlDiscoveryAgent discoveryAgent,
         JraRaceResultScraper scraper,
         DataCollectionWriteTools writeTools,
         ILogger<JraRaceResultCollectionWorkflow>? logger = null)
@@ -40,6 +41,22 @@ public sealed class JraRaceResultCollectionWorkflow
         _scraper = scraper;
         _writeTools = writeTools;
         _logger = logger ?? NullLogger<JraRaceResultCollectionWorkflow>.Instance;
+    }
+
+    public JraRaceResultCollectionWorkflow(
+        IWebBrowser browser,
+        JraRaceResultScraper scraper,
+        DataCollectionWriteTools writeTools,
+        ILogger<JraRaceResultCollectionWorkflow>? logger = null,
+        ILoggerFactory? loggerFactory = null)
+        : this(
+            new JraRaceResultUrlDiscoveryAgent(
+                browser,
+                loggerFactory?.CreateLogger<JraRaceResultUrlDiscoveryAgent>()),
+            scraper,
+            writeTools,
+            logger)
+    {
     }
 
     /// <summary>

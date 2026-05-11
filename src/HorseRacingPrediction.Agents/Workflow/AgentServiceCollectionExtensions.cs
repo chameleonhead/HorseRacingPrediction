@@ -129,7 +129,7 @@ public static class AgentServiceCollectionExtensions
     }
 
     /// <summary>
-    /// <see cref="JraRaceResultCollectionWorkflow"/>、<see cref="JraResultUrlDiscoveryAgent"/>、
+    /// <see cref="JraRaceResultCollectionWorkflow"/>、<see cref="JraRaceResultUrlDiscoveryAgent"/>、
     /// および <see cref="JraRaceResultScraper"/> を DI コンテナに登録する。
     /// <para>
     /// このワークフローは AI が成績 URL を発見し、
@@ -152,17 +152,13 @@ public static class AgentServiceCollectionExtensions
             var browser = sp.GetRequiredService<IWebBrowser>();
             return new JraRaceResultScraper(browser);
         });
-        services.AddTransient<JraResultUrlDiscoveryAgent>(sp =>
-        {
-            var browser = sp.GetRequiredService<IWebBrowser>();
-            var discoveryLogger = sp.GetRequiredService<ILogger<JraResultUrlDiscoveryAgent>>();
-            return new JraResultUrlDiscoveryAgent(browser, discoveryLogger);
-        });
         services.AddTransient<JraRaceResultCollectionWorkflow>(sp =>
             new JraRaceResultCollectionWorkflow(
-                sp.GetRequiredService<JraResultUrlDiscoveryAgent>(),
+                sp.GetRequiredService<IWebBrowser>(),
                 sp.GetRequiredService<JraRaceResultScraper>(),
-                sp.GetRequiredService<DataCollectionWriteTools>()));
+                sp.GetRequiredService<DataCollectionWriteTools>(),
+                sp.GetService<ILogger<JraRaceResultCollectionWorkflow>>(),
+                sp.GetService<ILoggerFactory>()));
         return services;
     }
 
@@ -179,7 +175,7 @@ public static class AgentServiceCollectionExtensions
     }
 
     /// <summary>
-    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraUrlDiscoveryAgent"/>、
+    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraRaceCardUrlDiscoveryAgent"/>、
     /// および <see cref="JraRaceCardScraper"/> を DI コンテナに登録する。
     /// <para>
     /// このワークフローは AI が出馬表 URL を発見し、
@@ -197,21 +193,20 @@ public static class AgentServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddJraRaceCardCollectionWorkflow(this IServiceCollection services)
     {
-        services.AddTransient<JraUrlDiscoveryAgent>(sp =>
+        services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
         {
-            var chatClient = sp.GetRequiredService<IChatClient>();
             var browser = sp.GetRequiredService<IWebBrowser>();
             var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
             var extractionAgent = sp.GetService<PageDataExtractionAgent>();
             var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
             var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
-            return new JraUrlDiscoveryAgent(chatClient, playwrightTools.GetReadPageOnlyAITools());
-        });
-        services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
-            new JraRaceCardCollectionWorkflow(
-                sp.GetRequiredService<JraUrlDiscoveryAgent>(),
+
+            return new JraRaceCardCollectionWorkflow(
+                sp.GetRequiredService<IChatClient>(),
+                playwrightTools.GetReadPageOnlyAITools(),
                 sp.GetRequiredService<JraRaceCardScraper>(),
-                sp.GetRequiredService<DataCollectionWriteTools>()));
+                sp.GetRequiredService<DataCollectionWriteTools>());
+        });
         return services;
     }
 

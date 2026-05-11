@@ -14,27 +14,23 @@ namespace HorseRacingPrediction.Agents.Agents;
 /// 実際の成績データの抽出は <see cref="Scrapers.Jra.JraRaceResultScraper"/> が担う。
 /// </para>
 /// </summary>
-public sealed class JraResultUrlDiscoveryAgent
+internal sealed class JraRaceResultUrlDiscoveryAgent
 {
-    public const string AgentName = "JraResultUrlDiscoveryAgent";
+    private sealed record ResultClickCandidate(string Text, string? Url, int Score);
+
+    public const string AgentName = "JraRaceResultUrlDiscoveryAgent";
 
     private const int MaxPageVisits = 20;
     private const int MaxDepth = 4;
     private readonly IWebBrowser _browser;
-    private readonly ILogger<JraResultUrlDiscoveryAgent> _logger;
+    private readonly ILogger<JraRaceResultUrlDiscoveryAgent> _logger;
 
-    public JraResultUrlDiscoveryAgent(IWebBrowser browser, ILogger<JraResultUrlDiscoveryAgent>? logger = null)
+    public JraRaceResultUrlDiscoveryAgent(IWebBrowser browser, ILogger<JraRaceResultUrlDiscoveryAgent>? logger = null)
     {
         _browser = browser;
-        _logger = logger ?? NullLogger<JraResultUrlDiscoveryAgent>.Instance;
+        _logger = logger ?? NullLogger<JraRaceResultUrlDiscoveryAgent>.Instance;
     }
 
-    /// <summary>
-    /// 指定した週末の開催日に対応する成績 URL 一覧を返す。
-    /// </summary>
-    /// <param name="raceDate">対象の開催日付</param>
-    /// <param name="cancellationToken">キャンセルトークン</param>
-    /// <returns>発見された成績 URL の一覧</returns>
     public async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUrlsAsync(
         DateOnly raceDate,
         CancellationToken cancellationToken = default)
@@ -87,7 +83,13 @@ public sealed class JraResultUrlDiscoveryAgent
         }
 
         var snapshot = await _browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken);
-        var currentUrl = snapshot.Url;
+        var extractedLinks = await _browser.GetLinksAsync(maxResults: 300, cancellationToken: cancellationToken);
+        var effectiveSnapshot = snapshot with
+        {
+            Links = MergeLinks(snapshot.Links, extractedLinks, snapshot.Url),
+        };
+
+        var currentUrl = effectiveSnapshot.Url;
         if (!string.IsNullOrWhiteSpace(currentUrl)
             && !currentUrl.StartsWith("https://www.jra.go.jp/keiba", StringComparison.OrdinalIgnoreCase))
         {
@@ -103,11 +105,11 @@ public sealed class JraResultUrlDiscoveryAgent
             "JRA discovery page. Depth={Depth} Url={Url} Headings={HeadingCount} Links={LinkCount} Actions={ActionCount}",
             depth,
             currentUrl,
-            snapshot.Headings.Count,
-            snapshot.Links.Count,
-            snapshot.Actions.Count);
+            effectiveSnapshot.Headings.Count,
+            effectiveSnapshot.Links.Count,
+            effectiveSnapshot.Actions.Count);
 
-        var (candidateFound, dateMatched) = CollectResultUrls(snapshot, raceDate, seenResultUrls, results);
+        var (candidateFound, dateMatched) = CollectResultUrls(effectiveSnapshot, raceDate, seenResultUrls, results);
         if (candidateFound > 0)
         {
             _logger.LogInformation(
@@ -118,17 +120,17 @@ public sealed class JraResultUrlDiscoveryAgent
                 dateMatched);
         }
 
-        var clickCandidates = BuildResultClickCandidates(snapshot, raceDate);
+        var clickCandidates = BuildResultClickCandidates(effectiveSnapshot, raceDate);
         _logger.LogInformation(
             "JRA discovery click candidates. Depth={Depth} Url={Url} Candidates={CandidateCount} Top={TopCandidates}",
             depth,
             currentUrl,
             clickCandidates.Count,
-            string.Join(" | ", clickCandidates.Take(5)));
+            string.Join(" | ", clickCandidates.Take(5).Select(candidate => candidate.Text)));
 
-        foreach (var clickText in clickCandidates)
+        foreach (var candidate in clickCandidates)
         {
-            var transitionKey = $"{currentUrl}|{NormalizeText(clickText)}";
+            var transitionKey = $"{currentUrl}|{NormalizeText(candidate.Url ?? candidate.Text)}";
             if (!visitedTransitions.Add(transitionKey))
             {
                 continue;
@@ -141,8 +143,17 @@ public sealed class JraResultUrlDiscoveryAgent
                     "JRA discovery click attempt. Depth={Depth} Url={Url} Target={Target}",
                     depth,
                     currentUrl,
-                    clickText);
-                await _browser.ClickAsync(clickText, cancellationToken);
+                    candidate.Text);
+
+                if (!string.IsNullOrWhiteSpace(candidate.Url))
+                {
+                    await _browser.NavigateAsync(candidate.Url, cancellationToken);
+                }
+                else
+                {
+                    await _browser.ClickAsync(candidate.Text, cancellationToken);
+                }
+
                 clicked = true;
 
                 var nextSnapshot = await _browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken);
@@ -164,13 +175,15 @@ public sealed class JraResultUrlDiscoveryAgent
                     results,
                     cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                _logger.LogInformation(
-                    "JRA discovery click failed. Depth={Depth} Url={Url} Target={Target}",
+                _logger.LogWarning(
+                    ex,
+                    "JRA discovery click failed. Depth={Depth} Url={Url} Target={Target} TargetUrl={TargetUrl}",
                     depth,
                     currentUrl,
-                    clickText);
+                    candidate.Text,
+                    candidate.Url);
             }
             finally
             {
@@ -214,40 +227,101 @@ public sealed class JraResultUrlDiscoveryAgent
         return (candidateFound, dateMatched);
     }
 
-    private static IReadOnlyList<string> BuildResultClickCandidates(PageSnapshot snapshot, DateOnly raceDate)
+    private static IReadOnlyList<ResultClickCandidate> BuildResultClickCandidates(PageSnapshot snapshot, DateOnly raceDate)
     {
         var dayText = $"{raceDate.Month}月{raceDate.Day}日";
         var monthText = $"{raceDate.Month}月";
         var yearText = raceDate.Year.ToString(CultureInfo.InvariantCulture);
+        var currentUrl = snapshot.Url ?? string.Empty;
 
-        return snapshot.Actions.Select(a => a.Text)
-            .Concat(snapshot.Links.Select(l => l.Title))
+        var actionCandidates = snapshot.Actions
+            .Select(action => action.Text)
             .Where(text => !string.IsNullOrWhiteSpace(text))
-            .Select(text => text!.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .Select(text => new { Text = text, Score = ScoreClickCandidate(text, dayText, monthText, yearText) })
-            .Where(x => x.Score > 0)
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Text.Length)
-            .Select(x => x.Text)
+            .Select(text => new ResultClickCandidate(
+                text!.Trim(),
+                null,
+                ScoreClickCandidate(text, null, currentUrl, dayText, monthText, yearText, raceDate.Month)));
+
+        var linkCandidates = snapshot.Links
+            .Where(link => !string.IsNullOrWhiteSpace(link.Title))
+            .Select(link =>
+            {
+                var normalizedUrl = NormalizeAbsoluteUrl(link.Url, currentUrl);
+                return new ResultClickCandidate(
+                    link.Title!.Trim(),
+                    normalizedUrl,
+                    ScoreClickCandidate(link.Title!, normalizedUrl, currentUrl, dayText, monthText, yearText, raceDate.Month));
+            });
+
+        return actionCandidates
+            .Concat(linkCandidates)
+            .GroupBy(candidate => candidate.Text, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.Url is null ? 1 : 0)
+                .First())
+            .Where(candidate => candidate.Score > 0)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Text.Length)
             .Take(15)
             .ToList();
     }
 
-    private static int ScoreClickCandidate(string text, string dayText, string monthText, string yearText)
+    private static int ScoreClickCandidate(
+        string text,
+        string? url,
+        string currentUrl,
+        string dayText,
+        string monthText,
+        string yearText,
+        int raceMonth)
     {
         var normalized = NormalizeText(text);
+        var normalizedDayText = NormalizeText(dayText);
+        var normalizedMonthText = NormalizeText(monthText);
+        var normalizedCurrentUrl = currentUrl ?? string.Empty;
         var score = 0;
 
+        if (normalized.Contains(normalizedDayText, StringComparison.Ordinal)) score += 400;
+        if (normalized.Equals(normalizedMonthText, StringComparison.Ordinal)) score += 320;
+        if (normalized.Contains(normalizedMonthText, StringComparison.Ordinal)) score += 220;
+        if (normalized.Equals(yearText, StringComparison.Ordinal) || normalized.Contains($"{yearText}年", StringComparison.Ordinal)) score += 240;
+        if (normalized.Contains("開催日程", StringComparison.Ordinal)) score += 300;
+        if (normalized.Contains("カレンダー", StringComparison.Ordinal)) score += 220;
+        if (normalized.Contains("開催場別", StringComparison.Ordinal)) score += 160;
         if (normalized.Contains("レース結果", StringComparison.Ordinal)) score += 120;
-        if (normalized.Contains("結果", StringComparison.Ordinal)) score += 80;
-        if (normalized.Contains("払戻", StringComparison.Ordinal)) score += 60;
-        if (normalized.Contains("成績", StringComparison.Ordinal)) score += 60;
-        if (normalized.Contains("開催", StringComparison.Ordinal)) score += 40;
-        if (normalized.Contains("今週", StringComparison.Ordinal)) score += 35;
-        if (normalized.Contains(NormalizeText(dayText), StringComparison.Ordinal)) score += 50;
-        if (normalized.Contains(NormalizeText(monthText), StringComparison.Ordinal)) score += 30;
+        if (normalized.Contains("結果", StringComparison.Ordinal)) score += 60;
+        if (normalized.Contains("成績", StringComparison.Ordinal)) score += 50;
+        if (normalized.Contains("開催", StringComparison.Ordinal)) score += 45;
+        if (normalized.Contains("今週", StringComparison.Ordinal)) score += 25;
         if (normalized.Contains(yearText, StringComparison.Ordinal)) score += 25;
+
+        if (normalized.Contains("払戻", StringComparison.Ordinal)) score -= 80;
+        if (normalized.Contains("税", StringComparison.Ordinal)) score -= 100;
+        if (normalized.Contains("支払", StringComparison.Ordinal)) score -= 100;
+
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            if (url.Contains("/keiba/calendar", StringComparison.OrdinalIgnoreCase)) score += 260;
+            if (url.Contains("/datafile/seiseki", StringComparison.OrdinalIgnoreCase)) score += 220;
+            if (url.Contains("/JRADB/accessD", StringComparison.OrdinalIgnoreCase)) score += 240;
+            if (url.Contains("/kouza/haraimodoshi", StringComparison.OrdinalIgnoreCase)) score -= 200;
+            if (url.Contains("/company/social", StringComparison.OrdinalIgnoreCase)) score -= 200;
+        }
+
+        if (normalizedCurrentUrl.Contains("/keiba/calendar", StringComparison.OrdinalIgnoreCase))
+        {
+            if (normalized.Equals(normalizedMonthText, StringComparison.Ordinal) || normalized.Contains($"{yearText}年{raceMonth}月", StringComparison.Ordinal))
+            {
+                score += 180;
+            }
+        }
+
+        if (normalizedCurrentUrl.Contains("/datafile/seiseki", StringComparison.OrdinalIgnoreCase)
+            && normalized.Contains("レース結果", StringComparison.Ordinal))
+        {
+            score += 120;
+        }
 
         return score;
     }
@@ -256,6 +330,21 @@ public sealed class JraResultUrlDiscoveryAgent
         => text.Replace(" ", string.Empty, StringComparison.Ordinal)
             .Replace("　", string.Empty, StringComparison.Ordinal)
             .Trim();
+
+    private static IReadOnlyList<SearchResultLink> MergeLinks(
+        IReadOnlyList<SearchResultLink> snapshotLinks,
+        IReadOnlyList<SearchResultLink> extractedLinks,
+        string? baseUrl)
+    {
+        return snapshotLinks
+            .Concat(extractedLinks)
+            .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
+            .GroupBy(
+                link => NormalizeAbsoluteUrl(link.Url, baseUrl) ?? NormalizeText(link.Title ?? string.Empty),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
 
     private static string? NormalizeAbsoluteUrl(string? candidate, string? baseUrl)
     {
@@ -266,7 +355,11 @@ public sealed class JraResultUrlDiscoveryAgent
 
         if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
         {
-            return absolute.AbsoluteUri;
+            if (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return absolute.AbsoluteUri;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(baseUrl)

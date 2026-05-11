@@ -16,8 +16,7 @@ public static class InfrastructureServiceExtensions
     {
         return options
             .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
-            .UseEntityFrameworkEventStore<EventStoreDbContext>()
-            .AddDbContextProvider<EventStoreDbContext, SqliteDbContextProvider>();
+            .UseEntityFrameworkEventStore<EventStoreDbContext>();
     }
 
     public static IServiceCollection AddSqliteDbContextProvider(

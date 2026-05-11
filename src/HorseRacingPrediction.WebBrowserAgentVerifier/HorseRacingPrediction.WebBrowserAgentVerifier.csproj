@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HorseRacingPrediction.Agents\HorseRacingPrediction.Agents.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.AgentClient\HorseRacingPrediction.AgentClient.csproj" />
   </ItemGroup>
 
 </Project>

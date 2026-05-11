@@ -33,12 +33,11 @@ public class JraRaceResultCollectionWorkflowTests
         _fakeCommandBus = new FakeCommandBus();
         _fakeQueryProcessor = new CollaboratingFakeQueryProcessor(_fakeCommandBus);
 
-        var discoveryAgent = new JraResultUrlDiscoveryAgent(_fakeWebBrowser);
         var scraper = new JraRaceResultScraper(_fakeWebBrowser);
         var writeTools = new DataCollectionWriteTools(
             new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
 
-        _sut = new JraRaceResultCollectionWorkflow(discoveryAgent, scraper, writeTools);
+        _sut = new JraRaceResultCollectionWorkflow(_fakeWebBrowser, scraper, writeTools);
     }
 
     [TestCleanup]
@@ -91,6 +90,69 @@ public class JraRaceResultCollectionWorkflowTests
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 10, 26));
 
         Assert.IsEmpty(result);
+    }
+
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_PrefersCalendarNavigationBeforePayoutLinks()
+    {
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/",
+                Title: "JRA 競馬",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
+                    new SearchResultLink("https://www.jra.go.jp/kouza/haraimodoshi/", "払戻")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/calendar/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/calendar/",
+                Title: "開催日程",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
+                    new SearchResultLink("https://www.jra.go.jp/kouza/haraimodoshi/", "払戻")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/calendar/jun.html",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/calendar/jun.html",
+                Title: "6月開催日程",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink(
+                        "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20250601051101&sub=",
+                        "11R 結果")
+                ],
+                Actions: [],
+                Tables: []));
+
+        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 6, 1));
+
+        Assert.HasCount(1, result);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "https://www.jra.go.jp/keiba/",
+                "https://www.jra.go.jp/keiba/calendar/",
+                "https://www.jra.go.jp/keiba/calendar/jun.html"
+            },
+            _fakeWebBrowser.NavigationHistory.Take(3).ToArray(),
+            "払戻系ではなく calendar 導線が優先されること");
     }
 
     // ------------------------------------------------------------------ //
@@ -302,12 +364,28 @@ public class JraRaceResultCollectionWorkflowTests
     private sealed class FakeWebBrowser : IWebBrowser
     {
         public PageSnapshot? Snapshot { get; set; }
+        public List<string> ClickHistory { get; } = [];
+        public List<string> NavigationHistory { get; } = [];
+
+        private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Stack<string> _history = new();
 
         public string? CurrentUrl { get; private set; } = "https://www.jra.go.jp/keiba/";
 
+        public void SetSnapshot(string url, PageSnapshot snapshot)
+        {
+            _snapshotsByUrl[url] = snapshot;
+        }
+
         public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
         {
+            if (!string.IsNullOrWhiteSpace(CurrentUrl))
+            {
+                _history.Push(CurrentUrl);
+            }
+
             CurrentUrl = url;
+            NavigationHistory.Add(url);
             return Task.FromResult(string.Empty);
         }
 
@@ -315,26 +393,93 @@ public class JraRaceResultCollectionWorkflowTests
             int maxLinks = 0,
             CancellationToken cancellationToken = default)
         {
-            var snapshot = Snapshot ?? new PageSnapshot(
-                CurrentUrl ?? string.Empty, null, string.Empty, [], [], [], []);
+            var snapshot = GetCurrentSnapshot();
             return Task.FromResult(snapshot);
         }
 
         public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            ClickHistory.Add(text);
+
+            var snapshot = GetCurrentSnapshot();
+            var matchedLink = snapshot.Links.FirstOrDefault(link =>
+                !string.IsNullOrWhiteSpace(link.Title)
+                && link.Title.Contains(text, StringComparison.Ordinal));
+
+            if (matchedLink is not null && !string.IsNullOrWhiteSpace(matchedLink.Url))
+            {
+                var resolvedUrl = NormalizeAbsoluteUrl(matchedLink.Url, snapshot.Url);
+                if (!string.IsNullOrWhiteSpace(resolvedUrl))
+                {
+                    if (!string.IsNullOrWhiteSpace(CurrentUrl))
+                    {
+                        _history.Push(CurrentUrl);
+                    }
+
+                    CurrentUrl = resolvedUrl;
+                }
+            }
+
+            return Task.FromResult(string.Empty);
+        }
 
         public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);
 
         public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
             int maxResults = 10, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
+            => Task.FromResult<IReadOnlyList<SearchResultLink>>(GetCurrentSnapshot().Links);
 
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);
 
         public Task<string> GoBackAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            if (_history.Count > 0)
+            {
+                CurrentUrl = _history.Pop();
+            }
+
+            return Task.FromResult(string.Empty);
+        }
+
+        private PageSnapshot GetCurrentSnapshot()
+        {
+            if (!string.IsNullOrWhiteSpace(CurrentUrl)
+                && _snapshotsByUrl.TryGetValue(CurrentUrl, out var snapshotByUrl))
+            {
+                return snapshotByUrl;
+            }
+
+            return Snapshot ?? new PageSnapshot(
+                CurrentUrl ?? string.Empty, null, string.Empty, [], [], [], []);
+        }
+
+        private static string? NormalizeAbsoluteUrl(string? candidate, string? baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                return null;
+            }
+
+            if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute))
+            {
+                if (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                {
+                    return absolute.AbsoluteUri;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(baseUrl)
+                && Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
+                && Uri.TryCreate(baseUri, candidate, out var resolved))
+            {
+                return resolved.AbsoluteUri;
+            }
+
+            return null;
+        }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

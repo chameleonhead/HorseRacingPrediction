@@ -1,13 +1,14 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
+using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
 /// <summary>
 /// JRA 出馬表データを効率的に収集して DB へ保存するワークフロー。
 /// <para>
-/// AI（<see cref="JraUrlDiscoveryAgent"/>）は出馬表 URL の「発見」のみを担当し、
+/// AI（<see cref="JraRaceCardUrlDiscoveryAgent"/>）は出馬表 URL の「発見」のみを担当し、
 /// 各ページの詳細スクレイピングは Playwright ベースの <see cref="JraRaceCardScraper"/> が行う。
 /// 最後に <see cref="DataCollectionWriteTools"/> で EventFlow 経由でドメインへ保存する。
 /// </para>
@@ -27,18 +28,27 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// </summary>
 public sealed class JraRaceCardCollectionWorkflow
 {
-    private readonly JraUrlDiscoveryAgent _discoveryAgent;
+    private readonly JraRaceCardUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceCardScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
 
-    public JraRaceCardCollectionWorkflow(
-        JraUrlDiscoveryAgent discoveryAgent,
+    internal JraRaceCardCollectionWorkflow(
+        JraRaceCardUrlDiscoveryAgent discoveryAgent,
         JraRaceCardScraper scraper,
         DataCollectionWriteTools writeTools)
     {
         _discoveryAgent = discoveryAgent;
         _scraper = scraper;
         _writeTools = writeTools;
+    }
+
+    public JraRaceCardCollectionWorkflow(
+        IChatClient chatClient,
+        IList<AITool> tools,
+        JraRaceCardScraper scraper,
+        DataCollectionWriteTools writeTools)
+        : this(new JraRaceCardUrlDiscoveryAgent(chatClient, tools), scraper, writeTools)
+    {
     }
 
     /// <summary>
