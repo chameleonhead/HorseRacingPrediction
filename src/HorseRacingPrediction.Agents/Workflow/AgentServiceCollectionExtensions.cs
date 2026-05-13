@@ -1,14 +1,7 @@
-using EventFlow.EntityFramework.Extensions;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
-using HorseRacingPrediction.Application.Commands.Races;
-using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Domain.Races;
-using HorseRacingPrediction.Infrastructure;
-using HorseRacingPrediction.Infrastructure.Persistence;
-using EventFlow.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -23,48 +16,6 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// </summary>
 public static class AgentServiceCollectionExtensions
 {
-    public static IServiceCollection AddHorseRacingAgentDomainSupport(
-        this IServiceCollection services,
-        string connectionString)
-    {
-        services.AddSqliteDbContextProvider(connectionString);
-
-        services.AddSingleton<HorseWeightHistoryLocator>();
-        services.AddSingleton<PredictionComparisonViewLocator>();
-        services.AddSingleton<MemoBySubjectLocator>();
-        services.AddSingleton<HorseRaceHistoryLocator>();
-        services.AddSingleton<JockeyRaceHistoryLocator>();
-
-        services.AddEventFlow(options =>
-        {
-            options
-                .AddDefaults(typeof(RaceAggregate).Assembly)
-                .AddDefaults(typeof(CreateRaceCommand).Assembly)
-                .UseEntityFrameworkSqliteEventStore(connectionString)
-                .UseEntityFrameworkReadModel<RaceSummaryReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
-            .UseEntityFrameworkReadModel<HorseWeightHistoryReadModel, EventStoreDbContext, HorseWeightHistoryLocator>()
-            .UseEntityFrameworkReadModel<PredictionComparisonViewReadModel, EventStoreDbContext, PredictionComparisonViewLocator>()
-            .UseEntityFrameworkReadModel<MemoBySubjectReadModel, EventStoreDbContext, MemoBySubjectLocator>()
-            .UseEntityFrameworkReadModel<HorseRaceHistoryReadModel, EventStoreDbContext, HorseRaceHistoryLocator>()
-            .UseEntityFrameworkReadModel<JockeyRaceHistoryReadModel, EventStoreDbContext, JockeyRaceHistoryLocator>();
-        });
-
-        services.AddTransient<IRaceQueryService, EventFlowRaceQueryService>();
-        services.AddTransient<IPredictionWriteService, EventFlowPredictionWriteService>();
-        services.AddTransient<IDataCollectionWriteService, EventFlowDataCollectionWriteService>();
-
-        services.AddTransient<RaceQueryTools>();
-        services.AddTransient<PredictionWriteTools>();
-        services.AddTransient<DataCollectionWriteTools>();
-        return services;
-    }
-
     /// <summary>
     /// PlaywrightTools、WebBrowserAgent、WebFetchTools、および HorseRacingTools を DI コンテナに登録する。
     /// <para>

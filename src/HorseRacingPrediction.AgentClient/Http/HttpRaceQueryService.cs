@@ -1,13 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Application.Queries.ReadModels;
 
 namespace HorseRacingPrediction.AgentClient.Http;
 
-/// <summary>
-/// クラウド API を呼び出して <see cref="IRaceQueryService"/> を実装するクラス。
-/// </summary>
 public sealed class HttpRaceQueryService : IRaceQueryService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -19,9 +16,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         _httpClient = httpClient;
     }
 
-    public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
-        DateOnly raceDate,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
             .GetAsync($"/api/races?raceDateFrom={raceDate:yyyy-MM-dd}&raceDateTo={raceDate:yyyy-MM-dd}&page=1&pageSize=200&sortBy=raceNumber&sortDescending=false", cancellationToken)
@@ -33,68 +28,40 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             .ReadFromJsonAsync<PagedResponseDto<RaceSummaryDto>>(JsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return dto?.Items
-            .Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber))
-            .ToList()
-            ?? [];
+        return dto?.Items.Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber)).ToList() ?? [];
     }
 
-    public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
-        string raceId, CancellationToken cancellationToken = default)
+    public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient
-            .GetAsync($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken)
-            .ConfigureAwait(false);
-
+        var response = await _httpClient.GetAsync($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content
-            .ReadFromJsonAsync<RacePredictionContextDto>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-
-        return ReadModelMapper.ToRacePredictionContext(dto);
+        return await response.Content.ReadFromJsonAsync<RacePredictionContextReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<HorseReadModel?> GetHorseAsync(
-        string horseId, CancellationToken cancellationToken = default)
+    public async Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient
-            .GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken)
-            .ConfigureAwait(false);
-
+        var response = await _httpClient.GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content
-            .ReadFromJsonAsync<HorseDto>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-
-        return ReadModelMapper.ToHorse(dto);
+        return await response.Content.ReadFromJsonAsync<HorseReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JockeyReadModel?> GetJockeyAsync(
-        string jockeyId, CancellationToken cancellationToken = default)
+    public async Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient
-            .GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken)
-            .ConfigureAwait(false);
-
+        var response = await _httpClient.GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content
-            .ReadFromJsonAsync<JockeyDto>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-
-        return ReadModelMapper.ToJockey(dto);
+        return await response.Content.ReadFromJsonAsync<JockeyReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(
-        string subjectType, string subjectId, CancellationToken cancellationToken = default)
+    public async Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
             .GetAsync($"/api/memos/by-subject/{Uri.EscapeDataString(subjectType)}/{Uri.EscapeDataString(subjectId)}", cancellationToken)
@@ -104,55 +71,71 @@ public sealed class HttpRaceQueryService : IRaceQueryService
             return null;
 
         response.EnsureSuccessStatusCode();
-        var memos = await response.Content
-            .ReadFromJsonAsync<List<MemoResponseDto>>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        var memos = await response.Content.ReadFromJsonAsync<List<MemoResponseDto>>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        if (memos is null || memos.Count == 0)
+            return null;
 
-        var subjectKey = $"{subjectType.ToUpperInvariant()}:{subjectId}";
-        return ReadModelMapper.ToMemoBySubject(subjectKey, memos);
+        return new MemoBySubjectReadModel
+        {
+            SubjectKey = $"{subjectType.ToUpperInvariant()}:{subjectId}",
+            Memos = memos.Select(m => new MemoSnapshot(
+                m.MemoId,
+                m.AuthorId,
+                m.MemoType,
+                m.Content,
+                m.CreatedAt,
+                m.Subjects.Select(s => new MemoSubjectSnapshot(s.SubjectType, s.SubjectId)).ToList(),
+                m.Links.Select(l => new MemoLinkSnapshot(l.LinkId, l.LinkType, l.Title, l.Url, l.StorageKey)).ToList())).ToList()
+        };
     }
 
-    public async Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(
-        string horseId, CancellationToken cancellationToken = default)
+    public async Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient
-            .GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}/race-history", cancellationToken)
-            .ConfigureAwait(false);
-
+        var response = await _httpClient.GetAsync($"/api/horses/{Uri.EscapeDataString(horseId)}/race-history", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content
-            .ReadFromJsonAsync<HorseRaceHistoryDto>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-
-        return ReadModelMapper.ToHorseRaceHistory(dto);
+        return await response.Content.ReadFromJsonAsync<HorseRaceHistoryReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
-        string jockeyId, CancellationToken cancellationToken = default)
+    public async Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient
-            .GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history", cancellationToken)
-            .ConfigureAwait(false);
-
+        var response = await _httpClient.GetAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
         response.EnsureSuccessStatusCode();
-        var dto = await response.Content
-            .ReadFromJsonAsync<JockeyRaceHistoryDto>(JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
-
-        return ReadModelMapper.ToJockeyRaceHistory(dto);
+        return await response.Content.ReadFromJsonAsync<JockeyRaceHistoryReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
     private sealed record PagedResponseDto<T>(IReadOnlyList<T> Items);
 
-    private sealed record RaceSummaryDto(
-        string RaceId,
-        DateOnly? RaceDate,
-        string? RacecourseCode,
-        int? RaceNumber);
+    private sealed record RaceSummaryDto(string RaceId, DateOnly? RaceDate, string? RacecourseCode, int? RaceNumber);
+}
+
+internal sealed class MemoResponseDto
+{
+    public string MemoId { get; set; } = string.Empty;
+    public string? AuthorId { get; set; }
+    public string MemoType { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public List<MemoSubjectDto> Subjects { get; set; } = [];
+    public List<MemoLinkDto> Links { get; set; } = [];
+}
+
+internal sealed class MemoSubjectDto
+{
+    public string SubjectType { get; set; } = string.Empty;
+    public string SubjectId { get; set; } = string.Empty;
+}
+
+internal sealed class MemoLinkDto
+{
+    public string LinkId { get; set; } = string.Empty;
+    public string LinkType { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Url { get; set; }
+    public string? StorageKey { get; set; }
 }

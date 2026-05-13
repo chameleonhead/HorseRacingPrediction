@@ -19,6 +19,6 @@ public sealed class ScrapingRegistrationServiceTests
     {
         var result = ScrapingRegistrationService.BuildPredictionCandidateRaceIds([]);
 
-        Assert.AreEqual(0, result.Count);
+        Assert.IsEmpty(result);
     }
 }

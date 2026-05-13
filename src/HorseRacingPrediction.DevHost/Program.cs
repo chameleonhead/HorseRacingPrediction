@@ -2,6 +2,7 @@ using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
+using HorseRacingPrediction.Agents.Local.Workflow;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Workflow;
 using Microsoft.Agents.AI;

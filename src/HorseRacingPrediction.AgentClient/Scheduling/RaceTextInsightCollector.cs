@@ -5,7 +5,7 @@ using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Agents.Contracts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

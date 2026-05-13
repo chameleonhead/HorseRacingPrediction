@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Domain.Races;
+using HorseRacingPrediction.Agents.Contracts;
 
 namespace HorseRacingPrediction.Api.Contracts;
 

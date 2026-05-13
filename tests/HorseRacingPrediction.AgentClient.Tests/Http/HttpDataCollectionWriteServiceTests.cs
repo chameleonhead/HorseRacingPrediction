@@ -12,7 +12,7 @@ public sealed class HttpDataCollectionWriteServiceTests
     [TestMethod]
     public async Task UpsertRaceAsync_WhenCreateConflicts_FallsBackToPatchAndPublishesCard()
     {
-        var raceId = DeterministicIdGenerator.BuildRaceId(new DateOnly(2025, 6, 15), "TOKYO", 5).Value;
+        var raceId = DeterministicIdGenerator.BuildRaceId(new DateOnly(2025, 6, 15), "TOKYO", 5);
         var handler = new StubHttpMessageHandler();
         handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/races", new HttpResponseMessage(HttpStatusCode.Conflict));
@@ -51,7 +51,7 @@ public sealed class HttpDataCollectionWriteServiceTests
     [TestMethod]
     public async Task UpsertRaceAsync_WhenPublishConflicts_TreatsItAsSuccess()
     {
-        var raceId = DeterministicIdGenerator.BuildRaceId(new DateOnly(2025, 6, 15), "TOKYO", 5).Value;
+        var raceId = DeterministicIdGenerator.BuildRaceId(new DateOnly(2025, 6, 15), "TOKYO", 5);
         var handler = new StubHttpMessageHandler();
         handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/races", new HttpResponseMessage(HttpStatusCode.Conflict));

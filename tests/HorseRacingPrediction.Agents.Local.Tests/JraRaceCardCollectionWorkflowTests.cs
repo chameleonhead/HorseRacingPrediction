@@ -13,7 +13,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.Extensions.AI;
 
-namespace HorseRacingPrediction.Agents.Tests;
+namespace HorseRacingPrediction.Agents.Local.Tests;
 
 /// <summary>
 /// JraRaceCardCollectionWorkflow のユニットテスト。

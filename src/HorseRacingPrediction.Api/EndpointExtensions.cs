@@ -2,6 +2,7 @@ using EventFlow;
 using EventFlow.Commands;
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
+using AgentContracts = HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -410,7 +411,7 @@ public static class EndpointExtensions
                     filtered = filtered.Where(x => ContainsIgnoreCase(x.RaceName, request.RaceName));
 
                 if (request.Status.HasValue)
-                    filtered = filtered.Where(x => x.Status == request.Status.Value);
+                    filtered = filtered.Where(x => x.Status == (HorseRacingPrediction.Domain.Races.RaceStatus)request.Status.Value);
 
                 if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
                     filtered = filtered.Where(x => ContainsIgnoreCase(x.WinningHorseName, request.WinningHorseName));
@@ -454,7 +455,7 @@ public static class EndpointExtensions
                         x.RacecourseCode,
                         x.RaceNumber,
                         x.RaceName,
-                        x.Status,
+                        (AgentContracts.RaceStatus)(int)x.Status,
                         x.EntryCount,
                         x.WinningHorseName,
                         x.ResultDeclaredAt))
@@ -960,7 +961,7 @@ public static class EndpointExtensions
                     readModel.RacecourseCode,
                     readModel.RaceNumber,
                     readModel.RaceName,
-                    readModel.Status,
+                    (AgentContracts.RaceStatus)(int)readModel.Status,
                     null, null,
                     null, null, null, null,
                     readModel.EntryCount,
@@ -985,11 +986,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
 
-                return Results.Ok(readModel);
+                return Results.Ok(ToAgentRacePredictionContext(readModel));
             })
             .WithName("GetRacePredictionContext")
             .WithTags("Race API")
-            .Produces<RacePredictionContextReadModel>(StatusCodes.Status200OK)
+            .Produces<AgentContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1074,10 +1075,10 @@ public static class EndpointExtensions
                     filtered = filtered.Where(x => string.Equals(x.PredictorId, request.PredictorId, StringComparison.OrdinalIgnoreCase));
 
                 if (request.TicketStatus.HasValue)
-                    filtered = filtered.Where(x => x.TicketStatus == request.TicketStatus.Value);
+                    filtered = filtered.Where(x => x.TicketStatus == (HorseRacingPrediction.Domain.Predictions.TicketStatus)request.TicketStatus.Value);
 
                 if (request.EvaluationStatus.HasValue)
-                    filtered = filtered.Where(x => x.EvaluationStatus == request.EvaluationStatus.Value);
+                    filtered = filtered.Where(x => x.EvaluationStatus == (HorseRacingPrediction.Application.Queries.ReadModels.EvaluationStatus)request.EvaluationStatus.Value);
 
                 if (request.PredictedAtFrom.HasValue)
                     filtered = filtered.Where(x => x.PredictedAt.HasValue && x.PredictedAt.Value >= request.PredictedAtFrom.Value);
@@ -1115,8 +1116,8 @@ public static class EndpointExtensions
                         x.ConfidenceScore,
                         x.SummaryComment,
                         x.PredictedAt,
-                        x.TicketStatus,
-                        x.EvaluationStatus,
+                        (AgentContracts.TicketStatus)(int)x.TicketStatus,
+                        (AgentContracts.EvaluationStatus)(int)x.EvaluationStatus,
                         x.Marks.Count)));
             })
             .WithName("SearchPredictionTickets")
@@ -1135,21 +1136,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
                     return Results.NotFound();
 
-                var response = new HorseProfileResponse(
-                    readModel.HorseId,
-                    readModel.RegisteredName,
-                    readModel.NormalizedName,
-                    readModel.SexCode,
-                    readModel.BirthDate,
-                    readModel.Aliases
-                        .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
-                        .ToList());
-
-                return Results.Ok(response);
+                return Results.Ok(ToAgentHorse(readModel));
             })
             .WithName("GetHorseProfile")
             .WithTags("Horse API")
-            .Produces<HorseProfileResponse>(StatusCodes.Status200OK)
+            .Produces<AgentContracts.HorseReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1238,11 +1229,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
                     return Results.NotFound();
 
-                return Results.Ok(readModel);
+                return Results.Ok(ToAgentHorseRaceHistory(readModel));
             })
             .WithName("GetHorseRaceHistory")
             .WithTags("Horse API")
-            .Produces<HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<AgentContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1281,11 +1272,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
                     return Results.NotFound();
 
-                return Results.Ok(readModel);
+                return Results.Ok(ToAgentJockeyRaceHistory(readModel));
             })
             .WithName("GetJockeyRaceHistory")
             .WithTags("Jockey API")
-            .Produces<JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<AgentContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1299,20 +1290,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
                     return Results.NotFound();
 
-                var response = new JockeyProfileResponse(
-                    readModel.JockeyId,
-                    readModel.DisplayName,
-                    readModel.NormalizedName,
-                    readModel.AffiliationCode,
-                    readModel.Aliases
-                        .Select(a => new AliasResponse(a.AliasType, a.AliasValue, a.SourceName, a.IsPrimary))
-                        .ToList());
-
-                return Results.Ok(response);
+                return Results.Ok(ToAgentJockey(readModel));
             })
             .WithName("GetJockeyProfile")
             .WithTags("Jockey API")
-            .Produces<JockeyProfileResponse>(StatusCodes.Status200OK)
+            .Produces<AgentContracts.JockeyReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1774,5 +1756,58 @@ public static class EndpointExtensions
                 ? source.OrderByDescending(x => x.EvaluationStatus).ThenByDescending(x => x.PredictedAt)
                 : source.OrderBy(x => x.EvaluationStatus).ThenBy(x => x.PredictedAt),
             _ => null
+        };
+
+    private static AgentContracts.RacePredictionContextReadModel ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
+        => new()
+        {
+            RaceId = model.RaceId,
+            RaceDate = model.RaceDate,
+            RacecourseCode = model.RacecourseCode,
+            RaceNumber = model.RaceNumber,
+            RaceName = model.RaceName,
+            Status = (AgentContracts.RaceStatus)(int)model.Status,
+            GradeCode = model.GradeCode,
+            SurfaceCode = model.SurfaceCode,
+            DistanceMeters = model.DistanceMeters,
+            DirectionCode = model.DirectionCode,
+            Entries = model.Entries.Select(x => new AgentContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode)).ToList(),
+            WeatherObservations = model.WeatherObservations.Select(x => new AgentContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
+            TrackConditionObservations = model.TrackConditionObservations.Select(x => new AgentContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
+        };
+
+    private static AgentContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
+        => new()
+        {
+            HorseId = model.HorseId,
+            RegisteredName = model.RegisteredName,
+            NormalizedName = model.NormalizedName,
+            SexCode = model.SexCode,
+            BirthDate = model.BirthDate,
+            Aliases = model.Aliases.Select(x => new AgentContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+        };
+
+    private static AgentContracts.JockeyReadModel ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
+        => new()
+        {
+            JockeyId = model.JockeyId,
+            DisplayName = model.DisplayName,
+            NormalizedName = model.NormalizedName,
+            AffiliationCode = model.AffiliationCode,
+            Aliases = model.Aliases.Select(x => new AgentContracts.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+        };
+
+    private static AgentContracts.HorseRaceHistoryReadModel ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
+        => new()
+        {
+            HorseId = model.HorseId,
+            Entries = model.Entries.Select(x => new AgentContracts.HorseRaceHistoryEntry(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
+        };
+
+    private static AgentContracts.JockeyRaceHistoryReadModel ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
+        => new()
+        {
+            JockeyId = model.JockeyId,
+            Entries = model.Entries.Select(x => new AgentContracts.JockeyRaceHistoryEntry(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
         };
 }

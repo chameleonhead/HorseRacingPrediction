@@ -7,6 +7,7 @@ using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.JraAgent;
+using HorseRacingPrediction.Agents.Local.Workflow;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;

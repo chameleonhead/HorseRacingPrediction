@@ -39,7 +39,7 @@ public sealed class ProcessingStateStoreTests
 
         var restarted = CreateStore(predictionLeaseMinutes: 5);
         var beforeLeaseExpiry = await restarted.TakeReadyPredictionCandidatesAsync(now.AddMinutes(15), TimeSpan.FromMinutes(10), 10);
-        Assert.AreEqual(0, beforeLeaseExpiry.Count, "lease 中は再取得されないこと");
+        Assert.IsEmpty(beforeLeaseExpiry, "lease 中は再取得されないこと");
 
         var afterLeaseExpiry = await restarted.TakeReadyPredictionCandidatesAsync(now.AddMinutes(17), TimeSpan.FromMinutes(10), 10);
         CollectionAssert.AreEqual(new[] { "race-1" }, afterLeaseExpiry.ToArray());
@@ -59,7 +59,7 @@ public sealed class ProcessingStateStoreTests
         var restarted = CreateStore(predictionLeaseMinutes: 5);
         var afterCompletion = await restarted.TakeReadyPredictionCandidatesAsync(now.AddMinutes(30), TimeSpan.FromMinutes(10), 10);
 
-        Assert.AreEqual(0, afterCompletion.Count, "完了済みは再取得されないこと");
+        Assert.IsEmpty(afterCompletion, "完了済みは再取得されないこと");
     }
 
     private ProcessingStateStore CreateStore(int predictionLeaseMinutes)

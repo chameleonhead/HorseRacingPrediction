@@ -1,5 +1,5 @@
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Application.Queries.ReadModels;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;

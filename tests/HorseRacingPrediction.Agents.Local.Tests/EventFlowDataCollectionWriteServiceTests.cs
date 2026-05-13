@@ -8,7 +8,7 @@ using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 
-namespace HorseRacingPrediction.Agents.Tests;
+namespace HorseRacingPrediction.Agents.Local.Tests;
 
 /// <summary>
 /// EventFlowDataCollectionWriteService のユニットテスト。
@@ -118,5 +118,24 @@ public class EventFlowDataCollectionWriteServiceTests
 
             return Task.FromResult((TResult)result!);
         }
+    }
+}
+
+internal static class EventFlowDataCollectionReadModelTestExtensions
+{
+    public static void SetTestData(this HorseReadModel model, string horseId, string registeredName, string normalizedName)
+    {
+        typeof(HorseReadModel).GetProperty(nameof(HorseReadModel.HorseId))!.SetValue(model, horseId);
+        typeof(HorseReadModel).GetProperty(nameof(HorseReadModel.RegisteredName))!.SetValue(model, registeredName);
+        typeof(HorseReadModel).GetProperty(nameof(HorseReadModel.NormalizedName))!.SetValue(model, normalizedName);
+    }
+
+    public static void SetTestData(this RacePredictionContextReadModel model, string raceId, DateOnly raceDate, string racecourseCode, int raceNumber, string raceName)
+    {
+        typeof(RacePredictionContextReadModel).GetProperty(nameof(RacePredictionContextReadModel.RaceId))!.SetValue(model, raceId);
+        typeof(RacePredictionContextReadModel).GetProperty(nameof(RacePredictionContextReadModel.RaceDate))!.SetValue(model, raceDate);
+        typeof(RacePredictionContextReadModel).GetProperty(nameof(RacePredictionContextReadModel.RacecourseCode))!.SetValue(model, racecourseCode);
+        typeof(RacePredictionContextReadModel).GetProperty(nameof(RacePredictionContextReadModel.RaceNumber))!.SetValue(model, raceNumber);
+        typeof(RacePredictionContextReadModel).GetProperty(nameof(RacePredictionContextReadModel.RaceName))!.SetValue(model, raceName);
     }
 }

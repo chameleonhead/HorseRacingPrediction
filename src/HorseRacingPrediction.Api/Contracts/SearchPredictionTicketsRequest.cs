@@ -1,5 +1,4 @@
-using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Domain.Predictions;
+using HorseRacingPrediction.Agents.Contracts;
 
 namespace HorseRacingPrediction.Api.Contracts;
 

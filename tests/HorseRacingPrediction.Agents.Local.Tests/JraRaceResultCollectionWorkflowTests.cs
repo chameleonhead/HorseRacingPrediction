@@ -6,13 +6,14 @@ using EventFlow.Core;
 using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 
-namespace HorseRacingPrediction.Agents.Tests;
+namespace HorseRacingPrediction.Agents.Local.Tests;
 
 /// <summary>
 /// JraRaceResultCollectionWorkflow のユニットテスト。
@@ -283,7 +284,7 @@ public class JraRaceResultCollectionWorkflowTests
 
         var filtered = await _sut.FilterUnregisteredUrlsAsync(urls, raceDate);
 
-        Assert.AreEqual(1, filtered.Count);
+        Assert.HasCount(1, filtered);
         Assert.AreEqual("https://example.test/2", filtered[0].Url);
     }
 
@@ -712,10 +713,10 @@ public class JraRaceResultCollectionWorkflowTests
 
         public Task<TResult> ProcessAsync<TResult>(IQuery<TResult> query, CancellationToken cancellationToken)
         {
-            if (query is ReadModelByIdQuery<RacePredictionContextReadModel> raceQuery &&
+            if (query is ReadModelByIdQuery<HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel> raceQuery &&
                 _bus.CreatedRaceIds.Contains(raceQuery.Id))
             {
-                var model = new RacePredictionContextReadModel();
+                var model = new HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel();
                 model.SetTestData(raceQuery.Id, DateOnly.MinValue, "test", 0, "test");
                 return Task.FromResult((TResult)(object)model);
             }
@@ -731,22 +732,22 @@ public class JraRaceResultCollectionWorkflowTests
         public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
 
-        public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
-            => Task.FromResult<RacePredictionContextReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.RacePredictionContextReadModel?>(null);
 
-        public Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
-            => Task.FromResult<HorseReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.HorseReadModel?>(null);
 
-        public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
-            => Task.FromResult<JockeyReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.JockeyReadModel?>(null);
 
-        public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
-            => Task.FromResult<MemoBySubjectReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.MemoBySubjectReadModel?>(null);
 
-        public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
-            => Task.FromResult<HorseRaceHistoryReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.HorseRaceHistoryReadModel?>(null);
 
-        public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
-            => Task.FromResult<JockeyRaceHistoryReadModel?>(null);
+        public Task<HorseRacingPrediction.Agents.Contracts.JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRacingPrediction.Agents.Contracts.JockeyRaceHistoryReadModel?>(null);
     }
 }

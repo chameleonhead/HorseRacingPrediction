@@ -1,5 +1,4 @@
 using System.Text;
-using HorseRacingPrediction.Domain.Races;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
@@ -19,12 +18,12 @@ public static class DeterministicIdGenerator
     private static readonly Guid TrainerNamespaceId = new("36d7318f-bf48-488f-b0d8-0e2c942b36d2");
     private static readonly Guid RaceNamespaceId = new("d54c5101-305d-42aa-a8df-3c52ca96a6ef");
 
-    /// <summary>レース日・競馬場コード・レース番号から決定論的な <see cref="RaceId"/> を生成する。</summary>
-    public static RaceId BuildRaceId(DateOnly raceDate, string racecourseCode, int raceNumber)
+    /// <summary>レース日・競馬場コード・レース番号から決定論的なレース ID を生成する。</summary>
+    public static string BuildRaceId(DateOnly raceDate, string racecourseCode, int raceNumber)
     {
         var normalizedRacecourse = NormalizeKey(racecourseCode);
         var guid = CreateDeterministicGuid(RaceNamespaceId, $"{raceDate:yyyy-MM-dd}|{normalizedRacecourse}|{raceNumber:D2}");
-        return new RaceId($"race-{guid:D}");
+        return $"race-{guid:D}";
     }
 
     /// <summary>レース ID と馬番から出走エントリー ID を生成する。</summary>

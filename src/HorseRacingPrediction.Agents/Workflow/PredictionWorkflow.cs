@@ -1,13 +1,9 @@
-using EventFlow;
-using EventFlow.Commands;
-using EventFlow.Queries;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
@@ -92,52 +88,5 @@ public sealed class PredictionWorkflow
             outputs[_raceContextAgent.Id].ToString(),
             outputs[_horseAnalysisAgent.Id].ToString(),
             outputs[_predictionAgent.Id].ToString());
-    }
-
-    /// <summary>
-    /// <see cref="PredictionWorkflow"/> を DI なしで構築するファクトリメソッド。
-    /// 各エージェントに必要なツールを個別に設定する。
-    /// </summary>
-    /// <param name="chatClient">共通の <see cref="IChatClient"/> インスタンス</param>
-    /// <param name="queryProcessor">EventFlow クエリプロセッサー</param>
-    /// <param name="commandBus">EventFlow コマンドバス</param>
-    /// <param name="browser">Web ブラウザ抽象</param>
-    /// <param name="webFetchOptions">Web 取得オプション（許可ドメインなど）</param>
-    public static PredictionWorkflow Create(
-        IChatClient chatClient,
-        IQueryProcessor queryProcessor,
-        ICommandBus commandBus,
-        IWebBrowser browser,
-        IOptions<WebFetchOptions> webFetchOptions)
-    {
-        var raceQueryTools = new RaceQueryTools(new EventFlowRaceQueryService(queryProcessor));
-        var predictionWriteTools = new PredictionWriteTools(new EventFlowPredictionWriteService(commandBus));
-        var playwrightTools = new PlaywrightTools(browser, webFetchOptions);
-        var webBrowserAgent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
-        var webFetchTools = new WebFetchTools(webBrowserAgent);
-
-        var raceQueryAiTools = raceQueryTools.GetAITools();
-        var predictionWriteAiTools = predictionWriteTools.GetAITools();
-        var webFetchAiTools = webFetchTools.GetAITools();
-
-        var raceContextAgent = new ChatClientAgent(
-            chatClient,
-            name: RaceContextAgent.AgentName,
-            instructions: RaceContextAgent.SystemPrompt,
-            tools: [.. raceQueryAiTools, .. webFetchAiTools]);
-
-        var horseAnalysisAgent = new ChatClientAgent(
-            chatClient,
-            name: HorseAnalysisAgent.AgentName,
-            instructions: HorseAnalysisAgent.SystemPrompt,
-            tools: [.. raceQueryAiTools, .. webFetchAiTools]);
-
-        var predictionAgent = new ChatClientAgent(
-            chatClient,
-            name: PredictionAgent.AgentName,
-            instructions: PredictionAgent.SystemPrompt,
-            tools: [.. raceQueryAiTools, .. predictionWriteAiTools, .. webFetchAiTools]);
-
-        return new PredictionWorkflow(raceContextAgent, horseAnalysisAgent, predictionAgent);
     }
 }

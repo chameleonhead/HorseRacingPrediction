@@ -17,7 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HorseRacingPrediction.AgentClient\HorseRacingPrediction.AgentClient.csproj" />
     <ProjectReference Include="..\HorseRacingPrediction.Agents\HorseRacingPrediction.Agents.csproj" />
-    <ProjectReference Include="..\HorseRacingPrediction.Infrastructure\HorseRacingPrediction.Infrastructure.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.Agents.Local\HorseRacingPrediction.Agents.Local.csproj" />
   </ItemGroup>
 
 </Project>

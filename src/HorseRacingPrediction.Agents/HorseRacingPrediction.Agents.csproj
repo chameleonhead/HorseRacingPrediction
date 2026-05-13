@@ -8,17 +8,15 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HorseRacingPrediction.Agents.Tests" />
+    <InternalsVisibleTo Include="HorseRacingPrediction.Agents.Local.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Playwright" Version="1.59.0" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.1.0" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.1.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\HorseRacingPrediction.Application\HorseRacingPrediction.Application.csproj" />
-    <ProjectReference Include="..\HorseRacingPrediction.Infrastructure\HorseRacingPrediction.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
   </ItemGroup>
 
 </Project>

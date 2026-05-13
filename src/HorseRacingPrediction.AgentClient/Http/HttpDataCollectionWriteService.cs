@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
 
 namespace HorseRacingPrediction.AgentClient.Http;
@@ -42,7 +43,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var parsedRaceDate = DateOnly.Parse(raceDate, CultureInfo.InvariantCulture);
-        var raceId = DeterministicIdGenerator.BuildRaceId(parsedRaceDate, racecourseCode, raceNumber).Value;
+        var raceId = DeterministicIdGenerator.BuildRaceId(parsedRaceDate, racecourseCode, raceNumber);
 
         var existing = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
 
@@ -320,7 +321,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        if (race?.Status == HorseRacingPrediction.Domain.Races.RaceStatus.Draft)
+        if (race?.Status == RaceStatus.Draft)
         {
             var entryCount = race.Entries.Count > 0 ? race.Entries.Count : 1;
             var publishRequest = new { EntryCount = entryCount };
@@ -418,8 +419,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<RacePredictionContextDto?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)
-        => await GetAsync<RacePredictionContextDto>($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
+    private async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)
+        => await GetAsync<RacePredictionContextReadModel>($"/api/races/{Uri.EscapeDataString(raceId)}/context", cancellationToken).ConfigureAwait(false);
 
     // ------------------------------------------------------------------ //
     // private helpers — payout parsing
@@ -439,65 +440,66 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         {
             return null;
         }
-}
-        private async Task UpdateHorseAsync(
-            string horseId,
-            string registeredName,
-            string normalizedName,
-            string? sexCode,
-            DateOnly? birthDate,
-            CancellationToken cancellationToken)
-        {
-            var updateRequest = new
-            {
-                RegisteredName = registeredName,
-                NormalizedName = normalizedName,
-                SexCode = sexCode,
-                BirthDate = birthDate
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-        }
+    }
 
-        private async Task UpdateJockeyAsync(
-            string jockeyId,
-            string displayName,
-            string normalizedName,
-            string? affiliationCode,
-            CancellationToken cancellationToken)
+    private async Task UpdateHorseAsync(
+        string horseId,
+        string registeredName,
+        string normalizedName,
+        string? sexCode,
+        DateOnly? birthDate,
+        CancellationToken cancellationToken)
+    {
+        var updateRequest = new
         {
-            var updateRequest = new
-            {
-                DisplayName = displayName,
-                NormalizedName = normalizedName,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-        }
+            RegisteredName = registeredName,
+            NormalizedName = normalizedName,
+            SexCode = sexCode,
+            BirthDate = birthDate
+        };
+        var response = await _httpClient
+            .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
 
-        private async Task UpdateTrainerAsync(
-            string trainerId,
-            string displayName,
-            string normalizedName,
-            string? affiliationCode,
-            CancellationToken cancellationToken)
+    private async Task UpdateJockeyAsync(
+        string jockeyId,
+        string displayName,
+        string normalizedName,
+        string? affiliationCode,
+        CancellationToken cancellationToken)
+    {
+        var updateRequest = new
         {
-            var updateRequest = new
-            {
-                DisplayName = displayName,
-                NormalizedName = normalizedName,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-        }
+            DisplayName = displayName,
+            NormalizedName = normalizedName,
+            AffiliationCode = affiliationCode
+        };
+        var response = await _httpClient
+            .PutAsJsonAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", updateRequest, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task UpdateTrainerAsync(
+        string trainerId,
+        string displayName,
+        string normalizedName,
+        string? affiliationCode,
+        CancellationToken cancellationToken)
+    {
+        var updateRequest = new
+        {
+            DisplayName = displayName,
+            NormalizedName = normalizedName,
+            AffiliationCode = affiliationCode
+        };
+        var response = await _httpClient
+            .PutAsJsonAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", updateRequest, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
 
     private sealed record PayoutEntry(string Combination, decimal Amount);
 
