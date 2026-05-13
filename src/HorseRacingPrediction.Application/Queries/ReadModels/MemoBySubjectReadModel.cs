@@ -10,10 +10,8 @@ public class MemoBySubjectReadModel : IReadModel,
     IAmReadModelFor<MemoAggregate, MemoId, MemoDeleted>,
     IAmReadModelFor<MemoAggregate, MemoId, MemoSubjectsChanged>
 {
-    private readonly List<MemoSnapshot> _memos = new();
-
     public string SubjectKey { get; private set; } = string.Empty;
-    public IReadOnlyList<MemoSnapshot> Memos => _memos.AsReadOnly();
+    public List<MemoSnapshot> Memos { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<MemoAggregate, MemoId, MemoCreated> domainEvent,
@@ -25,7 +23,7 @@ public class MemoBySubjectReadModel : IReadModel,
         var e = domainEvent.AggregateEvent;
         var memoId = domainEvent.AggregateIdentity.Value;
 
-        _memos.Add(BuildSnapshot(memoId, e.AuthorId, e.MemoType, e.Content, e.CreatedAt,
+        Memos.Add(BuildSnapshot(memoId, e.AuthorId, e.MemoType, e.Content, e.CreatedAt,
             e.Subjects, e.Links));
         return Task.CompletedTask;
     }
@@ -36,15 +34,15 @@ public class MemoBySubjectReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var memoId = domainEvent.AggregateIdentity.Value;
-        var index = _memos.FindIndex(m => m.MemoId == memoId);
+        var index = Memos.FindIndex(m => m.MemoId == memoId);
         if (index < 0) return Task.CompletedTask;
 
-        var existing = _memos[index];
+        var existing = Memos[index];
         var updatedLinks = e.Links != null
             ? ToLinkSnapshots(e.Links)
             : existing.Links;
 
-        _memos[index] = existing with
+        Memos[index] = existing with
         {
             MemoType = e.MemoType ?? existing.MemoType,
             Content = e.Content ?? existing.Content,
@@ -58,7 +56,7 @@ public class MemoBySubjectReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var memoId = domainEvent.AggregateIdentity.Value;
-        _memos.RemoveAll(m => m.MemoId == memoId);
+        Memos.RemoveAll(m => m.MemoId == memoId);
         return Task.CompletedTask;
     }
 
@@ -77,18 +75,18 @@ public class MemoBySubjectReadModel : IReadModel,
 
         if (isRemoved)
         {
-            _memos.RemoveAll(m => m.MemoId == memoId);
+            Memos.RemoveAll(m => m.MemoId == memoId);
             return Task.CompletedTask;
         }
 
-        var index = _memos.FindIndex(m => m.MemoId == memoId);
+        var index = Memos.FindIndex(m => m.MemoId == memoId);
         var newSnapshot = BuildSnapshot(memoId, e.AuthorId, e.MemoType, e.Content, e.CreatedAt,
             e.AllSubjects, e.Links);
 
         if (index >= 0)
-            _memos[index] = newSnapshot;
+            Memos[index] = newSnapshot;
         else
-            _memos.Add(newSnapshot);
+            Memos.Add(newSnapshot);
 
         return Task.CompletedTask;
     }
@@ -103,7 +101,7 @@ public class MemoBySubjectReadModel : IReadModel,
             ToLinkSnapshots(links));
     }
 
-    private static IReadOnlyList<MemoLinkSnapshot> ToLinkSnapshots(IReadOnlyList<MemoLink> links)
+    private static List<MemoLinkSnapshot> ToLinkSnapshots(IReadOnlyList<MemoLink> links)
         => links.Select(l => new MemoLinkSnapshot(l.LinkId, l.LinkType.ToString(), l.Title, l.Url, l.StorageKey))
                 .ToList();
 }

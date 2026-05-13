@@ -10,13 +10,11 @@ public class TrainerReadModel : IReadModel,
     IAmReadModelFor<TrainerAggregate, TrainerId, TrainerAliasMerged>,
     IAmReadModelFor<TrainerAggregate, TrainerId, TrainerDataCorrected>
 {
-    private readonly List<TrainerAliasEntry> _aliases = new();
-
     public string TrainerId { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? AffiliationCode { get; private set; }
-    public IReadOnlyList<TrainerAliasEntry> Aliases => _aliases.AsReadOnly();
+    public List<TrainerAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<TrainerAggregate, TrainerId, TrainerRegistered> domainEvent,
@@ -46,7 +44,7 @@ public class TrainerReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _aliases.Add(new TrainerAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
+        Aliases.Add(new TrainerAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
         return Task.CompletedTask;
     }
 

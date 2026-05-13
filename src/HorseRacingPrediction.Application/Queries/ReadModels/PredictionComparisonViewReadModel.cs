@@ -2,6 +2,7 @@ using EventFlow.Aggregates;
 using EventFlow.ReadStores;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
@@ -20,17 +21,17 @@ public class PredictionComparisonViewReadModel : IReadModel,
     IAmReadModelFor<PredictionTicketAggregate, PredictionTicketId, PredictionEvaluationRecalculated>,
     IAmReadModelFor<PredictionTicketAggregate, PredictionTicketId, PredictionMetadataCorrected>
 {
-    private readonly List<EntryResultSnapshot> _entryResults = new();
-    private readonly Dictionary<string, (string HorseId, int HorseNumber)> _entryIndex = new();
-    private readonly Dictionary<string, MutableTicketState> _ticketStates = new();
-
     public string RaceId { get; private set; } = string.Empty;
     public string? RaceName { get; private set; }
     public string? WinningHorseName { get; private set; }
     public DateTimeOffset? ResultDeclaredAt { get; private set; }
+    [JsonIgnore]
+    public List<PredictionComparisonTicketState> TicketStates { get; private set; } = [];
+    [JsonIgnore]
+    public List<RaceEntryIndexSnapshot> EntryIndexes { get; private set; } = [];
     public IReadOnlyList<PredictionTicketSnapshot> PredictionTickets =>
-        _ticketStates.Values.Select(s => s.ToSnapshot()).ToList().AsReadOnly();
-    public IReadOnlyList<EntryResultSnapshot> EntryResults => _entryResults.AsReadOnly();
+        TicketStates.Select(s => s.ToSnapshot()).ToList().AsReadOnly();
+    public List<EntryResultSnapshot> EntryResults { get; private set; } = [];
     public PayoutResultSnapshot? PayoutResult { get; private set; }
 
     public Task ApplyAsync(IReadModelContext context,
@@ -55,7 +56,12 @@ public class PredictionComparisonViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _entryIndex[e.EntryId] = (e.HorseId, e.HorseNumber);
+        var index = EntryIndexes.FindIndex(x => x.EntryId == e.EntryId);
+        var snapshot = new RaceEntryIndexSnapshot(e.EntryId, e.HorseId, e.HorseNumber);
+        if (index >= 0)
+            EntryIndexes[index] = snapshot;
+        else
+            EntryIndexes.Add(snapshot);
         return Task.CompletedTask;
     }
 
@@ -73,11 +79,11 @@ public class PredictionComparisonViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _entryIndex.TryGetValue(e.EntryId, out var entryInfo);
-        _entryResults.Add(new EntryResultSnapshot(
+        var entryInfo = EntryIndexes.LastOrDefault(x => x.EntryId == e.EntryId);
+        EntryResults.Add(new EntryResultSnapshot(
             e.EntryId,
-            entryInfo.HorseId ?? string.Empty,
-            entryInfo.HorseNumber,
+            entryInfo?.HorseId ?? string.Empty,
+            entryInfo?.HorseNumber ?? 0,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
             e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
@@ -105,7 +111,7 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var ticketId = domainEvent.AggregateIdentity.Value;
-        _ticketStates[ticketId] = new MutableTicketState
+        var state = new PredictionComparisonTicketState
         {
             PredictionTicketId = ticketId,
             PredictorType = e.PredictorType,
@@ -114,6 +120,11 @@ public class PredictionComparisonViewReadModel : IReadModel,
             SummaryComment = e.SummaryComment,
             PredictedAt = e.PredictedAt
         };
+        var index = TicketStates.FindIndex(x => x.PredictionTicketId == ticketId);
+        if (index >= 0)
+            TicketStates[index] = state;
+        else
+            TicketStates.Add(state);
         return Task.CompletedTask;
     }
 
@@ -123,7 +134,8 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
         {
             state.Marks.Add(new PredictionMarkSnapshot(
                 e.EntryId, e.MarkCode, e.PredictedRank, e.Score, e.Comment));
@@ -136,7 +148,8 @@ public class PredictionComparisonViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
             state.Status = TicketStatus.Finalized;
         return Task.CompletedTask;
     }
@@ -146,7 +159,8 @@ public class PredictionComparisonViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
             state.Status = TicketStatus.Withdrawn;
         return Task.CompletedTask;
     }
@@ -157,10 +171,11 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
         {
             state.Evaluations.Add(new PredictionEvaluationSnapshot(
-                e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes,
+                e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes.ToList(),
                 e.ScoreSummary, e.ReturnAmount, e.Roi));
             state.EvaluationStatus = EvaluationStatus.Ready;
         }
@@ -173,10 +188,11 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
         {
             state.Evaluations.Add(new PredictionEvaluationSnapshot(
-                e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes,
+                e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes.ToList(),
                 e.ScoreSummary, e.ReturnAmount, e.Roi));
         }
         return Task.CompletedTask;
@@ -188,31 +204,12 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var ticketId = domainEvent.AggregateIdentity.Value;
-        if (_ticketStates.TryGetValue(ticketId, out var state))
+        var state = TicketStates.LastOrDefault(x => x.PredictionTicketId == ticketId);
+        if (state is not null)
         {
             if (e.ConfidenceScore.HasValue) state.ConfidenceScore = e.ConfidenceScore.Value;
             if (e.SummaryComment != null) state.SummaryComment = e.SummaryComment;
         }
         return Task.CompletedTask;
-    }
-
-    private sealed class MutableTicketState
-    {
-        public string PredictionTicketId { get; set; } = string.Empty;
-        public string PredictorType { get; set; } = string.Empty;
-        public string PredictorId { get; set; } = string.Empty;
-        public TicketStatus Status { get; set; } = TicketStatus.Draft;
-        public decimal ConfidenceScore { get; set; }
-        public string? SummaryComment { get; set; }
-        public DateTimeOffset PredictedAt { get; set; }
-        public List<PredictionMarkSnapshot> Marks { get; set; } = new();
-        public List<PredictionEvaluationSnapshot> Evaluations { get; set; } = new();
-        public EvaluationStatus EvaluationStatus { get; set; } = EvaluationStatus.Ready;
-
-        public PredictionTicketSnapshot ToSnapshot() => new(
-            PredictionTicketId, PredictorType, PredictorId, Status, ConfidenceScore, SummaryComment, PredictedAt,
-            Marks.AsReadOnly(),
-            Evaluations.OrderByDescending(e => e.EvaluationRevision).FirstOrDefault(),
-            EvaluationStatus);
     }
 }

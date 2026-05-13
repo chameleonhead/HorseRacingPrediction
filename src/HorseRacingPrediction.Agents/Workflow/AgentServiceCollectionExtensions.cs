@@ -1,3 +1,4 @@
+using EventFlow.EntityFramework.Extensions;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
@@ -6,6 +7,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -30,6 +32,8 @@ public static class AgentServiceCollectionExtensions
         services.AddSingleton<HorseWeightHistoryLocator>();
         services.AddSingleton<PredictionComparisonViewLocator>();
         services.AddSingleton<MemoBySubjectLocator>();
+        services.AddSingleton<HorseRaceHistoryLocator>();
+        services.AddSingleton<JockeyRaceHistoryLocator>();
 
         services.AddEventFlow(options =>
         {
@@ -37,15 +41,18 @@ public static class AgentServiceCollectionExtensions
                 .AddDefaults(typeof(RaceAggregate).Assembly)
                 .AddDefaults(typeof(CreateRaceCommand).Assembly)
                 .UseEntityFrameworkSqliteEventStore(connectionString)
-                .UseInMemoryReadStoreFor<HorseReadModel>()
-                .UseInMemoryReadStoreFor<JockeyReadModel>()
-                .UseInMemoryReadStoreFor<TrainerReadModel>()
-                .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
-                .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
-                .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
-                .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>();
+                .UseEntityFrameworkReadModel<RaceSummaryReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
+            .UseEntityFrameworkReadModel<HorseWeightHistoryReadModel, EventStoreDbContext, HorseWeightHistoryLocator>()
+            .UseEntityFrameworkReadModel<PredictionComparisonViewReadModel, EventStoreDbContext, PredictionComparisonViewLocator>()
+            .UseEntityFrameworkReadModel<MemoBySubjectReadModel, EventStoreDbContext, MemoBySubjectLocator>()
+            .UseEntityFrameworkReadModel<HorseRaceHistoryReadModel, EventStoreDbContext, HorseRaceHistoryLocator>()
+            .UseEntityFrameworkReadModel<JockeyRaceHistoryReadModel, EventStoreDbContext, JockeyRaceHistoryLocator>();
         });
 
         services.AddTransient<IRaceQueryService, EventFlowRaceQueryService>();
@@ -157,6 +164,7 @@ public static class AgentServiceCollectionExtensions
                 sp.GetRequiredService<IWebBrowser>(),
                 sp.GetRequiredService<JraRaceResultScraper>(),
                 sp.GetRequiredService<DataCollectionWriteTools>(),
+                sp.GetRequiredService<IRaceQueryService>(),
                 sp.GetService<ILogger<JraRaceResultCollectionWorkflow>>(),
                 sp.GetService<ILoggerFactory>()));
         return services;

@@ -12,18 +12,16 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryResultDeclared>
 {
-    private readonly List<JockeyRaceHistoryEntry> _entries = new();
-
     public string JockeyId { get; private set; } = string.Empty;
-    public IReadOnlyList<JockeyRaceHistoryEntry> Entries => _entries.AsReadOnly();
+    public List<JockeyRaceHistoryEntry> Entries { get; private set; } = [];
 
     // ------------------------------------------------------------------ //
     // Group C: 騎手統計パラメーター
     // ------------------------------------------------------------------ //
 
-    public int TotalRaceCount => _entries.Count(e => e.FinishPosition.HasValue);
-    public int WinCount => _entries.Count(e => e.FinishPosition == 1);
-    public int PlaceCount => _entries.Count(e => e.FinishPosition is >= 1 and <= 3);
+    public int TotalRaceCount => Entries.Count(e => e.FinishPosition.HasValue);
+    public int WinCount => Entries.Count(e => e.FinishPosition == 1);
+    public int PlaceCount => Entries.Count(e => e.FinishPosition is >= 1 and <= 3);
     public double WinRate => TotalRaceCount == 0 ? 0 : (double)WinCount / TotalRaceCount;
     public double PlaceRate => TotalRaceCount == 0 ? 0 : (double)PlaceCount / TotalRaceCount;
 
@@ -32,7 +30,7 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var recent = _entries
+            var recent = Entries
                 .OrderByDescending(e => e.RaceDate ?? DateOnly.MinValue)
                 .Take(20)
                 .ToList();
@@ -46,7 +44,7 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var recent = _entries
+            var recent = Entries
                 .OrderByDescending(e => e.RaceDate ?? DateOnly.MinValue)
                 .Take(20)
                 .ToList();
@@ -58,7 +56,7 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     /// <summary>指定馬場での騎手勝率</summary>
     public double GetSurfaceWinRate(string surfaceCode)
     {
-        var filtered = _entries.Where(e => e.SurfaceCode == surfaceCode && e.FinishPosition.HasValue).ToList();
+        var filtered = Entries.Where(e => e.SurfaceCode == surfaceCode && e.FinishPosition.HasValue).ToList();
         if (filtered.Count == 0) return 0;
         return (double)filtered.Count(e => e.FinishPosition == 1) / filtered.Count;
     }
@@ -66,7 +64,7 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     /// <summary>指定距離±200m 帯での騎手勝率</summary>
     public double GetDistanceWinRate(int distanceMeters)
     {
-        var filtered = _entries
+        var filtered = Entries
             .Where(e => e.DistanceMeters.HasValue
                         && Math.Abs(e.DistanceMeters.Value - distanceMeters) <= 200
                         && e.FinishPosition.HasValue)
@@ -77,12 +75,12 @@ public class JockeyRaceHistoryReadModel : IReadModel,
 
     /// <summary>指定馬とのコンビ出走数</summary>
     public int GetHorseComboCount(string horseId)
-        => _entries.Count(e => e.HorseId == horseId);
+        => Entries.Count(e => e.HorseId == horseId);
 
     /// <summary>指定馬とのコンビ勝率</summary>
     public double GetHorseComboWinRate(string horseId)
     {
-        var filtered = _entries.Where(e => e.HorseId == horseId && e.FinishPosition.HasValue).ToList();
+        var filtered = Entries.Where(e => e.HorseId == horseId && e.FinishPosition.HasValue).ToList();
         if (filtered.Count == 0) return 0;
         return (double)filtered.Count(e => e.FinishPosition == 1) / filtered.Count;
     }
@@ -98,7 +96,7 @@ public class JockeyRaceHistoryReadModel : IReadModel,
         var e = domainEvent.AggregateEvent;
         if (e.JockeyId == null) return Task.CompletedTask;
         JockeyId = e.JockeyId;
-        _entries.Add(new JockeyRaceHistoryEntry(
+        Entries.Add(new JockeyRaceHistoryEntry(
             domainEvent.AggregateIdentity.Value,
             e.EntryId,
             e.HorseId,
@@ -118,10 +116,10 @@ public class JockeyRaceHistoryReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        var idx = _entries.FindIndex(x => x.EntryId == e.EntryId);
+        var idx = Entries.FindIndex(x => x.EntryId == e.EntryId);
         if (idx >= 0)
         {
-            _entries[idx] = _entries[idx] with
+            Entries[idx] = Entries[idx] with
             {
                 FinishPosition = e.FinishPosition,
                 PrizeMoney = e.PrizeMoney

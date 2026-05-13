@@ -10,13 +10,11 @@ public class JockeyReadModel : IReadModel,
     IAmReadModelFor<JockeyAggregate, JockeyId, JockeyAliasMerged>,
     IAmReadModelFor<JockeyAggregate, JockeyId, JockeyDataCorrected>
 {
-    private readonly List<JockeyAliasEntry> _aliases = new();
-
     public string JockeyId { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? AffiliationCode { get; private set; }
-    public IReadOnlyList<JockeyAliasEntry> Aliases => _aliases.AsReadOnly();
+    public List<JockeyAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<JockeyAggregate, JockeyId, JockeyRegistered> domainEvent,
@@ -46,7 +44,7 @@ public class JockeyReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _aliases.Add(new JockeyAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
+        Aliases.Add(new JockeyAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
         return Task.CompletedTask;
     }
 

@@ -7,10 +7,8 @@ namespace HorseRacingPrediction.Application.Queries.ReadModels;
 public class HorseWeightHistoryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>
 {
-    private readonly List<HorseWeightEntry> _weightHistory = new();
-
     public string HorseId { get; private set; } = string.Empty;
-    public IReadOnlyList<HorseWeightEntry> WeightHistory => _weightHistory.AsReadOnly();
+    public List<HorseWeightEntry> WeightHistory { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<RaceAggregate, RaceId, EntryRegistered> domainEvent,
@@ -18,7 +16,7 @@ public class HorseWeightHistoryReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         HorseId = e.HorseId;
-        _weightHistory.Add(new HorseWeightEntry(
+        WeightHistory.Add(new HorseWeightEntry(
             domainEvent.AggregateIdentity.Value,
             e.EntryId,
             domainEvent.Timestamp,

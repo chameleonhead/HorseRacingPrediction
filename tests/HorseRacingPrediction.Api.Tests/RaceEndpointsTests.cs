@@ -109,6 +109,60 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task SearchRaces_AfterAppRestart_UsesPersistedRaceSummaryReadModel()
+    {
+        var databasePath = Path.Combine(Path.GetTempPath(), $"race-summary-{Guid.NewGuid():N}.db");
+        var connectionString = $"Data Source={databasePath}";
+        var raceId = $"race-{Guid.NewGuid()}";
+
+        try
+        {
+            var (firstApp, firstClient) = await TestApplicationFactory.CreateAsync(connectionString);
+            firstClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+
+            var createResponse = await firstClient.PostAsJsonAsync(
+                "/api/races",
+                new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 9, "Restart Persistence Cup", raceId),
+                JsonOptions);
+
+            Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
+
+            firstClient.Dispose();
+            await firstApp.DisposeAsync();
+
+            var (secondApp, secondClient) = await TestApplicationFactory.CreateAsync(connectionString);
+
+            try
+            {
+                var getResponse = await secondClient.GetAsync($"/api/races/{raceId}");
+                Assert.AreEqual(HttpStatusCode.OK, getResponse.StatusCode);
+
+                var race = await getResponse.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+                Assert.IsNotNull(race);
+                Assert.AreEqual(raceId, race.RaceId);
+
+                var searchResponse = await secondClient.GetAsync($"/api/races?raceId={raceId}");
+                Assert.AreEqual(HttpStatusCode.OK, searchResponse.StatusCode);
+
+                var result = await searchResponse.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryResponse>>(JsonOptions);
+                Assert.IsNotNull(result);
+                Assert.AreEqual(1, result.TotalCount);
+                Assert.AreEqual(raceId, result.Items[0].RaceId);
+            }
+            finally
+            {
+                secondClient.Dispose();
+                await secondApp.DisposeAsync();
+            }
+        }
+        finally
+        {
+            if (File.Exists(databasePath))
+                File.Delete(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task PublishCard_AfterCreate_ReturnsOk()
     {
         var raceId = $"race-{Guid.NewGuid()}";
@@ -123,6 +177,28 @@ public class RaceEndpointsTests
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task PublishCard_WhenAlreadyPublished_ReturnsConflict()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            JsonOptions);
+
+        var firstResponse = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(18),
+            JsonOptions);
+        var secondResponse = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(18),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, secondResponse.StatusCode);
     }
 
     [TestMethod]

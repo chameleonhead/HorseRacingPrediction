@@ -1,6 +1,8 @@
 using EventFlow.Queries;
-using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using EventFlow.EntityFramework;
 
 namespace HorseRacingPrediction.Agents.Plugins;
 
@@ -10,10 +12,38 @@ namespace HorseRacingPrediction.Agents.Plugins;
 public sealed class EventFlowRaceQueryService : IRaceQueryService
 {
     private readonly IQueryProcessor _queryProcessor;
+    private readonly IDbContextProvider<EventStoreDbContext>? _dbContextProvider;
 
     public EventFlowRaceQueryService(IQueryProcessor queryProcessor)
     {
         _queryProcessor = queryProcessor;
+    }
+
+    public EventFlowRaceQueryService(
+        IQueryProcessor queryProcessor,
+        IDbContextProvider<EventStoreDbContext> dbContextProvider)
+    {
+        _queryProcessor = queryProcessor;
+        _dbContextProvider = dbContextProvider;
+    }
+
+    public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
+        DateOnly raceDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (_dbContextProvider is null)
+            return [];
+
+        using var dbContext = _dbContextProvider.CreateContext();
+        var races = await dbContext.Set<RaceSummaryReadModel>()
+            .AsNoTracking()
+            .Where(x => x.RaceDate.HasValue && x.RaceDate.Value == raceDate)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return races
+            .Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber))
+            .ToList();
     }
 
     public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(

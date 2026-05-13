@@ -12,23 +12,21 @@ public class HorseRaceHistoryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryResultDeclared>
 {
-    private readonly List<HorseRaceHistoryEntry> _entries = new();
-
     public string HorseId { get; private set; } = string.Empty;
-    public IReadOnlyList<HorseRaceHistoryEntry> Entries => _entries.AsReadOnly();
+    public List<HorseRaceHistoryEntry> Entries { get; private set; } = [];
 
     // ------------------------------------------------------------------ //
     // Group B: 基本集計パラメーター
     // ------------------------------------------------------------------ //
 
     /// <summary>総出走数（結果判明分）</summary>
-    public int TotalRaceCount => _entries.Count(e => e.FinishPosition.HasValue);
+    public int TotalRaceCount => Entries.Count(e => e.FinishPosition.HasValue);
 
     /// <summary>勝利数</summary>
-    public int WinCount => _entries.Count(e => e.FinishPosition == 1);
+    public int WinCount => Entries.Count(e => e.FinishPosition == 1);
 
     /// <summary>複勝数（3着以内）</summary>
-    public int PlaceCount => _entries.Count(e => e.FinishPosition is >= 1 and <= 3);
+    public int PlaceCount => Entries.Count(e => e.FinishPosition is >= 1 and <= 3);
 
     /// <summary>勝率</summary>
     public double WinRate => TotalRaceCount == 0 ? 0 : (double)WinCount / TotalRaceCount;
@@ -41,7 +39,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var recent = _entries
+            var recent = Entries
                 .Where(e => e.FinishPosition.HasValue)
                 .OrderByDescending(e => e.RaceDate ?? DateOnly.MinValue)
                 .Take(5)
@@ -56,7 +54,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var times = _entries
+            var times = Entries
                 .Where(e => e.LastThreeFurlongTime != null)
                 .Select(e => ParseTimeToSeconds(e.LastThreeFurlongTime!))
                 .Where(t => t > 0)
@@ -70,7 +68,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var prizes = _entries
+            var prizes = Entries
                 .Where(e => e.PrizeMoney.HasValue)
                 .Select(e => (double)e.PrizeMoney!.Value)
                 .ToList();
@@ -83,7 +81,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     {
         get
         {
-            var diffs = _entries
+            var diffs = Entries
                 .Where(e => e.DeclaredWeightDiff.HasValue)
                 .Select(e => (double)e.DeclaredWeightDiff!.Value)
                 .ToList();
@@ -97,14 +95,14 @@ public class HorseRaceHistoryReadModel : IReadModel,
 
     /// <summary>直近レース日</summary>
     public DateOnly? LatestRaceDate =>
-        _entries
+        Entries
             .Where(e => e.RaceDate.HasValue)
             .OrderByDescending(e => e.RaceDate)
             .FirstOrDefault()?.RaceDate;
 
     /// <summary>直近騎手 ID</summary>
     public string? LatestJockeyId =>
-        _entries
+        Entries
             .OrderByDescending(e => e.RaceDate ?? DateOnly.MinValue)
             .FirstOrDefault()?.JockeyId;
 
@@ -115,7 +113,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     /// <summary>指定馬場での勝率</summary>
     public double GetSurfaceWinRate(string surfaceCode)
     {
-        var filtered = _entries.Where(e => e.SurfaceCode == surfaceCode && e.FinishPosition.HasValue).ToList();
+        var filtered = Entries.Where(e => e.SurfaceCode == surfaceCode && e.FinishPosition.HasValue).ToList();
         if (filtered.Count == 0) return 0;
         return (double)filtered.Count(e => e.FinishPosition == 1) / filtered.Count;
     }
@@ -126,7 +124,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     /// </summary>
     public double GetDistanceSuitabilityScore(int distanceMeters)
     {
-        var filtered = _entries
+        var filtered = Entries
             .Where(e => e.DistanceMeters.HasValue
                         && Math.Abs(e.DistanceMeters.Value - distanceMeters) <= 200
                         && e.FinishPosition.HasValue)
@@ -139,7 +137,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     /// <summary>指定競馬場での成績から競馬場適性スコア（0〜100）を算出。</summary>
     public double GetRacecourseSuitabilityScore(string racecourseCode)
     {
-        var filtered = _entries
+        var filtered = Entries
             .Where(e => e.RacecourseCode == racecourseCode && e.FinishPosition.HasValue)
             .ToList();
         if (filtered.Count == 0) return 50.0;
@@ -150,7 +148,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     /// <summary>指定回りでの成績から回り適性スコア（0〜100）を算出。</summary>
     public double GetDirectionSuitabilityScore(string directionCode)
     {
-        var filtered = _entries
+        var filtered = Entries
             .Where(e => e.DirectionCode == directionCode && e.FinishPosition.HasValue)
             .ToList();
         if (filtered.Count == 0) return 50.0;
@@ -163,7 +161,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     /// </summary>
     public double GetAvgCornerPosition()
     {
-        var positions = _entries
+        var positions = Entries
             .Where(e => e.CornerPositions != null)
             .Select(e => ParseLastCornerPosition(e.CornerPositions!))
             .Where(p => p > 0)
@@ -188,7 +186,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         HorseId = e.HorseId;
-        _entries.Add(new HorseRaceHistoryEntry(
+        Entries.Add(new HorseRaceHistoryEntry(
             domainEvent.AggregateIdentity.Value,
             e.EntryId,
             e.RaceDate,
@@ -213,10 +211,10 @@ public class HorseRaceHistoryReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        var idx = _entries.FindIndex(x => x.EntryId == e.EntryId);
+        var idx = Entries.FindIndex(x => x.EntryId == e.EntryId);
         if (idx >= 0)
         {
-            _entries[idx] = _entries[idx] with
+            Entries[idx] = Entries[idx] with
             {
                 FinishPosition = e.FinishPosition,
                 LastThreeFurlongTime = e.LastThreeFurlongTime,

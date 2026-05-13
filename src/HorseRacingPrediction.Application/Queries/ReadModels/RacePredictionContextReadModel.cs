@@ -15,10 +15,6 @@ public class RacePredictionContextReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
-    private readonly List<RacePredictionContextEntry> _entries = new();
-    private readonly List<WeatherObservationSnapshot> _weatherObservations = new();
-    private readonly List<TrackConditionSnapshot> _trackConditionObservations = new();
-
     public string RaceId { get; private set; } = string.Empty;
     public DateOnly? RaceDate { get; private set; }
     public string? RacecourseCode { get; private set; }
@@ -29,11 +25,11 @@ public class RacePredictionContextReadModel : IReadModel,
     public string? SurfaceCode { get; private set; }
     public int? DistanceMeters { get; private set; }
     public string? DirectionCode { get; private set; }
-    public IReadOnlyList<RacePredictionContextEntry> Entries => _entries.AsReadOnly();
-    public IReadOnlyList<WeatherObservationSnapshot> WeatherObservations => _weatherObservations.AsReadOnly();
-    public WeatherObservationSnapshot? LatestWeather => _weatherObservations.LastOrDefault();
-    public IReadOnlyList<TrackConditionSnapshot> TrackConditionObservations => _trackConditionObservations.AsReadOnly();
-    public TrackConditionSnapshot? LatestTrackCondition => _trackConditionObservations.LastOrDefault();
+    public List<RacePredictionContextEntry> Entries { get; private set; } = [];
+    public List<WeatherObservationSnapshot> WeatherObservations { get; private set; } = [];
+    public WeatherObservationSnapshot? LatestWeather => WeatherObservations.LastOrDefault();
+    public List<TrackConditionSnapshot> TrackConditionObservations { get; private set; } = [];
+    public TrackConditionSnapshot? LatestTrackCondition => TrackConditionObservations.LastOrDefault();
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<RaceAggregate, RaceId, RaceCreated> domainEvent,
@@ -66,7 +62,7 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _entries.Add(new RacePredictionContextEntry(
+        Entries.Add(new RacePredictionContextEntry(
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
             e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff,
@@ -79,7 +75,7 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _weatherObservations.Add(new WeatherObservationSnapshot(
+        WeatherObservations.Add(new WeatherObservationSnapshot(
             e.ObservationTime, e.WeatherCode, e.WeatherText,
             e.TemperatureCelsius, e.HumidityPercent,
             e.WindDirectionCode, e.WindSpeedMeterPerSecond));
@@ -91,7 +87,7 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _trackConditionObservations.Add(new TrackConditionSnapshot(
+        TrackConditionObservations.Add(new TrackConditionSnapshot(
             e.ObservationTime, e.TurfConditionCode, e.DirtConditionCode, e.GoingDescriptionText));
         return Task.CompletedTask;
     }

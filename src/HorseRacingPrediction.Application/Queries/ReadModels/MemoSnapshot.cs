@@ -6,5 +6,5 @@ public sealed record MemoSnapshot(
     string MemoType,
     string Content,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<MemoSubjectSnapshot> Subjects,
-    IReadOnlyList<MemoLinkSnapshot> Links);
+    List<MemoSubjectSnapshot> Subjects,
+    List<MemoLinkSnapshot> Links);

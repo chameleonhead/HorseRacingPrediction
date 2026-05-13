@@ -10,14 +10,12 @@ public class HorseReadModel : IReadModel,
     IAmReadModelFor<HorseAggregate, HorseId, HorseAliasMerged>,
     IAmReadModelFor<HorseAggregate, HorseId, HorseDataCorrected>
 {
-    private readonly List<HorseAliasEntry> _aliases = new();
-
     public string HorseId { get; private set; } = string.Empty;
     public string RegisteredName { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? SexCode { get; private set; }
     public DateOnly? BirthDate { get; private set; }
-    public IReadOnlyList<HorseAliasEntry> Aliases => _aliases.AsReadOnly();
+    public List<HorseAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<HorseAggregate, HorseId, HorseRegistered> domainEvent,
@@ -49,7 +47,7 @@ public class HorseReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _aliases.Add(new HorseAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
+        Aliases.Add(new HorseAliasEntry(e.AliasType, e.AliasValue, e.SourceName, e.IsPrimary));
         return Task.CompletedTask;
     }
 

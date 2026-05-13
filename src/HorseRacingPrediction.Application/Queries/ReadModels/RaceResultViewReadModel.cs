@@ -1,6 +1,7 @@
 using EventFlow.Aggregates;
 using EventFlow.ReadStores;
 using HorseRacingPrediction.Domain.Races;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
@@ -16,9 +17,6 @@ public class RaceResultViewReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
-    private readonly List<EntryResultSnapshot> _entryResults = new();
-    private readonly Dictionary<string, (string HorseId, int HorseNumber)> _entryIndex = new();
-
     public string RaceId { get; private set; } = string.Empty;
     public DateOnly? RaceDate { get; private set; }
     public string? RacecourseCode { get; private set; }
@@ -30,7 +28,9 @@ public class RaceResultViewReadModel : IReadModel,
     public string? WinningHorseId { get; private set; }
     public DateTimeOffset? ResultDeclaredAt { get; private set; }
     public string? StewardReportText { get; private set; }
-    public IReadOnlyList<EntryResultSnapshot> EntryResults => _entryResults.AsReadOnly();
+    public List<EntryResultSnapshot> EntryResults { get; private set; } = [];
+    [JsonIgnore]
+    public List<RaceEntryIndexSnapshot> EntryIndexes { get; private set; } = [];
     public PayoutResultSnapshot? PayoutResult { get; private set; }
 
     public Task ApplyAsync(IReadModelContext context,
@@ -61,7 +61,12 @@ public class RaceResultViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _entryIndex[e.EntryId] = (e.HorseId, e.HorseNumber);
+        var index = EntryIndexes.FindIndex(x => x.EntryId == e.EntryId);
+        var snapshot = new RaceEntryIndexSnapshot(e.EntryId, e.HorseId, e.HorseNumber);
+        if (index >= 0)
+            EntryIndexes[index] = snapshot;
+        else
+            EntryIndexes.Add(snapshot);
         return Task.CompletedTask;
     }
 
@@ -99,11 +104,11 @@ public class RaceResultViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _entryIndex.TryGetValue(e.EntryId, out var entryInfo);
-        _entryResults.Add(new EntryResultSnapshot(
+        var entryInfo = EntryIndexes.LastOrDefault(x => x.EntryId == e.EntryId);
+        EntryResults.Add(new EntryResultSnapshot(
             e.EntryId,
-            entryInfo.HorseId ?? string.Empty,
-            entryInfo.HorseNumber,
+            entryInfo?.HorseId ?? string.Empty,
+            entryInfo?.HorseNumber ?? 0,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
             e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));

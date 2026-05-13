@@ -422,6 +422,7 @@ try
             resultBrowser,
             scraper,
             writeTools,
+            queryService,
             loggerFactory.CreateLogger<JraRaceResultCollectionWorkflow>(),
             loggerFactory);
 

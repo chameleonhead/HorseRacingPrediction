@@ -1,4 +1,5 @@
 using EventFlow;
+using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
@@ -6,6 +7,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.OpenApi.Models;
 
@@ -66,17 +68,18 @@ builder.Services.AddEventFlow(options =>
     .AddDefaults(typeof(RaceAggregate).Assembly)
     .AddDefaults(typeof(CreateRaceCommand).Assembly)
     .UseEntityFrameworkSqliteEventStore(connectionString)
-    .UseInMemoryReadStoreFor<HorseReadModel>()
-    .UseInMemoryReadStoreFor<JockeyReadModel>()
-    .UseInMemoryReadStoreFor<TrainerReadModel>()
-    .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
-    .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
-    .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
-    .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-    .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-    .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
-    .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
-    .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
+    .UseEntityFrameworkReadModel<RaceSummaryReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<HorseWeightHistoryReadModel, EventStoreDbContext, HorseWeightHistoryLocator>()
+    .UseEntityFrameworkReadModel<PredictionComparisonViewReadModel, EventStoreDbContext, PredictionComparisonViewLocator>()
+    .UseEntityFrameworkReadModel<MemoBySubjectReadModel, EventStoreDbContext, MemoBySubjectLocator>()
+    .UseEntityFrameworkReadModel<HorseRaceHistoryReadModel, EventStoreDbContext, HorseRaceHistoryLocator>()
+    .UseEntityFrameworkReadModel<JockeyRaceHistoryReadModel, EventStoreDbContext, JockeyRaceHistoryLocator>();
 });
 
 var app = builder.Build();

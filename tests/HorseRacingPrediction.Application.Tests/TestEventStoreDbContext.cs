@@ -7,11 +7,16 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Linq.Expressions;
 using System.Text.Json;
 
-namespace HorseRacingPrediction.Infrastructure.Persistence;
+namespace HorseRacingPrediction.Application.Tests;
 
-public class EventStoreDbContext : DbContext
+internal sealed class TestEventStoreDbContext : DbContext
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public TestEventStoreDbContext(DbContextOptions<TestEventStoreDbContext> options)
+        : base(options)
+    {
+    }
 
     public DbSet<HorseReadModel> Horses => Set<HorseReadModel>();
     public DbSet<JockeyReadModel> Jockeys => Set<JockeyReadModel>();
@@ -25,11 +30,6 @@ public class EventStoreDbContext : DbContext
     public DbSet<HorseRaceHistoryReadModel> HorseRaceHistories => Set<HorseRaceHistoryReadModel>();
     public DbSet<JockeyRaceHistoryReadModel> JockeyRaceHistories => Set<JockeyRaceHistoryReadModel>();
     public DbSet<RaceSummaryReadModel> RaceSummaries => Set<RaceSummaryReadModel>();
-
-    public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
-        : base(options)
-    {
-    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

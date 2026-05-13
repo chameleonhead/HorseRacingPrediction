@@ -12,6 +12,9 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// </summary>
 public interface IRaceQueryService
 {
+    Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
+        DateOnly raceDate, CancellationToken cancellationToken = default);
+
     Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
         string raceId, CancellationToken cancellationToken = default);
 

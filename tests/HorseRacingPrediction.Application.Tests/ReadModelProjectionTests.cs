@@ -1,8 +1,9 @@
 using EventFlow;
 using EventFlow.Commands;
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using EventFlow.Queries;
-using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Memos;
@@ -32,6 +33,9 @@ public class ReadModelProjectionTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        var dbContextProvider = new TestSqliteDbContextProvider("DataSource=:memory:");
+        services.AddSingleton(dbContextProvider);
+        services.AddSingleton<IDbContextProvider<TestEventStoreDbContext>>(dbContextProvider);
         services.AddSingleton<HorseWeightHistoryLocator>();
         services.AddSingleton<PredictionComparisonViewLocator>();
         services.AddSingleton<MemoBySubjectLocator>();
@@ -40,19 +44,22 @@ public class ReadModelProjectionTests
         services.AddEventFlow(options =>
         {
             options
+                .ConfigureEntityFramework(EntityFrameworkConfiguration.New)
                 .AddDefaults(typeof(RaceAggregate).Assembly)
                 .AddDefaults(typeof(CreateRaceCommand).Assembly)
-                .UseInMemoryReadStoreFor<HorseReadModel>()
-                .UseInMemoryReadStoreFor<JockeyReadModel>()
-                .UseInMemoryReadStoreFor<TrainerReadModel>()
-                .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
-                .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
-                .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
-                .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
-                .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
-                .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
+                .UseEntityFrameworkEventStore<TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<RaceSummaryReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<HorseReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<JockeyReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<TrainerReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<RacePredictionContextReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<RaceResultViewReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<PredictionTicketReadModel, TestEventStoreDbContext>()
+                .UseEntityFrameworkReadModel<HorseWeightHistoryReadModel, TestEventStoreDbContext, HorseWeightHistoryLocator>()
+                .UseEntityFrameworkReadModel<PredictionComparisonViewReadModel, TestEventStoreDbContext, PredictionComparisonViewLocator>()
+                .UseEntityFrameworkReadModel<MemoBySubjectReadModel, TestEventStoreDbContext, MemoBySubjectLocator>()
+                .UseEntityFrameworkReadModel<HorseRaceHistoryReadModel, TestEventStoreDbContext, HorseRaceHistoryLocator>()
+                .UseEntityFrameworkReadModel<JockeyRaceHistoryReadModel, TestEventStoreDbContext, JockeyRaceHistoryLocator>();
         });
         _serviceProvider = services.BuildServiceProvider();
         _commandBus = _serviceProvider.GetRequiredService<ICommandBus>();

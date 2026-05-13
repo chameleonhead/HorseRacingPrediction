@@ -19,6 +19,26 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         _httpClient = httpClient;
     }
 
+    public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(
+        DateOnly raceDate,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient
+            .GetAsync($"/api/races?raceDateFrom={raceDate:yyyy-MM-dd}&raceDateTo={raceDate:yyyy-MM-dd}&page=1&pageSize=200&sortBy=raceNumber&sortDescending=false", cancellationToken)
+            .ConfigureAwait(false);
+
+        response.EnsureSuccessStatusCode();
+
+        var dto = await response.Content
+            .ReadFromJsonAsync<PagedResponseDto<RaceSummaryDto>>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+
+        return dto?.Items
+            .Select(x => new RaceSearchSummary(x.RaceId, x.RaceDate, x.RacecourseCode, x.RaceNumber))
+            .ToList()
+            ?? [];
+    }
+
     public async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(
         string raceId, CancellationToken cancellationToken = default)
     {
@@ -127,4 +147,12 @@ public sealed class HttpRaceQueryService : IRaceQueryService
 
         return ReadModelMapper.ToJockeyRaceHistory(dto);
     }
+
+    private sealed record PagedResponseDto<T>(IReadOnlyList<T> Items);
+
+    private sealed record RaceSummaryDto(
+        string RaceId,
+        DateOnly? RaceDate,
+        string? RacecourseCode,
+        int? RaceNumber);
 }

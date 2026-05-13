@@ -17,7 +17,8 @@ internal static class TestApplicationFactory
 {
     public const string TestApiKey = "test-api-key-12345";
 
-    public static async Task<(WebApplication App, HttpClient Client)> CreateAsync()
+    public static async Task<(WebApplication App, HttpClient Client)> CreateAsync(
+        string connectionString = "DataSource=:memory:")
     {
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseTestServer();
@@ -29,7 +30,7 @@ internal static class TestApplicationFactory
         });
         builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 
-        var dbContextProvider = new SqliteDbContextProvider("DataSource=:memory:");
+        var dbContextProvider = new SqliteDbContextProvider(connectionString);
         builder.Services.AddSingleton(dbContextProvider);
         builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(dbContextProvider);
 
@@ -47,17 +48,18 @@ internal static class TestApplicationFactory
                 .AddDefaults(typeof(RaceAggregate).Assembly)
                 .AddDefaults(typeof(CreateRaceCommand).Assembly)
                 .UseEntityFrameworkEventStore<EventStoreDbContext>()
-                .UseInMemoryReadStoreFor<HorseReadModel>()
-                .UseInMemoryReadStoreFor<JockeyReadModel>()
-                .UseInMemoryReadStoreFor<TrainerReadModel>()
-                .UseInMemoryReadStoreFor<RacePredictionContextReadModel>()
-                .UseInMemoryReadStoreFor<RaceResultViewReadModel>()
-                .UseInMemoryReadStoreFor<PredictionTicketReadModel>()
-                .UseInMemoryReadStoreFor<HorseWeightHistoryReadModel, HorseWeightHistoryLocator>()
-                .UseInMemoryReadStoreFor<PredictionComparisonViewReadModel, PredictionComparisonViewLocator>()
-                .UseInMemoryReadStoreFor<MemoBySubjectReadModel, MemoBySubjectLocator>()
-                .UseInMemoryReadStoreFor<HorseRaceHistoryReadModel, HorseRaceHistoryLocator>()
-                .UseInMemoryReadStoreFor<JockeyRaceHistoryReadModel, JockeyRaceHistoryLocator>();
+                .UseEntityFrameworkReadModel<RaceSummaryReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<HorseWeightHistoryReadModel, EventStoreDbContext, HorseWeightHistoryLocator>()
+                .UseEntityFrameworkReadModel<PredictionComparisonViewReadModel, EventStoreDbContext, PredictionComparisonViewLocator>()
+                .UseEntityFrameworkReadModel<MemoBySubjectReadModel, EventStoreDbContext, MemoBySubjectLocator>()
+                .UseEntityFrameworkReadModel<HorseRaceHistoryReadModel, EventStoreDbContext, HorseRaceHistoryLocator>()
+                .UseEntityFrameworkReadModel<JockeyRaceHistoryReadModel, EventStoreDbContext, JockeyRaceHistoryLocator>();
         });
 
         var app = builder.Build();

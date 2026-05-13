@@ -1,6 +1,7 @@
 using EventFlow.Aggregates;
 using EventFlow.ReadStores;
 using HorseRacingPrediction.Domain.Predictions;
+using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
@@ -15,9 +16,6 @@ public class PredictionTicketReadModel : IReadModel,
     IAmReadModelFor<PredictionTicketAggregate, PredictionTicketId, PredictionEvaluationRecalculated>,
     IAmReadModelFor<PredictionTicketAggregate, PredictionTicketId, PredictionMetadataCorrected>
 {
-    private readonly List<PredictionMarkSnapshot> _marks = new();
-    private readonly List<PredictionEvaluationSnapshot> _evaluations = new();
-
     public string PredictionTicketId { get; private set; } = string.Empty;
     public string? RaceId { get; private set; }
     public string? PredictorType { get; private set; }
@@ -26,9 +24,11 @@ public class PredictionTicketReadModel : IReadModel,
     public string? SummaryComment { get; private set; }
     public DateTimeOffset? PredictedAt { get; private set; }
     public TicketStatus TicketStatus { get; private set; } = TicketStatus.Draft;
-    public IReadOnlyList<PredictionMarkSnapshot> Marks => _marks.AsReadOnly();
+    public List<PredictionMarkSnapshot> Marks { get; private set; } = [];
+    [JsonIgnore]
+    public List<PredictionEvaluationSnapshot> Evaluations { get; private set; } = [];
     public PredictionEvaluationSnapshot? LatestEvaluation =>
-        _evaluations.OrderByDescending(e => e.EvaluationRevision).FirstOrDefault();
+        Evaluations.OrderByDescending(e => e.EvaluationRevision).FirstOrDefault();
     public EvaluationStatus EvaluationStatus { get; private set; } = EvaluationStatus.Ready;
 
     public Task ApplyAsync(IReadModelContext context,
@@ -52,7 +52,7 @@ public class PredictionTicketReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _marks.Add(new PredictionMarkSnapshot(e.EntryId, e.MarkCode, e.PredictedRank, e.Score, e.Comment));
+        Marks.Add(new PredictionMarkSnapshot(e.EntryId, e.MarkCode, e.PredictedRank, e.Score, e.Comment));
         return Task.CompletedTask;
     }
 
@@ -85,8 +85,8 @@ public class PredictionTicketReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _evaluations.Add(new PredictionEvaluationSnapshot(
-            e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes,
+        Evaluations.Add(new PredictionEvaluationSnapshot(
+            e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes.ToList(),
             e.ScoreSummary, e.ReturnAmount, e.Roi));
         return Task.CompletedTask;
     }
@@ -96,8 +96,8 @@ public class PredictionTicketReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
-        _evaluations.Add(new PredictionEvaluationSnapshot(
-            e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes,
+        Evaluations.Add(new PredictionEvaluationSnapshot(
+            e.EvaluatedAt, e.EvaluationRevision, e.HitTypeCodes.ToList(),
             e.ScoreSummary, e.ReturnAmount, e.Roi));
         EvaluationStatus = EvaluationStatus.RecalculationRequired;
         return Task.CompletedTask;

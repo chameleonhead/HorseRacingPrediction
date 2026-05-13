@@ -25,6 +25,7 @@ public class JraRaceResultCollectionWorkflowTests
     private FakeWebBrowser _fakeWebBrowser = null!;
     private FakeCommandBus _fakeCommandBus = null!;
     private CollaboratingFakeQueryProcessor _fakeQueryProcessor = null!;
+    private FakeRaceQueryService _fakeRaceQueryService = null!;
 
     [TestInitialize]
     public void Setup()
@@ -32,12 +33,13 @@ public class JraRaceResultCollectionWorkflowTests
         _fakeWebBrowser = new FakeWebBrowser();
         _fakeCommandBus = new FakeCommandBus();
         _fakeQueryProcessor = new CollaboratingFakeQueryProcessor(_fakeCommandBus);
+        _fakeRaceQueryService = new FakeRaceQueryService();
 
         var scraper = new JraRaceResultScraper(_fakeWebBrowser);
         var writeTools = new DataCollectionWriteTools(
             new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
 
-        _sut = new JraRaceResultCollectionWorkflow(_fakeWebBrowser, scraper, writeTools);
+        _sut = new JraRaceResultCollectionWorkflow(_fakeWebBrowser, scraper, writeTools, _fakeRaceQueryService);
     }
 
     [TestCleanup]
@@ -264,6 +266,25 @@ public class JraRaceResultCollectionWorkflowTests
         var result = await _sut.DiscoverUrlsAsync(raceDate);
 
         Assert.IsEmpty(result);
+    }
+
+    [TestMethod]
+    public async Task FilterUnregisteredUrlsAsync_SkipsRegisteredAndDuplicateRaces()
+    {
+        var raceDate = new DateOnly(2025, 6, 1);
+        _fakeRaceQueryService.RegisteredRaces.Add(new RaceSearchSummary("race-1", raceDate, "東京", 11));
+
+        var urls = new[]
+        {
+            new JraRaceResultUrl("https://example.test/1", "東京", "05", raceDate, 11),
+            new JraRaceResultUrl("https://example.test/2", "東京", "05", raceDate, 12),
+            new JraRaceResultUrl("https://example.test/3", "東京", "05", raceDate, 12)
+        };
+
+        var filtered = await _sut.FilterUnregisteredUrlsAsync(urls, raceDate);
+
+        Assert.AreEqual(1, filtered.Count);
+        Assert.AreEqual("https://example.test/2", filtered[0].Url);
     }
 
     // ------------------------------------------------------------------ //
@@ -701,5 +722,31 @@ public class JraRaceResultCollectionWorkflowTests
 
             return Task.FromResult(default(TResult)!);
         }
+    }
+
+    private sealed class FakeRaceQueryService : IRaceQueryService
+    {
+        public List<RaceSearchSummary> RegisteredRaces { get; } = [];
+
+        public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
+
+        public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
+            => Task.FromResult<RacePredictionContextReadModel?>(null);
+
+        public Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseReadModel?>(null);
+
+        public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult<JockeyReadModel?>(null);
+
+        public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
+            => Task.FromResult<MemoBySubjectReadModel?>(null);
+
+        public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
+            => Task.FromResult<HorseRaceHistoryReadModel?>(null);
+
+        public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
+            => Task.FromResult<JockeyRaceHistoryReadModel?>(null);
     }
 }

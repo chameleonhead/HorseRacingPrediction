@@ -1,7 +1,7 @@
 using EventFlow;
 using EventFlow.Commands;
+using EventFlow.EntityFramework;
 using EventFlow.Queries;
-using EventFlow.ReadStores.InMemory;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -17,9 +17,11 @@ using HorseRacingPrediction.Domain.Memos;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
+using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using HorseRacingPrediction.MachineLearning.Prediction;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace HorseRacingPrediction.Api;
@@ -369,7 +371,7 @@ public static class EndpointExtensions
         app.MapGet("/api/races",
             [SwaggerOperation(Summary = "Search races", Description = "Returns paged race summaries filtered by date, course, status, race name and result information")]
             async ([AsParameters] SearchRacesRequest request,
-                IInMemoryReadStore<RaceResultViewReadModel> raceResultStore,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
                 var page = request.Page ?? 1;
@@ -381,9 +383,13 @@ public static class EndpointExtensions
                 if (pagingError is not null)
                     return Results.BadRequest(new[] { pagingError });
 
-                var allRaces = await raceResultStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allRaces = await dbContext.Set<RaceSummaryReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
-                IEnumerable<RaceResultViewReadModel> filtered = allRaces;
+                IEnumerable<RaceSummaryReadModel> filtered = allRaces;
 
                 if (!string.IsNullOrWhiteSpace(request.RaceId))
                     filtered = filtered.Where(x => string.Equals(x.RaceId, request.RaceId, StringComparison.OrdinalIgnoreCase));
@@ -471,15 +477,23 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Publish race card", Description = "Moves lifecycle from Draft to CardPublished")]
             async (string raceId, PublishRaceCardRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var command = new PublishRaceCardCommand(new RaceId(raceId), request.EntryCount);
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Ok()
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                try
+                {
+                    var command = new PublishRaceCardCommand(new RaceId(raceId), request.EntryCount);
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Ok()
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Race card can only be published from Draft state.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("PublishRaceCard")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
@@ -929,10 +943,13 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}",
             [SwaggerOperation(Summary = "Get race", Description = "Returns race read model with current status and result information")]
-            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            async (string raceId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<RaceResultViewReadModel>(raceId);
-                var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var readModel = await dbContext.Set<RaceSummaryReadModel>()
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken)
+                    .ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
@@ -1027,7 +1044,7 @@ public static class EndpointExtensions
         app.MapGet("/api/predictions",
             [SwaggerOperation(Summary = "Search prediction tickets", Description = "Returns paged prediction ticket summaries filtered by race, predictor, ticket status, evaluation status and confidence score")]
             async ([AsParameters] SearchPredictionTicketsRequest request,
-                IInMemoryReadStore<PredictionTicketReadModel> predictionTicketStore,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
                 var page = request.Page ?? 1;
@@ -1036,7 +1053,11 @@ public static class EndpointExtensions
                 if (pagingError is not null)
                     return Results.BadRequest(new[] { pagingError });
 
-                var allTickets = await predictionTicketStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allTickets = await dbContext.Set<PredictionTicketReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 IEnumerable<PredictionTicketReadModel> filtered = allTickets;
 
@@ -1135,7 +1156,7 @@ public static class EndpointExtensions
         app.MapGet("/api/horses",
             [SwaggerOperation(Summary = "Search horses", Description = "Returns paged horse summaries filtered by identifiers, names, sex, birth date and aliases")]
             async ([AsParameters] SearchHorsesRequest request,
-                IInMemoryReadStore<HorseReadModel> horseStore,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
                 var page = request.Page ?? 1;
@@ -1144,7 +1165,11 @@ public static class EndpointExtensions
                 if (pagingError is not null)
                     return Results.BadRequest(new[] { pagingError });
 
-                var allHorses = await horseStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allHorses = await dbContext.Set<HorseReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 IEnumerable<HorseReadModel> filtered = allHorses;
 
@@ -1294,7 +1319,7 @@ public static class EndpointExtensions
         app.MapGet("/api/jockeys",
             [SwaggerOperation(Summary = "Search jockeys", Description = "Returns paged jockey summaries filtered by identifiers, names, affiliation and aliases")]
             async ([AsParameters] SearchJockeysRequest request,
-                IInMemoryReadStore<JockeyReadModel> jockeyStore,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
                 var page = request.Page ?? 1;
@@ -1303,7 +1328,11 @@ public static class EndpointExtensions
                 if (pagingError is not null)
                     return Results.BadRequest(new[] { pagingError });
 
-                var allJockeys = await jockeyStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allJockeys = await dbContext.Set<JockeyReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 IEnumerable<JockeyReadModel> filtered = allJockeys;
 
@@ -1385,7 +1414,7 @@ public static class EndpointExtensions
         app.MapGet("/api/trainers",
             [SwaggerOperation(Summary = "Search trainers", Description = "Returns paged trainer summaries filtered by identifiers, names, affiliation and aliases")]
             async ([AsParameters] SearchTrainersRequest request,
-                IInMemoryReadStore<TrainerReadModel> trainerStore,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
                 var page = request.Page ?? 1;
@@ -1394,7 +1423,11 @@ public static class EndpointExtensions
                 if (pagingError is not null)
                     return Results.BadRequest(new[] { pagingError });
 
-                var allTrainers = await trainerStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allTrainers = await dbContext.Set<TrainerReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
                 IEnumerable<TrainerReadModel> filtered = allTrainers;
 
@@ -1612,10 +1645,14 @@ public static class EndpointExtensions
 
         app.MapPost("/ml/train",
             [SwaggerOperation(Summary = "ML再訓練", Description = "過去レース結果を使ってML.NETモデルを再訓練します。")]
-            async (IQueryProcessor queryProcessor, IInMemoryReadStore<RaceResultViewReadModel> raceResultStore,
+            async (IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 IRacePredictor predictor, CancellationToken cancellationToken) =>
             {
-                var allRaces = await raceResultStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+                using var dbContext = dbContextProvider.CreateContext();
+                var allRaces = await dbContext.Set<RaceResultViewReadModel>()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 var finishedRaces = allRaces.Where(r => r.Status == RaceStatus.ResultDeclared).ToList();
 
                 if (finishedRaces.Count == 0)

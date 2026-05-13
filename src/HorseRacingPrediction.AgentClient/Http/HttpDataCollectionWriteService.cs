@@ -102,7 +102,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var publishResponse = await _httpClient
                 .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/card/publish", publishRequest, cancellationToken)
                 .ConfigureAwait(false);
-            publishResponse.EnsureSuccessStatusCode();
+            if (publishResponse.StatusCode != HttpStatusCode.Conflict)
+            {
+                publishResponse.EnsureSuccessStatusCode();
+            }
         }
 
         return raceId;
@@ -274,11 +277,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        if (race is null)
-            throw new InvalidOperationException($"レースが存在しません: {raceId}");
-
-        var entries = race.Entries;
-        if (entries.Any(e => e.HorseNumber == horseNumber))
+        if (race?.Entries.Any(e => e.HorseNumber == horseNumber) == true)
             return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです。";
 
         var horseId = await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -321,17 +320,17 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        if (race is null)
-            throw new InvalidOperationException($"レースが存在しません: {raceId}");
-
-        if (race.Status == HorseRacingPrediction.Domain.Races.RaceStatus.Draft)
+        if (race?.Status == HorseRacingPrediction.Domain.Races.RaceStatus.Draft)
         {
             var entryCount = race.Entries.Count > 0 ? race.Entries.Count : 1;
             var publishRequest = new { EntryCount = entryCount };
             var publishResponse = await _httpClient
                 .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/card/publish", publishRequest, cancellationToken)
                 .ConfigureAwait(false);
-            publishResponse.EnsureSuccessStatusCode();
+            if (publishResponse.StatusCode != HttpStatusCode.Conflict)
+            {
+                publishResponse.EnsureSuccessStatusCode();
+            }
         }
 
         var resultRequest = new

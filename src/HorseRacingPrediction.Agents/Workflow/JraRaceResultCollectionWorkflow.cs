@@ -29,17 +29,20 @@ public sealed class JraRaceResultCollectionWorkflow
     private readonly JraRaceResultUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceResultScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
+    private readonly IRaceQueryService? _queryService;
     private readonly ILogger<JraRaceResultCollectionWorkflow> _logger;
 
     internal JraRaceResultCollectionWorkflow(
         JraRaceResultUrlDiscoveryAgent discoveryAgent,
         JraRaceResultScraper scraper,
         DataCollectionWriteTools writeTools,
+        IRaceQueryService? queryService = null,
         ILogger<JraRaceResultCollectionWorkflow>? logger = null)
     {
         _discoveryAgent = discoveryAgent;
         _scraper = scraper;
         _writeTools = writeTools;
+        _queryService = queryService;
         _logger = logger ?? NullLogger<JraRaceResultCollectionWorkflow>.Instance;
     }
 
@@ -55,6 +58,25 @@ public sealed class JraRaceResultCollectionWorkflow
                 loggerFactory?.CreateLogger<JraRaceResultUrlDiscoveryAgent>()),
             scraper,
             writeTools,
+            queryService: null,
+            logger)
+    {
+    }
+
+    public JraRaceResultCollectionWorkflow(
+        IWebBrowser browser,
+        JraRaceResultScraper scraper,
+        DataCollectionWriteTools writeTools,
+        IRaceQueryService queryService,
+        ILogger<JraRaceResultCollectionWorkflow>? logger = null,
+        ILoggerFactory? loggerFactory = null)
+        : this(
+            new JraRaceResultUrlDiscoveryAgent(
+                browser,
+                loggerFactory?.CreateLogger<JraRaceResultUrlDiscoveryAgent>()),
+            scraper,
+            writeTools,
+            queryService,
             logger)
     {
     }
@@ -66,6 +88,41 @@ public sealed class JraRaceResultCollectionWorkflow
         DateOnly raceDate,
         CancellationToken cancellationToken = default)
         => _discoveryAgent.DiscoverUrlsAsync(raceDate, cancellationToken);
+
+    internal async Task<IReadOnlyList<JraRaceResultUrl>> FilterUnregisteredUrlsAsync(
+        IReadOnlyList<JraRaceResultUrl> urls,
+        DateOnly raceDate,
+        CancellationToken cancellationToken = default)
+    {
+        if (_queryService is null || urls.Count == 0)
+            return urls;
+
+        var registeredRaces = await _queryService
+            .SearchRegisteredRacesAsync(raceDate, cancellationToken)
+            .ConfigureAwait(false);
+
+        var registeredKeys = registeredRaces
+            .Select(BuildRaceKey)
+            .Where(x => x is not null)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
+        var filtered = new List<JraRaceResultUrl>(urls.Count);
+
+        foreach (var url in urls)
+        {
+            var key = BuildRaceKey(url);
+            if (key is not null)
+            {
+                if (registeredKeys.Contains(key) || !seenKeys.Add(key))
+                    continue;
+            }
+
+            filtered.Add(url);
+        }
+
+        return filtered;
+    }
 
     /// <summary>
     /// 指定した URL 一覧を Playwright でスクレイプして成績データを返す。
@@ -142,13 +199,15 @@ public sealed class JraRaceResultCollectionWorkflow
 
         // Step 1: AI による URL 発見（少ないページ閲覧でトークン節約）
         var discoveredUrls = await DiscoverUrlsAsync(raceDate, cancellationToken);
+        var targetUrls = await FilterUnregisteredUrlsAsync(discoveredUrls, raceDate, cancellationToken);
         _logger.LogInformation(
-            "JRA race result collection discovery done. RaceDate={RaceDate} DiscoveredCount={DiscoveredCount}",
+            "JRA race result collection discovery done. RaceDate={RaceDate} DiscoveredCount={DiscoveredCount} TargetCount={TargetCount}",
             raceDate,
-            discoveredUrls.Count);
+            discoveredUrls.Count,
+            targetUrls.Count);
 
         // Step 2: 決定的なスクレイピング（AI 不使用）
-        var scraped = await ScrapeAllAsync(discoveredUrls, cancellationToken);
+        var scraped = await ScrapeAllAsync(targetUrls, cancellationToken);
         _logger.LogInformation(
             "JRA race result collection scraping done. RaceDate={RaceDate} ScrapedCount={ScrapedCount}",
             raceDate,
@@ -164,10 +223,33 @@ public sealed class JraRaceResultCollectionWorkflow
 
         return new JraRaceResultCollectionResult(
             RaceDate: raceDate,
-            DiscoveredUrls: discoveredUrls,
+            DiscoveredUrls: targetUrls,
             ScrapedResults: scraped.Select(s => s.Data).ToList(),
             SavedRaceIds: savedRaceIds,
             Errors: errors);
+    }
+
+    private static string? BuildRaceKey(RaceSearchSummary summary)
+    {
+        if (summary.RaceDate is null || summary.RaceNumber is null || string.IsNullOrWhiteSpace(summary.RacecourseCode))
+            return null;
+
+        return $"{summary.RaceDate:yyyy-MM-dd}|{DeterministicIdGenerator.NormalizeKey(summary.RacecourseCode)}|{summary.RaceNumber.Value:D2}";
+    }
+
+    private static string? BuildRaceKey(JraRaceResultUrl url)
+    {
+        if (url.RaceDate is null || url.RaceNumber is null)
+            return null;
+
+        var racecourse = !string.IsNullOrWhiteSpace(url.Racecourse)
+            ? url.Racecourse
+            : url.RacecourseCode;
+
+        if (string.IsNullOrWhiteSpace(racecourse))
+            return null;
+
+        return $"{url.RaceDate:yyyy-MM-dd}|{DeterministicIdGenerator.NormalizeKey(racecourse)}|{url.RaceNumber.Value:D2}";
     }
 
     // ------------------------------------------------------------------ //

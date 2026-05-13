@@ -22,6 +22,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
     private readonly WebFetchOptions _webFetchOptions;
     private readonly PageDataExtractionAgent? _pageDataExtractionAgent;
     private readonly DataCollectionWriteTools _writeTools;
+    private readonly IRaceQueryService _raceQueryService;
     private readonly ProcessingStateStore _stateStore;
     private readonly RaceTextInsightCollector _insightCollector;
     private readonly ILoggerFactory _loggerFactory;
@@ -35,6 +36,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         IOptions<WebFetchOptions> webFetchOptions,
         PageDataExtractionAgent? pageDataExtractionAgent,
         DataCollectionWriteTools writeTools,
+        IRaceQueryService raceQueryService,
         ProcessingStateStore stateStore,
         RaceTextInsightCollector insightCollector,
         ILoggerFactory loggerFactory,
@@ -47,6 +49,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         _webFetchOptions = webFetchOptions.Value;
         _pageDataExtractionAgent = pageDataExtractionAgent;
         _writeTools = writeTools;
+        _raceQueryService = raceQueryService;
         _stateStore = stateStore;
         _insightCollector = insightCollector;
         _loggerFactory = loggerFactory;
@@ -214,6 +217,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
             browser,
             new JraRaceResultScraper(browser),
             _writeTools,
+            _raceQueryService,
             _loggerFactory.CreateLogger<JraRaceResultCollectionWorkflow>(),
             _loggerFactory);
 

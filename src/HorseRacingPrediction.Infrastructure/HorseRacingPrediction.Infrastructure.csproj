@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HorseRacingPrediction.Domain\HorseRacingPrediction.Domain.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.Application\HorseRacingPrediction.Application.csproj" />
   </ItemGroup>
 
 </Project>

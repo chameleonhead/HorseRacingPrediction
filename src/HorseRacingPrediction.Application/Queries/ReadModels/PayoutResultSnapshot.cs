@@ -2,8 +2,8 @@ namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
 public sealed record PayoutResultSnapshot(
     DateTimeOffset DeclaredAt,
-    IReadOnlyList<PayoutEntrySnapshot> WinPayouts,
-    IReadOnlyList<PayoutEntrySnapshot> PlacePayouts,
-    IReadOnlyList<PayoutEntrySnapshot> QuinellaPayouts,
-    IReadOnlyList<PayoutEntrySnapshot> ExactaPayouts,
-    IReadOnlyList<PayoutEntrySnapshot> TrifectaPayouts);
+    List<PayoutEntrySnapshot> WinPayouts,
+    List<PayoutEntrySnapshot> PlacePayouts,
+    List<PayoutEntrySnapshot> QuinellaPayouts,
+    List<PayoutEntrySnapshot> ExactaPayouts,
+    List<PayoutEntrySnapshot> TrifectaPayouts);
