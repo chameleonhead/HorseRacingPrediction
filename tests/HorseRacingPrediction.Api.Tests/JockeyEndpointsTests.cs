@@ -58,6 +58,34 @@ public class JockeyEndpointsTests
     }
 
     [TestMethod]
+    public async Task SearchJockeys_FiltersSortsAndPages()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        var jockeyId1 = $"jockey-{Guid.NewGuid()}";
+        var jockeyId2 = $"jockey-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/jockeys",
+            new RegisterJockeyRequest($"SearchJockeyA-{key}", $"search-jockey-a-{key}", "JRA", jockeyId1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/jockeys",
+            new RegisterJockeyRequest($"SearchJockeyB-{key}", $"search-jockey-b-{key}", "JRA", jockeyId2),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/jockeys?query=SearchJockey&affiliationCode=JRA&page=2&pageSize=1&sortBy=displayName&sortDescending=false");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<JockeySummaryResponse>>(JsonOptions);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.TotalPages);
+        Assert.AreEqual(1, result.Items.Count);
+        Assert.AreEqual(jockeyId2, result.Items[0].JockeyId);
+    }
+
+    [TestMethod]
     public async Task UpdateJockeyProfile_AfterRegister_ReturnsOk()
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";

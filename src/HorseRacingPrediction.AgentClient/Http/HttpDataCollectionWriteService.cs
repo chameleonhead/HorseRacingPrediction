@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -62,25 +63,37 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var createResponse = await _httpClient
                 .PostAsJsonAsync("/api/races", createRequest, cancellationToken)
                 .ConfigureAwait(false);
-            createResponse.EnsureSuccessStatusCode();
+
+            if (createResponse.StatusCode == HttpStatusCode.Conflict)
+            {
+                await CorrectRaceAsync(
+                    raceId,
+                    raceName,
+                    racecourseCode,
+                    raceNumber,
+                    gradeCode,
+                    surfaceCode,
+                    distanceMeters,
+                    directionCode,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                createResponse.EnsureSuccessStatusCode();
+            }
         }
         else
         {
-            var correctRequest = new
-            {
-                RaceName = raceName,
-                RacecourseCode = racecourseCode,
-                RaceNumber = (int?)raceNumber,
-                GradeCode = gradeCode,
-                SurfaceCode = surfaceCode,
-                DistanceMeters = distanceMeters,
-                DirectionCode = directionCode,
-                Reason = "Collected by data collection agent"
-            };
-            var patchResponse = await _httpClient
-                .PatchAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}", correctRequest, cancellationToken)
-                .ConfigureAwait(false);
-            patchResponse.EnsureSuccessStatusCode();
+            await CorrectRaceAsync(
+                raceId,
+                raceName,
+                racecourseCode,
+                raceNumber,
+                gradeCode,
+                surfaceCode,
+                distanceMeters,
+                directionCode,
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (entryCount is > 0 && existing is null)
@@ -93,6 +106,34 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
 
         return raceId;
+    }
+
+    private async Task CorrectRaceAsync(
+        string raceId,
+        string raceName,
+        string racecourseCode,
+        int raceNumber,
+        string? gradeCode,
+        string? surfaceCode,
+        int? distanceMeters,
+        string? directionCode,
+        CancellationToken cancellationToken)
+    {
+        var correctRequest = new
+        {
+            RaceName = raceName,
+            RacecourseCode = racecourseCode,
+            RaceNumber = (int?)raceNumber,
+            GradeCode = gradeCode,
+            SurfaceCode = surfaceCode,
+            DistanceMeters = distanceMeters,
+            DirectionCode = directionCode,
+            Reason = "Collected by data collection agent"
+        };
+        var patchResponse = await _httpClient
+            .PatchAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}", correctRequest, cancellationToken)
+            .ConfigureAwait(false);
+        patchResponse.EnsureSuccessStatusCode();
     }
 
     public async Task<string> UpsertHorseAsync(

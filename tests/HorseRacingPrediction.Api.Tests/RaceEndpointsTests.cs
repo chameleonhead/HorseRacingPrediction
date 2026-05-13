@@ -41,6 +41,20 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task CreateRace_WhenAlreadyExists_ReturnsConflict()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var request = new CreateRaceRequest(
+            new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId);
+
+        var firstResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
+        var secondResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.Created, firstResponse.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, secondResponse.StatusCode);
+    }
+
+    [TestMethod]
     public async Task GetRace_AfterCreate_ReturnsCorrectData()
     {
         var raceId = $"race-{Guid.NewGuid()}";
@@ -58,6 +72,40 @@ public class RaceEndpointsTests
         Assert.AreEqual(5, race.RaceNumber);
         Assert.AreEqual("皐月賞", race.RaceName);
         Assert.AreEqual(RaceStatus.Draft, race.Status);
+    }
+
+    [TestMethod]
+    public async Task SearchRaces_FiltersSortsAndPages()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        var tokyoRace1 = $"race-{Guid.NewGuid()}";
+        var tokyoRace2 = $"race-{Guid.NewGuid()}";
+        var nakayamaRace = $"race-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 3, $"RaceSearch-{key}-A", tokyoRace1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 7, $"RaceSearch-{key}-B", tokyoRace2),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "NAKAYAMA", 11, $"RaceSearch-{key}-C", nakayamaRace),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/races?racecourseCode=TOKYO&raceName=RaceSearch-{key}&page=2&pageSize=1&sortBy=raceNumber&sortDescending=false");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<RaceSummaryResponse>>(JsonOptions);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.TotalPages);
+        Assert.AreEqual(1, result.Items.Count);
+        Assert.AreEqual(tokyoRace2, result.Items[0].RaceId);
+        Assert.AreEqual(7, result.Items[0].RaceNumber);
     }
 
     [TestMethod]

@@ -19,6 +19,7 @@ using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.MachineLearning;
 using HorseRacingPrediction.MachineLearning.Prediction;
+using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace HorseRacingPrediction.Api;
@@ -337,24 +338,133 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Create race", Description = "Creates a race aggregate in Draft state")]
             async (CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var raceId = string.IsNullOrWhiteSpace(request.RaceId) ? RaceId.New : new RaceId(request.RaceId);
-                var command = new CreateRaceCommand(
-                    raceId,
-                    request.RaceDate,
-                    request.RacecourseCode,
-                    request.RaceNumber,
-                    request.RaceName);
+                try
+                {
+                    var raceId = string.IsNullOrWhiteSpace(request.RaceId) ? RaceId.New : new RaceId(request.RaceId);
+                    var command = new CreateRaceCommand(
+                        raceId,
+                        request.RaceDate,
+                        request.RacecourseCode,
+                        request.RaceNumber,
+                        request.RaceName);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Race is already created.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("CreateRace")
             .WithTags("Race API")
             .Produces(StatusCodes.Status201Created)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
+            .WithOpenApi();
+
+        app.MapGet("/api/races",
+            [SwaggerOperation(Summary = "Search races", Description = "Returns paged race summaries filtered by date, course, status, race name and result information")]
+            async ([AsParameters] SearchRacesRequest request,
+                IInMemoryReadStore<RaceResultViewReadModel> raceResultStore,
+                CancellationToken cancellationToken) =>
+            {
+                var page = request.Page ?? 1;
+                var pageSize = request.PageSize ?? 20;
+                var sortBy = request.SortBy ?? "raceDate";
+                var sortDescending = request.SortDescending ?? true;
+
+                var pagingError = ValidatePaging(page, pageSize);
+                if (pagingError is not null)
+                    return Results.BadRequest(new[] { pagingError });
+
+                var allRaces = await raceResultStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+
+                IEnumerable<RaceResultViewReadModel> filtered = allRaces;
+
+                if (!string.IsNullOrWhiteSpace(request.RaceId))
+                    filtered = filtered.Where(x => string.Equals(x.RaceId, request.RaceId, StringComparison.OrdinalIgnoreCase));
+
+                if (request.RaceDateFrom.HasValue)
+                    filtered = filtered.Where(x => x.RaceDate.HasValue && x.RaceDate.Value >= request.RaceDateFrom.Value);
+
+                if (request.RaceDateTo.HasValue)
+                    filtered = filtered.Where(x => x.RaceDate.HasValue && x.RaceDate.Value <= request.RaceDateTo.Value);
+
+                if (!string.IsNullOrWhiteSpace(request.RacecourseCode))
+                    filtered = filtered.Where(x => string.Equals(x.RacecourseCode, request.RacecourseCode, StringComparison.OrdinalIgnoreCase));
+
+                if (request.RaceNumber.HasValue)
+                    filtered = filtered.Where(x => x.RaceNumber == request.RaceNumber.Value);
+
+                if (!string.IsNullOrWhiteSpace(request.RaceName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.RaceName, request.RaceName));
+
+                if (request.Status.HasValue)
+                    filtered = filtered.Where(x => x.Status == request.Status.Value);
+
+                if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.WinningHorseName, request.WinningHorseName));
+
+                filtered = sortBy.ToLowerInvariant() switch
+                {
+                    "racedate" => sortDescending
+                        ? filtered.OrderByDescending(x => x.RaceDate).ThenByDescending(x => x.RaceNumber)
+                        : filtered.OrderBy(x => x.RaceDate).ThenBy(x => x.RaceNumber),
+                    "racenumber" => sortDescending
+                        ? filtered.OrderByDescending(x => x.RaceNumber).ThenByDescending(x => x.RaceDate)
+                        : filtered.OrderBy(x => x.RaceNumber).ThenBy(x => x.RaceDate),
+                    "racename" => sortDescending
+                        ? filtered.OrderByDescending(x => x.RaceName)
+                        : filtered.OrderBy(x => x.RaceName),
+                    "status" => sortDescending
+                        ? filtered.OrderByDescending(x => x.Status)
+                        : filtered.OrderBy(x => x.Status),
+                    "resultdeclaredat" => sortDescending
+                        ? filtered.OrderByDescending(x => x.ResultDeclaredAt).ThenByDescending(x => x.RaceDate)
+                        : filtered.OrderBy(x => x.ResultDeclaredAt).ThenBy(x => x.RaceDate),
+                    _ => null!
+                };
+
+                if (filtered is null)
+                {
+                    return Results.BadRequest(new[]
+                    {
+                        "SortBy must be one of: raceDate, raceNumber, raceName, status, resultDeclaredAt."
+                    });
+                }
+
+                var totalCount = filtered.Count();
+                var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+                var items = filtered
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(x => new RaceSummaryResponse(
+                        x.RaceId,
+                        x.RaceDate,
+                        x.RacecourseCode,
+                        x.RaceNumber,
+                        x.RaceName,
+                        x.Status,
+                        x.EntryCount,
+                        x.WinningHorseName,
+                        x.ResultDeclaredAt))
+                    .ToList();
+
+                return Results.Ok(new PagedResponse<RaceSummaryResponse>(
+                    items,
+                    page,
+                    pageSize,
+                    totalCount,
+                    totalPages));
+            })
+            .WithName("SearchRaces")
+            .WithTags("Race API")
+            .Produces<PagedResponse<RaceSummaryResponse>>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .WithOpenApi();
 
         writeGroup.MapPost("/races/{raceId}/card/publish",
@@ -914,6 +1024,86 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        app.MapGet("/api/predictions",
+            [SwaggerOperation(Summary = "Search prediction tickets", Description = "Returns paged prediction ticket summaries filtered by race, predictor, ticket status, evaluation status and confidence score")]
+            async ([AsParameters] SearchPredictionTicketsRequest request,
+                IInMemoryReadStore<PredictionTicketReadModel> predictionTicketStore,
+                CancellationToken cancellationToken) =>
+            {
+                var page = request.Page ?? 1;
+                var pageSize = request.PageSize ?? 20;
+                var pagingError = ValidatePaging(page, pageSize);
+                if (pagingError is not null)
+                    return Results.BadRequest(new[] { pagingError });
+
+                var allTickets = await predictionTicketStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+
+                IEnumerable<PredictionTicketReadModel> filtered = allTickets;
+
+                if (!string.IsNullOrWhiteSpace(request.PredictionTicketId))
+                    filtered = filtered.Where(x => string.Equals(x.PredictionTicketId, request.PredictionTicketId, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.RaceId))
+                    filtered = filtered.Where(x => string.Equals(x.RaceId, request.RaceId, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.PredictorType))
+                    filtered = filtered.Where(x => string.Equals(x.PredictorType, request.PredictorType, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.PredictorId))
+                    filtered = filtered.Where(x => string.Equals(x.PredictorId, request.PredictorId, StringComparison.OrdinalIgnoreCase));
+
+                if (request.TicketStatus.HasValue)
+                    filtered = filtered.Where(x => x.TicketStatus == request.TicketStatus.Value);
+
+                if (request.EvaluationStatus.HasValue)
+                    filtered = filtered.Where(x => x.EvaluationStatus == request.EvaluationStatus.Value);
+
+                if (request.PredictedAtFrom.HasValue)
+                    filtered = filtered.Where(x => x.PredictedAt.HasValue && x.PredictedAt.Value >= request.PredictedAtFrom.Value);
+
+                if (request.PredictedAtTo.HasValue)
+                    filtered = filtered.Where(x => x.PredictedAt.HasValue && x.PredictedAt.Value <= request.PredictedAtTo.Value);
+
+                if (request.MinConfidenceScore.HasValue)
+                    filtered = filtered.Where(x => x.ConfidenceScore >= request.MinConfidenceScore.Value);
+
+                if (request.MaxConfidenceScore.HasValue)
+                    filtered = filtered.Where(x => x.ConfidenceScore <= request.MaxConfidenceScore.Value);
+
+                if (!string.IsNullOrWhiteSpace(request.SummaryComment))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.SummaryComment, request.SummaryComment));
+
+                var sorted = SortPredictionTickets(filtered, request);
+                if (sorted is null)
+                {
+                    return Results.BadRequest(new[]
+                    {
+                        "SortBy must be one of: predictedAt, confidenceScore, ticketStatus, evaluationStatus."
+                    });
+                }
+
+                return Results.Ok(ToPagedResponse(
+                    sorted,
+                    page,
+                    pageSize,
+                    x => new PredictionTicketSummaryResponse(
+                        x.PredictionTicketId,
+                        x.RaceId,
+                        x.PredictorType,
+                        x.PredictorId,
+                        x.ConfidenceScore,
+                        x.SummaryComment,
+                        x.PredictedAt,
+                        x.TicketStatus,
+                        x.EvaluationStatus,
+                        x.Marks.Count)));
+            })
+            .WithName("SearchPredictionTickets")
+            .WithTags("Prediction API")
+            .Produces<PagedResponse<PredictionTicketSummaryResponse>>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .WithOpenApi();
+
         app.MapGet("/api/horses/{horseId}",
             [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
             async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
@@ -940,6 +1130,77 @@ public static class EndpointExtensions
             .WithTags("Horse API")
             .Produces<HorseProfileResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/horses",
+            [SwaggerOperation(Summary = "Search horses", Description = "Returns paged horse summaries filtered by identifiers, names, sex, birth date and aliases")]
+            async ([AsParameters] SearchHorsesRequest request,
+                IInMemoryReadStore<HorseReadModel> horseStore,
+                CancellationToken cancellationToken) =>
+            {
+                var page = request.Page ?? 1;
+                var pageSize = request.PageSize ?? 20;
+                var pagingError = ValidatePaging(page, pageSize);
+                if (pagingError is not null)
+                    return Results.BadRequest(new[] { pagingError });
+
+                var allHorses = await horseStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+
+                IEnumerable<HorseReadModel> filtered = allHorses;
+
+                if (!string.IsNullOrWhiteSpace(request.HorseId))
+                    filtered = filtered.Where(x => string.Equals(x.HorseId, request.HorseId, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.Query))
+                {
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.RegisteredName, request.Query)
+                        || ContainsIgnoreCase(x.NormalizedName, request.Query)
+                        || x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.Query)));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.RegisteredName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.RegisteredName, request.RegisteredName));
+
+                if (!string.IsNullOrWhiteSpace(request.NormalizedName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.NormalizedName, request.NormalizedName));
+
+                if (!string.IsNullOrWhiteSpace(request.SexCode))
+                    filtered = filtered.Where(x => string.Equals(x.SexCode, request.SexCode, StringComparison.OrdinalIgnoreCase));
+
+                if (request.BirthDateFrom.HasValue)
+                    filtered = filtered.Where(x => x.BirthDate.HasValue && x.BirthDate.Value >= request.BirthDateFrom.Value);
+
+                if (request.BirthDateTo.HasValue)
+                    filtered = filtered.Where(x => x.BirthDate.HasValue && x.BirthDate.Value <= request.BirthDateTo.Value);
+
+                if (!string.IsNullOrWhiteSpace(request.AliasValue))
+                    filtered = filtered.Where(x => x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.AliasValue)));
+
+                var sorted = SortHorses(filtered, request);
+                if (sorted is null)
+                {
+                    return Results.BadRequest(new[]
+                    {
+                        "SortBy must be one of: registeredName, normalizedName, birthDate."
+                    });
+                }
+
+                return Results.Ok(ToPagedResponse(
+                    sorted,
+                    page,
+                    pageSize,
+                    x => new HorseSummaryResponse(
+                        x.HorseId,
+                        x.RegisteredName,
+                        x.NormalizedName,
+                        x.SexCode,
+                        x.BirthDate,
+                        x.Aliases.Count)));
+            })
+            .WithName("SearchHorses")
+            .WithTags("Horse API")
+            .Produces<PagedResponse<HorseSummaryResponse>>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .WithOpenApi();
 
         app.MapGet("/api/horses/{horseId}/race-history",
@@ -1030,6 +1291,70 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        app.MapGet("/api/jockeys",
+            [SwaggerOperation(Summary = "Search jockeys", Description = "Returns paged jockey summaries filtered by identifiers, names, affiliation and aliases")]
+            async ([AsParameters] SearchJockeysRequest request,
+                IInMemoryReadStore<JockeyReadModel> jockeyStore,
+                CancellationToken cancellationToken) =>
+            {
+                var page = request.Page ?? 1;
+                var pageSize = request.PageSize ?? 20;
+                var pagingError = ValidatePaging(page, pageSize);
+                if (pagingError is not null)
+                    return Results.BadRequest(new[] { pagingError });
+
+                var allJockeys = await jockeyStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+
+                IEnumerable<JockeyReadModel> filtered = allJockeys;
+
+                if (!string.IsNullOrWhiteSpace(request.JockeyId))
+                    filtered = filtered.Where(x => string.Equals(x.JockeyId, request.JockeyId, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.Query))
+                {
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.DisplayName, request.Query)
+                        || ContainsIgnoreCase(x.NormalizedName, request.Query)
+                        || x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.Query)));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.DisplayName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.DisplayName, request.DisplayName));
+
+                if (!string.IsNullOrWhiteSpace(request.NormalizedName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.NormalizedName, request.NormalizedName));
+
+                if (!string.IsNullOrWhiteSpace(request.AffiliationCode))
+                    filtered = filtered.Where(x => string.Equals(x.AffiliationCode, request.AffiliationCode, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.AliasValue))
+                    filtered = filtered.Where(x => x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.AliasValue)));
+
+                var sorted = SortJockeys(filtered, request);
+                if (sorted is null)
+                {
+                    return Results.BadRequest(new[]
+                    {
+                        "SortBy must be one of: displayName, normalizedName, affiliationCode."
+                    });
+                }
+
+                return Results.Ok(ToPagedResponse(
+                    sorted,
+                    page,
+                    pageSize,
+                    x => new JockeySummaryResponse(
+                        x.JockeyId,
+                        x.DisplayName,
+                        x.NormalizedName,
+                        x.AffiliationCode,
+                        x.Aliases.Count)));
+            })
+            .WithName("SearchJockeys")
+            .WithTags("Jockey API")
+            .Produces<PagedResponse<JockeySummaryResponse>>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .WithOpenApi();
+
         app.MapGet("/api/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Get trainer profile", Description = "Returns trainer profile read model")]
             async (string trainerId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
@@ -1055,6 +1380,70 @@ public static class EndpointExtensions
             .WithTags("Trainer API")
             .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/trainers",
+            [SwaggerOperation(Summary = "Search trainers", Description = "Returns paged trainer summaries filtered by identifiers, names, affiliation and aliases")]
+            async ([AsParameters] SearchTrainersRequest request,
+                IInMemoryReadStore<TrainerReadModel> trainerStore,
+                CancellationToken cancellationToken) =>
+            {
+                var page = request.Page ?? 1;
+                var pageSize = request.PageSize ?? 20;
+                var pagingError = ValidatePaging(page, pageSize);
+                if (pagingError is not null)
+                    return Results.BadRequest(new[] { pagingError });
+
+                var allTrainers = await trainerStore.FindAsync(_ => true, cancellationToken).ConfigureAwait(false);
+
+                IEnumerable<TrainerReadModel> filtered = allTrainers;
+
+                if (!string.IsNullOrWhiteSpace(request.TrainerId))
+                    filtered = filtered.Where(x => string.Equals(x.TrainerId, request.TrainerId, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.Query))
+                {
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.DisplayName, request.Query)
+                        || ContainsIgnoreCase(x.NormalizedName, request.Query)
+                        || x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.Query)));
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.DisplayName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.DisplayName, request.DisplayName));
+
+                if (!string.IsNullOrWhiteSpace(request.NormalizedName))
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.NormalizedName, request.NormalizedName));
+
+                if (!string.IsNullOrWhiteSpace(request.AffiliationCode))
+                    filtered = filtered.Where(x => string.Equals(x.AffiliationCode, request.AffiliationCode, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(request.AliasValue))
+                    filtered = filtered.Where(x => x.Aliases.Any(a => ContainsIgnoreCase(a.AliasValue, request.AliasValue)));
+
+                var sorted = SortTrainers(filtered, request);
+                if (sorted is null)
+                {
+                    return Results.BadRequest(new[]
+                    {
+                        "SortBy must be one of: displayName, normalizedName, affiliationCode."
+                    });
+                }
+
+                return Results.Ok(ToPagedResponse(
+                    sorted,
+                    page,
+                    pageSize,
+                    x => new TrainerSummaryResponse(
+                        x.TrainerId,
+                        x.DisplayName,
+                        x.NormalizedName,
+                        x.AffiliationCode,
+                        x.Aliases.Count)));
+            })
+            .WithName("SearchTrainers")
+            .WithTags("Trainer API")
+            .Produces<PagedResponse<TrainerSummaryResponse>>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .WithOpenApi();
 
         writeGroup.MapPost("/memos",
@@ -1252,4 +1641,101 @@ public static class EndpointExtensions
 
         return app;
     }
+
+    private static bool ContainsIgnoreCase(string? value, string searchTerm)
+        => !string.IsNullOrWhiteSpace(value)
+            && value.Contains(searchTerm, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ValidatePaging(int page, int pageSize)
+    {
+        if (page < 1)
+            return "Page must be greater than or equal to 1.";
+
+        if (pageSize is < 1 or > 100)
+            return "PageSize must be between 1 and 100.";
+
+        return null;
+    }
+
+    private static PagedResponse<TResponse> ToPagedResponse<TReadModel, TResponse>(
+        IEnumerable<TReadModel> source,
+        int page,
+        int pageSize,
+        Func<TReadModel, TResponse> selector)
+    {
+        var totalCount = source.Count();
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        var items = source
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(selector)
+            .ToList();
+
+        return new PagedResponse<TResponse>(items, page, pageSize, totalCount, totalPages);
+    }
+
+    private static IOrderedEnumerable<HorseReadModel>? SortHorses(IEnumerable<HorseReadModel> source, SearchHorsesRequest request)
+        => (request.SortBy ?? "registeredName").ToLowerInvariant() switch
+        {
+            "registeredname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.RegisteredName).ThenByDescending(x => x.HorseId)
+                : source.OrderBy(x => x.RegisteredName).ThenBy(x => x.HorseId),
+            "normalizedname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.NormalizedName).ThenByDescending(x => x.HorseId)
+                : source.OrderBy(x => x.NormalizedName).ThenBy(x => x.HorseId),
+            "birthdate" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.BirthDate).ThenByDescending(x => x.RegisteredName)
+                : source.OrderBy(x => x.BirthDate).ThenBy(x => x.RegisteredName),
+            _ => null
+        };
+
+    private static IOrderedEnumerable<JockeyReadModel>? SortJockeys(IEnumerable<JockeyReadModel> source, SearchJockeysRequest request)
+        => (request.SortBy ?? "displayName").ToLowerInvariant() switch
+        {
+            "displayname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.DisplayName).ThenByDescending(x => x.JockeyId)
+                : source.OrderBy(x => x.DisplayName).ThenBy(x => x.JockeyId),
+            "normalizedname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.NormalizedName).ThenByDescending(x => x.JockeyId)
+                : source.OrderBy(x => x.NormalizedName).ThenBy(x => x.JockeyId),
+            "affiliationcode" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.AffiliationCode).ThenByDescending(x => x.DisplayName)
+                : source.OrderBy(x => x.AffiliationCode).ThenBy(x => x.DisplayName),
+            _ => null
+        };
+
+    private static IOrderedEnumerable<TrainerReadModel>? SortTrainers(IEnumerable<TrainerReadModel> source, SearchTrainersRequest request)
+        => (request.SortBy ?? "displayName").ToLowerInvariant() switch
+        {
+            "displayname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.DisplayName).ThenByDescending(x => x.TrainerId)
+                : source.OrderBy(x => x.DisplayName).ThenBy(x => x.TrainerId),
+            "normalizedname" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.NormalizedName).ThenByDescending(x => x.TrainerId)
+                : source.OrderBy(x => x.NormalizedName).ThenBy(x => x.TrainerId),
+            "affiliationcode" => (request.SortDescending ?? false)
+                ? source.OrderByDescending(x => x.AffiliationCode).ThenByDescending(x => x.DisplayName)
+                : source.OrderBy(x => x.AffiliationCode).ThenBy(x => x.DisplayName),
+            _ => null
+        };
+
+    private static IOrderedEnumerable<PredictionTicketReadModel>? SortPredictionTickets(
+        IEnumerable<PredictionTicketReadModel> source,
+        SearchPredictionTicketsRequest request)
+        => (request.SortBy ?? "predictedAt").ToLowerInvariant() switch
+        {
+            "predictedat" => (request.SortDescending ?? true)
+                ? source.OrderByDescending(x => x.PredictedAt).ThenByDescending(x => x.PredictionTicketId)
+                : source.OrderBy(x => x.PredictedAt).ThenBy(x => x.PredictionTicketId),
+            "confidencescore" => (request.SortDescending ?? true)
+                ? source.OrderByDescending(x => x.ConfidenceScore).ThenByDescending(x => x.PredictedAt)
+                : source.OrderBy(x => x.ConfidenceScore).ThenBy(x => x.PredictedAt),
+            "ticketstatus" => (request.SortDescending ?? true)
+                ? source.OrderByDescending(x => x.TicketStatus).ThenByDescending(x => x.PredictedAt)
+                : source.OrderBy(x => x.TicketStatus).ThenBy(x => x.PredictedAt),
+            "evaluationstatus" => (request.SortDescending ?? true)
+                ? source.OrderByDescending(x => x.EvaluationStatus).ThenByDescending(x => x.PredictedAt)
+                : source.OrderBy(x => x.EvaluationStatus).ThenBy(x => x.PredictedAt),
+            _ => null
+        };
 }

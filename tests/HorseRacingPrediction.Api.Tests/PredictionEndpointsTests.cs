@@ -61,6 +61,35 @@ public class PredictionEndpointsTests
     }
 
     [TestMethod]
+    public async Task SearchPredictionTickets_FiltersSortsAndPages()
+    {
+        var raceId = $"race-search-{Guid.NewGuid()}";
+        var ticketId1 = $"predictionticket-{Guid.NewGuid()}";
+        var ticketId2 = $"predictionticket-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/predictions",
+            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.91m, "search-1", ticketId1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/predictions",
+            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.72m, "search-2", ticketId2),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/predictions?raceId={raceId}&predictorType=AI&page=2&pageSize=1&sortBy=confidenceScore&sortDescending=true");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>(JsonOptions);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.TotalPages);
+        Assert.AreEqual(1, result.Items.Count);
+        Assert.AreEqual(ticketId2, result.Items[0].PredictionTicketId);
+        Assert.AreEqual(0.72m, result.Items[0].ConfidenceScore);
+    }
+
+    [TestMethod]
     public async Task AddMark_AfterCreate_ReturnsOk()
     {
         var ticketId = $"predictionticket-{Guid.NewGuid()}";

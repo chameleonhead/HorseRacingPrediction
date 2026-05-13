@@ -57,6 +57,34 @@ public class HorseEndpointsTests
     }
 
     [TestMethod]
+    public async Task SearchHorses_FiltersSortsAndPages()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        var horseId1 = $"horse-{Guid.NewGuid()}";
+        var horseId2 = $"horse-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest($"SearchHorseA-{key}", $"searchhorse-a-{key}", "M", null, horseId1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest($"SearchHorseB-{key}", $"searchhorse-b-{key}", "M", null, horseId2),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/horses?query=SearchHorse&normalizedName={key}&page=2&pageSize=1&sortBy=registeredName&sortDescending=false");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<HorseSummaryResponse>>(JsonOptions);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.TotalPages);
+        Assert.AreEqual(1, result.Items.Count);
+        Assert.AreEqual(horseId2, result.Items[0].HorseId);
+    }
+
+    [TestMethod]
     public async Task UpdateHorseProfile_AfterRegister_ReturnsOk()
     {
         var horseId = $"horse-{Guid.NewGuid()}";

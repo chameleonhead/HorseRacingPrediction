@@ -58,6 +58,34 @@ public class TrainerEndpointsTests
     }
 
     [TestMethod]
+    public async Task SearchTrainers_FiltersSortsAndPages()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        var trainerId1 = $"trainer-{Guid.NewGuid()}";
+        var trainerId2 = $"trainer-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/trainers",
+            new RegisterTrainerRequest($"SearchTrainerA-{key}", $"search-trainer-a-{key}", "JRA", trainerId1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/trainers",
+            new RegisterTrainerRequest($"SearchTrainerB-{key}", $"search-trainer-b-{key}", "JRA", trainerId2),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/trainers?query=SearchTrainer&affiliationCode=JRA&page=2&pageSize=1&sortBy=displayName&sortDescending=false");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<TrainerSummaryResponse>>(JsonOptions);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.TotalPages);
+        Assert.AreEqual(1, result.Items.Count);
+        Assert.AreEqual(trainerId2, result.Items[0].TrainerId);
+    }
+
+    [TestMethod]
     public async Task UpdateTrainerProfile_AfterRegister_ReturnsOk()
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";
