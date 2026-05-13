@@ -121,21 +121,18 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var response = await _httpClient
                 .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
         }
         else
         {
-            var updateRequest = new
-            {
-                RegisteredName = registeredName,
-                NormalizedName = normalized,
-                SexCode = sexCode,
-                BirthDate = parsedBirthDate
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
         }
 
         return horseId;
@@ -164,20 +161,18 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var response = await _httpClient
                 .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
         }
         else
         {
-            var updateRequest = new
-            {
-                DisplayName = displayName,
-                NormalizedName = normalized,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
         }
 
         return jockeyId;
@@ -206,20 +201,18 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var response = await _httpClient
                 .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
                 .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
         }
         else
         {
-            var updateRequest = new
-            {
-                DisplayName = displayName,
-                NormalizedName = normalized,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PutAsJsonAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", updateRequest, cancellationToken)
-                .ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
         }
 
         return trainerId;
@@ -406,7 +399,65 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         {
             return null;
         }
-    }
+}
+        private async Task UpdateHorseAsync(
+            string horseId,
+            string registeredName,
+            string normalizedName,
+            string? sexCode,
+            DateOnly? birthDate,
+            CancellationToken cancellationToken)
+        {
+            var updateRequest = new
+            {
+                RegisteredName = registeredName,
+                NormalizedName = normalizedName,
+                SexCode = sexCode,
+                BirthDate = birthDate
+            };
+            var response = await _httpClient
+                .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
+
+        private async Task UpdateJockeyAsync(
+            string jockeyId,
+            string displayName,
+            string normalizedName,
+            string? affiliationCode,
+            CancellationToken cancellationToken)
+        {
+            var updateRequest = new
+            {
+                DisplayName = displayName,
+                NormalizedName = normalizedName,
+                AffiliationCode = affiliationCode
+            };
+            var response = await _httpClient
+                .PutAsJsonAsync($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", updateRequest, cancellationToken)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
+
+        private async Task UpdateTrainerAsync(
+            string trainerId,
+            string displayName,
+            string normalizedName,
+            string? affiliationCode,
+            CancellationToken cancellationToken)
+        {
+            var updateRequest = new
+            {
+                DisplayName = displayName,
+                NormalizedName = normalizedName,
+                AffiliationCode = affiliationCode
+            };
+            var response = await _httpClient
+                .PutAsJsonAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", updateRequest, cancellationToken)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
 
     private sealed record PayoutEntry(string Combination, decimal Amount);
 

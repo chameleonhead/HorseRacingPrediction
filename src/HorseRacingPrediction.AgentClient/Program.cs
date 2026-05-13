@@ -54,17 +54,23 @@ else
 // -------------------------------------------------------------------
 builder.Services.Configure<ApiClientOptions>(
     builder.Configuration.GetSection(ApiClientOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<ApiClientOptions>, ApiClientOptionsValidator>();
+builder.Services.AddOptions<ApiClientOptions>()
+    .Bind(builder.Configuration.GetSection(ApiClientOptions.SectionName))
+    .ValidateOnStart();
 builder.Services.AddHttpAgentServices();
 
 // -------------------------------------------------------------------
 // WebBrowser + WebFetchTools（Playwright）
 // -------------------------------------------------------------------
+builder.Services.AddSingleton<IWebBrowserSessionFactory, PlaywrightWebBrowserSessionFactory>();
 builder.Services.AddSingleton<IWebBrowser>(sp =>
-    PlaywrightWebBrowser.CreateAsync().GetAwaiter().GetResult());
+    sp.GetRequiredService<IWebBrowserSessionFactory>().CreateAsync().GetAwaiter().GetResult());
 builder.Services.Configure<WebFetchOptions>(
     builder.Configuration.GetSection(WebFetchOptions.SectionName));
 builder.Services.AddWebBrowserAgent();
 builder.Services.AddPredictionWorkflow();
+builder.Services.AddJraRaceCardCollectionWorkflow();
 builder.Services.AddJraRaceResultCollectionWorkflow();
 builder.Services.AddJraRaceScheduleCollectionWorkflow();
 

@@ -476,6 +476,12 @@ public sealed class JraTaskAgent : IAsyncDisposable
         var holdingsUrl      = Browser.CurrentUrl;
         var holdingsSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: ct);
 
+        if (date.Year != DateTime.Today.Year && !ContainsExactRequestedDate(holdingsSnapshot, date))
+        {
+            throw new InvalidOperationException(
+                $"{date.Year}年{date.Month}月{date.Day}日の出馬表は現在の JRA 出馬表導線では見つかりませんでした。過去開催は別導線での取得が必要です。");
+        }
+
         if (await TryNavigateDirectRaceLinkFromHoldingSelectionAsync(holdingsSnapshot, date, racecourse, raceNumber, steps, ct))
         {
             _memory.SetRaceContext(date, racecourse, raceNumber);
@@ -491,7 +497,9 @@ public sealed class JraTaskAgent : IAsyncDisposable
             await Browser.ClickAsync(scopedHolding, ct);
             steps.Add($"click: {scopedHolding}");
 
-            if (await TryClickRaceNumberAsync(raceNumber, steps, ct))
+            var scopedRaceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: ct);
+            if (ContainsExactRequestedDate(scopedRaceListSnapshot, date)
+                && await TryClickRaceNumberAsync(raceNumber, steps, ct))
             {
                 _memory.SetRaceContext(date, racecourse, raceNumber);
                 SyncMemoryFromUrl();
@@ -528,9 +536,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
             steps.Add($"click: {holding}");
 
             var raceListSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 120, cancellationToken: ct);
-            var hasTargetDate =
-                raceListSnapshot.MainText.Contains(dateText, StringComparison.Ordinal)
-                || raceListSnapshot.Headings.Any(h => h.Contains(dateText, StringComparison.Ordinal));
+            var hasTargetDate = ContainsExactRequestedDate(raceListSnapshot, date);
 
             if (!hasTargetDate) continue;
 
@@ -551,13 +557,20 @@ public sealed class JraTaskAgent : IAsyncDisposable
     private async Task<bool> TryClickRaceNumberAsync(
         int raceNumber, List<string> steps, CancellationToken ct)
     {
-        try
+        foreach (var candidate in BuildRaceNumberClickCandidates(raceNumber))
         {
-            await Browser.ClickAsync($"{raceNumber}レース", ct);
-            steps.Add($"click: {raceNumber}レース");
-            return true;
+            try
+            {
+                await Browser.ClickAsync(candidate, ct);
+                steps.Add($"click: {candidate}");
+                return true;
+            }
+            catch
+            {
+            }
         }
-        catch { return false; }
+
+        return false;
     }
 
     private async Task<bool> TryNavigateDirectRaceLinkFromHoldingSelectionAsync(
@@ -671,6 +684,22 @@ public sealed class JraTaskAgent : IAsyncDisposable
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static IReadOnlyList<string> BuildRaceNumberClickCandidates(int raceNumber)
+    {
+        var baseNumber = raceNumber.ToString(CultureInfo.InvariantCulture);
+
+        return new[]
+        {
+            $"{baseNumber}レース",
+            $"第{baseNumber}レース",
+            $"{baseNumber}R",
+            $"{baseNumber}Ｒ",
+            baseNumber,
+        }
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
     }
 
     private static void ExtractScheduleDates(
@@ -817,6 +846,25 @@ public sealed class JraTaskAgent : IAsyncDisposable
         => value.Replace(" ", string.Empty, StringComparison.Ordinal)
             .Replace("　", string.Empty, StringComparison.Ordinal)
             .Trim();
+
+    private static bool ContainsExactRequestedDate(PageSnapshot snapshot, DateOnly date)
+    {
+        var fullDateText = $"{date.Year}年{date.Month}月{date.Day}日";
+        var texts = snapshot.Headings
+            .Concat(snapshot.Actions.Select(action => action.Text))
+            .Concat(snapshot.Links.Select(link => link.Title))
+            .Append(snapshot.MainText)
+            .Where(text => !string.IsNullOrWhiteSpace(text));
+
+        if (texts.Any(text => text!.Contains(fullDateText, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(snapshot.Url)
+            && snapshot.Url.Contains($"calendar{date.Year}", StringComparison.Ordinal)
+            && snapshot.Url.Contains($"/{date.Month}/{date.Month:D2}{date.Day:D2}.html", StringComparison.Ordinal);
+    }
 
     private static string? TryBuildDirectRacePageUrl(string? currentUrl, JraPageKind target)
     {

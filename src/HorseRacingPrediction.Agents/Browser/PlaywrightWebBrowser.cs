@@ -151,11 +151,126 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         await target.ScrollIntoViewIfNeededAsync();
         await target.ClickAsync();
 
+        if (string.IsNullOrWhiteSpace(href)
+            || href.TrimStart().StartsWith('#')
+            || href.TrimStart().StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+        {
+            // JRA は href="#" + onclick で same-page 更新する導線が多いため、
+            // click 直後に短く待ってから DOM の安定化を確認する。
+            await _page.WaitForTimeoutAsync(500);
+        }
+
+        if (string.Equals(text.Trim(), "検索", StringComparison.Ordinal)
+            && await DismissHeaderSearchModalIfVisibleAsync(cancellationToken))
+        {
+            _logger.LogInformation(
+                "Browser click dismissed header search modal after ambiguous search click. CurrentUrl={CurrentUrl}",
+                CurrentUrl);
+        }
+
         await WaitForPageSettledAsync(cancellationToken);
         var content = await GetPageContentAsync(cancellationToken);
         _logger.LogInformation(
             "Browser click complete. Text={Text} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
             text,
+            CurrentUrl,
+            content.Length);
+        return content;
+    }
+
+    public async Task<string> SelectOptionAsync(
+        string fieldText,
+        string optionText,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(fieldText))
+        {
+            throw new ArgumentException("選択対象フィールドのラベルを指定してください。", nameof(fieldText));
+        }
+
+        if (string.IsNullOrWhiteSpace(optionText))
+        {
+            throw new ArgumentException("選択する値を指定してください。", nameof(optionText));
+        }
+
+        _logger.LogInformation(
+            "Browser select start. Field={Field} Option={Option} CurrentUrl={CurrentUrl}",
+            fieldText,
+            optionText,
+            CurrentUrl);
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var target = await FindSelectLocatorAsync(fieldText, cancellationToken);
+        if (target is null)
+        {
+            throw new InvalidOperationException($"ラベル '{fieldText}' に一致する選択項目が見つかりませんでした。");
+        }
+
+        await target.ScrollIntoViewIfNeededAsync();
+        await target.SelectOptionAsync(new[]
+        {
+            new SelectOptionValue { Label = optionText },
+            new SelectOptionValue { Value = optionText },
+            new SelectOptionValue { Index = int.TryParse(optionText, out var index) ? index - 1 : null }
+        }.Where(value => value.Label is not null || value.Value is not null || value.Index is not null).ToArray());
+
+        await WaitForPageSettledAsync(cancellationToken);
+        var content = await GetPageContentAsync(cancellationToken);
+        _logger.LogInformation(
+            "Browser select complete. Field={Field} Option={Option} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
+            fieldText,
+            optionText,
+            CurrentUrl,
+            content.Length);
+        return content;
+    }
+
+    public async Task<string> ClickActionInSectionAsync(
+        string sectionText,
+        string actionText,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(sectionText))
+        {
+            throw new ArgumentException("対象セクションの見出しを指定してください。", nameof(sectionText));
+        }
+
+        if (string.IsNullOrWhiteSpace(actionText))
+        {
+            throw new ArgumentException("クリックするアクションを指定してください。", nameof(actionText));
+        }
+
+        _logger.LogInformation(
+            "Browser section action click start. Section={Section} Action={Action} CurrentUrl={CurrentUrl}",
+            sectionText,
+            actionText,
+            CurrentUrl);
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var target = await FindSectionActionLocatorAsync(sectionText, actionText, cancellationToken);
+        if (target is null)
+        {
+            throw new InvalidOperationException($"セクション '{sectionText}' 内のアクション '{actionText}' が見つかりませんでした。");
+        }
+
+        await target.ScrollIntoViewIfNeededAsync();
+        await target.ClickAsync();
+        await _page.WaitForTimeoutAsync(500);
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var content = await GetPageContentAsync(cancellationToken);
+        _logger.LogInformation(
+            "Browser section action click complete. Section={Section} Action={Action} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
+            sectionText,
+            actionText,
             CurrentUrl,
             content.Length);
         return content;
@@ -528,6 +643,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         ILocator? bestLocator = null;
         var bestScore = int.MaxValue;
         var bestTextLength = int.MaxValue;
+        var bestRegionPriority = int.MaxValue;
 
         for (var index = 0; index < candidateCount; index++)
         {
@@ -552,15 +668,117 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                     ? 1
                     : 2;
 
-            if (score < bestScore || (score == bestScore && normalizedCandidateText.Length < bestTextLength))
+            var region = await DetermineRegionAsync(candidate);
+            var regionPriority = region switch
+            {
+                "content" => 0,
+                "header" => 1,
+                "footer" => 2,
+                _ => 3,
+            };
+
+            if (score < bestScore
+                || (score == bestScore && regionPriority < bestRegionPriority)
+                || (score == bestScore && regionPriority == bestRegionPriority && normalizedCandidateText.Length < bestTextLength))
             {
                 bestLocator = candidate;
                 bestScore = score;
+                bestRegionPriority = regionPriority;
                 bestTextLength = normalizedCandidateText.Length;
             }
         }
 
         return bestLocator;
+    }
+
+    private async Task<ILocator?> FindSelectLocatorAsync(string fieldText, CancellationToken cancellationToken)
+    {
+        var normalizedField = NormalizeForMatch(fieldText);
+        var roleMatches = _page.GetByRole(AriaRole.Combobox, new PageGetByRoleOptions { Name = fieldText, Exact = false });
+        if (await roleMatches.CountAsync() > 0)
+        {
+            return roleMatches.First;
+        }
+
+        var labelMatches = _page.GetByLabel(fieldText, new PageGetByLabelOptions { Exact = false });
+        if (await labelMatches.CountAsync() > 0)
+        {
+            return labelMatches.First;
+        }
+
+        var candidates = _page.Locator("select");
+        var candidateCount = await candidates.CountAsync();
+        for (var index = 0; index < candidateCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var candidate = candidates.Nth(index);
+            if (!await candidate.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var label = await GetLocatorTextAsync(candidate);
+            if (NormalizeForMatch(label).Contains(normalizedField, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+
+            var ariaLabel = await candidate.GetAttributeAsync("aria-label") ?? string.Empty;
+            if (NormalizeForMatch(ariaLabel).Contains(normalizedField, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<ILocator?> FindSectionActionLocatorAsync(
+        string sectionText,
+        string actionText,
+        CancellationToken cancellationToken)
+    {
+        var sectionMarkers = _page.GetByText(sectionText, new PageGetByTextOptions { Exact = false });
+        var markerCount = await sectionMarkers.CountAsync();
+        var normalizedAction = NormalizeForMatch(actionText);
+
+        for (var index = 0; index < markerCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var marker = sectionMarkers.Nth(index);
+            if (!await marker.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var container = marker.Locator("xpath=ancestor::*[contains(@class,'layout_grid') or contains(@class,'setting_area') or self::section or self::form][1]");
+            if (await container.CountAsync() == 0)
+            {
+                continue;
+            }
+
+            var candidates = container.First.Locator("a[href], button, [role='button'], input[type='button'], input[type='submit'], [onclick]");
+            var candidateCount = await candidates.CountAsync();
+            for (var candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++)
+            {
+                var candidate = candidates.Nth(candidateIndex);
+                if (!await candidate.IsVisibleAsync())
+                {
+                    continue;
+                }
+
+                var candidateText = NormalizeForMatch(await GetLocatorTextAsync(candidate));
+                if (candidateText.Equals(normalizedAction, StringComparison.Ordinal)
+                    || candidateText.Contains(normalizedAction, StringComparison.Ordinal))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
     }
 
     private async Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(int limit, CancellationToken cancellationToken)
@@ -591,6 +809,34 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         return links;
+    }
+
+    private async Task<bool> DismissHeaderSearchModalIfVisibleAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var modal = _page.Locator("#modal.modal.show, #modal .modal_inner, .modal_box.modal.show, [aria-modal='true']").First;
+        if (await modal.CountAsync() == 0 || !await modal.IsVisibleAsync())
+        {
+            return false;
+        }
+
+        var modalText = NormalizeText(await GetLocatorTextAsync(modal));
+        if (!modalText.Contains("検索ウィンドウ", StringComparison.Ordinal)
+            && !modalText.Contains("検索キーワード", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var closeButton = _page.GetByLabel("検索ウィンドウを閉じる", new PageGetByLabelOptions { Exact = false });
+        if (await closeButton.CountAsync() == 0)
+        {
+            return false;
+        }
+
+        await closeButton.First.ClickAsync();
+        await _page.WaitForTimeoutAsync(300);
+        return true;
     }
 
     private async Task AddLinksFromSearchResultsAsync(

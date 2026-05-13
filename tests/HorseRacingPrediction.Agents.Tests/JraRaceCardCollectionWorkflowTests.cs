@@ -354,6 +354,18 @@ public class JraRaceCardCollectionWorkflowTests
         public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);
 
+        public Task<string> SelectOptionAsync(
+            string fieldText,
+            string optionText,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
+        public Task<string> ClickActionInSectionAsync(
+            string sectionText,
+            string actionText,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(string.Empty);
+
         public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);
 

@@ -333,6 +333,22 @@ public class PlaywrightToolsTests
             return Task.FromResult(ClickResponseText);
         }
 
+        public Task<string> SelectOptionAsync(
+            string fieldText,
+            string optionText,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        public Task<string> ClickActionInSectionAsync(
+            string sectionText,
+            string actionText,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
         public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(ResponseText);

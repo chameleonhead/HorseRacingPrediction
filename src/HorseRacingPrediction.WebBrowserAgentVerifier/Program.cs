@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http;
 using System.Text;
 using EventFlow.Queries;
 using HorseRacingPrediction.AgentClient.Http;
@@ -16,6 +17,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 Console.OutputEncoding = Encoding.UTF8;
+
+const string DefaultApiBaseUrl = "http://localhost:5177";
 
 var scenario = GetArgValue(args, "--scenario") ?? "jra-task-agent";
 var runDateArg = GetArgValue(args, "--run-date");
@@ -39,12 +42,6 @@ var prompt = args.Length > 0
 var baseUri = Environment.GetEnvironmentVariable("LMSTUDIO_BASEURI") ?? "http://127.0.0.1:1234";
 var model = Environment.GetEnvironmentVariable("LMSTUDIO_MODEL") ?? "default";
 
-IChatClient chatClient = new LMStudioChatClient(new LMStudioChatClientOptions
-{
-    BaseUri = new Uri(baseUri),
-    DefaultModel = model,
-});
-
 using var loggerFactory = LoggerFactory.Create(logging =>
 {
     logging
@@ -56,11 +53,6 @@ using var loggerFactory = LoggerFactory.Create(logging =>
         });
 });
 
-var extractionAgent = new PageDataExtractionAgent(
-    chatClient,
-    loggerFactory.CreateLogger<PageDataExtractionAgent>(),
-    modelId: model,
-    profileOverride: extractionProfileArg);
 var options = Options.Create(new WebFetchOptions
 {
     AllowedDomains =
@@ -72,14 +64,6 @@ var options = Options.Create(new WebFetchOptions
     SearchBaseUrl = "https://duckduckgo.com/?q=",
     SearchResultsToFetch = 3
 });
-await using var browser = await PlaywrightWebBrowser.CreateAsync(searchBaseUrl: options.Value.SearchBaseUrl);
-
-var playwrightTools = new PlaywrightTools(
-    browser,
-    options,
-    extractionAgent,
-    loggerFactory.CreateLogger<PlaywrightTools>());
-var agent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
 
 Console.WriteLine("=== WebBrowserAgent Verifier ===");
 Console.WriteLine($"Model   : {model}");
@@ -107,6 +91,10 @@ try
         Console.WriteLine();
 
         await using var jraAgent = await JraTaskAgent.CreateAsync();
+        if (!await EnsureSupportedRaceCardScenarioDateAsync(jraAgent, runDate, scenario, CancellationToken.None))
+        {
+            return;
+        }
 
         Console.WriteLine("[1] 出馬表を取得中...");
         var cardResult = await jraAgent.RequestRaceCardAsync(runDate, racecourse, raceNumber);
@@ -252,6 +240,10 @@ try
         Console.WriteLine();
 
         await using var jraAgent = await JraTaskAgent.CreateAsync();
+        if (!await EnsureSupportedRaceCardScenarioDateAsync(jraAgent, runDate, scenario, CancellationToken.None))
+        {
+            return;
+        }
 
         Console.WriteLine("[1] 出馬表を取得中...");
         var cardResult = await jraAgent.RequestRaceCardAsync(runDate, racecourse, raceNumber);
@@ -325,7 +317,7 @@ try
     }
     else if (string.Equals(scenario, "agent-client-api-roundtrip", StringComparison.OrdinalIgnoreCase))
     {
-        var apiBaseUrl = apiBaseUrlArg ?? "http://127.0.0.1:5081";
+        var apiBaseUrl = apiBaseUrlArg ?? DefaultApiBaseUrl;
         var apiKey = apiKeyArg ?? "dev-api-key";
         var runDate = runDateArg is null
             ? DateOnly.FromDateTime(DateTime.Today)
@@ -414,7 +406,7 @@ try
     }
     else if (string.Equals(scenario, "agent-client-jra-result-workflow", StringComparison.OrdinalIgnoreCase))
     {
-        var apiBaseUrl = apiBaseUrlArg ?? "http://127.0.0.1:5081";
+        var apiBaseUrl = apiBaseUrlArg ?? DefaultApiBaseUrl;
         var apiKey = apiKeyArg ?? "dev-api-key";
         var runDate = runDateArg is null
             ? DateOnly.FromDateTime(DateTime.Today.AddDays(-1))
@@ -457,6 +449,8 @@ try
     else if (string.Equals(scenario, "agent-client-jra-navigation-agent", StringComparison.OrdinalIgnoreCase))
     {
         var targetUrl = targetUrlArg ?? "https://www.jra.go.jp/keiba/thisweek/";
+        await EnsureLmStudioAvailableAsync(baseUri, model, scenario, CancellationToken.None);
+        var chatClient = CreateLmStudioChatClient(baseUri, model);
         await using var jraTools = new JraPageExtractionTools();
         var navigationAgent = new JraNavigationAgent(chatClient, jraTools.GetAITools());
         var navigationPrompt = relationArg is null
@@ -484,6 +478,21 @@ try
     }
     else
     {
+        await EnsureLmStudioAvailableAsync(baseUri, model, scenario, CancellationToken.None);
+        var chatClient = CreateLmStudioChatClient(baseUri, model);
+        var pageDataExtractionAgent = new PageDataExtractionAgent(
+            chatClient,
+            loggerFactory.CreateLogger<PageDataExtractionAgent>(),
+            modelId: model,
+            profileOverride: extractionProfileArg);
+        await using var browser = await PlaywrightWebBrowser.CreateAsync(searchBaseUrl: options.Value.SearchBaseUrl);
+        var playwrightTools = new PlaywrightTools(
+            browser,
+            options,
+            pageDataExtractionAgent,
+            loggerFactory.CreateLogger<PlaywrightTools>());
+        var agent = new WebBrowserAgent(chatClient, playwrightTools.GetAITools());
+
         Console.WriteLine($"Prompt  : {prompt}");
         var result = await agent.InvokeAsync(prompt);
         Console.WriteLine(result);
@@ -492,6 +501,70 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Agent invocation failed: {ex.Message}");
+}
+
+static IChatClient CreateLmStudioChatClient(string baseUri, string model)
+    => new LMStudioChatClient(new LMStudioChatClientOptions
+    {
+        BaseUri = new Uri(baseUri),
+        DefaultModel = model,
+    });
+
+static async Task EnsureLmStudioAvailableAsync(
+    string baseUri,
+    string model,
+    string scenario,
+    CancellationToken cancellationToken)
+{
+    using var httpClient = new HttpClient
+    {
+        Timeout = TimeSpan.FromSeconds(3)
+    };
+
+    try
+    {
+        using var response = await httpClient.GetAsync(new Uri(new Uri(baseUri), "/v1/models"), cancellationToken).ConfigureAwait(false);
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException($"LMStudio returned {(int)response.StatusCode} {response.ReasonPhrase}");
+    }
+    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+    {
+        throw new InvalidOperationException(
+            $"シナリオ '{scenario}' は LMStudio が必要ですが、{baseUri} に接続できませんでした。LMStudio を起動するか、LMSTUDIO_BASEURI / LMSTUDIO_MODEL を確認してください。Model={model}",
+            ex);
+    }
+}
+
+static async Task<bool> EnsureSupportedRaceCardScenarioDateAsync(
+    JraTaskAgent jraAgent,
+    DateOnly runDate,
+    string scenario,
+    CancellationToken cancellationToken)
+{
+    var scheduleReferenceDate = DateOnly.FromDateTime(DateTime.Today);
+    var scheduleResult = await jraAgent.RequestRaceScheduleDatesAsync(scheduleReferenceDate, cancellationToken);
+
+    if (!scheduleResult.Success || scheduleResult.Data is null)
+    {
+        Console.WriteLine("[preflight] 開催日一覧の取得に失敗したため、current-week 前提の検証可否を判定できませんでした。");
+        Console.WriteLine($"  Error: {scheduleResult.Error ?? "開催日一覧を取得できませんでした。"}");
+        return false;
+    }
+
+    if (scheduleResult.Data.RaceDates.Contains(runDate))
+    {
+        return true;
+    }
+
+    Console.WriteLine($"[preflight] シナリオ '{scenario}' は current-week の出馬表導線専用です。");
+    Console.WriteLine($"  Requested : {runDate:yyyy-MM-dd}");
+    Console.WriteLine("  Supported : " + string.Join(", ", scheduleResult.Data.RaceDates.Select(x => x.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))));
+    Console.WriteLine("  Hint      : まず jra-task-agent-schedule-dates で有効日を確認し、その日付を指定してください。");
+    return false;
 }
 
 static string GetJapaneseDayOfWeek(DayOfWeek dayOfWeek)

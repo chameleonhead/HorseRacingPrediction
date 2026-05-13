@@ -40,18 +40,25 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]
             async (RegisterHorseRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var horseId = string.IsNullOrWhiteSpace(request.HorseId) ? HorseId.New : new HorseId(request.HorseId);
-                var command = new RegisterHorseCommand(
-                    horseId,
-                    request.RegisteredName,
-                    request.NormalizedName,
-                    request.SexCode,
-                    request.BirthDate);
+                try
+                {
+                    var horseId = string.IsNullOrWhiteSpace(request.HorseId) ? HorseId.New : new HorseId(request.HorseId);
+                    var command = new RegisterHorseCommand(
+                        horseId,
+                        request.RegisteredName,
+                        request.NormalizedName,
+                        request.SexCode,
+                        request.BirthDate);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/horses/{horseId.Value}", new { HorseId = horseId.Value })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Created($"/api/horses/{horseId.Value}", new { HorseId = horseId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Horse is already registered.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("RegisterHorse")
             .WithTags("Horse API")
@@ -134,17 +141,24 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Register jockey", Description = "Registers a new jockey")]
             async (RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var jockeyId = string.IsNullOrWhiteSpace(request.JockeyId) ? JockeyId.New : new JockeyId(request.JockeyId);
-                var command = new RegisterJockeyCommand(
-                    jockeyId,
-                    request.DisplayName,
-                    request.NormalizedName,
-                    request.AffiliationCode);
+                try
+                {
+                    var jockeyId = string.IsNullOrWhiteSpace(request.JockeyId) ? JockeyId.New : new JockeyId(request.JockeyId);
+                    var command = new RegisterJockeyCommand(
+                        jockeyId,
+                        request.DisplayName,
+                        request.NormalizedName,
+                        request.AffiliationCode);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/jockeys/{jockeyId.Value}", new { JockeyId = jockeyId.Value })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Created($"/api/jockeys/{jockeyId.Value}", new { JockeyId = jockeyId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Jockey is already registered.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("RegisterJockey")
             .WithTags("Jockey API")
@@ -225,17 +239,24 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
             async (RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var trainerId = string.IsNullOrWhiteSpace(request.TrainerId) ? TrainerId.New : new TrainerId(request.TrainerId);
-                var command = new RegisterTrainerCommand(
-                    trainerId,
-                    request.DisplayName,
-                    request.NormalizedName,
-                    request.AffiliationCode);
+                try
+                {
+                    var trainerId = string.IsNullOrWhiteSpace(request.TrainerId) ? TrainerId.New : new TrainerId(request.TrainerId);
+                    var command = new RegisterTrainerCommand(
+                        trainerId,
+                        request.DisplayName,
+                        request.NormalizedName,
+                        request.AffiliationCode);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/trainers/{trainerId.Value}", new { TrainerId = trainerId.Value })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Created($"/api/trainers/{trainerId.Value}", new { TrainerId = trainerId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Trainer is already registered.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("RegisterTrainer")
             .WithTags("Trainer API")

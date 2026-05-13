@@ -30,6 +30,32 @@ public interface IWebBrowser : IAsyncDisposable
     Task<string> ClickAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 現在のページで指定ラベルに対応する選択項目を変更し、
+    /// 更新後のページ本文テキストを返す。
+    /// </summary>
+    /// <param name="fieldText">選択対象フィールドのラベル</param>
+    /// <param name="optionText">選択する表示値</param>
+    /// <param name="cancellationToken">キャンセルトークン</param>
+    /// <returns>選択後のページ本文テキスト</returns>
+    Task<string> SelectOptionAsync(
+        string fieldText,
+        string optionText,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 指定したセクション見出しの近傍にあるアクション要素をクリックし、
+    /// 更新後のページ本文テキストを返す。
+    /// </summary>
+    /// <param name="sectionText">操作対象セクションを特定する見出しテキスト</param>
+    /// <param name="actionText">クリックするアクションの表示テキスト</param>
+    /// <param name="cancellationToken">キャンセルトークン</param>
+    /// <returns>クリック後のページ本文テキスト</returns>
+    Task<string> ClickActionInSectionAsync(
+        string sectionText,
+        string actionText,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 現在のページの本文テキストを取得する。
     /// 動的コンテンツの再読み込みや、クリック後の確認に使用する。
     /// </summary>

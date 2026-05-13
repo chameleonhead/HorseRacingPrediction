@@ -3,8 +3,10 @@ using System.Security.Cryptography;
 using System.Text;
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.Agents.Agents;
+using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -15,23 +17,35 @@ public sealed class RaceTextInsightCollector
     private readonly AgentProcessingOptions _options;
     private readonly IRaceQueryService _raceQueryService;
     private readonly IMemoWriteService _memoWriteService;
-    private readonly WebBrowserAgent _webBrowserAgent;
+    private readonly IWebBrowserSessionFactory _browserSessionFactory;
+    private readonly IChatClient _chatClient;
+    private readonly WebFetchOptions _webFetchOptions;
+    private readonly PageDataExtractionAgent? _pageDataExtractionAgent;
     private readonly ProcessingStateStore _stateStore;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<RaceTextInsightCollector> _logger;
 
     public RaceTextInsightCollector(
         IOptions<AgentProcessingOptions> options,
         IRaceQueryService raceQueryService,
         IMemoWriteService memoWriteService,
-        WebBrowserAgent webBrowserAgent,
+        IWebBrowserSessionFactory browserSessionFactory,
+        IChatClient chatClient,
+        IOptions<WebFetchOptions> webFetchOptions,
+        PageDataExtractionAgent? pageDataExtractionAgent,
         ProcessingStateStore stateStore,
+        ILoggerFactory loggerFactory,
         ILogger<RaceTextInsightCollector> logger)
     {
         _options = options.Value;
         _raceQueryService = raceQueryService;
         _memoWriteService = memoWriteService;
-        _webBrowserAgent = webBrowserAgent;
+        _browserSessionFactory = browserSessionFactory;
+        _chatClient = chatClient;
+        _webFetchOptions = webFetchOptions.Value;
+        _pageDataExtractionAgent = pageDataExtractionAgent;
         _stateStore = stateStore;
+        _loggerFactory = loggerFactory;
         _logger = logger;
     }
 
@@ -48,6 +62,9 @@ public sealed class RaceTextInsightCollector
             _logger.LogDebug("RacePredictionContext が見つからないため任意テキスト収集をスキップします。RaceId={RaceId}", raceId);
             return;
         }
+
+        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        var webBrowserAgent = CreateWebBrowserAgent(browser);
 
         foreach (var template in _options.TextInsightQueryTemplates.Where(x => !string.IsNullOrWhiteSpace(x)))
         {
@@ -72,7 +89,7 @@ public sealed class RaceTextInsightCollector
                     - 噂や根拠不明情報は除外
                     """;
 
-                var memoText = await _webBrowserAgent.InvokeAsync(prompt, cancellationToken).ConfigureAwait(false);
+                var memoText = await webBrowserAgent.InvokeAsync(prompt, cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(memoText))
                 {
                     continue;
@@ -94,6 +111,17 @@ public sealed class RaceTextInsightCollector
                 _logger.LogWarning(ex, "任意テキスト収集でエラーが発生しました。RaceId={RaceId} Query={Query}", raceId, query);
             }
         }
+    }
+
+    private WebBrowserAgent CreateWebBrowserAgent(IWebBrowser browser)
+    {
+        var tools = new PlaywrightTools(
+            browser,
+            Options.Create(_webFetchOptions),
+            _pageDataExtractionAgent,
+            _loggerFactory.CreateLogger<PlaywrightTools>());
+
+        return new WebBrowserAgent(_chatClient, tools.GetAITools());
     }
 
     private static string BuildQuery(string template, RacePredictionContextReadModel context)

@@ -51,108 +51,219 @@ public class JraRaceResultCollectionWorkflowTests
     // ------------------------------------------------------------------ //
 
     [TestMethod]
-    public async Task DiscoverUrlsAsync_ReturnsUrlsFromScrapedLinks()
+    public async Task DiscoverUrlsAsync_UsesRecentResultButtonsWithoutUrlGeneration()
     {
-        _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/",
-            Title: "JRA 競馬",
-            MainText: "",
-            Headings: [],
-            Links:
-            [
-                new SearchResultLink(
-                    "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
-                    "11R 結果")
-            ],
-            Actions: [],
-            Tables: []);
+        var currentYear = DateTime.Today.Year;
+        var raceDate = new DateOnly(currentYear, 5, 10);
 
-        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 10, 26));
-
-        Assert.HasCount(1, result);
-        Assert.AreEqual("05", result[0].RacecourseCode, "CNAME から競馬場コードが解析されること");
-        Assert.AreEqual(new DateOnly(2025, 10, 26), result[0].RaceDate);
-        Assert.AreEqual(11, result[0].RaceNumber);
-    }
-
-    [TestMethod]
-    public async Task DiscoverUrlsAsync_NoResultLinks_ReturnsEmptyList()
-    {
-        _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/",
-            Title: "JRA 競馬",
-            MainText: "",
-            Headings: [],
-            Links: [new SearchResultLink("https://www.jra.go.jp/keiba/thisweek/", "今週の開催")],
-            Actions: [],
-            Tables: []);
-
-        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 10, 26));
-
-        Assert.IsEmpty(result);
-    }
-
-    [TestMethod]
-    public async Task DiscoverUrlsAsync_PrefersCalendarNavigationBeforePayoutLinks()
-    {
         _fakeWebBrowser.SetSnapshot(
             "https://www.jra.go.jp/keiba/",
             new PageSnapshot(
                 Url: "https://www.jra.go.jp/keiba/",
-                Title: "JRA 競馬",
+                Title: "競馬メニュー",
                 MainText: string.Empty,
                 Headings: [],
                 Links:
                 [
-                    new SearchResultLink("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
-                    new SearchResultLink("https://www.jra.go.jp/kouza/haraimodoshi/", "払戻")
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html", "レース結果")
                 ],
                 Actions: [],
                 Tables: []));
 
         _fakeWebBrowser.SetSnapshot(
-            "https://www.jra.go.jp/keiba/calendar/",
+            "https://www.jra.go.jp/JRADB/accessS.html",
             new PageSnapshot(
-                Url: "https://www.jra.go.jp/keiba/calendar/",
-                Title: "開催日程",
-                MainText: string.Empty,
-                Headings: [],
+                Url: "https://www.jra.go.jp/JRADB/accessS.html",
+                Title: "レース結果 開催選択",
+                MainText: "5月10日（日曜） 2回東京6日",
+                Headings: ["レース結果", "5月10日（日曜）"],
                 Links:
                 [
-                    new SearchResultLink("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
-                    new SearchResultLink("https://www.jra.go.jp/kouza/haraimodoshi/", "払戻")
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo", "2回東京6日")
                 ],
                 Actions: [],
                 Tables: []));
 
         _fakeWebBrowser.SetSnapshot(
-            "https://www.jra.go.jp/keiba/calendar/jun.html",
+            "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
             new PageSnapshot(
-                Url: "https://www.jra.go.jp/keiba/calendar/jun.html",
-                Title: "6月開催日程",
-                MainText: string.Empty,
-                Headings: [],
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
+                Title: $"レース結果 レース選択 {currentYear}年5月10日（日曜）2回東京6日",
+                MainText: $"{currentYear}年5月10日（日曜）2回東京6日",
+                Headings: [$"{currentYear}年5月10日（日曜）2回東京6日"],
                 Links:
                 [
                     new SearchResultLink(
-                        "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20250601051101&sub=",
-                        "11R 結果")
+                        $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{currentYear}020611{currentYear}0510/7F",
+                        string.Empty),
+                    new SearchResultLink(
+                        $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{currentYear}020612{currentYear}0510/34",
+                        string.Empty)
                 ],
                 Actions: [],
                 Tables: []));
 
-        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 6, 1));
+        var result = await _sut.DiscoverUrlsAsync(raceDate);
+
+        Assert.HasCount(2, result);
+        Assert.IsEmpty(_fakeWebBrowser.SelectHistory, "recent result では検索フォームを使わないこと");
+        Assert.AreEqual("05", result[0].RacecourseCode);
+        Assert.AreEqual(raceDate, result[0].RaceDate);
+        Assert.AreEqual(11, result[0].RaceNumber);
+    }
+
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_UsesHistoricalSearchForPastYear()
+    {
+        var raceDate = new DateOnly(DateTime.Today.Year - 1, 5, 11);
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/",
+                Title: "競馬メニュー",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html", "レース結果")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html",
+                Title: "レース結果 開催選択",
+                MainText: string.Empty,
+                Headings: ["レース結果", "過去のレース結果"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?search=true", "過去レース結果検索")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?search=true",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?search=true",
+                Title: "過去レース結果検索",
+                MainText: "検索条件",
+                Headings: ["過去レース結果検索"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?month=target", "検索")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?month=target",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?month=target",
+                Title: "過去レース結果検索",
+                MainText: $"{raceDate.Year}年5月11日（日曜） 2回東京7日",
+                Headings: [$"{raceDate.Year}年5月"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?kaisai=past-tokyo", "2回東京7日")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?kaisai=past-tokyo",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?kaisai=past-tokyo",
+                Title: $"レース結果 レース選択 {raceDate.Year}年5月11日（日曜）2回東京7日",
+                MainText: $"{raceDate.Year}年5月11日（日曜）2回東京7日",
+                Headings: [$"{raceDate.Year}年5月11日（日曜）2回東京7日"],
+                Links:
+                [
+                    new SearchResultLink(
+                        $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{raceDate.Year}020711{raceDate.Year}0511/7F",
+                        string.Empty)
+                ],
+                Actions: [],
+                Tables: []));
+
+        var result = await _sut.DiscoverUrlsAsync(raceDate);
 
         Assert.HasCount(1, result);
         CollectionAssert.AreEqual(
             new[]
             {
-                "https://www.jra.go.jp/keiba/",
-                "https://www.jra.go.jp/keiba/calendar/",
-                "https://www.jra.go.jp/keiba/calendar/jun.html"
+                $"年:{raceDate.Year}",
+                $"月:{raceDate.Month}"
             },
-            _fakeWebBrowser.NavigationHistory.Take(3).ToArray(),
-            "払戻系ではなく calendar 導線が優先されること");
+            _fakeWebBrowser.SelectHistory);
+        Assert.AreEqual(11, result[0].RaceNumber);
+        Assert.AreEqual(raceDate, result[0].RaceDate);
+    }
+
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_NoMeetingButtons_ReturnsEmptyList()
+    {
+        var raceDate = new DateOnly(DateTime.Today.Year - 1, 10, 26);
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/",
+                Title: "競馬メニュー",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html", "レース結果")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html",
+                Title: "レース結果 開催選択",
+                MainText: string.Empty,
+                Headings: ["レース結果", "過去のレース結果"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?search=true", "過去レース結果検索")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?search=true",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?search=true",
+                Title: "過去レース結果検索",
+                MainText: "検索条件",
+                Headings: ["過去レース結果検索"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?month=empty", "検索")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?month=empty",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?month=empty",
+                Title: "過去レース結果検索",
+                MainText: $"{raceDate.Year}年10月",
+                Headings: [$"{raceDate.Year}年10月"],
+                Links: [],
+                Actions: [],
+                Tables: []));
+
+        var result = await _sut.DiscoverUrlsAsync(raceDate);
+
+        Assert.IsEmpty(result);
     }
 
     // ------------------------------------------------------------------ //
@@ -327,30 +438,73 @@ public class JraRaceResultCollectionWorkflowTests
     [TestMethod]
     public async Task CollectAsync_EndToEnd_ReturnsPopulatedResult()
     {
-        _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/",
-            Title: "天皇賞（秋） 成績 | JRA",
-            MainText: "2025年10月26日 東京 11R 天皇賞（秋） 芝・右 2000m GⅠ",
-            Headings: ["天皇賞（秋）", "2025年10月26日 東京 11R"],
-            Links:
-            [
-                new SearchResultLink(
-                    "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01skd0203_20251026051101&sub=",
-                    "11R 結果")
-            ],
-            Actions: [],
-            Tables:
-            [
-                new PageTableSnapshot(
-                    ["着順", "馬番", "馬名", "騎手"],
-                    [
-                        ["1", "1", "イクイノックス", "川田将雅"],
-                    ])
-            ]);
+        var currentYear = DateTime.Today.Year;
+        var raceDate = new DateOnly(currentYear, 5, 10);
+        var resultUrl = $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{currentYear}020611{currentYear}0510/7F";
 
-        var result = await _sut.CollectAsync(new DateOnly(2025, 10, 26));
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/",
+                Title: "競馬メニュー",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html", "レース結果")
+                ],
+                Actions: [],
+                Tables: []));
 
-        Assert.AreEqual(new DateOnly(2025, 10, 26), result.RaceDate);
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html",
+                Title: "レース結果 開催選択",
+                MainText: "5月10日（日曜） 2回東京6日",
+                Headings: ["レース結果", "5月10日（日曜）"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo", "2回東京6日")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
+                Title: $"レース結果 レース選択 {currentYear}年5月10日（日曜）2回東京6日",
+                MainText: $"{currentYear}年5月10日（日曜）2回東京6日",
+                Headings: [$"{currentYear}年5月10日（日曜）2回東京6日"],
+                Links:
+                [
+                    new SearchResultLink(resultUrl, string.Empty)
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            resultUrl,
+            new PageSnapshot(
+                Url: resultUrl,
+                Title: "天皇賞（秋） 成績 | JRA",
+                MainText: $"{currentYear}年5月10日 東京 11R 天皇賞（秋） 芝・右 2000m GⅠ",
+                Headings: ["天皇賞（秋）", $"{currentYear}年5月10日 東京 11R"],
+                Links: [],
+                Actions: [],
+                Tables:
+                [
+                    new PageTableSnapshot(
+                        ["着順", "馬番", "馬名", "騎手"],
+                        [
+                            ["1", "1", "イクイノックス", "川田将雅"],
+                        ])
+                ]));
+
+        var result = await _sut.CollectAsync(raceDate);
+
+        Assert.AreEqual(raceDate, result.RaceDate);
         Assert.HasCount(1, result.DiscoveredUrls, "URL が1件発見されること");
         Assert.HasCount(1, result.ScrapedResults, "成績が1件スクレイプされること");
         Assert.HasCount(1, result.SavedRaceIds, "レースが1件保存されること");
@@ -366,6 +520,7 @@ public class JraRaceResultCollectionWorkflowTests
         public PageSnapshot? Snapshot { get; set; }
         public List<string> ClickHistory { get; } = [];
         public List<string> NavigationHistory { get; } = [];
+        public List<string> SelectHistory { get; } = [];
 
         private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new(StringComparer.OrdinalIgnoreCase);
         private readonly Stack<string> _history = new();
@@ -421,6 +576,24 @@ public class JraRaceResultCollectionWorkflowTests
             }
 
             return Task.FromResult(string.Empty);
+        }
+
+        public Task<string> SelectOptionAsync(
+            string fieldText,
+            string optionText,
+            CancellationToken cancellationToken = default)
+        {
+            SelectHistory.Add($"{fieldText}:{optionText}");
+            return Task.FromResult(string.Empty);
+        }
+
+        public Task<string> ClickActionInSectionAsync(
+            string sectionText,
+            string actionText,
+            CancellationToken cancellationToken = default)
+        {
+            ClickHistory.Add($"{sectionText}:{actionText}");
+            return ClickAsync(actionText, cancellationToken);
         }
 
         public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
