@@ -79,6 +79,51 @@ public sealed class HttpDataCollectionWriteServiceTests
     }
 
     [TestMethod]
+    public async Task UpsertRaceAsync_WhenExistingRaceIsDraft_PublishesCard()
+    {
+        var raceId = DeterministicIdGenerator.BuildRaceId(new DateOnly(2025, 6, 15), "TOKYO", 5);
+        var handler = new StubHttpMessageHandler();
+        handler.Add(
+            HttpMethod.Get,
+            $"/api/races/{raceId}/context",
+            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.Agents.Contracts.RacePredictionContextReadModel
+            {
+                RaceId = raceId,
+                Status = HorseRacingPrediction.Agents.Contracts.RaceStatus.Draft,
+                Entries = []
+            }));
+        handler.Add(HttpMethod.Patch, $"/api/races/{raceId}", new HttpResponseMessage(HttpStatusCode.OK));
+        handler.Add(HttpMethod.Post, $"/api/races/{raceId}/card/publish", new HttpResponseMessage(HttpStatusCode.OK));
+
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        var service = new HttpDataCollectionWriteService(httpClient);
+
+        var savedRaceId = await service.UpsertRaceAsync(
+            "2025-06-15",
+            "TOKYO",
+            5,
+            "皐月賞",
+            18,
+            "G1",
+            "TURF",
+            2000,
+            "RIGHT");
+
+        Assert.AreEqual(raceId, savedRaceId);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                $"GET /api/races/{raceId}/context",
+                $"PATCH /api/races/{raceId}",
+                $"POST /api/races/{raceId}/card/publish"
+            },
+            handler.Requests);
+    }
+
+    [TestMethod]
     public async Task UpsertRaceEntryAsync_WhenContextIsMissing_StillRegistersEntry()
     {
         const string raceId = "race-test";
@@ -175,6 +220,14 @@ public sealed class HttpDataCollectionWriteServiceTests
         private static string BuildKey(HttpMethod method, string pathAndQuery)
         {
             return $"{method.Method.ToUpperInvariant()} {pathAndQuery}";
+        }
+
+        public static HttpResponseMessage JsonResponse<T>(T value)
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(value)
+            };
         }
     }
 }

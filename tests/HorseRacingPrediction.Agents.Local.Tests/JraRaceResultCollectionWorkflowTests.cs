@@ -288,6 +288,24 @@ public class JraRaceResultCollectionWorkflowTests
         Assert.AreEqual("https://example.test/2", filtered[0].Url);
     }
 
+    [TestMethod]
+    public async Task FilterUnregisteredUrlsAsync_MatchesRegisteredRaceAgainstNumericRacecourseCode()
+    {
+        var raceDate = new DateOnly(2025, 6, 1);
+        _fakeRaceQueryService.RegisteredRaces.Add(new RaceSearchSummary("race-1", raceDate, "東京", 11));
+
+        var urls = new[]
+        {
+            new JraRaceResultUrl("https://example.test/1", null, "05", raceDate, 11),
+            new JraRaceResultUrl("https://example.test/2", null, "08", raceDate, 11)
+        };
+
+        var filtered = await _sut.FilterUnregisteredUrlsAsync(urls, raceDate);
+
+        Assert.HasCount(1, filtered);
+        Assert.AreEqual("https://example.test/2", filtered[0].Url);
+    }
+
     // ------------------------------------------------------------------ //
     // ScrapeAllAsync
     // ------------------------------------------------------------------ //

@@ -97,7 +97,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 cancellationToken).ConfigureAwait(false);
         }
 
-        if (entryCount is > 0 && existing is null)
+        if (entryCount is > 0 && (existing is null || existing.Status == RaceStatus.Draft))
         {
             var publishRequest = new { EntryCount = entryCount.Value };
             var publishResponse = await _httpClient

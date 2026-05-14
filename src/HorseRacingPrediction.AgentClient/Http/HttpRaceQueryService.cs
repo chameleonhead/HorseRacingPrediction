@@ -19,7 +19,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
     public async Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
-            .GetAsync($"/api/races?raceDateFrom={raceDate:yyyy-MM-dd}&raceDateTo={raceDate:yyyy-MM-dd}&page=1&pageSize=200&sortBy=raceNumber&sortDescending=false", cancellationToken)
+            .GetAsync($"/api/races?raceDateFrom={raceDate:yyyy-MM-dd}&raceDateTo={raceDate:yyyy-MM-dd}&page=1&pageSize=100&sortBy=raceNumber&sortDescending=false", cancellationToken)
             .ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();

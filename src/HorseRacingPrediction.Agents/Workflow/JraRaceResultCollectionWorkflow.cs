@@ -26,6 +26,31 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
 {
+    private static readonly IReadOnlyDictionary<string, string> RacecourseAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["01"] = "札幌",
+            ["02"] = "函館",
+            ["03"] = "福島",
+            ["04"] = "新潟",
+            ["05"] = "東京",
+            ["06"] = "中山",
+            ["07"] = "中京",
+            ["08"] = "京都",
+            ["09"] = "阪神",
+            ["10"] = "小倉",
+            ["札幌"] = "札幌",
+            ["函館"] = "函館",
+            ["福島"] = "福島",
+            ["新潟"] = "新潟",
+            ["東京"] = "東京",
+            ["中山"] = "中山",
+            ["中京"] = "中京",
+            ["京都"] = "京都",
+            ["阪神"] = "阪神",
+            ["小倉"] = "小倉",
+        };
+
     private readonly JraRaceResultUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceResultScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
@@ -234,7 +259,10 @@ public sealed class JraRaceResultCollectionWorkflow
         if (summary.RaceDate is null || summary.RaceNumber is null || string.IsNullOrWhiteSpace(summary.RacecourseCode))
             return null;
 
-        return $"{summary.RaceDate:yyyy-MM-dd}|{DeterministicIdGenerator.NormalizeKey(summary.RacecourseCode)}|{summary.RaceNumber.Value:D2}";
+        var racecourseKey = NormalizeRacecourseKey(summary.RacecourseCode);
+        return racecourseKey is null
+            ? null
+            : $"{summary.RaceDate:yyyy-MM-dd}|{racecourseKey}|{summary.RaceNumber.Value:D2}";
     }
 
     private static string? BuildRaceKey(JraRaceResultUrl url)
@@ -249,7 +277,25 @@ public sealed class JraRaceResultCollectionWorkflow
         if (string.IsNullOrWhiteSpace(racecourse))
             return null;
 
-        return $"{url.RaceDate:yyyy-MM-dd}|{DeterministicIdGenerator.NormalizeKey(racecourse)}|{url.RaceNumber.Value:D2}";
+        var racecourseKey = NormalizeRacecourseKey(racecourse);
+        return racecourseKey is null
+            ? null
+            : $"{url.RaceDate:yyyy-MM-dd}|{racecourseKey}|{url.RaceNumber.Value:D2}";
+    }
+
+    private static string? NormalizeRacecourseKey(string? racecourse)
+    {
+        if (string.IsNullOrWhiteSpace(racecourse))
+            return null;
+
+        var normalized = DeterministicIdGenerator.NormalizeKey(racecourse);
+        if (RacecourseAliases.TryGetValue(racecourse.Trim(), out var canonical)
+            || RacecourseAliases.TryGetValue(normalized, out canonical))
+        {
+            return DeterministicIdGenerator.NormalizeKey(canonical);
+        }
+
+        return normalized;
     }
 
     // ------------------------------------------------------------------ //
