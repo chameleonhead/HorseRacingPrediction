@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for the Lightsail resources."
   type        = string
-  default     = "ap-northeast-1"
+  default     = "us-east-1"
 }
 
 variable "project_name" {
@@ -13,7 +13,7 @@ variable "project_name" {
 variable "availability_zone" {
   description = "Availability zone for the instance."
   type        = string
-  default     = "ap-northeast-1a"
+  default     = "us-east-1a"
 }
 
 variable "blueprint_id" {
