@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/.DS_Store
+**/.vs/
+**/.vscode/
+**/TestResults/
+**/*.user
+**/*.suo
+**/*.db
+**/*.db-*
+infra/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+deploy/data/

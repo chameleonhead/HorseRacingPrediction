@@ -6,6 +6,7 @@ CQRS+ES と ASP.NET Core Web API を前提にした競馬予想アプリケー�
 
 - [docs/domain-design.md](docs/domain-design.md): CQRS+ES 前提の競馬予想ドメイン設計
 - [docs/automation-design.md](docs/automation-design.md): 自動処理の責務設計
+- [docs/lightsail-deployment.md](docs/lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
 
 ## 現時点の方針
 

@@ -5,6 +5,12 @@
 
 # dotenv files
 .env
+deploy/.env
+
+# Terraform
+infra/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
 
 # User-specific files
 *.rsuser

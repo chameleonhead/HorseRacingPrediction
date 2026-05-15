@@ -1,0 +1,103 @@
+name: app-deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - Dockerfile
+      - .dockerignore
+      - deploy/**
+      - .github/workflows/app-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: app-production-deploy
+  cancel-in-progress: true
+
+env:
+  APP_DIRECTORY: /opt/horse-racing-prediction/app
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.image.outputs.image_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Resolve image name
+        id: image
+        run: echo "image_name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/horse-racing-prediction-api" >> "$GITHUB_OUTPUT"
+
+      - name: Publish API
+        run: dotnet publish src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj -c Release -o /tmp/hrp-api-publish
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image_name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.image_name }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload compose bundle
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          source: deploy/docker-compose.yml,deploy/Caddyfile
+          target: ${{ env.APP_DIRECTORY }}
+          strip_components: 1
+
+      - name: Restart remote stack
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
+          IMAGE_TAG: sha-${{ github.sha }}
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          ACME_EMAIL: ${{ secrets.LIGHTSAIL_ACME_EMAIL }}
+          HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,ACME_EMAIL,HORSE_RACING_API_KEY
+          script: |
+            mkdir -p "$APP_DIRECTORY/data"
+            cat > "$APP_DIRECTORY/.env" <<EOF
+            IMAGE_NAME=$IMAGE_NAME
+            IMAGE_TAG=$IMAGE_TAG
+            DOMAIN_NAME=$DOMAIN_NAME
+            ACME_EMAIL=$ACME_EMAIL
+            HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
+            EOF
+            cd "$APP_DIRECTORY"
+            docker compose --env-file .env pull
+            docker compose --env-file .env up -d
+            docker image prune -f

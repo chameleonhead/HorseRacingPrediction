@@ -9,6 +9,7 @@ using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +25,12 @@ builder.Services.Configure<ApiKeyOptions>(options =>
 
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddSwaggerGen(options =>
 {
     options.EnableAnnotations();
@@ -85,6 +92,7 @@ builder.Services.AddEventFlow(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
