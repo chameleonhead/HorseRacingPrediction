@@ -323,12 +323,14 @@ gh run view --log
 
 ## 11. 動作確認をする
 
+独自ドメインがない場合は、`LIGHTSAIL_HOST` 向けの自己署名証明書をデプロイ時に自動生成します。ブラウザや `curl` では信頼されないため、確認時は `-k` を付けてください。
+
+独自ドメインがある場合は、`LIGHTSAIL_DOMAIN_NAME` と `LIGHTSAIL_ACME_EMAIL` を GitHub Secrets に設定してください。Caddy がドメイン側だけ公開証明書を自動取得します。
+
 ```bash
 curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/index.html
 curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/v1/swagger.json
 ```
-
-IP 直アクセスも使う場合は、デプロイ時に `LIGHTSAIL_HOST` 向けの自己署名証明書を自動生成します。ブラウザや `curl` では信頼されないので、確認時は `-k` を付けてください。
 
 ```bash
 curl -k -I https://${LIGHTSAIL_HOST}/swagger/index.html
@@ -339,6 +341,7 @@ API キー付きの確認例:
 
 ```bash
 curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_DOMAIN_NAME}/api/races
+curl -k -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_HOST}/api/races
 ```
 
 ## GitHub Secrets 一覧
@@ -358,8 +361,8 @@ curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_DOMAIN_NAME}/api/races
 - `LIGHTSAIL_HOST`
 - `LIGHTSAIL_USERNAME`
 - `LIGHTSAIL_SSH_PRIVATE_KEY`
-- `LIGHTSAIL_DOMAIN_NAME`
-- `LIGHTSAIL_ACME_EMAIL`
+- `LIGHTSAIL_DOMAIN_NAME` (独自ドメインを使う場合のみ。IP は設定しない)
+- `LIGHTSAIL_ACME_EMAIL` (独自ドメインを使う場合のみ)
 - `LIGHTSAIL_API_KEY`
 
 ## 運用メモ
