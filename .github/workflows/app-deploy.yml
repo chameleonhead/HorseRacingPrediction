@@ -81,19 +81,21 @@ jobs:
           IMAGE_TAG: sha-${{ github.sha }}
           APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           ACME_EMAIL: ${{ secrets.LIGHTSAIL_ACME_EMAIL }}
           HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,ACME_EMAIL,HORSE_RACING_API_KEY
+          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY
           script: |
             mkdir -p "$APP_DIRECTORY/data"
             cat > "$APP_DIRECTORY/.env" <<EOF
             IMAGE_NAME=$IMAGE_NAME
             IMAGE_TAG=$IMAGE_TAG
             DOMAIN_NAME=$DOMAIN_NAME
+            LIGHTSAIL_HOST=$LIGHTSAIL_HOST
             ACME_EMAIL=$ACME_EMAIL
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
             EOF

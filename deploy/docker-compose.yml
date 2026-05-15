@@ -20,6 +20,7 @@ services:
       - "443:443"
     environment:
       DOMAIN_NAME: ${DOMAIN_NAME}
+      LIGHTSAIL_HOST: ${LIGHTSAIL_HOST}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
