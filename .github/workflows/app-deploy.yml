@@ -70,7 +70,7 @@ jobs:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          source: deploy/docker-compose.yml,deploy/Caddyfile
+          source: deploy/docker-compose.yml,deploy/Caddyfile,deploy/start-caddy.sh
           target: ${{ env.APP_DIRECTORY }}
           strip_components: 1
 

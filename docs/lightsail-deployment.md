@@ -328,7 +328,7 @@ curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/index.html
 curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/v1/swagger.json
 ```
 
-IP 直アクセスも使う場合は、Caddy が `LIGHTSAIL_HOST` に対して内部 CA の証明書を返します。自己署名相当なので、確認時は `-k` を付けてください。
+IP 直アクセスも使う場合は、デプロイ時に `LIGHTSAIL_HOST` 向けの自己署名証明書を自動生成します。ブラウザや `curl` では信頼されないので、確認時は `-k` を付けてください。
 
 ```bash
 curl -k -I https://${LIGHTSAIL_HOST}/swagger/index.html

@@ -15,6 +15,9 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    entrypoint:
+      - /bin/sh
+      - /usr/local/bin/start-caddy.sh
     ports:
       - "80:80"
       - "443:443"
@@ -24,9 +27,12 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./start-caddy.sh:/usr/local/bin/start-caddy.sh:ro
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_certs:/certs
 
 volumes:
   caddy_data:
   caddy_config:
+  caddy_certs:

@@ -8,7 +8,7 @@
 }
 
 https://{$LIGHTSAIL_HOST} {
-    tls internal
+    tls /certs/ip.crt /certs/ip.key
     encode zstd gzip
     reverse_proxy api:8080
 }
