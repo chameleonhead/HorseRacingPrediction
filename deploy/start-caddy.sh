@@ -61,6 +61,12 @@ EOF
     fi
 
     ip_block=$(cat <<EOF
+:443 {
+    tls /certs/ip.crt /certs/ip.key
+    encode zstd gzip
+    reverse_proxy api:8080
+}
+
 https://$LIGHTSAIL_HOST {
     tls /certs/ip.crt /certs/ip.key
     encode zstd gzip
