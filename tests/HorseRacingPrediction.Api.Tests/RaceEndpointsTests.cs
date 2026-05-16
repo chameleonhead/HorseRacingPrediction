@@ -131,6 +131,7 @@ public class RaceEndpointsTests
             await firstApp.DisposeAsync();
 
             var (secondApp, secondClient) = await TestApplicationFactory.CreateAsync(connectionString);
+            secondClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
 
             try
             {

@@ -63,6 +63,7 @@ internal static class TestApplicationFactory
         });
 
         var app = builder.Build();
+        app.UseApiKeyProtection();
         app.MapApiEndpoints();
 
         await app.StartAsync();

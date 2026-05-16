@@ -74,7 +74,7 @@ public class AuthenticationTests
     }
 
     [TestMethod]
-    public async Task Get_WithoutApiKey_ReturnsOk()
+    public async Task Get_WithoutApiKey_ReturnsUnauthorized()
     {
         // First create a race with API key
         using var authClient = CreateClient();
@@ -89,7 +89,7 @@ public class AuthenticationTests
         using var unauthClient = CreateClient();
         var response = await unauthClient.GetAsync($"/api/races/{raceId}");
 
-        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [TestMethod]

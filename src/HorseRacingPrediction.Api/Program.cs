@@ -96,6 +96,7 @@ app.UseForwardedHeaders();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
+app.UseApiKeyProtection();
 
 app.MapApiEndpoints();
 
