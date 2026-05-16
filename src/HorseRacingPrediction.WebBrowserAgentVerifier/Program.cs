@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using EventFlow.Queries;
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.Agents.Agents;
@@ -206,10 +207,119 @@ try
         }
 
         Console.WriteLine($"  Dates   : {scheduleResult.Data.RaceDates.Count}");
-        foreach (var d in scheduleResult.Data.RaceDates.Take(40))
+        foreach (var day in (scheduleResult.Data.ScheduledDays ?? []).Take(40))
         {
-            Console.WriteLine($"    - {d:yyyy-MM-dd} ({GetJapaneseDayOfWeek(d.DayOfWeek)})");
+            var racecourses = day.Racecourses.Count == 0
+                ? "-"
+                : string.Join(", ", day.Racecourses);
+            Console.WriteLine($"    - {day.Date:yyyy-MM-dd} ({GetJapaneseDayOfWeek(day.Date.DayOfWeek)}) [{racecourses}]");
         }
+    }
+    else if (string.Equals(scenario, "jra-task-agent-nearest-race-card", StringComparison.OrdinalIgnoreCase))
+    {
+        var referenceDate = runDateArg is null
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : DateOnly.ParseExact(runDateArg, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var raceNumber = raceNumberArg is null
+            ? 1
+            : int.Parse(raceNumberArg, CultureInfo.InvariantCulture);
+
+        Console.WriteLine($"ReferenceDate : {referenceDate:yyyy-MM-dd}");
+        Console.WriteLine($"RaceNumber    : {raceNumber}R");
+        Console.WriteLine();
+
+        await using var jraAgent = await JraTaskAgent.CreateAsync();
+
+        Console.WriteLine("[1] 開催日一覧を取得中...");
+        var scheduleResult = await jraAgent.RequestRaceScheduleDatesAsync(referenceDate);
+        Console.WriteLine($"  Success : {scheduleResult.Success}");
+        Console.WriteLine($"  URL     : {scheduleResult.SourceUrl}");
+        Console.WriteLine($"  Steps   : {string.Join(" → ", scheduleResult.Trace.Steps)}");
+        Console.WriteLine($"  Elapsed : {scheduleResult.Trace.Elapsed.TotalSeconds:F1}s");
+
+        if (!scheduleResult.Success || scheduleResult.Data?.ScheduledDays is null)
+        {
+            Console.WriteLine($"  Error   : {scheduleResult.Error ?? "開催日一覧を取得できませんでした。"}");
+            return;
+        }
+
+        var nearestScheduledDay = scheduleResult.Data.ScheduledDays
+            .Where(day => day.Date >= referenceDate && day.Racecourses.Count > 0)
+            .OrderBy(day => day.Date)
+            .FirstOrDefault();
+
+        if (nearestScheduledDay is null)
+        {
+            Console.WriteLine("  Error   : 直近開催日と開催場を特定できませんでした。");
+            return;
+        }
+
+        var racecourse = nearestScheduledDay.Racecourses[0];
+        Console.WriteLine($"  Nearest : {nearestScheduledDay.Date:yyyy-MM-dd} ({GetJapaneseDayOfWeek(nearestScheduledDay.Date.DayOfWeek)})");
+        Console.WriteLine($"  Course  : {racecourse}");
+        Console.WriteLine();
+
+        Console.WriteLine("[2] カレンダー導線のまま出馬表へ遷移中...");
+        var manualSteps = new List<string>();
+
+        try
+        {
+            await jraAgent.FollowAsync("出馬表");
+            manualSteps.Add("click: 出馬表");
+        }
+        catch
+        {
+            await jraAgent.BackAsync();
+            manualSteps.Add("back");
+            await jraAgent.FollowAsync("出馬表");
+            manualSteps.Add("click: 出馬表");
+        }
+
+        var holdingsSnapshot = await jraAgent.GetPageSnapshotAsync(maxLinks: 300);
+        var directRaceLink = FindRaceLink(holdingsSnapshot, nearestScheduledDay.Date, racecourse, raceNumber);
+        if (!string.IsNullOrWhiteSpace(directRaceLink))
+        {
+            await jraAgent.NavigateAsync(directRaceLink);
+            manualSteps.Add($"navigate: {directRaceLink}");
+        }
+        else
+        {
+            var holdingLabel = FindHoldingLabel(holdingsSnapshot, racecourse);
+            if (string.IsNullOrWhiteSpace(holdingLabel))
+            {
+                Console.WriteLine("  Error   : 開催選択画面から対象競馬場の開催ラベルを特定できませんでした。");
+                return;
+            }
+
+            await jraAgent.FollowAsync(holdingLabel);
+            manualSteps.Add($"click: {holdingLabel}");
+
+            var clickedRaceNumber = await TryOpenRaceNumberAsync(jraAgent, raceNumber);
+            if (clickedRaceNumber is null)
+            {
+                Console.WriteLine($"  Error   : {raceNumber}R への遷移に失敗しました。");
+                return;
+            }
+
+            manualSteps.Add($"click: {clickedRaceNumber}");
+        }
+
+        var cardResult = (await jraAgent.ExtractCurrentPageAsync()).ToTyped<JraRaceCardData>();
+        Console.WriteLine($"  Success : {cardResult.Success}");
+        Console.WriteLine($"  PageKind: {cardResult.PageKind}");
+        Console.WriteLine($"  URL     : {cardResult.SourceUrl}");
+        Console.WriteLine($"  Steps   : {string.Join(" → ", manualSteps)}");
+
+        if (!cardResult.Success || cardResult.Data is null)
+        {
+            Console.WriteLine($"  Error   : {cardResult.Error ?? "出馬表を取得できませんでした。"}");
+            return;
+        }
+
+        Console.WriteLine($"  RaceDate : {cardResult.Data.RaceDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? nearestScheduledDay.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"  Course   : {cardResult.Data.Racecourse ?? racecourse}");
+        Console.WriteLine($"  RaceName : {cardResult.Data.RaceName ?? "-"}");
+        Console.WriteLine($"  Entries  : {cardResult.Data.Entries.Count}");
     }
     else if (string.Equals(scenario, "jra-task-agent-eventflow-save", StringComparison.OrdinalIgnoreCase))
     {
@@ -598,6 +708,109 @@ static (string? sexCode, int? age) ParseSexAge(string? sexAge)
         ? parsedAge
         : (int?)null;
     return (sexCode, age);
+}
+
+static string? FindHoldingLabel(PageSnapshot snapshot, string racecourse)
+{
+    var regex = new Regex(@"\d+回(東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)\d+日", RegexOptions.CultureInvariant);
+
+    return snapshot.Links
+        .Select(link => regex.Match(link.Title ?? string.Empty))
+        .Where(match => match.Success && match.Value.Contains(racecourse, StringComparison.Ordinal))
+        .Select(match => match.Value)
+        .FirstOrDefault()
+        ?? snapshot.Actions
+            .Select(action => regex.Match(action.Text ?? string.Empty))
+            .Where(match => match.Success && match.Value.Contains(racecourse, StringComparison.Ordinal))
+            .Select(match => match.Value)
+            .FirstOrDefault()
+        ?? regex.Matches(snapshot.MainText ?? string.Empty)
+            .Select(match => match.Value)
+            .Where(value => value.Contains(racecourse, StringComparison.Ordinal))
+            .FirstOrDefault();
+}
+
+static string? FindRaceLink(PageSnapshot snapshot, DateOnly raceDate, string racecourse, int raceNumber)
+{
+    var dayText = $"{raceDate.Month}月{raceDate.Day}日";
+    var compactDate = raceDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+
+    return snapshot.Links
+        .Select(link => new
+        {
+            link.Title,
+            Url = ResolveUrl(snapshot.Url, link.Url),
+            MatchesCourse = !string.IsNullOrWhiteSpace(link.Title)
+                && link.Title.Contains(racecourse, StringComparison.Ordinal),
+            MatchesRaceNumber = !string.IsNullOrWhiteSpace(link.Title)
+                && (link.Title.Contains($"{raceNumber}R", StringComparison.OrdinalIgnoreCase)
+                    || link.Title.Contains($"第{raceNumber}レース", StringComparison.Ordinal)
+                    || link.Title.Contains($"{raceNumber}レース", StringComparison.Ordinal)),
+            MatchesDate = (!string.IsNullOrWhiteSpace(link.Title)
+                    && link.Title.Contains(dayText, StringComparison.Ordinal))
+                || (!string.IsNullOrWhiteSpace(link.Url)
+                    && link.Url.Contains(compactDate, StringComparison.Ordinal)),
+        })
+        .Where(link => !string.IsNullOrWhiteSpace(link.Url)
+            && link.MatchesCourse
+            && link.MatchesRaceNumber
+            && !link.Url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(link => link.MatchesDate)
+        .Select(link => link.Url)
+        .FirstOrDefault();
+}
+
+static async Task<string?> TryOpenRaceNumberAsync(JraTaskAgent jraAgent, int raceNumber)
+{
+    foreach (var candidate in BuildRaceNumberClickCandidates(raceNumber))
+    {
+        try
+        {
+            await jraAgent.FollowAsync(candidate);
+            return candidate;
+        }
+        catch
+        {
+        }
+    }
+
+    return null;
+}
+
+static IReadOnlyList<string> BuildRaceNumberClickCandidates(int raceNumber)
+{
+    var baseNumber = raceNumber.ToString(CultureInfo.InvariantCulture);
+
+    return new[]
+    {
+        $"{baseNumber}レース",
+        $"第{baseNumber}レース",
+        $"{baseNumber}R",
+        $"{baseNumber}Ｒ",
+        baseNumber,
+    };
+}
+
+static string? ResolveUrl(string? baseUrl, string? candidateUrl)
+{
+    if (string.IsNullOrWhiteSpace(candidateUrl))
+    {
+        return candidateUrl;
+    }
+
+    if (Uri.TryCreate(candidateUrl, UriKind.Absolute, out var absoluteUri))
+    {
+        return absoluteUri.ToString();
+    }
+
+    if (string.IsNullOrWhiteSpace(baseUrl)
+        || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var sourceUri)
+        || !Uri.TryCreate(sourceUri, candidateUrl, out var resolvedUri))
+    {
+        return candidateUrl;
+    }
+
+    return resolvedUri.ToString();
 }
 
 static ServiceProvider BuildAgentClientApiServiceProvider(string apiBaseUrl, string apiKey)
