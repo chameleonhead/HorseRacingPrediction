@@ -101,5 +101,5 @@ jobs:
             EOF
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
-            docker compose --env-file .env up -d
+            docker compose --env-file .env up -d --force-recreate --remove-orphans
             docker image prune -f
