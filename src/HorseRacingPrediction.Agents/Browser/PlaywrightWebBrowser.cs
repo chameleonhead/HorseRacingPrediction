@@ -433,6 +433,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private async Task<string> ReadPageTextAsync()
     {
+        var imageAltTexts = await ReadVisibleImageAltTextsAsync();
+
         var main = _page.Locator("main, article, [role='main']");
         if (await main.CountAsync() > 0)
         {
@@ -441,7 +443,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 var candidate = main.Nth(index);
                 if (await candidate.IsVisibleAsync())
                 {
-                    return await candidate.InnerTextAsync();
+                    return AppendSupplementalText(await candidate.InnerTextAsync(), imageAltTexts);
                 }
             }
         }
@@ -449,16 +451,55 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var body = _page.Locator("body");
         if (await body.CountAsync() > 0)
         {
-            return await body.Nth(0).InnerTextAsync();
+            return AppendSupplementalText(await body.Nth(0).InnerTextAsync(), imageAltTexts);
         }
 
         var html = _page.Locator("html");
         if (await html.CountAsync() > 0)
         {
-            return await html.Nth(0).TextContentAsync() ?? string.Empty;
+            return AppendSupplementalText(await html.Nth(0).TextContentAsync() ?? string.Empty, imageAltTexts);
         }
 
         return string.Empty;
+    }
+
+    private async Task<string> ReadVisibleImageAltTextsAsync()
+    {
+        var images = _page.Locator("img[alt]");
+        if (await images.CountAsync() == 0)
+        {
+            return string.Empty;
+        }
+
+        var altTexts = new List<string>();
+        for (var index = 0; index < await images.CountAsync(); index++)
+        {
+            var image = images.Nth(index);
+            if (!await image.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var alt = await image.GetAttributeAsync("alt");
+            if (!string.IsNullOrWhiteSpace(alt))
+            {
+                altTexts.Add(alt);
+            }
+        }
+
+        return string.Join("\n", altTexts);
+    }
+
+    private static string AppendSupplementalText(string mainText, string supplementalText)
+    {
+        if (string.IsNullOrWhiteSpace(supplementalText))
+        {
+            return mainText;
+        }
+
+        return string.IsNullOrWhiteSpace(mainText)
+            ? supplementalText
+            : $"{mainText}\n{supplementalText}";
     }
 
     private async Task<string?> TryGetPageTitleAsync()

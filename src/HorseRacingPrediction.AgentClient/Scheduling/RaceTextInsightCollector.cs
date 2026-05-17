@@ -95,13 +95,12 @@ public sealed class RaceTextInsightCollector
                     continue;
                 }
 
-                var memoId = BuildDeterministicMemoId(raceId, query, raceDate);
                 await _memoWriteService.CreateRaceMemoAsync(
                     raceId: raceId,
                     memoType: "ExternalTextInsight",
                     content: memoText,
                     authorId: "agent-client",
-                    memoId: memoId,
+                    memoId: null,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 await _stateStore.MarkTextInsightRecordedAsync(insightKey, cancellationToken).ConfigureAwait(false);
@@ -143,12 +142,6 @@ public sealed class RaceTextInsightCollector
     {
         var hash = Sha256(query);
         return $"{raceId}:{raceDate:yyyyMMdd}:{hash}";
-    }
-
-    private static string BuildDeterministicMemoId(string raceId, string query, DateOnly raceDate)
-    {
-        var hash = Sha256(query);
-        return $"memo-{raceId}-{raceDate:yyyyMMdd}-{hash[..10]}";
     }
 
     private static string Sha256(string input)

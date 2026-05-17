@@ -11,7 +11,6 @@ using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Local.Tests;
 
@@ -23,7 +22,6 @@ namespace HorseRacingPrediction.Agents.Local.Tests;
 public class JraRaceCardCollectionWorkflowTests
 {
     private JraRaceCardCollectionWorkflow _sut = null!;
-    private FakeChatClient _fakeChatClient = null!;
     private FakeWebBrowser _fakeWebBrowser = null!;
     private FakeCommandBus _fakeCommandBus = null!;
     private CollaboratingFakeQueryProcessor _fakeQueryProcessor = null!;
@@ -31,7 +29,6 @@ public class JraRaceCardCollectionWorkflowTests
     [TestInitialize]
     public void Setup()
     {
-        _fakeChatClient = new FakeChatClient();
         _fakeWebBrowser = new FakeWebBrowser();
         _fakeCommandBus = new FakeCommandBus();
         _fakeQueryProcessor = new CollaboratingFakeQueryProcessor(_fakeCommandBus);
@@ -40,7 +37,7 @@ public class JraRaceCardCollectionWorkflowTests
         var writeTools = new DataCollectionWriteTools(
             new EventFlowDataCollectionWriteService(_fakeCommandBus, _fakeQueryProcessor));
 
-        _sut = new JraRaceCardCollectionWorkflow(_fakeChatClient, [], scraper, writeTools);
+        _sut = new JraRaceCardCollectionWorkflow(_fakeWebBrowser, scraper, writeTools);
     }
 
     [TestCleanup]
@@ -56,52 +53,44 @@ public class JraRaceCardCollectionWorkflowTests
     [TestMethod]
     public async Task DiscoverUrlsAsync_ReturnsUrlsFromAgentResponse()
     {
-        _fakeChatClient.ResponseText = """
-            [
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-04-20",
-                "raceNumber": 11
-              },
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051001&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-04-20",
-                "raceNumber": 10
-              }
-            ]
-            """;
+                _fakeWebBrowser.Snapshot = new PageSnapshot(
+                        Url: "https://www.jra.go.jp/keiba/thisweek/",
+                        Title: "今週の注目レース",
+                        MainText: "2025年4月20日 東京",
+                        Headings: ["4月20日 東京"],
+                        Links:
+                        [
+                                new SearchResultLink("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=", "11R"),
+                                new SearchResultLink("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051001&sub=", "10R"),
+                        ],
+                        Actions: [],
+                        Tables: []);
 
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 4, 20));
 
         Assert.HasCount(2, result);
-        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=", result[0].Url);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051001&sub=", result[0].Url);
         Assert.AreEqual("東京", result[0].Racecourse);
         Assert.AreEqual("05", result[0].RacecourseCode, "CNAME から競馬場コードが解析されること");
         Assert.AreEqual(new DateOnly(2025, 4, 20), result[0].RaceDate, "CNAME から開催日が解析されること");
-        Assert.AreEqual(11, result[0].RaceNumber, "CNAME からレース番号が解析されること");
+        Assert.AreEqual(10, result[0].RaceNumber, "CNAME からレース番号が解析されること");
     }
 
     [TestMethod]
     public async Task DiscoverUrlsAsync_FiltersUrlsByRequestedDate()
     {
-        _fakeChatClient.ResponseText = """
-            [
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-04-20",
-                "raceNumber": 11
-              },
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250421061101&sub=",
-                "racecourse": "中山",
-                "raceDate": "2025-04-21",
-                "raceNumber": 11
-              }
-            ]
-            """;
+                _fakeWebBrowser.Snapshot = new PageSnapshot(
+                        Url: "https://www.jra.go.jp/keiba/thisweek/",
+                        Title: "今週の注目レース",
+                        MainText: "2025年4月20日 東京",
+                        Headings: ["4月20日 東京"],
+                        Links:
+                        [
+                                new SearchResultLink("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=", "11R"),
+                                new SearchResultLink("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250421061101&sub=", "11R"),
+                        ],
+                        Actions: [],
+                        Tables: []);
 
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 4, 20));
 
@@ -112,11 +101,124 @@ public class JraRaceCardCollectionWorkflowTests
     [TestMethod]
     public async Task DiscoverUrlsAsync_EmptyResponse_ReturnsEmptyList()
     {
-        _fakeChatClient.ResponseText = "[]";
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/thisweek/",
+            Title: "今週の注目レース",
+            MainText: string.Empty,
+            Headings: [],
+            Links: [],
+            Actions: [],
+            Tables: []);
 
         var result = await _sut.DiscoverUrlsAsync(new DateOnly(2025, 4, 20));
 
         Assert.IsEmpty(result);
+    }
+
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_DoesNotReuseDifferentDateSyutsubaLink()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/thisweek/",
+            Title: "今週の注目レース",
+            MainText: "2026年5月17日 東京 11R ヴィクトリアマイル",
+            Headings: ["2026年5月17日 東京 11R"],
+            Links:
+            [
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/victoria/syutsuba.html", "出馬表")
+            ],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2026, 5, 23));
+
+        Assert.IsEmpty(result, "別日の syutsuba URL を requestedDate に誤割当てしないこと");
+    }
+
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_FallsBackToMenuHoldingsForFutureDate()
+    {
+        _fakeWebBrowser.SnapshotsByUrl["https://www.jra.go.jp/keiba/thisweek/"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/thisweek/",
+            Title: "今週の注目レース",
+            MainText: "2026年5月17日 東京 11R ヴィクトリアマイル",
+            Headings: ["2026年5月17日 東京 11R"],
+            Links:
+            [
+                new SearchResultLink("https://www.jra.go.jp/keiba/g1/victoria/syutsuba.html", "出馬表")
+            ],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByUrl["https://www.jra.go.jp/keiba/"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/keiba/",
+            Title: "競馬メニュー",
+            MainText: "出馬表",
+            Headings: ["競馬メニュー"],
+            Links: [new SearchResultLink("#", "出馬表")],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByClickText["出馬表"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/JRADB/accessD.html",
+            Title: "出馬表 開催選択",
+            MainText: "2回東京9日 3回京都9日 1回新潟7日",
+            Headings: ["出馬表 開催選択"],
+            Links:
+            [
+                new SearchResultLink("#", "2回東京9日"),
+                new SearchResultLink("#", "3回京都9日"),
+                new SearchResultLink("#", "1回新潟7日")
+            ],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByClickText["2回東京9日"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/JRADB/accessD.html?tokyo",
+            Title: "出馬表 レース選択",
+            MainText: "2026年5月23日 東京 11R オークス 12R",
+            Headings: ["2026年5月23日 東京"],
+            Links:
+            [
+                new SearchResultLink("#", "11R オークス"),
+                new SearchResultLink("#", "12R")
+            ],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByClickText["11R"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20260523051101&sub=",
+            Title: "オークス | JRA",
+            MainText: "2026年5月23日 東京 11R オークス",
+            Headings: ["2026年5月23日 東京 11R", "オークス"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByClickText["12R"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20260523051201&sub=",
+            Title: "東京12R | JRA",
+            MainText: "2026年5月23日 東京 12R",
+            Headings: ["2026年5月23日 東京 12R"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        _fakeWebBrowser.SnapshotsByClickText["3回京都9日"] = new PageSnapshot(
+            Url: "https://www.jra.go.jp/JRADB/accessD.html?kyoto",
+            Title: "出馬表 レース選択",
+            MainText: "2026年5月24日 京都",
+            Headings: ["2026年5月24日 京都"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.DiscoverUrlsAsync(new DateOnly(2026, 5, 23));
+
+        Assert.HasCount(2, result, "今週ページで見つからない次週日付も出馬表導線から発見できること");
+        Assert.AreEqual(new DateOnly(2026, 5, 23), result[0].RaceDate);
+        Assert.AreEqual("東京", result[0].Racecourse);
+        Assert.AreEqual(11, result[0].RaceNumber);
     }
 
     // ------------------------------------------------------------------ //
@@ -267,23 +369,17 @@ public class JraRaceCardCollectionWorkflowTests
     [TestMethod]
     public async Task CollectAsync_EndToEnd_ReturnsPopulatedResult()
     {
-        _fakeChatClient.ResponseText = """
-            [
-              {
-                "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20251026051101&sub=",
-                "racecourse": "東京",
-                "raceDate": "2025-10-26",
-                "raceNumber": 11
-              }
-            ]
-            """;
-
         _fakeWebBrowser.Snapshot = new PageSnapshot(
             Url: "https://www.jra.go.jp/test",
             Title: "天皇賞（秋） | JRA",
             MainText: "2025年10月26日 東京 11R 天皇賞（秋） 芝・右 2000m GⅠ",
             Headings: ["天皇賞（秋）", "2025年10月26日 東京 11R"],
-            Links: [],
+                        Links:
+                        [
+                                new SearchResultLink(
+                                        "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20251026051101&sub=",
+                                        "11R")
+                        ],
             Actions: [],
             Tables:
             [
@@ -307,40 +403,29 @@ public class JraRaceCardCollectionWorkflowTests
     // Fake implementations
     // ------------------------------------------------------------------ //
 
-    private sealed class FakeChatClient : IChatClient
-    {
-        public string ResponseText { get; set; } = "[]";
-
-        public ChatClientMetadata Metadata => new("fake", null, "fake");
-
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            var response = new ChatResponse([new ChatMessage(ChatRole.Assistant, ResponseText)]);
-            return Task.FromResult(response);
-        }
-
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
-            => throw new NotImplementedException();
-
-        public object? GetService(Type serviceType, object? key = null) => null;
-
-        public void Dispose() { }
-    }
-
     private sealed class FakeWebBrowser : IWebBrowser
     {
         public PageSnapshot? Snapshot { get; set; }
 
-        public string? CurrentUrl => "https://www.jra.go.jp";
+        public Dictionary<string, PageSnapshot> SnapshotsByUrl { get; } = [];
+
+        public Dictionary<string, PageSnapshot> SnapshotsByClickText { get; } = [];
+
+        private string? _currentUrl;
+
+        public string? CurrentUrl => _currentUrl ?? Snapshot?.Url ?? "https://www.jra.go.jp";
 
         public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            _currentUrl = url;
+            if (SnapshotsByUrl.TryGetValue(url, out var snapshot))
+            {
+                Snapshot = snapshot;
+                _currentUrl = snapshot.Url;
+            }
+
+            return Task.FromResult(string.Empty);
+        }
 
         public Task<PageSnapshot> GetPageSnapshotAsync(
             int maxLinks = 0,
@@ -352,7 +437,16 @@ public class JraRaceCardCollectionWorkflowTests
         }
 
         public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+        {
+            if (SnapshotsByClickText.TryGetValue(text, out var snapshot))
+            {
+                Snapshot = snapshot;
+                _currentUrl = snapshot.Url;
+                return Task.FromResult(string.Empty);
+            }
+
+            throw new InvalidOperationException($"Click target not configured: {text}");
+        }
 
         public Task<string> SelectOptionAsync(
             string fieldText,
@@ -371,7 +465,7 @@ public class JraRaceCardCollectionWorkflowTests
 
         public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
             int maxResults = 10, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
+            => Task.FromResult<IReadOnlyList<SearchResultLink>>(Snapshot?.Links ?? []);
 
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);

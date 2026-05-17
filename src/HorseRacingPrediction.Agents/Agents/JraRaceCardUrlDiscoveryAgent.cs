@@ -1,161 +1,527 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using HorseRacingPrediction.Agents.Browser;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorseRacingPrediction.Agents.Agents;
 
 /// <summary>
-/// JRA 公式サイトのスケジュールページを閲覧し、
-/// 指定週末に開催される全レースの出馬表 URL 一覧を返す軽量エージェント。
-/// <para>
-/// このエージェントは URL を「発見する」だけであり、各ページの詳細を読まない。
-/// 実際の出馬表データの抽出は <see cref="Scrapers.Jra.JraRaceCardScraper"/> が担う。
-/// これにより AI が消費するトークン数を大幅に削減できる。
-/// </para>
-/// <para>
-/// 使用ツール: <see cref="PlaywrightTools.BrowserReadPage"/>（スケジュールページへの直接アクセス）
-/// </para>
+/// JRA 公式サイトの今週ページと開催ページを巡回し、
+/// 指定日の出馬表 URL 一覧を返す discovery agent。
 /// </summary>
 internal sealed class JraRaceCardUrlDiscoveryAgent
 {
-    public const string AgentName = "JraRaceCardUrlDiscoveryAgent";
+    private const string KeibaMenuUrl = "https://www.jra.go.jp/keiba/";
+    private const string ThisWeekUrl = "https://www.jra.go.jp/keiba/thisweek/";
 
-    public const string SystemPrompt = """
-        あなたはJRA公式サイトから出馬表ページのURLを収集する専門エージェントです。
-        指定された日付（または当週末）に開催される全レースの出馬表URLを収集し、
-        **JSON配列のみ**で返してください。説明文・Markdown・コードブロックは一切含めないこと。
+    private static readonly Regex MeetingLinkDateRegex = new(@"20\d{6}", RegexOptions.Compiled);
+    private static readonly Regex RaceNumberRegex = new(@"(?<number>\d{1,2})R", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex SnapshotDateRegex = new(@"(?<year>\d{4})年(?<month>\d{1,2})月(?<day>\d{1,2})日", RegexOptions.Compiled);
 
-        ## 行動方針
-        1. BrowserReadPage ツールで `https://www.jra.go.jp/keiba/thisweek/` にアクセスする
-        2. 対象日付に合致する出馬表リンクを探す
-           - URL に `CNAME=pw01sde0203_` が含まれているリンクが出馬表のURLです
-           - 対象日付に合致するURLのみを選択し、他の日付・レース種別は除外する
-        3. 対象日のリンクが見つからない場合は、競馬場ごとの個別ページも確認する
-        4. リンクが全く見つからない場合は空配列 [] を返す
+    private readonly IWebBrowser _browser;
+    private readonly ILogger<JraRaceCardUrlDiscoveryAgent> _logger;
 
-        ## 出力形式（JSON 配列）
-        [
-          {
-            "url": "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20250420051101&sub=",
-            "racecourse": "東京",
-            "raceDate": "2025-04-20",
-            "raceNumber": 11
-          }
-        ]
-
-        ## 重要なルール
-        - ページを 1〜3 ページ程度しか読まない（詳細ページは読まない）
-        - raceDate は `YYYY-MM-DD` 形式で返す
-        - raceNumber は整数で返す
-        - URL は自分で生成せず、ページから取得したリンクのみを使う
-        - racecourse・raceDate・raceNumber が不明な場合は null を設定する
-        """;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public JraRaceCardUrlDiscoveryAgent(IWebBrowser browser, ILogger<JraRaceCardUrlDiscoveryAgent>? logger = null)
     {
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    private readonly ChatClientAgent _innerAgent;
-
-    public JraRaceCardUrlDiscoveryAgent(IChatClient chatClient, IList<AITool> tools)
-    {
-        _innerAgent = new ChatClientAgent(
-            chatClient,
-            name: AgentName,
-            instructions: SystemPrompt,
-            tools: tools);
+        _browser = browser;
+        _logger = logger ?? NullLogger<JraRaceCardUrlDiscoveryAgent>.Instance;
     }
 
     public async Task<IReadOnlyList<JraRaceCardUrl>> DiscoverUrlsAsync(
         DateOnly weekendDate,
         CancellationToken cancellationToken = default)
     {
-        var result = await _innerAgent.RunAsync(
-            $"JRA の {weekendDate:yyyy年M月d日} に開催される全レースの出馬表URL一覧を収集してください。",
-            cancellationToken: cancellationToken);
+        _logger.LogInformation("JRA race card URL discovery started. RaceDate={RaceDate}", weekendDate);
 
-        return ParseJsonResponse(result.Text, weekendDate);
+        await _browser.NavigateAsync(ThisWeekUrl, cancellationToken).ConfigureAwait(false);
+
+        var thisWeekSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        var discovered = new List<JraRaceCardUrl>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cardUrl in CollectRaceCardUrls(thisWeekSnapshot, weekendDate))
+        {
+            if (seenUrls.Add(cardUrl.Url))
+            {
+                discovered.Add(cardUrl);
+            }
+        }
+
+        foreach (var meetingUrl in BuildMeetingUrls(thisWeekSnapshot, weekendDate))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                await _browser.NavigateAsync(meetingUrl, cancellationToken).ConfigureAwait(false);
+                var meetingSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+
+                foreach (var cardUrl in CollectRaceCardUrls(meetingSnapshot, weekendDate))
+                {
+                    if (seenUrls.Add(cardUrl.Url))
+                    {
+                        discovered.Add(cardUrl);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "JRA race card URL discovery failed to inspect meeting page. RaceDate={RaceDate} MeetingUrl={MeetingUrl}",
+                    weekendDate,
+                    meetingUrl);
+            }
+        }
+
+        if (discovered.Count == 0)
+        {
+            foreach (var cardUrl in await DiscoverFromMenuAsync(weekendDate, cancellationToken).ConfigureAwait(false))
+            {
+                if (seenUrls.Add(cardUrl.Url))
+                {
+                    discovered.Add(cardUrl);
+                }
+            }
+        }
+
+        var ordered = discovered
+            .OrderBy(url => url.RaceNumber ?? int.MaxValue)
+            .ThenBy(url => url.Url, StringComparer.Ordinal)
+            .ToList();
+
+        _logger.LogInformation(
+            "JRA race card URL discovery completed. RaceDate={RaceDate} DiscoveredCount={DiscoveredCount}",
+            weekendDate,
+            ordered.Count);
+
+        return ordered;
     }
 
-    private static IReadOnlyList<JraRaceCardUrl> ParseJsonResponse(string responseText, DateOnly requestedDate)
+    private async Task<IReadOnlyList<JraRaceCardUrl>> DiscoverFromMenuAsync(
+        DateOnly requestedDate,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(responseText))
-        {
-            return [];
-        }
-
-        var jsonText = ExtractJsonArray(responseText);
-        if (jsonText is null)
-        {
-            return [];
-        }
+        var discovered = new List<JraRaceCardUrl>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            var dtos = JsonSerializer.Deserialize<List<DiscoveredUrlDto>>(jsonText, JsonOptions);
-            if (dtos is null)
-            {
-                return [];
-            }
-
-            return dtos
-                .Where(dto => !string.IsNullOrWhiteSpace(dto.Url))
-                .Select(dto =>
-                {
-                    var url = JraRaceCardUrl.ParseFromUrl(dto.Url!, dto.Racecourse);
-
-                    if (url.RaceDate is null && dto.RaceDate is not null &&
-                        DateOnly.TryParse(dto.RaceDate, out var parsedDate))
-                    {
-                        url = url with { RaceDate = parsedDate };
-                    }
-
-                    if (url.RaceNumber is null && dto.RaceNumber is not null)
-                    {
-                        url = url with { RaceNumber = dto.RaceNumber };
-                    }
-
-                    return url;
-                })
-                .Where(url => url.RaceDate is null || url.RaceDate.Value == requestedDate)
-                .ToList();
+            await _browser.NavigateAsync(KeibaMenuUrl, cancellationToken).ConfigureAwait(false);
+            await _browser.ClickAsync("出馬表", cancellationToken).ConfigureAwait(false);
         }
-        catch (JsonException)
+        catch (Exception ex)
         {
-            return [];
+            _logger.LogWarning(
+                ex,
+                "JRA race card URL discovery fallback failed to open holdings page. RaceDate={RaceDate}",
+                requestedDate);
+            return discovered;
         }
+
+        var holdingsSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        var holdingsUrl = _browser.CurrentUrl;
+
+        foreach (var cardUrl in CollectRaceCardUrls(holdingsSnapshot, requestedDate))
+        {
+            if (seenUrls.Add(cardUrl.Url))
+            {
+                discovered.Add(cardUrl);
+            }
+        }
+
+        foreach (var holdingLabel in ExtractHoldingLabels(holdingsSnapshot))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(holdingsUrl)
+                    && !string.Equals(_browser.CurrentUrl, holdingsUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    await _browser.NavigateAsync(holdingsUrl, cancellationToken).ConfigureAwait(false);
+                }
+
+                await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
+                var raceListSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                if (!ContainsExactRequestedDate(raceListSnapshot, requestedDate))
+                {
+                    continue;
+                }
+
+                var raceListUrl = _browser.CurrentUrl;
+                var directUrls = CollectRaceCardUrls(raceListSnapshot, requestedDate);
+                if (directUrls.Count == 0)
+                {
+                    directUrls = await CollectRaceCardUrlsByClickingRaceNumbersAsync(
+                        requestedDate,
+                        holdingLabel,
+                        holdingsUrl,
+                        raceListUrl,
+                        raceListSnapshot,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                foreach (var cardUrl in directUrls)
+                {
+                    if (seenUrls.Add(cardUrl.Url))
+                    {
+                        discovered.Add(cardUrl);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(
+                    ex,
+                    "JRA race card URL discovery fallback failed to inspect holding. RaceDate={RaceDate} HoldingLabel={HoldingLabel}",
+                    requestedDate,
+                    holdingLabel);
+            }
+        }
+
+        return discovered;
     }
 
-    private static string? ExtractJsonArray(string text)
+    private async Task<IReadOnlyList<JraRaceCardUrl>> CollectRaceCardUrlsByClickingRaceNumbersAsync(
+        DateOnly requestedDate,
+        string holdingLabel,
+        string? holdingsUrl,
+        string? raceListUrl,
+        PageSnapshot raceListSnapshot,
+        CancellationToken cancellationToken)
     {
-        var start = text.IndexOf('[');
-        var end = text.LastIndexOf(']');
-        if (start < 0 || end <= start)
+        var discovered = new List<JraRaceCardUrl>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fallbackRacecourse = ExtractRacecourse(raceListSnapshot);
+
+        for (var raceNumber = 1; raceNumber <= 12; raceNumber++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            foreach (var clickLabel in BuildRaceNumberClickCandidates(raceNumber))
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(raceListUrl)
+                        && !string.Equals(_browser.CurrentUrl, raceListUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!string.IsNullOrWhiteSpace(holdingsUrl))
+                        {
+                            await _browser.NavigateAsync(holdingsUrl, cancellationToken).ConfigureAwait(false);
+                            await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await _browser.NavigateAsync(raceListUrl, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+
+                    await _browser.ClickAsync(clickLabel, cancellationToken).ConfigureAwait(false);
+                    var cardSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                    var cardUrl = CreateRaceCardUrlFromCurrentPage(cardSnapshot, _browser.CurrentUrl, fallbackRacecourse, requestedDate, raceNumber);
+                    if (cardUrl is not null && seenUrls.Add(cardUrl.Url))
+                    {
+                        discovered.Add(cardUrl);
+                    }
+
+                    break;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return discovered;
+    }
+
+    private static IReadOnlyList<string> BuildMeetingUrls(PageSnapshot snapshot, DateOnly requestedDate)
+    {
+        return snapshot.Links
+            .Select(link => NormalizeAbsoluteUrl(link.Url, snapshot.Url))
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url!)
+            .Where(url => url.Contains("pw01dde", StringComparison.OrdinalIgnoreCase))
+            .Where(url => TryExtractLinkedDate(url, out var linkedDate) && linkedDate == requestedDate)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<JraRaceCardUrl> CollectRaceCardUrls(PageSnapshot snapshot, DateOnly requestedDate)
+    {
+        var racecourse = ExtractRacecourse(snapshot);
+        var snapshotDate = ExtractSnapshotDate(snapshot);
+
+        return snapshot.Links
+            .Select(link => CreateRaceCardUrl(link, snapshot.Url, racecourse, snapshotDate, requestedDate))
+            .Where(url => url is not null)
+            .Select(url => url!)
+            .GroupBy(url => url.Url, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static JraRaceCardUrl? CreateRaceCardUrl(
+        SearchResultLink link,
+        string? baseUrl,
+        string? fallbackRacecourse,
+        DateOnly? snapshotDate,
+        DateOnly requestedDate)
+    {
+        var normalizedUrl = NormalizeAbsoluteUrl(link.Url, baseUrl);
+        if (string.IsNullOrWhiteSpace(normalizedUrl))
         {
             return null;
         }
 
-        return text[start..(end + 1)];
+        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase))
+        {
+            var parsed = JraRaceCardUrl.ParseFromUrl(normalizedUrl, fallbackRacecourse);
+            return parsed.RaceDate == requestedDate ? parsed : null;
+        }
+
+        if (!normalizedUrl.Contains("/syutsuba", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (snapshotDate is null || snapshotDate != requestedDate)
+        {
+            return null;
+        }
+
+        var raceNumber = ExtractRaceNumber(link.Title) ?? ExtractRaceNumber(normalizedUrl);
+        return new JraRaceCardUrl(normalizedUrl, fallbackRacecourse, null, requestedDate, raceNumber);
     }
 
-    private sealed class DiscoveredUrlDto
+    private static JraRaceCardUrl? CreateRaceCardUrlFromCurrentPage(
+        PageSnapshot snapshot,
+        string? currentUrl,
+        string? fallbackRacecourse,
+        DateOnly requestedDate,
+        int raceNumber)
     {
-        [JsonPropertyName("url")]
-        public string? Url { get; init; }
+        var normalizedUrl = NormalizeAbsoluteUrl(currentUrl ?? snapshot.Url, snapshot.Url);
+        if (string.IsNullOrWhiteSpace(normalizedUrl))
+        {
+            return null;
+        }
 
-        [JsonPropertyName("racecourse")]
-        public string? Racecourse { get; init; }
+        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase))
+        {
+            var parsed = JraRaceCardUrl.ParseFromUrl(normalizedUrl, fallbackRacecourse ?? ExtractRacecourse(snapshot));
+            return parsed.RaceDate == requestedDate ? parsed : null;
+        }
 
-        [JsonPropertyName("raceDate")]
-        public string? RaceDate { get; init; }
+        if (!normalizedUrl.Contains("/syutsuba", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
 
-        [JsonPropertyName("raceNumber")]
-        public int? RaceNumber { get; init; }
+        var snapshotDate = ExtractSnapshotDate(snapshot);
+        if (snapshotDate != requestedDate)
+        {
+            return null;
+        }
+
+        return new JraRaceCardUrl(normalizedUrl, fallbackRacecourse ?? ExtractRacecourse(snapshot), null, requestedDate, raceNumber);
+    }
+
+    private static int? ExtractRaceNumber(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var match = RaceNumberRegex.Match(text);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return int.TryParse(match.Groups["number"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
+            ? number
+            : null;
+    }
+
+    private static IReadOnlyList<string> BuildRaceNumberClickCandidates(int raceNumber)
+    {
+        var baseNumber = raceNumber.ToString(CultureInfo.InvariantCulture);
+
+        return new[]
+        {
+            $"{baseNumber}レース",
+            $"第{baseNumber}レース",
+            $"{baseNumber}R",
+            $"{baseNumber}Ｒ",
+            baseNumber,
+        }
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
+    }
+
+    private static string? ExtractRacecourse(PageSnapshot snapshot)
+    {
+        string[] knownRacecourses = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"];
+
+        foreach (var text in EnumerateSnapshotText(snapshot))
+        {
+            foreach (var racecourse in knownRacecourses)
+            {
+                if (text.Contains(racecourse, StringComparison.Ordinal))
+                {
+                    return racecourse;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static DateOnly? ExtractSnapshotDate(PageSnapshot snapshot)
+    {
+        foreach (var text in EnumerateSnapshotText(snapshot))
+        {
+            var match = SnapshotDateRegex.Match(text);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            if (int.TryParse(match.Groups["year"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var year)
+                && int.TryParse(match.Groups["month"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var month)
+                && int.TryParse(match.Groups["day"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day))
+            {
+                try
+                {
+                    return new DateOnly(year, month, day);
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return null;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<string> ExtractHoldingLabels(PageSnapshot snapshot)
+    {
+        return JraPageParserText.ExtractHoldingEntries(snapshot)
+            .Select(entry => entry.Label)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool ContainsExactRequestedDate(PageSnapshot snapshot, DateOnly date)
+    {
+        var fullDateText = $"{date.Year}年{date.Month}月{date.Day}日";
+
+        return EnumerateSnapshotText(snapshot)
+            .Any(text => text.Contains(fullDateText, StringComparison.Ordinal));
+    }
+
+    private async Task<PageSnapshot> GetMergedSnapshotAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await _browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var links = await _browser.GetLinksAsync(maxResults: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return snapshot with
+        {
+            Links = snapshot.Links
+                .Concat(links)
+                .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
+                .GroupBy(
+                    link => NormalizeAbsoluteUrl(link.Url, snapshot.Url) ?? NormalizeText(link.Title),
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList(),
+        };
+    }
+
+    private static bool TryExtractLinkedDate(string url, out DateOnly linkedDate)
+    {
+        linkedDate = default;
+        var match = MeetingLinkDateRegex.Match(url);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        return DateOnly.TryParseExact(match.Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out linkedDate);
+    }
+
+    private static IEnumerable<string> EnumerateSnapshotText(PageSnapshot snapshot)
+    {
+        if (!string.IsNullOrWhiteSpace(snapshot.Title))
+        {
+            yield return snapshot.Title;
+        }
+
+        if (!string.IsNullOrWhiteSpace(snapshot.MainText))
+        {
+            yield return snapshot.MainText;
+        }
+
+        foreach (var heading in snapshot.Headings)
+        {
+            if (!string.IsNullOrWhiteSpace(heading))
+            {
+                yield return heading;
+            }
+        }
+
+        foreach (var link in snapshot.Links)
+        {
+            if (!string.IsNullOrWhiteSpace(link.Title))
+            {
+                yield return link.Title;
+            }
+        }
+    }
+
+    private static string NormalizeText(string? text)
+        => (text ?? string.Empty)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("　", string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+    private static string? NormalizeAbsoluteUrl(string? candidate, string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        var trimmedCandidate = candidate.Trim();
+        if (trimmedCandidate.StartsWith('#')
+            || trimmedCandidate.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(trimmedCandidate, UriKind.Absolute, out var absolute))
+        {
+            if (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            {
+                return absolute.AbsoluteUri;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseUrl)
+            && Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri)
+            && Uri.TryCreate(baseUri, trimmedCandidate, out var resolved))
+        {
+            return resolved.AbsoluteUri;
+        }
+
+        return null;
     }
 }

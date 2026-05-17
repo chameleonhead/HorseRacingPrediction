@@ -155,14 +155,9 @@ public static class AgentServiceCollectionExtensions
         services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
         {
             var browser = sp.GetRequiredService<IWebBrowser>();
-            var options = sp.GetRequiredService<IOptions<WebFetchOptions>>();
-            var extractionAgent = sp.GetService<PageDataExtractionAgent>();
-            var logger = sp.GetRequiredService<ILogger<PlaywrightTools>>();
-            var playwrightTools = new PlaywrightTools(browser, options, extractionAgent, logger);
 
             return new JraRaceCardCollectionWorkflow(
-                sp.GetRequiredService<IChatClient>(),
-                playwrightTools.GetReadPageOnlyAITools(),
+                browser,
                 sp.GetRequiredService<JraRaceCardScraper>(),
                 sp.GetRequiredService<DataCollectionWriteTools>());
         });

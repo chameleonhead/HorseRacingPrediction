@@ -191,6 +191,11 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
         if (!match.Success)
         {
+            match = Regex.Match(text, @"(\d{1,2})レース");
+        }
+
+        if (!match.Success)
+        {
             return null;
         }
 

@@ -556,14 +556,8 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-        var tools = new PlaywrightTools(
-            browser,
-            Options.Create(_webFetchOptions),
-            _pageDataExtractionAgent,
-            _loggerFactory.CreateLogger<PlaywrightTools>());
         var workflow = new JraRaceCardCollectionWorkflow(
-            _chatClient,
-            tools.GetReadPageOnlyAITools(),
+            browser,
             new JraRaceCardScraper(browser),
             _writeTools);
 

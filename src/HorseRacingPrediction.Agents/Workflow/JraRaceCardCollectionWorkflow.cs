@@ -1,25 +1,16 @@
 using HorseRacingPrediction.Agents.Agents;
+using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
-using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Workflow;
 
 /// <summary>
-/// JRA 出馬表データを効率的に収集して DB へ保存するワークフロー。
-/// <para>
-/// AI（<see cref="JraRaceCardUrlDiscoveryAgent"/>）は出馬表 URL の「発見」のみを担当し、
-/// 各ページの詳細スクレイピングは Playwright ベースの <see cref="JraRaceCardScraper"/> が行う。
-/// 最後に <see cref="DataCollectionWriteTools"/> で EventFlow 経由でドメインへ保存する。
-/// </para>
-/// <para>
-/// このアーキテクチャにより、AI がページを 1〜3 ページ程度閲覧するだけで
-/// 全レースデータを収集でき、トークン消費を大幅に削減できる。
-/// </para>
+/// JRA 出馬表データを収集して DB へ保存するワークフロー。
 /// <para>
 /// ワークフロー:
 /// <list type="number">
-///   <item><see cref="DiscoverUrlsAsync"/> — AI エージェントが JRA スケジュールから URL を収集</item>
+///   <item><see cref="DiscoverUrlsAsync"/> — browser-only discovery が JRA から URL を収集</item>
 ///   <item><see cref="ScrapeAllAsync"/> — 各 URL を Playwright で決定的にスクレイプ（AI 不使用）</item>
 ///   <item><see cref="SaveAllAsync"/> — スクレイプ結果を EventFlow コマンド経由で保存（AI 不使用）</item>
 ///   <item><see cref="CollectAsync"/> — 上記3ステップをまとめて実行</item>
@@ -43,11 +34,10 @@ public sealed class JraRaceCardCollectionWorkflow
     }
 
     public JraRaceCardCollectionWorkflow(
-        IChatClient chatClient,
-        IList<AITool> tools,
+        IWebBrowser browser,
         JraRaceCardScraper scraper,
         DataCollectionWriteTools writeTools)
-        : this(new JraRaceCardUrlDiscoveryAgent(chatClient, tools), scraper, writeTools)
+        : this(new JraRaceCardUrlDiscoveryAgent(browser), scraper, writeTools)
     {
     }
 
@@ -130,7 +120,7 @@ public sealed class JraRaceCardCollectionWorkflow
         DateOnly weekendDate,
         CancellationToken cancellationToken = default)
     {
-        // Step 1: AI による URL 発見（少ないページ閲覧でトークン節約）
+        // Step 1: browser-only discovery による URL 発見
         var discoveredUrls = await DiscoverUrlsAsync(weekendDate, cancellationToken);
 
         // Step 2: 決定的なスクレイピング（AI 不使用）
