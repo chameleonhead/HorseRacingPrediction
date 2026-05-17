@@ -47,8 +47,8 @@
 │  ├─ JraResultRaceListScraper                │
 │  └─ JraRaceResultScraper                    │
 │                                             │
-│  HorseRacingPrediction.WebBrowserAgentVerifier│
-│   （デバッグ・シナリオ検証・最小再現）        │
+│  HorseRacingPrediction.AgentClient           │
+│   （DevUI・ダッシュボード・最小再現）       │
 └──────────────────────┬──────────────────────┘
                        │ HTTPS + X-Api-Key
                        ▼
@@ -163,8 +163,8 @@
 - 冪等キーで重複登録を防止する
 
 3. サイト仕様変更
-- Verifier で最小再現シナリオを作る
-- 必要に応じて `HorseRacingPrediction.WebBrowserAgentVerifier` を変更し、切り分けを優先する
+- AgentClient の DevUI または局所テストで最小再現シナリオを作る
+- 必要に応じて `HorseRacingPrediction.AgentClient` または対象テストを変更し、切り分けを優先する
 - 一時デバッグコードは修正完了後に削除または無効化する
 
 ---
@@ -188,7 +188,7 @@ AI を主オーケストレータとして使うのではなく、補助用途�
 | 収集 | `JraResultTopPageScraper` | 開催日、開催場の抽出 |
 | 収集 | `JraResultRaceListScraper` | レース番号抽出 |
 | 収集 | `JraRaceResultScraper` | 結果、着順、払戻抽出 |
-| 検証 | `HorseRacingPrediction.WebBrowserAgentVerifier` | シナリオ実行、デバッグ、最小再現 |
+| 検証 | `HorseRacingPrediction.AgentClient` | DevUI、ダッシュボード、最小再現 |
 | 保存 | API + WriteTools | 結果の冪等保存 |
 | 監査 | 週次監査ジョブ | 欠損、重複、再収集キュー生成 |
 

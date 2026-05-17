@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HorseRacingPrediction.Agents.Tests" />
-    <InternalsVisibleTo Include="HorseRacingPrediction.Agents.Local.Tests" />
   </ItemGroup>
 
   <ItemGroup>

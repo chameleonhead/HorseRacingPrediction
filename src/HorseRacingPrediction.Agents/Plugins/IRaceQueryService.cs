@@ -5,8 +5,7 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// <summary>
 /// レース・馬・騎手に関する読み取りクエリを抽象化するサービスインターフェース。
 /// <para>
-/// ローカルテスト時は <see cref="EventFlowRaceQueryService"/> を使用する。
-/// クラウド接続時は HTTP クライアント実装に差し替えることで、
+/// 実行環境ごとに具体実装を差し替えることで、
 /// エージェントコードを変更せずにデータソースを切り替えられる。
 /// </para>
 /// </summary>

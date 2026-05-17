@@ -736,7 +736,7 @@ HorseRacingTools                     ← ドメイン固有ツール
 ### Step 6: テスト
 
 - ツール単体テスト: `FakeWebBrowser` や `Func<>` デリゲートでモック
-- 統合テスト: `WebBrowserAgentVerifier` で実際のブラウザ + LLM で E2E 検証
+- 統合テスト: `HorseRacingPrediction.AgentClient` の DevUI または関連テストで実際のブラウザ + LLM を用いて E2E 検証
 
 ### Step 7: 反復改善
 

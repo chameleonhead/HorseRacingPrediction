@@ -7,8 +7,7 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// <para>
 /// UUID v5 相当のアルゴリズム（SHA-1 ハッシュ + 名前空間）により、
 /// 同じ入力から常に同じ ID を生成する。
-/// <see cref="EventFlowDataCollectionWriteService"/> と
-/// クラウド接続時の HTTP 実装の両方がこのクラスを使用する。
+/// 複数のデータ収集実装で共通利用する。
 /// </para>
 /// </summary>
 public static class DeterministicIdGenerator

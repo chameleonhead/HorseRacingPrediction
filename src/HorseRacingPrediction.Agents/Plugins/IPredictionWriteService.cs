@@ -3,8 +3,7 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// <summary>
 /// 予測票の作成・更新操作を抽象化するサービスインターフェース。
 /// <para>
-/// ローカルテスト時は <see cref="EventFlowPredictionWriteService"/> を使用する。
-/// クラウド接続時は HTTP クライアント実装に差し替えることで、
+/// 実行環境ごとに具体実装を差し替えることで、
 /// エージェントコードを変更せずにバックエンドを切り替えられる。
 /// </para>
 /// </summary>
