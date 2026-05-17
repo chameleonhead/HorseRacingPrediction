@@ -955,7 +955,12 @@ public static class EndpointExtensions
             async (string raceId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 using var dbContext = dbContextProvider.CreateContext();
-                var readModel = await dbContext.Set<RaceSummaryReadModel>()
+                var readModel = await dbContext.Set<RacePredictionContextReadModel>()
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                var resultReadModel = await dbContext.Set<RaceResultViewReadModel>()
                     .AsNoTracking()
                     .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken)
                     .ConfigureAwait(false);
@@ -971,10 +976,21 @@ public static class EndpointExtensions
                     readModel.RaceName,
                     (AgentContracts.RaceStatus)(int)readModel.Status,
                     null, null,
-                    null, null, null, null,
-                    readModel.EntryCount,
-                    readModel.WinningHorseName,
-                    readModel.ResultDeclaredAt);
+                    readModel.GradeCode,
+                    readModel.SurfaceCode,
+                    readModel.DistanceMeters,
+                    readModel.DirectionCode,
+                    resultReadModel?.EntryCount ?? readModel.Entries.Count,
+                    readModel.Entries.Select(ToRaceEntryResponse).ToList(),
+                    readModel.WeatherObservations.Select(ToRaceWeatherObservationResponse).ToList(),
+                    readModel.TrackConditionObservations.Select(ToRaceTrackConditionResponse).ToList(),
+                    BuildUnavailableOddsResponse(),
+                    resultReadModel?.WinningHorseName,
+                    resultReadModel?.WinningHorseId,
+                    resultReadModel?.StewardReportText,
+                    resultReadModel?.ResultDeclaredAt,
+                    resultReadModel?.EntryResults.Select(ToRaceEntryResultResponse).ToList() ?? [],
+                    resultReadModel?.PayoutResult is null ? null : ToRacePayoutResultResponse(resultReadModel.PayoutResult));
 
                 return Results.Ok(response);
             })
@@ -1783,6 +1799,70 @@ public static class EndpointExtensions
             WeatherObservations = model.WeatherObservations.Select(x => new AgentContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new AgentContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
+
+    private static RaceEntryResponse ToRaceEntryResponse(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry)
+        => new(
+            entry.EntryId,
+            entry.HorseId,
+            entry.HorseNumber,
+            entry.JockeyId,
+            entry.TrainerId,
+            entry.GateNumber,
+            entry.AssignedWeight,
+            entry.SexCode,
+            entry.Age,
+            entry.DeclaredWeight,
+            entry.DeclaredWeightDiff,
+            entry.RunningStyleCode);
+
+    private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(WeatherObservationSnapshot observation)
+        => new(
+            observation.ObservationTime,
+            observation.WeatherCode,
+            observation.WeatherText,
+            observation.TemperatureCelsius,
+            observation.HumidityPercent,
+            observation.WindDirectionCode,
+            observation.WindSpeedMeterPerSecond);
+
+    private static RaceTrackConditionResponse ToRaceTrackConditionResponse(TrackConditionSnapshot condition)
+        => new(
+            condition.ObservationTime,
+            condition.TurfConditionCode,
+            condition.DirtConditionCode,
+            condition.GoingDescriptionText);
+
+    private static RaceEntryResultResponse ToRaceEntryResultResponse(EntryResultSnapshot entryResult)
+        => new(
+            entryResult.EntryId,
+            entryResult.HorseId,
+            entryResult.HorseNumber,
+            entryResult.FinishPosition,
+            entryResult.OfficialTime,
+            entryResult.MarginText,
+            entryResult.LastThreeFurlongTime,
+            entryResult.AbnormalResultCode,
+            entryResult.PrizeMoney,
+            entryResult.CornerPositions);
+
+    private static RacePayoutResultResponse ToRacePayoutResultResponse(PayoutResultSnapshot payoutResult)
+        => new(
+            payoutResult.DeclaredAt,
+            payoutResult.WinPayouts.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.PlacePayouts.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.QuinellaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.ExactaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.TrifectaPayouts.Select(ToRacePayoutEntryResponse).ToList());
+
+    private static RacePayoutEntryResponse ToRacePayoutEntryResponse(PayoutEntrySnapshot payout)
+        => new(payout.Combination, payout.Amount);
+
+    private static RaceOddsResponse BuildUnavailableOddsResponse()
+        => new(
+            false,
+            "保存済みオッズはまだ API ReadModel に保持されていません。",
+            [],
+            []);
 
     private static AgentContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()

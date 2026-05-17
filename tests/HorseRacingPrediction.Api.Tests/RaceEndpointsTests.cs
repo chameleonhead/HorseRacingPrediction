@@ -294,6 +294,77 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task GetRace_AfterFullLifecycle_ReturnsCardWeatherTrackAndResultDetails()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var observedAt = DateTimeOffset.UtcNow;
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(16),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, null, entryId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/weather",
+            new RecordWeatherObservationRequest(observedAt, "SUNNY", "晴れ", 22.5m, 55.0m, "N", 3.2m),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/track-condition",
+            new RecordTrackConditionRequest(observedAt, "GOOD", "STANDARD", "良"),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/result",
+            new DeclareRaceResultRequest("イクイノックス", observedAt),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries/{entryId}/result",
+            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, 500000m),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/payout",
+            new DeclarePayoutResultRequest(
+                observedAt,
+                WinPayouts: [new PayoutEntryDto("1", 350m)],
+                PlacePayouts: [new PayoutEntryDto("1", 180m)],
+                QuinellaPayouts: null,
+                ExactaPayouts: null,
+                TrifectaPayouts: null),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/races/{raceId}");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var race = await response.Content.ReadFromJsonAsync<RaceResponse>(JsonOptions);
+        Assert.IsNotNull(race);
+        Assert.AreEqual(1, race.Entries.Count);
+        Assert.AreEqual(entryId, race.Entries[0].EntryId);
+        Assert.AreEqual(1, race.WeatherObservations.Count);
+        Assert.AreEqual("晴れ", race.WeatherObservations[0].WeatherText);
+        Assert.AreEqual(1, race.TrackConditionObservations.Count);
+        Assert.AreEqual("良", race.TrackConditionObservations[0].GoingDescriptionText);
+        Assert.AreEqual("イクイノックス", race.WinningHorseName);
+        Assert.IsNull(race.WinningHorseId);
+        Assert.IsNull(race.StewardReportText);
+        Assert.AreEqual(1, race.EntryResults.Count);
+        Assert.AreEqual(1, race.EntryResults[0].FinishPosition);
+        Assert.IsNotNull(race.PayoutResult);
+        Assert.AreEqual(1, race.PayoutResult.WinPayouts.Count);
+        Assert.AreEqual(350m, race.PayoutResult.WinPayouts[0].Amount);
+        Assert.IsNotNull(race.Odds);
+        Assert.IsFalse(race.Odds.IsAvailable);
+    }
+
+    [TestMethod]
     public async Task RecordWeatherObservation_AfterCreate_ReturnsOk()
     {
         var raceId = $"race-{Guid.NewGuid()}";

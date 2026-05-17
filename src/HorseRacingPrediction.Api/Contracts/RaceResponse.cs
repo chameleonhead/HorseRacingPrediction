@@ -16,5 +16,13 @@ public sealed record RaceResponse(
     int? DistanceMeters,
     string? DirectionCode,
     int? EntryCount,
+    IReadOnlyList<RaceEntryResponse> Entries,
+    IReadOnlyList<RaceWeatherObservationResponse> WeatherObservations,
+    IReadOnlyList<RaceTrackConditionResponse> TrackConditionObservations,
+    RaceOddsResponse? Odds,
     string? WinningHorseName,
-    DateTimeOffset? ResultDeclaredAt);
+    string? WinningHorseId,
+    string? StewardReportText,
+    DateTimeOffset? ResultDeclaredAt,
+    IReadOnlyList<RaceEntryResultResponse> EntryResults,
+    RacePayoutResultResponse? PayoutResult);
