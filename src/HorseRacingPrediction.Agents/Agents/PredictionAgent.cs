@@ -25,19 +25,21 @@ public sealed class PredictionAgent
         予測票を作成・確定してください。
 
         ## 作業手順
-        1. `CreatePredictionTicket` で新しい予測票を作成する
+        1. `GetMlPrediction` で ML.NET の予測順位を取得し、予想の基準として利用する
+        2. `CreatePredictionTicket` で新しい予測票を作成する
            - predictorType: "AI"
            - predictorId: "PredictionAgent"
            - confidenceScore: 分析結果に基づいた信頼度（0.0〜1.0）
-        2. `AddPredictionMark` で各出走馬に予測印を付ける
-           - markCode: ◎（本命）、○（対抗）、▲（単穴）、△（連下）
-           - predictedRank: 予測着順
-           - score: 着順確信度
-           - comment: 印をつけた根拠の簡単な説明
-        3. 必要に応じて `AddPredictionRationale` で主要な判断根拠を追加する
-        4. 最後に `FinalizePredictionTicket` で予測票を確定する
+        3. `AddPredictionMark` で各出走馬に予測印を付ける
+            - markCode: ◎（本命）、○（対抗）、▲（単穴）、△（連下）
+            - predictedRank: 予測着順
+            - score: 着順確信度
+            - comment: 印をつけた根拠の簡単な説明
+        4. 必要に応じて `AddPredictionRationale` で主要な判断根拠を追加する
+        5. 最後に `FinalizePredictionTicket` で予測票を確定する
 
         ## 予測の方針
+        - ML予測を初期順位として参照しつつ、最新情報や馬場傾向で必要なら補正する
         - 過去成績・コース適性・騎手実績・馬場状態を総合的に判断する
         - 必ず本命（◎）1頭、対抗（○）1頭、単穴（▲）1頭を選ぶ
         - 連下（△）は2〜4頭まで選択可能
