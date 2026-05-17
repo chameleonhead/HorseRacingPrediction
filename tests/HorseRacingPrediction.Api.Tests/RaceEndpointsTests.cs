@@ -224,6 +224,23 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task DeclareResult_BeforePublishCard_ReturnsConflict()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞", raceId),
+            JsonOptions);
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/result",
+            new DeclareRaceResultRequest("ディープインパクト", DateTimeOffset.UtcNow),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [TestMethod]
     public async Task FullLifecycle_WithEntryAndPayout_ProducesCorrectState()
     {
         var raceId = $"race-{Guid.NewGuid()}";

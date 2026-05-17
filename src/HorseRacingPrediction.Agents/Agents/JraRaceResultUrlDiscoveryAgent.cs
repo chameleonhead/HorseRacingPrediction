@@ -73,6 +73,8 @@ internal sealed class JraRaceResultUrlDiscoveryAgent
 
         var discovered = await CollectMeetingResultUrlsAsync(selectionSnapshot, raceDate, cancellationToken);
         var ordered = discovered
+            .GroupBy(BuildRaceIdentityKey, StringComparer.Ordinal)
+            .Select(group => group.First())
             .OrderBy(result => result.RaceNumber ?? int.MaxValue)
             .ThenBy(result => result.Url, StringComparer.Ordinal)
             .ToList();
@@ -177,6 +179,16 @@ internal sealed class JraRaceResultUrlDiscoveryAgent
         }
 
         return discovered;
+    }
+
+    private static string BuildRaceIdentityKey(JraRaceResultUrl url)
+    {
+        var raceDate = url.RaceDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unknown-date";
+        var racecourse = !string.IsNullOrWhiteSpace(url.Racecourse)
+            ? url.Racecourse
+            : url.RacecourseCode ?? "unknown-course";
+        var raceNumber = url.RaceNumber?.ToString("D2", CultureInfo.InvariantCulture) ?? "00";
+        return $"{raceDate}|{racecourse}|{raceNumber}";
     }
 
     private static IReadOnlyList<MeetingCandidate> BuildMeetingCandidates(PageSnapshot snapshot, DateOnly raceDate)

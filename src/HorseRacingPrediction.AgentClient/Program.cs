@@ -123,8 +123,19 @@ builder.AddWorkflow(
 builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 builder.Services.AddSingleton<ProcessingStateStore>();
+builder.Services.AddSingleton<JraResultDateParser>();
+builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
+builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, JraHistoricalRaceReferenceCollector>();
+builder.Services.AddSingleton<IJraRaceResultLookup, JraTaskAgentRaceResultLookup>();
+builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
+builder.Services.AddSingleton<IJraProfileLookup, JraTaskAgentProfileLookup>();
+builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
+builder.Services.AddTransient<HistoricalDataRequestPlanner>();
+builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<RaceTextInsightCollector>();
 builder.Services.AddHostedService<ScrapingRegistrationService>();
+builder.Services.AddHostedService<CollectionExecutionService>();
+builder.Services.AddHostedService<HistoricalDataRequestExecutionService>();
 builder.Services.AddHostedService<PredictionExecutionService>();
 
 // -------------------------------------------------------------------
@@ -145,6 +156,9 @@ var app = builder.Build();
 
 app.MapOpenAIResponses();
 app.MapOpenAIConversations();
+app.MapAgentCollectionStatusEndpoints();
+app.MapAgentAcquisitionStatusEndpoints();
+app.MapAgentDashboardEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

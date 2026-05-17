@@ -2,13 +2,34 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using HorseRacingPrediction.AgentClient.Http;
+using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Agents.Plugins;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.AgentClient.Tests.Http;
 
 [TestClass]
 public sealed class HttpDataCollectionWriteServiceTests
 {
+    private string _stateDirectory = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _stateDirectory = Path.Combine(Path.GetTempPath(), "http-data-collection-write-service-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_stateDirectory);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        if (Directory.Exists(_stateDirectory))
+        {
+            Directory.Delete(_stateDirectory, recursive: true);
+        }
+    }
+
     [TestMethod]
     public async Task UpsertRaceAsync_WhenCreateConflicts_FallsBackToPatchAndPublishesCard()
     {
@@ -23,7 +44,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var service = new HttpDataCollectionWriteService(httpClient);
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
         var savedRaceId = await service.UpsertRaceAsync(
             "2025-06-15",
@@ -62,7 +83,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var service = new HttpDataCollectionWriteService(httpClient);
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
         var savedRaceId = await service.UpsertRaceAsync(
             "2025-06-15",
@@ -99,7 +120,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var service = new HttpDataCollectionWriteService(httpClient);
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
         var savedRaceId = await service.UpsertRaceAsync(
             "2025-06-15",
@@ -127,13 +148,16 @@ public sealed class HttpDataCollectionWriteServiceTests
     public async Task UpsertRaceEntryAsync_WhenContextIsMissing_StillRegistersEntry()
     {
         const string raceId = "race-test";
+        var horseId = DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeDisplayName("テストホース"));
+        var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeDisplayName("テスト騎手"));
+        var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeDisplayName("テスト調教師"));
         var handler = new StubHttpMessageHandler();
         handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
-        handler.Add(HttpMethod.Get, "/api/horses/horse-f4977642-14d8-5782-a6f2-a38c91f53f5a", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Get, $"/api/horses/{horseId}", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/horses", new HttpResponseMessage(HttpStatusCode.Created));
-        handler.Add(HttpMethod.Get, "/api/jockeys/jockey-b6b2e32d-62de-5c88-84f9-30c4d1220c13", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Get, $"/api/jockeys/{jockeyId}", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/jockeys", new HttpResponseMessage(HttpStatusCode.Created));
-        handler.Add(HttpMethod.Get, "/api/trainers/trainer-15595a65-f0d2-5181-8c3d-d7cb3af4d67c", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Get, $"/api/trainers/{trainerId}", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/trainers", new HttpResponseMessage(HttpStatusCode.Created));
         handler.Add(HttpMethod.Post, $"/api/races/{raceId}/entries", new HttpResponseMessage(HttpStatusCode.Created));
 
@@ -141,7 +165,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var service = new HttpDataCollectionWriteService(httpClient);
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
         var message = await service.UpsertRaceEntryAsync(
             raceId,
@@ -172,7 +196,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         {
             BaseAddress = new Uri("http://localhost")
         };
-        var service = new HttpDataCollectionWriteService(httpClient);
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
         var message = await service.DeclareRaceResultAsync(raceId, "テストホース", null, null);
 
@@ -184,6 +208,19 @@ public sealed class HttpDataCollectionWriteServiceTests
                 $"POST /api/races/{raceId}/result"
             },
             handler.Requests);
+    }
+
+    private AgentAcquisitionStatusRecorder CreateStatusRecorder()
+    {
+        var options = Options.Create(new AgentProcessingOptions
+        {
+            StateDirectory = _stateDirectory,
+            PredictionLeaseMinutes = 5,
+            CollectionLeaseMinutes = 5,
+        });
+
+        return new AgentAcquisitionStatusRecorder(
+            new ProcessingStateStore(options, NullLogger<ProcessingStateStore>.Instance));
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

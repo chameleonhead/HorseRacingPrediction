@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.AgentClient.Scheduling;
 
 namespace HorseRacingPrediction.AgentClient.Http;
 
@@ -20,10 +21,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
+    private readonly AgentAcquisitionStatusRecorder _statusRecorder;
 
-    public HttpDataCollectionWriteService(HttpClient httpClient)
+    public HttpDataCollectionWriteService(HttpClient httpClient, AgentAcquisitionStatusRecorder statusRecorder)
     {
         _httpClient = httpClient;
+        _statusRecorder = statusRecorder;
     }
 
     // ------------------------------------------------------------------ //
@@ -147,40 +150,73 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? birthDate,
         CancellationToken cancellationToken = default)
     {
-        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
-        var horseId = DeterministicIdGenerator.BuildEntityId("horse", normalized);
-        var parsedBirthDate = TryParseDateOnly(birthDate);
-
-        var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
-
-        if (existing is null)
+        try
         {
-            var registerRequest = new
+            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
+            var horseId = DeterministicIdGenerator.BuildEntityId("horse", normalized);
+            var parsedBirthDate = TryParseDateOnly(birthDate);
+
+            var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
+
+            if (existing is null)
             {
-                HorseId = horseId,
-                RegisteredName = registeredName,
-                NormalizedName = normalized,
-                SexCode = sexCode,
-                BirthDate = parsedBirthDate
-            };
-            var response = await _httpClient
-                .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
-                .ConfigureAwait(false);
-            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-            {
-                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
+                var registerRequest = new
+                {
+                    HorseId = horseId,
+                    RegisteredName = registeredName,
+                    NormalizedName = normalized,
+                    SexCode = sexCode,
+                    BirthDate = parsedBirthDate
+                };
+                var response = await _httpClient
+                    .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
+                    .ConfigureAwait(false);
+                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                }
             }
             else
             {
-                response.EnsureSuccessStatusCode();
+                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
             }
-        }
-        else
-        {
-            await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
-        }
 
-        return horseId;
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Horse,
+                AgentAcquisitionOperationType.EntityUpsert,
+                registeredName,
+                RaceDataCollectionState.Succeeded,
+                providerType: "API",
+                subjectId: horseId,
+                relatedRaceId: null,
+                sourceUrl: null,
+                errorCode: null,
+                errorReason: null,
+                cancellationToken).ConfigureAwait(false);
+
+            return horseId;
+        }
+        catch (Exception ex)
+        {
+            var error = RaceDataCollectionErrorClassifier.Classify(ex.Message, ex);
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Horse,
+                AgentAcquisitionOperationType.EntityUpsert,
+                registeredName,
+                RaceDataCollectionState.Failed,
+                providerType: "API",
+                subjectId: null,
+                relatedRaceId: null,
+                sourceUrl: null,
+                error.Code,
+                error.Reason,
+                cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<string> UpsertJockeyAsync(
@@ -189,38 +225,71 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
-        var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
-
-        var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
-
-        if (existing is null)
+        try
         {
-            var registerRequest = new
+            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+            var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
+
+            var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
+
+            if (existing is null)
             {
-                JockeyId = jockeyId,
-                DisplayName = displayName,
-                NormalizedName = normalized,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
-                .ConfigureAwait(false);
-            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-            {
-                await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                var registerRequest = new
+                {
+                    JockeyId = jockeyId,
+                    DisplayName = displayName,
+                    NormalizedName = normalized,
+                    AffiliationCode = affiliationCode
+                };
+                var response = await _httpClient
+                    .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
+                    .ConfigureAwait(false);
+                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                }
             }
             else
             {
-                response.EnsureSuccessStatusCode();
+                await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
             }
-        }
-        else
-        {
-            await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-        }
 
-        return jockeyId;
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Jockey,
+                AgentAcquisitionOperationType.EntityUpsert,
+                displayName,
+                RaceDataCollectionState.Succeeded,
+                providerType: "API",
+                subjectId: jockeyId,
+                relatedRaceId: null,
+                sourceUrl: null,
+                errorCode: null,
+                errorReason: null,
+                cancellationToken).ConfigureAwait(false);
+
+            return jockeyId;
+        }
+        catch (Exception ex)
+        {
+            var error = RaceDataCollectionErrorClassifier.Classify(ex.Message, ex);
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Jockey,
+                AgentAcquisitionOperationType.EntityUpsert,
+                displayName,
+                RaceDataCollectionState.Failed,
+                providerType: "API",
+                subjectId: null,
+                relatedRaceId: null,
+                sourceUrl: null,
+                error.Code,
+                error.Reason,
+                cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<string> UpsertTrainerAsync(
@@ -229,38 +298,71 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
-        var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", normalized);
-
-        var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
-
-        if (existing is null)
+        try
         {
-            var registerRequest = new
+            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+            var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", normalized);
+
+            var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
+
+            if (existing is null)
             {
-                TrainerId = trainerId,
-                DisplayName = displayName,
-                NormalizedName = normalized,
-                AffiliationCode = affiliationCode
-            };
-            var response = await _httpClient
-                .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
-                .ConfigureAwait(false);
-            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-            {
-                await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                var registerRequest = new
+                {
+                    TrainerId = trainerId,
+                    DisplayName = displayName,
+                    NormalizedName = normalized,
+                    AffiliationCode = affiliationCode
+                };
+                var response = await _httpClient
+                    .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
+                    .ConfigureAwait(false);
+                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                {
+                    await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                }
             }
             else
             {
-                response.EnsureSuccessStatusCode();
+                await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
             }
-        }
-        else
-        {
-            await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-        }
 
-        return trainerId;
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Trainer,
+                AgentAcquisitionOperationType.EntityUpsert,
+                displayName,
+                RaceDataCollectionState.Succeeded,
+                providerType: "API",
+                subjectId: trainerId,
+                relatedRaceId: null,
+                sourceUrl: null,
+                errorCode: null,
+                errorReason: null,
+                cancellationToken).ConfigureAwait(false);
+
+            return trainerId;
+        }
+        catch (Exception ex)
+        {
+            var error = RaceDataCollectionErrorClassifier.Classify(ex.Message, ex);
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Trainer,
+                AgentAcquisitionOperationType.EntityUpsert,
+                displayName,
+                RaceDataCollectionState.Failed,
+                providerType: "API",
+                subjectId: null,
+                relatedRaceId: null,
+                sourceUrl: null,
+                error.Code,
+                error.Reason,
+                cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<string> UpsertRaceEntryAsync(

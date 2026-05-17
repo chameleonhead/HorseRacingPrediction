@@ -503,19 +503,27 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Declare race result", Description = "Declares result and moves lifecycle to ResultDeclared")]
             async (string raceId, DeclareRaceResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var command = new DeclareRaceResultCommand(
-                    new RaceId(raceId),
-                    request.WinningHorseName,
-                    request.DeclaredAt ?? DateTimeOffset.UtcNow);
+                try
+                {
+                    var command = new DeclareRaceResultCommand(
+                        new RaceId(raceId),
+                        request.WinningHorseName,
+                        request.DeclaredAt ?? DateTimeOffset.UtcNow);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Ok()
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Ok()
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("DeclareRaceResult")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();

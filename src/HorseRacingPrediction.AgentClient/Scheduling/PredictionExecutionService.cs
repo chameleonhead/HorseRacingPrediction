@@ -12,17 +12,20 @@ public sealed class PredictionExecutionService : BackgroundService
 
     private readonly AgentProcessingOptions _options;
     private readonly ProcessingStateStore _stateStore;
+    private readonly HistoricalDataRequestTracker _historicalDataRequestTracker;
     private readonly PredictionWorkflow _predictionWorkflow;
     private readonly ILogger<PredictionExecutionService> _logger;
 
     public PredictionExecutionService(
         IOptions<AgentProcessingOptions> options,
         ProcessingStateStore stateStore,
+        HistoricalDataRequestTracker historicalDataRequestTracker,
         PredictionWorkflow predictionWorkflow,
         ILogger<PredictionExecutionService> logger)
     {
         _options = options.Value;
         _stateStore = stateStore;
+        _historicalDataRequestTracker = historicalDataRequestTracker;
         _predictionWorkflow = predictionWorkflow;
         _logger = logger;
     }
@@ -32,6 +35,12 @@ public sealed class PredictionExecutionService : BackgroundService
         if (!_options.Enabled)
         {
             _logger.LogInformation("PredictionExecutionService は無効化されています。");
+            return;
+        }
+
+        if (!_options.EnablePredictionExecution)
+        {
+            _logger.LogInformation("PredictionExecutionService は設定で無効化されています。データ収集のみ継続します。");
             return;
         }
 
@@ -83,6 +92,29 @@ public sealed class PredictionExecutionService : BackgroundService
         {
             try
             {
+                if (_options.BlockPredictionWhileHistoricalRequestsPending)
+                {
+                    var summary = await _historicalDataRequestTracker
+                        .GetOutstandingRequestsAsync(raceId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (summary.TotalPendingRequests > 0)
+                    {
+                        _logger.LogInformation(
+                            "[予想] 過去データ補完待ちのため再投入します。RaceId={RaceId} HorseRequests={HorseRequests} JockeyRequests={JockeyRequests} RaceResultRequests={RaceResultRequests}",
+                            raceId,
+                            summary.PendingHorseRequests,
+                            summary.PendingJockeyRequests,
+                            summary.PendingRaceResultRequests);
+
+                        await _stateStore.RequeuePredictionCandidateAsync(
+                            raceId,
+                            now.AddMinutes(Math.Max(1, _options.HistoricalRequestRetryDelayMinutes)),
+                            "Historical data requests are still pending.",
+                            cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+                }
+
                 var result = await _predictionWorkflow.RunAsync(raceId, cancellationToken).ConfigureAwait(false);
                 _logger.LogInformation(
                     "[予想] 完了: RaceId={RaceId} SummaryLength={SummaryLength}",

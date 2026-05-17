@@ -1,9 +1,5 @@
-using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,47 +8,25 @@ namespace HorseRacingPrediction.AgentClient.Scheduling;
 
 public sealed class ScrapingRegistrationService : BackgroundService
 {
+    private static readonly string JraProviderType = "JRA";
+
     private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
     private readonly JraRaceScheduleCollectionWorkflow _scheduleCollectionWorkflow;
-    private readonly IWebBrowserSessionFactory _browserSessionFactory;
-    private readonly IChatClient _chatClient;
-    private readonly WebFetchOptions _webFetchOptions;
-    private readonly PageDataExtractionAgent? _pageDataExtractionAgent;
-    private readonly DataCollectionWriteTools _writeTools;
-    private readonly IRaceQueryService _raceQueryService;
     private readonly ProcessingStateStore _stateStore;
-    private readonly RaceTextInsightCollector _insightCollector;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ScrapingRegistrationService> _logger;
 
     public ScrapingRegistrationService(
         IOptions<AgentProcessingOptions> options,
         JraRaceScheduleCollectionWorkflow scheduleCollectionWorkflow,
-        IWebBrowserSessionFactory browserSessionFactory,
-        IChatClient chatClient,
-        IOptions<WebFetchOptions> webFetchOptions,
-        PageDataExtractionAgent? pageDataExtractionAgent,
-        DataCollectionWriteTools writeTools,
-        IRaceQueryService raceQueryService,
         ProcessingStateStore stateStore,
-        RaceTextInsightCollector insightCollector,
-        ILoggerFactory loggerFactory,
         ILogger<ScrapingRegistrationService> logger)
     {
         _options = options.Value;
         _scheduleCollectionWorkflow = scheduleCollectionWorkflow;
-        _browserSessionFactory = browserSessionFactory;
-        _chatClient = chatClient;
-        _webFetchOptions = webFetchOptions.Value;
-        _pageDataExtractionAgent = pageDataExtractionAgent;
-        _writeTools = writeTools;
-        _raceQueryService = raceQueryService;
         _stateStore = stateStore;
-        _insightCollector = insightCollector;
-        _loggerFactory = loggerFactory;
         _logger = logger;
     }
 
@@ -97,8 +71,8 @@ public sealed class ScrapingRegistrationService : BackgroundService
     {
         var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
         var today = DateOnly.FromDateTime(now.Date);
-        var predictionCandidateRaceIds = new List<string>();
         JraRaceScheduleCollectionResult? schedule = null;
+        var workMode = AgentWorkMode.Idle;
 
         if (_options.EnableScheduleCollection)
         {
@@ -120,6 +94,9 @@ public sealed class ScrapingRegistrationService : BackgroundService
                     "[収集登録] 予定収集完了: Collected={Collected} Upcoming={Upcoming}",
                     schedule.RaceDates.Count,
                     schedule.UpcomingRaceDates.Count);
+
+                workMode = AgentWorkModeResolver.Resolve(today, schedule, _options.PreRaceLeadDays);
+                _logger.LogInformation("[収集登録] 実行モード: {Mode}", workMode);
             }
         }
 
@@ -129,99 +106,59 @@ public sealed class ScrapingRegistrationService : BackgroundService
         {
             foreach (var date in schedule.UpcomingRaceDates.Distinct().OrderBy(x => x))
             {
-                _logger.LogInformation("[収集登録] 出馬表収集開始: {Date}", date);
-                var result = await CollectRaceCardsAsync(date, cancellationToken).ConfigureAwait(false);
-                predictionCandidateRaceIds.AddRange(result.SavedRaceIds);
-
-                _logger.LogInformation(
-                    "[収集登録] 出馬表収集完了: Date={Date} Saved={Saved} Errors={Errors}",
-                    date,
-                    result.SavedRaceIds.Count,
-                    result.Errors.Count);
-
-                foreach (var error in result.Errors)
-                {
-                    _logger.LogWarning("[収集登録] {Error}", error);
-                }
+                var payload = new RaceCardCollectionJobPayload(date, JraProviderType);
+                var key = AgentJobKeyFactory.BuildRaceCardCollectionKey(JraProviderType, date);
+                await _stateStore.ScheduleJobAsync(
+                    AgentJobType.RaceCardCollection,
+                    key,
+                    AgentJobPayloadSerializer.Serialize(payload),
+                    now,
+                    priority: 200,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation("[収集登録] 出馬表収集ジョブを登録しました。Date={Date}", date);
             }
         }
 
         if (_options.EnableRaceResultCollection)
         {
-            var start = today.AddDays(-Math.Max(0, _options.ResultLookbackDays));
-            var end = today.AddDays(Math.Max(0, _options.ResultLookaheadDays));
+            var planningPayload = new ResultBackfillPlanningRequestPayload(
+                JraProviderType,
+                Math.Max(1, _options.InitialResultBackfillYears));
+            await _stateStore.EnqueueJobAsync(
+                AgentJobType.ResultBackfillPlanningRequest,
+                AgentJobKeyFactory.BuildResultBackfillPlanningRequestKey(JraProviderType),
+                AgentJobPayloadSerializer.Serialize(planningPayload),
+                now,
+                priority: 40,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            for (var date = start; date <= end; date = date.AddDays(1))
-            {
-                _logger.LogInformation("[収集登録] 成績収集開始: {Date}", date);
-                var result = await CollectRaceResultsAsync(date, cancellationToken).ConfigureAwait(false);
+            var currentMonth = new DateOnly(today.Year, today.Month, 1);
+            await ScheduleResultMonthDiscoveryAsync(currentMonth, now, cancellationToken).ConfigureAwait(false);
 
-                _logger.LogInformation(
-                    "[収集登録] 成績収集完了: Date={Date} Saved={Saved} Errors={Errors}",
-                    date,
-                    result.SavedRaceIds.Count,
-                    result.Errors.Count);
-
-                foreach (var error in result.Errors)
-                {
-                    _logger.LogWarning("[収集登録] {Error}", error);
-                }
-            }
-        }
-
-        var distinctRaceIds = BuildPredictionCandidateRaceIds(predictionCandidateRaceIds);
-        if (distinctRaceIds.Count == 0)
-        {
-            _logger.LogInformation("[収集登録] 保存済みレースIDはありませんでした。");
-            return;
-        }
-
-        await _stateStore.EnqueuePredictionCandidatesAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
-
-        if (_options.EnableTextInsightCollection)
-        {
-            foreach (var raceId in distinctRaceIds)
-            {
-                await _insightCollector.CollectForRaceAsync(raceId, cancellationToken).ConfigureAwait(false);
-            }
+            var previousMonth = currentMonth.AddMonths(-1);
+            await ScheduleResultMonthDiscoveryAsync(previousMonth, now, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task<JraRaceCardCollectionResult> CollectRaceCardsAsync(
-        DateOnly raceDate,
+    private async Task ScheduleResultMonthDiscoveryAsync(
+        DateOnly targetMonth,
+        DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
-
-        var tools = new PlaywrightTools(
-            browser,
-            Options.Create(_webFetchOptions),
-            _pageDataExtractionAgent,
-            _loggerFactory.CreateLogger<PlaywrightTools>());
-        var workflow = new JraRaceCardCollectionWorkflow(
-            _chatClient,
-            tools.GetReadPageOnlyAITools(),
-            new JraRaceCardScraper(browser),
-            _writeTools);
-
-        return await workflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<JraRaceResultCollectionResult> CollectRaceResultsAsync(
-        DateOnly raceDate,
-        CancellationToken cancellationToken)
-    {
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
-
-        var workflow = new JraRaceResultCollectionWorkflow(
-            browser,
-            new JraRaceResultScraper(browser),
-            _writeTools,
-            _raceQueryService,
-            _loggerFactory.CreateLogger<JraRaceResultCollectionWorkflow>(),
-            _loggerFactory);
-
-        return await workflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        var payload = new ResultMonthDiscoveryRequestPayload(
+            JraProviderType,
+            targetMonth.Year,
+            targetMonth.Month,
+            RevisitIncompleteDays: true);
+        var key = AgentJobKeyFactory.BuildResultMonthDiscoveryRequestKey(JraProviderType, targetMonth.Year, targetMonth.Month);
+        await _stateStore.ScheduleJobAsync(
+            AgentJobType.ResultMonthDiscoveryRequest,
+            key,
+            AgentJobPayloadSerializer.Serialize(payload),
+            now,
+            priority: 160,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("[収集登録] 月次成績探索ジョブを登録しました。Month={Month}", targetMonth.ToString("yyyy-MM"));
     }
 
     internal static IReadOnlyList<string> BuildPredictionCandidateRaceIds(IEnumerable<string> savedRaceIds)
@@ -229,4 +166,42 @@ public sealed class ScrapingRegistrationService : BackgroundService
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+    internal static IReadOnlyList<DateOnly> BuildResultCollectionDates(
+        DateOnly today,
+        JraRaceScheduleCollectionResult? schedule,
+        AgentWorkMode workMode,
+        AgentProcessingOptions options)
+    {
+        var lookbackDays = workMode switch
+        {
+            AgentWorkMode.Live when options.SuppressHistoricalBackfillDuringLive => Math.Max(0, options.LiveResultLookbackDays),
+            AgentWorkMode.PreRace => Math.Max(0, options.PreRaceResultLookbackDays),
+            _ => Math.Max(0, options.ResultLookbackDays)
+        };
+
+        var start = today.AddDays(-lookbackDays);
+        var end = today.AddDays(Math.Max(0, options.ResultLookaheadDays));
+        var dates = new List<DateOnly>();
+
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            dates.Add(date);
+        }
+
+        if (workMode == AgentWorkMode.Live && schedule is not null)
+        {
+            foreach (var raceDate in schedule.RaceDates.Where(x => x >= start && x <= end))
+            {
+                if (!dates.Contains(raceDate))
+                {
+                    dates.Add(raceDate);
+                }
+            }
+        }
+
+        return dates
+            .OrderBy(x => x)
+            .ToList();
+    }
 }

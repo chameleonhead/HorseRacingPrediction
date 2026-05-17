@@ -1,4 +1,5 @@
 using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.AgentClient.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -18,6 +19,7 @@ public static class AgentHttpServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddHttpAgentServices(this IServiceCollection services)
     {
+        services.AddSingleton<AgentAcquisitionStatusRecorder>();
         services.AddHttpClient<IRaceQueryService, HttpRaceQueryService>(ConfigureClient);
         services.AddHttpClient<IPredictionWriteService, HttpPredictionWriteService>(ConfigureClient);
         services.AddHttpClient<IDataCollectionWriteService, HttpDataCollectionWriteService>(ConfigureClient);

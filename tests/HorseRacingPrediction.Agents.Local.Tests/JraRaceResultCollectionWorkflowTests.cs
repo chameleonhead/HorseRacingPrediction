@@ -306,6 +306,65 @@ public class JraRaceResultCollectionWorkflowTests
         Assert.AreEqual("https://example.test/2", filtered[0].Url);
     }
 
+    [TestMethod]
+    public async Task DiscoverUrlsAsync_DeduplicatesDifferentUrlsForSameRace()
+    {
+        var currentYear = DateTime.Today.Year;
+        var raceDate = new DateOnly(currentYear, 5, 10);
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/keiba/",
+                Title: "競馬メニュー",
+                MainText: string.Empty,
+                Headings: [],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html", "レース結果")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html",
+                Title: "レース結果 開催選択",
+                MainText: "5月10日（日曜） 2回東京6日",
+                Headings: ["レース結果", "5月10日（日曜）"],
+                Links:
+                [
+                    new SearchResultLink("https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo", "2回東京6日")
+                ],
+                Actions: [],
+                Tables: []));
+
+        _fakeWebBrowser.SetSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
+            new PageSnapshot(
+                Url: "https://www.jra.go.jp/JRADB/accessS.html?kaisai=tokyo",
+                Title: $"レース結果 レース選択 {currentYear}年5月10日（日曜）2回東京6日",
+                MainText: $"{currentYear}年5月10日（日曜）2回東京6日",
+                Headings: [$"{currentYear}年5月10日（日曜）2回東京6日"],
+                Links:
+                [
+                    new SearchResultLink(
+                        $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{currentYear}020611{currentYear}0510/7F",
+                        string.Empty),
+                    new SearchResultLink(
+                        $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1005{currentYear}020611{currentYear}0510/AA",
+                        string.Empty)
+                ],
+                Actions: [],
+                Tables: []));
+
+        var result = await _sut.DiscoverUrlsAsync(raceDate);
+
+        Assert.HasCount(1, result);
+        Assert.AreEqual(11, result[0].RaceNumber);
+    }
+
     // ------------------------------------------------------------------ //
     // ScrapeAllAsync
     // ------------------------------------------------------------------ //
