@@ -319,7 +319,7 @@ public sealed class RaceQueryTools
         sb.AppendLine($"## ML予測順位: {prediction.RaceId}");
         sb.AppendLine("| 予測順位 | 馬番 | 馬ID | エントリーID | 予測スコア |");
         sb.AppendLine("|---------|------|------|--------------|------------|");
-        foreach (var row in prediction.Rankings.OrderBy(x => x.PredictedRank).ThenByDescending(x => x.PredictedScore))
+        foreach (var row in prediction.Rankings.OrderBy(x => x.PredictedRank))
         {
             sb.AppendLine($"| {row.PredictedRank} | {row.HorseNumber} | {row.HorseId} | {row.EntryId} | {row.PredictedScore:F3} |");
         }
