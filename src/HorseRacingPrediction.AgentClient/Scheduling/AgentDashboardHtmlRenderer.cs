@@ -115,6 +115,12 @@ public static class AgentDashboardHtmlRenderer
       grid-template-columns: 1.25fr 1fr;
       gap: 16px;
     }
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
     .section {
       padding: 18px 18px 10px;
     }
@@ -209,6 +215,34 @@ public static class AgentDashboardHtmlRenderer
       opacity: 0.45;
       cursor: default;
     }
+    .inline-form {
+      display: flex;
+      gap: 12px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .inline-form label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 150px;
+    }
+    input[type="date"], input[type="text"] {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.88);
+      color: var(--text);
+      min-width: 132px;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
     @media (max-width: 980px) {
       .metrics, .grid { grid-template-columns: 1fr; }
     }
@@ -259,6 +293,24 @@ public static class AgentDashboardHtmlRenderer
         <h2>Acquisition Failures</h2>
         <div class="value" id="acquisitionFailures">-</div>
         <div class="note">horse / jockey / trainer</div>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <div class="panel section">
+        <h2>Manual Result Fetch</h2>
+        <div class="hint">任意日の結果データ再取得を、探索から強制的に再投入します。Completed 済みの日付でも起動できます。</div>
+        <div class="inline-form">
+          <label>
+            <span>Target Date</span>
+            <input id="manualResultTargetDate" type="date">
+          </label>
+          <label>
+            <span>Provider</span>
+            <input id="manualResultProviderType" type="text" value="JRA">
+          </label>
+          <button onclick="triggerManualResultFetch()">結果取得ジョブを起動</button>
+        </div>
       </div>
     </div>
 
@@ -445,6 +497,22 @@ public static class AgentDashboardHtmlRenderer
 
     async function requeueDay(providerType, targetDate, mode) {
       const response = await fetch(`/agent/result-day-statuses/${encodeURIComponent(providerType)}/${encodeURIComponent(targetDate)}/requeue?mode=${encodeURIComponent(mode)}`, {
+        method: 'POST'
+      });
+      await ensureSucceeded(response);
+      await load();
+    }
+
+    async function triggerManualResultFetch() {
+      const targetDate = document.getElementById('manualResultTargetDate').value;
+      const providerType = document.getElementById('manualResultProviderType').value || 'JRA';
+
+      if (!targetDate) {
+        window.alert('Target Date を指定してください。');
+        return;
+      }
+
+      const response = await fetch(`/agent/result-day-jobs/trigger?targetDate=${encodeURIComponent(targetDate)}&providerType=${encodeURIComponent(providerType)}`, {
         method: 'POST'
       });
       await ensureSucceeded(response);
@@ -674,6 +742,8 @@ public static class AgentDashboardHtmlRenderer
     function escapeValue(value) {
       return String(value ?? '').replaceAll('\\', '\\\\').replaceAll("'", "\\'");
     }
+
+    document.getElementById('manualResultTargetDate').value = to;
 
     load().catch(err => console.error(err));
     setInterval(() => load().catch(err => console.error(err)), 30000);

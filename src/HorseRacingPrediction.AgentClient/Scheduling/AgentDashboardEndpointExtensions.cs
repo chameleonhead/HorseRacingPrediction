@@ -107,6 +107,46 @@ public static class AgentDashboardEndpointExtensions
                 return Results.Ok();
             });
 
+        endpoints.MapPost(
+            "/agent/result-day-jobs/trigger",
+            async (
+                DateOnly targetDate,
+                string? providerType,
+                ProcessingStateStore stateStore,
+                CancellationToken cancellationToken) =>
+            {
+                var now = DateTimeOffset.UtcNow;
+                var normalizedProviderType = string.IsNullOrWhiteSpace(providerType) ? "JRA" : providerType.Trim();
+
+                await stateStore.UpsertResultDayCollectionStatusAsync(
+                    normalizedProviderType,
+                    targetDate,
+                    ResultDayCollectionState.RetryScheduled,
+                    expectedRaceCount: null,
+                    completedRaceCount: null,
+                    incompleteReason: null,
+                    lastCompletedAt: null,
+                    retryAfter: now,
+                    lastError: null,
+                    now,
+                    cancellationToken).ConfigureAwait(false);
+
+                await stateStore.ScheduleJobAsync(
+                    AgentJobType.ResultDayDiscoveryRequest,
+                    AgentJobKeyFactory.BuildResultDayDiscoveryRequestKey(normalizedProviderType, targetDate),
+                    AgentJobPayloadSerializer.Serialize(new ResultDayDiscoveryRequestPayload(targetDate, normalizedProviderType)),
+                    now,
+                    priority: 200,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                return Results.Ok(new
+                {
+                    providerType = normalizedProviderType,
+                    targetDate,
+                    queuedJobType = AgentJobType.ResultDayDiscoveryRequest
+                });
+            });
+
         return endpoints;
     }
 }
