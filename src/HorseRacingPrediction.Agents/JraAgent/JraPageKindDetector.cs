@@ -48,7 +48,8 @@ public static class JraPageKindDetector
             return JraPageKind.RaceCard;
         if (url.Contains("accessO.html", StringComparison.OrdinalIgnoreCase))
             return JraPageKind.Odds;
-        if (url.Contains("accessP.html", StringComparison.OrdinalIgnoreCase))
+        if (url.Contains("accessP.html", StringComparison.OrdinalIgnoreCase)
+            || url.Contains("accessS.html", StringComparison.OrdinalIgnoreCase))
             return JraPageKind.Result;
         if (url.Contains("accessU.html", StringComparison.OrdinalIgnoreCase))
             return JraPageKind.HorseProfile;

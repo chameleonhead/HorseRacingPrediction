@@ -63,6 +63,11 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken);
         var url = _browser.CurrentUrl ?? string.Empty;
 
+        if (IsKnownErrorPage(url, snapshot))
+        {
+            return null;
+        }
+
         var metadata = ParseRaceMetadata(snapshot);
         var entries = ParseResultEntries(snapshot.Tables);
         var payouts = ParsePayouts(snapshot.MainText, snapshot.Tables);
@@ -78,6 +83,24 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
             Grade: metadata.Grade,
             Entries: entries,
             Payouts: payouts);
+    }
+
+    private static bool IsKnownErrorPage(string url, PageSnapshot snapshot)
+    {
+        if (url.Contains("/error/", StringComparison.OrdinalIgnoreCase)
+            || url.Contains("error013", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var title = snapshot.Title ?? string.Empty;
+        var text = $"{title}\n{snapshot.MainText}\n{string.Join("\n", snapshot.Headings)}";
+
+        return text.Contains("パラメータエラー", StringComparison.Ordinal)
+            || text.Contains("Forbidden", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("アクセスしたページ", StringComparison.Ordinal)
+            || text.Contains("お探しのページ", StringComparison.Ordinal)
+            || text.Contains("ただいまご利用できません", StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------------ //

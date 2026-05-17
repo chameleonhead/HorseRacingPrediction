@@ -121,6 +121,23 @@ public class JraRaceResultScraperTests
     }
 
     [TestMethod]
+    public async Task ScrapeAsync_OnParameterErrorPage_ReturnsNull()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/error/error013.html",
+            Title: "パラメータエラー JRA",
+            MainText: "アクセスしたページは表示できません。",
+            Headings: ["パラメータエラー"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/JRADB/accessS.html?CNAME=invalid");
+
+        Assert.IsNull(result, "既知のエラーページは結果ページとして解析しないこと");
+    }
+
+    [TestMethod]
     public async Task ScrapeAsync_SkipsRowsWithInvalidHorseNumber()
     {
         _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(

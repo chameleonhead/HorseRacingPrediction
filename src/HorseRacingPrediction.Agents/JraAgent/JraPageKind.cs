@@ -27,7 +27,7 @@ public enum JraPageKind
     /// <summary>オッズページ（accessO.html）</summary>
     Odds,
 
-    /// <summary>払戻金・レース結果ページ（accessP.html）</summary>
+    /// <summary>払戻金・レース結果ページ（accessP.html / accessS.html）</summary>
     Result,
 
     /// <summary>競走馬情報ページ（accessU.html）</summary>
