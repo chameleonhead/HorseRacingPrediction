@@ -134,7 +134,8 @@ public sealed class RaceQueryTools
         AIFunctionFactory.Create(GetMemosBySubject),
         AIFunctionFactory.Create(GetHorseRaceStats),
         AIFunctionFactory.Create(GetJockeyRaceStats),
-        AIFunctionFactory.Create(GetRaceFieldAnalysis)
+        AIFunctionFactory.Create(GetRaceFieldAnalysis),
+        AIFunctionFactory.Create(GetMlPrediction)
     ];
 
     // ------------------------------------------------------------------ //
@@ -300,6 +301,30 @@ public sealed class RaceQueryTools
             "追" => "後方",
             _ => "不明"
         };
+    }
+
+    /// <summary>
+    /// 指定したレースの ML.NET 予測順位を取得する。
+    /// </summary>
+    [Description("指定したレース ID の ML.NET 予測順位（予測着順・スコア）を Markdown 形式で取得します。")]
+    public async Task<string> GetMlPrediction(
+        [Description("レース ID")] string raceId,
+        CancellationToken cancellationToken = default)
+    {
+        var prediction = await _queryService.GetMlPredictionAsync(raceId, cancellationToken);
+        if (prediction is null || prediction.Rankings.Count == 0)
+            return $"レース ID '{raceId}' の ML予測は取得できませんでした。";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"## ML予測順位: {prediction.RaceId}");
+        sb.AppendLine("| 予測順位 | 馬番 | 馬ID | エントリーID | 予測スコア |");
+        sb.AppendLine("|---------|------|------|--------------|------------|");
+        foreach (var row in prediction.Rankings.OrderBy(x => x.PredictedRank))
+        {
+            sb.AppendLine($"| {row.PredictedRank} | {row.HorseNumber} | {row.HorseId} | {row.EntryId} | {row.PredictedScore:F3} |");
+        }
+
+        return sb.ToString();
     }
 
     // ------------------------------------------------------------------ //

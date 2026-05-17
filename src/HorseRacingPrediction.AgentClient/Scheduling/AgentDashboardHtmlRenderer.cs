@@ -312,6 +312,17 @@ public static class AgentDashboardHtmlRenderer
           <button onclick="triggerManualResultFetch()">結果取得ジョブを起動</button>
         </div>
       </div>
+      <div class="panel section">
+        <h2>Manual Prediction Trigger</h2>
+        <div class="hint">RaceId を指定して予想ジョブを手動投入します。自動投入済みレースも再投入できます。</div>
+        <div class="inline-form">
+          <label>
+            <span>RaceId</span>
+            <input id="manualPredictionRaceId" type="text" placeholder="race-20260517-tokyo-11r">
+          </label>
+          <button onclick="triggerManualPrediction()">予想ジョブを起動</button>
+        </div>
+      </div>
     </div>
 
     <div class="grid">
@@ -513,6 +524,21 @@ public static class AgentDashboardHtmlRenderer
       }
 
       const response = await fetch(`/agent/result-day-jobs/trigger?targetDate=${encodeURIComponent(targetDate)}&providerType=${encodeURIComponent(providerType)}`, {
+        method: 'POST'
+      });
+      await ensureSucceeded(response);
+      await load();
+    }
+
+    async function triggerManualPrediction() {
+      const raceId = document.getElementById('manualPredictionRaceId').value;
+
+      if (!raceId || !raceId.trim()) {
+        window.alert('RaceId を指定してください。');
+        return;
+      }
+
+      const response = await fetch(`/agent/prediction-jobs/trigger?raceId=${encodeURIComponent(raceId.trim())}`, {
         method: 'POST'
       });
       await ensureSucceeded(response);

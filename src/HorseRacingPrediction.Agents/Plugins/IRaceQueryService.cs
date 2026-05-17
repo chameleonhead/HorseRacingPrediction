@@ -31,4 +31,7 @@ public interface IRaceQueryService
 
     Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
         string jockeyId, CancellationToken cancellationToken = default);
+
+    Task<MlPredictionResponse?> GetMlPredictionAsync(
+        string raceId, CancellationToken cancellationToken = default);
 }

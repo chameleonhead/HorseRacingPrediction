@@ -109,6 +109,27 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return await response.Content.ReadFromJsonAsync<JockeyRaceHistoryReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/races/{Uri.EscapeDataString(raceId)}/ml-prediction", cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        var dto = await response.Content.ReadFromJsonAsync<MlPredictionResponseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        if (dto is null || string.IsNullOrWhiteSpace(dto.RaceId))
+            return null;
+
+        return new MlPredictionResponse(
+            dto.RaceId,
+            dto.Rankings.Select(x => new MlHorsePrediction(
+                x.EntryId,
+                x.HorseId,
+                x.HorseNumber,
+                x.PredictedScore,
+                x.PredictedRank)).ToList());
+    }
+
     private sealed record PagedResponseDto<T>(IReadOnlyList<T> Items);
 
     private sealed record RaceSummaryDto(string RaceId, DateOnly? RaceDate, string? RacecourseCode, int? RaceNumber);
@@ -138,4 +159,19 @@ internal sealed class MemoLinkDto
     public string Title { get; set; } = string.Empty;
     public string? Url { get; set; }
     public string? StorageKey { get; set; }
+}
+
+internal sealed class MlPredictionResponseDto
+{
+    public string RaceId { get; set; } = string.Empty;
+    public List<MlHorsePredictionDto> Rankings { get; set; } = [];
+}
+
+internal sealed class MlHorsePredictionDto
+{
+    public string EntryId { get; set; } = string.Empty;
+    public string HorseId { get; set; } = string.Empty;
+    public int HorseNumber { get; set; }
+    public float PredictedScore { get; set; }
+    public int PredictedRank { get; set; }
 }
