@@ -45,11 +45,17 @@ public static class AgentDashboardEndpointExtensions
                 string jobType,
                 string deduplicationKey,
                 ProcessingStateStore stateStore,
+                CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
                 var success = await stateStore
                     .ForceRequeueJobAsync(jobType, deduplicationKey, DateTimeOffset.UtcNow, cancellationToken)
                     .ConfigureAwait(false);
+                if (success)
+                {
+                    executionTrigger.Signal();
+                }
+
                 return success ? Results.Ok() : Results.NotFound();
             });
 
@@ -60,6 +66,7 @@ public static class AgentDashboardEndpointExtensions
                 DateOnly targetDate,
                 ResultDayRequeueMode? mode,
                 ProcessingStateStore stateStore,
+                CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
                 var now = DateTimeOffset.UtcNow;
@@ -93,6 +100,7 @@ public static class AgentDashboardEndpointExtensions
                         });
                     }
 
+                    executionTrigger.Signal();
                     return Results.Ok();
                 }
 
@@ -104,6 +112,8 @@ public static class AgentDashboardEndpointExtensions
                     priority: 170,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
+                executionTrigger.Signal();
+
                 return Results.Ok();
             });
 
@@ -113,6 +123,7 @@ public static class AgentDashboardEndpointExtensions
                 DateOnly targetDate,
                 string? providerType,
                 ProcessingStateStore stateStore,
+                CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
                 var now = DateTimeOffset.UtcNow;
@@ -138,6 +149,8 @@ public static class AgentDashboardEndpointExtensions
                     now,
                     priority: 200,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                executionTrigger.Signal();
 
                 return Results.Ok(new
                 {

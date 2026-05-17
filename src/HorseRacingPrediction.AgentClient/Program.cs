@@ -122,6 +122,7 @@ builder.AddWorkflow(
 // -------------------------------------------------------------------
 builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
+builder.Services.AddSingleton<CollectionExecutionTrigger>();
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<JraResultDateParser>();
 builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();

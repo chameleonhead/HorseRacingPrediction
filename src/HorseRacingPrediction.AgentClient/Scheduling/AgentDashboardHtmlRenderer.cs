@@ -298,18 +298,18 @@ public static class AgentDashboardHtmlRenderer
 
     <div class="quick-actions">
       <div class="panel section">
-        <h2>Manual Result Fetch</h2>
-        <div class="hint">任意日の結果データ再取得を、探索から強制的に再投入します。Completed 済みの日付でも起動できます。</div>
+        <h2>日次結果を今すぐ再実行</h2>
+        <div class="hint">指定日の結果データ取得を最初からやり直します。完了済みの日付でも、ボタンを押した直後に再実行を開始します。</div>
         <div class="inline-form">
           <label>
-            <span>Target Date</span>
+            <span>対象日</span>
             <input id="manualResultTargetDate" type="date">
           </label>
           <label>
-            <span>Provider</span>
+            <span>提供元</span>
             <input id="manualResultProviderType" type="text" value="JRA">
           </label>
-          <button onclick="triggerManualResultFetch()">結果取得ジョブを起動</button>
+          <button onclick="triggerManualResultFetch()">指定日の結果取得を今すぐ開始</button>
         </div>
       </div>
       <div class="panel section">
@@ -519,7 +519,7 @@ public static class AgentDashboardHtmlRenderer
       const providerType = document.getElementById('manualResultProviderType').value || 'JRA';
 
       if (!targetDate) {
-        window.alert('Target Date を指定してください。');
+        window.alert('対象日を指定してください。');
         return;
       }
 
@@ -689,7 +689,7 @@ public static class AgentDashboardHtmlRenderer
           <td>${day.completedRaceCount} / ${day.expectedRaceCount}</td>
           <td>${fmt(day.retryAfter)}</td>
           <td class="error">${day.incompleteReason ?? day.lastError ?? ''}</td>
-          <td>${normalizeDayStatus(day.status) === 'RetryScheduled' || normalizeDayStatus(day.status) === 'Incomplete' || normalizeDayStatus(day.status) === 'DeadLetter' ? `<div class="chips"><button class="secondary" onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Discovery')">探索から再投入</button><button onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Collection')">収集のみ再投入</button></div>` : ''}</td>
+          <td>${normalizeDayStatus(day.status) === 'RetryScheduled' || normalizeDayStatus(day.status) === 'Incomplete' || normalizeDayStatus(day.status) === 'DeadLetter' ? `<div class="chips"><button class="secondary" onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Discovery')">この日の結果取得を最初からやり直す</button><button onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Collection')">探索済みレースだけ再収集する</button></div>` : ''}</td>
         </tr>`).join('');
     }
 

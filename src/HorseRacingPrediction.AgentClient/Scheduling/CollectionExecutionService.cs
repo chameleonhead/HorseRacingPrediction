@@ -29,6 +29,7 @@ public sealed class CollectionExecutionService : BackgroundService
     private readonly IJraResultDateDiscoveryService _resultDateDiscoveryService;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
     private readonly RaceTextInsightCollector _insightCollector;
+    private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
 
@@ -44,6 +45,7 @@ public sealed class CollectionExecutionService : BackgroundService
         IJraResultDateDiscoveryService resultDateDiscoveryService,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
         RaceTextInsightCollector insightCollector,
+        CollectionExecutionTrigger executionTrigger,
         ILoggerFactory loggerFactory,
         ILogger<CollectionExecutionService> logger)
     {
@@ -58,6 +60,7 @@ public sealed class CollectionExecutionService : BackgroundService
         _resultDateDiscoveryService = resultDateDiscoveryService;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
         _insightCollector = insightCollector;
+        _executionTrigger = executionTrigger;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -89,8 +92,12 @@ public sealed class CollectionExecutionService : BackgroundService
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(Math.Max(1, _options.CollectionExecutionIntervalMinutes)), stoppingToken)
-                    .ConfigureAwait(false);
+                var delay = TimeSpan.FromMinutes(Math.Max(1, _options.CollectionExecutionIntervalMinutes));
+                var signaled = await _executionTrigger.WaitAsync(delay, stoppingToken).ConfigureAwait(false);
+                if (signaled)
+                {
+                    _logger.LogInformation("収集実行の即時トリガーを受信しました。次サイクルを開始します。");
+                }
             }
             catch (OperationCanceledException)
             {
