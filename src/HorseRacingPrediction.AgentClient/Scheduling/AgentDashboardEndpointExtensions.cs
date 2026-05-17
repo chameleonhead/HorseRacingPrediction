@@ -147,6 +147,34 @@ public static class AgentDashboardEndpointExtensions
                 });
             });
 
+        endpoints.MapPost(
+            "/agent/prediction-jobs/trigger",
+            async (
+                string raceId,
+                ProcessingStateStore stateStore,
+                CancellationToken cancellationToken) =>
+            {
+                if (string.IsNullOrWhiteSpace(raceId))
+                {
+                    return Results.ValidationProblem(new Dictionary<string, string[]>
+                    {
+                        ["raceId"] = ["raceId は必須です。"]
+                    });
+                }
+
+                var normalizedRaceId = raceId.Trim();
+                var now = DateTimeOffset.UtcNow;
+                await stateStore
+                    .EnqueuePredictionCandidatesAsync([normalizedRaceId], now, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return Results.Ok(new
+                {
+                    raceId = normalizedRaceId,
+                    queuedJobType = AgentJobType.PredictionExecution
+                });
+            });
+
         return endpoints;
     }
 }
