@@ -968,6 +968,37 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
 
+                var entryHorseIdsByEntryId = readModel.Entries
+                    .Where(x => !string.IsNullOrWhiteSpace(x.EntryId) && !string.IsNullOrWhiteSpace(x.HorseId))
+                    .ToDictionary(x => x.EntryId, x => x.HorseId, StringComparer.Ordinal);
+
+                var entryHorseNumbersByEntryId = readModel.Entries
+                    .Where(x => !string.IsNullOrWhiteSpace(x.EntryId))
+                    .ToDictionary(x => x.EntryId, x => x.HorseNumber, StringComparer.Ordinal);
+
+                var horseIds = readModel.Entries
+                    .Select(x => x.HorseId)
+                    .Concat(resultReadModel?.EntryResults.Select(x => ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)) ?? [])
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+
+                var horseNamesById = horseIds.Count == 0
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    : await dbContext.Set<HorseReadModel>()
+                        .AsNoTracking()
+                        .Where(x => horseIds.Contains(x.HorseId))
+                        .ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal, cancellationToken)
+                        .ConfigureAwait(false);
+
+                var entryResponses = readModel.Entries.Count > 0
+                    ? readModel.Entries.Select(x => ToRaceEntryResponse(x, ResolveHorseName(horseNamesById, x.HorseId))).ToList()
+                    : resultReadModel?.EntryResults.Select(x => ToRaceEntryResponse(
+                        x,
+                        ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
+                        ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
+                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
+
                 var response = new RaceResponse(
                     readModel.RaceId,
                     readModel.RaceDate,
@@ -981,7 +1012,7 @@ public static class EndpointExtensions
                     readModel.DistanceMeters,
                     readModel.DirectionCode,
                     resultReadModel?.EntryCount ?? readModel.Entries.Count,
-                    readModel.Entries.Select(ToRaceEntryResponse).ToList(),
+                    entryResponses,
                     readModel.WeatherObservations.Select(ToRaceWeatherObservationResponse).ToList(),
                     readModel.TrackConditionObservations.Select(ToRaceTrackConditionResponse).ToList(),
                     BuildUnavailableOddsResponse(),
@@ -989,7 +1020,11 @@ public static class EndpointExtensions
                     resultReadModel?.WinningHorseId,
                     resultReadModel?.StewardReportText,
                     resultReadModel?.ResultDeclaredAt,
-                    resultReadModel?.EntryResults.Select(ToRaceEntryResultResponse).ToList() ?? [],
+                    resultReadModel?.EntryResults.Select(x => ToRaceEntryResultResponse(
+                        x,
+                        ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
+                        ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
+                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [],
                     resultReadModel?.PayoutResult is null ? null : ToRacePayoutResultResponse(resultReadModel.PayoutResult));
 
                 return Results.Ok(response);
@@ -1800,10 +1835,11 @@ public static class EndpointExtensions
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new AgentContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
-    private static RaceEntryResponse ToRaceEntryResponse(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry)
+    private static RaceEntryResponse ToRaceEntryResponse(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry, string? horseName)
         => new(
             entry.EntryId,
             entry.HorseId,
+            horseName,
             entry.HorseNumber,
             entry.JockeyId,
             entry.TrainerId,
@@ -1814,6 +1850,22 @@ public static class EndpointExtensions
             entry.DeclaredWeight,
             entry.DeclaredWeightDiff,
             entry.RunningStyleCode);
+
+    private static RaceEntryResponse ToRaceEntryResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
+        => new(
+            entryResult.EntryId,
+            horseId ?? string.Empty,
+            horseName,
+            horseNumber,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
 
     private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(WeatherObservationSnapshot observation)
         => new(
@@ -1832,11 +1884,12 @@ public static class EndpointExtensions
             condition.DirtConditionCode,
             condition.GoingDescriptionText);
 
-    private static RaceEntryResultResponse ToRaceEntryResultResponse(EntryResultSnapshot entryResult)
+    private static RaceEntryResultResponse ToRaceEntryResultResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
         => new(
             entryResult.EntryId,
-            entryResult.HorseId,
-            entryResult.HorseNumber,
+            horseId ?? string.Empty,
+            horseName,
+            horseNumber,
             entryResult.FinishPosition,
             entryResult.OfficialTime,
             entryResult.MarginText,
@@ -1844,6 +1897,25 @@ public static class EndpointExtensions
             entryResult.AbnormalResultCode,
             entryResult.PrizeMoney,
             entryResult.CornerPositions);
+
+    private static string? ResolveHorseId(IReadOnlyDictionary<string, string> entryHorseIdsByEntryId, string entryId, string? horseId)
+        => !string.IsNullOrWhiteSpace(horseId)
+            ? horseId
+            : entryHorseIdsByEntryId.TryGetValue(entryId, out var fallbackHorseId)
+                ? fallbackHorseId
+                : null;
+
+    private static int ResolveHorseNumber(IReadOnlyDictionary<string, int> entryHorseNumbersByEntryId, string entryId, int horseNumber)
+        => horseNumber > 0
+            ? horseNumber
+            : entryHorseNumbersByEntryId.TryGetValue(entryId, out var fallbackHorseNumber)
+                ? fallbackHorseNumber
+                : 0;
+
+    private static string? ResolveHorseName(IReadOnlyDictionary<string, string> horseNamesById, string? horseId)
+        => !string.IsNullOrWhiteSpace(horseId) && horseNamesById.TryGetValue(horseId, out var horseName)
+            ? horseName
+            : null;
 
     private static RacePayoutResultResponse ToRacePayoutResultResponse(PayoutResultSnapshot payoutResult)
         => new(

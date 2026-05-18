@@ -108,6 +108,23 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                     $"Historical race result did not contain a winner. RaceId={raceId}");
             }
 
+            foreach (var entry in result.Entries.Where(x => !string.IsNullOrWhiteSpace(x.HorseName)))
+            {
+                await _writeTools.UpsertRaceEntry(
+                    raceId,
+                    entry.HorseNumber,
+                    entry.HorseName!,
+                    entry.JockeyName,
+                    trainerName: null,
+                    gateNumber: null,
+                    assignedWeight: null,
+                    sexCode: null,
+                    age: null,
+                    declaredWeight: entry.Weight,
+                    declaredWeightDiff: null,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
             await _writeTools.DeclareRaceResult(raceId, winner.HorseName!, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             foreach (var entry in result.Entries)

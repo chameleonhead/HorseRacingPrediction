@@ -3,6 +3,7 @@ namespace HorseRacingPrediction.Api.Contracts;
 public sealed record RaceEntryResultResponse(
     string EntryId,
     string HorseId,
+    string? HorseName,
     int HorseNumber,
     int? FinishPosition,
     string? OfficialTime,

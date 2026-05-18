@@ -52,6 +52,8 @@ public sealed class JraHistoricalRaceResultCollectorTests
 
         Assert.IsTrue(result.Succeeded);
         Assert.AreEqual("皐月賞", writeService.UpsertedRaceName);
+        Assert.AreEqual(2, writeService.UpsertedEntries.Count);
+        Assert.AreEqual((3, "ソールオリエンス", "横山武史"), writeService.UpsertedEntries[0]);
         Assert.HasCount(2, writeService.RecordedEntryResults);
         Assert.AreEqual("ソールオリエンス", writeService.WinningHorseName);
     }
@@ -67,6 +69,8 @@ public sealed class JraHistoricalRaceResultCollectorTests
     private sealed class StubDataCollectionWriteService : IDataCollectionWriteService
     {
         public List<(int HorseNumber, int? FinishPosition, string? OfficialTime)> RecordedEntryResults { get; } = [];
+
+        public List<(int HorseNumber, string HorseName, string? JockeyName)> UpsertedEntries { get; } = [];
 
         public string? UpsertedRaceName { get; private set; }
 
@@ -100,7 +104,10 @@ public sealed class JraHistoricalRaceResultCollectorTests
             => throw new NotSupportedException();
 
         public Task<string> UpsertRaceEntryAsync(string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName, int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight, decimal? declaredWeightDiff, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            UpsertedEntries.Add((horseNumber, horseName, jockeyName));
+            return Task.FromResult("ok");
+        }
 
         public Task<string> DeclareRacePayoutsAsync(string raceId, string? winPayoutsJson, string? placePayoutsJson, string? quinellaPayoutsJson, string? exactaPayoutsJson, string? trifectaPayoutsJson, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();

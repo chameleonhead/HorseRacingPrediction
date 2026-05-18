@@ -253,6 +253,10 @@ public class RaceEndpointsTests
             new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
             JsonOptions);
         await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
             new PublishRaceCardRequest(16),
             JsonOptions);
@@ -306,6 +310,10 @@ public class RaceEndpointsTests
             new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
             JsonOptions);
         await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
             new PublishRaceCardRequest(16),
             JsonOptions);
@@ -348,6 +356,8 @@ public class RaceEndpointsTests
         Assert.IsNotNull(race);
         Assert.AreEqual(1, race.Entries.Count);
         Assert.AreEqual(entryId, race.Entries[0].EntryId);
+        Assert.AreEqual(horseId, race.Entries[0].HorseId);
+        Assert.AreEqual("イクイノックス", race.Entries[0].HorseName);
         Assert.AreEqual(1, race.WeatherObservations.Count);
         Assert.AreEqual("晴れ", race.WeatherObservations[0].WeatherText);
         Assert.AreEqual(1, race.TrackConditionObservations.Count);
@@ -356,6 +366,8 @@ public class RaceEndpointsTests
         Assert.IsNull(race.WinningHorseId);
         Assert.IsNull(race.StewardReportText);
         Assert.AreEqual(1, race.EntryResults.Count);
+        Assert.AreEqual(horseId, race.EntryResults[0].HorseId);
+        Assert.AreEqual("イクイノックス", race.EntryResults[0].HorseName);
         Assert.AreEqual(1, race.EntryResults[0].FinishPosition);
         Assert.IsNotNull(race.PayoutResult);
         Assert.AreEqual(1, race.PayoutResult.WinPayouts.Count);
