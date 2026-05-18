@@ -12,6 +12,8 @@ public class RacePredictionContextReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceTrackConditionObserved>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceLifecycleStatusChanged>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceStarted>,
+    IAmReadModelFor<RaceAggregate, RaceId, RaceResultDeclared>,
+    IAmReadModelFor<RaceAggregate, RaceId, PayoutResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
@@ -105,6 +107,22 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         Status = RaceStatus.InProgress;
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, RaceResultDeclared> domainEvent,
+        CancellationToken cancellationToken)
+    {
+        Status = RaceStatus.ResultDeclared;
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, PayoutResultDeclared> domainEvent,
+        CancellationToken cancellationToken)
+    {
+        Status = RaceStatus.PayoutDeclared;
         return Task.CompletedTask;
     }
 

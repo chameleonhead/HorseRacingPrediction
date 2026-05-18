@@ -15,11 +15,7 @@ internal static class ReadModelTestHelpers
     /// <summary>LatestJockeyId フィールドをリフレクションで直接設定する（テスト用）</summary>
     public static void SetLatestJockeyId(this HorseRaceHistoryReadModel model, string jockeyId)
     {
-        var field = typeof(HorseRaceHistoryReadModel)
-            .GetField("_entries", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var list = (List<HorseRaceHistoryEntry>)field.GetValue(model)!;
-
-        list.Add(new HorseRaceHistoryEntry(
+        model.Entries.Add(new HorseRaceHistoryEntry(
             "race-stub", "entry-stub", null, null, null, null, null, null,
             null, null, null, null, null, jockeyId, null,
             null, null, null, null));
@@ -29,11 +25,7 @@ internal static class ReadModelTestHelpers
     public static void AddHistoryEntry(
         this HorseRaceHistoryReadModel model, string horseId, int finishPosition)
     {
-        var field = typeof(HorseRaceHistoryReadModel)
-            .GetField("_entries", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var list = (List<HorseRaceHistoryEntry>)field.GetValue(model)!;
-
-        list.Add(new HorseRaceHistoryEntry(
+        model.Entries.Add(new HorseRaceHistoryEntry(
             $"race-{Guid.NewGuid()}", $"entry-{Guid.NewGuid()}",
             DateOnly.Parse("2024-01-01"), null, null, null, null, null,
             null, null, null, null, null, null, null,
@@ -53,10 +45,7 @@ internal static class ReadModelTestHelpers
 
     public static void AddEntry(this RacePredictionContextReadModel model, RacePredictionContextEntry entry)
     {
-        var field = typeof(RacePredictionContextReadModel)
-            .GetField("_entries", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var list = (List<RacePredictionContextEntry>)field.GetValue(model)!;
-        list.Add(entry);
+        model.Entries.Add(entry);
     }
 
     public static void SetTestData(this RaceResultViewReadModel model, string raceId)
@@ -66,16 +55,18 @@ internal static class ReadModelTestHelpers
 
     public static void AddEntryResult(this RaceResultViewReadModel model, EntryResultSnapshot result)
     {
-        var field = typeof(RaceResultViewReadModel)
-            .GetField("_entryResults", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var list = (List<EntryResultSnapshot>)field.GetValue(model)!;
-        list.Add(result);
+        model.EntryResults.Add(result);
 
-        // entryIndex にも追加
-        var indexField = typeof(RaceResultViewReadModel)
-            .GetField("_entryIndex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var dict = (Dictionary<string, (string HorseId, int HorseNumber)>)indexField.GetValue(model)!;
-        dict[result.EntryId] = (result.HorseId, result.HorseNumber);
+        var index = model.EntryIndexes.FindIndex(x => x.EntryId == result.EntryId);
+        var snapshot = new RaceEntryIndexSnapshot(result.EntryId, result.HorseId, result.HorseNumber);
+        if (index >= 0)
+        {
+            model.EntryIndexes[index] = snapshot;
+        }
+        else
+        {
+            model.EntryIndexes.Add(snapshot);
+        }
     }
 
     private static void SetProperty(object obj, string propertyName, object? value)
