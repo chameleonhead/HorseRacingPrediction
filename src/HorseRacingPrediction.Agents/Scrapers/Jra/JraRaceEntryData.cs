@@ -13,4 +13,5 @@ public sealed record JraRaceEntryData(
     decimal? BodyWeight,
     decimal? BodyWeightDiff,
     string? TrainerName,
-    string? OwnerName);
+    string? OwnerName,
+    string? BreederName);

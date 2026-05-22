@@ -49,9 +49,25 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             Racecourse: metadata.Racecourse,
             RaceDate: metadata.RaceDate,
             RaceNumber: metadata.RaceNumber,
+            MeetingNumber: metadata.MeetingNumber,
+            DayNumber: metadata.DayNumber,
+            PostTime: metadata.PostTime,
+            ConditionSummary: metadata.ConditionSummary,
+            AgeCondition: metadata.AgeCondition,
+            AgeConditionCode: metadata.AgeConditionCode,
+            RaceClass: metadata.RaceClass,
+            RaceClassCode: metadata.RaceClassCode,
+            Eligibility: metadata.Eligibility,
+            EligibilityCodes: metadata.EligibilityCodes,
+            EntryCondition: metadata.EntryCondition,
+            EntryConditionCodes: metadata.EntryConditionCodes,
+            WeightCondition: metadata.WeightCondition,
+            WeightConditionCode: metadata.WeightConditionCode,
             CourseType: metadata.CourseType,
+            TrackDirection: metadata.TrackDirection,
             Distance: metadata.Distance,
             Grade: metadata.Grade,
+            PrizeMoney: metadata.PrizeMoney,
             Entries: entries);
     }
 
@@ -74,9 +90,25 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             Racecourse: metadata.Racecourse,
             RaceDate: metadata.RaceDate,
             RaceNumber: metadata.RaceNumber,
+            MeetingNumber: metadata.MeetingNumber,
+            DayNumber: metadata.DayNumber,
+            PostTime: metadata.PostTime,
+            ConditionSummary: metadata.ConditionSummary,
+            AgeCondition: metadata.AgeCondition,
+            AgeConditionCode: metadata.AgeConditionCode,
+            RaceClass: metadata.RaceClass,
+            RaceClassCode: metadata.RaceClassCode,
+            Eligibility: metadata.Eligibility,
+            EligibilityCodes: metadata.EligibilityCodes,
+            EntryCondition: metadata.EntryCondition,
+            EntryConditionCodes: metadata.EntryConditionCodes,
+            WeightCondition: metadata.WeightCondition,
+            WeightConditionCode: metadata.WeightConditionCode,
             CourseType: metadata.CourseType,
+            TrackDirection: metadata.TrackDirection,
             Distance: metadata.Distance,
             Grade: metadata.Grade,
+            PrizeMoney: metadata.PrizeMoney,
             Entries: entries);
     }
 
@@ -88,19 +120,70 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     {
         var headingsText = string.Join("\n", snapshot.Headings);
         var searchText = $"{snapshot.Title}\n{headingsText}\n{snapshot.MainText}";
+        var contentLines = ExtractContentLines(snapshot);
 
-        var raceName = ExtractRaceName(snapshot);
-        var racecourse = ExtractRacecourse(snapshot) ?? ExtractRacecourse(searchText);
-        var raceDate = ExtractDate(searchText);
-        var raceNumber = ExtractRaceNumber(searchText);
-        var courseType = ExtractCourseType(searchText);
-        var distance = ExtractDistance(searchText);
+        var raceName = ExtractRaceName(snapshot, contentLines);
+        var meeting = ExtractMeetingInfo(headingsText) ?? ExtractMeetingInfo(searchText);
+        var conditionSummary = ExtractConditionSummary(searchText, raceName, contentLines);
+        var courseSummary = contentLines.FirstOrDefault(x => x.Contains("コース：", StringComparison.Ordinal)) ?? searchText;
+        var (eligibilityTokens, entryConditionTokens) = ExtractConditionTokens(conditionSummary);
+        var raceCourse = meeting?.Racecourse ?? ExtractRacecourse(headingsText) ?? ExtractRacecourse(searchText);
+        var raceDate = ExtractDate(headingsText) ?? ExtractDate(searchText);
+        var raceNumber = ExtractRaceNumber(headingsText) ?? ExtractRaceNumber(searchText);
+        var postTime = ExtractPostTime(searchText);
+        var ageCondition = ExtractAgeCondition(conditionSummary, raceName);
+        var raceClass = ExtractRaceClass(conditionSummary, raceName);
+        var eligibility = eligibilityTokens.Count == 0 ? null : string.Join(" ", eligibilityTokens);
+        var entryCondition = entryConditionTokens.Count == 0 ? null : string.Join(" ", entryConditionTokens);
+        var weightCondition = ExtractWeightCondition(conditionSummary);
+        var courseType = ExtractCourseType(courseSummary);
+        var trackDirection = ExtractTrackDirection(courseSummary);
+        var distance = ExtractDistance(courseSummary);
         var grade = ExtractGrade(searchText);
+        var prizeMoney = ExtractPrizeMoney(searchText, contentLines);
 
-        return new RaceMetadata(raceName, racecourse, raceDate, raceNumber, courseType, distance, grade);
+        return new RaceMetadata(
+            raceName,
+            raceCourse,
+            raceDate,
+            raceNumber,
+            meeting?.MeetingNumber,
+            meeting?.DayNumber,
+            postTime,
+            conditionSummary,
+            ageCondition,
+            NormalizeAgeConditionCode(ageCondition),
+            raceClass,
+            NormalizeRaceClassCode(raceClass),
+            eligibility,
+            eligibilityTokens.Select(NormalizeEligibilityCode).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray(),
+            entryCondition,
+            entryConditionTokens.Select(NormalizeEntryConditionCode).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray(),
+            weightCondition,
+            NormalizeWeightConditionCode(weightCondition),
+            courseType,
+            trackDirection,
+            distance,
+            grade,
+            prizeMoney);
     }
 
-    private static string ExtractRaceName(PageSnapshot snapshot)
+    private static IReadOnlyList<string> ExtractContentLines(PageSnapshot snapshot)
+    {
+        var source = string.Join(
+            "\n",
+            new[] { snapshot.Title ?? string.Empty }
+                .Concat(snapshot.Headings)
+                .Append(snapshot.MainText));
+
+        return source
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+    }
+
+    private static string ExtractRaceName(PageSnapshot snapshot, IReadOnlyList<string> contentLines)
     {
         var headingRaceName = snapshot.Headings
             .Select(CleanRaceName)
@@ -129,6 +212,14 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             return CleanRaceName(namedRaceMatch.Groups["name"].Value);
         }
 
+        var genericRaceName = contentLines
+            .Select(CleanRaceName)
+            .FirstOrDefault(IsLikelyGenericRaceName);
+        if (!string.IsNullOrWhiteSpace(genericRaceName))
+        {
+            return genericRaceName;
+        }
+
         var candidates = snapshot.Headings
             .Select(h => h.Trim())
             .Where(h => h.Length > 1)
@@ -152,8 +243,8 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     private static string? ExtractRacecourse(PageSnapshot snapshot)
     {
         var source = string.Join("\n", snapshot.Headings.Append(snapshot.MainText));
-        var match = Regex.Match(source, @"\d+回(?<racecourse>東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)\d+日");
-        return match.Success ? match.Groups["racecourse"].Value : null;
+        var match = Regex.Match(source, @"\d+回(?<raceCourse>東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)\d+日");
+        return match.Success ? match.Groups["raceCourse"].Value : null;
     }
 
     private static DateOnly? ExtractDate(string text)
@@ -206,9 +297,19 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
     private static string? ExtractCourseType(string text)
     {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
         if (text.Contains("ダート", StringComparison.Ordinal))
         {
             return "ダート";
+        }
+
+        if (text.Contains("障害", StringComparison.Ordinal))
+        {
+            return "障害";
         }
 
         if (text.Contains("芝", StringComparison.Ordinal))
@@ -221,15 +322,219 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
     private static int? ExtractDistance(string text)
     {
-        var match = Regex.Match(text, @"(\d{3,4})\s*[mM]");
+        var match = Regex.Match(text, @"(?<distance>\d{1,2},\d{3}|\d{3,4})\s*(?:[mM]|メートル)");
         if (!match.Success)
         {
             return null;
         }
 
-        return int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dist)
+        var normalized = match.Groups["distance"].Value.Replace(",", string.Empty, StringComparison.Ordinal);
+        return int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dist)
             ? dist
             : null;
+    }
+
+    private static TimeOnly? ExtractPostTime(string text)
+    {
+        var match = Regex.Match(text, @"発走時刻[:：]\s*(?<hour>\d{1,2})時(?<minute>\d{1,2})分");
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return int.TryParse(match.Groups["hour"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var hour)
+            && int.TryParse(match.Groups["minute"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minute)
+            ? new TimeOnly(hour, minute)
+            : null;
+    }
+
+    private static MeetingInfo? ExtractMeetingInfo(string text)
+    {
+        var match = Regex.Match(text, @"(?<meeting>\d+)回(?<raceCourse>東京|中山|阪神|京都|中京|小倉|函館|福島|新潟|札幌)(?<day>\d+)日");
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        if (!int.TryParse(match.Groups["meeting"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var meetingNumber)
+            || !int.TryParse(match.Groups["day"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dayNumber))
+        {
+            return null;
+        }
+
+        return new MeetingInfo(meetingNumber, match.Groups["raceCourse"].Value, dayNumber);
+    }
+
+    private static string? ExtractConditionSummary(string searchText, string raceName, IReadOnlyList<string> contentLines)
+    {
+        var normalized = NormalizeWhitespace(searchText);
+        var courseIndex = normalized.IndexOf("コース：", StringComparison.Ordinal);
+        if (courseIndex >= 0)
+        {
+            var start = 0;
+            if (!string.IsNullOrWhiteSpace(raceName))
+            {
+                var searchWindow = normalized[..courseIndex];
+                var raceNameIndex = searchWindow.LastIndexOf(raceName, StringComparison.Ordinal);
+                if (raceNameIndex >= 0 && raceNameIndex < courseIndex)
+                {
+                    start = raceNameIndex + raceName.Length;
+                }
+            }
+
+            var ageMatch = Regex.Match(normalized[..courseIndex], @"(?:障害)?\d+歳(?:以上|上)?", RegexOptions.CultureInvariant);
+            if (ageMatch.Success)
+            {
+                start = Math.Max(start, ageMatch.Index);
+            }
+
+            var summary = normalized[start..courseIndex].Trim();
+            return string.IsNullOrWhiteSpace(summary) ? null : summary;
+        }
+
+        return contentLines
+            .Select(x =>
+            {
+                var index = x.IndexOf("コース：", StringComparison.Ordinal);
+                return index >= 0 ? x[..index].Trim() : x;
+            })
+            .FirstOrDefault(x => x.Contains("馬齢", StringComparison.Ordinal)
+                || x.Contains("ハンデ", StringComparison.Ordinal)
+                || x.Contains("別定", StringComparison.Ordinal)
+                || x.Contains("定量", StringComparison.Ordinal))
+            ?? contentLines.FirstOrDefault(x => x.Contains("馬齢", StringComparison.Ordinal)
+                || x.Contains("ハンデ", StringComparison.Ordinal)
+                || x.Contains("別定", StringComparison.Ordinal)
+                || x.Contains("定量", StringComparison.Ordinal));
+    }
+
+    private static string? ExtractAgeCondition(string? conditionsLine, string raceName)
+    {
+        var source = string.Join(" ", new[] { conditionsLine, raceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var match = Regex.Match(source, @"(?<age>(?:障害)?\d+歳(?:以上|上)?)");
+        return match.Success ? match.Groups["age"].Value : null;
+    }
+
+    private static string? ExtractRaceClass(string? conditionsLine, string raceName)
+    {
+        var source = string.Join(" ", new[] { conditionsLine, raceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var match = Regex.Match(source, @"(?<class>未勝利|新馬|未出走|1勝クラス|2勝クラス|3勝クラス|オープン)");
+        return match.Success ? match.Groups["class"].Value : null;
+    }
+
+    private static (IReadOnlyList<string> EligibilityTokens, IReadOnlyList<string> EntryConditionTokens) ExtractConditionTokens(string? conditionSummary)
+    {
+        if (string.IsNullOrWhiteSpace(conditionSummary))
+        {
+            return (Array.Empty<string>(), Array.Empty<string>());
+        }
+
+        var targetText = conditionSummary;
+        var courseIndex = targetText.IndexOf("コース：", StringComparison.Ordinal);
+        if (courseIndex >= 0)
+        {
+            targetText = targetText[..courseIndex];
+        }
+
+        var eligibilityTokens = new List<string>();
+        var entryConditionTokens = new List<string>();
+        var matches = Regex.Matches(targetText, @"（(?<paren>[^）]+)）|［(?<square>[^］]+)］|(?<standalone>牝|牡)", RegexOptions.CultureInvariant);
+        foreach (Match match in matches)
+        {
+            var token = match.Groups["paren"].Success
+                ? match.Groups["paren"].Value.Trim()
+                : match.Groups["square"].Success
+                    ? match.Groups["square"].Value.Trim()
+                    : match.Groups["standalone"].Value.Trim();
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                continue;
+            }
+
+            if (IsEntryConditionToken(token))
+            {
+                if (!entryConditionTokens.Contains(token, StringComparer.Ordinal))
+                {
+                    entryConditionTokens.Add(token);
+                }
+
+                continue;
+            }
+
+            if (!eligibilityTokens.Contains(token, StringComparer.Ordinal))
+            {
+                eligibilityTokens.Add(token);
+            }
+        }
+
+        return (eligibilityTokens, entryConditionTokens);
+    }
+
+    private static string? ExtractWeightCondition(string? conditionsLine)
+    {
+        var match = Regex.Match(conditionsLine ?? string.Empty, @"(?<weightCondition>馬齢|別定|定量|ハンデ)");
+        return match.Success ? match.Groups["weightCondition"].Value : null;
+    }
+
+    private static string? ExtractTrackDirection(string text)
+    {
+        var match = Regex.Match(text, @"(?:芝|ダート|障害)・(?<direction>右|左|直線)");
+        return match.Success ? match.Groups["direction"].Value : null;
+    }
+
+    private static IReadOnlyList<JraRacePrizeData> ExtractPrizeMoney(string searchText, IReadOnlyList<string> contentLines)
+    {
+        var prizes = new List<JraRacePrizeData>();
+        var source = NormalizeWhitespace(searchText);
+        var sectionMatches = PrizeSectionRegex.Matches(source);
+        foreach (Match sectionMatch in sectionMatches)
+        {
+            var label = sectionMatch.Groups["label"].Value;
+            var prizeText = sectionMatch.Groups["body"].Value;
+            prizes.AddRange(ParsePrizeEntries(label, prizeText));
+        }
+
+        return prizes;
+    }
+
+    private static IReadOnlyList<JraRacePrizeData> ParsePrizeEntries(string label, string prizeText)
+    {
+        if (string.IsNullOrWhiteSpace(prizeText))
+        {
+            return [];
+        }
+
+        var matches = PrizeEntryRegex.Matches(prizeText);
+        if (matches.Count == 0)
+        {
+            return [];
+        }
+
+        var prizes = new List<JraRacePrizeData>();
+        var expectedPlace = 1;
+        foreach (Match match in matches)
+        {
+            if (!int.TryParse(match.Groups["place"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var place)
+                || !decimal.TryParse(match.Groups["amount"].Value.Replace(",", string.Empty, StringComparison.Ordinal), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
+            {
+                continue;
+            }
+
+            if (place != expectedPlace)
+            {
+                break;
+            }
+
+            prizes.Add(new JraRacePrizeData(label, place, amount));
+            expectedPlace++;
+            if (expectedPlace > 5)
+            {
+                break;
+            }
+        }
+
+        return prizes;
     }
 
     private static string? ExtractGrade(string text)
@@ -257,6 +562,71 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         return null;
     }
 
+    private static bool IsEntryConditionToken(string token)
+        => token is "指定" or "特指";
+
+    private static string? NormalizeAgeConditionCode(string? ageCondition)
+    {
+        if (string.IsNullOrWhiteSpace(ageCondition))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(ageCondition, @"^(?<jump>障害)?(?<age>\d+)歳(?<range>以上|上)?$", RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return ageCondition;
+        }
+
+        var prefix = match.Groups["jump"].Success ? "jump-" : string.Empty;
+        var age = match.Groups["age"].Value;
+        return match.Groups["range"].Success ? $"{prefix}{age}up" : $"{prefix}{age}";
+    }
+
+    private static string? NormalizeRaceClassCode(string? raceClass)
+        => raceClass switch
+        {
+            "未勝利" => "maiden",
+            "新馬" => "debut",
+            "未出走" => "not-started",
+            "1勝クラス" => "1-win",
+            "2勝クラス" => "2-win",
+            "3勝クラス" => "3-win",
+            "オープン" => "open",
+            _ => raceClass,
+        };
+
+    private static string NormalizeEligibilityCode(string token)
+        => token switch
+        {
+            "混合" => "mixed",
+            "牝" => "fillies",
+            "牡" => "colts",
+            "国際" => "international",
+            _ => token,
+        };
+
+    private static string NormalizeEntryConditionCode(string token)
+        => token switch
+        {
+            "指定" => "designated",
+            "特指" => "special-designated",
+            _ => token,
+        };
+
+    private static string? NormalizeWeightConditionCode(string? weightCondition)
+        => weightCondition switch
+        {
+            "馬齢" => "age-weight",
+            "別定" => "special-weight",
+            "定量" => "set-weight",
+            "ハンデ" => "handicap",
+            _ => weightCondition,
+        };
+
+    private static string NormalizeWhitespace(string text)
+        => Regex.Replace(text ?? string.Empty, @"\s+", " ", RegexOptions.CultureInvariant).Trim();
+
     private static bool IsCourseLine(string text) =>
         Regex.IsMatch(text, @"\d{3,4}\s*[mM]") ||
         text.Contains("芝", StringComparison.Ordinal) ||
@@ -276,7 +646,12 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
            || text.StartsWith("出馬表", StringComparison.Ordinal)
            || text.Contains("検索ウィンドウ", StringComparison.Ordinal)
            || text.Contains("競馬メニュー", StringComparison.Ordinal)
-           || text.Contains("ニュース", StringComparison.Ordinal);
+           || text.Contains("ニュース", StringComparison.Ordinal)
+           || text.Contains("コースレコード", StringComparison.Ordinal)
+           || text.Contains("非当選・非抽選馬情報", StringComparison.Ordinal)
+           || text.Contains("非当選馬", StringComparison.Ordinal)
+           || text.Contains("非抽選馬", StringComparison.Ordinal)
+           || text.Contains("JRAからのお知らせ", StringComparison.Ordinal);
 
     private static bool IsLikelyRaceName(string? text)
     {
@@ -298,10 +673,34 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
         return normalizedForSuffix.EndsWith("記念", StringComparison.Ordinal)
             || normalizedForSuffix.EndsWith("カップ", StringComparison.Ordinal)
+            || normalizedForSuffix.EndsWith("トロフィー", StringComparison.Ordinal)
             || normalizedForSuffix.EndsWith("ステークス", StringComparison.Ordinal)
             || normalizedForSuffix.EndsWith("新聞杯", StringComparison.Ordinal)
             || normalizedForSuffix.EndsWith("賞", StringComparison.Ordinal)
             || normalizedForSuffix.EndsWith("S", StringComparison.Ordinal);
+    }
+
+    private static bool IsLikelyGenericRaceName(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var cleaned = CleanRaceName(text);
+        if (IsBoilerplateHeading(cleaned)
+            || IsCourseLine(cleaned)
+            || IsDateRaceNumberLine(cleaned)
+            || cleaned.StartsWith("本賞金", StringComparison.Ordinal)
+            || cleaned.StartsWith("発走時刻", StringComparison.Ordinal)
+            || cleaned.Contains("非当選", StringComparison.Ordinal)
+            || cleaned.Contains("非抽選", StringComparison.Ordinal)
+            || cleaned.Contains("コース：", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(cleaned, @"^(?:障害)?\d+歳(?:以上|上)?(?:未勝利|新馬|未出走|1勝クラス|2勝クラス|3勝クラス|オープン)$");
     }
 
     private static string CleanRaceName(string name)
@@ -340,10 +739,6 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         }
 
         var horseNumberIndex = FindHeaderIndex(headers, "馬番");
-        if (horseNumberIndex < 0)
-        {
-            return [];
-        }
 
         var gateNumberIndex = FindHeaderIndex(headers, "枠番", "枠");
         var jockeyIndex = FindHeaderIndex(headers, "騎手");
@@ -352,12 +747,14 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         var bodyWeightIndex = FindHeaderIndex(headers, "馬体重");
         var trainerIndex = FindHeaderIndex(headers, "厩舎", "調教師");
         var ownerIndex = FindHeaderIndex(headers, "馬主");
+        var breederIndex = FindHeaderIndex(headers, "生産者", "生産牧場");
 
         // JRA の出馬表は複合列ヘッダを持つことがある。
         // horseNameIndex と同一列になった場合は -1 に下げてセル内容から個別に抽出する。
         if (trainerIndex == horseNameIndex) trainerIndex = -1;
         if (bodyWeightIndex == horseNameIndex) bodyWeightIndex = -1;
         if (ownerIndex == horseNameIndex) ownerIndex = -1;
+        if (breederIndex == horseNameIndex) breederIndex = -1;
         if (weightIndex == horseNameIndex) weightIndex = -1;
         if (sexAgeIndex == horseNameIndex) sexAgeIndex = -1;
 
@@ -381,6 +778,11 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 continue;
             }
 
+            if (IsHeaderRow(row, headers))
+            {
+                continue;
+            }
+
             var horseCellText = GetCell(row, horseNameIndex)?.Trim();
             if (string.IsNullOrWhiteSpace(horseCellText))
             {
@@ -389,16 +791,28 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
             var horseNumberStr = GetCell(row, horseNumberIndex);
             var horseNumber = ParseInt(horseNumberStr);
+            var gateNumber = ParseInt(GetCell(row, gateNumberIndex));
             if (horseNumber is null or <= 0)
             {
-                continue;
+                horseNumber = ResolveProvisionalHorseNumber(row, headers, horseCellText, gateNumber, entries.Count);
+                if (horseNumber is null or <= 0)
+                {
+                    continue;
+                }
             }
 
             // 複合列から個別フィールドを抽出
             var horseName = ExtractHorseName(horseCellText);
+            var (extractedOwnerName, extractedBreederName) = ExtractOwnerAndBreederFromHorseCell(horseCellText);
             var trainerName = trainerIndex >= 0
                 ? NullIfEmpty(GetCell(row, trainerIndex))
                 : ExtractTrainerFromHorseCell(horseCellText);
+            var ownerName = ownerIndex >= 0
+                ? NullIfEmpty(GetCell(row, ownerIndex))
+                : extractedOwnerName;
+            var breederName = breederIndex >= 0
+                ? NullIfEmpty(GetCell(row, breederIndex))
+                : extractedBreederName;
 
             var jockeyCellText = GetCell(row, jockeyIndex)?.Trim();
             string? jockeyName;
@@ -418,11 +832,16 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
             }
 
             var bodyWeightCell = GetCell(row, bodyWeightIndex);
+            if (string.IsNullOrWhiteSpace(bodyWeightCell))
+            {
+                bodyWeightCell = ExtractBodyWeightTextFromHorseCell(horseCellText);
+            }
+
             var (bodyWeight, bodyWeightDiff) = ParseBodyWeight(bodyWeightCell);
 
             entries.Add(new JraRaceEntryData(
                 HorseNumber: horseNumber.Value,
-                GateNumber: ParseInt(GetCell(row, gateNumberIndex)),
+                GateNumber: gateNumber,
                 HorseName: horseName,
                 JockeyName: jockeyName,
                 Weight: weight,
@@ -430,10 +849,68 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 BodyWeight: bodyWeight,
                 BodyWeightDiff: bodyWeightDiff,
                 TrainerName: trainerName,
-                OwnerName: NullIfEmpty(GetCell(row, ownerIndex))));
+                OwnerName: ownerName,
+                BreederName: breederName));
         }
 
         return entries;
+    }
+
+    private static bool IsHeaderRow(IReadOnlyList<string> row, IReadOnlyList<string> headers)
+    {
+        if (row.Count != headers.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < row.Count; i++)
+        {
+            if (!string.Equals(row[i]?.Trim(), headers[i]?.Trim(), StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int? ResolveProvisionalHorseNumber(
+        IReadOnlyList<string> row,
+        IReadOnlyList<string> headers,
+        string horseCellText,
+        int? gateNumber,
+        int existingEntryCount)
+    {
+        if (gateNumber.HasValue)
+        {
+            return null;
+        }
+
+        if (FindHeaderIndex(headers, "馬番") < 0)
+        {
+            return null;
+        }
+
+        if (!LooksLikeUndecidedRaceCardRow(row, horseCellText))
+        {
+            return null;
+        }
+
+        return existingEntryCount + 1;
+    }
+
+    private static bool LooksLikeUndecidedRaceCardRow(IReadOnlyList<string> row, string horseCellText)
+    {
+        var hasCombinedHorseProfile = horseCellText.Contains("父：", StringComparison.Ordinal)
+            && ExtractTrainerFromHorseCell(horseCellText) is not null;
+        if (!hasCombinedHorseProfile)
+        {
+            return false;
+        }
+
+        var leadingCells = row.Take(Math.Min(2, row.Count)).ToArray();
+        return leadingCells.All(string.IsNullOrWhiteSpace)
+            || leadingCells.Any(cell => string.Equals(cell?.Trim(), "ブリンカー着用", StringComparison.Ordinal));
     }
 
     // ------------------------------------------------------------------ //
@@ -455,11 +932,139 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         new(@"([\p{L}]+\s+[\p{L}]+|[\p{L}]+)\((?:美浦|栗東|地方|JRA)\)",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex BodyWeightInHorseCellRegex =
+        new(@"(?<bodyWeight>\d{3,4}\s*kg\s*\((?:[-+]\d+|初出走)\))",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex PrizeSectionRegex =
+        new(@"(?<label>(?:本賞金|付加賞金|付加賞|特別出走手当)(?:（[^）]+）)?)\s*(?<body>.*?)(?=(?:本賞金|付加賞金|付加賞|特別出走手当)(?:（[^）]+）)?|印刷用ページ|馬柱の見方|枠\s*馬番|$)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PrizeEntryRegex =
+        new(@"(?<place>[1-5])着\s*(?<amount>\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly string[] BreederKeywords =
+    [
+        "牧場",
+        "ファーム",
+        "スタッド",
+        "スタツド",
+        "ホースランチ",
+        "Farm",
+        "Ranch",
+        "Stud",
+        "Bloodstock",
+        "Ecurie",
+        "Thoroughbred"
+    ];
+
     private static string? ExtractTrainerFromHorseCell(string? cellText)
     {
         if (string.IsNullOrWhiteSpace(cellText)) return null;
         var m = TrainerInHorseCellRegex.Match(cellText);
         return m.Success ? m.Groups[1].Value.Trim() : null;
+    }
+
+    private static string? ExtractBodyWeightTextFromHorseCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText))
+        {
+            return null;
+        }
+
+        var match = BodyWeightInHorseCellRegex.Match(cellText);
+        return match.Success ? match.Groups["bodyWeight"].Value : null;
+    }
+
+    private static (string? OwnerName, string? BreederName) ExtractOwnerAndBreederFromHorseCell(string? cellText)
+    {
+        if (string.IsNullOrWhiteSpace(cellText))
+        {
+            return (null, null);
+        }
+
+        var ownerSegmentStart = 0;
+        var bodyWeightMatch = BodyWeightInHorseCellRegex.Match(cellText);
+        if (bodyWeightMatch.Success)
+        {
+            ownerSegmentStart = bodyWeightMatch.Index + bodyWeightMatch.Length;
+        }
+
+        var trainerMatch = TrainerInHorseCellRegex.Match(cellText);
+        var ownerSegmentEnd = trainerMatch.Success ? trainerMatch.Index : cellText.Length;
+        if (ownerSegmentEnd <= ownerSegmentStart)
+        {
+            return (null, null);
+        }
+
+        var segment = cellText[ownerSegmentStart..ownerSegmentEnd];
+        var pedigreeIndex = segment.IndexOf("父：", StringComparison.Ordinal);
+        if (pedigreeIndex >= 0)
+        {
+            segment = segment[..pedigreeIndex];
+        }
+
+        segment = segment.Trim();
+        if (string.IsNullOrWhiteSpace(segment))
+        {
+            return (null, null);
+        }
+
+        var horseName = ExtractHorseName(cellText);
+        if (string.Equals(segment, horseName, StringComparison.Ordinal))
+        {
+            return (null, null);
+        }
+
+        var breederIndex = FindBreederBoundary(segment);
+        if (breederIndex > 0)
+        {
+            return (NullIfEmpty(segment[..breederIndex]), NullIfEmpty(segment[breederIndex..]));
+        }
+
+        var tokens = segment
+            .Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .ToArray();
+
+        if (tokens.Length == 0)
+        {
+            return (null, null);
+        }
+
+        if (tokens.Length == 1)
+        {
+            return (tokens[0], null);
+        }
+
+        var breederTokenCount = tokens.Length >= 3 ? 2 : 1;
+        var ownerName = string.Join(" ", tokens[..^breederTokenCount]);
+        var breederName = string.Join(" ", tokens[^breederTokenCount..]);
+        return (NullIfEmpty(ownerName), NullIfEmpty(breederName));
+    }
+
+    private static int FindBreederBoundary(string text)
+    {
+        var boundary = -1;
+        foreach (var keyword in BreederKeywords)
+        {
+            var index = text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            // キーワード自体は生産者名の途中に出るので、直前の区切りまで戻す。
+            var start = index;
+            while (start > 0 && !char.IsWhiteSpace(text[start - 1]))
+            {
+                start--;
+            }
+
+            boundary = boundary < 0 ? start : Math.Min(boundary, start);
+        }
+
+        return boundary;
     }
 
     // 複合騎手セル "牡3/黒鹿 57.0kg 松若 風馬" → "松若 風馬"
@@ -569,7 +1174,28 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         string? Racecourse,
         DateOnly? RaceDate,
         int? RaceNumber,
+        int? MeetingNumber,
+        int? DayNumber,
+        TimeOnly? PostTime,
+        string? ConditionSummary,
+        string? AgeCondition,
+        string? AgeConditionCode,
+        string? RaceClass,
+        string? RaceClassCode,
+        string? Eligibility,
+        IReadOnlyList<string> EligibilityCodes,
+        string? EntryCondition,
+        IReadOnlyList<string> EntryConditionCodes,
+        string? WeightCondition,
+        string? WeightConditionCode,
         string? CourseType,
+        string? TrackDirection,
         int? Distance,
-        string? Grade);
+        string? Grade,
+        IReadOnlyList<JraRacePrizeData> PrizeMoney);
+
+    private sealed record MeetingInfo(
+        int MeetingNumber,
+        string Racecourse,
+        int DayNumber);
 }

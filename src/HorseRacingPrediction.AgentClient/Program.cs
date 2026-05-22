@@ -1,4 +1,5 @@
 using HorseRacingPrediction.AgentClient.Http;
+using HorseRacingPrediction.AgentClient.JraTesting;
 using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
@@ -131,6 +132,7 @@ builder.Services.AddSingleton<IJraRaceResultLookup, JraTaskAgentRaceResultLookup
 builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
 builder.Services.AddSingleton<IJraProfileLookup, JraTaskAgentProfileLookup>();
 builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
+builder.Services.AddSingleton<JraJsonExtractionService>();
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<RaceTextInsightCollector>();
@@ -160,6 +162,7 @@ app.MapOpenAIConversations();
 app.MapAgentCollectionStatusEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapAgentDashboardEndpoints();
+app.MapJraJsonTesterEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
