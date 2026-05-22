@@ -14,6 +14,21 @@ namespace HorseRacingPrediction.Agents.Plugins;
 /// </summary>
 public sealed class HorseRacingTools
 {
+    private static readonly IReadOnlyDictionary<string, string> JraRacecourseDisplayNames =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["01"] = "札幌",
+            ["02"] = "函館",
+            ["03"] = "福島",
+            ["04"] = "新潟",
+            ["05"] = "東京",
+            ["06"] = "中山",
+            ["07"] = "中京",
+            ["08"] = "京都",
+            ["09"] = "阪神",
+            ["10"] = "小倉",
+        };
+
     private readonly WebFetchTools _webTools;
 
     public HorseRacingTools(WebFetchTools webTools)
@@ -31,8 +46,14 @@ public sealed class HorseRacingTools
         [Description("レース番号（1〜12）")] int raceNumber,
         CancellationToken cancellationToken = default)
     {
-        var url = BuildJraRaceCardUrl(racecourseCode, raceDate, raceNumber);
-        var rawText = await _webTools.FetchPageContent(url, cancellationToken);
+        var racecourse = ResolveRacecourseDisplayName(racecourseCode) ?? racecourseCode;
+        var query = $"{raceDate} {racecourse} {raceNumber}R 出馬表";
+        var rawText = await _webTools.SearchAndFetchContentAsync(
+            query,
+            "www.jra.go.jp",
+            maxLinksToFetch: 1,
+            cancellationToken: cancellationToken);
+
         return $"# 出馬表 競馬場={racecourseCode} 日付={raceDate} R{raceNumber}\n\n{rawText}";
     }
 
@@ -128,18 +149,10 @@ public sealed class HorseRacingTools
     // private helpers
     // ------------------------------------------------------------------ //
 
-    private static string BuildJraRaceCardUrl(string racecourseCode, string raceDate, int raceNumber)
-    {
-        // JRA の出馬表 URL パターン
-        // CNAME 形式: pw01sde0203_{raceDate}{racecourseCode}{raceNumber:00}01
-        //   pw01sde0203_ : JRA の出馬表画面識別子（固定値）
-        //   raceDate      : 開催日（YYYYMMDD）
-        //   racecourseCode: 競馬場コード（例: 05=東京, 06=中山）
-        //   raceNumber    : レース番号（2桁ゼロ埋め）
-        //   01            : 回次・日次（参照用固定値）
-        return $"https://www.jra.go.jp/JRADB/accessD.html?" +
-               $"CNAME=pw01sde0203_{raceDate}{racecourseCode}{raceNumber:D2}01&sub=";
-    }
+    private static string? ResolveRacecourseDisplayName(string racecourseCode)
+        => JraRacecourseDisplayNames.TryGetValue(racecourseCode, out var displayName)
+            ? displayName
+            : null;
 
     private static string FormatSection(string heading, string body)
     {

@@ -39,6 +39,16 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
         await _browser.NavigateAsync(ThisWeekUrl, cancellationToken).ConfigureAwait(false);
 
         var thisWeekSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        if (!ContainsExactRequestedDate(thisWeekSnapshot, weekendDate))
+        {
+            _logger.LogWarning(
+                "JRA race card URL discovery cannot use current-week route for requested date. RaceDate={RaceDate} CurrentUrl={CurrentUrl}",
+                weekendDate,
+                thisWeekSnapshot.Url);
+
+            return await DiscoverFromMenuAsync(weekendDate, cancellationToken).ConfigureAwait(false);
+        }
+
         var discovered = new List<JraRaceCardUrl>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -124,6 +134,15 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
 
         var holdingsSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
         var holdingsUrl = _browser.CurrentUrl;
+
+        if (!ContainsExactRequestedDate(holdingsSnapshot, requestedDate))
+        {
+            _logger.LogWarning(
+                "JRA race card URL discovery could not find requested date on holdings page. RaceDate={RaceDate} CurrentUrl={CurrentUrl}",
+                requestedDate,
+                holdingsSnapshot.Url);
+            return discovered;
+        }
 
         foreach (var cardUrl in CollectRaceCardUrls(holdingsSnapshot, requestedDate))
         {

@@ -249,15 +249,13 @@ public sealed class JraTaskAgent : IAsyncDisposable
             ?? throw new InvalidOperationException(
                 $"structured next link が見つかりませんでした: {relationOrLabel}");
 
-        if (nextLink.NavigationMode == JraStructuredLinkNavigationMode.DirectUrl
-            && !string.IsNullOrWhiteSpace(nextLink.Url))
+        if (string.IsNullOrWhiteSpace(nextLink.Label))
         {
-            await Browser.NavigateAsync(nextLink.Url, cancellationToken);
+            throw new InvalidOperationException(
+                $"structured next link にクリック可能なラベルがありませんでした: {relationOrLabel}");
         }
-        else
-        {
-            await Browser.ClickAsync(nextLink.Label, cancellationToken);
-        }
+
+        await Browser.ClickAsync(nextLink.Label, cancellationToken);
 
         SyncMemoryFromUrl();
         return await ExtractCurrentStructuredPageAsync(cancellationToken);
@@ -315,7 +313,28 @@ public sealed class JraTaskAgent : IAsyncDisposable
             SyncMemoryFromUrl();
             await EnsureOnRacePageAsync(date, racecourse, raceNumber, steps, ct);
             await EnsurePageKindAsync(targetKind, steps, ct);
-            return await ExtractCurrentAsync(steps, sw, ct);
+
+            var result = await ExtractCurrentAsync(steps, sw, ct);
+            if (result.Data is not null)
+            {
+                return result;
+            }
+
+            steps.Add("retry: clicked race page returned no extractable data");
+            await NavigateToRaceAsync(date, racecourse, raceNumber, steps, ct);
+            await EnsurePageKindAsync(targetKind, steps, ct);
+
+            var retried = await ExtractCurrentAsync(steps, sw, ct);
+            if (retried.Data is not null)
+            {
+                return retried;
+            }
+
+            return JraExtractionEnvelope.Failure(
+                targetKind,
+                _browser?.CurrentUrl ?? string.Empty,
+                new JraNavigationTrace(steps, sw.Elapsed),
+                "クリック遷移で到達したページから有効なデータを抽出できませんでした。JRA 側の一時エラーの可能性があります。");
         }
         catch (Exception ex)
         {
@@ -431,35 +450,23 @@ public sealed class JraTaskAgent : IAsyncDisposable
         SyncMemoryFromUrl();
         if (_memory.CurrentPageKind == target) return;
 
-        var directUrl = TryBuildDirectRacePageUrl(Browser.CurrentUrl, target);
-        if (!string.IsNullOrWhiteSpace(directUrl))
-        {
-            await Browser.NavigateAsync(directUrl, ct);
-            steps.Add($"navigate: {directUrl}");
-            SyncMemoryFromUrl();
-            if (_memory.CurrentPageKind == target) return;
-        }
-
         var hints = _planner.GetTransitionHints(_memory.CurrentPageKind, target)
             ?? throw new InvalidOperationException(
                 $"ページ {_memory.CurrentPageKind} から {target} への直接遷移が定義されていません。");
 
-        var snapshot    = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
-        var clickTarget = _planner.FindBestClickTarget(snapshot, hints) ?? hints[0];
+        var currentSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
+        var clickTarget = _planner.FindBestClickTarget(currentSnapshot, hints) ?? hints[0];
 
         await Browser.ClickAsync(clickTarget, ct);
         steps.Add($"click: {clickTarget}");
-        SyncMemoryFromUrl();
+        var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
+        var kind = JraPageKindDetector.Detect(Browser.CurrentUrl, snapshot);
+        _memory.RecordNavigation(Browser.CurrentUrl ?? snapshot.Url, kind);
 
         if (_memory.CurrentPageKind != target)
         {
-            directUrl = TryBuildDirectRacePageUrl(Browser.CurrentUrl, target);
-            if (!string.IsNullOrWhiteSpace(directUrl))
-            {
-                await Browser.NavigateAsync(directUrl, ct);
-                steps.Add($"navigate: {directUrl}");
-                SyncMemoryFromUrl();
-            }
+            throw new InvalidOperationException(
+                $"クリック遷移後もページ種別が {target} になりませんでした。actual={_memory.CurrentPageKind}");
         }
     }
 
@@ -476,13 +483,13 @@ public sealed class JraTaskAgent : IAsyncDisposable
         var holdingsUrl      = Browser.CurrentUrl;
         var holdingsSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: ct);
 
-        if (date.Year != DateTime.Today.Year && !ContainsExactRequestedDate(holdingsSnapshot, date))
+        if (!ContainsExactRequestedDate(holdingsSnapshot, date))
         {
             throw new InvalidOperationException(
-                $"{date.Year}年{date.Month}月{date.Day}日の出馬表は現在の JRA 出馬表導線では見つかりませんでした。過去開催は別導線での取得が必要です。");
+            $"{date.Year}年{date.Month}月{date.Day}日の出馬表は現在の JRA 出馬表導線には表示されていません。別導線が必要です。");
         }
 
-        if (await TryNavigateDirectRaceLinkFromHoldingSelectionAsync(holdingsSnapshot, date, racecourse, raceNumber, steps, ct))
+        if (await TryClickRaceLinkFromHoldingSelectionAsync(holdingsSnapshot, date, racecourse, raceNumber, steps, ct))
         {
             _memory.SetRaceContext(date, racecourse, raceNumber);
             SyncMemoryFromUrl();
@@ -530,7 +537,11 @@ public sealed class JraTaskAgent : IAsyncDisposable
         foreach (var holding in candidates)
         {
             if (!string.IsNullOrWhiteSpace(holdingsUrl) && Browser.CurrentUrl != holdingsUrl)
-                await Browser.NavigateAsync(holdingsUrl, ct);
+            {
+                await Browser.GoBackAsync(ct);
+                steps.Add("back");
+                _memory.RecordGoBack();
+            }
 
             await Browser.ClickAsync(holding, ct);
             steps.Add($"click: {holding}");
@@ -573,7 +584,7 @@ public sealed class JraTaskAgent : IAsyncDisposable
         return false;
     }
 
-    private async Task<bool> TryNavigateDirectRaceLinkFromHoldingSelectionAsync(
+    private async Task<bool> TryClickRaceLinkFromHoldingSelectionAsync(
         PageSnapshot snapshot,
         DateOnly date,
         string racecourse,
@@ -585,11 +596,10 @@ public sealed class JraTaskAgent : IAsyncDisposable
             .Select(link => new
             {
                 link.Title,
-                Url = ResolveUrl(snapshot.Url, link.Url),
                 MatchesHeadingDate = IsLinkScopedUnderDateHeading(snapshot.MainText, link.Title, date),
                 MatchesCompactDate = UrlContainsDate(link.Url, date.ToString("yyyyMMdd", CultureInfo.InvariantCulture)),
             })
-            .Where(link => !string.IsNullOrWhiteSpace(link.Url)
+            .Where(link => !string.IsNullOrWhiteSpace(link.Title)
                 && ContainsNormalized(link.Title, racecourse)
                 && ContainsNormalized(link.Title, $"{raceNumber}R"))
             .OrderByDescending(link => link.MatchesHeadingDate)
@@ -601,8 +611,8 @@ public sealed class JraTaskAgent : IAsyncDisposable
             return false;
         }
 
-        await Browser.NavigateAsync(directRaceLink.Url!, ct);
-        steps.Add($"navigate: {directRaceLink.Url}");
+        await Browser.ClickAsync(directRaceLink.Title!, ct);
+        steps.Add($"click: {directRaceLink.Title}");
         return true;
     }
 
@@ -866,27 +876,4 @@ public sealed class JraTaskAgent : IAsyncDisposable
             && snapshot.Url.Contains($"/{date.Month}/{date.Month:D2}{date.Day:D2}.html", StringComparison.Ordinal);
     }
 
-    private static string? TryBuildDirectRacePageUrl(string? currentUrl, JraPageKind target)
-    {
-        if (string.IsNullOrWhiteSpace(currentUrl)) return null;
-
-        var current = currentUrl;
-        var converted = target switch
-        {
-            JraPageKind.RaceCard => current
-                .Replace("accessO.html", "accessD.html", StringComparison.OrdinalIgnoreCase)
-                .Replace("accessP.html", "accessD.html", StringComparison.OrdinalIgnoreCase),
-            JraPageKind.Odds => current
-                .Replace("accessD.html", "accessO.html", StringComparison.OrdinalIgnoreCase)
-                .Replace("accessP.html", "accessO.html", StringComparison.OrdinalIgnoreCase),
-            JraPageKind.Result => current
-                .Replace("accessD.html", "accessP.html", StringComparison.OrdinalIgnoreCase)
-                .Replace("accessO.html", "accessP.html", StringComparison.OrdinalIgnoreCase),
-            _ => null,
-        };
-
-        if (string.IsNullOrWhiteSpace(converted)) return null;
-        if (string.Equals(converted, current, StringComparison.Ordinal)) return null;
-        return converted;
-    }
 }
