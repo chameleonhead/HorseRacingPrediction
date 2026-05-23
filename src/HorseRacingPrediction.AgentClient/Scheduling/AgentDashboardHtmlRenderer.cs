@@ -115,6 +115,12 @@ public static class AgentDashboardHtmlRenderer
       grid-template-columns: 1.25fr 1fr;
       gap: 16px;
     }
+    .wide-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
     .quick-actions {
       display: grid;
       grid-template-columns: 1fr;
@@ -243,8 +249,14 @@ public static class AgentDashboardHtmlRenderer
       font-size: 13px;
       margin-bottom: 12px;
     }
+    .summary-line {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
     @media (max-width: 980px) {
-      .metrics, .grid { grid-template-columns: 1fr; }
+      .metrics, .grid, .wide-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -253,7 +265,7 @@ public static class AgentDashboardHtmlRenderer
     <div class="hero">
       <div>
         <h1>AgentClient Dashboard</h1>
-        <div class="sub">結果ジョブ、日別抽出状態、取得障害を AgentClient ローカル状態から可視化します。</div>
+        <div class="sub">進行中ジョブ、待ち行列、日次結果、レース収集、依存取得を横断して観測するローカル運用ダッシュボードです。</div>
       </div>
       <div class="actions">
         <div class="chip">自動更新: 30 秒</div>
@@ -275,12 +287,12 @@ public static class AgentDashboardHtmlRenderer
 
     <div class="metrics">
       <div class="panel metric">
-        <h2>Running Jobs</h2>
+        <h2>Active Work Items</h2>
         <div class="value" id="runningJobs">-</div>
         <div class="note" id="jobBreakdown">-</div>
       </div>
       <div class="panel metric">
-        <h2>Retry Scheduled Days</h2>
+        <h2>Queue Depth</h2>
         <div class="value" id="retryDays">-</div>
         <div class="note" id="dayBreakdown">-</div>
       </div>
@@ -290,9 +302,9 @@ public static class AgentDashboardHtmlRenderer
         <div class="note">job + day status の合計</div>
       </div>
       <div class="panel metric">
-        <h2>Acquisition Failures</h2>
+        <h2>Current Race Work</h2>
         <div class="value" id="acquisitionFailures">-</div>
-        <div class="note">horse / jockey / trainer</div>
+        <div class="note" id="currentRaceBreakdown">-</div>
       </div>
     </div>
 
@@ -327,6 +339,26 @@ public static class AgentDashboardHtmlRenderer
 
     <div class="grid">
       <div class="panel section">
+        <h2>Active Work</h2>
+        <div class="summary-line" id="activeWorkSummary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Updated</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="activeWorkBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel section">
         <h2>Job Statuses</h2>
         <div class="toolbar">
           <span class="muted" id="jobsUpdated">読込中...</span>
@@ -336,10 +368,11 @@ public static class AgentDashboardHtmlRenderer
             <thead>
               <tr>
                 <th>JobType</th>
+                <th>Target</th>
                 <th>Status</th>
+                <th>Timeline</th>
                 <th>Priority</th>
                 <th>Attempts</th>
-                <th>Updated</th>
                 <th>Error</th>
                 <th>Action</th>
               </tr>
@@ -372,9 +405,31 @@ public static class AgentDashboardHtmlRenderer
       </div>
     </div>
 
-    <div class="grid" style="margin-top:16px;">
+    <div class="wide-grid">
+      <div class="panel section">
+        <h2>Queue Overview</h2>
+        <div class="summary-line" id="queueSummary"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Ready At</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody id="queueBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="panel section">
         <h2>Race Collection Statuses</h2>
+        <div class="toolbar">
+          <span class="muted" id="racesUpdated">進行中のレースと直近更新を表示</span>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -382,6 +437,7 @@ public static class AgentDashboardHtmlRenderer
                 <th>Race</th>
                 <th>Card</th>
                 <th>Result</th>
+                <th>Origin</th>
                 <th>Updated</th>
               </tr>
             </thead>
@@ -392,6 +448,9 @@ public static class AgentDashboardHtmlRenderer
 
       <div class="panel section">
         <h2>Acquisition Statuses</h2>
+        <div class="toolbar">
+          <span class="muted" id="acquisitionsUpdated">進行中と障害を優先表示</span>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -573,7 +632,9 @@ public static class AgentDashboardHtmlRenderer
       renderDays(filteredDays);
       renderRaces(filteredRaces);
       renderAcquisitions(filteredAcquisitions);
-      renderMetrics(filteredJobs, filteredDays, filteredAcquisitions);
+      renderActiveWork(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
+      renderQueue(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
+      renderMetrics(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
     }
 
     function filterJobs(jobs) {
@@ -666,15 +727,212 @@ public static class AgentDashboardHtmlRenderer
       return [...new Set(items.map(item => normalizeStatus(item.status)).filter(Boolean))].sort();
     }
 
+    function buildActiveWorkItems(jobs, days, races, acquisitions) {
+      const jobItems = jobs
+        .filter(job => normalizeJobStatus(job.status) === 'Running')
+        .map(job => ({
+          kind: 'Job',
+          target: describeJobTarget(job),
+          status: normalizeJobStatus(job.status),
+          progress: describeJobProgress(job),
+          updatedAt: job.updatedAt,
+          detail: buildJobDetail(job)
+        }));
+
+      const dayItems = days
+        .filter(day => ['Discovering', 'Running', 'Partial', 'RetryScheduled'].includes(normalizeDayStatus(day.status)))
+        .map(day => ({
+          kind: 'ResultDay',
+          target: `${day.providerType} ${day.targetDate}`,
+          status: normalizeDayStatus(day.status),
+          progress: `${day.completedRaceCount} / ${day.expectedRaceCount}`,
+          updatedAt: day.updatedAt,
+          detail: day.incompleteReason ?? day.lastError ?? ''
+        }));
+
+      const raceItems = races
+        .filter(race => normalizeCollectionStatus(race.raceCardStatus) === 'Running' || normalizeCollectionStatus(race.raceResultStatus) === 'Running')
+        .map(race => ({
+          kind: 'Race',
+          target: `${race.raceDate} ${race.racecourse} ${race.raceNumber}R ${race.raceName ?? ''}`.trim(),
+          status: normalizeCollectionStatus(race.raceResultStatus) === 'Running'
+            ? `Result ${normalizeCollectionStatus(race.raceResultStatus)}`
+            : `Card ${normalizeCollectionStatus(race.raceCardStatus)}`,
+          progress: `${normalizeCollectionStatus(race.raceCardStatus)} / ${normalizeCollectionStatus(race.raceResultStatus)}`,
+          updatedAt: race.updatedAt,
+          detail: race.raceResultErrorReason ?? race.raceCardErrorReason ?? race.raceResultUrl ?? race.raceCardUrl ?? ''
+        }));
+
+      const acquisitionItems = acquisitions
+        .filter(item => normalizeCollectionStatus(item.status) === 'Running')
+        .map(item => ({
+          kind: 'Acquisition',
+          target: `${item.subjectType} ${item.subjectName}`,
+          status: normalizeCollectionStatus(item.status),
+          progress: item.operationType,
+          updatedAt: item.updatedAt,
+          detail: item.relatedRaceId ?? item.sourceUrl ?? ''
+        }));
+
+      return [...jobItems, ...dayItems, ...raceItems, ...acquisitionItems]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 40);
+    }
+
+    function buildQueueItems(jobs, days, races, acquisitions) {
+      const jobItems = jobs
+        .filter(job => ['Ready', 'WaitingDependency', 'Pending'].includes(normalizeJobStatus(job.status)))
+        .map(job => ({
+          kind: 'Job',
+          target: describeJobTarget(job),
+          status: normalizeJobStatus(job.status),
+          readyAt: job.availableAt,
+          detail: buildJobDetail(job)
+        }));
+
+      const dayItems = days
+        .filter(day => ['Ready', 'RetryScheduled', 'Incomplete', 'Partial'].includes(normalizeDayStatus(day.status)))
+        .map(day => ({
+          kind: 'ResultDay',
+          target: `${day.providerType} ${day.targetDate}`,
+          status: normalizeDayStatus(day.status),
+          readyAt: day.retryAfter ?? day.updatedAt,
+          detail: `${day.completedRaceCount} / ${day.expectedRaceCount}${day.incompleteReason ? ` | ${day.incompleteReason}` : ''}`
+        }));
+
+      const raceItems = races
+        .filter(race => normalizeCollectionStatus(race.raceCardStatus) === 'Failed' || normalizeCollectionStatus(race.raceResultStatus) === 'Failed')
+        .map(race => ({
+          kind: 'Race',
+          target: `${race.raceDate} ${race.racecourse} ${race.raceNumber}R`,
+          status: normalizeCollectionStatus(race.raceResultStatus) === 'Failed'
+            ? `Result ${normalizeCollectionStatus(race.raceResultStatus)}`
+            : `Card ${normalizeCollectionStatus(race.raceCardStatus)}`,
+          readyAt: race.updatedAt,
+          detail: race.raceResultErrorReason ?? race.raceCardErrorReason ?? ''
+        }));
+
+      const acquisitionItems = acquisitions
+        .filter(item => ['Failed', 'DeadLetter'].includes(normalizeCollectionStatus(item.status)))
+        .map(item => ({
+          kind: 'Acquisition',
+          target: `${item.subjectType} ${item.subjectName}`,
+          status: normalizeCollectionStatus(item.status),
+          readyAt: item.updatedAt,
+          detail: item.errorReason ?? item.sourceUrl ?? ''
+        }));
+
+      return [...jobItems, ...dayItems, ...raceItems, ...acquisitionItems]
+        .sort((a, b) => new Date(b.readyAt).getTime() - new Date(a.readyAt).getTime())
+        .slice(0, 40);
+    }
+
+    function describeJobTarget(job) {
+      const key = job.deduplicationKey ?? '';
+      const parts = key.split(':');
+      if (parts.length < 2) {
+        return key;
+      }
+
+      if (key.includes(':race-card:') || key.includes(':race-result:') || key.includes(':result-day-discovery:') || key.includes(':result-day-collection:')) {
+        return `${job.jobType} ${parts.at(-1)}`;
+      }
+
+      if (key.includes(':result-month:')) {
+        return `${job.jobType} ${parts.at(-1)}`;
+      }
+
+      if (key.includes(':historical-race-result:') && parts.length >= 5) {
+        return `${job.jobType} ${parts[2]} ${parts[3]} ${parts[4]}R`;
+      }
+
+      return `${job.jobType} ${key}`;
+    }
+
+    function describeJobProgress(job) {
+      if (job.startedAt && job.leaseExpiresAt) {
+        return `started ${fmt(job.startedAt)} / lease ${fmt(job.leaseExpiresAt)}`;
+      }
+
+      if (job.startedAt) {
+        return `started ${fmt(job.startedAt)}`;
+      }
+
+      return `available ${fmt(job.availableAt)}`;
+    }
+
+    function buildJobDetail(job) {
+      const timeline = [];
+      if (job.firstQueuedAt) timeline.push(`queued ${fmt(job.firstQueuedAt)}`);
+      if (job.startedAt) timeline.push(`started ${fmt(job.startedAt)}`);
+      if (job.leaseExpiresAt) timeline.push(`lease ${fmt(job.leaseExpiresAt)}`);
+      if (job.lastError) timeline.push(job.lastError);
+      return timeline.join(' | ');
+    }
+
+    function renderActiveWork(jobs, days, races, acquisitions) {
+      const items = buildActiveWorkItems(jobs, days, races, acquisitions);
+      const counts = {
+        jobs: items.filter(x => x.kind === 'Job').length,
+        days: items.filter(x => x.kind === 'ResultDay').length,
+        races: items.filter(x => x.kind === 'Race').length,
+        acquisitions: items.filter(x => x.kind === 'Acquisition').length
+      };
+
+      document.getElementById('activeWorkSummary').innerHTML = [
+        `Job ${counts.jobs}`,
+        `ResultDay ${counts.days}`,
+        `Race ${counts.races}`,
+        `Acquisition ${counts.acquisitions}`
+      ].map(text => `<span class="chip">${text}</span>`).join('');
+
+      document.getElementById('activeWorkBody').innerHTML = items.map(item => `
+        <tr>
+          <td>${item.kind}</td>
+          <td>${item.target}</td>
+          <td><span class="${statusClass(item.status)}">${item.status}</span></td>
+          <td>${item.progress}</td>
+          <td>${fmt(item.updatedAt)}</td>
+          <td class="error">${item.detail ?? ''}</td>
+        </tr>`).join('');
+    }
+
+    function renderQueue(jobs, days, races, acquisitions) {
+      const items = buildQueueItems(jobs, days, races, acquisitions);
+      const counts = {
+        ready: items.filter(x => x.status === 'Ready').length,
+        retry: items.filter(x => x.status === 'RetryScheduled').length,
+        waiting: items.filter(x => x.status === 'WaitingDependency').length,
+        failed: items.filter(x => x.status.includes('Failed') || x.status === 'Incomplete' || x.status === 'Partial' || x.status === 'DeadLetter').length
+      };
+
+      document.getElementById('queueSummary').innerHTML = [
+        `Ready ${counts.ready}`,
+        `Retry ${counts.retry}`,
+        `Waiting ${counts.waiting}`,
+        `Attention ${counts.failed}`
+      ].map(text => `<span class="chip">${text}</span>`).join('');
+
+      document.getElementById('queueBody').innerHTML = items.map(item => `
+        <tr>
+          <td>${item.kind}</td>
+          <td>${item.target}</td>
+          <td><span class="${statusClass(item.status)}">${item.status}</span></td>
+          <td>${fmt(item.readyAt)}</td>
+          <td class="error">${item.detail ?? ''}</td>
+        </tr>`).join('');
+    }
+
     function renderJobs(jobs) {
       document.getElementById('jobsUpdated').textContent = `件数: ${jobs.length}`;
       document.getElementById('jobsBody').innerHTML = jobs.map(job => `
         <tr>
           <td class="mono">${job.jobType}<div class="muted mono">${job.deduplicationKey}</div></td>
+          <td>${describeJobTarget(job)}</td>
           <td><span class="${statusClass(job.status)}">${normalizeJobStatus(job.status)}</span></td>
+          <td class="mono">${describeJobProgress(job)}</td>
           <td>${job.priority}</td>
           <td>${job.attemptCount}</td>
-          <td>${fmt(job.updatedAt)}</td>
           <td class="error">${job.lastError ?? ''}</td>
           <td>${normalizeJobStatus(job.status) === 'DeadLetter' || normalizeJobStatus(job.status) === 'Failed' ? `<button onclick="requeueJob('${escapeValue(job.jobType)}', '${escapeValue(job.deduplicationKey)}')">再投入</button>` : ''}</td>
         </tr>`).join('');
@@ -694,17 +952,46 @@ public static class AgentDashboardHtmlRenderer
     }
 
     function renderRaces(races) {
-      document.getElementById('racesBody').innerHTML = races.slice(-80).reverse().map(race => `
+      const ordered = races
+        .slice()
+        .sort((a, b) => {
+          const aScore = (normalizeCollectionStatus(a.raceCardStatus) === 'Running' || normalizeCollectionStatus(a.raceResultStatus) === 'Running') ? 1 : 0;
+          const bScore = (normalizeCollectionStatus(b.raceCardStatus) === 'Running' || normalizeCollectionStatus(b.raceResultStatus) === 'Running') ? 1 : 0;
+          if (aScore !== bScore) {
+            return bScore - aScore;
+          }
+
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        })
+        .slice(0, 80);
+
+      document.getElementById('racesUpdated').textContent = `件数: ${ordered.length}`;
+      document.getElementById('racesBody').innerHTML = ordered.map(race => `
         <tr>
           <td class="mono">${race.raceDate} ${race.racecourse} ${race.raceNumber}R<div>${race.raceName ?? ''}</div></td>
           <td><span class="${statusClass(race.raceCardStatus)}">${normalizeCollectionStatus(race.raceCardStatus)}</span></td>
           <td><span class="${statusClass(race.raceResultStatus)}">${normalizeCollectionStatus(race.raceResultStatus)}</span></td>
+          <td>${race.raceResultOrigin ?? '-'}</td>
           <td>${fmt(race.updatedAt)}</td>
         </tr>`).join('');
     }
 
     function renderAcquisitions(items) {
-      document.getElementById('acquisitionsBody').innerHTML = items.slice(0, 80).map(item => `
+      const ordered = items
+        .slice()
+        .sort((a, b) => {
+          const aScore = ['Running', 'Failed', 'DeadLetter'].includes(normalizeCollectionStatus(a.status)) ? 1 : 0;
+          const bScore = ['Running', 'Failed', 'DeadLetter'].includes(normalizeCollectionStatus(b.status)) ? 1 : 0;
+          if (aScore !== bScore) {
+            return bScore - aScore;
+          }
+
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        })
+        .slice(0, 80);
+
+      document.getElementById('acquisitionsUpdated').textContent = `件数: ${ordered.length}`;
+      document.getElementById('acquisitionsBody').innerHTML = ordered.map(item => `
         <tr>
           <td>${item.subjectType}<div>${item.subjectName}</div></td>
           <td>${item.operationType}</td>
@@ -714,19 +1001,23 @@ public static class AgentDashboardHtmlRenderer
         </tr>`).join('');
     }
 
-    function renderMetrics(jobs, days, acquisitions) {
-      const runningJobs = jobs.filter(x => normalizeJobStatus(x.status) === 'Running').length;
+    function renderMetrics(jobs, days, races, acquisitions) {
+      const activeWorkItems = buildActiveWorkItems(jobs, days, races, acquisitions);
+      const queueItems = buildQueueItems(jobs, days, races, acquisitions);
+      const runningJobs = activeWorkItems.length;
       const deadLetters = jobs.filter(x => normalizeJobStatus(x.status) === 'DeadLetter').length + days.filter(x => normalizeDayStatus(x.status) === 'DeadLetter').length;
-      const retryDays = days.filter(x => normalizeDayStatus(x.status) === 'RetryScheduled').length;
+      const retryDays = queueItems.length;
       const incompleteDays = days.filter(x => normalizeDayStatus(x.status) === 'Incomplete' || normalizeDayStatus(x.status) === 'Partial').length;
-      const acquisitionFailures = acquisitions.filter(x => normalizeCollectionStatus(x.status) === 'Failed' || normalizeCollectionStatus(x.status) === 'DeadLetter').length;
+      const runningRaces = races.filter(x => normalizeCollectionStatus(x.raceCardStatus) === 'Running' || normalizeCollectionStatus(x.raceResultStatus) === 'Running').length;
+      const runningAcquisitions = acquisitions.filter(x => normalizeCollectionStatus(x.status) === 'Running').length;
 
       document.getElementById('runningJobs').textContent = runningJobs;
-      document.getElementById('jobBreakdown').textContent = `Ready: ${jobs.filter(x => normalizeJobStatus(x.status) === 'Ready').length} / Waiting: ${jobs.filter(x => normalizeJobStatus(x.status) === 'WaitingDependency').length}`;
+      document.getElementById('jobBreakdown').textContent = `Job: ${jobs.filter(x => normalizeJobStatus(x.status) === 'Running').length} / Day: ${days.filter(x => ['Discovering', 'Running', 'Partial', 'RetryScheduled'].includes(normalizeDayStatus(x.status))).length}`;
       document.getElementById('retryDays').textContent = retryDays;
-      document.getElementById('dayBreakdown').textContent = `Incomplete: ${incompleteDays}`;
+      document.getElementById('dayBreakdown').textContent = `Incomplete: ${incompleteDays} / Ready jobs: ${jobs.filter(x => normalizeJobStatus(x.status) === 'Ready').length}`;
       document.getElementById('deadLetters').textContent = deadLetters;
-      document.getElementById('acquisitionFailures').textContent = acquisitionFailures;
+      document.getElementById('acquisitionFailures').textContent = runningRaces;
+      document.getElementById('currentRaceBreakdown').textContent = `Acquisition running: ${runningAcquisitions}`;
     }
 
     function normalizeStatus(value) {
