@@ -8,7 +8,7 @@ public static class JraJsonTesterPageHtml
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JRA JSON Tester</title>
+  <title>JRA Tool - AgentClient Operations</title>
   <style>
     :root {
       --bg: #f4efe5;
@@ -132,6 +132,17 @@ public static class JraJsonTesterPageHtml
       color: var(--accent);
     }
 
+    .nav-link {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: rgba(0, 95, 115, 0.1);
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+      margin-top: 14px;
+    }
+
     .output-head {
       display: flex;
       justify-content: space-between;
@@ -176,6 +187,7 @@ public static class JraJsonTesterPageHtml
     <section class="hero">
       <h1>JRA URL JSON Tester</h1>
       <p class="lead">JRA の URL を入力すると、ページ種別を判定し、対応する scraper または structured parser の JSON を返します。出馬表、オッズ、結果、プロフィール系に加えて、一覧系ページは structured parser の結果を確認できます。</p>
+      <a class="nav-link" href="/tools">運用ポータルへ戻る</a>
     </section>
 
     <section class="panel">
