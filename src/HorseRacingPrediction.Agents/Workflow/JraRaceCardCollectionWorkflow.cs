@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 
@@ -19,6 +20,21 @@ namespace HorseRacingPrediction.Agents.Workflow;
 /// </summary>
 public sealed class JraRaceCardCollectionWorkflow
 {
+    private static readonly IReadOnlyDictionary<string, string> RacecourseAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["01"] = "札幌",
+            ["02"] = "函館",
+            ["03"] = "福島",
+            ["04"] = "新潟",
+            ["05"] = "東京",
+            ["06"] = "中山",
+            ["07"] = "中京",
+            ["08"] = "京都",
+            ["09"] = "阪神",
+            ["10"] = "小倉",
+        };
+
     private readonly JraRaceCardUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceCardScraper _scraper;
     private readonly DataCollectionWriteTools _writeTools;
@@ -58,12 +74,13 @@ public sealed class JraRaceCardCollectionWorkflow
         CancellationToken cancellationToken = default)
     {
         var results = new List<(JraRaceCardUrl, JraRaceCardData)>();
+        await using var taskAgent = await JraTaskAgent.CreateAsync(cancellationToken).ConfigureAwait(false);
 
         foreach (var url in urls)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var data = await _scraper.ScrapeAsync(url.Url, cancellationToken);
+            var data = await TryScrapeByNavigationAsync(taskAgent, url, cancellationToken).ConfigureAwait(false);
             if (data is not null)
             {
                 results.Add((url, data));
@@ -195,6 +212,44 @@ public sealed class JraRaceCardCollectionWorkflow
         }
 
         return raceId;
+    }
+
+    private static async Task<JraRaceCardData?> TryScrapeByNavigationAsync(
+        JraTaskAgent taskAgent,
+        JraRaceCardUrl source,
+        CancellationToken cancellationToken)
+    {
+        if (source.RaceDate is not { } raceDate
+            || source.RaceNumber is not { } raceNumber
+            || !TryResolveRacecourseDisplayName(source, out var racecourse))
+        {
+            return null;
+        }
+
+        var envelope = await taskAgent
+            .RequestRaceCardAsync(raceDate, racecourse, raceNumber, cancellationToken)
+            .ConfigureAwait(false);
+
+        return envelope.Success ? envelope.Data : null;
+    }
+
+    private static bool TryResolveRacecourseDisplayName(JraRaceCardUrl source, out string racecourse)
+    {
+        racecourse = source.Racecourse ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(racecourse))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(source.RacecourseCode)
+            && RacecourseAliases.TryGetValue(source.RacecourseCode, out var displayName))
+        {
+            racecourse = displayName;
+            return true;
+        }
+
+        racecourse = string.Empty;
+        return false;
     }
 
     private static (string? sexCode, int? age) ParseSexAge(string? sexAge)

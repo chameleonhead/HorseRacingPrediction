@@ -117,11 +117,11 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
     {
         var discovered = new List<JraRaceCardUrl>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        PageSnapshot holdingsSnapshot;
 
         try
         {
-            await _browser.NavigateAsync(KeibaMenuUrl, cancellationToken).ConfigureAwait(false);
-            await _browser.ClickAsync("出馬表", cancellationToken).ConfigureAwait(false);
+            holdingsSnapshot = await OpenHoldingsPageAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -131,9 +131,6 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
                 requestedDate);
             return discovered;
         }
-
-        var holdingsSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        var holdingsUrl = _browser.CurrentUrl;
 
         if (!ContainsExactRequestedDate(holdingsSnapshot, requestedDate))
         {
@@ -158,11 +155,7 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
 
             try
             {
-                if (!string.IsNullOrWhiteSpace(holdingsUrl)
-                    && !string.Equals(_browser.CurrentUrl, holdingsUrl, StringComparison.OrdinalIgnoreCase))
-                {
-                    await _browser.NavigateAsync(holdingsUrl, cancellationToken).ConfigureAwait(false);
-                }
+                await OpenHoldingsPageAsync(cancellationToken).ConfigureAwait(false);
 
                 await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
                 var raceListSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
@@ -178,7 +171,6 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
                     directUrls = await CollectRaceCardUrlsByClickingRaceNumbersAsync(
                         requestedDate,
                         holdingLabel,
-                        holdingsUrl,
                         raceListUrl,
                         raceListSnapshot,
                         cancellationToken).ConfigureAwait(false);
@@ -208,7 +200,6 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
     private async Task<IReadOnlyList<JraRaceCardUrl>> CollectRaceCardUrlsByClickingRaceNumbersAsync(
         DateOnly requestedDate,
         string holdingLabel,
-        string? holdingsUrl,
         string? raceListUrl,
         PageSnapshot raceListSnapshot,
         CancellationToken cancellationToken)
@@ -228,15 +219,8 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
                     if (!string.IsNullOrWhiteSpace(raceListUrl)
                         && !string.Equals(_browser.CurrentUrl, raceListUrl, StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!string.IsNullOrWhiteSpace(holdingsUrl))
-                        {
-                            await _browser.NavigateAsync(holdingsUrl, cancellationToken).ConfigureAwait(false);
-                            await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            await _browser.NavigateAsync(raceListUrl, cancellationToken).ConfigureAwait(false);
-                        }
+                        await OpenHoldingsPageAsync(cancellationToken).ConfigureAwait(false);
+                        await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
                     }
 
                     await _browser.ClickAsync(clickLabel, cancellationToken).ConfigureAwait(false);
@@ -256,6 +240,13 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
         }
 
         return discovered;
+    }
+
+    private async Task<PageSnapshot> OpenHoldingsPageAsync(CancellationToken cancellationToken)
+    {
+        await _browser.NavigateAsync(KeibaMenuUrl, cancellationToken).ConfigureAwait(false);
+        await _browser.ClickAsync("出馬表", cancellationToken).ConfigureAwait(false);
+        return await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static IReadOnlyList<string> BuildMeetingUrls(PageSnapshot snapshot, DateOnly requestedDate)
@@ -297,7 +288,8 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
             return null;
         }
 
-        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase))
+        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase)
+            || normalizedUrl.Contains("pw01dde", StringComparison.OrdinalIgnoreCase))
         {
             var parsed = JraRaceCardUrl.ParseFromUrl(normalizedUrl, fallbackRacecourse);
             return parsed.RaceDate == requestedDate ? parsed : null;
@@ -330,7 +322,8 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
             return null;
         }
 
-        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase))
+        if (normalizedUrl.Contains("pw01sde0203_", StringComparison.OrdinalIgnoreCase)
+            || normalizedUrl.Contains("pw01dde", StringComparison.OrdinalIgnoreCase))
         {
             var parsed = JraRaceCardUrl.ParseFromUrl(normalizedUrl, fallbackRacecourse ?? ExtractRacecourse(snapshot));
             return parsed.RaceDate == requestedDate ? parsed : null;
@@ -441,9 +434,21 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
     private static bool ContainsExactRequestedDate(PageSnapshot snapshot, DateOnly date)
     {
         var fullDateText = $"{date.Year}年{date.Month}月{date.Day}日";
+        var monthDayText = $"{date.Month}月{date.Day}日";
+
+        if (EnumerateSnapshotText(snapshot)
+            .Any(text => text.Contains(fullDateText, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        if (date.Year != DateTime.Today.Year)
+        {
+            return false;
+        }
 
         return EnumerateSnapshotText(snapshot)
-            .Any(text => text.Contains(fullDateText, StringComparison.Ordinal));
+            .Any(text => text.Contains(monthDayText, StringComparison.Ordinal));
     }
 
     private async Task<PageSnapshot> GetMergedSnapshotAsync(CancellationToken cancellationToken)
@@ -467,13 +472,21 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
     private static bool TryExtractLinkedDate(string url, out DateOnly linkedDate)
     {
         linkedDate = default;
-        var match = MeetingLinkDateRegex.Match(url);
-        if (!match.Success)
+        var matches = MeetingLinkDateRegex.Matches(url);
+        if (matches.Count == 0)
         {
             return false;
         }
 
-        return DateOnly.TryParseExact(match.Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out linkedDate);
+        for (var index = matches.Count - 1; index >= 0; index--)
+        {
+            if (DateOnly.TryParseExact(matches[index].Value, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out linkedDate))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> EnumerateSnapshotText(PageSnapshot snapshot)

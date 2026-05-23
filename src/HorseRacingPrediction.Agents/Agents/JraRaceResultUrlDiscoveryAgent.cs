@@ -125,13 +125,17 @@ internal sealed class JraRaceResultUrlDiscoveryAgent
             var clicked = false;
             try
             {
-                if (!string.IsNullOrWhiteSpace(candidate.Url))
+                if (!string.IsNullOrWhiteSpace(candidate.Text))
+                {
+                    await _browser.ClickAsync(candidate.Text, cancellationToken);
+                }
+                else if (!string.IsNullOrWhiteSpace(candidate.Url))
                 {
                     await _browser.NavigateAsync(candidate.Url, cancellationToken);
                 }
                 else
                 {
-                    await _browser.ClickAsync(candidate.Text, cancellationToken);
+                    continue;
                 }
 
                 clicked = true;

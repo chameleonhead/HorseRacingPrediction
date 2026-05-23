@@ -267,15 +267,37 @@ public sealed class CollectionExecutionService : BackgroundService
                     now,
                     cancellationToken).ConfigureAwait(false);
 
-                var urls = await DiscoverUnregisteredResultUrlsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                var discoveredUrls = await DiscoverResultUrlsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                if (discoveredUrls.Count == 0)
+                {
+                    var shouldRetry = ShouldRetryIncompleteDay(payload.RaceDate, now);
+                    await _stateStore.UpsertResultDayCollectionStatusAsync(
+                        payload.ProviderType,
+                        payload.RaceDate,
+                        shouldRetry ? ResultDayCollectionState.RetryScheduled : ResultDayCollectionState.Complete,
+                        expectedRaceCount: 0,
+                        completedRaceCount: 0,
+                        incompleteReason: shouldRetry ? "Result URL discovery returned no URLs." : null,
+                        lastCompletedAt: shouldRetry ? null : now,
+                        retryAfter: shouldRetry ? now.AddHours(3) : null,
+                        lastError: shouldRetry ? "Result URL discovery returned no URLs." : null,
+                        now,
+                        cancellationToken).ConfigureAwait(false);
+
+                    await _stateStore.CompleteJobAsync(AgentJobType.ResultDayDiscoveryRequest, job.DeduplicationKey, cancellationToken)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
+                var urls = await FilterUnregisteredResultUrlsAsync(discoveredUrls, payload.RaceDate, cancellationToken).ConfigureAwait(false);
                 if (urls.Count == 0)
                 {
                     await _stateStore.UpsertResultDayCollectionStatusAsync(
                         payload.ProviderType,
                         payload.RaceDate,
                         ResultDayCollectionState.Complete,
-                        expectedRaceCount: 0,
-                        completedRaceCount: 0,
+                        expectedRaceCount: discoveredUrls.Count,
+                        completedRaceCount: discoveredUrls.Count,
                         incompleteReason: null,
                         lastCompletedAt: now,
                         retryAfter: null,
@@ -447,6 +469,23 @@ public sealed class CollectionExecutionService : BackgroundService
                 }
 
                 var result = await CollectRaceCardsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+
+                if (ShouldRetryRaceCardCollection(payload.RaceDate, result, now))
+                {
+                    _logger.LogInformation(
+                        "[収集実行] 出馬表未公開のため再試行します: Date={Date}",
+                        payload.RaceDate);
+
+                    await _stateStore.RequeueJobAsync(
+                        AgentJobType.RaceCardCollection,
+                        job.DeduplicationKey,
+                        now,
+                        "Race card discovery returned no URLs.",
+                        cancellationToken).ConfigureAwait(false);
+
+                    continue;
+                }
+
                 await RecordRaceCardStatusesAsync(result, now, cancellationToken).ConfigureAwait(false);
 
                 _logger.LogInformation(
@@ -598,13 +637,20 @@ public sealed class CollectionExecutionService : BackgroundService
             Errors: errors);
     }
 
-    private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(
+    private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverResultUrlsAsync(
         DateOnly raceDate,
         CancellationToken cancellationToken)
     {
         await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
         var workflow = CreateRaceResultWorkflow(browser);
-        var discoveredUrls = await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        return await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(
+        DateOnly raceDate,
+        CancellationToken cancellationToken)
+    {
+        var discoveredUrls = await DiscoverResultUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
         return await FilterUnregisteredResultUrlsAsync(discoveredUrls, raceDate, cancellationToken).ConfigureAwait(false);
     }
 
@@ -622,6 +668,20 @@ public sealed class CollectionExecutionService : BackgroundService
         var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
         var retryThreshold = new DateOnly(todayJst.Year, todayJst.Month, 1).AddMonths(-1);
         return raceDate >= retryThreshold;
+    }
+
+    private static bool ShouldRetryRaceCardCollection(
+        DateOnly raceDate,
+        JraRaceCardCollectionResult result,
+        DateTimeOffset now)
+    {
+        if (result.DiscoveredUrls.Count > 0 || result.Errors.Count > 0)
+        {
+            return false;
+        }
+
+        var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
+        return raceDate >= todayJst;
     }
 
     private async Task<IReadOnlyList<JraRaceResultUrl>> FilterUnregisteredResultUrlsAsync(

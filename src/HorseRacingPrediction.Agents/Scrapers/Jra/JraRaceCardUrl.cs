@@ -28,8 +28,15 @@ public sealed record JraRaceCardUrl(
     //   CC      : 競馬場コード（2桁）
     //   NN      : レース番号（2桁）
     //   01      : 回次・日次（固定値）
-    private static readonly Regex CnameRegex =
+    private static readonly Regex DirectCnameRegex =
         new(@"pw01sde0203_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d{2}", RegexOptions.Compiled);
+
+    // CNAME 形式: pw01dde1{0CC}{YYYY}{KK}{DD}{NN}{YYYY}{MM}{DD}
+    //   0CC     : 競馬場コード（3桁のうち後ろ2桁を使用）
+    //   YYYYMMDD: 開催日
+    //   NN      : レース番号（2桁）
+    private static readonly Regex ThisWeekCnameRegex =
+        new(@"pw01dde1(\d{3})(\d{4})(\d{2})(\d{2})(\d{2})(\d{4})(\d{2})(\d{2})", RegexOptions.Compiled);
 
     /// <summary>
     /// JRA 出馬表 URL から <see cref="JraRaceCardUrl"/> を生成する。
@@ -39,30 +46,60 @@ public sealed record JraRaceCardUrl(
     /// <param name="racecourse">競馬場名（日本語）。発見エージェントが返した場合に設定する</param>
     public static JraRaceCardUrl ParseFromUrl(string url, string? racecourse = null)
     {
-        var match = CnameRegex.Match(url);
-        if (!match.Success)
+        var directMatch = DirectCnameRegex.Match(url);
+        if (directMatch.Success)
+        {
+            return BuildFromDirectMatch(url, racecourse, directMatch);
+        }
+
+        var thisWeekMatch = ThisWeekCnameRegex.Match(url);
+        if (thisWeekMatch.Success)
+        {
+            return BuildFromThisWeekMatch(url, racecourse, thisWeekMatch);
+        }
+
+        if (!url.Contains("/syutsuba", StringComparison.OrdinalIgnoreCase))
         {
             return new JraRaceCardUrl(url, racecourse, null, null, null);
         }
 
-        DateOnly? raceDate = null;
-        if (int.TryParse(match.Groups[1].Value, out var year) &&
-            int.TryParse(match.Groups[2].Value, out var month) &&
-            int.TryParse(match.Groups[3].Value, out var day))
-        {
-            try
-            {
-                raceDate = new DateOnly(year, month, day);
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                // invalid date — leave as null
-            }
-        }
+        return new JraRaceCardUrl(url, racecourse, null, null, null);
+    }
 
+    private static JraRaceCardUrl BuildFromDirectMatch(string url, string? racecourse, Match match)
+    {
+        var raceDate = TryBuildDate(match.Groups[1].Value, match.Groups[2].Value, match.Groups[3].Value);
         var racecourseCode = match.Groups[4].Value;
         int? raceNumber = int.TryParse(match.Groups[5].Value, out var rn) ? rn : null;
 
         return new JraRaceCardUrl(url, racecourse, racecourseCode, raceDate, raceNumber);
+    }
+
+    private static JraRaceCardUrl BuildFromThisWeekMatch(string url, string? racecourse, Match match)
+    {
+        var raceDate = TryBuildDate(match.Groups[6].Value, match.Groups[7].Value, match.Groups[8].Value);
+        var racecourseCode = match.Groups[1].Value[1..];
+        int? raceNumber = int.TryParse(match.Groups[5].Value, out var rn) ? rn : null;
+
+        return new JraRaceCardUrl(url, racecourse, racecourseCode, raceDate, raceNumber);
+    }
+
+    private static DateOnly? TryBuildDate(string yearText, string monthText, string dayText)
+    {
+        if (int.TryParse(yearText, out var year) &&
+            int.TryParse(monthText, out var month) &&
+            int.TryParse(dayText, out var day))
+        {
+            try
+            {
+                return new DateOnly(year, month, day);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 }
