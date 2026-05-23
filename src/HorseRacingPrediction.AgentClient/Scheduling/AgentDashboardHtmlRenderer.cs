@@ -351,11 +351,26 @@ public static class AgentDashboardHtmlRenderer
     const state = { jobs: [], days: [], races: [], acquisitions: [] };
 
     const statusMap = {
-      0: 'Ready', 1: 'Running', 2: 'Completed', 3: 'Failed', 4: 'DeadLetter'
+      0: 'Pending',
+      1: 'Ready',
+      2: 'Running',
+      3: 'WaitingDependency',
+      4: 'Succeeded',
+      5: 'Failed',
+      6: 'Cancelled',
+      7: 'DeadLetter'
     };
 
     const dayStatusMap = {
-      0: 'Discovering', 1: 'Running', 2: 'Completed', 3: 'RetryScheduled', 4: 'Failed', 5: 'Incomplete', 6: 'Partial', 7: 'DeadLetter'
+      0: 'NotStarted',
+      1: 'Discovering',
+      2: 'Ready',
+      3: 'Running',
+      4: 'Partial',
+      5: 'Incomplete',
+      6: 'Complete',
+      7: 'RetryScheduled',
+      8: 'DeadLetter'
     };
 
     const now = new Date();
@@ -451,9 +466,9 @@ public static class AgentDashboardHtmlRenderer
       const acquisitions = state.acquisitions || [];
 
       const runningJobs = jobs.filter(x => normalizeJobStatus(x.status) === 'Running');
-      const runningDays = days.filter(x => ['Discovering', 'Running', 'RetryScheduled', 'Partial'].includes(normalizeDayStatus(x.status)));
-      const queueJobs = jobs.filter(x => ['Ready', 'Failed'].includes(normalizeJobStatus(x.status)));
-      const queueDays = days.filter(x => ['RetryScheduled', 'Failed', 'Incomplete', 'Partial'].includes(normalizeDayStatus(x.status)));
+      const runningDays = days.filter(x => ['Discovering', 'Running'].includes(normalizeDayStatus(x.status)));
+      const queueJobs = jobs.filter(x => ['Pending', 'Ready', 'WaitingDependency', 'Failed'].includes(normalizeJobStatus(x.status)));
+      const queueDays = days.filter(x => ['NotStarted', 'Ready', 'RetryScheduled', 'Incomplete', 'Partial'].includes(normalizeDayStatus(x.status)));
       const deadLetters = jobs.filter(x => normalizeJobStatus(x.status) === 'DeadLetter').length + days.filter(x => normalizeDayStatus(x.status) === 'DeadLetter').length;
 
       const raceIssues = races.filter(x => ['Failed', 'DeadLetter'].includes(normalizeState(x.raceCardStatus)) || ['Failed', 'DeadLetter'].includes(normalizeState(x.raceResultStatus)));
@@ -484,7 +499,10 @@ public static class AgentDashboardHtmlRenderer
     function issueJobRow(item) {
       const status = normalizeJobStatus(item.status);
       const error = escapeHtml(item.lastError ?? '(error detail なし)');
-      const canRetry = item.deduplicationKey && status !== 'Running';
+      const hasDeduplicationKey = item.deduplicationKey !== null
+        && item.deduplicationKey !== undefined
+        && String(item.deduplicationKey).length > 0;
+      const canRetry = hasDeduplicationKey && status !== 'Running';
       return `<tr>
         <td>Job</td>
         <td>${escapeHtml(item.jobType)}<div class="status">${escapeHtml(item.deduplicationKey ?? '-')}</div></td>
@@ -528,7 +546,7 @@ public static class AgentDashboardHtmlRenderer
       const normalized = (status || '').toLowerCase();
       let clazz = 'pill';
       if (['deadletter', 'failed', 'incomplete'].includes(normalized)) clazz += ' bad';
-      else if (['partial', 'retryscheduled', 'discovering', 'ready'].includes(normalized)) clazz += ' warn';
+      else if (['partial', 'retryscheduled', 'discovering', 'ready', 'pending', 'waitingdependency', 'notstarted'].includes(normalized)) clazz += ' warn';
       else if (['running'].includes(normalized)) clazz += ' run';
       else clazz += ' ok';
       return `<span class="${clazz}">${escapeHtml(status || '-')}</span>`;
@@ -560,7 +578,12 @@ public static class AgentDashboardHtmlRenderer
     }
 
     function escapeJs(value) {
-      return String(value ?? '').replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+      return String(value ?? '')
+        .replaceAll('\\', '\\\\')
+        .replaceAll("'", "\\'")
+        .replaceAll('\"', '\\\"')
+        .replaceAll('\n', '\\n')
+        .replaceAll('\r', '\\r');
     }
 
     async function fetchJson(url) {
