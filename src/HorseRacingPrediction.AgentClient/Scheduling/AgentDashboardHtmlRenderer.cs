@@ -330,7 +330,7 @@ public static class AgentDashboardHtmlRenderer
         </div>
       </div>
       <div class="actions">
-        <a class="link-btn" href="/tools/jra-tool" target="_blank" rel="noreferrer">JRA 解析ツールを開く</a>
+        <a class="link-btn" href="/tools/jra-tool" target="_blank" rel="noopener noreferrer">JRA 解析ツールを開く</a>
         <button class="subtle" id="refreshNow">監視データを即時更新</button>
       </div>
     </section>
@@ -349,6 +349,7 @@ public static class AgentDashboardHtmlRenderer
 
   <script>
     const state = { jobs: [], days: [], races: [], acquisitions: [] };
+    const JOB_STATUS_LIMIT = 200;
 
     const statusMap = {
       0: 'Pending',
@@ -387,11 +388,12 @@ public static class AgentDashboardHtmlRenderer
     document.getElementById('triggerPrediction').addEventListener('click', triggerPrediction);
     document.getElementById('refreshNow').addEventListener('click', refresh);
     document.getElementById('inspectButton').addEventListener('click', runInspector);
+    document.getElementById('issueBody').addEventListener('click', onIssueActionClicked);
 
     async function refresh() {
       try {
         const [jobs, days, races, acquisitions] = await Promise.all([
-          fetchJson('/agent/job-statuses?limit=200'),
+          fetchJson(`/agent/job-statuses?limit=${JOB_STATUS_LIMIT}`),
           fetchJson(`/agent/result-day-statuses?from=${from}&to=${to}`),
           fetchJson(`/agent/race-collection-statuses?from=${from}&to=${to}`),
           fetchJson(`/agent/acquisition-statuses?from=${from}&to=${to}`)
@@ -419,6 +421,11 @@ public static class AgentDashboardHtmlRenderer
       output.textContent = '取得中...';
       try {
         const response = await fetch(path);
+        if (!response.ok) {
+          const body = await response.text();
+          output.textContent = `HTTP ${response.status}\\n${body}`;
+          return;
+        }
         const payload = await response.json();
         output.textContent = JSON.stringify(payload, null, 2);
       } catch (error) {
@@ -457,6 +464,24 @@ public static class AgentDashboardHtmlRenderer
     async function requeueDay(providerType, targetDate) {
       await post(`/agent/result-day-statuses/${encodeURIComponent(providerType)}/${encodeURIComponent(targetDate)}/requeue?mode=discovery`);
       await refresh();
+    }
+
+    async function onIssueActionClicked(event) {
+      const button = event.target.closest('button[data-action]');
+      if (!button) {
+        return;
+      }
+
+      const action = button.dataset.action;
+      if (action === 'requeue-job') {
+        await requeueJob(
+          decodeURIComponent(button.dataset.jobType ?? ''),
+          decodeURIComponent(button.dataset.deduplicationKey ?? ''));
+      } else if (action === 'requeue-day') {
+        await requeueDay(
+          decodeURIComponent(button.dataset.providerType ?? ''),
+          decodeURIComponent(button.dataset.targetDate ?? ''));
+      }
     }
 
     function renderMonitor() {
@@ -503,24 +528,28 @@ public static class AgentDashboardHtmlRenderer
         && item.deduplicationKey !== undefined
         && String(item.deduplicationKey).length > 0;
       const canRetry = hasDeduplicationKey && status !== 'Running';
+      const encodedJobType = encodeURIComponent(item.jobType ?? '');
+      const encodedDeduplicationKey = encodeURIComponent(item.deduplicationKey ?? '');
       return `<tr>
         <td>Job</td>
         <td>${escapeHtml(item.jobType)}<div class="status">${escapeHtml(item.deduplicationKey ?? '-')}</div></td>
         <td>${statusPill(status)}</td>
         <td>${error}</td>
-        <td>${canRetry ? `<button class="subtle" onclick="requeueJob('${escapeJs(item.jobType)}','${escapeJs(item.deduplicationKey)}')">再投入</button>` : '-'}</td>
+        <td>${canRetry ? `<button class="subtle" data-action="requeue-job" data-job-type="${encodedJobType}" data-deduplication-key="${encodedDeduplicationKey}">再投入</button>` : '-'}</td>
       </tr>`;
     }
 
     function issueDayRow(item) {
       const status = normalizeDayStatus(item.status);
       const error = escapeHtml(item.lastError ?? item.incompleteReason ?? '(理由なし)');
+      const encodedProviderType = encodeURIComponent(item.providerType ?? '');
+      const encodedTargetDate = encodeURIComponent(item.targetDate ?? '');
       return `<tr>
         <td>Result Day</td>
         <td>${escapeHtml(item.providerType)}:${escapeHtml(item.targetDate)}</td>
         <td>${statusPill(status)}</td>
         <td>${error}</td>
-        <td><button class="subtle" onclick="requeueDay('${escapeJs(item.providerType)}','${escapeJs(item.targetDate)}')">再投入</button></td>
+        <td><button class="subtle" data-action="requeue-day" data-provider-type="${encodedProviderType}" data-target-date="${encodedTargetDate}">再投入</button></td>
       </tr>`;
     }
 
@@ -575,15 +604,6 @@ public static class AgentDashboardHtmlRenderer
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
-    }
-
-    function escapeJs(value) {
-      return String(value ?? '')
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\"', '\\\"')
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r');
     }
 
     async function fetchJson(url) {
