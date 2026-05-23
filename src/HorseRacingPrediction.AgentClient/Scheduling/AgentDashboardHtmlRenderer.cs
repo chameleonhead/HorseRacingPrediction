@@ -6,1064 +6,582 @@ public static class AgentDashboardHtmlRenderer
     {
         return
             """
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgentClient Dashboard</title>
+  <title>AgentClient Operations Tool</title>
   <style>
     :root {
-      --bg: #f3efe6;
-      --panel: rgba(255,255,255,0.82);
-      --line: rgba(39, 48, 39, 0.14);
-      --text: #203126;
-      --muted: #5d6c62;
-      --ok: #2f7d4a;
-      --warn: #a36e17;
-      --bad: #9d3c2d;
-      --run: #0d6e6e;
-      --chip: #e7e0d2;
+      --bg: #f6f3ed;
+      --panel: rgba(255, 255, 255, 0.92);
+      --line: rgba(34, 56, 67, 0.14);
+      --ink: #1f2a31;
+      --muted: #5e6a72;
+      --accent: #0f766e;
+      --danger: #a32020;
+      --warn: #986200;
+      --ok: #246d38;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.08);
     }
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif;
-      color: var(--text);
+      color: var(--ink);
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(184, 213, 190, 0.55), transparent 32%),
-        radial-gradient(circle at top right, rgba(225, 197, 142, 0.45), transparent 28%),
-        linear-gradient(180deg, #f7f3eb 0%, var(--bg) 100%);
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 30%),
+        radial-gradient(circle at top left, rgba(23, 88, 136, 0.09), transparent 28%),
+        linear-gradient(180deg, #fbf9f4, var(--bg));
+      min-height: 100vh;
     }
-    .wrap {
-      width: min(1380px, calc(100% - 32px));
-      margin: 0 auto;
-      padding: 28px 0 56px;
-    }
-    .hero {
-      display: flex;
-      justify-content: space-between;
-      align-items: end;
+
+    main {
+      width: min(1280px, calc(100% - 32px));
+      margin: 28px auto 52px;
+      display: grid;
       gap: 16px;
-      margin-bottom: 22px;
     }
-    h1 {
-      margin: 0;
-      font-size: clamp(28px, 4vw, 46px);
-      letter-spacing: 0.02em;
-    }
-    .sub {
-      color: var(--muted);
-      margin-top: 8px;
-    }
-    .actions {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .filter {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    select {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 8px 10px;
-      background: rgba(255,255,255,0.88);
-      color: var(--text);
-      min-width: 132px;
-    }
+
+    .hero,
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      backdrop-filter: blur(10px);
       border-radius: 20px;
-      box-shadow: 0 18px 40px rgba(49, 53, 37, 0.08);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
     }
-    .metrics {
+
+    .hero {
+      padding: 24px;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 16px;
-      margin-bottom: 18px;
+      gap: 14px;
     }
-    .metric {
-      padding: 18px 20px;
-      min-height: 118px;
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 42px);
+      letter-spacing: -0.02em;
     }
-    .metric h2 {
-      margin: 0 0 10px;
-      font-size: 12px;
+
+    .lead {
+      margin: 0;
       color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
+      line-height: 1.65;
+      max-width: 860px;
     }
-    .metric .value {
-      font-size: 38px;
-      font-weight: 700;
-    }
-    .metric .note {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1.25fr 1fr;
-      gap: 16px;
-    }
-    .wide-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-top: 16px;
-    }
-    .quick-actions {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-    .section {
-      padding: 18px 18px 10px;
-    }
-    .section h2 {
-      margin: 0 0 12px;
-      font-size: 18px;
-    }
-    .toolbar {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      color: var(--muted);
-      margin-bottom: 12px;
-      flex-wrap: wrap;
-    }
-    .table-wrap {
-      overflow: auto;
-      border-top: 1px solid var(--line);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 720px;
-    }
-    th, td {
-      padding: 11px 10px;
-      text-align: left;
-      border-bottom: 1px solid rgba(39, 48, 39, 0.08);
-      vertical-align: top;
-      font-size: 13px;
-    }
-    th {
-      color: var(--muted);
-      font-size: 12px;
-      position: sticky;
-      top: 0;
-      background: rgba(250,248,242,0.92);
-      backdrop-filter: blur(6px);
-    }
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .chip {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: var(--chip);
-      font-size: 12px;
-      color: var(--text);
-    }
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 9px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      background: #ebe7de;
-    }
-    .status.ok { color: var(--ok); background: rgba(47,125,74,0.13); }
-    .status.warn { color: var(--warn); background: rgba(163,110,23,0.14); }
-    .status.bad { color: var(--bad); background: rgba(157,60,45,0.12); }
-    .status.run { color: var(--run); background: rgba(13,110,110,0.12); }
-    .muted { color: var(--muted); }
-    .error {
-      white-space: pre-wrap;
-      color: var(--bad);
-      max-width: 420px;
-    }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .footer {
-      margin-top: 18px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    button {
-      border: 0;
-      border-radius: 999px;
-      background: #264733;
-      color: #fffdf8;
-      padding: 7px 12px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    button.secondary {
-      background: #8b6d38;
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-    .inline-form {
-      display: flex;
-      gap: 12px;
-      align-items: end;
-      flex-wrap: wrap;
-      margin-bottom: 12px;
-    }
-    .inline-form label {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-      min-width: 150px;
-    }
-    input[type="date"], input[type="text"] {
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 8px 10px;
-      background: rgba(255,255,255,0.88);
-      color: var(--text);
-      min-width: 132px;
-    }
-    .hint {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 12px;
-    }
-    .summary-line {
+
+    .tablist {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 12px;
     }
+
+    .tab-btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      color: var(--ink);
+      font-weight: 700;
+      cursor: pointer;
+      padding: 10px 16px;
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, var(--accent), #127baf);
+      color: white;
+      border-color: transparent;
+    }
+
+    .panel {
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: grid; }
+
+    .status {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.84);
+    }
+
+    .metric .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .metric .value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    h2, h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    h3 { font-size: 16px; }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th { color: var(--muted); font-size: 12px; }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 320px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #f5f5f5;
+    }
+
+    .pill.bad { color: var(--danger); }
+    .pill.warn { color: var(--warn); }
+    .pill.ok { color: var(--ok); }
+    .pill.run { color: var(--accent); }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    button, .link-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), #127baf);
+    }
+
+    .subtle {
+      background: rgba(15, 118, 110, 0.12);
+      color: #0f5f5a;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+      padding: 10px 12px;
+      color: var(--ink);
+    }
+
+    .inline-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .json {
+      margin: 0;
+      border-radius: 12px;
+      padding: 12px;
+      overflow: auto;
+      min-height: 280px;
+      background: #0f1720;
+      color: #e2e8f0;
+      border: 1px solid #0b1320;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
     @media (max-width: 980px) {
-      .metrics, .grid, .wide-grid { grid-template-columns: 1fr; }
+      .metrics,
+      .grid,
+      .inline-form { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="hero">
-      <div>
-        <h1>AgentClient Dashboard</h1>
-        <div class="sub">進行中ジョブ、待ち行列、日次結果、レース収集、依存取得を横断して観測するローカル運用ダッシュボードです。</div>
+  <main>
+    <section class="hero">
+      <h1>AgentClient Operations Tool</h1>
+      <p class="lead">監視・デバッグ・情報収集を一体化した運用サイトです。日々のジョブ状況確認、手動再実行、API 保存データの可視化を同じ導線で扱えます。</p>
+      <div class="tablist">
+        <button class="tab-btn active" data-tab="monitor">監視</button>
+        <button class="tab-btn" data-tab="debug">デバッグ</button>
+        <button class="tab-btn" data-tab="insight">情報収集</button>
+      </div>
+      <div class="status" id="globalStatus">読込中...</div>
+    </section>
+
+    <section class="panel tab-panel active" id="tab-monitor">
+      <h2>監視ダッシュボード</h2>
+      <div class="metrics">
+        <div class="metric"><div class="label">稼働中ワーク</div><div class="value" id="metricRunning">-</div></div>
+        <div class="metric"><div class="label">待機ジョブ</div><div class="value" id="metricQueue">-</div></div>
+        <div class="metric"><div class="label">Dead Letter</div><div class="value" id="metricDead">-</div></div>
+        <div class="metric"><div class="label">失敗/不完全</div><div class="value" id="metricIssue">-</div></div>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <h3>現在進行中</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>種別</th><th>対象</th><th>状態</th><th>更新</th></tr></thead>
+              <tbody id="runningBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>再試行・待機キュー</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>種別</th><th>対象</th><th>状態</th><th>次回</th></tr></thead>
+              <tbody id="queueBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>直近エラー/要対応</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>種別</th><th>対象</th><th>状態</th><th>詳細</th><th>操作</th></tr></thead>
+            <tbody id="issueBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel tab-panel" id="tab-debug">
+      <h2>デバッグ & 手動実行</h2>
+      <p class="hint">監視画面と同じデータ基盤を使って、日次結果と予想ジョブを即時投入できます。解析ツールへの導線もここに統合しています。</p>
+      <div class="grid">
+        <div class="panel">
+          <h3>日次結果を再取得</h3>
+          <div class="inline-form">
+            <label>対象日<input type="date" id="debugResultDate"></label>
+            <label>Provider<input type="text" id="debugProvider" value="JRA"></label>
+            <button id="triggerResult">再取得を開始</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>予想ジョブを投入</h3>
+          <div class="inline-form">
+            <label>RaceId<input type="text" id="debugRaceId" placeholder="race-20260517-tokyo-11r"></label>
+            <label>備考<input type="text" value="手動投入" disabled></label>
+            <button id="triggerPrediction">予想ジョブ投入</button>
+          </div>
+        </div>
       </div>
       <div class="actions">
-        <div class="chip">自動更新: 30 秒</div>
-        <div class="chip">表示期間: 180 日</div>
-        <label class="filter">
-          <span>対象月</span>
-          <select id="monthFilter"></select>
-        </label>
-        <label class="filter">
-          <span>Job Status</span>
-          <select id="jobStatusFilter"></select>
-        </label>
-        <label class="filter">
-          <span>Day Status</span>
-          <select id="dayStatusFilter"></select>
-        </label>
+        <a class="link-btn" href="/tools/jra-tool" target="_blank" rel="noreferrer">JRA 解析ツールを開く</a>
+        <button class="subtle" id="refreshNow">監視データを即時更新</button>
       </div>
-    </div>
+    </section>
 
-    <div class="metrics">
-      <div class="panel metric">
-        <h2>Active Work Items</h2>
-        <div class="value" id="runningJobs">-</div>
-        <div class="note" id="jobBreakdown">-</div>
+    <section class="panel tab-panel" id="tab-insight">
+      <h2>情報収集（API データ可視化）</h2>
+      <p class="hint">保存済み API 情報の確認に使える簡易ビューアです。相対パスを指定して JSON を確認できます。今後の可視化機能追加時もこのセクションに統合可能です。</p>
+      <div class="inline-form">
+        <label>API Path<input type="text" id="inspectPath" value="/agent/job-statuses?limit=30"></label>
+        <label>説明<input type="text" value="GET のみ" disabled></label>
+        <button id="inspectButton">取得</button>
       </div>
-      <div class="panel metric">
-        <h2>Queue Depth</h2>
-        <div class="value" id="retryDays">-</div>
-        <div class="note" id="dayBreakdown">-</div>
-      </div>
-      <div class="panel metric">
-        <h2>Dead Letters</h2>
-        <div class="value" id="deadLetters">-</div>
-        <div class="note">job + day status の合計</div>
-      </div>
-      <div class="panel metric">
-        <h2>Current Race Work</h2>
-        <div class="value" id="acquisitionFailures">-</div>
-        <div class="note" id="currentRaceBreakdown">-</div>
-      </div>
-    </div>
-
-    <div class="quick-actions">
-      <div class="panel section">
-        <h2>日次結果を今すぐ再実行</h2>
-        <div class="hint">指定日の結果データ取得を最初からやり直します。完了済みの日付でも、ボタンを押した直後に再実行を開始します。</div>
-        <div class="inline-form">
-          <label>
-            <span>対象日</span>
-            <input id="manualResultTargetDate" type="date">
-          </label>
-          <label>
-            <span>提供元</span>
-            <input id="manualResultProviderType" type="text" value="JRA">
-          </label>
-          <button onclick="triggerManualResultFetch()">指定日の結果取得を今すぐ開始</button>
-        </div>
-      </div>
-      <div class="panel section">
-        <h2>Manual Prediction Trigger</h2>
-        <div class="hint">RaceId を指定して予想ジョブを手動投入します。自動投入済みレースも再投入できます。</div>
-        <div class="inline-form">
-          <label>
-            <span>RaceId</span>
-            <input id="manualPredictionRaceId" type="text" placeholder="race-20260517-tokyo-11r">
-          </label>
-          <button onclick="triggerManualPrediction()">予想ジョブを起動</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div class="panel section">
-        <h2>Active Work</h2>
-        <div class="summary-line" id="activeWorkSummary"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Kind</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Updated</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody id="activeWorkBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel section">
-        <h2>Job Statuses</h2>
-        <div class="toolbar">
-          <span class="muted" id="jobsUpdated">読込中...</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>JobType</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Timeline</th>
-                <th>Priority</th>
-                <th>Attempts</th>
-                <th>Error</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="jobsBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel section">
-        <h2>Result Day Statuses</h2>
-        <div class="toolbar">
-          <span class="muted" id="daysUpdated">読込中...</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Done</th>
-                <th>Retry</th>
-                <th>Reason</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="daysBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="wide-grid">
-      <div class="panel section">
-        <h2>Queue Overview</h2>
-        <div class="summary-line" id="queueSummary"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Kind</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Ready At</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody id="queueBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel section">
-        <h2>Race Collection Statuses</h2>
-        <div class="toolbar">
-          <span class="muted" id="racesUpdated">進行中のレースと直近更新を表示</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Race</th>
-                <th>Card</th>
-                <th>Result</th>
-                <th>Origin</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody id="racesBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel section">
-        <h2>Acquisition Statuses</h2>
-        <div class="toolbar">
-          <span class="muted" id="acquisitionsUpdated">進行中と障害を優先表示</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Subject</th>
-                <th>Operation</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th>Error</th>
-              </tr>
-            </thead>
-            <tbody id="acquisitionsBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="footer">AgentClient local dashboard</div>
-  </div>
+      <pre class="json" id="inspectOutput">ここに API レスポンスが表示されます。</pre>
+    </section>
+  </main>
 
   <script>
-    const jobStatusNames = {
-      0: 'Pending',
-      1: 'Ready',
-      2: 'Running',
-      3: 'WaitingDependency',
-      4: 'Succeeded',
-      5: 'Failed',
-      6: 'Cancelled',
-      7: 'DeadLetter'
-    };
-    const dayStatusNames = {
-      0: 'NotStarted',
-      1: 'Discovering',
-      2: 'Ready',
-      3: 'Running',
-      4: 'Partial',
-      5: 'Incomplete',
-      6: 'Complete',
-      7: 'RetryScheduled',
-      8: 'DeadLetter'
-    };
-    const collectionStateNames = {
-      0: 'Unknown',
-      1: 'Running',
-      2: 'Succeeded',
-      3: 'Failed',
-      4: 'DeadLetter'
-    };
-    const statusClass = (status) => {
-      const normalized = normalizeStatus(status);
-      if (!normalized) return 'status';
-      const s = normalized.toLowerCase();
-      if (s.includes('succeed') || s.includes('complete')) return 'status ok';
-      if (s.includes('run')) return 'status run';
-      if (s.includes('retry') || s.includes('partial') || s.includes('wait')) return 'status warn';
-      if (s.includes('dead') || s.includes('fail') || s.includes('incomplete')) return 'status bad';
-      return 'status';
+    const state = { jobs: [], days: [], races: [], acquisitions: [] };
+
+    const statusMap = {
+      0: 'Ready', 1: 'Running', 2: 'Completed', 3: 'Failed', 4: 'DeadLetter'
     };
 
-    const fmt = (value) => value ? new Date(value).toLocaleString('ja-JP') : '-';
-    const dashboardState = {
-      month: 'all',
-      jobStatus: 'all',
-      dayStatus: 'all'
+    const dayStatusMap = {
+      0: 'Discovering', 1: 'Running', 2: 'Completed', 3: 'RetryScheduled', 4: 'Failed', 5: 'Incomplete', 6: 'Partial', 7: 'DeadLetter'
     };
-    const dashboardData = {
-      jobs: [],
-      days: [],
-      races: [],
-      acquisitions: []
-    };
-    const today = new Date();
-    const from = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const to = today.toISOString().slice(0, 10);
 
-    async function load() {
-      const [jobs, days, races, acquisitions] = await Promise.all([
-        fetchJson('/agent/job-statuses?limit=80'),
-        fetchJson(`/agent/result-day-statuses?from=${from}&to=${to}`),
-        fetchJson(`/agent/race-collection-statuses?from=${from}&to=${to}`),
-        fetchJson(`/agent/acquisition-statuses?from=${from}&to=${to}`)
-      ]);
+    const now = new Date();
+    const from = new Date(now.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const to = now.toISOString().slice(0, 10);
 
-      dashboardData.jobs = jobs;
-      dashboardData.days = days;
-      dashboardData.races = races;
-      dashboardData.acquisitions = acquisitions;
+    document.getElementById('debugResultDate').value = to;
 
-      syncFilterOptions(jobs, days, races, acquisitions);
-      applyFiltersAndRender();
+    for (const button of document.querySelectorAll('.tab-btn')) {
+      button.addEventListener('click', () => switchTab(button.dataset.tab));
     }
 
-    async function fetchJson(url) {
+    document.getElementById('triggerResult').addEventListener('click', triggerResult);
+    document.getElementById('triggerPrediction').addEventListener('click', triggerPrediction);
+    document.getElementById('refreshNow').addEventListener('click', refresh);
+    document.getElementById('inspectButton').addEventListener('click', runInspector);
+
+    async function refresh() {
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          return [];
-        }
+        const [jobs, days, races, acquisitions] = await Promise.all([
+          fetchJson('/agent/job-statuses?limit=200'),
+          fetchJson(`/agent/result-day-statuses?from=${from}&to=${to}`),
+          fetchJson(`/agent/race-collection-statuses?from=${from}&to=${to}`),
+          fetchJson(`/agent/acquisition-statuses?from=${from}&to=${to}`)
+        ]);
 
-        return await response.json();
-      } catch {
-        return [];
+        state.jobs = jobs;
+        state.days = days;
+        state.races = races;
+        state.acquisitions = acquisitions;
+        renderMonitor();
+        document.getElementById('globalStatus').textContent = `最終更新: ${new Date().toLocaleString('ja-JP')}`;
+      } catch (error) {
+        document.getElementById('globalStatus').textContent = `読込失敗: ${error}`;
       }
     }
 
-    async function requeueJob(jobType, deduplicationKey) {
-      const response = await fetch(`/agent/job-statuses/${encodeURIComponent(jobType)}/${encodeURIComponent(deduplicationKey)}/requeue`, {
-        method: 'POST'
-      });
-      await ensureSucceeded(response);
-      await load();
-    }
-
-    async function requeueDay(providerType, targetDate, mode) {
-      const response = await fetch(`/agent/result-day-statuses/${encodeURIComponent(providerType)}/${encodeURIComponent(targetDate)}/requeue?mode=${encodeURIComponent(mode)}`, {
-        method: 'POST'
-      });
-      await ensureSucceeded(response);
-      await load();
-    }
-
-    async function triggerManualResultFetch() {
-      const targetDate = document.getElementById('manualResultTargetDate').value;
-      const providerType = document.getElementById('manualResultProviderType').value || 'JRA';
-
-      if (!targetDate) {
-        window.alert('対象日を指定してください。');
+    async function runInspector() {
+      const path = document.getElementById('inspectPath').value.trim();
+      const output = document.getElementById('inspectOutput');
+      if (!path.startsWith('/')) {
+        output.textContent = '相対パスは / から開始してください。';
         return;
       }
 
-      const response = await fetch(`/agent/result-day-jobs/trigger?targetDate=${encodeURIComponent(targetDate)}&providerType=${encodeURIComponent(providerType)}`, {
-        method: 'POST'
-      });
-      await ensureSucceeded(response);
-      await load();
-    }
-
-    async function triggerManualPrediction() {
-      const raceId = document.getElementById('manualPredictionRaceId').value;
-
-      if (!raceId || !raceId.trim()) {
-        window.alert('RaceId を指定してください。');
-        return;
-      }
-
-      const response = await fetch(`/agent/prediction-jobs/trigger?raceId=${encodeURIComponent(raceId.trim())}`, {
-        method: 'POST'
-      });
-      await ensureSucceeded(response);
-      await load();
-    }
-
-    async function ensureSucceeded(response) {
-      if (response.ok) {
-        return;
-      }
-
-      let message = `${response.status} ${response.statusText}`;
+      output.textContent = '取得中...';
       try {
+        const response = await fetch(path);
         const payload = await response.json();
-        if (payload?.errors) {
-          message = Object.values(payload.errors).flat().join('\n');
-        }
-      } catch {
+        output.textContent = JSON.stringify(payload, null, 2);
+      } catch (error) {
+        output.textContent = String(error);
+      }
+    }
+
+    async function triggerResult() {
+      const targetDate = document.getElementById('debugResultDate').value;
+      const providerType = document.getElementById('debugProvider').value || 'JRA';
+      if (!targetDate) {
+        alert('対象日を指定してください。');
+        return;
       }
 
-      window.alert(message);
-      throw new Error(message);
+      await post(`/agent/result-day-jobs/trigger?targetDate=${encodeURIComponent(targetDate)}&providerType=${encodeURIComponent(providerType)}`);
+      await refresh();
     }
 
-    function applyFiltersAndRender() {
-      const filteredJobs = filterJobs(dashboardData.jobs);
-      const filteredDays = filterDays(dashboardData.days);
-      const filteredRaces = filterByMonth(dashboardData.races, item => item.raceDate, item => item.updatedAt);
-      const filteredAcquisitions = filterByMonth(dashboardData.acquisitions, _ => null, item => item.updatedAt);
-
-      renderJobs(filteredJobs);
-      renderDays(filteredDays);
-      renderRaces(filteredRaces);
-      renderAcquisitions(filteredAcquisitions);
-      renderActiveWork(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
-      renderQueue(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
-      renderMetrics(filteredJobs, filteredDays, filteredRaces, filteredAcquisitions);
-    }
-
-    function filterJobs(jobs) {
-      return jobs.filter(job => {
-        const monthMatched = matchesMonth(job.updatedAt);
-        const statusMatched = dashboardState.jobStatus === 'all' || normalizeJobStatus(job.status) === dashboardState.jobStatus;
-        return monthMatched && statusMatched;
-      });
-    }
-
-    function filterDays(days) {
-      return days.filter(day => {
-        const monthMatched = matchesMonth(day.targetDate);
-        const statusMatched = dashboardState.dayStatus === 'all' || normalizeDayStatus(day.status) === dashboardState.dayStatus;
-        return monthMatched && statusMatched;
-      });
-    }
-
-    function filterByMonth(items, primaryDateSelector, fallbackDateSelector) {
-      return items.filter(item => {
-        const primaryDate = primaryDateSelector(item);
-        const fallbackDate = fallbackDateSelector(item);
-        return matchesMonth(primaryDate ?? fallbackDate);
-      });
-    }
-
-    function matchesMonth(value) {
-      if (dashboardState.month === 'all') {
-        return true;
+    async function triggerPrediction() {
+      const raceId = document.getElementById('debugRaceId').value.trim();
+      if (!raceId) {
+        alert('RaceId を指定してください。');
+        return;
       }
 
-      if (!value) {
-        return false;
-      }
-
-      return String(value).slice(0, 7) === dashboardState.month;
+      await post(`/agent/prediction-jobs/trigger?raceId=${encodeURIComponent(raceId)}`);
+      await refresh();
     }
 
-    function syncFilterOptions(jobs, days, races, acquisitions) {
-      syncSelect(
-        document.getElementById('monthFilter'),
-        ['all', ...collectMonthOptions(jobs, days, races, acquisitions)],
-        dashboardState.month,
-        value => value === 'all' ? '全期間' : value,
-        value => { dashboardState.month = value; applyFiltersAndRender(); });
-
-      syncSelect(
-        document.getElementById('jobStatusFilter'),
-        ['all', ...collectStatusOptions(jobs)],
-        dashboardState.jobStatus,
-        value => value === 'all' ? 'すべて' : value,
-        value => { dashboardState.jobStatus = value; applyFiltersAndRender(); });
-
-      syncSelect(
-        document.getElementById('dayStatusFilter'),
-        ['all', ...collectStatusOptions(days)],
-        dashboardState.dayStatus,
-        value => value === 'all' ? 'すべて' : value,
-        value => { dashboardState.dayStatus = value; applyFiltersAndRender(); });
+    async function requeueJob(jobType, key) {
+      await post(`/agent/job-statuses/${encodeURIComponent(jobType)}/${encodeURIComponent(key)}/requeue`);
+      await refresh();
     }
 
-    function syncSelect(element, values, currentValue, labelSelector, onChange) {
-      const nextValue = values.includes(currentValue) ? currentValue : values[0];
-      if (element.dataset.initialized !== 'true') {
-        element.addEventListener('change', event => onChange(event.target.value));
-        element.dataset.initialized = 'true';
-      }
-
-      element.innerHTML = values
-        .map(value => `<option value="${value}">${labelSelector(value)}</option>`)
-        .join('');
-      element.value = nextValue;
-      onChange(nextValue);
+    async function requeueDay(providerType, targetDate) {
+      await post(`/agent/result-day-statuses/${encodeURIComponent(providerType)}/${encodeURIComponent(targetDate)}/requeue?mode=discovery`);
+      await refresh();
     }
 
-    function collectMonthOptions(jobs, days, races, acquisitions) {
-      const values = [
-        ...jobs.map(item => item.updatedAt),
-        ...days.map(item => item.targetDate),
-        ...races.map(item => item.raceDate),
-        ...acquisitions.map(item => item.updatedAt)
-      ]
-        .filter(Boolean)
-        .map(value => String(value).slice(0, 7));
+    function renderMonitor() {
+      const jobs = state.jobs || [];
+      const days = state.days || [];
+      const races = state.races || [];
+      const acquisitions = state.acquisitions || [];
 
-      return [...new Set(values)].sort().reverse();
-    }
-
-    function collectStatusOptions(items) {
-      return [...new Set(items.map(item => normalizeStatus(item.status)).filter(Boolean))].sort();
-    }
-
-    function buildActiveWorkItems(jobs, days, races, acquisitions) {
-      const jobItems = jobs
-        .filter(job => normalizeJobStatus(job.status) === 'Running')
-        .map(job => ({
-          kind: 'Job',
-          target: describeJobTarget(job),
-          status: normalizeJobStatus(job.status),
-          progress: describeJobProgress(job),
-          updatedAt: job.updatedAt,
-          detail: buildJobDetail(job)
-        }));
-
-      const dayItems = days
-        .filter(day => ['Discovering', 'Running', 'Partial', 'RetryScheduled'].includes(normalizeDayStatus(day.status)))
-        .map(day => ({
-          kind: 'ResultDay',
-          target: `${day.providerType} ${day.targetDate}`,
-          status: normalizeDayStatus(day.status),
-          progress: `${day.completedRaceCount} / ${day.expectedRaceCount}`,
-          updatedAt: day.updatedAt,
-          detail: day.incompleteReason ?? day.lastError ?? ''
-        }));
-
-      const raceItems = races
-        .filter(race => normalizeCollectionStatus(race.raceCardStatus) === 'Running' || normalizeCollectionStatus(race.raceResultStatus) === 'Running')
-        .map(race => ({
-          kind: 'Race',
-          target: `${race.raceDate} ${race.racecourse} ${race.raceNumber}R ${race.raceName ?? ''}`.trim(),
-          status: normalizeCollectionStatus(race.raceResultStatus) === 'Running'
-            ? `Result ${normalizeCollectionStatus(race.raceResultStatus)}`
-            : `Card ${normalizeCollectionStatus(race.raceCardStatus)}`,
-          progress: `${normalizeCollectionStatus(race.raceCardStatus)} / ${normalizeCollectionStatus(race.raceResultStatus)}`,
-          updatedAt: race.updatedAt,
-          detail: race.raceResultErrorReason ?? race.raceCardErrorReason ?? race.raceResultUrl ?? race.raceCardUrl ?? ''
-        }));
-
-      const acquisitionItems = acquisitions
-        .filter(item => normalizeCollectionStatus(item.status) === 'Running')
-        .map(item => ({
-          kind: 'Acquisition',
-          target: `${item.subjectType} ${item.subjectName}`,
-          status: normalizeCollectionStatus(item.status),
-          progress: item.operationType,
-          updatedAt: item.updatedAt,
-          detail: item.relatedRaceId ?? item.sourceUrl ?? ''
-        }));
-
-      return [...jobItems, ...dayItems, ...raceItems, ...acquisitionItems]
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        .slice(0, 40);
-    }
-
-    function buildQueueItems(jobs, days, races, acquisitions) {
-      const jobItems = jobs
-        .filter(job => ['Ready', 'WaitingDependency', 'Pending'].includes(normalizeJobStatus(job.status)))
-        .map(job => ({
-          kind: 'Job',
-          target: describeJobTarget(job),
-          status: normalizeJobStatus(job.status),
-          readyAt: job.availableAt,
-          detail: buildJobDetail(job)
-        }));
-
-      const dayItems = days
-        .filter(day => ['Ready', 'RetryScheduled', 'Incomplete', 'Partial'].includes(normalizeDayStatus(day.status)))
-        .map(day => ({
-          kind: 'ResultDay',
-          target: `${day.providerType} ${day.targetDate}`,
-          status: normalizeDayStatus(day.status),
-          readyAt: day.retryAfter ?? day.updatedAt,
-          detail: `${day.completedRaceCount} / ${day.expectedRaceCount}${day.incompleteReason ? ` | ${day.incompleteReason}` : ''}`
-        }));
-
-      const raceItems = races
-        .filter(race => normalizeCollectionStatus(race.raceCardStatus) === 'Failed' || normalizeCollectionStatus(race.raceResultStatus) === 'Failed')
-        .map(race => ({
-          kind: 'Race',
-          target: `${race.raceDate} ${race.racecourse} ${race.raceNumber}R`,
-          status: normalizeCollectionStatus(race.raceResultStatus) === 'Failed'
-            ? `Result ${normalizeCollectionStatus(race.raceResultStatus)}`
-            : `Card ${normalizeCollectionStatus(race.raceCardStatus)}`,
-          readyAt: race.updatedAt,
-          detail: race.raceResultErrorReason ?? race.raceCardErrorReason ?? ''
-        }));
-
-      const acquisitionItems = acquisitions
-        .filter(item => ['Failed', 'DeadLetter'].includes(normalizeCollectionStatus(item.status)))
-        .map(item => ({
-          kind: 'Acquisition',
-          target: `${item.subjectType} ${item.subjectName}`,
-          status: normalizeCollectionStatus(item.status),
-          readyAt: item.updatedAt,
-          detail: item.errorReason ?? item.sourceUrl ?? ''
-        }));
-
-      return [...jobItems, ...dayItems, ...raceItems, ...acquisitionItems]
-        .sort((a, b) => new Date(b.readyAt).getTime() - new Date(a.readyAt).getTime())
-        .slice(0, 40);
-    }
-
-    function describeJobTarget(job) {
-      const key = job.deduplicationKey ?? '';
-      const parts = key.split(':');
-      if (parts.length < 2) {
-        return key;
-      }
-
-      if (key.includes(':race-card:') || key.includes(':race-result:') || key.includes(':result-day-discovery:') || key.includes(':result-day-collection:')) {
-        return `${job.jobType} ${parts.at(-1)}`;
-      }
-
-      if (key.includes(':result-month:')) {
-        return `${job.jobType} ${parts.at(-1)}`;
-      }
-
-      if (key.includes(':historical-race-result:') && parts.length >= 5) {
-        return `${job.jobType} ${parts[2]} ${parts[3]} ${parts[4]}R`;
-      }
-
-      return `${job.jobType} ${key}`;
-    }
-
-    function describeJobProgress(job) {
-      if (job.startedAt && job.leaseExpiresAt) {
-        return `started ${fmt(job.startedAt)} / lease ${fmt(job.leaseExpiresAt)}`;
-      }
-
-      if (job.startedAt) {
-        return `started ${fmt(job.startedAt)}`;
-      }
-
-      return `available ${fmt(job.availableAt)}`;
-    }
-
-    function buildJobDetail(job) {
-      const timeline = [];
-      if (job.firstQueuedAt) timeline.push(`queued ${fmt(job.firstQueuedAt)}`);
-      if (job.startedAt) timeline.push(`started ${fmt(job.startedAt)}`);
-      if (job.leaseExpiresAt) timeline.push(`lease ${fmt(job.leaseExpiresAt)}`);
-      if (job.lastError) timeline.push(job.lastError);
-      return timeline.join(' | ');
-    }
-
-    function renderActiveWork(jobs, days, races, acquisitions) {
-      const items = buildActiveWorkItems(jobs, days, races, acquisitions);
-      const counts = {
-        jobs: items.filter(x => x.kind === 'Job').length,
-        days: items.filter(x => x.kind === 'ResultDay').length,
-        races: items.filter(x => x.kind === 'Race').length,
-        acquisitions: items.filter(x => x.kind === 'Acquisition').length
-      };
-
-      document.getElementById('activeWorkSummary').innerHTML = [
-        `Job ${counts.jobs}`,
-        `ResultDay ${counts.days}`,
-        `Race ${counts.races}`,
-        `Acquisition ${counts.acquisitions}`
-      ].map(text => `<span class="chip">${text}</span>`).join('');
-
-      document.getElementById('activeWorkBody').innerHTML = items.map(item => `
-        <tr>
-          <td>${item.kind}</td>
-          <td>${item.target}</td>
-          <td><span class="${statusClass(item.status)}">${item.status}</span></td>
-          <td>${item.progress}</td>
-          <td>${fmt(item.updatedAt)}</td>
-          <td class="error">${item.detail ?? ''}</td>
-        </tr>`).join('');
-    }
-
-    function renderQueue(jobs, days, races, acquisitions) {
-      const items = buildQueueItems(jobs, days, races, acquisitions);
-      const counts = {
-        ready: items.filter(x => x.status === 'Ready').length,
-        retry: items.filter(x => x.status === 'RetryScheduled').length,
-        waiting: items.filter(x => x.status === 'WaitingDependency').length,
-        failed: items.filter(x => x.status.includes('Failed') || x.status === 'Incomplete' || x.status === 'Partial' || x.status === 'DeadLetter').length
-      };
-
-      document.getElementById('queueSummary').innerHTML = [
-        `Ready ${counts.ready}`,
-        `Retry ${counts.retry}`,
-        `Waiting ${counts.waiting}`,
-        `Attention ${counts.failed}`
-      ].map(text => `<span class="chip">${text}</span>`).join('');
-
-      document.getElementById('queueBody').innerHTML = items.map(item => `
-        <tr>
-          <td>${item.kind}</td>
-          <td>${item.target}</td>
-          <td><span class="${statusClass(item.status)}">${item.status}</span></td>
-          <td>${fmt(item.readyAt)}</td>
-          <td class="error">${item.detail ?? ''}</td>
-        </tr>`).join('');
-    }
-
-    function renderJobs(jobs) {
-      document.getElementById('jobsUpdated').textContent = `件数: ${jobs.length}`;
-      document.getElementById('jobsBody').innerHTML = jobs.map(job => `
-        <tr>
-          <td class="mono">${job.jobType}<div class="muted mono">${job.deduplicationKey}</div></td>
-          <td>${describeJobTarget(job)}</td>
-          <td><span class="${statusClass(job.status)}">${normalizeJobStatus(job.status)}</span></td>
-          <td class="mono">${describeJobProgress(job)}</td>
-          <td>${job.priority}</td>
-          <td>${job.attemptCount}</td>
-          <td class="error">${job.lastError ?? ''}</td>
-          <td>${normalizeJobStatus(job.status) === 'DeadLetter' || normalizeJobStatus(job.status) === 'Failed' ? `<button onclick="requeueJob('${escapeValue(job.jobType)}', '${escapeValue(job.deduplicationKey)}')">再投入</button>` : ''}</td>
-        </tr>`).join('');
-    }
-
-    function renderDays(days) {
-      document.getElementById('daysUpdated').textContent = `件数: ${days.length}`;
-      document.getElementById('daysBody').innerHTML = days.map(day => `
-        <tr>
-          <td class="mono">${day.targetDate}</td>
-          <td><span class="${statusClass(day.status)}">${normalizeDayStatus(day.status)}</span></td>
-          <td>${day.completedRaceCount} / ${day.expectedRaceCount}</td>
-          <td>${fmt(day.retryAfter)}</td>
-          <td class="error">${day.incompleteReason ?? day.lastError ?? ''}</td>
-          <td>${normalizeDayStatus(day.status) === 'RetryScheduled' || normalizeDayStatus(day.status) === 'Incomplete' || normalizeDayStatus(day.status) === 'DeadLetter' ? `<div class="chips"><button class="secondary" onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Discovery')">この日の結果取得を最初からやり直す</button><button onclick="requeueDay('${escapeValue(day.providerType)}', '${escapeValue(day.targetDate)}', 'Collection')">探索済みレースだけ再収集する</button></div>` : ''}</td>
-        </tr>`).join('');
-    }
-
-    function renderRaces(races) {
-      const ordered = races
-        .slice()
-        .sort((a, b) => {
-          const aScore = (normalizeCollectionStatus(a.raceCardStatus) === 'Running' || normalizeCollectionStatus(a.raceResultStatus) === 'Running') ? 1 : 0;
-          const bScore = (normalizeCollectionStatus(b.raceCardStatus) === 'Running' || normalizeCollectionStatus(b.raceResultStatus) === 'Running') ? 1 : 0;
-          if (aScore !== bScore) {
-            return bScore - aScore;
-          }
-
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        })
-        .slice(0, 80);
-
-      document.getElementById('racesUpdated').textContent = `件数: ${ordered.length}`;
-      document.getElementById('racesBody').innerHTML = ordered.map(race => `
-        <tr>
-          <td class="mono">${race.raceDate} ${race.racecourse} ${race.raceNumber}R<div>${race.raceName ?? ''}</div></td>
-          <td><span class="${statusClass(race.raceCardStatus)}">${normalizeCollectionStatus(race.raceCardStatus)}</span></td>
-          <td><span class="${statusClass(race.raceResultStatus)}">${normalizeCollectionStatus(race.raceResultStatus)}</span></td>
-          <td>${race.raceResultOrigin ?? '-'}</td>
-          <td>${fmt(race.updatedAt)}</td>
-        </tr>`).join('');
-    }
-
-    function renderAcquisitions(items) {
-      const ordered = items
-        .slice()
-        .sort((a, b) => {
-          const aScore = ['Running', 'Failed', 'DeadLetter'].includes(normalizeCollectionStatus(a.status)) ? 1 : 0;
-          const bScore = ['Running', 'Failed', 'DeadLetter'].includes(normalizeCollectionStatus(b.status)) ? 1 : 0;
-          if (aScore !== bScore) {
-            return bScore - aScore;
-          }
-
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-        })
-        .slice(0, 80);
-
-      document.getElementById('acquisitionsUpdated').textContent = `件数: ${ordered.length}`;
-      document.getElementById('acquisitionsBody').innerHTML = ordered.map(item => `
-        <tr>
-          <td>${item.subjectType}<div>${item.subjectName}</div></td>
-          <td>${item.operationType}</td>
-          <td><span class="${statusClass(item.status)}">${normalizeCollectionStatus(item.status)}</span></td>
-          <td>${fmt(item.updatedAt)}</td>
-          <td class="error">${item.errorReason ?? ''}</td>
-        </tr>`).join('');
-    }
-
-    function renderMetrics(jobs, days, races, acquisitions) {
-      const activeWorkItems = buildActiveWorkItems(jobs, days, races, acquisitions);
-      const queueItems = buildQueueItems(jobs, days, races, acquisitions);
-      const runningJobs = activeWorkItems.length;
+      const runningJobs = jobs.filter(x => normalizeJobStatus(x.status) === 'Running');
+      const runningDays = days.filter(x => ['Discovering', 'Running', 'RetryScheduled', 'Partial'].includes(normalizeDayStatus(x.status)));
+      const queueJobs = jobs.filter(x => ['Ready', 'Failed'].includes(normalizeJobStatus(x.status)));
+      const queueDays = days.filter(x => ['RetryScheduled', 'Failed', 'Incomplete', 'Partial'].includes(normalizeDayStatus(x.status)));
       const deadLetters = jobs.filter(x => normalizeJobStatus(x.status) === 'DeadLetter').length + days.filter(x => normalizeDayStatus(x.status) === 'DeadLetter').length;
-      const retryDays = queueItems.length;
-      const incompleteDays = days.filter(x => normalizeDayStatus(x.status) === 'Incomplete' || normalizeDayStatus(x.status) === 'Partial').length;
-      const runningRaces = races.filter(x => normalizeCollectionStatus(x.raceCardStatus) === 'Running' || normalizeCollectionStatus(x.raceResultStatus) === 'Running').length;
-      const runningAcquisitions = acquisitions.filter(x => normalizeCollectionStatus(x.status) === 'Running').length;
 
-      document.getElementById('runningJobs').textContent = runningJobs;
-      document.getElementById('jobBreakdown').textContent = `Job: ${jobs.filter(x => normalizeJobStatus(x.status) === 'Running').length} / Day: ${days.filter(x => ['Discovering', 'Running', 'Partial', 'RetryScheduled'].includes(normalizeDayStatus(x.status))).length}`;
-      document.getElementById('retryDays').textContent = retryDays;
-      document.getElementById('dayBreakdown').textContent = `Incomplete: ${incompleteDays} / Ready jobs: ${jobs.filter(x => normalizeJobStatus(x.status) === 'Ready').length}`;
-      document.getElementById('deadLetters').textContent = deadLetters;
-      document.getElementById('acquisitionFailures').textContent = runningRaces;
-      document.getElementById('currentRaceBreakdown').textContent = `Acquisition running: ${runningAcquisitions}`;
+      const raceIssues = races.filter(x => ['Failed', 'DeadLetter'].includes(normalizeState(x.raceCardStatus)) || ['Failed', 'DeadLetter'].includes(normalizeState(x.raceResultStatus)));
+      const acquisitionIssues = acquisitions.filter(x => ['Failed', 'DeadLetter'].includes(normalizeState(x.status)));
+
+      document.getElementById('metricRunning').textContent = runningJobs.length + runningDays.length;
+      document.getElementById('metricQueue').textContent = queueJobs.length + queueDays.length;
+      document.getElementById('metricDead').textContent = deadLetters;
+      document.getElementById('metricIssue').textContent = raceIssues.length + acquisitionIssues.length;
+
+      document.getElementById('runningBody').innerHTML = [
+        ...runningJobs.slice(0, 30).map(item => row('Job', item.jobType, normalizeJobStatus(item.status), item.updatedAt)),
+        ...runningDays.slice(0, 30).map(item => row('Day', `${item.providerType}:${item.targetDate}`, normalizeDayStatus(item.status), item.updatedAt))
+      ].join('') || '<tr><td colspan="4">該当なし</td></tr>';
+
+      document.getElementById('queueBody').innerHTML = [
+        ...queueJobs.slice(0, 30).map(item => row('Job', item.jobType, normalizeJobStatus(item.status), item.retryAfter ?? item.updatedAt)),
+        ...queueDays.slice(0, 30).map(item => row('Day', `${item.providerType}:${item.targetDate}`, normalizeDayStatus(item.status), item.retryAfter ?? item.updatedAt))
+      ].join('') || '<tr><td colspan="4">該当なし</td></tr>';
+
+      const issues = [
+        ...jobs.filter(x => ['Failed', 'DeadLetter'].includes(normalizeJobStatus(x.status))).slice(0, 20).map(item => issueJobRow(item)),
+        ...days.filter(x => ['Failed', 'DeadLetter', 'Incomplete'].includes(normalizeDayStatus(x.status))).slice(0, 20).map(item => issueDayRow(item))
+      ];
+      document.getElementById('issueBody').innerHTML = issues.join('') || '<tr><td colspan="5">該当なし</td></tr>';
     }
 
-    function normalizeStatus(value) {
-      if (value === null || value === undefined) {
-        return '';
-      }
+    function issueJobRow(item) {
+      const status = normalizeJobStatus(item.status);
+      const error = escapeHtml(item.lastError ?? '(error detail なし)');
+      const canRetry = item.deduplicationKey && status !== 'Running';
+      return `<tr>
+        <td>Job</td>
+        <td>${escapeHtml(item.jobType)}<div class="status">${escapeHtml(item.deduplicationKey ?? '-')}</div></td>
+        <td>${statusPill(status)}</td>
+        <td>${error}</td>
+        <td>${canRetry ? `<button class="subtle" onclick="requeueJob('${escapeJs(item.jobType)}','${escapeJs(item.deduplicationKey)}')">再投入</button>` : '-'}</td>
+      </tr>`;
+    }
 
-      if (typeof value === 'string') {
-        return value;
-      }
+    function issueDayRow(item) {
+      const status = normalizeDayStatus(item.status);
+      const error = escapeHtml(item.lastError ?? item.incompleteReason ?? '(理由なし)');
+      return `<tr>
+        <td>Result Day</td>
+        <td>${escapeHtml(item.providerType)}:${escapeHtml(item.targetDate)}</td>
+        <td>${statusPill(status)}</td>
+        <td>${error}</td>
+        <td><button class="subtle" onclick="requeueDay('${escapeJs(item.providerType)}','${escapeJs(item.targetDate)}')">再投入</button></td>
+      </tr>`;
+    }
 
-      return String(value);
+    function row(kind, target, status, updatedAt) {
+      return `<tr>
+        <td>${escapeHtml(kind)}</td>
+        <td>${escapeHtml(target)}</td>
+        <td>${statusPill(status)}</td>
+        <td>${fmt(updatedAt)}</td>
+      </tr>`;
+    }
+
+    function switchTab(tab) {
+      for (const button of document.querySelectorAll('.tab-btn')) {
+        button.classList.toggle('active', button.dataset.tab === tab);
+      }
+      for (const panel of document.querySelectorAll('.tab-panel')) {
+        panel.classList.toggle('active', panel.id === `tab-${tab}`);
+      }
+    }
+
+    function statusPill(status) {
+      const normalized = (status || '').toLowerCase();
+      let clazz = 'pill';
+      if (['deadletter', 'failed', 'incomplete'].includes(normalized)) clazz += ' bad';
+      else if (['partial', 'retryscheduled', 'discovering', 'ready'].includes(normalized)) clazz += ' warn';
+      else if (['running'].includes(normalized)) clazz += ' run';
+      else clazz += ' ok';
+      return `<span class="${clazz}">${escapeHtml(status || '-')}</span>`;
     }
 
     function normalizeJobStatus(value) {
-      if (typeof value === 'number' && jobStatusNames[value] !== undefined) {
-        return jobStatusNames[value];
-      }
-
-      return normalizeStatus(value);
+      return typeof value === 'number' ? (statusMap[value] ?? String(value)) : String(value ?? '');
     }
 
     function normalizeDayStatus(value) {
-      if (typeof value === 'number' && dayStatusNames[value] !== undefined) {
-        return dayStatusNames[value];
-      }
-
-      return normalizeStatus(value);
+      return typeof value === 'number' ? (dayStatusMap[value] ?? String(value)) : String(value ?? '');
     }
 
-    function normalizeCollectionStatus(value) {
-      if (typeof value === 'number' && collectionStateNames[value] !== undefined) {
-        return collectionStateNames[value];
-      }
-
-      return normalizeStatus(value);
+    function normalizeState(value) {
+      return String(value ?? '');
     }
 
-    function escapeValue(value) {
+    function fmt(value) {
+      return value ? new Date(value).toLocaleString('ja-JP') : '-';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function escapeJs(value) {
       return String(value ?? '').replaceAll('\\', '\\\\').replaceAll("'", "\\'");
     }
 
-    document.getElementById('manualResultTargetDate').value = to;
+    async function fetchJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`${url} -> ${response.status}`);
+      }
+      return response.json();
+    }
 
-    load().catch(err => console.error(err));
-    setInterval(() => load().catch(err => console.error(err)), 30000);
+    async function post(url) {
+      const response = await fetch(url, { method: 'POST' });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`${response.status}: ${body}`);
+      }
+      return response;
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
   </script>
 </body>
 </html>

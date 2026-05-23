@@ -5,8 +5,16 @@ public static class AgentDashboardEndpointExtensions
     public static IEndpointRouteBuilder MapAgentDashboardEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(
-            "/agent/dashboard",
+            "/tools",
             () => Results.Content(AgentDashboardHtmlRenderer.Render(), "text/html; charset=utf-8"));
+
+        endpoints.MapGet(
+            "/tools/monitor",
+            () => Results.Content(AgentDashboardHtmlRenderer.Render(), "text/html; charset=utf-8"));
+
+        endpoints.MapGet(
+            "/agent/dashboard",
+            () => Results.Redirect("/tools"));
 
         endpoints.MapGet(
             "/agent/job-statuses",
