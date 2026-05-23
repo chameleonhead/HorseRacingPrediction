@@ -16,17 +16,20 @@ public sealed class ScrapingRegistrationService : BackgroundService
     private readonly AgentProcessingOptions _options;
     private readonly JraRaceScheduleCollectionWorkflow _scheduleCollectionWorkflow;
     private readonly ProcessingStateStore _stateStore;
+    private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILogger<ScrapingRegistrationService> _logger;
 
     public ScrapingRegistrationService(
         IOptions<AgentProcessingOptions> options,
         JraRaceScheduleCollectionWorkflow scheduleCollectionWorkflow,
         ProcessingStateStore stateStore,
+        CollectionExecutionTrigger executionTrigger,
         ILogger<ScrapingRegistrationService> logger)
     {
         _options = options.Value;
         _scheduleCollectionWorkflow = scheduleCollectionWorkflow;
         _stateStore = stateStore;
+        _executionTrigger = executionTrigger;
         _logger = logger;
     }
 
@@ -73,6 +76,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         var today = DateOnly.FromDateTime(now.Date);
         JraRaceScheduleCollectionResult? schedule = null;
         var workMode = AgentWorkMode.Idle;
+        var queuedJobs = false;
 
         if (_options.EnableScheduleCollection)
         {
@@ -108,13 +112,15 @@ public sealed class ScrapingRegistrationService : BackgroundService
             {
                 var payload = new RaceCardCollectionJobPayload(date, JraProviderType);
                 var key = AgentJobKeyFactory.BuildRaceCardCollectionKey(JraProviderType, date);
+                var priority = date == today ? 200 : 180;
                 await _stateStore.ScheduleJobAsync(
                     AgentJobType.RaceCardCollection,
                     key,
                     AgentJobPayloadSerializer.Serialize(payload),
                     now,
-                    priority: 200,
+                    priority,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
+                queuedJobs = true;
                 _logger.LogInformation("[収集登録] 出馬表収集ジョブを登録しました。Date={Date}", date);
             }
         }
@@ -131,16 +137,22 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 now,
                 priority: 40,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+            queuedJobs = true;
 
             var currentMonth = new DateOnly(today.Year, today.Month, 1);
-            await ScheduleResultMonthDiscoveryAsync(currentMonth, now, cancellationToken).ConfigureAwait(false);
+            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(currentMonth, now, cancellationToken).ConfigureAwait(false);
 
             var previousMonth = currentMonth.AddMonths(-1);
-            await ScheduleResultMonthDiscoveryAsync(previousMonth, now, cancellationToken).ConfigureAwait(false);
+            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(previousMonth, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (queuedJobs)
+        {
+            _executionTrigger.Signal();
         }
     }
 
-    private async Task ScheduleResultMonthDiscoveryAsync(
+    private async Task<bool> ScheduleResultMonthDiscoveryAsync(
         DateOnly targetMonth,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -159,6 +171,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
             priority: 160,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("[収集登録] 月次成績探索ジョブを登録しました。Month={Month}", targetMonth.ToString("yyyy-MM"));
+        return true;
     }
 
     internal static IReadOnlyList<string> BuildPredictionCandidateRaceIds(IEnumerable<string> savedRaceIds)

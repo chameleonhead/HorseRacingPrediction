@@ -52,7 +52,7 @@ public sealed class JraHistoricalRaceResultCollectorTests
 
         Assert.IsTrue(result.Succeeded);
         Assert.AreEqual("皐月賞", writeService.UpsertedRaceName);
-        Assert.AreEqual(2, writeService.UpsertedEntries.Count);
+        Assert.HasCount(2, writeService.UpsertedEntries);
         Assert.AreEqual((3, "ソールオリエンス", "横山武史"), writeService.UpsertedEntries[0]);
         Assert.HasCount(2, writeService.RecordedEntryResults);
         Assert.AreEqual("ソールオリエンス", writeService.WinningHorseName);

@@ -344,7 +344,8 @@ public sealed class ProcessingStateStore
         string deduplicationKey,
         DateTimeOffset now,
         string? error,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? availableAt = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -360,8 +361,9 @@ public sealed class ProcessingStateStore
                 return;
             }
 
+            var scheduledAt = availableAt ?? now;
             job.Status = AgentJobStatus.Ready;
-            job.AvailableAt = now;
+            job.AvailableAt = scheduledAt;
             job.LeaseExpiresAt = null;
             job.AttemptCount += 1;
             job.LastError = error;
@@ -402,6 +404,54 @@ public sealed class ProcessingStateStore
             job.UpdatedAt = now;
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<int> RequeueRunningJobsAsync(
+        IEnumerable<string> jobTypes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        var jobTypeSet = jobTypes
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (jobTypeSet.Count == 0)
+        {
+            return 0;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var runningJobs = await dbContext.Jobs
+                .Where(x => x.Status == AgentJobStatus.Running && jobTypeSet.Contains(x.JobType))
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (runningJobs.Count == 0)
+            {
+                return 0;
+            }
+
+            foreach (var job in runningJobs)
+            {
+                job.Status = AgentJobStatus.Ready;
+                job.StartedAt = null;
+                job.LeaseExpiresAt = null;
+                job.LastError = null;
+                job.AvailableAt = now;
+                job.UpdatedAt = now;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return runningJobs.Count;
         }
         finally
         {

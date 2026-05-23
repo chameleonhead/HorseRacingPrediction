@@ -14,6 +14,15 @@ namespace HorseRacingPrediction.AgentClient.Scheduling;
 public sealed class CollectionExecutionService : BackgroundService
 {
     private static readonly string JraProviderType = "JRA";
+    private static readonly string[] RecoverableJobTypes =
+    [
+        AgentJobType.RaceCardCollection,
+        AgentJobType.ResultMonthDiscoveryRequest,
+        AgentJobType.ResultDayDiscoveryRequest,
+        AgentJobType.ResultDayCollectionRequest,
+        AgentJobType.RaceResultCollection,
+        AgentJobType.ResultBackfillPlanningRequest
+    ];
 
     private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
@@ -75,6 +84,16 @@ public sealed class CollectionExecutionService : BackgroundService
 
         _logger.LogInformation("CollectionExecutionService を開始しました。");
 
+        var recoveredJobs = await _stateStore
+            .RequeueRunningJobsAsync(RecoverableJobTypes, DateTimeOffset.UtcNow, stoppingToken)
+            .ConfigureAwait(false);
+        if (recoveredJobs > 0)
+        {
+            _logger.LogWarning(
+                "CollectionExecutionService 起動時に孤立した収集ジョブを再キューしました。Count={Count}",
+                recoveredJobs);
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -110,12 +129,12 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         var now = DateTimeOffset.UtcNow;
 
-        await ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken).ConfigureAwait(false);
+        await ExecuteRaceCardJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteResultMonthDiscoveryJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteResultDayDiscoveryJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteResultDayCollectionJobsAsync(now, cancellationToken).ConfigureAwait(false);
-        await ExecuteRaceCardJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceResultJobsAsync(now, cancellationToken).ConfigureAwait(false);
+        await ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ExecuteResultBackfillPlanningJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
@@ -480,8 +499,9 @@ public sealed class CollectionExecutionService : BackgroundService
                         AgentJobType.RaceCardCollection,
                         job.DeduplicationKey,
                         now,
-                        "Race card discovery returned no URLs.",
-                        cancellationToken).ConfigureAwait(false);
+                        "Race card publication is not available yet. Retry scheduled.",
+                        cancellationToken,
+                        availableAt: now.AddMinutes(30)).ConfigureAwait(false);
 
                     continue;
                 }
