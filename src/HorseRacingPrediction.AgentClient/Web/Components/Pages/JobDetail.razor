@@ -1,0 +1,111 @@
+@page "/jobs/{JobId}"
+@inject ProcessingStateStore Store
+@inject CollectionExecutionTrigger ExecutionTrigger
+
+<h1>ジョブ詳細</h1>
+<p class="hint"><a href="jobs">← ジョブ一覧へ戻る</a></p>
+
+@if (loading)
+{
+    <p>読み込み中…</p>
+}
+else if (detail is null)
+{
+    <p>JobId「@JobId」のジョブは見つかりませんでした。</p>
+}
+else
+{
+    <section class="card">
+        <h2>@detail.JobType</h2>
+        <dl class="meta">
+            <dt>JobId</dt><dd><code>@detail.JobId</code></dd>
+            <dt>DeduplicationKey</dt><dd><code>@detail.DeduplicationKey</code></dd>
+            <dt>Status</dt><dd><span class="pill">@detail.Status</span></dd>
+            <dt>Priority</dt><dd>@detail.Priority</dd>
+            <dt>AttemptCount</dt><dd>@detail.AttemptCount</dd>
+            <dt>FirstQueuedAt</dt><dd>@Fmt(detail.FirstQueuedAt)</dd>
+            <dt>AvailableAt</dt><dd>@Fmt(detail.AvailableAt)</dd>
+            <dt>StartedAt</dt><dd>@Fmt(detail.StartedAt)</dd>
+            <dt>LeaseExpiresAt</dt><dd>@Fmt(detail.LeaseExpiresAt)</dd>
+            <dt>CreatedAt</dt><dd>@Fmt(detail.CreatedAt)</dd>
+            <dt>UpdatedAt</dt><dd>@Fmt(detail.UpdatedAt)</dd>
+        </dl>
+        <div class="toolbar">
+            <button class="btn primary" @onclick="RequeueAsync">再キュー</button>
+            <button class="btn" @onclick="LoadAsync">再読み込み</button>
+        </div>
+        @if (!string.IsNullOrEmpty(message))
+        {
+            <p class="hint">@message</p>
+        }
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(detail.LastError))
+    {
+        <section class="card">
+            <h3>最終エラー</h3>
+            <pre class="error">@detail.LastError</pre>
+        </section>
+    }
+
+    <section class="card">
+        <h3>ペイロード</h3>
+        <pre class="payload">@FormatPayload(detail.Payload)</pre>
+    </section>
+}
+
+@code {
+    [Parameter] public string JobId { get; set; } = string.Empty;
+
+    private bool loading;
+    private AgentJobDetailReadModel? detail;
+    private string? message;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            detail = await Store.GetJobDetailAsync(JobId);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task RequeueAsync()
+    {
+        if (detail is null) return;
+        var ok = await Store.ForceRequeueJobAsync(detail.JobType, detail.DeduplicationKey, DateTimeOffset.UtcNow);
+        if (ok)
+        {
+            ExecutionTrigger.Signal();
+            message = "再キューしました。";
+        }
+        else
+        {
+            message = "再キューに失敗しました。";
+        }
+        await LoadAsync();
+    }
+
+    private static string Fmt(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    private static string Fmt(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+
+    private static string FormatPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload)) return "(empty)";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(payload);
+            return System.Text.Json.JsonSerializer.Serialize(doc.RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return payload;
+        }
+    }
+}

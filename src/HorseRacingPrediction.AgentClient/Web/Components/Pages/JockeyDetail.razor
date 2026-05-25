@@ -1,0 +1,41 @@
+@page "/jockeys/{JockeyId}"
+@inject ApiBrowseClient Api
+
+<h1>騎手詳細</h1>
+<p class="hint"><a href="jockeys">← 騎手検索へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (jockey is null) { <p>JockeyId「@JockeyId」の騎手は見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@jockey.DisplayName</h2>
+        <dl class="meta">
+            <dt>JockeyId</dt><dd><code>@jockey.JockeyId</code></dd>
+            <dt>正規化名</dt><dd>@jockey.NormalizedName</dd>
+            <dt>所属</dt><dd>@jockey.AffiliationCode</dd>
+        </dl>
+    </section>
+    @if (jockey.Aliases.Count > 0)
+    {
+        <section class="card">
+            <h3>別名</h3>
+            <ul>
+                @foreach (var a in jockey.Aliases) { <li><span class="pill">@a.Type</span> @a.Value</li> }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string JockeyId { get; set; } = string.Empty;
+    private bool loading;
+    private JockeyProfileDto? jockey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try { jockey = await Api.GetJockeyAsync(JockeyId); }
+        finally { loading = false; }
+    }
+}

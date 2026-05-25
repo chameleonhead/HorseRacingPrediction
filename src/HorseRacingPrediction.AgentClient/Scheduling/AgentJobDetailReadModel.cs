@@ -1,9 +1,10 @@
 namespace HorseRacingPrediction.AgentClient.Scheduling;
 
-public sealed record AgentJobStatusReadModel(
+public sealed record AgentJobDetailReadModel(
     string JobId,
     string JobType,
     string DeduplicationKey,
+    string Payload,
     AgentJobStatus Status,
     int Priority,
     int AttemptCount,
@@ -12,4 +13,5 @@ public sealed record AgentJobStatusReadModel(
     DateTimeOffset? StartedAt,
     DateTimeOffset? LeaseExpiresAt,
     string? LastError,
+    DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

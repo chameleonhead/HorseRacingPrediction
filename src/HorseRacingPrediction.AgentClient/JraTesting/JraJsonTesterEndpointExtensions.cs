@@ -5,14 +5,6 @@ public static class JraJsonTesterEndpointExtensions
     public static IEndpointRouteBuilder MapJraJsonTesterEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(
-            "/tools/jra-tool",
-            () => Results.Content(JraJsonTesterPageHtml.Content, "text/html; charset=utf-8"));
-
-        endpoints.MapGet(
-            "/tools/jra-json",
-            () => Results.Redirect("/tools/jra-tool"));
-
-        endpoints.MapGet(
             "/api/tools/jra-json",
             async (string url, bool includeSnapshot, JraJsonExtractionService service, CancellationToken cancellationToken) =>
             {

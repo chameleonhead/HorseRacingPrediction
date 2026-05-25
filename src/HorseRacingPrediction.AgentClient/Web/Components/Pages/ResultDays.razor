@@ -1,0 +1,114 @@
+@page "/result-days"
+@inject ProcessingStateStore Store
+@inject CollectionExecutionTrigger ExecutionTrigger
+
+<h1>日次収集状況</h1>
+<div class="toolbar">
+    <label>From: <input type="date" @bind="from" /></label>
+    <label>To: <input type="date" @bind="to" /></label>
+    <button class="btn primary" @onclick="LoadAsync">再読み込み</button>
+</div>
+
+@if (loading)
+{
+    <p>読み込み中…</p>
+}
+else if (items is null || items.Count == 0)
+{
+    <p>該当データはありません。</p>
+}
+else
+{
+    <table class="data">
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th>日付</th>
+                <th>Status</th>
+                <th>Expected / Completed</th>
+                <th>Incomplete Reason</th>
+                <th>UpdatedAt</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in items)
+            {
+                <tr>
+                    <td>@s.ProviderType</td>
+                    <td>@s.TargetDate</td>
+                    <td>@s.Status</td>
+                    <td>@s.ExpectedRaceCount / @s.CompletedRaceCount</td>
+                    <td>@s.IncompleteReason</td>
+                    <td>@s.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss</td>
+                    <td>
+                        <button class="btn small" @onclick="() => RequeueDiscoveryAsync(s)">Discovery 再投入</button>
+                        <button class="btn small" @onclick="() => RequeueCollectionAsync(s)">Collection 再投入</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(message)) { <p class="hint">@message</p> }
+
+@code {
+    private DateOnly from = DateOnly.FromDateTime(DateTime.Today.AddDays(-14));
+    private DateOnly to = DateOnly.FromDateTime(DateTime.Today);
+    private bool loading;
+    private IReadOnlyList<ResultDayCollectionStatusReadModel>? items;
+    private string? message;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (from > to) { message = "From は To 以下にしてください。"; return; }
+        loading = true;
+        try
+        {
+            items = await Store.GetResultDayCollectionStatusesAsync(from, to);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task RequeueDiscoveryAsync(ResultDayCollectionStatusReadModel s)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await Store.UpsertResultDayCollectionStatusAsync(
+            s.ProviderType, s.TargetDate, ResultDayCollectionState.RetryScheduled,
+            null, null, null, null, now, null, now);
+        await Store.ScheduleJobAsync(
+            AgentJobType.ResultDayDiscoveryRequest,
+            AgentJobKeyFactory.BuildResultDayDiscoveryRequestKey(s.ProviderType, s.TargetDate),
+            AgentJobPayloadSerializer.Serialize(new ResultDayDiscoveryRequestPayload(s.TargetDate, s.ProviderType)),
+            now,
+            priority: 170);
+        ExecutionTrigger.Signal();
+        message = $"Discovery 再投入: {s.ProviderType} {s.TargetDate}";
+        await LoadAsync();
+    }
+
+    private async Task RequeueCollectionAsync(ResultDayCollectionStatusReadModel s)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var ok = await Store.ForceRequeueJobAsync(
+            AgentJobType.ResultDayCollectionRequest,
+            AgentJobKeyFactory.BuildResultDayCollectionRequestKey(s.ProviderType, s.TargetDate),
+            now);
+        if (ok)
+        {
+            ExecutionTrigger.Signal();
+            message = $"Collection 再投入: {s.ProviderType} {s.TargetDate}";
+        }
+        else
+        {
+            message = "Collection ジョブが存在しません。Discovery を先に実行してください。";
+        }
+        await LoadAsync();
+    }
+}

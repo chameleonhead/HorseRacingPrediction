@@ -5,18 +5,6 @@ public static class AgentDashboardEndpointExtensions
     public static IEndpointRouteBuilder MapAgentDashboardEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(
-            "/tools",
-            () => Results.Content(AgentDashboardHtmlRenderer.Render(), "text/html; charset=utf-8"));
-
-        endpoints.MapGet(
-            "/tools/monitor",
-            () => Results.Content(AgentDashboardHtmlRenderer.Render(), "text/html; charset=utf-8"));
-
-        endpoints.MapGet(
-            "/agent/dashboard",
-            () => Results.Redirect("/tools"));
-
-        endpoints.MapGet(
             "/agent/job-statuses",
             async (
                 string? jobType,
@@ -29,6 +17,14 @@ public static class AgentDashboardEndpointExtensions
                     .GetJobStatusesAsync(jobType, status, limit ?? 100, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Ok(items);
+            });
+
+        endpoints.MapGet(
+            "/agent/jobs/{jobId}",
+            async (string jobId, ProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+            {
+                var detail = await stateStore.GetJobDetailAsync(jobId, cancellationToken).ConfigureAwait(false);
+                return detail is null ? Results.NotFound() : Results.Ok(detail);
             });
 
         endpoints.MapGet(

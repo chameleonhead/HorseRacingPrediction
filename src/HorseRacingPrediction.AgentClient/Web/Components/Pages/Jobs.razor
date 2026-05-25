@@ -1,0 +1,185 @@
+@page "/jobs"
+@inject ProcessingStateStore Store
+@inject CollectionExecutionTrigger ExecutionTrigger
+@inject NavigationManager Nav
+
+<h1>ジョブ一覧</h1>
+
+<div class="toolbar">
+    <label>
+        JobType:
+        <input @bind="jobTypeFilter" @bind:event="oninput" placeholder="例: JraRaceCardCollection" />
+    </label>
+    <label>
+        Status:
+        <select @bind="statusFilter">
+            <option value="">(指定なし)</option>
+            @foreach (var s in Enum.GetValues<AgentJobStatus>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </label>
+    <label>
+        件数上限:
+        <input type="number" @bind="limit" min="1" max="500" />
+    </label>
+    <button class="btn primary" @onclick="LoadAsync">再読み込み</button>
+</div>
+
+<section class="card">
+    <h2>新規ジョブ投入</h2>
+    <div class="toolbar">
+        <label>
+            ResultDay 対象日:
+            <input type="date" @bind="newResultDay" />
+        </label>
+        <label>
+            ProviderType:
+            <input @bind="newProvider" placeholder="JRA" />
+        </label>
+        <button class="btn" @onclick="TriggerResultDayAsync">日次収集を投入</button>
+    </div>
+    <div class="toolbar">
+        <label>
+            予想 RaceId:
+            <input @bind="newRaceId" placeholder="例: 2026010110201" />
+        </label>
+        <button class="btn" @onclick="TriggerPredictionAsync">予想ジョブを投入</button>
+    </div>
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <p class="hint">@message</p>
+    }
+</section>
+
+@if (loading)
+{
+    <p>読み込み中…</p>
+}
+else if (items is null || items.Count == 0)
+{
+    <p>該当ジョブはありません。</p>
+}
+else
+{
+    <table class="data">
+        <thead>
+            <tr>
+                <th>JobType</th>
+                <th>DeduplicationKey</th>
+                <th>Status</th>
+                <th>Attempts</th>
+                <th>AvailableAt</th>
+                <th>UpdatedAt</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var job in items)
+            {
+                <tr>
+                    <td>@job.JobType</td>
+                    <td><a href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">@job.DeduplicationKey</a></td>
+                    <td><span class="pill @PillClass(job.Status)">@job.Status</span></td>
+                    <td>@job.AttemptCount</td>
+                    <td>@FormatDate(job.AvailableAt)</td>
+                    <td>@FormatDate(job.UpdatedAt)</td>
+                    <td><button class="btn small" @onclick="() => RequeueAsync(job)">再キュー</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string? jobTypeFilter;
+    private AgentJobStatus? statusFilter;
+    private int limit = 100;
+    private bool loading;
+    private IReadOnlyList<AgentJobStatusReadModel>? items;
+    private string? message;
+
+    private DateOnly newResultDay = DateOnly.FromDateTime(DateTime.Today);
+    private string newProvider = "JRA";
+    private string? newRaceId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Store.GetJobStatusesAsync(jobTypeFilter, statusFilter, limit);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task RequeueAsync(AgentJobStatusReadModel job)
+    {
+        var ok = await Store.ForceRequeueJobAsync(job.JobType, job.DeduplicationKey, DateTimeOffset.UtcNow);
+        if (ok)
+        {
+            ExecutionTrigger.Signal();
+            message = $"{job.JobType}/{job.DeduplicationKey} を再キューしました。";
+        }
+        else
+        {
+            message = "対象のジョブが見つかりませんでした。";
+        }
+        await LoadAsync();
+    }
+
+    private async Task TriggerResultDayAsync()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var provider = string.IsNullOrWhiteSpace(newProvider) ? "JRA" : newProvider.Trim();
+        await Store.UpsertResultDayCollectionStatusAsync(
+            provider,
+            newResultDay,
+            ResultDayCollectionState.RetryScheduled,
+            null, null, null, null, now, null, now);
+        await Store.ScheduleJobAsync(
+            AgentJobType.ResultDayDiscoveryRequest,
+            AgentJobKeyFactory.BuildResultDayDiscoveryRequestKey(provider, newResultDay),
+            AgentJobPayloadSerializer.Serialize(new ResultDayDiscoveryRequestPayload(newResultDay, provider)),
+            now,
+            priority: 200);
+        ExecutionTrigger.Signal();
+        message = $"日次収集ジョブを投入しました: {provider} {newResultDay:yyyy-MM-dd}";
+        await LoadAsync();
+    }
+
+    private async Task TriggerPredictionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newRaceId))
+        {
+            message = "RaceId を入力してください。";
+            return;
+        }
+        var rid = newRaceId.Trim();
+        await Store.EnqueuePredictionCandidatesAsync(new[] { rid }, DateTimeOffset.UtcNow);
+        message = $"予想ジョブを投入しました: {rid}";
+        await LoadAsync();
+    }
+
+    private static string PillClass(AgentJobStatus s) => s switch
+    {
+        AgentJobStatus.Pending => "pill-queued",
+        AgentJobStatus.Ready => "pill-queued",
+        AgentJobStatus.Running => "pill-running",
+        AgentJobStatus.WaitingDependency => "pill-warn",
+        AgentJobStatus.Succeeded => "pill-ok",
+        AgentJobStatus.Failed => "pill-bad",
+        AgentJobStatus.Cancelled => "pill-default",
+        AgentJobStatus.DeadLetter => "pill-bad",
+        _ => "pill-default"
+    };
+
+    private static string FormatDate(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    private static string FormatDate(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+}

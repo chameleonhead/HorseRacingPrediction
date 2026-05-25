@@ -1,0 +1,125 @@
+@page "/races/{RaceId}"
+@inject ApiBrowseClient Api
+
+<h1>レース詳細</h1>
+<p class="hint"><a href="races">← レース検索へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@(race.RaceName ?? race.RaceId)</h2>
+        <dl class="meta">
+            <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
+            <dt>日付</dt><dd>@race.RaceDate</dd>
+            <dt>競馬場 / R</dt><dd>@race.RacecourseCode / @race.RaceNumber</dd>
+            <dt>状態</dt><dd>@race.Status</dd>
+            <dt>距離 / 馬場</dt><dd>@race.DistanceMeters m / @race.SurfaceCode @race.DirectionCode</dd>
+            <dt>Grade</dt><dd>@race.GradeCode</dd>
+            <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
+            <dt>勝ち馬</dt>
+            <dd>
+                @if (!string.IsNullOrEmpty(race.WinningHorseId))
+                {
+                    <a href="@($"horses/{Uri.EscapeDataString(race.WinningHorseId!)}")">@race.WinningHorseName</a>
+                }
+                else { @race.WinningHorseName }
+            </dd>
+        </dl>
+    </section>
+
+    @if (race.Entries.Count > 0)
+    {
+        <section class="card">
+            <h3>出走表</h3>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>馬番</th>
+                        <th>馬名</th>
+                        <th>性齢</th>
+                        <th>斤量</th>
+                        <th>騎手</th>
+                        <th>調教師</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
+                    {
+                        <tr>
+                            <td>@e.HorseNumber</td>
+                            <td><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a></td>
+                            <td>@e.SexCode @e.Age</td>
+                            <td>@e.AssignedWeight</td>
+                            <td>@if (!string.IsNullOrEmpty(e.JockeyId)) { <a href="@($"jockeys/{Uri.EscapeDataString(e.JockeyId!)}")">@e.JockeyId</a> }</td>
+                            <td>@if (!string.IsNullOrEmpty(e.TrainerId)) { <a href="@($"trainers/{Uri.EscapeDataString(e.TrainerId!)}")">@e.TrainerId</a> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (race.EntryResults.Count > 0)
+    {
+        <section class="card">
+            <h3>結果</h3>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>着順</th>
+                        <th>馬番</th>
+                        <th>馬名</th>
+                        <th>タイム</th>
+                        <th>着差</th>
+                        <th>上り3F</th>
+                        <th>賞金</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue))
+                    {
+                        <tr>
+                            <td>@r.FinishPosition</td>
+                            <td>@r.HorseNumber</td>
+                            <td><a href="@($"horses/{Uri.EscapeDataString(r.HorseId)}")">@(r.HorseName ?? r.HorseId)</a></td>
+                            <td>@r.OfficialTime</td>
+                            <td>@r.MarginText</td>
+                            <td>@r.LastThreeFurlongTime</td>
+                            <td>@r.PrizeMoney</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(race.StewardReportText))
+    {
+        <section class="card">
+            <h3>レース概況</h3>
+            <pre class="payload">@race.StewardReportText</pre>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string RaceId { get; set; } = string.Empty;
+
+    private bool loading;
+    private RaceDetailDto? race;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try
+        {
+            race = await Api.GetRaceAsync(RaceId);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

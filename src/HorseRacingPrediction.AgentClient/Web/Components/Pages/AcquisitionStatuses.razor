@@ -1,0 +1,87 @@
+@page "/acquisition-statuses"
+@inject ProcessingStateStore Store
+
+<h1>取得ステータス</h1>
+<div class="toolbar">
+    <label>From: <input type="date" @bind="from" /></label>
+    <label>To: <input type="date" @bind="to" /></label>
+    <label>
+        SubjectType:
+        <select @bind="subjectType">
+            <option value="">(指定なし)</option>
+            @foreach (var t in Enum.GetValues<AgentAcquisitionSubjectType>())
+            {
+                <option value="@t">@t</option>
+            }
+        </select>
+    </label>
+    <label>
+        Status:
+        <select @bind="status">
+            <option value="">(指定なし)</option>
+            @foreach (var s in Enum.GetValues<RaceDataCollectionState>())
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </label>
+    <button class="btn primary" @onclick="LoadAsync">再読み込み</button>
+</div>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (items is null || items.Count == 0) { <p>該当データはありません。</p> }
+else
+{
+    <table class="data">
+        <thead>
+            <tr>
+                <th>Subject</th>
+                <th>Operation</th>
+                <th>Provider</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Error</th>
+                <th>UpdatedAt</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var i in items)
+            {
+                <tr>
+                    <td>@i.SubjectType</td>
+                    <td>@i.OperationType</td>
+                    <td>@i.ProviderType</td>
+                    <td>@i.SubjectName</td>
+                    <td>@i.Status</td>
+                    <td>@i.ErrorReason</td>
+                    <td>@i.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private DateOnly from = DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
+    private DateOnly to = DateOnly.FromDateTime(DateTime.Today);
+    private AgentAcquisitionSubjectType? subjectType;
+    private RaceDataCollectionState? status;
+    private bool loading;
+    private IReadOnlyList<AgentAcquisitionStatusReadModel>? items;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (from > to) return;
+        loading = true;
+        try
+        {
+            items = await Store.GetAgentAcquisitionStatusesAsync(from, to, subjectType, status);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

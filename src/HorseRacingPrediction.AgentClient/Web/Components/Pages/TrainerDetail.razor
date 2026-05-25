@@ -1,0 +1,41 @@
+@page "/trainers/{TrainerId}"
+@inject ApiBrowseClient Api
+
+<h1>調教師詳細</h1>
+<p class="hint"><a href="trainers">← 調教師検索へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (trainer is null) { <p>TrainerId「@TrainerId」の調教師は見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@trainer.DisplayName</h2>
+        <dl class="meta">
+            <dt>TrainerId</dt><dd><code>@trainer.TrainerId</code></dd>
+            <dt>正規化名</dt><dd>@trainer.NormalizedName</dd>
+            <dt>所属</dt><dd>@trainer.AffiliationCode</dd>
+        </dl>
+    </section>
+    @if (trainer.Aliases.Count > 0)
+    {
+        <section class="card">
+            <h3>別名</h3>
+            <ul>
+                @foreach (var a in trainer.Aliases) { <li><span class="pill">@a.Type</span> @a.Value</li> }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public string TrainerId { get; set; } = string.Empty;
+    private bool loading;
+    private TrainerProfileDto? trainer;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try { trainer = await Api.GetTrainerAsync(TrainerId); }
+        finally { loading = false; }
+    }
+}

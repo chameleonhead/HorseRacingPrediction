@@ -740,6 +740,7 @@ public sealed class ProcessingStateStore
                 .OrderByDescending(x => x.UpdatedAt)
                 .Take(Math.Max(1, limit))
                 .Select(x => new AgentJobStatusReadModel(
+                    BuildJobId(x.JobType, x.DeduplicationKey),
                     x.JobType,
                     x.DeduplicationKey,
                     x.Status,
@@ -758,6 +759,41 @@ public sealed class ProcessingStateStore
             _gate.Release();
         }
     }
+
+    public async Task<AgentJobDetailReadModel?> GetJobDetailAsync(string jobId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(jobId)) return null;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var entity = await dbContext.Jobs
+                .SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken)
+                .ConfigureAwait(false);
+            if (entity is null) return null;
+            return new AgentJobDetailReadModel(
+                entity.JobId,
+                entity.JobType,
+                entity.DeduplicationKey,
+                entity.Payload,
+                entity.Status,
+                entity.Priority,
+                entity.AttemptCount,
+                entity.FirstQueuedAt,
+                entity.AvailableAt,
+                entity.StartedAt,
+                entity.LeaseExpiresAt,
+                entity.LastError,
+                entity.CreatedAt,
+                entity.UpdatedAt);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public static string ComposeJobId(string jobType, string deduplicationKey) => BuildJobId(jobType, deduplicationKey);
 
     public async Task<ResultDayCollectionStatusReadModel?> GetResultDayCollectionStatusAsync(
         string providerType,
