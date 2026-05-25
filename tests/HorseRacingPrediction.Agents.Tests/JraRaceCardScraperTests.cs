@@ -78,6 +78,24 @@ public class JraRaceCardScraperTests
     }
 
     [TestMethod]
+    public async Task ScrapeAsync_WithSpacedHeaders_ParsesEntries()
+    {
+        _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
+            headers: ["枠 番", "馬 番", "馬 名", "性 齢", "斤 量", "騎 手", "調教師", "馬体重"],
+            rows:
+            [
+                ["1", "1", "アオサギ", "牡3", "56.0", "川田将雅", "友道康夫", "480(+2)"],
+            ]);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.HasCount(1, result.Entries);
+        Assert.AreEqual(1, result.Entries[0].HorseNumber);
+        Assert.AreEqual("アオサギ", result.Entries[0].HorseName);
+    }
+
+    [TestMethod]
     public async Task ScrapeAsync_WithoutGateNumber_ParsesEntries()
     {
         _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
@@ -306,6 +324,35 @@ public class JraRaceCardScraperTests
 
         Assert.IsNotNull(result);
         Assert.AreEqual("シドニートロフィー", result.RaceName);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_DoesNotTreatJraBoilerplateAsRaceName()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "出馬表 JRA",
+            MainText: string.Join(
+                Environment.NewLine,
+                [
+                    "2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分",
+                    "10レース",
+                    "4歳以上 3勝クラス（混合）［指定］ 定量 コース：2,000メートル（芝・右）"
+                ]),
+            Headings:
+            [
+                "日本中央競馬会",
+                "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
+                "3歳以上2勝クラス"
+            ],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("3歳以上2勝クラス", result.RaceName);
     }
 
     [TestMethod]

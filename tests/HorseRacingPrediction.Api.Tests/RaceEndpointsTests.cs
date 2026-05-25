@@ -298,6 +298,56 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task RegisterEntry_WhenRelatedSubjectsAreMissing_AutoCreatesHorseJockeyTrainer()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var jockeyId = $"jockey-{Guid.NewGuid()}";
+        var trainerId = $"trainer-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 5, 30), "TOKYO", 9, "自動作成テスト", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(18),
+            JsonOptions);
+
+        var entryResponse = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(
+                HorseId: horseId,
+                HorseNumber: 1,
+                JockeyId: jockeyId,
+                TrainerId: trainerId,
+                GateNumber: 1,
+                AssignedWeight: 57.0m,
+                SexCode: "M",
+                Age: 4,
+                DeclaredWeight: 470.0m,
+                DeclaredWeightDiff: 2.0m,
+                RunningStyleCode: null,
+                EntryId: entryId,
+                HorseName: "テストホース",
+                JockeyName: "テスト騎手",
+                TrainerName: "テスト調教師"),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.Created, entryResponse.StatusCode);
+
+        var horseResponse = await _client.GetAsync($"/api/horses/{horseId}");
+        Assert.AreEqual(HttpStatusCode.OK, horseResponse.StatusCode);
+
+        var jockeyResponse = await _client.GetAsync($"/api/jockeys/{jockeyId}");
+        Assert.AreEqual(HttpStatusCode.OK, jockeyResponse.StatusCode);
+
+        var trainerResponse = await _client.GetAsync($"/api/trainers/{trainerId}");
+        Assert.AreEqual(HttpStatusCode.OK, trainerResponse.StatusCode);
+    }
+
+    [TestMethod]
     public async Task GetRace_AfterFullLifecycle_ReturnsCardWeatherTrackAndResultDetails()
     {
         var raceId = $"race-{Guid.NewGuid()}";

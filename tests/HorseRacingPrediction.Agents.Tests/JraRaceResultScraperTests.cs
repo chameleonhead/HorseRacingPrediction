@@ -82,6 +82,24 @@ public class JraRaceResultScraperTests
     }
 
     [TestMethod]
+    public async Task ScrapeAsync_WithSpacedResultHeaders_ParsesEntries()
+    {
+        _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
+            headers: ["着 順", "馬 番", "馬 名", "騎 手"],
+            rows:
+            [
+                ["1", "1", "アオサギ", "川田将雅"],
+            ]);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.HasCount(1, result.Entries);
+        Assert.AreEqual("アオサギ", result.Entries[0].HorseName);
+        Assert.AreEqual(1, result.Entries[0].HorseNumber);
+    }
+
+    [TestMethod]
     public async Task ScrapeAsync_WithAbnormalCode_ParsesEntryWithCode()
     {
         _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
@@ -168,6 +186,24 @@ public class JraRaceResultScraperTests
             Title: "JRA",
             MainText: string.Empty,
             Headings: ["2025年4月20日 東京 11R", "天皇賞（春）", "芝・右 3200m"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("天皇賞（春）", result.RaceName);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_DoesNotTreatJraBoilerplateAsRaceName()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "成績 JRA",
+            MainText: "2025年4月20日 東京 11R",
+            Headings: ["日本中央競馬会", "天皇賞（春）", "芝・右 3200m"],
             Links: [],
             Actions: [],
             Tables: []);

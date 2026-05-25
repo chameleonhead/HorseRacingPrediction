@@ -671,6 +671,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
     private static bool IsBoilerplateHeading(string text)
         => text.Contains("JRA 日本中央競馬会", StringComparison.Ordinal)
+           || text.Contains("日本中央競馬会", StringComparison.Ordinal)
            || text.StartsWith("出馬表", StringComparison.Ordinal)
            || text.Contains("検索ウィンドウ", StringComparison.Ordinal)
            || text.Contains("競馬メニュー", StringComparison.Ordinal)
@@ -754,7 +755,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     private static bool IsRaceCardTable(PageTableSnapshot table) =>
         table.Headers.Any(h =>
             RaceCardRequiredHeaders.Any(candidate =>
-                h.Contains(candidate, StringComparison.OrdinalIgnoreCase)));
+                NormalizeHeader(h).Contains(NormalizeHeader(candidate), StringComparison.OrdinalIgnoreCase)));
 
     private static IReadOnlyList<JraRaceEntryData> ParseRaceCardTable(PageTableSnapshot table)
     {
@@ -1126,7 +1127,8 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (candidates.Any(c => headers[i].Contains(c, StringComparison.OrdinalIgnoreCase)))
+            var normalizedHeader = NormalizeHeader(headers[i]);
+            if (candidates.Any(c => normalizedHeader.Contains(NormalizeHeader(c), StringComparison.OrdinalIgnoreCase)))
             {
                 return i;
             }
@@ -1134,6 +1136,11 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
 
         return -1;
     }
+
+    private static string NormalizeHeader(string? value)
+        => (value ?? string.Empty)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("\u3000", string.Empty, StringComparison.Ordinal);
 
     private static string? GetCell(IReadOnlyList<string> row, int index) =>
         index >= 0 && index < row.Count ? row[index] : null;

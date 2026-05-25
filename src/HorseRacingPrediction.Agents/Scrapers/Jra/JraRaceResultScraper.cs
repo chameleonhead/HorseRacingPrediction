@@ -129,6 +129,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         var candidates = snapshot.Headings
             .Select(h => h.Trim())
             .Where(h => h.Length > 1)
+            .Where(h => !IsBoilerplateHeading(h))
             .Where(h => !IsCourseLine(h))
             .Where(h => !IsDateRaceNumberLine(h))
             .ToList();
@@ -258,6 +259,15 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
          text.Contains("日", StringComparison.Ordinal)) ||
         Regex.IsMatch(text, @"\d{1,2}R\b");
 
+    private static bool IsBoilerplateHeading(string text)
+        => text.Contains("JRA 日本中央競馬会", StringComparison.Ordinal)
+           || text.Contains("日本中央競馬会", StringComparison.Ordinal)
+           || text.StartsWith("出馬表", StringComparison.Ordinal)
+           || text.StartsWith("成績", StringComparison.Ordinal)
+           || text.Contains("検索ウィンドウ", StringComparison.Ordinal)
+           || text.Contains("競馬メニュー", StringComparison.Ordinal)
+           || text.Contains("JRAからのお知らせ", StringComparison.Ordinal);
+
     private static bool ContainsKanji(string text) =>
         text.Any(c => c >= '\u4e00' && c <= '\u9fff');
 
@@ -281,7 +291,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     private static bool IsResultTable(PageTableSnapshot table) =>
         table.Headers.Any(h =>
             ResultTableRequiredHeaders.Any(candidate =>
-                h.Contains(candidate, StringComparison.OrdinalIgnoreCase)));
+                NormalizeHeader(h).Contains(NormalizeHeader(candidate), StringComparison.OrdinalIgnoreCase)));
 
     private static IReadOnlyList<JraRaceResultEntryData> ParseResultTable(PageTableSnapshot table)
     {
@@ -404,7 +414,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     private static bool IsPayoutTable(PageTableSnapshot table) =>
         table.Headers.Any(h =>
             PayoutTableRequiredHeaders.Any(candidate =>
-                h.Contains(candidate, StringComparison.OrdinalIgnoreCase)));
+                NormalizeHeader(h).Contains(NormalizeHeader(candidate), StringComparison.OrdinalIgnoreCase)));
 
     private static void ParsePayoutTable(
         PageTableSnapshot table,
@@ -585,13 +595,10 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         for (var i = 0; i < headers.Count; i++)
         {
             // ページから取得したヘッダーに空白が混入する場合があるため空白除去後に比較する
-            var normalizedHeader = headers[i]
-                .Replace(" ", string.Empty, StringComparison.Ordinal)
-                .Replace("\u3000", string.Empty, StringComparison.Ordinal);
+            var normalizedHeader = NormalizeHeader(headers[i]);
             if (candidates.Any(c =>
             {
-                var nc = c.Replace(" ", string.Empty, StringComparison.Ordinal)
-                           .Replace("\u3000", string.Empty, StringComparison.Ordinal);
+                var nc = NormalizeHeader(c);
                 return normalizedHeader.Contains(nc, StringComparison.OrdinalIgnoreCase);
             }))
             {
@@ -601,6 +608,11 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
 
         return -1;
     }
+
+    private static string NormalizeHeader(string? value)
+        => (value ?? string.Empty)
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("\u3000", string.Empty, StringComparison.Ordinal);
 
     private static string? GetCell(IReadOnlyList<string> row, int index) =>
         index >= 0 && index < row.Count ? row[index] : null;

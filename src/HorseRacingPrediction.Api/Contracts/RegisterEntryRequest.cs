@@ -14,4 +14,7 @@ public sealed record RegisterEntryRequest(
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
     string? RunningStyleCode = null,
-    string? EntryId = null);
+    string? EntryId = null,
+    string? HorseName = null,
+    string? JockeyName = null,
+    string? TrainerName = null);

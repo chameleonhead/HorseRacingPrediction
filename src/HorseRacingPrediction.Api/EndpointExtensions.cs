@@ -530,8 +530,10 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/entries",
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
-            async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
+                await EnsureRelatedSubjectsAsync(request, commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
+
                 var entryId = string.IsNullOrWhiteSpace(request.EntryId) ? $"entry-{Guid.NewGuid()}" : request.EntryId;
                 var command = new RegisterEntryCommand(
                     new RaceId(raceId),
@@ -1723,6 +1725,95 @@ public static class EndpointExtensions
     private static bool ContainsIgnoreCase(string? value, string searchTerm)
         => !string.IsNullOrWhiteSpace(value)
             && value.Contains(searchTerm, StringComparison.OrdinalIgnoreCase);
+
+    private static async Task EnsureRelatedSubjectsAsync(
+        RegisterEntryRequest request,
+        ICommandBus commandBus,
+        IDbContextProvider<EventStoreDbContext> dbContextProvider,
+        CancellationToken cancellationToken)
+    {
+        using var dbContext = dbContextProvider.CreateContext();
+
+        var horseExists = await dbContext.Set<HorseReadModel>()
+            .AsNoTracking()
+            .AnyAsync(x => x.HorseId == request.HorseId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!horseExists)
+        {
+            var horseName = string.IsNullOrWhiteSpace(request.HorseName) ? request.HorseId : request.HorseName;
+            var normalizedHorseName = NormalizeDisplayName(horseName);
+            var registerHorse = new RegisterHorseCommand(
+                new HorseId(request.HorseId),
+                horseName,
+                normalizedHorseName,
+                request.SexCode,
+                birthDate: null);
+
+            var horseResult = await commandBus.PublishAsync(registerHorse, cancellationToken).ConfigureAwait(false);
+            if (!horseResult.IsSuccess)
+            {
+                throw new InvalidOperationException($"Horse auto-registration failed. HorseId={request.HorseId}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.JockeyId))
+        {
+            var jockeyExists = await dbContext.Set<JockeyReadModel>()
+                .AsNoTracking()
+                .AnyAsync(x => x.JockeyId == request.JockeyId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!jockeyExists)
+            {
+                var jockeyName = string.IsNullOrWhiteSpace(request.JockeyName) ? request.JockeyId : request.JockeyName;
+                var normalizedJockeyName = NormalizeDisplayName(jockeyName);
+                var registerJockey = new RegisterJockeyCommand(
+                    new JockeyId(request.JockeyId),
+                    jockeyName,
+                    normalizedJockeyName,
+                    affiliationCode: null);
+
+                var jockeyResult = await commandBus.PublishAsync(registerJockey, cancellationToken).ConfigureAwait(false);
+                if (!jockeyResult.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Jockey auto-registration failed. JockeyId={request.JockeyId}");
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TrainerId))
+        {
+            var trainerExists = await dbContext.Set<TrainerReadModel>()
+                .AsNoTracking()
+                .AnyAsync(x => x.TrainerId == request.TrainerId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!trainerExists)
+            {
+                var trainerName = string.IsNullOrWhiteSpace(request.TrainerName) ? request.TrainerId : request.TrainerName;
+                var normalizedTrainerName = NormalizeDisplayName(trainerName);
+                var registerTrainer = new RegisterTrainerCommand(
+                    new TrainerId(request.TrainerId),
+                    trainerName,
+                    normalizedTrainerName,
+                    affiliationCode: null);
+
+                var trainerResult = await commandBus.PublishAsync(registerTrainer, cancellationToken).ConfigureAwait(false);
+                if (!trainerResult.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Trainer auto-registration failed. TrainerId={request.TrainerId}");
+                }
+            }
+        }
+    }
+
+    private static string NormalizeDisplayName(string value)
+        => string.Join(
+            string.Empty,
+            value
+                .Trim()
+                .Where(c => !char.IsWhiteSpace(c)));
 
     private static string? ValidatePaging(int page, int pageSize)
     {
