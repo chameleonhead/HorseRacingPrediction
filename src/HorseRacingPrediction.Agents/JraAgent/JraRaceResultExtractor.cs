@@ -33,6 +33,7 @@ public sealed class JraRaceResultExtractor : IPageExtractor
             var gateNoIdx  = FindHeaderIndex(headers, "枠番", "枠");
             var horseNoIdx = FindHeaderIndex(headers, "馬番");
             var horseNmIdx = FindHeaderIndex(headers, "馬名");
+            var sexAgeIdx  = FindHeaderIndex(headers, "性齢");
             var jockeyIdx  = FindHeaderIndex(headers, "騎手");
             var timeIdx    = FindHeaderIndex(headers, "タイム", "走破時計");
             var assignedWeightIdx = FindHeaderIndex(headers, "斤量", "負担重量", "負担体重");
@@ -55,6 +56,7 @@ public sealed class JraRaceResultExtractor : IPageExtractor
                         JockeyName: NullIfEmpty(GetCell(row, jockeyIdx)),
                         FinishTime: NullIfEmpty(GetCell(row, timeIdx)),
                         AssignedWeight: ParseDecimal(GetCell(row, assignedWeightIdx)),
+                        SexAge: NullIfEmpty(GetCell(row, sexAgeIdx)),
                         DeclaredWeight: declaredWeight,
                         DeclaredWeightDiff: declaredWeightDiff));
                 }

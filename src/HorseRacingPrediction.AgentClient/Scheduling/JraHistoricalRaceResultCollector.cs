@@ -110,6 +110,7 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
 
             foreach (var entry in result.Entries.Where(x => !string.IsNullOrWhiteSpace(x.HorseName)))
             {
+                var (sexCode, age) = ParseSexAge(entry.SexAge);
                 await _writeTools.UpsertRaceEntry(
                     raceId,
                     entry.HorseNumber,
@@ -118,8 +119,8 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                     trainerName: null,
                     gateNumber: entry.GateNumber,
                     assignedWeight: entry.AssignedWeight,
-                    sexCode: null,
-                    age: null,
+                    sexCode: sexCode,
+                    age: age,
                     declaredWeight: entry.DeclaredWeight,
                     declaredWeightDiff: entry.DeclaredWeightDiff,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -176,5 +177,26 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
             return HistoricalDataRequestExecutionResult.Retry(
                 $"Historical race result synchronization failed. Date={payload.RaceDate:yyyy-MM-dd} Racecourse={payload.Racecourse} RaceNumber={payload.RaceNumber}. {ex.Message}");
         }
+    }
+
+    private static (string? SexCode, int? Age) ParseSexAge(string? sexAge)
+    {
+        if (string.IsNullOrWhiteSpace(sexAge))
+        {
+            return (null, null);
+        }
+
+        var normalized = sexAge.Trim();
+        var sexCode = normalized[0] switch
+        {
+            '牡' => "M",
+            '牝' => "F",
+            'セ' => "G",
+            _ => null
+        };
+
+        var ageDigits = new string(normalized.Skip(1).Where(char.IsDigit).ToArray());
+        int? age = int.TryParse(ageDigits, out var parsedAge) ? parsedAge : null;
+        return (sexCode, age);
     }
 }

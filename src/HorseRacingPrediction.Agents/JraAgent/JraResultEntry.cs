@@ -9,5 +9,6 @@ public sealed record JraResultEntry(
     string? JockeyName,
     string? FinishTime,
     decimal? AssignedWeight,
+    string? SexAge,
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff);
