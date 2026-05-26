@@ -169,9 +169,7 @@ public sealed class JraProfileExtractor : IPageExtractor
 
     private static string? ParseSexCode(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        var first = value.Trim()[0];
-        return first is '牡' or '牝' or 'セ' ? first.ToString() : null;
+        return JraSexAgeParser.Parse(value).SexCode;
     }
 
     private static DateOnly? ParseDateOnly(string? value)

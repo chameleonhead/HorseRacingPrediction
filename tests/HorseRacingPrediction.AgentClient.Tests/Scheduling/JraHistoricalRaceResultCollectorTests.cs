@@ -26,7 +26,7 @@ public sealed class JraHistoricalRaceResultCollectorTests
                     11,
                     [
                         new JraResultEntry(1, 3, 2, "ソールオリエンス", "横山武史", "1:57.8", 56.0m, "牡3", 480.0m, 4.0m),
-                        new JraResultEntry(2, 8, 4, "タスティエーラ", "松山弘平", "1:58.0", 57.0m, "牝4", 500.0m, -2.0m),
+                        new JraResultEntry(2, 8, 4, "タスティエーラ", "松山弘平", "1:58.0", 57.0m, "せん4", 500.0m, -2.0m),
                     ],
                     Array.Empty<JraPayoutSummary>(),
                     "https://example.test/result"))
@@ -54,7 +54,7 @@ public sealed class JraHistoricalRaceResultCollectorTests
         Assert.AreEqual("皐月賞", writeService.UpsertedRaceName);
         Assert.HasCount(2, writeService.UpsertedEntries);
         Assert.AreEqual((3, "ソールオリエンス", "横山武史", 56.0m, "M", 3), writeService.UpsertedEntries[0]);
-        Assert.AreEqual((8, "タスティエーラ", "松山弘平", 57.0m, "F", 4), writeService.UpsertedEntries[1]);
+        Assert.AreEqual((8, "タスティエーラ", "松山弘平", 57.0m, "G", 4), writeService.UpsertedEntries[1]);
         Assert.HasCount(2, writeService.RecordedEntryResults);
         Assert.AreEqual("ソールオリエンス", writeService.WinningHorseName);
     }

@@ -233,15 +233,7 @@ public sealed class JraRaceCardCollectionWorkflow
 
     private static (string? sexCode, int? age) ParseSexAge(string? sexAge)
     {
-        if (string.IsNullOrWhiteSpace(sexAge))
-        {
-            return (null, null);
-        }
-
-        var trimmed = sexAge.Trim();
-        var sexCode = trimmed.Length > 0 ? trimmed[0].ToString() : null;
-        var digits = new string(trimmed.Skip(1).Where(char.IsDigit).ToArray());
-        var age = int.TryParse(digits, out var parsedAge) ? parsedAge : (int?)null;
+        var (sexCode, age) = JraSexAgeParser.Parse(sexAge);
         return (sexCode, age);
     }
 }

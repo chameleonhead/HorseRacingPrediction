@@ -181,22 +181,6 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
 
     private static (string? SexCode, int? Age) ParseSexAge(string? sexAge)
     {
-        if (string.IsNullOrWhiteSpace(sexAge))
-        {
-            return (null, null);
-        }
-
-        var normalized = sexAge.Trim();
-        var sexCode = normalized[0] switch
-        {
-            '牡' => "M",
-            '牝' => "F",
-            'セ' => "G",
-            _ => null
-        };
-
-        var ageDigits = new string(normalized.Skip(1).Where(char.IsDigit).ToArray());
-        int? age = int.TryParse(ageDigits, out var parsedAge) ? parsedAge : null;
-        return (sexCode, age);
+        return JraSexAgeParser.Parse(sexAge);
     }
 }
