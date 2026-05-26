@@ -312,7 +312,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         var finishPositionIndex = FindHeaderIndex(headers, "着順", "着");
         var gateNumberIndex = FindHeaderIndex(headers, "枠番");
         var jockeyIndex = FindHeaderIndex(headers, "騎手");
-        var weightIndex = FindHeaderIndex(headers, "斤量");
+        var weightIndex = FindHeaderIndex(headers, "斤量", "負担重量", "負担体重");
         var sexAgeIndex = FindHeaderIndex(headers, "性齢");
         var officialTimeIndex = FindHeaderIndex(headers, "タイム", "時間");
         var marginIndex = FindHeaderIndex(headers, "着差");
@@ -610,9 +610,9 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     }
 
     private static string NormalizeHeader(string? value)
-        => (value ?? string.Empty)
-            .Replace(" ", string.Empty, StringComparison.Ordinal)
-            .Replace("\u3000", string.Empty, StringComparison.Ordinal);
+        => new string((value ?? string.Empty)
+            .Where(c => !char.IsWhiteSpace(c) && c != '\u3000')
+            .ToArray());
 
     private static string? GetCell(IReadOnlyList<string> row, int index) =>
         index >= 0 && index < row.Count ? row[index] : null;

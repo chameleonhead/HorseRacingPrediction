@@ -35,7 +35,7 @@ public sealed class JraRaceResultExtractor : IPageExtractor
             var horseNmIdx = FindHeaderIndex(headers, "馬名");
             var jockeyIdx  = FindHeaderIndex(headers, "騎手");
             var timeIdx    = FindHeaderIndex(headers, "タイム", "走破時計");
-            var assignedWeightIdx = FindHeaderIndex(headers, "斤量", "負担重量");
+            var assignedWeightIdx = FindHeaderIndex(headers, "斤量", "負担重量", "負担体重");
             var bodyWeightIdx = FindHeaderIndex(headers, "馬体重");
 
             if (horseNoIdx >= 0 && horseNmIdx >= 0 && entries.Count == 0)
@@ -98,11 +98,17 @@ public sealed class JraRaceResultExtractor : IPageExtractor
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (keywords.Any(k => headers[i].Contains(k, StringComparison.Ordinal)))
+            var normalizedHeader = NormalizeHeader(headers[i]);
+            if (keywords.Any(k => normalizedHeader.Contains(NormalizeHeader(k), StringComparison.Ordinal)))
                 return i;
         }
         return -1;
     }
+
+    private static string NormalizeHeader(string? value)
+        => new string((value ?? string.Empty)
+            .Where(c => !char.IsWhiteSpace(c) && c != '\u3000')
+            .ToArray());
 
     private static string GetCell(IReadOnlyList<string> row, int index)
     {

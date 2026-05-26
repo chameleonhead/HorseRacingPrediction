@@ -100,6 +100,25 @@ public class JraRaceResultScraperTests
     }
 
     [TestMethod]
+    public async Task ScrapeAsync_WithAssignedWeightAliasHeader_ParsesWeight()
+    {
+        _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
+            headers: ["着順", "馬番", "馬名", "負担重量", "馬体重"],
+            rows:
+            [
+                ["1", "7", "テストホース", "57.0", "480(+2)"],
+            ]);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.HasCount(1, result.Entries);
+        Assert.AreEqual(57.0m, result.Entries[0].Weight);
+        Assert.AreEqual(480m, result.Entries[0].BodyWeight);
+        Assert.AreEqual(2m, result.Entries[0].BodyWeightDiff);
+    }
+
+    [TestMethod]
     public async Task ScrapeAsync_WithAbnormalCode_ParsesEntryWithCode()
     {
         _fakeWebBrowser.Snapshot = CreateSnapshotWithTable(
