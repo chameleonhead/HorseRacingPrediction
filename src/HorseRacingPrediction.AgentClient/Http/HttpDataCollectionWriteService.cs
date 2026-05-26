@@ -380,8 +380,24 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        if (race?.Entries.Any(e => e.HorseNumber == horseNumber) == true)
-            return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです。";
+        var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
+        if (existingEntry is not null)
+        {
+            // 既存エントリの場合でも、関連エンティティ欠落や名称欠落を補完する。
+            await EnsureHorseExistsByIdAsync(existingEntry.HorseId, horseName, sexCode, cancellationToken).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(existingEntry.JockeyId))
+            {
+                await EnsureJockeyExistsByIdAsync(existingEntry.JockeyId, jockeyName, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (!string.IsNullOrWhiteSpace(existingEntry.TrainerId))
+            {
+                await EnsureTrainerExistsByIdAsync(existingEntry.TrainerId, trainerName, cancellationToken).ConfigureAwait(false);
+            }
+
+            return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです（関連エンティティを補完しました）。";
+        }
 
         var horseId = await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null, cancellationToken: cancellationToken).ConfigureAwait(false);
         var jockeyId = string.IsNullOrWhiteSpace(jockeyName)
@@ -413,6 +429,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/entries", registerRequest, cancellationToken)
             .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです。";
+        }
+
         response.EnsureSuccessStatusCode();
 
         return $"レース {raceId} に馬番 {horseNumber} の出走登録を行いました。";
@@ -449,6 +471,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var resultResponse = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/result", resultRequest, cancellationToken)
             .ConfigureAwait(false);
+
+        if (resultResponse.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の確定結果は既に記録済みです。";
+        }
+
         resultResponse.EnsureSuccessStatusCode();
 
         return $"レース {raceId} の確定結果（勝ち馬: {winningHorseName}）を記録しました。";
@@ -479,6 +507,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/entries/{Uri.EscapeDataString(entryId)}/result", request, cancellationToken)
             .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の馬番 {horseNumber} の成績は既に記録済みです。";
+        }
+
         response.EnsureSuccessStatusCode();
 
         return $"レース {raceId} の馬番 {horseNumber} の成績を記録しました。";
@@ -506,6 +540,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var response = await _httpClient
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/payout", request, cancellationToken)
             .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の払い戻しは既に記録済みです。";
+        }
+
         response.EnsureSuccessStatusCode();
 
         return $"レース {raceId} の払い戻しを記録しました。";
@@ -522,6 +562,125 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             return null;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task EnsureHorseExistsByIdAsync(
+        string horseId,
+        string? horseName,
+        string? sexCode,
+        CancellationToken cancellationToken)
+    {
+        var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
+        var resolvedName = string.IsNullOrWhiteSpace(horseName) ? horseId : horseName.Trim();
+        var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
+
+        if (existing is null)
+        {
+            var registerRequest = new
+            {
+                HorseId = horseId,
+                RegisteredName = resolvedName,
+                NormalizedName = normalizedName,
+                SexCode = sexCode,
+                BirthDate = (DateOnly?)null
+            };
+            var response = await _httpClient
+                .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
+                .ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
+
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(horseName))
+        {
+            await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task EnsureJockeyExistsByIdAsync(
+        string jockeyId,
+        string? jockeyName,
+        CancellationToken cancellationToken)
+    {
+        var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
+        var resolvedName = string.IsNullOrWhiteSpace(jockeyName) ? jockeyId : jockeyName.Trim();
+        var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
+
+        if (existing is null)
+        {
+            var registerRequest = new
+            {
+                JockeyId = jockeyId,
+                DisplayName = resolvedName,
+                NormalizedName = normalizedName,
+                AffiliationCode = (string?)null
+            };
+            var response = await _httpClient
+                .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
+                .ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                await UpdateJockeyAsync(jockeyId, resolvedName, normalizedName, null, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
+
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(jockeyName))
+        {
+            await UpdateJockeyAsync(jockeyId, resolvedName, normalizedName, null, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task EnsureTrainerExistsByIdAsync(
+        string trainerId,
+        string? trainerName,
+        CancellationToken cancellationToken)
+    {
+        var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
+        var resolvedName = string.IsNullOrWhiteSpace(trainerName) ? trainerId : trainerName.Trim();
+        var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
+
+        if (existing is null)
+        {
+            var registerRequest = new
+            {
+                TrainerId = trainerId,
+                DisplayName = resolvedName,
+                NormalizedName = normalizedName,
+                AffiliationCode = (string?)null
+            };
+            var response = await _httpClient
+                .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
+                .ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.Conflict)
+            {
+                await UpdateTrainerAsync(trainerId, resolvedName, normalizedName, null, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+            }
+
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(trainerName))
+        {
+            await UpdateTrainerAsync(trainerId, resolvedName, normalizedName, null, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken)

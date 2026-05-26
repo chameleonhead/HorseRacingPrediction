@@ -105,7 +105,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         await _page.GotoAsync(url, new PageGotoOptions
         {
             WaitUntil = WaitUntilState.DOMContentLoaded,
-        });
+        }).WaitAsync(cancellationToken);
 
         await WaitForPageSettledAsync(cancellationToken);
         var content = await GetPageContentAsync(cancellationToken);
@@ -149,7 +149,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         await target.ScrollIntoViewIfNeededAsync();
-        await target.ClickAsync();
+        await target.ClickAsync().WaitAsync(cancellationToken);
 
         if (string.IsNullOrWhiteSpace(href)
             || href.TrimStart().StartsWith('#')
@@ -157,7 +157,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         {
             // JRA は href="#" + onclick で same-page 更新する導線が多いため、
             // click 直後に短く待ってから DOM の安定化を確認する。
-            await _page.WaitForTimeoutAsync(500);
+            await _page.WaitForTimeoutAsync(500).WaitAsync(cancellationToken);
         }
 
         if (string.Equals(text.Trim(), "検索", StringComparison.Ordinal)

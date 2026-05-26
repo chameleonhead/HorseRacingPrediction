@@ -649,25 +649,33 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Declare entry result", Description = "Declares finish result for a specific entry after race result is declared")]
             async (string raceId, string entryId, DeclareEntryResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                var command = new DeclareEntryResultCommand(
-                    new RaceId(raceId),
-                    entryId,
-                    request.FinishPosition,
-                    request.OfficialTime,
-                    request.MarginText,
-                    request.LastThreeFurlongTime,
-                    request.AbnormalResultCode,
-                    request.PrizeMoney,
-                    request.CornerPositions);
+                try
+                {
+                    var command = new DeclareEntryResultCommand(
+                        new RaceId(raceId),
+                        entryId,
+                        request.FinishPosition,
+                        request.OfficialTime,
+                        request.MarginText,
+                        request.LastThreeFurlongTime,
+                        request.AbnormalResultCode,
+                        request.PrizeMoney,
+                        request.CornerPositions);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Ok()
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Ok()
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("DeclareEntryResult")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();
@@ -676,26 +684,34 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
             async (string raceId, DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
-                static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? dtos) =>
-                    dtos?.Select(d => new PayoutEntry(d.Combination, d.Amount)).ToList();
+                try
+                {
+                    static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? dtos) =>
+                        dtos?.Select(d => new PayoutEntry(d.Combination, d.Amount)).ToList();
 
-                var command = new DeclarePayoutResultCommand(
-                    new RaceId(raceId),
-                    request.DeclaredAt,
-                    ToPayoutEntries(request.WinPayouts),
-                    ToPayoutEntries(request.PlacePayouts),
-                    ToPayoutEntries(request.QuinellaPayouts),
-                    ToPayoutEntries(request.ExactaPayouts),
-                    ToPayoutEntries(request.TrifectaPayouts));
+                    var command = new DeclarePayoutResultCommand(
+                        new RaceId(raceId),
+                        request.DeclaredAt,
+                        ToPayoutEntries(request.WinPayouts),
+                        ToPayoutEntries(request.PlacePayouts),
+                        ToPayoutEntries(request.QuinellaPayouts),
+                        ToPayoutEntries(request.ExactaPayouts),
+                        ToPayoutEntries(request.TrifectaPayouts));
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Ok()
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Ok()
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("DeclarePayoutResult")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();

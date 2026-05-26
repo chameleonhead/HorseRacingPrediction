@@ -16,6 +16,7 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
 {
     private const string KeibaMenuUrl = "https://www.jra.go.jp/keiba/";
     private const string ThisWeekUrl = "https://www.jra.go.jp/keiba/thisweek/";
+    private static readonly TimeSpan DiscoveryStepTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly Regex MeetingLinkDateRegex = new(@"20\d{6}", RegexOptions.Compiled);
     private static readonly Regex RaceNumberRegex = new(@"(?<number>\d{1,2})R", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -60,30 +61,34 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
             }
         }
 
+        if (discovered.Count >= 12)
+        {
+            var directOrdered = discovered
+                .OrderBy(url => url.RaceNumber ?? int.MaxValue)
+                .ThenBy(url => url.Url, StringComparer.Ordinal)
+                .ToList();
+
+            _logger.LogInformation(
+                "JRA race card URL discovery completed from current-week page. RaceDate={RaceDate} DiscoveredCount={DiscoveredCount}",
+                weekendDate,
+                directOrdered.Count);
+
+            return directOrdered;
+        }
+
         foreach (var meetingUrl in BuildMeetingUrls(thisWeekSnapshot, weekendDate))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            try
+            var parsed = JraRaceCardUrl.ParseFromUrl(meetingUrl);
+            if (parsed.RaceDate != weekendDate)
             {
-                await _browser.NavigateAsync(meetingUrl, cancellationToken).ConfigureAwait(false);
-                var meetingSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
-
-                foreach (var cardUrl in CollectRaceCardUrls(meetingSnapshot, weekendDate))
-                {
-                    if (seenUrls.Add(cardUrl.Url))
-                    {
-                        discovered.Add(cardUrl);
-                    }
-                }
+                continue;
             }
-            catch (Exception ex)
+
+            if (seenUrls.Add(parsed.Url))
             {
-                _logger.LogWarning(
-                    ex,
-                    "JRA race card URL discovery failed to inspect meeting page. RaceDate={RaceDate} MeetingUrl={MeetingUrl}",
-                    weekendDate,
-                    meetingUrl);
+                discovered.Add(parsed);
             }
         }
 
@@ -149,16 +154,27 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
             }
         }
 
+        if (discovered.Count >= 12)
+        {
+            return discovered
+                .OrderBy(url => url.RaceNumber ?? int.MaxValue)
+                .ThenBy(url => url.Url, StringComparer.Ordinal)
+                .ToList();
+        }
+
         foreach (var holdingLabel in ExtractHoldingLabels(holdingsSnapshot))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                await OpenHoldingsPageAsync(cancellationToken).ConfigureAwait(false);
+                using var stepCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                stepCts.CancelAfter(DiscoveryStepTimeout);
 
-                await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
-                var raceListSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                await OpenHoldingsPageAsync(stepCts.Token).ConfigureAwait(false);
+
+                await _browser.ClickAsync(holdingLabel, stepCts.Token).ConfigureAwait(false);
+                var raceListSnapshot = await GetMergedSnapshotAsync(stepCts.Token).ConfigureAwait(false);
                 if (!ContainsExactRequestedDate(raceListSnapshot, requestedDate))
                 {
                     continue;
@@ -173,7 +189,7 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
                         holdingLabel,
                         raceListUrl,
                         raceListSnapshot,
-                        cancellationToken).ConfigureAwait(false);
+                        stepCts.Token).ConfigureAwait(false);
                 }
 
                 foreach (var cardUrl in directUrls)

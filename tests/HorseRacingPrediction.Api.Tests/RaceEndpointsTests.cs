@@ -298,6 +298,101 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task DeclareEntryResult_WhenAlreadyDeclared_ReturnsOk()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(16),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/result",
+            new DeclareRaceResultRequest("イクイノックス", DateTimeOffset.UtcNow),
+            JsonOptions);
+
+        var first = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries/{entryId}/result",
+            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, null),
+            JsonOptions);
+        var second = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries/{entryId}/result",
+            new DeclareEntryResultRequest(1, "2:11.3", null, "35.1", null, null),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, second.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task DeclarePayout_WhenAlreadyDeclared_ReturnsConflict()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var declaredAt = DateTimeOffset.UtcNow;
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(16),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/result",
+            new DeclareRaceResultRequest("イクイノックス", declaredAt),
+            JsonOptions);
+
+        var first = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/payout",
+            new DeclarePayoutResultRequest(
+                declaredAt,
+                WinPayouts: new[] { new PayoutEntryDto("1", 350m) },
+                PlacePayouts: null,
+                QuinellaPayouts: null,
+                ExactaPayouts: null,
+                TrifectaPayouts: null),
+            JsonOptions);
+        var second = await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/payout",
+            new DeclarePayoutResultRequest(
+                declaredAt,
+                WinPayouts: new[] { new PayoutEntryDto("1", 350m) },
+                PlacePayouts: null,
+                QuinellaPayouts: null,
+                ExactaPayouts: null,
+                TrifectaPayouts: null),
+            JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    [TestMethod]
     public async Task RegisterEntry_WhenRelatedSubjectsAreMissing_AutoCreatesHorseJockeyTrainer()
     {
         var raceId = $"race-{Guid.NewGuid()}";
