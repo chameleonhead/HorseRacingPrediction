@@ -338,6 +338,9 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Get, $"/api/horses/{horseId}", StubHttpMessageHandler.JsonResponse(new { horseId }));
         handler.Add(HttpMethod.Put, $"/api/horses/{horseId}", new HttpResponseMessage(HttpStatusCode.OK));
+        var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", DeterministicIdGenerator.NormalizeDisplayName("競合調教師"));
+        handler.Add(HttpMethod.Get, $"/api/trainers/{trainerId}", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Post, "/api/trainers", new HttpResponseMessage(HttpStatusCode.Created));
         handler.Add(HttpMethod.Post, $"/api/races/{raceId}/entries", new HttpResponseMessage(HttpStatusCode.Conflict));
 
         using var httpClient = new HttpClient(handler)
@@ -351,7 +354,7 @@ public sealed class HttpDataCollectionWriteServiceTests
             3,
             "競合ホース",
             null,
-            null,
+            "競合調教師",
             null,
             null,
             "M",
@@ -360,6 +363,68 @@ public sealed class HttpDataCollectionWriteServiceTests
             null);
 
         StringAssert.Contains(message, "既に登録済み");
+    }
+
+    [TestMethod]
+    public async Task UpsertRaceEntryAsync_WhenHorseNumberIsMissing_SkipsRegistration()
+    {
+        const string raceId = "race-entry-missing-number";
+        var handler = new StubHttpMessageHandler();
+
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
+
+        var message = await service.UpsertRaceEntryAsync(
+            raceId,
+            0,
+            "テストホース",
+            "テスト騎手",
+            "テスト調教師",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        StringAssert.Contains(message, "スキップしました");
+        Assert.AreEqual(0, handler.Requests.Count);
+    }
+
+    [TestMethod]
+    public async Task UpsertRaceEntryAsync_WhenTrainerNameIsMissing_ThrowsArgumentException()
+    {
+        const string raceId = "race-entry-missing-trainer";
+        var handler = new StubHttpMessageHandler();
+
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost")
+        };
+        var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
+
+        try
+        {
+            await service.UpsertRaceEntryAsync(
+                raceId,
+                1,
+                "テストホース",
+                "テスト騎手",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+            Assert.Fail("ArgumentException が送出される想定でした。");
+        }
+        catch (ArgumentException)
+        {
+        }
     }
 
     [TestMethod]

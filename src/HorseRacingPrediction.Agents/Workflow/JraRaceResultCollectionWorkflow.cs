@@ -337,9 +337,43 @@ public sealed class JraRaceResultCollectionWorkflow
             distanceMeters: data.Distance,
             cancellationToken: cancellationToken);
 
+        foreach (var entry in data.Entries)
+        {
+            if (entry.HorseNumber <= 0)
+            {
+                _logger.LogWarning(
+                    "Skip race-entry registration because horse number is missing. RaceId={RaceId} Url={Url} HorseName={HorseName}",
+                    raceId,
+                    source.Url,
+                    entry.HorseName);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.HorseName) || string.IsNullOrWhiteSpace(entry.TrainerName))
+            {
+                throw new InvalidOperationException(
+                    $"出走登録バリデーションエラー: raceId={raceId}, horseNumber={entry.HorseNumber}, horseName='{entry.HorseName}', trainerName='{entry.TrainerName}'");
+            }
+
+            var (sexCode, age) = ParseSexAge(entry.SexAge);
+            await _writeTools.UpsertRaceEntry(
+                raceId: raceId,
+                horseNumber: entry.HorseNumber,
+                horseName: entry.HorseName,
+                jockeyName: entry.JockeyName,
+                trainerName: entry.TrainerName,
+                gateNumber: entry.GateNumber,
+                assignedWeight: entry.Weight,
+                sexCode: sexCode,
+                age: age,
+                declaredWeight: entry.BodyWeight,
+                declaredWeightDiff: entry.BodyWeightDiff,
+                cancellationToken: cancellationToken);
+        }
+
         // 勝ち馬を特定して結果を宣言
         var winner = data.Entries.FirstOrDefault(e => e.FinishPosition == 1);
-        if (winner is not null)
+        if (winner is not null && !string.IsNullOrWhiteSpace(winner.HorseName))
         {
             await _writeTools.DeclareRaceResult(
                 raceId: raceId,
@@ -349,6 +383,16 @@ public sealed class JraRaceResultCollectionWorkflow
             // 各馬の成績を記録
             foreach (var entry in data.Entries)
             {
+                if (entry.HorseNumber <= 0)
+                {
+                    _logger.LogWarning(
+                        "Skip entry-result registration because horse number is missing. RaceId={RaceId} Url={Url} HorseName={HorseName}",
+                        raceId,
+                        source.Url,
+                        entry.HorseName);
+                    continue;
+                }
+
                 await _writeTools.DeclareRaceEntryResult(
                     raceId: raceId,
                     horseNumber: entry.HorseNumber,
@@ -368,6 +412,27 @@ public sealed class JraRaceResultCollectionWorkflow
         }
 
         return raceId;
+    }
+
+    private static (string? SexCode, int? Age) ParseSexAge(string? sexAge)
+    {
+        if (string.IsNullOrWhiteSpace(sexAge))
+        {
+            return (null, null);
+        }
+
+        var normalized = sexAge.Trim();
+        var sexCode = normalized[0] switch
+        {
+            '牡' => "M",
+            '牝' => "F",
+            'セ' => "G",
+            _ => null
+        };
+
+        var ageDigits = new string(normalized.Skip(1).Where(char.IsDigit).ToArray());
+        int? age = int.TryParse(ageDigits, out var parsedAge) ? parsedAge : null;
+        return (sexCode, age);
     }
 
     private async Task SavePayoutsAsync(

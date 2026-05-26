@@ -45,6 +45,14 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? directionCode,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(raceDate, nameof(raceDate));
+        ValidateRequiredText(racecourseCode, nameof(racecourseCode));
+        ValidateRequiredText(raceName, nameof(raceName));
+        if (raceNumber <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(raceNumber), raceNumber, "raceNumber must be greater than zero.");
+        }
+
         var parsedRaceDate = DateOnly.Parse(raceDate, CultureInfo.InvariantCulture);
         var raceId = DeterministicIdGenerator.BuildRaceId(parsedRaceDate, racecourseCode, raceNumber);
 
@@ -150,6 +158,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? birthDate,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(registeredName, nameof(registeredName));
+
         try
         {
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
@@ -225,6 +235,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(displayName, nameof(displayName));
+
         try
         {
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
@@ -298,6 +310,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(displayName, nameof(displayName));
+
         try
         {
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
@@ -379,6 +393,16 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? declaredWeightDiff,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(raceId, nameof(raceId));
+
+        if (horseNumber <= 0)
+        {
+            return $"レース {raceId} の出走登録をスキップしました（馬番未取得）。";
+        }
+
+        ValidateRequiredText(horseName, nameof(horseName));
+        ValidateRequiredText(trainerName, nameof(trainerName));
+
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
         var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
         if (existingEntry is not null)
@@ -447,6 +471,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? winningHorseId,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(raceId, nameof(raceId));
+        ValidateRequiredText(winningHorseName, nameof(winningHorseName));
+
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
         if (race?.Status == RaceStatus.Draft)
         {
@@ -493,6 +520,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? prizeMoney,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(raceId, nameof(raceId));
+        if (horseNumber <= 0)
+        {
+            return $"レース {raceId} の成績登録をスキップしました（馬番未取得）。";
+        }
+
         var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseNumber);
         var request = new
         {
@@ -527,6 +560,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? trifectaPayoutsJson,
         CancellationToken cancellationToken = default)
     {
+        ValidateRequiredText(raceId, nameof(raceId));
+
         var request = new
         {
             DeclaredAt = DateTimeOffset.UtcNow,
@@ -557,6 +592,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
     private async Task<T?> GetAsync<T>(string path, CancellationToken cancellationToken) where T : class
     {
+        ValidateRequiredText(path, nameof(path));
+
         var response = await _httpClient.GetAsync(path, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
@@ -785,6 +822,14 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         if (string.IsNullOrWhiteSpace(value))
             return null;
         return DateOnly.TryParse(value, CultureInfo.InvariantCulture, out var d) ? d : null;
+    }
+
+    private static void ValidateRequiredText(string? value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"{paramName} is required.", paramName);
+        }
     }
 
     // ------------------------------------------------------------------ //
