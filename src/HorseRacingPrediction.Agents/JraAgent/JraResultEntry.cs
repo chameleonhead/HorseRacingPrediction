@@ -8,4 +8,6 @@ public sealed record JraResultEntry(
     string? HorseName,
     string? JockeyName,
     string? FinishTime,
-    decimal? Weight);
+    decimal? AssignedWeight,
+    decimal? DeclaredWeight,
+    decimal? DeclaredWeightDiff);

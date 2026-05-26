@@ -40,7 +40,8 @@ else
                         <th>馬番</th>
                         <th>馬名</th>
                         <th>性齢</th>
-                        <th>斤量</th>
+                        <th>負担体重</th>
+                        <th>馬体重</th>
                         <th>騎手</th>
                         <th>調教師</th>
                     </tr>
@@ -54,6 +55,7 @@ else
                             <td><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a></td>
                             <td>@e.SexCode @e.Age</td>
                             <td>@e.AssignedWeight</td>
+                            <td>@FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</td>
                             <td>
                                 @if (!string.IsNullOrEmpty(e.JockeyId))
                                 {
@@ -172,5 +174,21 @@ else
             '◇' => "女性騎手の減量記号（2kg減）",
             _ => null,
         };
+    }
+
+    private static string FormatBodyWeight(decimal? bodyWeight, decimal? bodyWeightDiff)
+    {
+        if (!bodyWeight.HasValue)
+        {
+            return string.Empty;
+        }
+
+        if (!bodyWeightDiff.HasValue || bodyWeightDiff.Value == 0m)
+        {
+            return bodyWeight.Value.ToString("0.#");
+        }
+
+        var diffPrefix = bodyWeightDiff.Value > 0m ? "+" : string.Empty;
+        return $"{bodyWeight.Value:0.#} ({diffPrefix}{bodyWeightDiff.Value:0.#})";
     }
 }

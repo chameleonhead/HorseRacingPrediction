@@ -35,7 +35,8 @@ public sealed class JraRaceResultExtractor : IPageExtractor
             var horseNmIdx = FindHeaderIndex(headers, "馬名");
             var jockeyIdx  = FindHeaderIndex(headers, "騎手");
             var timeIdx    = FindHeaderIndex(headers, "タイム", "走破時計");
-            var weightIdx  = FindHeaderIndex(headers, "馬体重");
+            var assignedWeightIdx = FindHeaderIndex(headers, "斤量", "負担重量");
+            var bodyWeightIdx = FindHeaderIndex(headers, "馬体重");
 
             if (horseNoIdx >= 0 && horseNmIdx >= 0 && entries.Count == 0)
             {
@@ -44,6 +45,8 @@ public sealed class JraRaceResultExtractor : IPageExtractor
                     var horseNoRaw = GetCell(row, horseNoIdx);
                     if (!int.TryParse(horseNoRaw, out var horseNo)) continue;
 
+                    var (declaredWeight, declaredWeightDiff) = ParseBodyWeight(GetCell(row, bodyWeightIdx));
+
                     entries.Add(new JraResultEntry(
                         FinishPosition: ParseInt(GetCell(row, posIdx)),
                         HorseNumber: horseNo,
@@ -51,7 +54,9 @@ public sealed class JraRaceResultExtractor : IPageExtractor
                         HorseName: NullIfEmpty(GetCell(row, horseNmIdx)),
                         JockeyName: NullIfEmpty(GetCell(row, jockeyIdx)),
                         FinishTime: NullIfEmpty(GetCell(row, timeIdx)),
-                        Weight: ParseDecimal(GetCell(row, weightIdx))));
+                        AssignedWeight: ParseDecimal(GetCell(row, assignedWeightIdx)),
+                        DeclaredWeight: declaredWeight,
+                        DeclaredWeightDiff: declaredWeightDiff));
                 }
                 continue;
             }
@@ -114,10 +119,30 @@ public sealed class JraRaceResultExtractor : IPageExtractor
     private static decimal? ParseDecimal(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw) || raw == "---") return null;
-        // 馬体重: "480(+4)" のような形式への対応
-        var idx = raw.IndexOf('(');
-        if (idx >= 0) raw = raw[..idx];
         return decimal.TryParse(raw.Trim(), out var v) ? v : null;
+    }
+
+    private static (decimal? weight, decimal? diff) ParseBodyWeight(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || raw == "---")
+        {
+            return (null, null);
+        }
+
+        var trimmed = raw.Trim();
+        var openIdx = trimmed.IndexOf('(');
+        if (openIdx < 0)
+        {
+            return (ParseDecimal(trimmed), null);
+        }
+
+        var closeIdx = trimmed.IndexOf(')', openIdx + 1);
+        var weightPart = trimmed[..openIdx];
+        var diffPart = closeIdx > openIdx
+            ? trimmed.Substring(openIdx + 1, closeIdx - openIdx - 1)
+            : trimmed[(openIdx + 1)..];
+
+        return (ParseDecimal(weightPart), ParseDecimal(diffPart));
     }
 
     private static string? NullIfEmpty(string? value)

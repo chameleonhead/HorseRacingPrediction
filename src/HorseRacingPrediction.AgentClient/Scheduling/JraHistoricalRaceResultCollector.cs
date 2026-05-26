@@ -117,11 +117,11 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                     entry.JockeyName,
                     trainerName: null,
                     gateNumber: entry.GateNumber,
-                    assignedWeight: null,
+                    assignedWeight: entry.AssignedWeight,
                     sexCode: null,
                     age: null,
-                    declaredWeight: entry.Weight,
-                    declaredWeightDiff: null,
+                    declaredWeight: entry.DeclaredWeight,
+                    declaredWeightDiff: entry.DeclaredWeightDiff,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
             }
 
