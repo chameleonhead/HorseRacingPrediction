@@ -994,6 +994,15 @@ public static class EndpointExtensions
                     .Where(x => !string.IsNullOrWhiteSpace(x.EntryId))
                     .ToDictionary(x => x.EntryId, x => x.HorseNumber, StringComparer.Ordinal);
 
+                var entryGateNumbersByEntryId = readModel.Entries
+                    .Where(x => !string.IsNullOrWhiteSpace(x.EntryId) && x.GateNumber.HasValue)
+                    .ToDictionary(x => x.EntryId, x => x.GateNumber!.Value, StringComparer.Ordinal);
+
+                var resultEntryGateNumbersByEntryId = resultReadModel?.EntryIndexes
+                    .Where(x => !string.IsNullOrWhiteSpace(x.EntryId) && x.GateNumber.HasValue)
+                    .ToDictionary(x => x.EntryId, x => x.GateNumber!.Value, StringComparer.Ordinal)
+                    ?? new Dictionary<string, int>(StringComparer.Ordinal);
+
                 var horseIds = readModel.Entries
                     .Select(x => x.HorseId)
                     .Concat(resultReadModel?.EntryResults.Select(x => ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)) ?? [])
@@ -1008,13 +1017,47 @@ public static class EndpointExtensions
                         .Where(x => horseIds.Contains(x.HorseId))
                         .ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal, cancellationToken)
                         .ConfigureAwait(false);
+                
+                var jockeyIds = readModel.Entries
+                    .Select(x => x.JockeyId)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                
+                var trainerIds = readModel.Entries
+                    .Select(x => x.TrainerId)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                
+                var jockeyNamesById = jockeyIds.Count == 0
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    : await dbContext.Set<JockeyReadModel>()
+                        .AsNoTracking()
+                        .Where(x => jockeyIds.Contains(x.JockeyId))
+                        .ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, StringComparer.Ordinal, cancellationToken)
+                        .ConfigureAwait(false);
+                
+                var trainerNamesById = trainerIds.Count == 0
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    : await dbContext.Set<TrainerReadModel>()
+                        .AsNoTracking()
+                        .Where(x => trainerIds.Contains(x.TrainerId))
+                        .ToDictionaryAsync(x => x.TrainerId, x => x.DisplayName, StringComparer.Ordinal, cancellationToken)
+                        .ConfigureAwait(false);
 
                 var entryResponses = readModel.Entries.Count > 0
-                    ? readModel.Entries.Select(x => ToRaceEntryResponse(x, ResolveHorseName(horseNamesById, x.HorseId))).ToList()
+                    ? readModel.Entries.Select(x => ToRaceEntryResponse(
+                        x,
+                        ResolveHorseName(horseNamesById, x.HorseId),
+                        ResolveJockeyName(jockeyNamesById, x.JockeyId),
+                        ResolveTrainerName(trainerNamesById, x.TrainerId),
+                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber))).ToList()
                     : resultReadModel?.EntryResults.Select(x => ToRaceEntryResponse(
                         x,
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
+                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
 
                 var response = new RaceResponse(
@@ -1942,15 +1985,22 @@ public static class EndpointExtensions
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new AgentContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
-    private static RaceEntryResponse ToRaceEntryResponse(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry, string? horseName)
+    private static RaceEntryResponse ToRaceEntryResponse(
+        HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextEntry entry,
+        string? horseName,
+        string? jockeyName,
+        string? trainerName,
+        int? gateNumber)
         => new(
             entry.EntryId,
             entry.HorseId,
             horseName,
             entry.HorseNumber,
             entry.JockeyId,
+            jockeyName,
             entry.TrainerId,
-            entry.GateNumber,
+            trainerName,
+            gateNumber,
             entry.AssignedWeight,
             entry.SexCode,
             entry.Age,
@@ -1958,7 +2008,7 @@ public static class EndpointExtensions
             entry.DeclaredWeightDiff,
             entry.RunningStyleCode);
 
-    private static RaceEntryResponse ToRaceEntryResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
+    private static RaceEntryResponse ToRaceEntryResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -1967,6 +2017,8 @@ public static class EndpointExtensions
             null,
             null,
             null,
+            null,
+            gateNumber,
             null,
             null,
             null,
@@ -2019,9 +2071,35 @@ public static class EndpointExtensions
                 ? fallbackHorseNumber
                 : 0;
 
+    private static int? ResolveGateNumber(
+        IReadOnlyDictionary<string, int> entryGateNumbersByEntryId,
+        IReadOnlyDictionary<string, int> resultEntryGateNumbersByEntryId,
+        string entryId,
+        int horseNumber)
+        => entryGateNumbersByEntryId.TryGetValue(entryId, out var gateNumber)
+            ? gateNumber
+            : resultEntryGateNumbersByEntryId.TryGetValue(entryId, out var fallbackGateNumber)
+                ? fallbackGateNumber
+                : ResolveGateNumberFromHorseNumber(horseNumber);
+
+    private static int? ResolveGateNumberFromHorseNumber(int horseNumber)
+        => horseNumber > 0
+            ? (horseNumber + 1) / 2
+            : null;
+
     private static string? ResolveHorseName(IReadOnlyDictionary<string, string> horseNamesById, string? horseId)
         => !string.IsNullOrWhiteSpace(horseId) && horseNamesById.TryGetValue(horseId, out var horseName)
             ? horseName
+            : null;
+
+    private static string? ResolveJockeyName(IReadOnlyDictionary<string, string> jockeyNamesById, string? jockeyId)
+        => !string.IsNullOrWhiteSpace(jockeyId) && jockeyNamesById.TryGetValue(jockeyId, out var jockeyName)
+            ? jockeyName
+            : null;
+
+    private static string? ResolveTrainerName(IReadOnlyDictionary<string, string> trainerNamesById, string? trainerId)
+        => !string.IsNullOrWhiteSpace(trainerId) && trainerNamesById.TryGetValue(trainerId, out var trainerName)
+            ? trainerName
             : null;
 
     private static RacePayoutResultResponse ToRacePayoutResultResponse(PayoutResultSnapshot payoutResult)

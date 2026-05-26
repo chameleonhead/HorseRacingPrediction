@@ -20,7 +20,7 @@ else
             @foreach (var j in result.Items)
             {
                 <tr>
-                    <td><a href="@($"jockeys/{Uri.EscapeDataString(j.JockeyId)}")">@j.DisplayName</a></td>
+                    <td><a href="@($"jockeys/{Uri.EscapeDataString(j.JockeyId)}")">@NormalizeJockeyName(j.DisplayName)</a></td>
                     <td>@j.AffiliationCode</td>
                     <td>@j.AliasCount</td>
                 </tr>
@@ -51,4 +51,17 @@ else
     }
 
     private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+
+    private static string NormalizeJockeyName(string? jockeyName)
+    {
+        if (string.IsNullOrWhiteSpace(jockeyName))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = jockeyName.Trim();
+        return trimmed.Length > 0 && trimmed[0] is '▲' or '△' or '☆' or '★' or '◇'
+            ? trimmed.Substring(1).TrimStart()
+            : trimmed;
+    }
 }

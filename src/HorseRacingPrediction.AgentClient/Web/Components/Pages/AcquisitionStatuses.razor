@@ -54,7 +54,7 @@ else
                     <td>@i.SubjectName</td>
                     <td>@i.Status</td>
                     <td>@i.ErrorReason</td>
-                    <td>@i.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss</td>
+                    <td>@i.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
                 </tr>
             }
         </tbody>

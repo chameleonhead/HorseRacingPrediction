@@ -4,6 +4,7 @@ namespace HorseRacingPrediction.Agents.JraAgent;
 public sealed record JraResultEntry(
     int? FinishPosition,
     int HorseNumber,
+    int? GateNumber,
     string? HorseName,
     string? JockeyName,
     string? FinishTime,

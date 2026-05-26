@@ -62,7 +62,7 @@ public class RaceResultViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var index = EntryIndexes.FindIndex(x => x.EntryId == e.EntryId);
-        var snapshot = new RaceEntryIndexSnapshot(e.EntryId, e.HorseId, e.HorseNumber);
+        var snapshot = new RaceEntryIndexSnapshot(e.EntryId, e.HorseId, e.HorseNumber, e.GateNumber);
         if (index >= 0)
             EntryIndexes[index] = snapshot;
         else

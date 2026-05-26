@@ -40,7 +40,7 @@ else
                     <td>@s.Status</td>
                     <td>@s.ExpectedRaceCount / @s.CompletedRaceCount</td>
                     <td>@s.IncompleteReason</td>
-                    <td>@s.UpdatedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss</td>
+                    <td>@s.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
                     <td>
                         <button class="btn small" @onclick="() => RequeueDiscoveryAsync(s)">Discovery 再投入</button>
                         <button class="btn small" @onclick="() => RequeueCollectionAsync(s)">Collection 再投入</button>

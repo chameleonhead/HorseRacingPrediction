@@ -30,6 +30,7 @@ public sealed class JraRaceResultExtractor : IPageExtractor
 
             // 着順テーブル
             var posIdx     = FindHeaderIndex(headers, "着順", "着");
+            var gateNoIdx  = FindHeaderIndex(headers, "枠番", "枠");
             var horseNoIdx = FindHeaderIndex(headers, "馬番");
             var horseNmIdx = FindHeaderIndex(headers, "馬名");
             var jockeyIdx  = FindHeaderIndex(headers, "騎手");
@@ -46,6 +47,7 @@ public sealed class JraRaceResultExtractor : IPageExtractor
                     entries.Add(new JraResultEntry(
                         FinishPosition: ParseInt(GetCell(row, posIdx)),
                         HorseNumber: horseNo,
+                        GateNumber: ParseInt(GetCell(row, gateNoIdx)),
                         HorseName: NullIfEmpty(GetCell(row, horseNmIdx)),
                         JockeyName: NullIfEmpty(GetCell(row, jockeyIdx)),
                         FinishTime: NullIfEmpty(GetCell(row, timeIdx)),

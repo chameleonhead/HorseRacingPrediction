@@ -14,6 +14,8 @@ namespace HorseRacingPrediction.Agents.Browser;
 public sealed class PlaywrightWebBrowser : IWebBrowser
 {
     private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
+    private const int MaxSnapshotTableCount = 10;
+    private const int MaxSnapshotRowsPerTable = 60;
 
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
@@ -595,7 +597,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var tableLocator = _page.Locator("table");
         var tableCount = await tableLocator.CountAsync();
 
-        for (var tableIndex = 0; tableIndex < tableCount && tables.Count < 10; tableIndex++)
+        for (var tableIndex = 0; tableIndex < tableCount && tables.Count < MaxSnapshotTableCount; tableIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var table = tableLocator.Nth(tableIndex);
@@ -646,7 +648,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var rowLocator = table.Locator("tr");
         var rowCount = await rowLocator.CountAsync();
 
-        for (var rowIndex = 0; rowIndex < rowCount && rows.Count < 10; rowIndex++)
+        for (var rowIndex = 0; rowIndex < rowCount && rows.Count < MaxSnapshotRowsPerTable; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var row = rowLocator.Nth(rowIndex);

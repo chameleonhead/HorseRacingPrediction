@@ -235,11 +235,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        ValidateRequiredText(displayName, nameof(displayName));
+        var cleanedDisplayName = StripJockeyAllowanceMark(displayName);
+        ValidateRequiredText(cleanedDisplayName, nameof(displayName));
 
         try
         {
-            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? cleanedDisplayName);
             var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
 
             var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
@@ -249,7 +250,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 var registerRequest = new
                 {
                     JockeyId = jockeyId,
-                    DisplayName = displayName,
+                    DisplayName = cleanedDisplayName,
                     NormalizedName = normalized,
                     AffiliationCode = affiliationCode
                 };
@@ -258,7 +259,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                     .ConfigureAwait(false);
                 if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                 {
-                    await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                    await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -267,13 +268,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             }
             else
             {
-                await UpdateJockeyAsync(jockeyId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
+                await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
             }
 
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Jockey,
                 AgentAcquisitionOperationType.EntityUpsert,
-                displayName,
+                cleanedDisplayName,
                 RaceDataCollectionState.Succeeded,
                 providerType: "API",
                 subjectId: jockeyId,
@@ -291,7 +292,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Jockey,
                 AgentAcquisitionOperationType.EntityUpsert,
-                displayName,
+                cleanedDisplayName,
                 RaceDataCollectionState.Failed,
                 providerType: "API",
                 subjectId: null,
@@ -401,7 +402,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
 
         ValidateRequiredText(horseName, nameof(horseName));
-        ValidateRequiredText(trainerName, nameof(trainerName));
+
+        var cleanedJockeyName = string.IsNullOrWhiteSpace(jockeyName)
+            ? null
+            : StripJockeyAllowanceMark(jockeyName);
 
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
         var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
@@ -412,7 +416,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
             if (!string.IsNullOrWhiteSpace(existingEntry.JockeyId))
             {
-                await EnsureJockeyExistsByIdAsync(existingEntry.JockeyId, jockeyName, cancellationToken).ConfigureAwait(false);
+                await EnsureJockeyExistsByIdAsync(existingEntry.JockeyId, cleanedJockeyName, cancellationToken).ConfigureAwait(false);
             }
 
             if (!string.IsNullOrWhiteSpace(existingEntry.TrainerId))
@@ -424,9 +428,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
 
         var horseId = await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var jockeyId = string.IsNullOrWhiteSpace(jockeyName)
+        var jockeyId = string.IsNullOrWhiteSpace(cleanedJockeyName)
             ? null
-            : await UpsertJockeyAsync(jockeyName, null, null, cancellationToken).ConfigureAwait(false);
+            : await UpsertJockeyAsync(cleanedJockeyName, null, null, cancellationToken).ConfigureAwait(false);
         var trainerId = string.IsNullOrWhiteSpace(trainerName)
             ? null
             : await UpsertTrainerAsync(trainerName, null, null, cancellationToken).ConfigureAwait(false);
@@ -440,7 +444,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             JockeyId = jockeyId,
             TrainerId = trainerId,
             HorseName = horseName,
-            JockeyName = jockeyName,
+            JockeyName = cleanedJockeyName,
             TrainerName = trainerName,
             GateNumber = gateNumber,
             AssignedWeight = assignedWeight,
@@ -648,7 +652,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken)
     {
         var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
-        var resolvedName = string.IsNullOrWhiteSpace(jockeyName) ? jockeyId : jockeyName.Trim();
+        var resolvedName = string.IsNullOrWhiteSpace(jockeyName)
+            ? jockeyId
+            : StripJockeyAllowanceMark(jockeyName);
         var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
 
         if (existing is null)
@@ -830,6 +836,23 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         {
             throw new ArgumentException($"{paramName} is required.", paramName);
         }
+    }
+
+    private static string StripJockeyAllowanceMark(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+        {
+            return trimmed;
+        }
+
+        var first = trimmed[0];
+        if (first is '▲' or '△' or '☆' or '★' or '◇')
+        {
+            return trimmed.Substring(1).TrimStart();
+        }
+
+        return trimmed;
     }
 
     // ------------------------------------------------------------------ //

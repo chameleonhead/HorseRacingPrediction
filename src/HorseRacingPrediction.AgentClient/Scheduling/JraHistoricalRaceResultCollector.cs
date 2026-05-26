@@ -116,7 +116,7 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                     entry.HorseName!,
                     entry.JockeyName,
                     trainerName: null,
-                    gateNumber: null,
+                    gateNumber: entry.GateNumber,
                     assignedWeight: null,
                     sexCode: null,
                     age: null,
