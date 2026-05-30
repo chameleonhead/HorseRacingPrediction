@@ -15,8 +15,8 @@ else
             <dt>日付</dt><dd>@race.RaceDate</dd>
             <dt>競馬場 / R</dt><dd>@race.RacecourseCode / @race.RaceNumber</dd>
             <dt>状態</dt><dd>@race.Status</dd>
-            <dt>距離 / 馬場</dt><dd>@race.DistanceMeters m / @race.SurfaceCode @race.DirectionCode</dd>
-            <dt>Grade</dt><dd>@race.GradeCode</dd>
+            <dt>距離 / 馬場</dt><dd>@FormatDistanceSurface(race.DistanceMeters, race.SurfaceCode, race.DirectionCode)</dd>
+            <dt>Grade</dt><dd>@(string.IsNullOrWhiteSpace(race.GradeCode) ? "未設定" : race.GradeCode)</dd>
             <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
             <dt>勝ち馬</dt>
             <dd>
@@ -190,5 +190,13 @@ else
 
         var diffPrefix = bodyWeightDiff.Value > 0m ? "+" : string.Empty;
         return $"{bodyWeight.Value:0.#} ({diffPrefix}{bodyWeightDiff.Value:0.#})";
+    }
+
+    private static string FormatDistanceSurface(int? distanceMeters, string? surfaceCode, string? directionCode)
+    {
+        var distance = distanceMeters.HasValue ? $"{distanceMeters.Value}m" : "未設定";
+        var surface = string.IsNullOrWhiteSpace(surfaceCode) ? "未設定" : surfaceCode;
+        var direction = string.IsNullOrWhiteSpace(directionCode) ? string.Empty : $" {directionCode}";
+        return $"{distance} / {surface}{direction}";
     }
 }

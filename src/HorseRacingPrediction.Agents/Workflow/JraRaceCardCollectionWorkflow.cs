@@ -180,6 +180,8 @@ public sealed class JraRaceCardCollectionWorkflow
             ? $"R{raceNumber}"
             : data.RaceName;
 
+        ValidateRaceCardCourseInformation(data, source.Url);
+
         var raceId = await _writeTools.UpsertRace(
             raceDate: raceDate.Value.ToString("yyyy-MM-dd"),
             racecourseCode: racecourse,
@@ -189,6 +191,7 @@ public sealed class JraRaceCardCollectionWorkflow
             gradeCode: data.Grade,
             surfaceCode: data.CourseType,
             distanceMeters: data.Distance,
+            directionCode: data.TrackDirection,
             cancellationToken: cancellationToken);
 
         foreach (var entry in data.Entries)
@@ -235,5 +238,14 @@ public sealed class JraRaceCardCollectionWorkflow
     {
         var (sexCode, age) = JraSexAgeParser.Parse(sexAge);
         return (sexCode, age);
+    }
+
+    private static void ValidateRaceCardCourseInformation(JraRaceCardData data, string sourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(data.CourseType) || data.Distance is null or <= 0)
+        {
+            throw new InvalidOperationException(
+                $"出馬表コース情報バリデーションエラー: raceName='{data.RaceName}', courseType='{data.CourseType}', distance='{data.Distance}', sourceUrl='{sourceUrl}'");
+        }
     }
 }

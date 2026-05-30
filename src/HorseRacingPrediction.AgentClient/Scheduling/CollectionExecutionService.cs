@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
@@ -718,10 +719,10 @@ public sealed class CollectionExecutionService : BackgroundService
             .SearchRegisteredRacesAsync(raceDate, cancellationToken)
             .ConfigureAwait(false);
 
-        var registeredKeys = registeredRaces
-            .Select(BuildResultRaceKey)
-            .Where(x => x is not null)
-            .ToHashSet(StringComparer.Ordinal);
+        var registeredRaceIdsByKey = registeredRaces
+            .Select(x => new { Key = BuildResultRaceKey(x), x.RaceId })
+            .Where(x => x.Key is not null && !string.IsNullOrWhiteSpace(x.RaceId))
+            .ToDictionary(x => x.Key!, x => x.RaceId, StringComparer.Ordinal);
         var seenKeys = new HashSet<string>(StringComparer.Ordinal);
         var filtered = new List<JraRaceResultUrl>(urls.Count);
 
@@ -730,9 +731,20 @@ public sealed class CollectionExecutionService : BackgroundService
             var key = BuildResultRaceKey(url);
             if (key is not null)
             {
-                if (registeredKeys.Contains(key) || !seenKeys.Add(key))
+                if (!seenKeys.Add(key))
                 {
                     continue;
+                }
+
+                if (registeredRaceIdsByKey.TryGetValue(key, out var raceId))
+                {
+                    var context = await _raceQueryService
+                        .GetRacePredictionContextAsync(raceId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (HasRequiredResultMetadata(context))
+                    {
+                        continue;
+                    }
                 }
             }
 
@@ -984,5 +996,14 @@ public sealed class CollectionExecutionService : BackgroundService
         resolvedRacecourse = racecourseDisplayName;
         resolvedRaceNumber = raceNumber.Value;
         return true;
+    }
+
+    private static bool HasRequiredResultMetadata(RacePredictionContextReadModel? context)
+    {
+        return context is not null
+            && !string.IsNullOrWhiteSpace(context.SurfaceCode)
+            && context.DistanceMeters is > 0
+            && !string.IsNullOrWhiteSpace(context.GradeCode)
+            && context.Status >= RaceStatus.ResultDeclared;
     }
 }

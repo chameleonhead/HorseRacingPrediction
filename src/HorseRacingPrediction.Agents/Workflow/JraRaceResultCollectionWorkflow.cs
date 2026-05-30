@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Scrapers.Jra;
@@ -127,10 +128,10 @@ public sealed class JraRaceResultCollectionWorkflow
             .SearchRegisteredRacesAsync(raceDate, cancellationToken)
             .ConfigureAwait(false);
 
-        var registeredKeys = registeredRaces
-            .Select(BuildRaceKey)
-            .Where(x => x is not null)
-            .ToHashSet(StringComparer.Ordinal);
+        var registeredRaceIdsByKey = registeredRaces
+            .Select(x => new { Key = BuildRaceKey(x), x.RaceId })
+            .Where(x => x.Key is not null && !string.IsNullOrWhiteSpace(x.RaceId))
+            .ToDictionary(x => x.Key!, x => x.RaceId, StringComparer.Ordinal);
 
         var seenKeys = new HashSet<string>(StringComparer.Ordinal);
         var filtered = new List<JraRaceResultUrl>(urls.Count);
@@ -140,8 +141,17 @@ public sealed class JraRaceResultCollectionWorkflow
             var key = BuildRaceKey(url);
             if (key is not null)
             {
-                if (registeredKeys.Contains(key) || !seenKeys.Add(key))
+                if (!seenKeys.Add(key))
                     continue;
+
+                if (registeredRaceIdsByKey.TryGetValue(key, out var raceId))
+                {
+                    var context = await _queryService
+                        .GetRacePredictionContextAsync(raceId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (HasRequiredResultMetadata(context))
+                        continue;
+                }
             }
 
             filtered.Add(url);
@@ -299,6 +309,15 @@ public sealed class JraRaceResultCollectionWorkflow
         return normalized;
     }
 
+    private static bool HasRequiredResultMetadata(RacePredictionContextReadModel? context)
+    {
+        return context is not null
+            && !string.IsNullOrWhiteSpace(context.SurfaceCode)
+            && context.DistanceMeters is > 0
+            && !string.IsNullOrWhiteSpace(context.GradeCode)
+            && context.Status >= RaceStatus.ResultDeclared;
+    }
+
     // ------------------------------------------------------------------ //
     // private helpers
     // ------------------------------------------------------------------ //
@@ -326,6 +345,8 @@ public sealed class JraRaceResultCollectionWorkflow
             ? $"R{raceNumber}"
             : data.RaceName;
 
+        ValidateRaceResultCourseInformation(data, source.Url);
+
         // レースを Upsert（存在しない場合は作成）
         var raceId = await _writeTools.UpsertRace(
             raceDate: raceDate.Value.ToString("yyyy-MM-dd"),
@@ -336,6 +357,7 @@ public sealed class JraRaceResultCollectionWorkflow
             gradeCode: data.Grade,
             surfaceCode: data.CourseType,
             distanceMeters: data.Distance,
+            directionCode: data.Direction,
             cancellationToken: cancellationToken);
 
         foreach (var entry in data.Entries)
@@ -374,42 +396,45 @@ public sealed class JraRaceResultCollectionWorkflow
 
         // 勝ち馬を特定して結果を宣言
         var winner = data.Entries.FirstOrDefault(e => e.FinishPosition == 1);
-        if (winner is not null && !string.IsNullOrWhiteSpace(winner.HorseName))
+        if (winner is null || string.IsNullOrWhiteSpace(winner.HorseName))
         {
-            await _writeTools.DeclareRaceResult(
+            throw new InvalidOperationException(
+                $"結果登録バリデーションエラー: 勝ち馬を特定できません。raceId={raceId}, raceName='{data.RaceName}', sourceUrl='{source.Url}'");
+        }
+
+        await _writeTools.DeclareRaceResult(
+            raceId: raceId,
+            winningHorseName: winner.HorseName,
+            cancellationToken: cancellationToken);
+
+        // 各馬の成績を記録
+        foreach (var entry in data.Entries)
+        {
+            if (entry.HorseNumber <= 0)
+            {
+                _logger.LogWarning(
+                    "Skip entry-result registration because horse number is missing. RaceId={RaceId} Url={Url} HorseName={HorseName}",
+                    raceId,
+                    source.Url,
+                    entry.HorseName);
+                continue;
+            }
+
+            await _writeTools.DeclareRaceEntryResult(
                 raceId: raceId,
-                winningHorseName: winner.HorseName,
+                horseNumber: entry.HorseNumber,
+                finishPosition: entry.FinishPosition,
+                officialTime: entry.OfficialTime,
+                marginText: entry.MarginText,
+                lastThreeFurlongTime: entry.LastThreeFurlongTime,
+                abnormalResultCode: entry.AbnormalResultCode,
                 cancellationToken: cancellationToken);
+        }
 
-            // 各馬の成績を記録
-            foreach (var entry in data.Entries)
-            {
-                if (entry.HorseNumber <= 0)
-                {
-                    _logger.LogWarning(
-                        "Skip entry-result registration because horse number is missing. RaceId={RaceId} Url={Url} HorseName={HorseName}",
-                        raceId,
-                        source.Url,
-                        entry.HorseName);
-                    continue;
-                }
-
-                await _writeTools.DeclareRaceEntryResult(
-                    raceId: raceId,
-                    horseNumber: entry.HorseNumber,
-                    finishPosition: entry.FinishPosition,
-                    officialTime: entry.OfficialTime,
-                    marginText: entry.MarginText,
-                    lastThreeFurlongTime: entry.LastThreeFurlongTime,
-                    abnormalResultCode: entry.AbnormalResultCode,
-                    cancellationToken: cancellationToken);
-            }
-
-            // 払い戻しデータを記録
-            if (data.Payouts is not null)
-            {
-                await SavePayoutsAsync(raceId, data.Payouts, cancellationToken);
-            }
+        // 払い戻しデータを記録
+        if (data.Payouts is not null)
+        {
+            await SavePayoutsAsync(raceId, data.Payouts, cancellationToken);
         }
 
         return raceId;
@@ -418,6 +443,17 @@ public sealed class JraRaceResultCollectionWorkflow
     private static (string? SexCode, int? Age) ParseSexAge(string? sexAge)
     {
         return JraSexAgeParser.Parse(sexAge);
+    }
+
+    private static void ValidateRaceResultCourseInformation(JraRaceResultData data, string sourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(data.CourseType)
+            || data.Distance is null or <= 0
+            || string.IsNullOrWhiteSpace(data.Grade))
+        {
+            throw new InvalidOperationException(
+                $"結果コース情報バリデーションエラー: raceName='{data.RaceName}', courseType='{data.CourseType}', distance='{data.Distance}', grade='{data.Grade}', sourceUrl='{sourceUrl}'");
+        }
     }
 
     private async Task SavePayoutsAsync(

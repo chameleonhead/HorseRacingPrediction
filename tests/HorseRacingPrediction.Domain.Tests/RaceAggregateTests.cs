@@ -189,7 +189,8 @@ public class RaceAggregateTests
     public void DeclareResult_FromCardPublished_SetsResultDeclaredStatus()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         var declaredAt = DateTimeOffset.UtcNow;
 
@@ -205,7 +206,8 @@ public class RaceAggregateTests
     public void DeclareResult_WithExtendedFields_SetsAllProperties()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         var declaredAt = DateTimeOffset.UtcNow;
 
@@ -240,7 +242,8 @@ public class RaceAggregateTests
     public void DeclareResult_FromResultDeclared_ThrowsInvalidOperationException()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 
@@ -252,7 +255,8 @@ public class RaceAggregateTests
     public void DeclareEntryResult_AfterRaceResult_AddsEntryResult()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 
@@ -281,7 +285,8 @@ public class RaceAggregateTests
     public void DeclarePayoutResult_FromResultDeclared_SetsPayoutDeclaredStatus()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
         var payoutTime = DateTimeOffset.UtcNow;
@@ -311,7 +316,8 @@ public class RaceAggregateTests
     public void CloseRaceLifecycle_FromPayoutDeclared_SetsClosedStatus()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
         sut.DeclarePayoutResult(DateTimeOffset.UtcNow, winPayouts: new[] { new PayoutEntry("1", 500m) });
@@ -325,7 +331,8 @@ public class RaceAggregateTests
     public void CloseRaceLifecycle_FromResultDeclared_SetsClosedStatus()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 
@@ -361,7 +368,8 @@ public class RaceAggregateTests
     public void CorrectRaceData_AllowedFromAnyState()
     {
         var sut = new RaceAggregate(RaceId.New);
-        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
+        sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
+            gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 

@@ -12,6 +12,7 @@ public sealed record JraRaceResultData(
     int? RaceNumber,
     string? CourseType,
     int? Distance,
+    string? Direction,
     string? Grade,
     IReadOnlyList<JraRaceResultEntryData> Entries,
     JraRacePayoutData? Payouts);

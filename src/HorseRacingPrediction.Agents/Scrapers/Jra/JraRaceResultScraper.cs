@@ -80,6 +80,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
             RaceNumber: metadata.RaceNumber,
             CourseType: metadata.CourseType,
             Distance: metadata.Distance,
+            Direction: metadata.Direction,
             Grade: metadata.Grade,
             Entries: entries,
             Payouts: payouts);
@@ -119,9 +120,10 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         var raceNumber = ExtractRaceNumber(headingsText) ?? ExtractRaceNumber(searchText);
         var courseType = ExtractCourseType(searchText);
         var distance = ExtractDistance(searchText);
+        var direction = ExtractDirection(searchText);
         var grade = ExtractGrade(searchText);
 
-        return new RaceMetadata(raceName, racecourse, raceDate, raceNumber, courseType, distance, grade);
+        return new RaceMetadata(raceName, racecourse, raceDate, raceNumber, courseType, distance, direction, grade);
     }
 
     private static string ExtractRaceName(PageSnapshot snapshot)
@@ -212,15 +214,36 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
 
     private static int? ExtractDistance(string text)
     {
-        var match = Regex.Match(text, @"(\d{3,4})\s*[mM]");
+        var match = Regex.Match(text, @"(?<distance>\d{1,2},\d{3}|\d{3,4})\s*(?:[mMｍ]|メートル)");
         if (!match.Success)
         {
             return null;
         }
 
-        return int.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dist)
+        var normalized = match.Groups["distance"].Value.Replace(",", string.Empty, StringComparison.Ordinal);
+        return int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dist)
             ? dist
             : null;
+    }
+
+    private static string? ExtractDirection(string text)
+    {
+        if (text.Contains("直線", StringComparison.Ordinal))
+        {
+            return "直線";
+        }
+
+        if (text.Contains("右", StringComparison.Ordinal))
+        {
+            return "右";
+        }
+
+        if (text.Contains("左", StringComparison.Ordinal))
+        {
+            return "左";
+        }
+
+        return null;
     }
 
     private static string? ExtractGrade(string text)
@@ -245,11 +268,41 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
             return "重賞";
         }
 
+        if (Regex.IsMatch(text, @"[1１]勝クラス"))
+        {
+            return "1勝クラス";
+        }
+
+        if (Regex.IsMatch(text, @"[2２]勝クラス"))
+        {
+            return "2勝クラス";
+        }
+
+        if (Regex.IsMatch(text, @"[3３]勝クラス"))
+        {
+            return "3勝クラス";
+        }
+
+        if (text.Contains("オープン", StringComparison.Ordinal))
+        {
+            return "オープン";
+        }
+
+        if (text.Contains("未勝利", StringComparison.Ordinal))
+        {
+            return "未勝利";
+        }
+
+        if (text.Contains("新馬", StringComparison.Ordinal))
+        {
+            return "新馬";
+        }
+
         return null;
     }
 
     private static bool IsCourseLine(string text) =>
-        Regex.IsMatch(text, @"\d{3,4}\s*[mM]") ||
+        Regex.IsMatch(text, @"\d{1,2},\d{3}\s*(?:[mMｍ]|メートル)|\d{3,4}\s*(?:[mMｍ]|メートル)") ||
         text.Contains("芝", StringComparison.Ordinal) ||
         text.Contains("ダート", StringComparison.Ordinal);
 
@@ -722,5 +775,6 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         int? RaceNumber,
         string? CourseType,
         int? Distance,
+        string? Direction,
         string? Grade);
 }

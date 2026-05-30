@@ -6,6 +6,10 @@ public sealed record JraRaceResultSummary(
     DateOnly? RaceDate,
     string? Racecourse,
     int? RaceNumber,
+    string? GradeCode,
+    string? SurfaceCode,
+    int? DistanceMeters,
+    string? DirectionCode,
     IReadOnlyList<JraResultEntry> Entries,
     IReadOnlyList<JraPayoutSummary> Payouts,
     string SourceUrl);

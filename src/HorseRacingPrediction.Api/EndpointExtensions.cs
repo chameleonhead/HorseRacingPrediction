@@ -1060,6 +1060,23 @@ public static class EndpointExtensions
                         ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
 
+                var winningHorseId = resultReadModel?.WinningHorseId;
+                if (string.IsNullOrWhiteSpace(winningHorseId))
+                {
+                    var winnerEntry = resultReadModel?.EntryResults
+                        .FirstOrDefault(x => x.FinishPosition == 1);
+                    if (winnerEntry is not null)
+                    {
+                        winningHorseId = ResolveHorseId(entryHorseIdsByEntryId, winnerEntry.EntryId, winnerEntry.HorseId);
+                    }
+                }
+
+                var winningHorseName = resultReadModel?.WinningHorseName;
+                if (string.IsNullOrWhiteSpace(winningHorseName) && !string.IsNullOrWhiteSpace(winningHorseId))
+                {
+                    winningHorseName = ResolveHorseName(horseNamesById, winningHorseId);
+                }
+
                 var response = new RaceResponse(
                     readModel.RaceId,
                     readModel.RaceDate,
@@ -1077,8 +1094,8 @@ public static class EndpointExtensions
                     readModel.WeatherObservations.Select(ToRaceWeatherObservationResponse).ToList(),
                     readModel.TrackConditionObservations.Select(ToRaceTrackConditionResponse).ToList(),
                     BuildUnavailableOddsResponse(),
-                    resultReadModel?.WinningHorseName,
-                    resultReadModel?.WinningHorseId,
+                    winningHorseName,
+                    winningHorseId,
                     resultReadModel?.StewardReportText,
                     resultReadModel?.ResultDeclaredAt,
                     resultReadModel?.EntryResults.Select(x => ToRaceEntryResultResponse(

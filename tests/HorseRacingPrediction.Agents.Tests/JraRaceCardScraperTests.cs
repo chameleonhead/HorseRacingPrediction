@@ -661,6 +661,8 @@ public class JraRaceCardScraperTests
     [DataRow("GⅡ", "GⅡ")]
     [DataRow("GⅢ", "GⅢ")]
     [DataRow("重賞", "重賞")]
+    [DataRow("2勝クラス", "2勝クラス")]
+    [DataRow("未勝利", "未勝利")]
     public async Task ScrapeAsync_ExtractsGrade(string gradeText, string expectedGrade)
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
@@ -676,6 +678,44 @@ public class JraRaceCardScraperTests
 
         Assert.IsNotNull(result);
         Assert.AreEqual(expectedGrade, result.Grade);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_ExtractsDistanceFromFullWidthMeterNotation()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "出馬表 | JRA",
+            MainText: "4歳以上2勝クラス コース：1,600ｍ（ダート左）",
+            Headings: [],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(1600, result.Distance);
+        Assert.AreEqual("ダート", result.CourseType);
+        Assert.AreEqual("左", result.TrackDirection);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_ExtractsTrackDirectionWithoutDotSeparator()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "出馬表 | JRA",
+            MainText: "4歳以上2勝クラス コース：1600メートル（ダート左）",
+            Headings: [],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("左", result.TrackDirection);
     }
 
     // ------------------------------------------------------------------ //

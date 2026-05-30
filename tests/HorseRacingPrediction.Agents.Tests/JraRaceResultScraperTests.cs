@@ -287,6 +287,60 @@ public class JraRaceResultScraperTests
         Assert.AreEqual(11, result.RaceNumber);
     }
 
+    [TestMethod]
+    public async Task ScrapeAsync_ExtractsDistanceFromMeterNotation()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "JRA",
+            MainText: "芝 1,200メートル",
+            Headings: ["2025年10月26日 東京 11R"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(1200, result.Distance);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_ExtractsDirection()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "JRA",
+            MainText: "芝・右 2000m",
+            Headings: ["2025年10月26日 東京 11R"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("右", result.Direction);
+    }
+
+    [TestMethod]
+    public async Task ScrapeAsync_ExtractsClassGrade()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            Url: "https://www.jra.go.jp/test",
+            Title: "JRA",
+            MainText: "4歳以上1勝クラス 芝 1000m",
+            Headings: ["2026年5月2日 新潟 12R"],
+            Links: [],
+            Actions: [],
+            Tables: []);
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("1勝クラス", result.Grade);
+    }
+
     // ------------------------------------------------------------------ //
     // ScrapeAsync — 払い戻しデータの解析
     // ------------------------------------------------------------------ //

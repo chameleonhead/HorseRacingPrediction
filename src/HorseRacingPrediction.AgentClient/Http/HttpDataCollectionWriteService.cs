@@ -478,7 +478,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         ValidateRequiredText(raceId, nameof(raceId));
         ValidateRequiredText(winningHorseName, nameof(winningHorseName));
 
-        var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
+        var race = await WaitForRaceMetadataAsync(raceId, cancellationToken).ConfigureAwait(false);
+        if (race is not null && !HasRequiredCourseMetadata(race))
+        {
+            throw new InvalidOperationException(
+                $"結果登録前バリデーションエラー: raceId={raceId}, grade='{race.GradeCode}', surface='{race.SurfaceCode}', distanceMeters='{race.DistanceMeters}'");
+        }
+
         if (race?.Status == RaceStatus.Draft)
         {
             var entryCount = race.Entries.Count > 0 ? race.Entries.Count : 1;
@@ -511,6 +517,38 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         resultResponse.EnsureSuccessStatusCode();
 
         return $"レース {raceId} の確定結果（勝ち馬: {winningHorseName}）を記録しました。";
+    }
+
+    private async Task<RacePredictionContextReadModel?> WaitForRaceMetadataAsync(
+        string raceId,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 5;
+        RacePredictionContextReadModel? latest = null;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            latest = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
+            if (HasRequiredCourseMetadata(latest))
+            {
+                return latest;
+            }
+
+            if (attempt < maxAttempts)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return latest;
+    }
+
+    private static bool HasRequiredCourseMetadata(RacePredictionContextReadModel? race)
+    {
+        return race is not null
+            && !string.IsNullOrWhiteSpace(race.GradeCode)
+            && !string.IsNullOrWhiteSpace(race.SurfaceCode)
+            && race.DistanceMeters is > 0;
     }
 
     public async Task<string> DeclareRaceEntryResultAsync(

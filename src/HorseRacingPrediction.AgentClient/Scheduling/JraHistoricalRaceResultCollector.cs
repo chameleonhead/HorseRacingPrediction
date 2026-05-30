@@ -77,15 +77,24 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
             }
 
             var result = extraction.Data;
+            ValidateCourseInformation(result, extraction.SourceUrl);
+            var validEntries = result.Entries
+                .Where(x => !string.IsNullOrWhiteSpace(x.HorseName))
+                .ToList();
+
             raceId = await _writeTools.UpsertRace(
                 payload.RaceDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 racecourse,
                 payload.RaceNumber,
                 string.IsNullOrWhiteSpace(result.RaceName) ? $"R{payload.RaceNumber}" : result.RaceName!,
-                result.Entries.Count > 0 ? result.Entries.Count : null,
+                validEntries.Count > 0 ? validEntries.Count : null,
+                gradeCode: result.GradeCode,
+                surfaceCode: result.SurfaceCode,
+                distanceMeters: result.DistanceMeters,
+                directionCode: result.DirectionCode,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            var winner = result.Entries.FirstOrDefault(x => x.FinishPosition == 1 && !string.IsNullOrWhiteSpace(x.HorseName));
+            var winner = validEntries.FirstOrDefault(x => x.FinishPosition == 1);
             if (winner is null)
             {
                 var error = RaceDataCollectionErrorClassifier.Classify("Historical race result did not contain a winner.");
@@ -108,14 +117,14 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                     $"Historical race result did not contain a winner. RaceId={raceId}");
             }
 
-            foreach (var entry in result.Entries.Where(x => !string.IsNullOrWhiteSpace(x.HorseName)))
+            foreach (var entry in validEntries)
             {
                 var (sexCode, age) = ParseSexAge(entry.SexAge);
                 await _writeTools.UpsertRaceEntry(
                     raceId,
                     entry.HorseNumber,
                     entry.HorseName!,
-                    entry.JockeyName,
+                    entry.JockeyName!,
                     trainerName: null,
                     gateNumber: entry.GateNumber,
                     assignedWeight: entry.AssignedWeight,
@@ -128,7 +137,7 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
 
             await _writeTools.DeclareRaceResult(raceId, winner.HorseName!, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            foreach (var entry in result.Entries)
+            foreach (var entry in validEntries)
             {
                 await _writeTools.DeclareRaceEntryResult(
                     raceId,
@@ -182,5 +191,16 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
     private static (string? SexCode, int? Age) ParseSexAge(string? sexAge)
     {
         return JraSexAgeParser.Parse(sexAge);
+    }
+
+    private static void ValidateCourseInformation(JraRaceResultSummary result, string sourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(result.SurfaceCode)
+            || result.DistanceMeters is null or <= 0
+            || string.IsNullOrWhiteSpace(result.GradeCode))
+        {
+            throw new InvalidOperationException(
+                $"結果コース情報バリデーションエラー: raceName='{result.RaceName}', surface='{result.SurfaceCode}', distanceMeters='{result.DistanceMeters}', grade='{result.GradeCode}', sourceUrl='{sourceUrl}'");
+        }
     }
 }
