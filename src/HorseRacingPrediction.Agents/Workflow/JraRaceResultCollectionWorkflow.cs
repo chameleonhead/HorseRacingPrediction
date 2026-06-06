@@ -55,6 +55,7 @@ public sealed class JraRaceResultCollectionWorkflow
 
     private readonly JraRaceResultUrlDiscoveryAgent _discoveryAgent;
     private readonly JraRaceResultScraper _scraper;
+    private readonly JraRaceCardScraper? _raceCardScraper;
     private readonly DataCollectionWriteTools _writeTools;
     private readonly IRaceQueryService? _queryService;
     private readonly ILogger<JraRaceResultCollectionWorkflow> _logger;
@@ -62,12 +63,14 @@ public sealed class JraRaceResultCollectionWorkflow
     internal JraRaceResultCollectionWorkflow(
         JraRaceResultUrlDiscoveryAgent discoveryAgent,
         JraRaceResultScraper scraper,
+        JraRaceCardScraper? raceCardScraper,
         DataCollectionWriteTools writeTools,
         IRaceQueryService? queryService = null,
         ILogger<JraRaceResultCollectionWorkflow>? logger = null)
     {
         _discoveryAgent = discoveryAgent;
         _scraper = scraper;
+        _raceCardScraper = raceCardScraper;
         _writeTools = writeTools;
         _queryService = queryService;
         _logger = logger ?? NullLogger<JraRaceResultCollectionWorkflow>.Instance;
@@ -84,6 +87,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 browser,
                 loggerFactory?.CreateLogger<JraRaceResultUrlDiscoveryAgent>()),
             scraper,
+            new JraRaceCardScraper(browser),
             writeTools,
             queryService: null,
             logger)
@@ -102,6 +106,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 browser,
                 loggerFactory?.CreateLogger<JraRaceResultUrlDiscoveryAgent>()),
             scraper,
+            new JraRaceCardScraper(browser),
             writeTools,
             queryService,
             logger)
@@ -265,6 +270,46 @@ public sealed class JraRaceResultCollectionWorkflow
             Errors: errors);
     }
 
+    public async Task<JraRaceResultCollectionResult> CollectRaceAsync(
+        DateOnly raceDate,
+        string racecourseCode,
+        int raceNumber,
+        CancellationToken cancellationToken = default)
+    {
+        var discoveredUrls = await DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        var targetUrl = discoveredUrls.FirstOrDefault(url => IsTargetRace(url, raceDate, racecourseCode, raceNumber));
+
+        if (targetUrl is null)
+        {
+            return new JraRaceResultCollectionResult(
+                RaceDate: raceDate,
+                DiscoveredUrls: discoveredUrls,
+                ScrapedResults: [],
+                SavedRaceIds: [],
+                Errors: [$"対象レースの成績 URL を特定できませんでした。RaceDate={raceDate:yyyy-MM-dd} RacecourseCode={racecourseCode} RaceNumber={raceNumber}"]);
+        }
+
+        var data = await _scraper.ScrapeAsync(targetUrl.Url, cancellationToken).ConfigureAwait(false);
+        if (data is null)
+        {
+            return new JraRaceResultCollectionResult(
+                RaceDate: raceDate,
+                DiscoveredUrls: discoveredUrls,
+                ScrapedResults: [],
+                SavedRaceIds: [],
+                Errors: [$"対象レースの成績スクレイプに失敗しました。Url={targetUrl.Url}"]);
+        }
+
+        var (savedRaceIds, errors) = await SaveAllAsync([(targetUrl, data)], cancellationToken).ConfigureAwait(false);
+
+        return new JraRaceResultCollectionResult(
+            RaceDate: raceDate,
+            DiscoveredUrls: [targetUrl],
+            ScrapedResults: [data],
+            SavedRaceIds: savedRaceIds,
+            Errors: errors);
+    }
+
     private static string? BuildRaceKey(RaceSearchSummary summary)
     {
         if (summary.RaceDate is null || summary.RaceNumber is null || string.IsNullOrWhiteSpace(summary.RacecourseCode))
@@ -309,6 +354,20 @@ public sealed class JraRaceResultCollectionWorkflow
         return normalized;
     }
 
+    private static bool IsTargetRace(JraRaceResultUrl url, DateOnly raceDate, string racecourseCode, int raceNumber)
+    {
+        if (url.RaceDate != raceDate || url.RaceNumber != raceNumber)
+        {
+            return false;
+        }
+
+        var targetRaceKey = NormalizeRacecourseKey(racecourseCode);
+        var urlRaceKey = NormalizeRacecourseKey(url.Racecourse ?? url.RacecourseCode);
+
+        return !string.IsNullOrWhiteSpace(targetRaceKey)
+            && string.Equals(targetRaceKey, urlRaceKey, StringComparison.Ordinal);
+    }
+
     private static bool HasRequiredResultMetadata(RacePredictionContextReadModel? context)
     {
         return context is not null
@@ -327,6 +386,8 @@ public sealed class JraRaceResultCollectionWorkflow
         JraRaceResultData data,
         CancellationToken cancellationToken)
     {
+        data = await EnrichCourseInformationFromRaceCardAsync(source, data, cancellationToken).ConfigureAwait(false);
+
         // 開催日: スクレイプ結果優先、フォールバックは URL から解析した値
         var raceDate = data.RaceDate ?? source.RaceDate;
         // レース番号: スクレイプ結果優先
@@ -454,6 +515,58 @@ public sealed class JraRaceResultCollectionWorkflow
             throw new InvalidOperationException(
                 $"結果コース情報バリデーションエラー: raceName='{data.RaceName}', courseType='{data.CourseType}', distance='{data.Distance}', grade='{data.Grade}', sourceUrl='{sourceUrl}'");
         }
+    }
+
+    private async Task<JraRaceResultData> EnrichCourseInformationFromRaceCardAsync(
+        JraRaceResultUrl source,
+        JraRaceResultData data,
+        CancellationToken cancellationToken)
+    {
+        if (_raceCardScraper is null || HasRequiredCourseInformation(data))
+        {
+            return data;
+        }
+
+        try
+        {
+            var opened = await _scraper
+                .TryOpenRaceCardFromResultPageAsync(source.Url, cancellationToken)
+                .ConfigureAwait(false);
+            if (!opened)
+            {
+                return data;
+            }
+
+            var raceCard = await _raceCardScraper.ScrapeCurrentPageAsync(cancellationToken).ConfigureAwait(false);
+            if (raceCard is null)
+            {
+                return data;
+            }
+
+            return data with
+            {
+                CourseType = string.IsNullOrWhiteSpace(data.CourseType) ? raceCard.CourseType : data.CourseType,
+                Distance = data.Distance is > 0 ? data.Distance : raceCard.Distance,
+                Direction = string.IsNullOrWhiteSpace(data.Direction) ? raceCard.TrackDirection : data.Direction,
+                Grade = string.IsNullOrWhiteSpace(data.Grade) ? raceCard.Grade : data.Grade,
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Race result course metadata fallback from race card failed. ResultUrl={ResultUrl}",
+                data.Url);
+            return data;
+        }
+    }
+
+    private static bool HasRequiredCourseInformation(JraRaceResultData data)
+    {
+        return !string.IsNullOrWhiteSpace(data.CourseType)
+            && data.Distance is > 0
+            && !string.IsNullOrWhiteSpace(data.Grade)
+            && !string.IsNullOrWhiteSpace(data.Direction);
     }
 
     private async Task SavePayoutsAsync(

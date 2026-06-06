@@ -1,5 +1,7 @@
 @page "/races/{RaceId}"
 @inject ApiBrowseClient Api
+@inject HorseRacingPrediction.Agents.Workflow.JraRaceCardCollectionWorkflow RaceCardWorkflow
+@inject HorseRacingPrediction.Agents.Workflow.JraRaceResultCollectionWorkflow RaceResultWorkflow
 
 <h1>レース詳細</h1>
 <p class="hint"><a href="races">← レース検索へ戻る</a></p>
@@ -9,7 +11,18 @@ else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませ
 else
 {
     <section class="card">
-        <h2>@(race.RaceName ?? race.RaceId)</h2>
+        <div class="toolbar" style="justify-content: space-between; align-items: flex-start;">
+            <div>
+                <h2>@(race.RaceName ?? race.RaceId)</h2>
+                @if (!string.IsNullOrWhiteSpace(refreshMessage))
+                {
+                    <p class="hint">@refreshMessage</p>
+                }
+            </div>
+            <button class="btn primary" @onclick="RefreshAsync" disabled="@refreshing">
+                @(refreshing ? "再取得中…" : "情報再取得")
+            </button>
+        </div>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
             <dt>日付</dt><dd>@race.RaceDate</dd>
@@ -120,9 +133,13 @@ else
     [Parameter] public string RaceId { get; set; } = string.Empty;
 
     private bool loading;
+    private bool refreshing;
     private RaceDetailDto? race;
+    private string? refreshMessage;
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
         loading = true;
         try
@@ -132,6 +149,54 @@ else
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (race is null || refreshing)
+        {
+            return;
+        }
+
+        if (race.RaceDate is null || string.IsNullOrWhiteSpace(race.RacecourseCode) || race.RaceNumber is null)
+        {
+            refreshMessage = "レース日付・競馬場コード・レース番号が不足しているため再取得できません。";
+            return;
+        }
+
+        refreshing = true;
+        refreshMessage = null;
+
+        try
+        {
+            var cardResult = await RaceCardWorkflow.CollectRaceAsync(
+                race.RaceDate.Value,
+                race.RacecourseCode,
+                race.RaceNumber.Value);
+
+            HorseRacingPrediction.Agents.Workflow.JraRaceResultCollectionResult? resultResult = null;
+            if (race.Status >= HorseRacingPrediction.Agents.Contracts.RaceStatus.ResultDeclared)
+            {
+                resultResult = await RaceResultWorkflow.CollectRaceAsync(
+                    race.RaceDate.Value,
+                    race.RacecourseCode,
+                    race.RaceNumber.Value);
+            }
+
+            var savedCount = cardResult.SavedRaceIds.Count + (resultResult?.SavedRaceIds.Count ?? 0);
+            var errorCount = cardResult.Errors.Count + (resultResult?.Errors.Count ?? 0);
+            refreshMessage = $"再取得を完了しました。保存: {savedCount} 件 / エラー: {errorCount} 件";
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            refreshMessage = $"再取得に失敗しました。{ex.Message}";
+        }
+        finally
+        {
+            refreshing = false;
         }
     }
 

@@ -153,9 +153,80 @@ public sealed class JraRaceCardCollectionWorkflow
             Errors: errors);
     }
 
+    public async Task<JraRaceCardCollectionResult> CollectRaceAsync(
+        DateOnly raceDate,
+        string racecourseCode,
+        int raceNumber,
+        CancellationToken cancellationToken = default)
+    {
+        var discoveredUrls = await DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        var targetUrl = discoveredUrls.FirstOrDefault(url => IsTargetRace(url, raceDate, racecourseCode, raceNumber));
+
+        if (targetUrl is null)
+        {
+            return new JraRaceCardCollectionResult(
+                WeekendDate: raceDate,
+                DiscoveredUrls: discoveredUrls,
+                ScrapedCards: [],
+                SavedRaceIds: [],
+                Errors: [$"対象レースの出馬表 URL を特定できませんでした。RaceDate={raceDate:yyyy-MM-dd} RacecourseCode={racecourseCode} RaceNumber={raceNumber}"]);
+        }
+
+        var data = await _scraper.ScrapeAsync(targetUrl.Url, cancellationToken).ConfigureAwait(false);
+        if (data is null)
+        {
+            return new JraRaceCardCollectionResult(
+                WeekendDate: raceDate,
+                DiscoveredUrls: discoveredUrls,
+                ScrapedCards: [],
+                SavedRaceIds: [],
+                Errors: [$"対象レースの出馬表スクレイプに失敗しました。Url={targetUrl.Url}"]);
+        }
+
+        var (savedRaceIds, errors) = await SaveAllAsync([(targetUrl, data)], cancellationToken).ConfigureAwait(false);
+
+        return new JraRaceCardCollectionResult(
+            WeekendDate: raceDate,
+            DiscoveredUrls: [targetUrl],
+            ScrapedCards: [data],
+            SavedRaceIds: savedRaceIds,
+            Errors: errors);
+    }
+
     // ------------------------------------------------------------------ //
     // private helpers
     // ------------------------------------------------------------------ //
+
+    private static bool IsTargetRace(JraRaceCardUrl url, DateOnly raceDate, string racecourseCode, int raceNumber)
+    {
+        if (url.RaceDate != raceDate || url.RaceNumber != raceNumber)
+        {
+            return false;
+        }
+
+        var targetRacecourse = NormalizeRacecourseKey(racecourseCode);
+        var urlRacecourse = NormalizeRacecourseKey(url.Racecourse ?? url.RacecourseCode);
+
+        return !string.IsNullOrWhiteSpace(targetRacecourse)
+            && string.Equals(targetRacecourse, urlRacecourse, StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeRacecourseKey(string? racecourse)
+    {
+        if (string.IsNullOrWhiteSpace(racecourse))
+        {
+            return null;
+        }
+
+        var normalized = DeterministicIdGenerator.NormalizeKey(racecourse);
+        if (RacecourseAliases.TryGetValue(racecourse.Trim(), out var canonical)
+            || RacecourseAliases.TryGetValue(normalized, out canonical))
+        {
+            return DeterministicIdGenerator.NormalizeKey(canonical);
+        }
+
+        return normalized;
+    }
 
     private async Task<string?> TrySaveRaceAsync(
         JraRaceCardUrl source,

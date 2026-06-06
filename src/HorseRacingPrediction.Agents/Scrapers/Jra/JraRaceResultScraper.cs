@@ -86,6 +86,50 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
             Payouts: payouts);
     }
 
+    /// <summary>
+    /// 成績ページから画面操作で出馬表ページへ遷移を試みる。
+    /// </summary>
+    public async Task<bool> TryOpenRaceCardFromResultPageAsync(
+        string resultUrl,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(resultUrl))
+        {
+            return false;
+        }
+
+        var clickPaths = new[]
+        {
+            new[] { "出馬表" },
+            new[] { "レーストップ", "出馬表" },
+            new[] { "出走馬情報" },
+        };
+
+        foreach (var path in clickPaths)
+        {
+            try
+            {
+                await _browser.NavigateAsync(resultUrl, cancellationToken).ConfigureAwait(false);
+
+                foreach (var step in path)
+                {
+                    await _browser.ClickAsync(step, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (await IsRaceCardPageAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+                // 次の導線候補を試す
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsKnownErrorPage(string url, PageSnapshot snapshot)
     {
         if (url.Contains("/error/", StringComparison.OrdinalIgnoreCase)
@@ -762,6 +806,22 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         return decimal.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : null;
+    }
+
+    private async Task<bool> IsRaceCardPageAsync(CancellationToken cancellationToken)
+    {
+        var url = _browser.CurrentUrl ?? string.Empty;
+        if (url.Contains("accessD.html", StringComparison.OrdinalIgnoreCase)
+            || url.Contains("/syutsuba", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken).ConfigureAwait(false);
+        var text = $"{snapshot.Title}\n{string.Join("\n", snapshot.Headings)}\n{snapshot.MainText}";
+
+        return text.Contains("出馬表", StringComparison.Ordinal)
+            || text.Contains("出走馬情報", StringComparison.Ordinal);
     }
 
     // ------------------------------------------------------------------ //
