@@ -508,7 +508,7 @@ public class RaceEndpointsTests
         Assert.AreEqual(1, race.TrackConditionObservations.Count);
         Assert.AreEqual("良", race.TrackConditionObservations[0].GoingDescriptionText);
         Assert.AreEqual("イクイノックス", race.WinningHorseName);
-        Assert.IsNull(race.WinningHorseId);
+        Assert.IsNotNull(race.WinningHorseId);
         Assert.IsNull(race.StewardReportText);
         Assert.AreEqual(1, race.EntryResults.Count);
         Assert.AreEqual(horseId, race.EntryResults[0].HorseId);

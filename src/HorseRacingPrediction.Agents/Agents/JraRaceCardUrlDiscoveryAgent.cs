@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -292,7 +292,7 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
     }
 
     private static JraRaceCardUrl? CreateRaceCardUrl(
-        SearchResultLink link,
+        PageLinkSnapshot link,
         string? baseUrl,
         string? fallbackRacecourse,
         DateOnly? snapshotDate,

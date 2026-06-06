@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
 using Microsoft.Extensions.AI;
 

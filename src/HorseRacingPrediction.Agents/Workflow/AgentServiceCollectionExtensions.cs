@@ -1,7 +1,7 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;

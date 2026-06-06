@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Browser;
+namespace HorseRacingPrediction.Scraping.Browser;
 
 /// <summary>
 /// セッションベースのブラウザインターフェース。
@@ -76,7 +76,7 @@ public interface IWebBrowser : IAsyncDisposable
     /// <param name="maxResults">抽出する最大リンク数</param>
     /// <param name="cancellationToken">キャンセルトークン</param>
     /// <returns>抽出されたリンク一覧</returns>
-    Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
+    Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(
         int maxResults = 0,
         CancellationToken cancellationToken = default);
 

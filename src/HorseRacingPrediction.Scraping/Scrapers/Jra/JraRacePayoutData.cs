@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Scrapers.Jra;
+namespace HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 /// <summary>
 /// JRA 成績ページから抽出した払い戻し全体データ。

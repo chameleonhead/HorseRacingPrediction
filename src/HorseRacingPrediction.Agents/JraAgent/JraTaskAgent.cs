@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Agents.Browser;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 namespace HorseRacingPrediction.Agents.JraAgent;
 

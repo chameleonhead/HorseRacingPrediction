@@ -1,5 +1,5 @@
 using HorseRacingPrediction.AgentClient.JraTesting;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorseRacingPrediction.AgentClient.Tests;
@@ -43,7 +43,7 @@ public class JraJsonExtractionServiceTests
                 "3レース",
                 "3歳未勝利"
             },
-            Links: Array.Empty<SearchResultLink>(),
+            Links: Array.Empty<PageLinkSnapshot>(),
             Actions: Array.Empty<PageActionSnapshot>(),
             Tables: new[] { table });
 
@@ -87,7 +87,7 @@ public class JraJsonExtractionServiceTests
                 Title: null,
                 MainText: string.Empty,
                 Headings: Array.Empty<string>(),
-                Links: Array.Empty<SearchResultLink>(),
+                Links: Array.Empty<PageLinkSnapshot>(),
                 Actions: Array.Empty<PageActionSnapshot>(),
                 Tables: Array.Empty<PageTableSnapshot>())),
             NullLogger<JraJsonExtractionService>.Instance);
@@ -157,8 +157,8 @@ public class JraJsonExtractionServiceTests
         public Task<PageSnapshot> GetPageSnapshotAsync(int maxLinks = 0, CancellationToken cancellationToken = default)
             => Task.FromResult(_snapshot);
 
-        public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(int maxResults = 0, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>(_snapshot.Links);
+        public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(int maxResults = 0, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<PageLinkSnapshot>>(_snapshot.Links);
 
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
             => Task.FromResult(_snapshot.MainText);

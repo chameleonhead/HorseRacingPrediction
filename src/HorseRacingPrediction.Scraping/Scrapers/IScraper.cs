@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Scrapers;
+namespace HorseRacingPrediction.Scraping.Scrapers;
 
 /// <summary>
 /// サイト固有のスクレイパーインターフェース。

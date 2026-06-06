@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 
-namespace HorseRacingPrediction.Agents.Scrapers.Jra;
+namespace HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 /// <summary>
 /// JRA 公式サイトの出馬表ページから構造化データを抽出するスクレイパー。

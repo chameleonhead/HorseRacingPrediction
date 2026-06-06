@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 namespace HorseRacingPrediction.Agents.Tests;
 

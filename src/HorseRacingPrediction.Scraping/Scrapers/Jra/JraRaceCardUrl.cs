@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace HorseRacingPrediction.Agents.Scrapers.Jra;
+namespace HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 /// <summary>
 /// JRA 公式サイトで発見した出馬表ページの URL と、

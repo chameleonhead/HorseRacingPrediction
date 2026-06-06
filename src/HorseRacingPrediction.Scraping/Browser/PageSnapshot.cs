@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Browser;
+namespace HorseRacingPrediction.Scraping.Browser;
 
 /// <summary>
 /// モデルへ渡すための Web ページ構造スナップショット。
@@ -8,6 +8,6 @@ public sealed record PageSnapshot(
     string? Title,
     string MainText,
     IReadOnlyList<string> Headings,
-    IReadOnlyList<SearchResultLink> Links,
+    IReadOnlyList<PageLinkSnapshot> Links,
     IReadOnlyList<PageActionSnapshot> Actions,
     IReadOnlyList<PageTableSnapshot> Tables);

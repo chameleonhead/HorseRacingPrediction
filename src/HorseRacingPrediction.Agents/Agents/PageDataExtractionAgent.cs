@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -104,7 +104,7 @@ public sealed class PageDataExtractionAgent
     public async Task<string> FormatPageContentAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<SearchResultLink>? pageLinks = null,
+        IReadOnlyList<PageLinkSnapshot>? pageLinks = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -173,7 +173,7 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<SearchResultLink> pageLinks,
+        IReadOnlyList<PageLinkSnapshot> pageLinks,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -251,7 +251,7 @@ public sealed class PageDataExtractionAgent
     private Task<string> FormatPageContentInternalAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<SearchResultLink>? pageLinks,
+        IReadOnlyList<PageLinkSnapshot>? pageLinks,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -261,7 +261,7 @@ public sealed class PageDataExtractionAgent
     private async Task<string> FormatPageContentCoreAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<SearchResultLink>? pageLinks,
+        IReadOnlyList<PageLinkSnapshot>? pageLinks,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -328,7 +328,7 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<SearchResultLink> pageLinks,
+        IReadOnlyList<PageLinkSnapshot> pageLinks,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -339,7 +339,7 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<SearchResultLink> pageLinks,
+        IReadOnlyList<PageLinkSnapshot> pageLinks,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -432,7 +432,7 @@ public sealed class PageDataExtractionAgent
         return false;
     }
 
-    private string BuildSearchResultLinkCollection(IReadOnlyList<SearchResultLink> pageLinks)
+    private string BuildSearchResultLinkCollection(IReadOnlyList<PageLinkSnapshot> pageLinks)
     {
         var primaryLinks = SelectSearchResultLinks(pageLinks);
         var sb = new StringBuilder();
@@ -463,7 +463,7 @@ public sealed class PageDataExtractionAgent
         return sb.ToString().TrimEnd();
     }
 
-    private string BuildLinksPromptText(IReadOnlyList<SearchResultLink> pageLinks)
+    private string BuildLinksPromptText(IReadOnlyList<PageLinkSnapshot> pageLinks)
     {
         var selectedLinks = pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
@@ -484,7 +484,7 @@ public sealed class PageDataExtractionAgent
         return string.Join(Environment.NewLine, selectedLinks);
     }
 
-    private List<SearchResultLink> SelectSearchResultLinks(IReadOnlyList<SearchResultLink> pageLinks)
+    private List<PageLinkSnapshot> SelectSearchResultLinks(IReadOnlyList<PageLinkSnapshot> pageLinks)
     {
         return pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
@@ -496,7 +496,7 @@ public sealed class PageDataExtractionAgent
             .ToList();
     }
 
-    private static int GetSearchResultPriority(SearchResultLink link)
+    private static int GetSearchResultPriority(PageLinkSnapshot link)
     {
         var score = 0;
         var title = (link.Title ?? string.Empty).ToLowerInvariant();
@@ -529,7 +529,7 @@ public sealed class PageDataExtractionAgent
         return score;
     }
 
-    private static bool IsSearchNoiseLink(SearchResultLink link)
+    private static bool IsSearchNoiseLink(PageLinkSnapshot link)
     {
         var title = (link.Title ?? string.Empty).ToLowerInvariant();
         var url = (link.Url ?? string.Empty).ToLowerInvariant();
@@ -662,7 +662,7 @@ public sealed class PageDataExtractionAgent
     private static string? NormalizeDetailLinkText(
         string? detailLinkText,
         string rawPageText,
-        IReadOnlyList<SearchResultLink> pageLinks)
+        IReadOnlyList<PageLinkSnapshot> pageLinks)
     {
         if (string.IsNullOrWhiteSpace(detailLinkText))
         {
@@ -695,7 +695,7 @@ public sealed class PageDataExtractionAgent
     private static string SanitizeUrls(
         string markdown,
         string pageUrl,
-        IReadOnlyList<SearchResultLink>? pageLinks)
+        IReadOnlyList<PageLinkSnapshot>? pageLinks)
     {
         if (string.IsNullOrWhiteSpace(markdown))
         {

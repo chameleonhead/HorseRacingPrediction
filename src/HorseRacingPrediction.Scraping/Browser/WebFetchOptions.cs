@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Browser;
+namespace HorseRacingPrediction.Scraping.Browser;
 
 /// <summary>
 /// WebFetchTools が使用する設定オプション。

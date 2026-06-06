@@ -4,7 +4,7 @@ using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.AgentClient.Web.ApiBrowsing;
 using HorseRacingPrediction.AgentClient.Web.Components;
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Workflow;

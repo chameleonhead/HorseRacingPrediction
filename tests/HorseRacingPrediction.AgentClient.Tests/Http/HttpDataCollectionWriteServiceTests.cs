@@ -307,7 +307,10 @@ public sealed class HttpDataCollectionWriteServiceTests
     {
         const string raceId = "race-test";
         var handler = new StubHttpMessageHandler();
-        handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
+        for (var i = 0; i < 5; i++)
+        {
+            handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
         handler.Add(HttpMethod.Post, $"/api/races/{raceId}/result", new HttpResponseMessage(HttpStatusCode.OK));
 
         using var httpClient = new HttpClient(handler)
@@ -319,13 +322,9 @@ public sealed class HttpDataCollectionWriteServiceTests
         var message = await service.DeclareRaceResultAsync(raceId, "テストホース", null, null);
 
         StringAssert.Contains(message, raceId);
-        CollectionAssert.AreEqual(
-            new[]
-            {
-                $"GET /api/races/{raceId}/context",
-                $"POST /api/races/{raceId}/result"
-            },
-            handler.Requests);
+        Assert.AreEqual(6, handler.Requests.Count);
+        Assert.IsTrue(handler.Requests.Take(5).All(request => request == $"GET /api/races/{raceId}/context"));
+        Assert.AreEqual($"POST /api/races/{raceId}/result", handler.Requests[^1]);
     }
 
     [TestMethod]
@@ -391,14 +390,22 @@ public sealed class HttpDataCollectionWriteServiceTests
             null);
 
         StringAssert.Contains(message, "スキップしました");
-        Assert.AreEqual(0, handler.Requests.Count);
+        Assert.IsEmpty(handler.Requests);
     }
 
     [TestMethod]
-    public async Task UpsertRaceEntryAsync_WhenTrainerNameIsMissing_ThrowsArgumentException()
+    public async Task UpsertRaceEntryAsync_WhenTrainerNameIsMissing_StillRegistersEntryWithoutTrainer()
     {
         const string raceId = "race-entry-missing-trainer";
+        var horseId = DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeDisplayName("テストホース"));
+        var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", DeterministicIdGenerator.NormalizeDisplayName("テスト騎手"));
         var handler = new StubHttpMessageHandler();
+        handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Get, $"/api/horses/{horseId}", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Post, "/api/horses", new HttpResponseMessage(HttpStatusCode.Created));
+        handler.Add(HttpMethod.Get, $"/api/jockeys/{jockeyId}", new HttpResponseMessage(HttpStatusCode.NotFound));
+        handler.Add(HttpMethod.Post, "/api/jockeys", new HttpResponseMessage(HttpStatusCode.Created));
+        handler.Add(HttpMethod.Post, $"/api/races/{raceId}/entries", new HttpResponseMessage(HttpStatusCode.Created));
 
         using var httpClient = new HttpClient(handler)
         {
@@ -406,25 +413,21 @@ public sealed class HttpDataCollectionWriteServiceTests
         };
         var service = new HttpDataCollectionWriteService(httpClient, CreateStatusRecorder());
 
-        try
-        {
-            await service.UpsertRaceEntryAsync(
-                raceId,
-                1,
-                "テストホース",
-                "テスト騎手",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
-            Assert.Fail("ArgumentException が送出される想定でした。");
-        }
-        catch (ArgumentException)
-        {
-        }
+        var message = await service.UpsertRaceEntryAsync(
+            raceId,
+            1,
+            "テストホース",
+            "テスト騎手",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+        StringAssert.Contains(message, raceId);
+        Assert.IsFalse(handler.Requests.Any(request => request.Contains("/api/trainers/", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -432,7 +435,10 @@ public sealed class HttpDataCollectionWriteServiceTests
     {
         const string raceId = "race-result-conflict";
         var handler = new StubHttpMessageHandler();
-        handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
+        for (var i = 0; i < 5; i++)
+        {
+            handler.Add(HttpMethod.Get, $"/api/races/{raceId}/context", new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
         handler.Add(HttpMethod.Post, $"/api/races/{raceId}/result", new HttpResponseMessage(HttpStatusCode.Conflict));
 
         using var httpClient = new HttpClient(handler)

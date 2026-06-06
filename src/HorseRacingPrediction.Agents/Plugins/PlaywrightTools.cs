@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text;
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -188,7 +188,7 @@ public sealed class PlaywrightTools
     private async Task<string> FormatIfAvailableAsync(
         string rawText,
         string url,
-        IReadOnlyList<SearchResultLink> pageLinks,
+        IReadOnlyList<PageLinkSnapshot> pageLinks,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -222,8 +222,8 @@ public sealed class PlaywrightTools
             : null;
     }
 
-    private static IReadOnlyList<SearchResultLink> NormalizeLinks(
-        IReadOnlyList<SearchResultLink> links,
+    private static IReadOnlyList<PageLinkSnapshot> NormalizeLinks(
+        IReadOnlyList<PageLinkSnapshot> links,
         string? baseUrl)
     {
         if (links.Count == 0)
@@ -237,7 +237,7 @@ public sealed class PlaywrightTools
             Uri.TryCreate(baseUrl, UriKind.Absolute, out baseUri);
         }
 
-        var normalized = new List<SearchResultLink>(links.Count);
+        var normalized = new List<PageLinkSnapshot>(links.Count);
         foreach (var link in links)
         {
             var normalizedUrl = NormalizeLinkUrl(link.Url, baseUri);
@@ -278,7 +278,7 @@ public sealed class PlaywrightTools
         string rawText,
         string url,
         string? objective,
-        IReadOnlyList<SearchResultLink> links,
+        IReadOnlyList<PageLinkSnapshot> links,
         PageSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
@@ -320,7 +320,7 @@ public sealed class PlaywrightTools
     private string BuildSearchResult(
         string searchQuery,
         string currentUrl,
-        IReadOnlyList<SearchResultLink> links,
+        IReadOnlyList<PageLinkSnapshot> links,
         string formattedText)
     {
         var sb = new StringBuilder();
@@ -347,7 +347,7 @@ public sealed class PlaywrightTools
     private string BuildPageResult(
         string currentUrl,
         string contentMarkdown,
-        IReadOnlyList<SearchResultLink> links)
+        IReadOnlyList<PageLinkSnapshot> links)
     {
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(currentUrl))
@@ -364,7 +364,7 @@ public sealed class PlaywrightTools
 
     private static void AppendLinks(
         StringBuilder sb,
-        IReadOnlyList<SearchResultLink> links,
+        IReadOnlyList<PageLinkSnapshot> links,
         string emptyMessage,
         bool groupByRegion)
     {
@@ -387,7 +387,7 @@ public sealed class PlaywrightTools
         }
     }
 
-    private static void AppendGroupedLinks(StringBuilder sb, IReadOnlyList<SearchResultLink> links)
+    private static void AppendGroupedLinks(StringBuilder sb, IReadOnlyList<PageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {
@@ -404,7 +404,7 @@ public sealed class PlaywrightTools
     private static void AppendLinkSection(
         StringBuilder sb,
         string heading,
-        IReadOnlyList<SearchResultLink> links)
+        IReadOnlyList<PageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {
@@ -437,7 +437,7 @@ public sealed class PlaywrightTools
 
     private static string? ResolveSafeDetailClickText(
         string detailLinkText,
-        IReadOnlyList<SearchResultLink> links,
+        IReadOnlyList<PageLinkSnapshot> links,
         PageSnapshot? snapshot)
     {
         var candidate = NormalizeMatchText(detailLinkText);
@@ -478,7 +478,7 @@ public sealed class PlaywrightTools
         string url,
         string? objective,
         string rawText,
-        IReadOnlyList<SearchResultLink> links,
+        IReadOnlyList<PageLinkSnapshot> links,
         PageSnapshot? snapshot)
     {
         _logger.LogInformation(
@@ -514,7 +514,7 @@ public sealed class PlaywrightTools
             ClipForLog(output.ContentMarkdown));
     }
 
-    private static string BuildLinksLogText(IReadOnlyList<SearchResultLink> links)
+    private static string BuildLinksLogText(IReadOnlyList<PageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {

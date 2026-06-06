@@ -1,9 +1,9 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
 using HorseRacingPrediction.Agents.Contracts;
 using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 

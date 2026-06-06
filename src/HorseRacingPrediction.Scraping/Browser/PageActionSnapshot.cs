@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Agents.Browser;
+namespace HorseRacingPrediction.Scraping.Browser;
 
 /// <summary>
 /// ページ上の操作可能要素のスナップショット。

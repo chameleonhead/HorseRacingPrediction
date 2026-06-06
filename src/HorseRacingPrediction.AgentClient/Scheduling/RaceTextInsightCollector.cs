@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Agents.Contracts;
 using Microsoft.Extensions.AI;

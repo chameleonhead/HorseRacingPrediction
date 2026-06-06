@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -84,8 +84,8 @@ public sealed class JraRaceResultExtractorTests
         public Task<PageSnapshot> GetPageSnapshotAsync(int maxLinks = 0, CancellationToken cancellationToken = default)
             => Task.FromResult(_snapshot);
 
-        public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(int maxResults = 10, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>([]);
+        public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(int maxResults = 10, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<PageLinkSnapshot>>([]);
 
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);

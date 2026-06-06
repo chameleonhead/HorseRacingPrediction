@@ -1,10 +1,9 @@
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Agents.Agents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
 
-namespace HorseRacingPrediction.Agents.Browser;
+namespace HorseRacingPrediction.Scraping.Browser;
 
 /// <summary>
 /// Microsoft.Playwright を使った汎用ブラウザ実装。
@@ -289,7 +288,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return NormalizeText(rawText);
     }
 
-    public async Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
+    public async Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(
         int maxResults = 0,
         CancellationToken cancellationToken = default)
     {
@@ -824,9 +823,9 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return null;
     }
 
-    private async Task<IReadOnlyList<SearchResultLink>> ExtractLinksAsync(int limit, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PageLinkSnapshot>> ExtractLinksAsync(int limit, CancellationToken cancellationToken)
     {
-        var links = new List<SearchResultLink>();
+        var links = new List<PageLinkSnapshot>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         await AddLinksFromSearchResultsAsync(links, seenUrls, limit, cancellationToken);
@@ -883,7 +882,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
     }
 
     private async Task AddLinksFromSearchResultsAsync(
-        List<SearchResultLink> links,
+        List<PageLinkSnapshot> links,
         HashSet<string> seenUrls,
         int limit,
         CancellationToken cancellationToken)
@@ -921,7 +920,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
     }
 
-    private async Task<SearchResultLink?> CreateLinkAsync(ILocator anchor)
+    private async Task<PageLinkSnapshot?> CreateLinkAsync(ILocator anchor)
     {
         var url = await anchor.GetAttributeAsync("href") ?? string.Empty;
         if (string.IsNullOrWhiteSpace(url))
@@ -931,7 +930,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         var title = await GetLocatorTextAsync(anchor);
         var region = await DetermineRegionAsync(anchor);
-        return new SearchResultLink(
+        return new PageLinkSnapshot(
             url,
             string.IsNullOrWhiteSpace(title) ? url : title,
             region);

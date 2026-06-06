@@ -1,5 +1,5 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -112,9 +112,9 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("https://www.jra.go.jp/home", "ホーム", "header"),
-            new SearchResultLink("https://www.jra.go.jp/detail", "詳細ページ"),
-            new SearchResultLink("https://www.jra.go.jp/contact", "お問い合わせ", "footer")
+            new PageLinkSnapshot("https://www.jra.go.jp/home", "ホーム", "header"),
+            new PageLinkSnapshot("https://www.jra.go.jp/detail", "詳細ページ"),
+            new PageLinkSnapshot("https://www.jra.go.jp/contact", "お問い合わせ", "footer")
         ];
 
         var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race");
@@ -135,8 +135,8 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("https://www.jra.go.jp/race", "JRA レース情報"),
-            new SearchResultLink("https://db.netkeiba.com/race", "netkeiba レース"),
+            new PageLinkSnapshot("https://www.jra.go.jp/race", "JRA レース情報"),
+            new PageLinkSnapshot("https://db.netkeiba.com/race", "netkeiba レース"),
         ];
 
         var result = await _sut.BrowserSearch("皐月賞");
@@ -154,8 +154,8 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("/race", "JRA レース情報"),
-            new SearchResultLink("https://db.netkeiba.com/race", "netkeiba レース"),
+            new PageLinkSnapshot("/race", "JRA レース情報"),
+            new PageLinkSnapshot("https://db.netkeiba.com/race", "netkeiba レース"),
         ];
 
         var result = await _sut.BrowserSearch("皐月賞");
@@ -191,7 +191,7 @@ public class PlaywrightToolsTests
         _fakeBrowser.SearchResponseText = "検索結果本文";
         _fakeBrowser.SimulatedCurrentUrl = "https://www.bing.com/search?q=test";
         _fakeBrowser.CurrentPageLinks = Enumerable.Range(1, 120)
-            .Select(index => new SearchResultLink($"https://example.com/{index}", $"結果 {index}"))
+            .Select(index => new PageLinkSnapshot($"https://example.com/{index}", $"結果 {index}"))
             .ToList();
 
         var result = await _sut.BrowserSearch("皐月賞");
@@ -231,7 +231,7 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("https://www.jra.go.jp/race/detail", "詳細を表示")
+            new PageLinkSnapshot("https://www.jra.go.jp/race/detail", "詳細を表示")
         ];
 
         var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race", "詳細を取得する");
@@ -263,8 +263,8 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("https://www.jra.go.jp/race/detail-1", "詳細"),
-            new SearchResultLink("https://www.jra.go.jp/race/detail-2", "詳細")
+            new PageLinkSnapshot("https://www.jra.go.jp/race/detail-1", "詳細"),
+            new PageLinkSnapshot("https://www.jra.go.jp/race/detail-2", "詳細")
         ];
 
         var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race", "詳細を取得する");
@@ -280,9 +280,9 @@ public class PlaywrightToolsTests
         _fakeBrowser.SimulatedCurrentUrl = "https://www.jra.go.jp/race";
         _fakeBrowser.CurrentPageLinks =
         [
-            new SearchResultLink("/home", "ホーム", "header"),
-            new SearchResultLink("./detail", "詳細ページ"),
-            new SearchResultLink("../contact", "お問い合わせ", "footer")
+            new PageLinkSnapshot("/home", "ホーム", "header"),
+            new PageLinkSnapshot("./detail", "詳細ページ"),
+            new PageLinkSnapshot("../contact", "お問い合わせ", "footer")
         ];
 
         var result = await _sut.BrowserReadPage("https://www.jra.go.jp/race");
@@ -310,7 +310,7 @@ public class PlaywrightToolsTests
         public string GoBackResponseText { get; set; } = string.Empty;
         public string? SimulatedCurrentUrl { get; set; }
 
-        public IReadOnlyList<SearchResultLink> CurrentPageLinks { get; set; } = [];
+        public IReadOnlyList<PageLinkSnapshot> CurrentPageLinks { get; set; } = [];
         public string SearchResponseText { get; set; } = string.Empty;
 
         public string? LastNavigatedUrl { get; private set; }
@@ -354,10 +354,10 @@ public class PlaywrightToolsTests
             return Task.FromResult(ResponseText);
         }
 
-        public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(
+        public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(
             int maxResults = 10, CancellationToken cancellationToken = default)
         {
-            IReadOnlyList<SearchResultLink> result = CurrentPageLinks.Take(maxResults).ToList();
+            IReadOnlyList<PageLinkSnapshot> result = CurrentPageLinks.Take(maxResults).ToList();
             return Task.FromResult(result);
         }
 

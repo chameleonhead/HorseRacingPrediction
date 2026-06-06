@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -50,7 +50,7 @@ public class JraStructuredPageParserTests
             Headings: ["NHKマイルカップ"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
             ],
             Actions: [],
             Tables: []);
@@ -69,9 +69,9 @@ public class JraStructuredPageParserTests
             Headings: ["競馬メニュー", "今週の開催情報"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/thisweek/", "今週の注目レース"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/baba/index.html", "馬場情報"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/thisweek/", "今週の注目レース"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/baba/index.html", "馬場情報"),
             ],
             Actions:
             [
@@ -98,9 +98,9 @@ public class JraStructuredPageParserTests
             Headings: ["開催日程", "5月"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/calendar/apr.html", "4月"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/calendar/may.html", "5月"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/apr.html", "4月"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/may.html", "5月"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
             ],
             Actions: [],
             Tables:
@@ -134,11 +134,11 @@ public class JraStructuredPageParserTests
             Headings: ["今週の注目レース"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc.html", "5月10日（日曜） NHKマイルカップ（GⅠ） 東京競馬場 芝1600メートル"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "5月10日（日曜） NHKマイルカップ（GⅠ） 東京競馬場 芝1600メートル"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
             ],
             Actions: [],
             Tables: []);
@@ -162,10 +162,10 @@ public class JraStructuredPageParserTests
             Headings: ["NHKマイルカップ"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "2026年5月8日（金曜） 第31回NHKマイルカップ（GⅠ）枠順確定"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "2026年5月8日（金曜） 第31回NHKマイルカップ（GⅠ）枠順確定"),
             ],
             Actions: [],
             Tables: []);
@@ -190,10 +190,10 @@ public class JraStructuredPageParserTests
             Headings: ["NHKマイルカップ"],
             Links:
             [
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
             ],
             Actions: [],
             Tables: []);

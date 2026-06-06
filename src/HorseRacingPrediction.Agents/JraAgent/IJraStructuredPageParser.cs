@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 
 namespace HorseRacingPrediction.Agents.JraAgent;
 

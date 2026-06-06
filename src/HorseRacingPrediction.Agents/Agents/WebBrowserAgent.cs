@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

@@ -1,6 +1,6 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -138,7 +138,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             Title: "2026年5月16日 JRA",
             MainText: "2026年5月16日 東京 1R",
             Headings: ["2026年5月16日 東京 1R"],
-            Links: [new SearchResultLink(CardUrl, "1R")],
+            Links: [new PageLinkSnapshot(CardUrl, "1R")],
             Actions: [],
             Tables: []);
 
@@ -180,8 +180,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
         public Task<PageSnapshot> GetPageSnapshotAsync(int maxLinks = 0, CancellationToken cancellationToken = default)
             => Task.FromResult(IsDiscoveryPage ? _discoverySnapshot : _cardSnapshot);
 
-        public Task<IReadOnlyList<SearchResultLink>> GetLinksAsync(int maxResults = 10, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<SearchResultLink>>(IsDiscoveryPage ? _discoverySnapshot.Links : []);
+        public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(int maxResults = 10, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<PageLinkSnapshot>>(IsDiscoveryPage ? _discoverySnapshot.Links : []);
 
         public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
             => Task.FromResult(string.Empty);

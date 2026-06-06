@@ -1,5 +1,5 @@
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 
 namespace HorseRacingPrediction.AgentClient.Tests.Scheduling;
 
@@ -14,7 +14,7 @@ public sealed class HistoricalRaceReferenceParserTests
             "race",
             string.Empty,
             Array.Empty<string>(),
-            Array.Empty<SearchResultLink>(),
+            Array.Empty<PageLinkSnapshot>(),
             Array.Empty<PageActionSnapshot>(),
             [
                 new PageTableSnapshot(
@@ -45,7 +45,7 @@ public sealed class HistoricalRaceReferenceParserTests
             "race",
             string.Empty,
             Array.Empty<string>(),
-            Array.Empty<SearchResultLink>(),
+            Array.Empty<PageLinkSnapshot>(),
             Array.Empty<PageActionSnapshot>(),
             [
                 new PageTableSnapshot(
@@ -71,7 +71,7 @@ public sealed class HistoricalRaceReferenceParserTests
             "race",
             string.Empty,
             Array.Empty<string>(),
-            Array.Empty<SearchResultLink>(),
+            Array.Empty<PageLinkSnapshot>(),
             Array.Empty<PageActionSnapshot>(),
             [
                 new PageTableSnapshot(
@@ -98,7 +98,7 @@ public sealed class HistoricalRaceReferenceParserTests
             "race",
             string.Empty,
             Array.Empty<string>(),
-            Array.Empty<SearchResultLink>(),
+            Array.Empty<PageLinkSnapshot>(),
             Array.Empty<PageActionSnapshot>(),
             [
                 new PageTableSnapshot(

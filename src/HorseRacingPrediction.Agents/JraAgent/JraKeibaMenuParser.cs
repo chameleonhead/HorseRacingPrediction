@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 
 namespace HorseRacingPrediction.Agents.JraAgent;
 
@@ -19,7 +19,7 @@ public sealed class JraKeibaMenuParser : IJraStructuredPageParser<JraKeibaMenuPa
     {
         var issues = new List<JraPageParseIssue>();
         var entries = snapshot.Links
-            .Concat(snapshot.Actions.Select(a => new SearchResultLink(snapshot.Url, a.Text)))
+            .Concat(snapshot.Actions.Select(a => new PageLinkSnapshot(snapshot.Url, a.Text)))
             .Where(link => PrimaryMenuNames.Any(name => JraPageParserText.ContainsNormalized(link.Title, name)))
             .Select(link => new JraNavigationMenuEntry(
                 link.Title,

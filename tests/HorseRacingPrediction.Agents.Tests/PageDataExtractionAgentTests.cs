@@ -1,5 +1,5 @@
 using HorseRacingPrediction.Agents.Agents;
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -45,8 +45,8 @@ public class PageDataExtractionAgentTests
             rawText,
             "https://www.jra.go.jp/race",
             [
-                new SearchResultLink("https://example.com/schedule", "開催日程"),
-                new SearchResultLink("https://example.com/contact", "お問い合わせ")
+                new PageLinkSnapshot("https://example.com/schedule", "開催日程"),
+                new PageLinkSnapshot("https://example.com/contact", "お問い合わせ")
             ]);
 
         Assert.AreEqual(expectedOutput, result, "LLM の整形結果がそのまま返されること");
@@ -61,7 +61,7 @@ public class PageDataExtractionAgentTests
         var result = await agent.FormatPageContentAsync(
             "本文",
             "https://example.com/page",
-            [new SearchResultLink("https://example.com/allowed", "正規リンク")]);
+            [new PageLinkSnapshot("https://example.com/allowed", "正規リンク")]);
 
         Assert.DoesNotContain(result, "https://invalid.example.com/path", "未検証 URL は除去されること");
         StringAssert.Contains(result, "偽リンク");
@@ -102,9 +102,9 @@ public class PageDataExtractionAgentTests
             "検索結果の生テキスト",
             "https://www.google.com/search?q=%E7%9A%90%E6%9C%88%E8%B3%9E",
             [
-                new SearchResultLink("https://www.google.com/preferences", "設定", "header"),
-                new SearchResultLink("https://www.jra.go.jp/keiba/satsuki/syutsuba.html", "皐月賞 - 出馬表 JRA日本中央競馬会"),
-                new SearchResultLink("https://race.netkeiba.com/special/index.html", "皐月賞2026特集 | netkeiba")
+                new PageLinkSnapshot("https://www.google.com/preferences", "設定", "header"),
+                new PageLinkSnapshot("https://www.jra.go.jp/keiba/satsuki/syutsuba.html", "皐月賞 - 出馬表 JRA日本中央競馬会"),
+                new PageLinkSnapshot("https://race.netkeiba.com/special/index.html", "皐月賞2026特集 | netkeiba")
             ]);
 
         StringAssert.Contains(result, "## 検索結果候補");
@@ -120,7 +120,7 @@ public class PageDataExtractionAgentTests
         var chatClient = new CapturingChatClient("整形済み");
         var agent = new PageDataExtractionAgent(chatClient);
         var links = Enumerable.Range(1, 30)
-            .Select(index => new SearchResultLink($"https://example.com/{index}", $"候補 {index}"))
+            .Select(index => new PageLinkSnapshot($"https://example.com/{index}", $"候補 {index}"))
             .ToList();
 
         await agent.FormatPageContentAsync("本文", "https://example.com", links);
@@ -158,7 +158,7 @@ public class PageDataExtractionAgentTests
             "ページタイトル",
             "本文",
             ["見出し1", "見出し2"],
-            [new SearchResultLink("https://example.com/detail", "詳細")],
+            [new PageLinkSnapshot("https://example.com/detail", "詳細")],
             [new PageActionSnapshot("もっと見る", "button")],
             [new PageTableSnapshot(["列1", "列2"], [["値1", "値2"]])]);
 
@@ -233,7 +233,7 @@ public class PageDataExtractionAgentTests
             "ページの生テキスト",
             "https://www.jra.go.jp/",
             "詳細を取得する",
-            [new SearchResultLink("https://www.jra.go.jp/", "トップページへ戻る")]);
+            [new PageLinkSnapshot("https://www.jra.go.jp/", "トップページへ戻る")]);
 
         Assert.AreEqual("ここから本文です", result.ContentMarkdown);
         Assert.IsTrue(result.ShouldFollowDetailLink);

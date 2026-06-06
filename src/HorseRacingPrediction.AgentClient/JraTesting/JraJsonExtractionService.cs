@@ -1,6 +1,6 @@
-using HorseRacingPrediction.Agents.Browser;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
-using HorseRacingPrediction.Agents.Scrapers.Jra;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 namespace HorseRacingPrediction.AgentClient.JraTesting;
 
