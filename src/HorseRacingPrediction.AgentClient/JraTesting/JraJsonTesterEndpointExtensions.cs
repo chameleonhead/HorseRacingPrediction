@@ -6,11 +6,13 @@ public static class JraJsonTesterEndpointExtensions
     {
         endpoints.MapGet(
             "/api/tools/jra-json",
-            async (string url, bool includeSnapshot, JraJsonExtractionService service, CancellationToken cancellationToken) =>
+            async (string url, bool includeSnapshot, bool? headless, JraJsonExtractionService service, CancellationToken cancellationToken) =>
             {
                 try
                 {
-                    var result = await service.ExtractAsync(url, includeSnapshot, cancellationToken).ConfigureAwait(false);
+                    var result = await service
+                        .ExtractAsync(url, includeSnapshot, headless: headless ?? true, cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
                     return Results.Ok(result);
                 }
                 catch (ArgumentException ex)

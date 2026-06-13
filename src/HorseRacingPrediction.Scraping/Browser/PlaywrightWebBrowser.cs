@@ -567,7 +567,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             for (var index = 0; index < await main.CountAsync(); index++)
             {
                 var candidate = main.Nth(index);
-                if (await candidate.IsVisibleAsync())
+                if (await IsElementRenderedAsync(candidate))
                 {
                     return AppendSupplementalText(await candidate.InnerTextAsync(), imageAltTexts);
                 }
@@ -601,7 +601,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         for (var index = 0; index < await images.CountAsync(); index++)
         {
             var image = images.Nth(index);
-            if (!await image.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(image))
             {
                 continue;
             }
@@ -677,7 +677,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var field = fieldLocator.Nth(index);
-            if (!await field.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(field))
             {
                 continue;
             }
@@ -821,7 +821,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             for (var i = 0; i < count; i++)
             {
                 var form = forms.Nth(i);
-                if (await form.IsVisibleAsync())
+                if (await IsElementRenderedAsync(form))
                 {
                     return form;
                 }
@@ -835,7 +835,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         {
             cancellationToken.ThrowIfCancellationRequested();
             var form = forms.Nth(i);
-            if (!await form.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(form))
             {
                 continue;
             }
@@ -852,6 +852,21 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private static string EscapeForCss(string value)
         => value.Replace("'", "\\'", StringComparison.Ordinal);
+
+    private static async Task<bool> IsElementRenderedAsync(ILocator locator)
+    {
+        if (await locator.CountAsync() == 0)
+        {
+            return false;
+        }
+
+        if (!await locator.IsVisibleAsync())
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     private async Task<List<PageSectionSnapshot>> ExtractSectionsAsync(
         string pageTitle,
@@ -947,7 +962,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             var node = nodes.Nth(index);
-            if (!await node.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(node))
             {
                 continue;
             }
@@ -1009,7 +1024,12 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             var candidate = candidates.Nth(index);
-            if (!await candidate.IsVisibleAsync())
+            if (await HasMatchingSectionAncestorAsync(candidate, selector))
+            {
+                continue;
+            }
+
+            if (!await IsElementRenderedAsync(candidate))
             {
                 continue;
             }
@@ -1049,6 +1069,19 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             sections.Add(new PageSectionSnapshot(title, mainText, links, actions, tables, headings, forms, images));
         }
     }
+
+    private static async Task<bool> HasMatchingSectionAncestorAsync(ILocator candidate, string selector)
+        => await candidate.EvaluateAsync<bool>(
+            """
+            (node, selector) => {
+                if (!node || !node.parentElement) {
+                    return false;
+                }
+
+                return node.parentElement.closest(selector) !== null;
+            }
+            """,
+            selector);
 
     private static string BuildSectionDedupeKey(string title, string mainText)
         => $"{title}|{mainText.AsSpan(0, Math.Min(mainText.Length, 160)).ToString()}|{mainText.Length}";
@@ -1253,7 +1286,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var anchor = anchors.Nth(index);
-            if (!await anchor.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(anchor))
             {
                 continue;
             }
@@ -1267,7 +1300,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             links.Add(link);
         }
 
-        return links;
+        return links.Take(limit).ToList();
     }
 
     private async Task<List<PageActionSnapshot>> ExtractActionsFromRootAsync(
@@ -1283,7 +1316,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             ("[role='button']", "button"),
             ("[role='tab']", "tab"),
             ("summary", "summary"),
-            ("input[type='button'], input[type='submit']", "input")
+            ("input[type='button'], input[type='submit']", "input"),
+            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索']", "link-action")
         };
 
         foreach (var (selector, kind) in actionSelectors)
@@ -1294,7 +1328,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var item = locator.Nth(index);
-                if (!await item.IsVisibleAsync())
+                if (!await IsElementRenderedAsync(item))
                 {
                     continue;
                 }
@@ -1319,6 +1353,32 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
         }
 
+        var anchorLocator = root.Locator("a[href]");
+        var anchorCount = await anchorLocator.CountAsync();
+        for (var index = 0; index < anchorCount && actions.Count < maxActions; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var anchor = anchorLocator.Nth(index);
+            if (!await IsElementRenderedAsync(anchor))
+            {
+                continue;
+            }
+
+            var pseudoAction = await TryCreatePseudoActionFromAnchorAsync(anchor);
+            if (pseudoAction is null)
+            {
+                continue;
+            }
+
+            var key = $"{pseudoAction.Kind}:{pseudoAction.Text}";
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+
+            actions.Add(pseudoAction);
+        }
+
         return actions;
     }
 
@@ -1335,7 +1395,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         {
             cancellationToken.ThrowIfCancellationRequested();
             var table = tableLocator.Nth(tableIndex);
-            if (!await table.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(table))
             {
                 continue;
             }
@@ -1367,7 +1427,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var form = formLocator.Nth(formIndex);
-            if (!await form.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(form))
             {
                 continue;
             }
@@ -1398,7 +1458,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var image = imageLocator.Nth(index);
-            if (!await image.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(image))
             {
                 continue;
             }
@@ -1485,7 +1545,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             ("[role='button']", "button"),
             ("[role='tab']", "tab"),
             ("summary", "summary"),
-            ("input[type='button'], input[type='submit']", "input")
+            ("input[type='button'], input[type='submit']", "input"),
+            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索']", "link-action")
         };
 
         foreach (var (selector, kind) in actionSelectors)
@@ -1496,7 +1557,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var item = locator.Nth(index);
-                if (!await item.IsVisibleAsync())
+                if (!await IsElementRenderedAsync(item))
                 {
                     continue;
                 }
@@ -1521,6 +1582,32 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
         }
 
+        var anchorLocator = _page.Locator("a[href]");
+        var anchorCount = await anchorLocator.CountAsync();
+        for (var index = 0; index < anchorCount && actions.Count < 50; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var anchor = anchorLocator.Nth(index);
+            if (!await IsElementRenderedAsync(anchor))
+            {
+                continue;
+            }
+
+            var pseudoAction = await TryCreatePseudoActionFromAnchorAsync(anchor);
+            if (pseudoAction is null)
+            {
+                continue;
+            }
+
+            var key = $"{pseudoAction.Kind}:{pseudoAction.Text}";
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+
+            actions.Add(pseudoAction);
+        }
+
         return actions;
     }
 
@@ -1534,7 +1621,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         {
             cancellationToken.ThrowIfCancellationRequested();
             var table = tableLocator.Nth(tableIndex);
-            if (!await table.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(table))
             {
                 continue;
             }
@@ -1626,7 +1713,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var candidate = candidates.Nth(index);
-            if (!await candidate.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(candidate))
             {
                 continue;
             }
@@ -1689,7 +1776,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var candidate = candidates.Nth(index);
-            if (!await candidate.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(candidate))
             {
                 continue;
             }
@@ -1724,7 +1811,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var marker = sectionMarkers.Nth(index);
-            if (!await marker.IsVisibleAsync())
+            if (!await IsElementRenderedAsync(marker))
             {
                 continue;
             }
@@ -1740,7 +1827,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             for (var candidateIndex = 0; candidateIndex < candidateCount; candidateIndex++)
             {
                 var candidate = candidates.Nth(candidateIndex);
-                if (!await candidate.IsVisibleAsync())
+                if (!await IsElementRenderedAsync(candidate))
                 {
                     continue;
                 }
@@ -1792,7 +1879,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         cancellationToken.ThrowIfCancellationRequested();
 
         var modal = _page.Locator("#modal.modal.show, #modal .modal_inner, .modal_box.modal.show, [aria-modal='true']").First;
-        if (await modal.CountAsync() == 0 || !await modal.IsVisibleAsync())
+        if (await modal.CountAsync() == 0 || !await IsElementRenderedAsync(modal))
         {
             return false;
         }
@@ -1863,11 +1950,72 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         var title = await GetLocatorTextAsync(anchor);
+        var ariaLabel = NormalizeText(await anchor.GetAttributeAsync("aria-label"));
+        var titleAttribute = NormalizeText(await anchor.GetAttributeAsync("title"));
+        if (IsDomainSearchPseudoActionAnchor(title, ariaLabel, titleAttribute, url))
+        {
+            return null;
+        }
+
         var region = await DetermineRegionAsync(anchor);
         return new PageLinkSnapshot(
             url,
             string.IsNullOrWhiteSpace(title) ? url : title,
             region);
+    }
+
+    private static bool IsDomainSearchPseudoActionAnchor(
+        string? linkText,
+        string? ariaLabel,
+        string? titleAttribute,
+        string? href)
+    {
+        static bool ContainsDomainSearchPhrase(string? value)
+            => !string.IsNullOrWhiteSpace(value)
+               && value.Contains("ドメインで検索", StringComparison.Ordinal);
+
+        if (ContainsDomainSearchPhrase(linkText)
+            || ContainsDomainSearchPhrase(ariaLabel)
+            || ContainsDomainSearchPhrase(titleAttribute))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return false;
+        }
+
+        var normalizedHref = href.Trim();
+        return normalizedHref.StartsWith("/?q=", StringComparison.OrdinalIgnoreCase)
+            && normalizedHref.Contains("site:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<PageActionSnapshot?> TryCreatePseudoActionFromAnchorAsync(ILocator anchor)
+    {
+        var href = await anchor.GetAttributeAsync("href") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return null;
+        }
+
+        var text = await GetLocatorTextAsync(anchor);
+        var ariaLabel = NormalizeText(await anchor.GetAttributeAsync("aria-label"));
+        var titleAttribute = NormalizeText(await anchor.GetAttributeAsync("title"));
+        if (!IsDomainSearchPseudoActionAnchor(text, ariaLabel, titleAttribute, href))
+        {
+            return null;
+        }
+
+        var resolvedText = !string.IsNullOrWhiteSpace(text)
+            ? text
+            : !string.IsNullOrWhiteSpace(ariaLabel)
+                ? ariaLabel
+                : !string.IsNullOrWhiteSpace(titleAttribute)
+                    ? titleAttribute
+                    : href;
+
+        return new PageActionSnapshot(resolvedText, "link-action");
     }
 
     private static string NormalizeForMatch(string? text)

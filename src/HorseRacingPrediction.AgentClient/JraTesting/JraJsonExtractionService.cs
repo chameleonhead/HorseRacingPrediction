@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.JraAgent;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
+using Microsoft.Playwright;
 
 namespace HorseRacingPrediction.AgentClient.JraTesting;
 
@@ -20,11 +21,12 @@ public sealed class JraJsonExtractionService
     public async Task<JraJsonExtractionResponse> ExtractAsync(
         string url,
         bool includeSnapshot,
+        bool headless = true,
         CancellationToken cancellationToken = default)
     {
         var normalizedUrl = ValidateUrl(url);
 
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        await using var browser = await CreateBrowserAsync(headless, cancellationToken).ConfigureAwait(false);
         await browser.NavigateAsync(normalizedUrl, cancellationToken).ConfigureAwait(false);
 
         var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -51,6 +53,29 @@ public sealed class JraJsonExtractionService
             Data: ToJsonFriendlyData(extraction.Data),
             Snapshot: includeSnapshot ? snapshot : null,
             Error: extraction.Error);
+    }
+
+    private async Task<IWebBrowser> CreateBrowserAsync(bool headless, CancellationToken cancellationToken)
+    {
+        if (headless)
+        {
+            return await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await PlaywrightWebBrowser.CreateAsync(
+            launchOptions: new BrowserTypeLaunchOptions
+            {
+                Headless = false,
+                Args =
+                [
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-setuid-sandbox",
+                    "--disable-web-security",
+                    "--ignore-certificate-errors",
+                ]
+            }).ConfigureAwait(false);
     }
 
     private static object? ToJsonFriendlyData(object? data)

@@ -11,6 +11,10 @@
             URL:
             <input class="grow" @bind="url" placeholder="https://example.com/..." />
         </label>
+        <label>
+            <input type="checkbox" @bind="useHeadful" />
+            Headful
+        </label>
         <button class="btn primary" @onclick="LoadSnapshotAsync" disabled="@busy">@(busy ? "取得中..." : "取得")</button>
     </div>
     @if (!string.IsNullOrEmpty(error))
@@ -224,6 +228,7 @@
 @code {
     private string url = string.Empty;
     private bool busy;
+    private bool useHeadful;
     private string? error;
     private JraJsonExtractionResponse? response;
 
@@ -241,7 +246,7 @@
         busy = true;
         try
         {
-            response = await Extractor.ExtractAsync(url, includeSnapshot: true);
+            response = await Extractor.ExtractAsync(url, includeSnapshot: true, headless: !useHeadful);
             if (response.Snapshot is null)
             {
                 error = "Snapshot が取得できませんでした。";
