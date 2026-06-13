@@ -1,0 +1,233 @@
+@page "/snapshot-tool"
+@using HorseRacingPrediction.Scraping.Browser
+@inject JraJsonExtractionService Extractor
+
+<h1>PageSnapshot ビューア</h1>
+<p class="hint">URL から取得した PageSnapshot をセクション構造で確認できます。</p>
+
+<section class="card">
+    <div class="toolbar">
+        <label class="grow">
+            URL:
+            <input class="grow" @bind="url" placeholder="https://example.com/..." />
+        </label>
+        <button class="btn primary" @onclick="LoadSnapshotAsync" disabled="@busy">@(busy ? "取得中..." : "取得")</button>
+    </div>
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <pre class="error">@error</pre>
+    }
+</section>
+
+@if (response is not null && response.Snapshot is not null)
+{
+    var snapshot = response.Snapshot;
+    <section class="card">
+        <h3>サマリー</h3>
+        <dl class="meta">
+            <dt>ResolvedUrl</dt><dd>@response.ResolvedUrl</dd>
+            <dt>PageKind</dt><dd>@response.PageKind</dd>
+            <dt>Title</dt><dd>@snapshot.Title</dd>
+            <dt>Sections</dt><dd>@snapshot.Sections.Count</dd>
+            <dt>Headings / Links / Actions / Tables</dt><dd>@snapshot.Headings.Count / @snapshot.Links.Count / @snapshot.Actions.Count / @snapshot.Tables.Count</dd>
+            <dt>Forms / Images</dt><dd>@snapshot.Forms.Count / @snapshot.Images.Count</dd>
+        </dl>
+    </section>
+
+    <section class="card">
+        <h3>セクション</h3>
+        <div class="snapshot-sections">
+            @for (var i = 0; i < snapshot.Sections.Count; i++)
+            {
+                var sec = snapshot.Sections[i];
+                <article class="snapshot-section">
+                    <header class="snapshot-section-header">
+                        <h4>#@(i + 1) @sec.Title</h4>
+                        <span class="pill">Text @sec.MainText.Length chars</span>
+                    </header>
+
+                    @if (!string.IsNullOrWhiteSpace(sec.MainText))
+                    {
+                        <details open>
+                            <summary>MainText</summary>
+                            <pre class="payload snapshot-maintext">@sec.MainText</pre>
+                        </details>
+                    }
+
+                    @if (sec.Links.Count > 0)
+                    {
+                        <details>
+                            <summary>Links (@sec.Links.Count)</summary>
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Url</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var link in sec.Links)
+                                    {
+                                        <tr>
+                                            <td>@link.Title</td>
+                                            <td class="snapshot-url">@link.Url</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </details>
+                    }
+
+                    @if (sec.Actions.Count > 0)
+                    {
+                        <details>
+                            <summary>Actions (@sec.Actions.Count)</summary>
+                            <div class="snapshot-chip-list">
+                                @foreach (var action in sec.Actions)
+                                {
+                                    <span class="pill">@action.Text (@action.Kind)</span>
+                                }
+                            </div>
+                        </details>
+                    }
+
+                    @if (sec.Tables.Count > 0)
+                    {
+                        <details>
+                            <summary>Tables (@sec.Tables.Count)</summary>
+                            @for (var tableIndex = 0; tableIndex < sec.Tables.Count; tableIndex++)
+                            {
+                                var table = sec.Tables[tableIndex];
+                                <h4>Table #@(tableIndex + 1)</h4>
+                                <table class="data">
+                                    <thead>
+                                        <tr>
+                                            @foreach (var header in table.Headers)
+                                            {
+                                                <th>@header</th>
+                                            }
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var row in table.Rows)
+                                        {
+                                            <tr>
+                                                @foreach (var cell in row)
+                                                {
+                                                    <td>@cell</td>
+                                                }
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                        </details>
+                    }
+
+                    @if (sec.Forms.Count > 0)
+                    {
+                        <details>
+                            <summary>Forms (@sec.Forms.Count)</summary>
+                            @foreach (var form in sec.Forms)
+                            {
+                                <div class="snapshot-form-block">
+                                    <div><strong>@form.Title</strong></div>
+                                    <div class="hint">@form.Method @form.Action</div>
+                                    @if (form.Fields.Count > 0)
+                                    {
+                                        <table class="data">
+                                            <thead>
+                                                <tr>
+                                                    <th>Label</th>
+                                                    <th>Name</th>
+                                                    <th>Kind</th>
+                                                    <th>Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var field in form.Fields)
+                                                {
+                                                    <tr>
+                                                        <td>@field.Label</td>
+                                                        <td>@field.Name</td>
+                                                        <td>@field.Kind</td>
+                                                        <td>@field.Value</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    }
+                                </div>
+                            }
+                        </details>
+                    }
+
+                    @if (sec.Images.Count > 0)
+                    {
+                        <details>
+                            <summary>Images (@sec.Images.Count)</summary>
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>Alt</th>
+                                        <th>Title</th>
+                                        <th>Region</th>
+                                        <th>Url</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var image in sec.Images)
+                                    {
+                                        <tr>
+                                            <td>@image.Alt</td>
+                                            <td>@image.Title</td>
+                                            <td>@image.Region</td>
+                                            <td class="snapshot-url">@image.Url</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </details>
+                    }
+                </article>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private string url = string.Empty;
+    private bool busy;
+    private string? error;
+    private JraJsonExtractionResponse? response;
+
+    private async Task LoadSnapshotAsync()
+    {
+        error = null;
+        response = null;
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            error = "URL を入力してください。";
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            response = await Extractor.ExtractAsync(url, includeSnapshot: true);
+            if (response.Snapshot is null)
+            {
+                error = "Snapshot が取得できませんでした。";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

@@ -172,11 +172,6 @@ public sealed class JraJsonExtractionService
             throw new ArgumentException("http または https の URL を指定してください。", nameof(url));
         }
 
-        if (!uri.Host.EndsWith("jra.go.jp", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("JRA ドメインの URL を指定してください。", nameof(url));
-        }
-
         return uri.ToString();
     }
 

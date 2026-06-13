@@ -145,4 +145,46 @@ dl.meta dd { margin: 0; }
 pre.error { background: #fbe9e9; color: var(--danger); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
 pre.payload { background: #f6f6f1; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow: auto; font-size: 12px; }
 
+.snapshot-sections {
+    display: grid;
+    gap: 12px;
+}
+
+.snapshot-section {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    background: #fff;
+    display: grid;
+    gap: 8px;
+}
+
+.snapshot-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.snapshot-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.snapshot-maintext {
+    max-height: 240px;
+}
+
+.snapshot-url {
+    word-break: break-all;
+    color: var(--accent-2);
+}
+
+.snapshot-form-block {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
 code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12px; }

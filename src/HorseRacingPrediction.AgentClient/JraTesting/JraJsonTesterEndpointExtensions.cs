@@ -23,7 +23,7 @@ public static class JraJsonTesterEndpointExtensions
                 catch (Exception ex)
                 {
                     return Results.Problem(
-                        title: "JRA URL の抽出に失敗しました。",
+                        title: "URL の抽出に失敗しました。",
                         detail: ex.Message,
                         statusCode: StatusCodes.Status500InternalServerError);
                 }
