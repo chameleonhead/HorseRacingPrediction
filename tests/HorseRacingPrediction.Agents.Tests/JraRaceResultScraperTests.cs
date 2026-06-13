@@ -143,13 +143,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_WithoutResultTable_ReturnsEmptyEntries()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "成績 | JRA",
-            MainText: "ページ本文",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "成績 | JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "ページ本文",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -161,13 +164,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_OnParameterErrorPage_ReturnsNull()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/error/error013.html",
-            Title: "パラメータエラー JRA",
-            MainText: "アクセスしたページは表示できません。",
-            Headings: ["パラメータエラー"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/error/error013.html",
+            "パラメータエラー JRA",
+            [
+            new PageSectionSnapshot(
+                title: "パラメータエラー",
+                mainText: "アクセスしたページは表示できません。",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/JRADB/accessS.html?CNAME=invalid");
 
@@ -201,13 +207,30 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsRaceNameFromHeadings()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: string.Empty,
-            Headings: ["2025年4月20日 東京 11R", "天皇賞（春）", "芝・右 3200m"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2025年4月20日 東京 11R",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "天皇賞（春）",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "芝・右 3200m",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -219,13 +242,30 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_DoesNotTreatJraBoilerplateAsRaceName()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "成績 JRA",
-            MainText: "2025年4月20日 東京 11R",
-            Headings: ["日本中央競馬会", "天皇賞（春）", "芝・右 3200m"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "成績 JRA",
+            [
+            new PageSectionSnapshot(
+                title: "日本中央競馬会",
+                mainText: "2025年4月20日 東京 11R",
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "天皇賞（春）",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "芝・右 3200m",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -237,13 +277,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsRacecourse()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "2025年10月26日 東京 11R",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "2025年10月26日 東京 11R",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -255,13 +298,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsDate()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "2025年10月26日 東京 11R",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "2025年10月26日 東京 11R",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -273,13 +319,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsRaceNumber()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "東京 11R 天皇賞（秋）",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "東京 11R 天皇賞（秋）",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -291,13 +340,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsDistanceFromMeterNotation()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "芝 1,200メートル",
-            Headings: ["2025年10月26日 東京 11R"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2025年10月26日 東京 11R",
+                mainText: "芝 1,200メートル",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -309,13 +361,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsDirection()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "芝・右 2000m",
-            Headings: ["2025年10月26日 東京 11R"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2025年10月26日 東京 11R",
+                mainText: "芝・右 2000m",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -327,13 +382,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_ExtractsClassGrade()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "4歳以上1勝クラス 芝 1000m",
-            Headings: ["2026年5月2日 新潟 12R"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2026年5月2日 新潟 12R",
+                mainText: "4歳以上1勝クラス 芝 1000m",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -361,13 +419,16 @@ public class JraRaceResultScraperTests
             ]);
 
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "成績",
-            MainText: string.Empty,
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: [resultTable, payoutTable]);
+            "https://www.jra.go.jp/test",
+            "成績",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [resultTable, payoutTable])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -383,13 +444,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_WithPayoutInMainText_ParsesPayouts()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "成績",
-            MainText: "単勝 3 430円\n複勝 3 200円\n馬連 1-3 1250円",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "成績",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "単勝 3 430円\n複勝 3 200円\n馬連 1-3 1250円",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -405,13 +469,16 @@ public class JraRaceResultScraperTests
     public async Task ScrapeAsync_WithNoPayoutData_ReturnsNullPayouts()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "成績",
-            MainText: string.Empty,
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "成績",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -431,13 +498,16 @@ public class JraRaceResultScraperTests
     {
         var table = new PageTableSnapshot(headers, rows);
         return new PageSnapshot(
-            Url: url,
-            Title: title,
-            MainText: string.Empty,
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: [table]);
+            url,
+            title,
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [table])
+        ]);
     }
 
     private sealed class FakeWebBrowser : IWebBrowser
@@ -459,13 +529,16 @@ public class JraRaceResultScraperTests
             CancellationToken cancellationToken = default)
         {
             var snapshot = Snapshot ?? new PageSnapshot(
-                Url: CurrentUrl ?? string.Empty,
-                Title: null,
-                MainText: string.Empty,
-                Headings: [],
-                Links: [],
-                Actions: [],
-                Tables: []);
+            CurrentUrl ?? string.Empty,
+            string.Empty,
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
             return Task.FromResult(snapshot);
         }
 

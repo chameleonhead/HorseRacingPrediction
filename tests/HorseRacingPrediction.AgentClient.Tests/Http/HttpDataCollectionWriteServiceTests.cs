@@ -322,7 +322,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         var message = await service.DeclareRaceResultAsync(raceId, "テストホース", null, null);
 
         StringAssert.Contains(message, raceId);
-        Assert.AreEqual(6, handler.Requests.Count);
+        Assert.HasCount(6, handler.Requests);
         Assert.IsTrue(handler.Requests.Take(5).All(request => request == $"GET /api/races/{raceId}/context"));
         Assert.AreEqual($"POST /api/races/{raceId}/result", handler.Requests[^1]);
     }

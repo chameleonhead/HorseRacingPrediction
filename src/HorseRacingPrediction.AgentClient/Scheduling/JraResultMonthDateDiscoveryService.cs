@@ -72,15 +72,23 @@ public sealed class JraResultMonthDateDiscoveryService : IJraResultDateDiscovery
     {
         var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
         var links = await browser.GetLinksAsync(maxResults: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return snapshot with
-        {
-            Links = snapshot.Links
-                .Concat(links)
-                .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
-                .GroupBy(link => $"{link.Url}|{link.Title}", StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToList(),
-        };
+        var mergedLinks = snapshot.Links
+            .Concat(links)
+            .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
+            .GroupBy(link => $"{link.Url}|{link.Title}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        var mergedSection = new PageSectionSnapshot(
+            title: snapshot.Title,
+            mainText: snapshot.MainText,
+            links: mergedLinks,
+            actions: snapshot.Actions.ToList(),
+            tables: snapshot.Tables.ToList(),
+            forms: snapshot.Forms.ToList(),
+            images: snapshot.Images.ToList());
+
+        return new PageSnapshot(snapshot.Url, snapshot.Title, [mergedSection]);
     }
 
     private static async Task<PageSnapshot?> TryMoveToPreviousMonthAsync(

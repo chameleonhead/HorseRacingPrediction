@@ -67,7 +67,56 @@ if (scenarioTargets.Contains("all", StringComparer.OrdinalIgnoreCase) || scenari
     }
 }
 
+if (scenarioTargets.Contains("snapshot-json", StringComparer.OrdinalIgnoreCase))
+{
+    var snapshotUrls = BuildSnapshotUrls(optionMap);
+    await VerifySectionSnapshotJsonAsync(snapshotUrls, operationTimeout);
+}
+
 return;
+
+async Task VerifySectionSnapshotJsonAsync(IReadOnlyList<string> urls, TimeSpan timeout)
+{
+    Console.WriteLine($"[SnapshotJson] urls={urls.Count}");
+    using var cts = new CancellationTokenSource(timeout);
+    await using var browser = await sessionFactory.CreateAsync(cts.Token);
+
+    foreach (var url in urls)
+    {
+        try
+        {
+            await browser.NavigateAsync(url, cts.Token);
+            var snapshot = await browser.GetPageSnapshotAsync(maxLinks: 100, cancellationToken: cts.Token);
+            var payload = new
+            {
+                snapshot.Url,
+                snapshot.Title,
+                SectionCount = snapshot.Sections.Count,
+                Sections = snapshot.Sections,
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                payload,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                });
+
+            Console.WriteLine($"--- SnapshotJson Start: {url} ---");
+            Console.WriteLine(json);
+            Console.WriteLine($"--- SnapshotJson End: {url} ---");
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine($"--- SnapshotJson Timeout: {url} ---");
+            return;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"--- SnapshotJson Error: {url} message={ex.Message} ---");
+        }
+    }
+}
 
 async Task VerifyRaceCardCollectionAsync(DateOnly raceDate, TimeSpan timeout)
 {
@@ -369,6 +418,33 @@ static IReadOnlyList<DateOnly> BuildResultDates(IReadOnlyDictionary<string, stri
     [
         new DateOnly(2026, 5, 2),
         new DateOnly(2026, 5, 3)
+    ];
+}
+
+static IReadOnlyList<string> BuildSnapshotUrls(IReadOnlyDictionary<string, string> options)
+{
+    if (options.TryGetValue("snapshot-url", out var singleUrl)
+        && !string.IsNullOrWhiteSpace(singleUrl))
+    {
+        return [singleUrl.Trim()];
+    }
+
+    if (options.TryGetValue("snapshot-urls", out var multiUrls)
+        && !string.IsNullOrWhiteSpace(multiUrls))
+    {
+        return multiUrls
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .ToArray();
+    }
+
+    return
+    [
+        "https://duckduckgo.com/?q=horse+racing&ia=web",
+        "https://dev.to/",
+        "https://www.bbc.com/news",
+        "https://blog.cloudflare.com/",
+        "https://zenn.dev/"
     ];
 }
 

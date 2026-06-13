@@ -12,17 +12,21 @@ public sealed class HistoricalRaceReferenceParserTests
         var snapshot = new PageSnapshot(
             "https://example.test/race",
             "race",
-            string.Empty,
-            Array.Empty<string>(),
-            Array.Empty<PageLinkSnapshot>(),
-            Array.Empty<PageActionSnapshot>(),
             [
-                new PageTableSnapshot(
-                    ["年月日", "開催", "R", "レース名"],
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables:
                     [
-                        new[] { "2026.04.13", "3中山8", "11R", "皐月賞" },
-                        new[] { "2026.03.02", "2中山4", "9R", "弥生賞" },
-                        new[] { "2026.04.13", "3中山8", "11R", "皐月賞" }
+                        new PageTableSnapshot(
+                            ["年月日", "開催", "R", "レース名"],
+                            [
+                                new[] { "2026.04.13", "3中山8", "11R", "皐月賞" },
+                                new[] { "2026.03.02", "2中山4", "9R", "弥生賞" },
+                                new[] { "2026.04.13", "3中山8", "11R", "皐月賞" }
+                            ])
                     ])
             ]);
 
@@ -43,15 +47,19 @@ public sealed class HistoricalRaceReferenceParserTests
         var snapshot = new PageSnapshot(
             "https://example.test/race",
             "race",
-            string.Empty,
-            Array.Empty<string>(),
-            Array.Empty<PageLinkSnapshot>(),
-            Array.Empty<PageActionSnapshot>(),
             [
-                new PageTableSnapshot(
-                    ["日付", "開催", "R"],
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables:
                     [
-                        new[] { "12/28", "5中山9", "10R" },
+                        new PageTableSnapshot(
+                            ["日付", "開催", "R"],
+                            [
+                                new[] { "12/28", "5中山9", "10R" },
+                            ])
                     ])
             ]);
 
@@ -69,16 +77,20 @@ public sealed class HistoricalRaceReferenceParserTests
         var snapshot = new PageSnapshot(
             "https://example.test/race",
             "race",
-            string.Empty,
-            Array.Empty<string>(),
-            Array.Empty<PageLinkSnapshot>(),
-            Array.Empty<PageActionSnapshot>(),
             [
-                new PageTableSnapshot(
-                    ["過去成績"],
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables:
                     [
-                        new[] { "2026.04.13 3中山8 11R 皐月賞" },
-                        new[] { "2026.03.02 2中山4 9R 弥生賞" }
+                        new PageTableSnapshot(
+                            ["過去成績"],
+                            [
+                                new[] { "2026.04.13 3中山8 11R 皐月賞" },
+                                new[] { "2026.03.02 2中山4 9R 弥生賞" }
+                            ])
                     ])
             ]);
 
@@ -96,15 +108,19 @@ public sealed class HistoricalRaceReferenceParserTests
         var snapshot = new PageSnapshot(
             "https://example.test/race",
             "race",
-            string.Empty,
-            Array.Empty<string>(),
-            Array.Empty<PageLinkSnapshot>(),
-            Array.Empty<PageActionSnapshot>(),
             [
-                new PageTableSnapshot(
-                    ["開催日", "場所"],
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables:
                     [
-                        new[] { "2026年4月13日", "中山11R" },
+                        new PageTableSnapshot(
+                            ["開催日", "場所"],
+                            [
+                                new[] { "2026年4月13日", "中山11R" },
+                            ])
                     ])
             ]);
 

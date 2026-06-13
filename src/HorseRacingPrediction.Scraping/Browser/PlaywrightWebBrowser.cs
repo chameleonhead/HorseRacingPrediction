@@ -13,8 +13,20 @@ namespace HorseRacingPrediction.Scraping.Browser;
 public sealed class PlaywrightWebBrowser : IWebBrowser
 {
     private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
+    private const int MaxSnapshotSectionCount = 24;
+    private const int MaxSectionTextLength = 4000;
+    private const int MaxLinksPerSection = 80;
+    private const int MaxActionsPerSection = 80;
+    private const int MaxTablesPerSection = 8;
+    private const int MaxFormsPerSection = 12;
+    private const int MaxImagesPerSection = 40;
     private const int MaxSnapshotTableCount = 10;
     private const int MaxSnapshotRowsPerTable = 60;
+    private const int MinSectionTextLength = 24;
+    private const int MergeCompactSectionTextThreshold = 140;
+    private const int MaxMergedCompactSections = 4;
+    private const string HeaderSectionSelector = "header, [role='banner'], div[id='header' i], div[id$='-header' i], div[id*='_header' i], nav[id='header' i], nav[id$='-header' i], nav[id*='_header' i], section[id='header' i], section[id$='-header' i], section[id*='_header' i], div[class~='header' i], div[class^='header-' i], div[class*='-header' i], div[class*='_header' i], nav[class~='header' i], nav[class^='header-' i], nav[class*='-header' i], nav[class*='_header' i], section[class~='header' i], section[class^='header-' i], section[class*='-header' i], section[class*='_header' i]";
+    private const string FooterSectionSelector = "footer, [role='contentinfo'], div[id='footer' i], div[id$='-footer' i], div[id*='_footer' i], nav[id='footer' i], nav[id$='-footer' i], nav[id*='_footer' i], section[id='footer' i], section[id$='-footer' i], section[id*='_footer' i], div[class~='footer' i], div[class^='footer-' i], div[class*='-footer' i], div[class*='_footer' i], nav[class~='footer' i], nav[class^='footer-' i], nav[class*='-footer' i], nav[class*='_footer' i], section[class~='footer' i], section[class^='footer-' i], section[class*='-footer' i], section[class*='_footer' i]";
 
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
@@ -318,24 +330,18 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         var limit = maxLinks > 0 ? maxLinks : int.MaxValue;
         var url = CurrentUrl ?? string.Empty;
-        var title = await TryGetPageTitleAsync();
-        var mainText = NormalizeText(await ReadPageTextAsync());
-        var headings = await ExtractHeadingsAsync(cancellationToken);
-        var links = await ExtractLinksAsync(limit, cancellationToken);
-        var actions = await ExtractActionsAsync(cancellationToken);
-        var tables = await ExtractTablesAsync(cancellationToken);
+        var title = await TryGetPageTitleAsync() ?? string.Empty;
+        var sections = await ExtractSectionsAsync(title, limit, cancellationToken);
+        var totalTextLength = sections.Sum(section => section.MainText.Length);
 
         _logger.LogInformation(
-            "Browser snapshot extracted. CurrentUrl={CurrentUrl} Title={Title} Headings={HeadingCount} Links={LinkCount} Actions={ActionCount} Tables={TableCount} TextLength={TextLength}",
+            "Browser snapshot extracted. CurrentUrl={CurrentUrl} Title={Title} Sections={SectionCount} DeferredCollections=true TextLength={TextLength}",
             url,
             title,
-            headings.Count,
-            links.Count,
-            actions.Count,
-            tables.Count,
-            mainText.Length);
+            sections.Count,
+            totalTextLength);
 
-        return new PageSnapshot(url, title, mainText, headings, links, actions, tables);
+        return new PageSnapshot(url, title, sections);
     }
 
     public Task<string> SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -367,6 +373,125 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var content = await GetPageContentAsync(cancellationToken);
         _logger.LogInformation("Browser go back complete. CurrentUrl={CurrentUrl} ContentLength={ContentLength}", CurrentUrl, content.Length);
         return content;
+    }
+
+    public async Task<IReadOnlyList<PageFormSnapshot>> GetFormsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await WaitForPageSettledAsync(cancellationToken);
+
+        var forms = new List<PageFormSnapshot>();
+        var formLocator = _page.Locator("form");
+        var formCount = await formLocator.CountAsync();
+
+        for (var formIndex = 0; formIndex < formCount; formIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var form = formLocator.Nth(formIndex);
+            if (!await form.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var title = await ExtractFormTitleAsync(form, formIndex);
+            var action = await form.GetAttributeAsync("action") ?? string.Empty;
+            var method = (await form.GetAttributeAsync("method") ?? "GET").ToUpperInvariant();
+            var fields = await ExtractFormFieldsAsync(form, cancellationToken);
+
+            forms.Add(new PageFormSnapshot(title, action, method, fields));
+        }
+
+        return forms;
+    }
+
+    public async Task<string> SetFieldValueAsync(
+        string fieldLabelOrName,
+        string value,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(fieldLabelOrName))
+        {
+            throw new ArgumentException("入力対象フィールド名を指定してください。", nameof(fieldLabelOrName));
+        }
+
+        var field = await FindFillableFieldAsync(fieldLabelOrName, cancellationToken);
+        if (field is null)
+        {
+            throw new InvalidOperationException($"フィールド '{fieldLabelOrName}' が見つかりませんでした。");
+        }
+
+        await field.ScrollIntoViewIfNeededAsync();
+        await field.FillAsync(value ?? string.Empty).WaitAsync(cancellationToken);
+        await WaitForPageSettledAsync(cancellationToken);
+        return await GetPageContentAsync(cancellationToken);
+    }
+
+    public async Task<string> SetCheckboxAsync(
+        string fieldLabelOrName,
+        bool isChecked,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(fieldLabelOrName))
+        {
+            throw new ArgumentException("チェック対象フィールド名を指定してください。", nameof(fieldLabelOrName));
+        }
+
+        var checkbox = await FindCheckboxAsync(fieldLabelOrName, cancellationToken);
+        if (checkbox is null)
+        {
+            throw new InvalidOperationException($"チェックボックス '{fieldLabelOrName}' が見つかりませんでした。");
+        }
+
+        await checkbox.ScrollIntoViewIfNeededAsync();
+        if (isChecked)
+        {
+            await checkbox.CheckAsync().WaitAsync(cancellationToken);
+        }
+        else
+        {
+            await checkbox.UncheckAsync().WaitAsync(cancellationToken);
+        }
+
+        await WaitForPageSettledAsync(cancellationToken);
+        return await GetPageContentAsync(cancellationToken);
+    }
+
+    public async Task<string> SubmitFormAsync(
+        string? formLabel = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var form = await FindFormAsync(formLabel, cancellationToken);
+        if (form is null)
+        {
+            throw new InvalidOperationException("送信対象のフォームが見つかりませんでした。");
+        }
+
+        var submitButtons = form.Locator("button[type='submit'], input[type='submit']");
+        if (await submitButtons.CountAsync() > 0)
+        {
+            var button = submitButtons.First;
+            await button.ScrollIntoViewIfNeededAsync();
+            await button.ClickAsync().WaitAsync(cancellationToken);
+        }
+        else
+        {
+            // submit ボタンがないフォーム向けに requestSubmit を実行する。
+            await form.EvaluateAsync("form => form.requestSubmit ? form.requestSubmit() : form.submit()").WaitAsync(cancellationToken);
+        }
+
+        await WaitForPageSettledAsync(cancellationToken);
+        return await GetPageContentAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -539,6 +664,808 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         return headings;
+    }
+
+    private async Task<string> ExtractFormTitleAsync(ILocator form, int index)
+    {
+        var legend = form.Locator("legend").First;
+        if (await legend.CountAsync() > 0)
+        {
+            var legendText = await GetLocatorTextAsync(legend);
+            if (!string.IsNullOrWhiteSpace(legendText))
+            {
+                return legendText;
+            }
+        }
+
+        var ariaLabel = await form.GetAttributeAsync("aria-label");
+        if (!string.IsNullOrWhiteSpace(ariaLabel))
+        {
+            return NormalizeText(ariaLabel);
+        }
+
+        return $"Form {index + 1}";
+    }
+
+    private async Task<IReadOnlyList<PageFormFieldSnapshot>> ExtractFormFieldsAsync(ILocator form, CancellationToken cancellationToken)
+    {
+        var fields = new List<PageFormFieldSnapshot>();
+        var fieldLocator = form.Locator("input, textarea, select");
+        var fieldCount = await fieldLocator.CountAsync();
+
+        for (var index = 0; index < fieldCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var field = fieldLocator.Nth(index);
+            if (!await field.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var tagName = (await field.EvaluateAsync<string>("el => el.tagName.toLowerCase()")) ?? string.Empty;
+            var type = (await field.GetAttributeAsync("type") ?? string.Empty).ToLowerInvariant();
+            var kind = ResolveFieldKind(tagName, type);
+
+            var name = await field.GetAttributeAsync("name") ?? string.Empty;
+            var id = await field.GetAttributeAsync("id") ?? string.Empty;
+            var required = await field.EvaluateAsync<bool>("el => !!el.required || el.getAttribute('aria-required') === 'true'");
+            var disabled = await field.EvaluateAsync<bool>("el => !!el.disabled || el.getAttribute('aria-disabled') === 'true'");
+            var placeholder = await field.GetAttributeAsync("placeholder");
+            var value = await field.InputValueAsync();
+
+            var label = await ResolveFieldLabelAsync(field, id, name);
+            var options = kind == PageFormFieldKind.Select
+                ? await ExtractSelectOptionsAsync(field)
+                : [];
+
+            fields.Add(new PageFormFieldSnapshot(label, name, kind, required, disabled, placeholder, value, options));
+        }
+
+        return fields;
+    }
+
+    private static PageFormFieldKind ResolveFieldKind(string tagName, string type)
+    {
+        return (tagName, type) switch
+        {
+            ("textarea", _) => PageFormFieldKind.TextArea,
+            ("select", _) => PageFormFieldKind.Select,
+            (_, "checkbox") => PageFormFieldKind.Checkbox,
+            (_, "radio") => PageFormFieldKind.Radio,
+            ("input", _) => PageFormFieldKind.Text,
+            _ => PageFormFieldKind.Unknown,
+        };
+    }
+
+    private async Task<string> ResolveFieldLabelAsync(ILocator field, string id, string name)
+    {
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            var label = _page.Locator($"label[for='{EscapeForCss(id)}']").First;
+            if (await label.CountAsync() > 0)
+            {
+                var labelText = await GetLocatorTextAsync(label);
+                if (!string.IsNullOrWhiteSpace(labelText))
+                {
+                    return labelText;
+                }
+            }
+        }
+
+        var ariaLabel = await field.GetAttributeAsync("aria-label");
+        if (!string.IsNullOrWhiteSpace(ariaLabel))
+        {
+            return NormalizeText(ariaLabel);
+        }
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        return string.Empty;
+    }
+
+    private async Task<IReadOnlyList<string>> ExtractSelectOptionsAsync(ILocator field)
+    {
+        var options = new List<string>();
+        var optionLocator = field.Locator("option");
+        var count = await optionLocator.CountAsync();
+        for (var i = 0; i < count; i++)
+        {
+            var text = await GetLocatorTextAsync(optionLocator.Nth(i));
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                options.Add(text);
+            }
+        }
+
+        return options;
+    }
+
+    private async Task<ILocator?> FindFillableFieldAsync(string fieldLabelOrName, CancellationToken cancellationToken)
+    {
+        var byLabel = _page.GetByLabel(fieldLabelOrName, new PageGetByLabelOptions { Exact = false });
+        if (await byLabel.CountAsync() > 0)
+        {
+            return byLabel.First;
+        }
+
+        var escaped = EscapeForCss(fieldLabelOrName);
+        var byName = _page.Locator($"input[name='{escaped}'], textarea[name='{escaped}'], select[name='{escaped}']");
+        if (await byName.CountAsync() > 0)
+        {
+            return byName.First;
+        }
+
+        var byPlaceholder = _page.Locator($"input[placeholder*='{escaped}'], textarea[placeholder*='{escaped}']");
+        if (await byPlaceholder.CountAsync() > 0)
+        {
+            return byPlaceholder.First;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return null;
+    }
+
+    private async Task<ILocator?> FindCheckboxAsync(string fieldLabelOrName, CancellationToken cancellationToken)
+    {
+        var byLabel = _page.GetByLabel(fieldLabelOrName, new PageGetByLabelOptions { Exact = false });
+        if (await byLabel.CountAsync() > 0)
+        {
+            return byLabel.First;
+        }
+
+        var escaped = EscapeForCss(fieldLabelOrName);
+        var byName = _page.Locator($"input[type='checkbox'][name='{escaped}']");
+        if (await byName.CountAsync() > 0)
+        {
+            return byName.First;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return null;
+    }
+
+    private async Task<ILocator?> FindFormAsync(string? formLabel, CancellationToken cancellationToken)
+    {
+        var forms = _page.Locator("form");
+        var count = await forms.CountAsync();
+        if (count == 0)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(formLabel))
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var form = forms.Nth(i);
+                if (await form.IsVisibleAsync())
+                {
+                    return form;
+                }
+            }
+
+            return forms.First;
+        }
+
+        var normalizedTarget = NormalizeForMatch(formLabel);
+        for (var i = 0; i < count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var form = forms.Nth(i);
+            if (!await form.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var title = NormalizeForMatch(await ExtractFormTitleAsync(form, i));
+            if (title.Contains(normalizedTarget, StringComparison.Ordinal))
+            {
+                return form;
+            }
+        }
+
+        return null;
+    }
+
+    private static string EscapeForCss(string value)
+        => value.Replace("'", "\\'", StringComparison.Ordinal);
+
+    private async Task<List<PageSectionSnapshot>> ExtractSectionsAsync(
+        string pageTitle,
+        int linkLimit,
+        CancellationToken cancellationToken)
+    {
+        var sections = new List<PageSectionSnapshot>(capacity: Math.Min(MaxSnapshotSectionCount, 12));
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var boundedLinkLimit = BoundLimit(linkLimit, MaxLinksPerSection);
+
+        // まずはヘッダー・フッターを固定的に抽出しておく。
+        await AddSpecialLayoutSectionAsync(
+            selector: HeaderSectionSelector,
+            fixedTitle: "Header",
+            sections,
+            seen,
+            boundedLinkLimit,
+            cancellationToken);
+
+        await AddSectionsFromCandidatesAsync(
+            selector: "main section, article section, [role='region'], section, article",
+            pageTitle,
+            sections,
+            seen,
+            boundedLinkLimit,
+            cancellationToken,
+            enforceQualityThreshold: true);
+
+        // セマンティック要素が少ないサイト向けフォールバック。
+        if (sections.Count < 3)
+        {
+            await AddSectionsFromCandidatesAsync(
+                selector: "[role='main'] > div, main > div, article > div, [data-testid], [class*='card'], [class*='post'], [class*='article']",
+                pageTitle,
+                sections,
+                seen,
+                boundedLinkLimit,
+                cancellationToken,
+                enforceQualityThreshold: true);
+        }
+
+        await AddSpecialLayoutSectionAsync(
+            selector: FooterSectionSelector,
+            fixedTitle: "Footer",
+            sections,
+            seen,
+            boundedLinkLimit,
+            cancellationToken);
+
+        sections = MergeCompactSections(sections);
+
+        if (sections.Count > 0)
+        {
+            return sections;
+        }
+
+        var fallbackText = TrimForSnapshot(NormalizeText(await ReadPageTextAsync()));
+        var boundedFallbackLinkLimit = BoundLimit(linkLimit, MaxLinksPerSection);
+        var fallbackLinksTask = ExtractLinksAsync(boundedFallbackLinkLimit, cancellationToken);
+        var fallbackActionsTask = ExtractActionsAsync(cancellationToken);
+        var fallbackTablesTask = ExtractTablesAsync(cancellationToken);
+        var fallbackFormsTask = GetFormsAsync(cancellationToken);
+        var fallbackImagesTask = ExtractImagesFromRootAsync(_page.Locator("body"), MaxImagesPerSection, cancellationToken);
+        await Task.WhenAll(fallbackLinksTask, fallbackActionsTask, fallbackTablesTask, fallbackFormsTask, fallbackImagesTask);
+
+        sections.Add(new PageSectionSnapshot(
+            pageTitle,
+            fallbackText,
+            links: (await fallbackLinksTask).ToList(),
+            actions: (await fallbackActionsTask).Take(MaxActionsPerSection).ToList(),
+            tables: (await fallbackTablesTask).Take(MaxTablesPerSection).ToList(),
+            forms: (await fallbackFormsTask).Take(MaxFormsPerSection).ToList(),
+            images: await fallbackImagesTask));
+        return sections;
+    }
+
+    private async Task AddSpecialLayoutSectionAsync(
+        string selector,
+        string fixedTitle,
+        List<PageSectionSnapshot> sections,
+        HashSet<string> seen,
+        int boundedLinkLimit,
+        CancellationToken cancellationToken)
+    {
+        var nodes = _page.Locator(selector);
+        var count = await nodes.CountAsync();
+        for (var index = 0; index < count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (sections.Count >= MaxSnapshotSectionCount)
+            {
+                return;
+            }
+
+            var node = nodes.Nth(index);
+            if (!await node.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var mainText = await TryReadLimitedInnerTextAsync(node, MaxSectionTextLength);
+            if (string.IsNullOrWhiteSpace(mainText) || mainText.Length < MinSectionTextLength)
+            {
+                continue;
+            }
+
+            var dedupeKey = BuildSectionDedupeKey(fixedTitle, mainText);
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            var linksTask = ExtractLinksFromRootAsync(node, boundedLinkLimit, cancellationToken);
+            var actionsTask = ExtractActionsFromRootAsync(node, MaxActionsPerSection, cancellationToken);
+            var tablesTask = ExtractTablesFromRootAsync(node, MaxTablesPerSection, cancellationToken);
+            var formsTask = ExtractFormsFromRootAsync(node, MaxFormsPerSection, cancellationToken);
+            var imagesTask = ExtractImagesFromRootAsync(node, MaxImagesPerSection, cancellationToken);
+            await Task.WhenAll(linksTask, actionsTask, tablesTask, formsTask, imagesTask);
+
+            sections.Add(new PageSectionSnapshot(
+                fixedTitle,
+                mainText,
+                links: await linksTask,
+                actions: await actionsTask,
+                tables: await tablesTask,
+                forms: await formsTask,
+                images: await imagesTask));
+
+            return;
+        }
+    }
+
+    private async Task AddSectionsFromCandidatesAsync(
+        string selector,
+        string pageTitle,
+        List<PageSectionSnapshot> sections,
+        HashSet<string> seen,
+        int boundedLinkLimit,
+        CancellationToken cancellationToken,
+        bool enforceQualityThreshold)
+    {
+        var candidates = _page.Locator(selector);
+        var candidateCount = await candidates.CountAsync();
+
+        for (var index = 0; index < candidateCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (sections.Count >= MaxSnapshotSectionCount)
+            {
+                return;
+            }
+
+            var candidate = candidates.Nth(index);
+            if (!await candidate.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var mainText = await TryReadLimitedInnerTextAsync(candidate, MaxSectionTextLength);
+            if (string.IsNullOrWhiteSpace(mainText) || mainText.Length < MinSectionTextLength)
+            {
+                continue;
+            }
+
+            var title = await GetSectionTitleAsync(candidate, pageTitle, index);
+            var dedupeKey = BuildSectionDedupeKey(title, mainText);
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            var linksTask = ExtractLinksFromRootAsync(candidate, boundedLinkLimit, cancellationToken);
+            var actionsTask = ExtractActionsFromRootAsync(candidate, MaxActionsPerSection, cancellationToken);
+            var tablesTask = ExtractTablesFromRootAsync(candidate, MaxTablesPerSection, cancellationToken);
+            var formsTask = ExtractFormsFromRootAsync(candidate, MaxFormsPerSection, cancellationToken);
+            var imagesTask = ExtractImagesFromRootAsync(candidate, MaxImagesPerSection, cancellationToken);
+            await Task.WhenAll(linksTask, actionsTask, tablesTask, formsTask, imagesTask);
+
+            var links = await linksTask;
+            var actions = await actionsTask;
+            var tables = await tablesTask;
+            var forms = await formsTask;
+            var images = await imagesTask;
+            if (enforceQualityThreshold && ComputeSectionQualityScore(mainText.Length, links.Count, actions.Count, tables.Count, forms.Count, images.Count) < 2)
+            {
+                continue;
+            }
+
+            sections.Add(new PageSectionSnapshot(title, mainText, links, actions, tables, forms, images));
+        }
+    }
+
+    private static string BuildSectionDedupeKey(string title, string mainText)
+        => $"{title}|{mainText.AsSpan(0, Math.Min(mainText.Length, 160)).ToString()}|{mainText.Length}";
+
+    private static int ComputeSectionQualityScore(
+        int textLength,
+        int linkCount,
+        int actionCount,
+        int tableCount,
+        int formCount,
+        int imageCount)
+    {
+        var score = 0;
+        if (textLength >= 80)
+        {
+            score += 1;
+        }
+
+        if (textLength >= 220)
+        {
+            score += 1;
+        }
+
+        if (linkCount >= 2)
+        {
+            score += 1;
+        }
+
+        if (actionCount > 0 || tableCount > 0)
+        {
+            score += 1;
+        }
+
+        if (formCount > 0 || imageCount >= 2)
+        {
+            score += 1;
+        }
+
+        return score;
+    }
+
+    private static List<PageSectionSnapshot> MergeCompactSections(List<PageSectionSnapshot> source)
+    {
+        if (source.Count <= 1)
+        {
+            return source;
+        }
+
+        var merged = new List<PageSectionSnapshot>(source.Count);
+        var compactBuffer = new List<PageSectionSnapshot>(MaxMergedCompactSections);
+
+        for (var index = 0; index < source.Count; index++)
+        {
+            var section = source[index];
+            if (IsCompactSection(section))
+            {
+                compactBuffer.Add(section);
+                if (compactBuffer.Count >= MaxMergedCompactSections)
+                {
+                    merged.Add(MergeCompactBuffer(compactBuffer));
+                    compactBuffer.Clear();
+                }
+
+                continue;
+            }
+
+            if (compactBuffer.Count > 0)
+            {
+                merged.Add(MergeCompactBuffer(compactBuffer));
+                compactBuffer.Clear();
+            }
+
+            merged.Add(section);
+        }
+
+        if (compactBuffer.Count > 0)
+        {
+            merged.Add(MergeCompactBuffer(compactBuffer));
+        }
+
+        return merged.Take(MaxSnapshotSectionCount).ToList();
+    }
+
+    private static bool IsCompactSection(PageSectionSnapshot section)
+        => section.MainText.Length <= MergeCompactSectionTextThreshold
+           && section.Tables.Count == 0
+           && section.Links.Count <= 4
+           && section.Actions.Count <= 2
+           && section.Forms.Count == 0
+           && section.Images.Count <= 2;
+
+    private static PageSectionSnapshot MergeCompactBuffer(List<PageSectionSnapshot> compactBuffer)
+    {
+        if (compactBuffer.Count == 1)
+        {
+            return compactBuffer[0];
+        }
+
+        var title = compactBuffer[0].Title;
+        var mainText = string.Join("\n", compactBuffer.Select(x => x.MainText));
+        var links = compactBuffer.SelectMany(x => x.Links)
+            .DistinctBy(x => x.Url, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxLinksPerSection)
+            .ToList();
+        var actions = compactBuffer.SelectMany(x => x.Actions)
+            .DistinctBy(x => (x.Kind, x.Text))
+            .Take(MaxActionsPerSection)
+            .ToList();
+        var tables = compactBuffer.SelectMany(x => x.Tables)
+            .Take(MaxTablesPerSection)
+            .ToList();
+        var forms = compactBuffer.SelectMany(x => x.Forms)
+            .DistinctBy(x => $"{x.Title}|{x.Action}|{x.Method}", StringComparer.OrdinalIgnoreCase)
+            .Take(MaxFormsPerSection)
+            .ToList();
+        var images = compactBuffer.SelectMany(x => x.Images)
+            .DistinctBy(x => x.Url, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxImagesPerSection)
+            .ToList();
+
+        return new PageSectionSnapshot(
+            title: title,
+            mainText: TrimForSnapshot(mainText, MaxSectionTextLength),
+            links: links,
+            actions: actions,
+            tables: tables,
+            forms: forms,
+            images: images);
+    }
+
+    private async Task<string> TryReadLimitedInnerTextAsync(ILocator root, int maxLength)
+    {
+        try
+        {
+            var text = NormalizeText(await root.InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3000 }));
+            return TrimForSnapshot(text, maxLength);
+        }
+        catch (PlaywrightException)
+        {
+            return string.Empty;
+        }
+        catch (TimeoutException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> GetSectionTitleAsync(ILocator section, string pageTitle, int index)
+    {
+        var heading = section.Locator("h1, h2, h3, h4").First;
+        if (await heading.CountAsync() > 0)
+        {
+            var headingText = await GetLocatorTextAsync(heading);
+            if (!string.IsNullOrWhiteSpace(headingText))
+            {
+                return headingText;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(pageTitle))
+        {
+            return pageTitle;
+        }
+
+        return $"Section {index + 1}";
+    }
+
+    private async Task<List<PageLinkSnapshot>> ExtractLinksFromRootAsync(
+        ILocator root,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var links = new List<PageLinkSnapshot>();
+        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var anchors = root.Locator("a[href]");
+        var anchorCount = await anchors.CountAsync();
+
+        for (var index = 0; index < anchorCount && links.Count < limit; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var anchor = anchors.Nth(index);
+            if (!await anchor.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var link = await CreateLinkAsync(anchor);
+            if (link is null || !seenUrls.Add(link.Url))
+            {
+                continue;
+            }
+
+            links.Add(link);
+        }
+
+        return links;
+    }
+
+    private async Task<List<PageActionSnapshot>> ExtractActionsFromRootAsync(
+        ILocator root,
+        int maxActions,
+        CancellationToken cancellationToken)
+    {
+        var actions = new List<PageActionSnapshot>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var actionSelectors = new (string Selector, string Kind)[]
+        {
+            ("button", "button"),
+            ("[role='button']", "button"),
+            ("[role='tab']", "tab"),
+            ("summary", "summary"),
+            ("input[type='button'], input[type='submit']", "input")
+        };
+
+        foreach (var (selector, kind) in actionSelectors)
+        {
+            var locator = root.Locator(selector);
+            var count = await locator.CountAsync();
+            for (var index = 0; index < count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var item = locator.Nth(index);
+                if (!await item.IsVisibleAsync())
+                {
+                    continue;
+                }
+
+                var text = await GetLocatorTextAsync(item);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                var key = $"{kind}:{text}";
+                if (!seen.Add(key))
+                {
+                    continue;
+                }
+
+                actions.Add(new PageActionSnapshot(text, kind));
+                if (actions.Count >= maxActions)
+                {
+                    return actions;
+                }
+            }
+        }
+
+        return actions;
+    }
+
+    private async Task<List<PageTableSnapshot>> ExtractTablesFromRootAsync(
+        ILocator root,
+        int maxTables,
+        CancellationToken cancellationToken)
+    {
+        var tables = new List<PageTableSnapshot>();
+        var tableLocator = root.Locator("table");
+        var tableCount = await tableLocator.CountAsync();
+
+        for (var tableIndex = 0; tableIndex < tableCount && tables.Count < maxTables; tableIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var table = tableLocator.Nth(tableIndex);
+            if (!await table.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var headers = await ExtractTableHeadersAsync(table, cancellationToken);
+            var rows = await ExtractTableRowsAsync(table, cancellationToken);
+            if (headers.Count == 0 && rows.Count == 0)
+            {
+                continue;
+            }
+
+            tables.Add(new PageTableSnapshot(headers, rows));
+        }
+
+        return tables;
+    }
+
+    private async Task<List<PageFormSnapshot>> ExtractFormsFromRootAsync(
+        ILocator root,
+        int maxForms,
+        CancellationToken cancellationToken)
+    {
+        var forms = new List<PageFormSnapshot>();
+        var formLocator = root.Locator("form");
+        var formCount = await formLocator.CountAsync();
+
+        for (var formIndex = 0; formIndex < formCount && forms.Count < maxForms; formIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var form = formLocator.Nth(formIndex);
+            if (!await form.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var title = await ExtractFormTitleAsync(form, formIndex);
+            var action = await form.GetAttributeAsync("action") ?? string.Empty;
+            var method = (await form.GetAttributeAsync("method") ?? "GET").ToUpperInvariant();
+            var fields = await ExtractFormFieldsAsync(form, cancellationToken);
+
+            forms.Add(new PageFormSnapshot(title, action, method, fields));
+        }
+
+        return forms;
+    }
+
+    private async Task<List<PageImageSnapshot>> ExtractImagesFromRootAsync(
+        ILocator root,
+        int maxImages,
+        CancellationToken cancellationToken)
+    {
+        var images = new List<PageImageSnapshot>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var imageLocator = root.Locator("img");
+        var imageCount = await imageLocator.CountAsync();
+
+        for (var index = 0; index < imageCount && images.Count < maxImages; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var image = imageLocator.Nth(index);
+            if (!await image.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            var src = await image.GetAttributeAsync("src") ?? string.Empty;
+            var resolvedUrl = ResolveImageUrl(src, CurrentUrl);
+            var alt = NormalizeText(await image.GetAttributeAsync("alt"));
+            var title = NormalizeText(await image.GetAttributeAsync("title"));
+
+            if (string.IsNullOrWhiteSpace(resolvedUrl) && string.IsNullOrWhiteSpace(alt) && string.IsNullOrWhiteSpace(title))
+            {
+                continue;
+            }
+
+            var dedupeKey = !string.IsNullOrWhiteSpace(resolvedUrl)
+                ? resolvedUrl
+                : $"{alt}|{title}";
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            images.Add(new PageImageSnapshot(
+                Url: resolvedUrl,
+                Alt: alt,
+                Title: title,
+                Region: await DetermineRegionAsync(image)));
+        }
+
+        return images;
+    }
+
+    private static string ResolveImageUrl(string? src, string? currentUrl)
+    {
+        if (string.IsNullOrWhiteSpace(src))
+        {
+            return string.Empty;
+        }
+
+        if (Uri.TryCreate(src, UriKind.Absolute, out var absolute) &&
+            absolute.Scheme is "http" or "https")
+        {
+            return absolute.AbsoluteUri;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentUrl)
+            && Uri.TryCreate(currentUrl, UriKind.Absolute, out var current)
+            && Uri.TryCreate(current, src, out var resolved)
+            && resolved.Scheme is "http" or "https")
+        {
+            return resolved.AbsoluteUri;
+        }
+
+        return string.Empty;
+    }
+
+    private static int BoundLimit(int requestedLimit, int hardLimit)
+    {
+        if (requestedLimit <= 0)
+        {
+            return hardLimit;
+        }
+
+        return Math.Min(requestedLimit, hardLimit);
+    }
+
+    private static string TrimForSnapshot(string value, int maxLength = MaxSectionTextLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength];
     }
 
     private async Task<IReadOnlyList<PageActionSnapshot>> ExtractActionsAsync(CancellationToken cancellationToken)

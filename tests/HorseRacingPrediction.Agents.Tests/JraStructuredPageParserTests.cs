@@ -10,22 +10,35 @@ public class JraStructuredPageParserTests
     public void Detect_KeibaMenuAndCalendarPageKinds()
     {
         var keibaMenu = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/",
-            Title: "競馬メニュー | JRA",
-            MainText: "競馬メニュー 開催日程 出馬表 オッズ レース結果",
-            Headings: ["競馬メニュー"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/keiba/",
+            "競馬メニュー | JRA",
+            [
+            new PageSectionSnapshot(
+                title: "競馬メニュー",
+                mainText: "競馬メニュー 開催日程 出馬表 オッズ レース結果",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var calendar = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/calendar/may.html",
-            Title: "開催日程 2026年5月 | JRA",
-            MainText: "開催日程 2026年5月",
-            Headings: ["開催日程", "5月"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/keiba/calendar/may.html",
+            "開催日程 2026年5月 | JRA",
+            [
+            new PageSectionSnapshot(
+                title: "開催日程",
+                mainText: "開催日程 2026年5月",
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "5月",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         Assert.AreEqual(JraPageKind.KeibaMenu, JraPageKindDetector.Detect(keibaMenu.Url, keibaMenu));
         Assert.AreEqual(JraPageKind.ScheduleCalendar, JraPageKindDetector.Detect(calendar.Url, calendar));
@@ -35,25 +48,28 @@ public class JraStructuredPageParserTests
     public void Detect_ThisWeekAndGradeOneSpecialPageKinds()
     {
         var thisWeek = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/thisweek/",
-            Title: "今週の注目レース | JRA",
-            MainText: "今週の注目レース 5月9日～5月10日",
-            Headings: ["今週の注目レース"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/keiba/thisweek/",
+            "今週の注目レース | JRA",
+            [
+            new PageSectionSnapshot(
+                title: "今週の注目レース",
+                mainText: "今週の注目レース 5月9日～5月10日",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var gradeOne = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/g1/nmc.html",
-            Title: "NHKマイルカップ | JRA",
-            MainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 1600メートル（芝） 出馬表",
-            Headings: ["NHKマイルカップ"],
-            Links:
+            "https://www.jra.go.jp/keiba/g1/nmc.html",
+            "NHKマイルカップ | JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-            ],
-            Actions: [],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "NHKマイルカップ",
+                mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 1600メートル（芝） 出馬表",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         Assert.AreEqual(JraPageKind.ThisWeekFeature, JraPageKindDetector.Detect(thisWeek.Url, thisWeek));
         Assert.AreEqual(JraPageKind.GradeOneSpecial, JraPageKindDetector.Detect(gradeOne.Url, gradeOne));
@@ -63,22 +79,32 @@ public class JraStructuredPageParserTests
     public void KeibaMenuParser_ExtractsPrimaryEntriesAndScheduleLink()
     {
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/",
-            Title: "競馬メニュー | JRA",
-            MainText: "今週の開催情報",
-            Headings: ["競馬メニュー", "今週の開催情報"],
-            Links:
+            "https://www.jra.go.jp/keiba/",
+            "競馬メニュー | JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/thisweek/", "今週の注目レース"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/baba/index.html", "馬場情報"),
-            ],
-            Actions:
-            [
-                new PageActionSnapshot("出馬表", "link"),
-                new PageActionSnapshot("オッズ", "link"),
-            ],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "競馬メニュー",
+                mainText: "今週の開催情報",
+                links:
+                [
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/thisweek/", "今週の注目レース"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/baba/index.html", "馬場情報"),
+                ],
+                actions:
+                [
+                    new PageActionSnapshot("出馬表", "link"),
+                    new PageActionSnapshot("オッズ", "link"),
+                ],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "今週の開催情報",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = new JraKeibaMenuParser().Parse(snapshot);
 
@@ -92,27 +118,37 @@ public class JraStructuredPageParserTests
     public void ScheduleCalendarParser_ExtractsRaceDatesAndRacecourses()
     {
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/calendar/may.html",
-            Title: "開催日程 2026年5月 | JRA",
-            MainText: "開催日程 2026年5月 9 地方 東京 エプソムC(GIII) 京都 京都新聞杯(GII) 新潟 10 地方 東京 NHKマイルC(GI) 京都 新潟",
-            Headings: ["開催日程", "5月"],
-            Links:
+            "https://www.jra.go.jp/keiba/calendar/may.html",
+            "開催日程 2026年5月 | JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/apr.html", "4月"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/may.html", "5月"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
-            ],
-            Actions: [],
-            Tables:
-            [
-                new PageTableSnapshot(
-                    Headers: [],
-                    Rows:
-                    [
-                        ["9 地方 東京 エプソムC(GIII) 京都 京都新聞杯(GII) 新潟"],
-                        ["10 地方 東京 NHKマイルC(GI) 京都 新潟"],
-                    ])
-            ]);
+            new PageSectionSnapshot(
+                title: "開催日程",
+                mainText: "開催日程 2026年5月 9 地方 東京 エプソムC(GIII) 京都 京都新聞杯(GII) 新潟 10 地方 東京 NHKマイルC(GI) 京都 新潟",
+                links:
+                [
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/apr.html", "4月"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/may.html", "5月"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/jun.html", "6月"),
+                ],
+                actions: [],
+                tables:
+                [
+                    new PageTableSnapshot(
+                        Headers: [],
+                        Rows:
+                        [
+                            ["9 地方 東京 エプソムC(GIII) 京都 京都新聞杯(GII) 新潟"],
+                            ["10 地方 東京 NHKマイルC(GI) 京都 新潟"],
+                        ])
+                ])
+            ,
+            new PageSectionSnapshot(
+                title: "5月",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = new JraScheduleCalendarParser().Parse(snapshot);
 
@@ -128,20 +164,23 @@ public class JraStructuredPageParserTests
     public void ThisWeekFeatureParser_ExtractsFeaturedRaceLinks()
     {
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/thisweek/",
-            Title: "今週の注目レース | JRA",
-            MainText: "今週の注目レース 5月9日～5月10日",
-            Headings: ["今週の注目レース"],
-            Links:
+            "https://www.jra.go.jp/keiba/thisweek/",
+            "今週の注目レース | JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "5月10日（日曜） NHKマイルカップ（GⅠ） 東京競馬場 芝1600メートル"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
-            ],
-            Actions: [],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "今週の注目レース",
+                mainText: "今週の注目レース 5月9日～5月10日",
+                links:
+                [
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "5月10日（日曜） NHKマイルカップ（GⅠ） 東京競馬場 芝1600メートル"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+                ],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = new JraThisWeekFeatureParser().Parse(snapshot);
 
@@ -156,19 +195,22 @@ public class JraStructuredPageParserTests
     public void GradeOneSpecialParser_ExtractsMetadataAndTabs()
     {
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/g1/nmc.html",
-            Title: "NHKマイルカップ | JRA",
-            MainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 関連ニュース 第31回NHKマイルカップ（GⅠ）枠順確定",
-            Headings: ["NHKマイルカップ"],
-            Links:
+            "https://www.jra.go.jp/keiba/g1/nmc.html",
+            "NHKマイルカップ | JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "2026年5月8日（金曜） 第31回NHKマイルカップ（GⅠ）枠順確定"),
-            ],
-            Actions: [],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "NHKマイルカップ",
+                mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 関連ニュース 第31回NHKマイルカップ（GⅠ）枠順確定",
+                links:
+                [
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
+                    new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "2026年5月8日（金曜） 第31回NHKマイルカップ（GⅠ）枠順確定"),
+                ],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = new JraGradeOneSpecialParser().Parse(snapshot);
 
@@ -184,19 +226,16 @@ public class JraStructuredPageParserTests
     public void GradeOneSpecialParser_NormalizesRaceNameOnHorseInfoPage()
     {
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/keiba/g1/nmc/horse.html",
-            Title: "出走馬情報 2026年NHKマイルカップ（GⅠ） JRA",
-            MainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 出馬表 出走馬情報 データ分析",
-            Headings: ["NHKマイルカップ"],
-            Links:
+            "https://www.jra.go.jp/keiba/g1/nmc/horse.html",
+            "出走馬情報 2026年NHKマイルカップ（GⅠ） JRA",
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "レーストップ"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/horse.html", "出走馬情報"),
-                new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/data.html", "データ分析"),
-            ],
-            Actions: [],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "NHKマイルカップ",
+                mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 出馬表 出走馬情報 データ分析",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = new JraGradeOneSpecialParser().Parse(snapshot);
 

@@ -97,6 +97,38 @@ public interface IWebBrowser : IAsyncDisposable
     /// </summary>
     Task<string> GoBackAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 現在ページに存在するフォーム構造を抽出する。
+    /// </summary>
+    Task<IReadOnlyList<PageFormSnapshot>> GetFormsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<PageFormSnapshot>>([]);
+
+    /// <summary>
+    /// 指定したラベルまたは name に対応する入力要素へ値を設定する。
+    /// </summary>
+    Task<string> SetFieldValueAsync(
+        string fieldLabelOrName,
+        string value,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("SetFieldValueAsync is not implemented.");
+
+    /// <summary>
+    /// 指定したラベルまたは name に対応するチェックボックス状態を設定する。
+    /// </summary>
+    Task<string> SetCheckboxAsync(
+        string fieldLabelOrName,
+        bool isChecked,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("SetCheckboxAsync is not implemented.");
+
+    /// <summary>
+    /// 指定したフォーム（未指定時は先頭の可視フォーム）を送信する。
+    /// </summary>
+    Task<string> SubmitFormAsync(
+        string? formLabel = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("SubmitFormAsync is not implemented.");
+
     private async Task<PageSnapshot> GetDefaultPageSnapshotAsync(
         int maxLinks,
         CancellationToken cancellationToken)
@@ -104,6 +136,14 @@ public interface IWebBrowser : IAsyncDisposable
         var url = CurrentUrl ?? string.Empty;
         var mainText = await GetPageContentAsync(cancellationToken);
         var links = await GetLinksAsync(maxLinks, cancellationToken);
-        return new PageSnapshot(url, null, mainText, [], links, [], []);
+        var rootSection = new PageSectionSnapshot(
+            title: string.Empty,
+            mainText: mainText,
+            links: links.ToList(),
+            actions: [],
+            tables: [],
+            forms: [],
+            images: []);
+        return new PageSnapshot(url, string.Empty, [rootSection]);
     }
 }

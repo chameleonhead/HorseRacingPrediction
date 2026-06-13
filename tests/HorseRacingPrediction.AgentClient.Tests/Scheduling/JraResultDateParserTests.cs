@@ -12,14 +12,18 @@ public sealed class JraResultDateParserTests
         var snapshot = new PageSnapshot(
             "https://www.jra.go.jp/keiba/thisweek/",
             "レース結果",
-            "5月3日 5月10日 5月10日",
-            Array.Empty<string>(),
             [
-                new PageLinkSnapshot("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202605031120260503/AA", "5月3日 東京11R"),
-                new PageLinkSnapshot("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202605101120260510/AA", "5月10日 東京11R")
-            ],
-            Array.Empty<PageActionSnapshot>(),
-            Array.Empty<PageTableSnapshot>());
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: "5月3日 5月10日 5月10日",
+                    links:
+                    [
+                        new PageLinkSnapshot("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202605031120260503/AA", "5月3日 東京11R"),
+                        new PageLinkSnapshot("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202605101120260510/AA", "5月10日 東京11R")
+                    ],
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList())
+            ]);
 
         var sut = new JraResultDateParser();
 
@@ -36,11 +40,14 @@ public sealed class JraResultDateParserTests
         var snapshot = new PageSnapshot(
             "https://www.jra.go.jp/keiba/",
             "過去レース結果検索",
-            "2026年4月6日 2026年4月13日 2026年5月3日",
-            ["2026年4月20日"],
-            Array.Empty<PageLinkSnapshot>(),
-            Array.Empty<PageActionSnapshot>(),
-            Array.Empty<PageTableSnapshot>());
+            [
+                new PageSectionSnapshot(
+                    title: "2026年4月20日",
+                    mainText: "2026年4月6日 2026年4月13日 2026年5月3日",
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList())
+            ]);
 
         var sut = new JraResultDateParser();
 

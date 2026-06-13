@@ -156,11 +156,21 @@ public class PageDataExtractionAgentTests
         var snapshot = new PageSnapshot(
             "https://example.com/page",
             "ページタイトル",
-            "本文",
-            ["見出し1", "見出し2"],
-            [new PageLinkSnapshot("https://example.com/detail", "詳細")],
-            [new PageActionSnapshot("もっと見る", "button")],
-            [new PageTableSnapshot(["列1", "列2"], [["値1", "値2"]])]);
+            [
+            new PageSectionSnapshot(
+                title: "見出し1",
+                mainText: "本文",
+                links: [new PageLinkSnapshot("https://example.com/detail", "詳細")],
+                actions: [new PageActionSnapshot("もっと見る", "button")],
+                tables: [new PageTableSnapshot(["列1", "列2"], [["値1", "値2"]])])
+            ,
+            new PageSectionSnapshot(
+                title: "見出し2",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         await agent.FormatPageContentAsync(snapshot);
 

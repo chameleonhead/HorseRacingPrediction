@@ -24,28 +24,43 @@ public class JraJsonExtractionServiceTests
             ]);
 
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1008202603070320260516/CB",
-            Title: "出馬表2026年5月16日（土曜）3回京都7日 3レース",
-            MainText: string.Join(
-                Environment.NewLine,
-                new[]
-                {
-                    "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
-                    "3レース",
-                    "3歳未勝利",
-                    "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
-                    "本賞金（万円） 1着590 2着240 3着150 4着89 5着59"
-                }),
-            Headings: new[]
-            {
-                "出馬表",
-                "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
-                "3レース",
-                "3歳未勝利"
-            },
-            Links: Array.Empty<PageLinkSnapshot>(),
-            Actions: Array.Empty<PageActionSnapshot>(),
-            Tables: new[] { table });
+            "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1008202603070320260516/CB",
+            "出馬表2026年5月16日（土曜）3回京都7日 3レース",
+            [
+                new PageSectionSnapshot(
+                    title: "出馬表",
+                    mainText: string.Join(
+                        Environment.NewLine,
+                        new[]
+                        {
+                            "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
+                            "3レース",
+                            "3歳未勝利",
+                            "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
+                            "本賞金（万円） 1着590 2着240 3着150 4着89 5着59"
+                        }),
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: new[] { table }.ToList()),
+                new PageSectionSnapshot(
+                    title: "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList()),
+                new PageSectionSnapshot(
+                    title: "3レース",
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList()),
+                new PageSectionSnapshot(
+                    title: "3歳未勝利",
+                    mainText: string.Empty,
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList()),
+            ]);
 
         var service = new JraJsonExtractionService(
             new FakeWebBrowserSessionFactory(snapshot),
@@ -83,13 +98,16 @@ public class JraJsonExtractionServiceTests
     {
         var service = new JraJsonExtractionService(
             new FakeWebBrowserSessionFactory(new PageSnapshot(
-                Url: string.Empty,
-                Title: null,
-                MainText: string.Empty,
-                Headings: Array.Empty<string>(),
-                Links: Array.Empty<PageLinkSnapshot>(),
-                Actions: Array.Empty<PageActionSnapshot>(),
-                Tables: Array.Empty<PageTableSnapshot>())),
+                string.Empty,
+                string.Empty,
+                [
+                    new PageSectionSnapshot(
+                        title: string.Empty,
+                        mainText: string.Empty,
+                        links: Array.Empty<PageLinkSnapshot>().ToList(),
+                        actions: Array.Empty<PageActionSnapshot>().ToList(),
+                        tables: Array.Empty<PageTableSnapshot>().ToList())
+                ])),
             NullLogger<JraJsonExtractionService>.Instance);
 
         try

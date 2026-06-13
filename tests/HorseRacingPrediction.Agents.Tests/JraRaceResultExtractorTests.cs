@@ -17,18 +17,30 @@ public sealed class JraRaceResultExtractorTests
             ]);
 
         var snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1004202601011220260502/9A",
-            Title: "レース結果 JRA",
-            MainText: "4歳以上1勝クラス 芝 1,000メートル",
-            Headings:
+            "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1004202601011220260502/9A",
+            "レース結果 JRA",
             [
-                "2026年5月2日（土曜） 1回新潟1日",
-                "12レース",
-                "4歳以上1勝クラス"
-            ],
-            Links: [],
-            Actions: [],
-            Tables: [table]);
+            new PageSectionSnapshot(
+                title: "2026年5月2日（土曜） 1回新潟1日",
+                mainText: "4歳以上1勝クラス 芝 1,000メートル",
+                links: [],
+                actions: [],
+                tables: [table])
+            ,
+            new PageSectionSnapshot(
+                title: "12レース",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "4歳以上1勝クラス",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var browser = new FakeWebBrowser(snapshot);
         var extractor = new JraRaceResultExtractor();

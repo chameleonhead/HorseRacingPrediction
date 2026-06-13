@@ -200,13 +200,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_WithoutTables_ReturnsEmptyEntries()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 | JRA",
-            MainText: "ページ本文",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "出馬表 | JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "ページ本文",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -218,13 +221,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_OnParameterErrorPage_ReturnsNull()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/error/error013.html",
-            Title: "パラメータエラー JRA",
-            MainText: "アクセスしたページは表示できません。",
-            Headings: ["パラメータエラー"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/error/error013.html",
+            "パラメータエラー JRA",
+            [
+            new PageSectionSnapshot(
+                title: "パラメータエラー",
+                mainText: "アクセスしたページは表示できません。",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/JRADB/accessD.html?CNAME=invalid");
 
@@ -276,13 +282,30 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsRaceNameFromHeadings()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: string.Empty,
-            Headings: ["2025年4月20日 東京 11R", "天皇賞（春）", "芝・右 3200m"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2025年4月20日 東京 11R",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "天皇賞（春）",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "芝・右 3200m",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -294,9 +317,12 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_DoesNotTreatNonSelectedInfoHeadingAsRaceName()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 JRA",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表 JRA",
+            [
+            new PageSectionSnapshot(
+                title: "JRA 日本中央競馬会",
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分",
@@ -304,21 +330,66 @@ public class JraRaceCardScraperTests
                     "4歳以上 3勝クラス（混合）［指定］ 定量 コース：2,000メートル（芝・右）",
                     "非当選・非抽選馬情報"
                 ]),
-            Headings:
-            [
-                "JRA 日本中央競馬会",
-                "検索ウィンドウ",
-                "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
-                "シドニートロフィー",
-                "コースレコード",
-                "非当選・非抽選馬情報",
-                "非当選馬",
-                "非抽選馬",
-                "JRAからのお知らせ"
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "検索ウィンドウ",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "シドニートロフィー",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "コースレコード",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "非当選・非抽選馬情報",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "非当選馬",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "非抽選馬",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "JRAからのお知らせ",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -330,24 +401,36 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_DoesNotTreatJraBoilerplateAsRaceName()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 JRA",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表 JRA",
+            [
+            new PageSectionSnapshot(
+                title: "日本中央競馬会",
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分",
                     "10レース",
                     "4歳以上 3勝クラス（混合）［指定］ 定量 コース：2,000メートル（芝・右）"
                 ]),
-            Headings:
-            [
-                "日本中央競馬会",
-                "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
-                "3歳以上2勝クラス"
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "3歳以上2勝クラス",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -359,13 +442,23 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsRacecourseFromHeadings()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "2025年5月3日 京都 11R",
-            Headings: ["2025年5月3日 京都 11R", "天皇賞（春）"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2025年5月3日 京都 11R",
+                mainText: "2025年5月3日 京都 11R",
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "天皇賞（春）",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -377,13 +470,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsDateFromText()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "2025年4月20日 東京 11R",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "2025年4月20日 東京 11R",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -395,13 +491,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsRaceNumberFromText()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "東京 11R 天皇賞（秋）",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "東京 11R 天皇賞（秋）",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -413,13 +512,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsCourseTypeAndDistance()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: string.Empty,
-            Headings: ["芝・右 2000m"],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: "芝・右 2000m",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -432,13 +534,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsDirtCourseType()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "JRA",
-            MainText: "ダート・左 1600m",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "ダート・左 1600m",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -451,9 +556,12 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsRaceOverviewFromRaceCardSummary()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表2026年5月16日（土曜）3回京都7日 3レース",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表2026年5月16日（土曜）3回京都7日 3レース",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
@@ -462,16 +570,10 @@ public class JraRaceCardScraperTests
                     "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
                     "本賞金（万円） 1着590 2着240 3着150 4着89 5着59",
                 ]),
-            Headings:
-            [
-                "出馬表",
-                "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
-                "3レース",
-                "3歳未勝利",
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -507,9 +609,12 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_DoesNotTreatPastPerformanceAsPrizeMoney()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表2026年5月16日（土曜）3回京都7日 3レース",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表2026年5月16日（土曜）3回京都7日 3レース",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
@@ -522,16 +627,10 @@ public class JraRaceCardScraperTests
                     "2026年5月2日 新潟 未勝利 2着 16頭10番 11番人気",
                     "2026年3月1日 小倉 牝未勝利 16着 16頭8番 9番人気",
                 ]),
-            Headings:
-            [
-                "出馬表",
-                "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
-                "3レース",
-                "3歳未勝利",
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -546,9 +645,12 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_StopsPrizeMoneyParsingWhenFinishPositionGoesBackward()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表2026年5月16日（土曜）3回京都7日 3レース",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表2026年5月16日（土曜）3回京都7日 3レース",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
@@ -557,16 +659,10 @@ public class JraRaceCardScraperTests
                     "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
                     "本賞金（万円） 1着590 2着240 3着150 4着89 5着59 2026年5月2日 京都 未勝利 3着 18頭11番 10番人気 2着 16頭10番 11番人気",
                 ]),
-            Headings:
-            [
-                "出馬表",
-                "2026年5月16日（土曜） 3回京都7日 発走時刻：10時40分",
-                "3レース",
-                "3歳未勝利",
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -581,9 +677,12 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsPrizeMoneyTypesFromHeadings()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表2026年5月16日（土曜）3回京都7日 8レース",
-            MainText: string.Join(
+            "https://www.jra.go.jp/test",
+            "出馬表2026年5月16日（土曜）3回京都7日 8レース",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Join(
                 Environment.NewLine,
                 [
                     "2026年5月16日（土曜） 3回京都7日 発走時刻：13時50分",
@@ -593,16 +692,10 @@ public class JraRaceCardScraperTests
                     "本賞金（万円） 1着4,100 2着1,600 3着1,000 4着620 5着410",
                     "付加賞（万円） 1着56.7 2着16.2 3着8.1",
                 ]),
-            Headings:
-            [
-                "出馬表",
-                "2026年5月16日（土曜） 3回京都7日 発走時刻：13時50分",
-                "8レース",
-                "京都ハイジャンプ",
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -619,22 +712,58 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_WithFlattenedMainText_ExtractsPrizeMoneyAndNormalizedConditions()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 JRA",
-            MainText: "本文へ移動する 出馬表 2026年5月23日（土曜）3回京都9日 10レース 2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分 シドニートロフィー 4歳以上 3勝クラス （混合）牝（特指） 定量 コース：2,000メートル（芝・右） 本賞金（万円） 1着1,870 2着750 3着470 4着280 5着187 印刷用ページ 馬柱の見方",
-            Headings:
+            "https://www.jra.go.jp/test",
+            "出馬表 JRA",
             [
-                "JRA 日本中央競馬会",
-                "検索ウィンドウ",
-                "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
-                "シドニートロフィー",
-                "コースレコード",
-                "非当選・非抽選馬情報",
-                "JRAからのお知らせ"
-            ],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            new PageSectionSnapshot(
+                title: "JRA 日本中央競馬会",
+                mainText: "本文へ移動する 出馬表 2026年5月23日（土曜）3回京都9日 10レース 2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分 シドニートロフィー 4歳以上 3勝クラス （混合）牝（特指） 定量 コース：2,000メートル（芝・右） 本賞金（万円） 1着1,870 2着750 3着470 4着280 5着187 印刷用ページ 馬柱の見方",
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "検索ウィンドウ",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "シドニートロフィー",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "コースレコード",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "非当選・非抽選馬情報",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+            ,
+            new PageSectionSnapshot(
+                title: "JRAからのお知らせ",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -666,13 +795,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsGrade(string gradeText, string expectedGrade)
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: $"天皇賞 {gradeText}",
-            MainText: string.Empty,
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            $"天皇賞 {gradeText}",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -684,13 +816,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsDistanceFromFullWidthMeterNotation()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 | JRA",
-            MainText: "4歳以上2勝クラス コース：1,600ｍ（ダート左）",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "出馬表 | JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "4歳以上2勝クラス コース：1,600ｍ（ダート左）",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -704,13 +839,16 @@ public class JraRaceCardScraperTests
     public async Task ScrapeAsync_ExtractsTrackDirectionWithoutDotSeparator()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
-            Url: "https://www.jra.go.jp/test",
-            Title: "出馬表 | JRA",
-            MainText: "4歳以上2勝クラス コース：1600メートル（ダート左）",
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: []);
+            "https://www.jra.go.jp/test",
+            "出馬表 | JRA",
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: "4歳以上2勝クラス コース：1600メートル（ダート左）",
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
 
@@ -730,13 +868,16 @@ public class JraRaceCardScraperTests
     {
         var table = new PageTableSnapshot(headers, rows);
         return new PageSnapshot(
-            Url: url,
-            Title: title,
-            MainText: string.Empty,
-            Headings: [],
-            Links: [],
-            Actions: [],
-            Tables: [table]);
+            url,
+            title,
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [table])
+        ]);
     }
 
     private sealed class FakeWebBrowser : IWebBrowser
@@ -753,13 +894,16 @@ public class JraRaceCardScraperTests
             CancellationToken cancellationToken = default)
         {
             var snapshot = Snapshot ?? new PageSnapshot(
-                Url: CurrentUrl ?? string.Empty,
-                Title: null,
-                MainText: string.Empty,
-                Headings: [],
-                Links: [],
-                Actions: [],
-                Tables: []);
+            CurrentUrl ?? string.Empty,
+            string.Empty,
+            [
+            new PageSectionSnapshot(
+                title: string.Empty,
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
             return Task.FromResult(snapshot);
         }
 

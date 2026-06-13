@@ -133,27 +133,40 @@ public sealed class JraRaceCardCollectionWorkflowTests
         private const string DiscoveryUrl = "https://www.jra.go.jp/keiba/thisweek/";
         private const string CardUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01sde0203_20260516050101";
 
-        private readonly PageSnapshot _discoverySnapshot = new(
-            Url: DiscoveryUrl,
-            Title: "2026年5月16日 JRA",
-            MainText: "2026年5月16日 東京 1R",
-            Headings: ["2026年5月16日 東京 1R"],
-            Links: [new PageLinkSnapshot(CardUrl, "1R")],
-            Actions: [],
-            Tables: []);
+        private readonly PageSnapshot _discoverySnapshot = new PageSnapshot(
+            DiscoveryUrl,
+            "2026年5月16日 JRA",
+            [
+            new PageSectionSnapshot(
+                title: "2026年5月16日 東京 1R",
+                mainText: "2026年5月16日 東京 1R",
+                links: [new PageLinkSnapshot(CardUrl, "1R")],
+                actions: [],
+                tables: [])
+        ]);
 
-        private readonly PageSnapshot _cardSnapshot = new(
-            Url: CardUrl,
-            Title: "1R 出馬表",
-            MainText: "東京 芝 1600メートル",
-            Headings: ["2026年5月16日（土曜） 2回東京1日", "1レース"],
-            Links: [],
-            Actions: [],
-            Tables: [new PageTableSnapshot(
+        private readonly PageSnapshot _cardSnapshot = new PageSnapshot(
+            CardUrl,
+            "1R 出馬表",
+            [
+            new PageSectionSnapshot(
+                title: "2026年5月16日（土曜） 2回東京1日",
+                mainText: "東京 芝 1600メートル",
+                links: [],
+                actions: [],
+                tables: [new PageTableSnapshot(
                 ["馬番", "馬名", "騎手", "調教師", "性齢", "斤量", "枠番", "馬体重"],
                 [
                     ["1", "テストホース", "テスト騎手", "テスト調教師", "牡3", "55.0", "1", "480(+2)"]
-                ])]);
+                ])])
+            ,
+            new PageSectionSnapshot(
+                title: "1レース",
+                mainText: string.Empty,
+                links: [],
+                actions: [],
+                tables: [])
+        ]);
 
         public string? CurrentUrl { get; private set; }
 

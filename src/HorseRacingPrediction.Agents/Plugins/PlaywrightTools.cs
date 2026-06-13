@@ -62,7 +62,7 @@ public sealed class PlaywrightTools
             if (snapshot.Links.Count > 0)
             {
                 links = NormalizeLinks(snapshot.Links, currentUrl);
-                snapshot = snapshot with { Links = links };
+                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
             }
 
             if (string.IsNullOrWhiteSpace(rawText) && links.Count == 0)
@@ -104,7 +104,7 @@ public sealed class PlaywrightTools
             if (snapshot.Links.Count > 0)
             {
                 links = NormalizeLinks(snapshot.Links, currentUrl);
-                snapshot = snapshot with { Url = currentUrl, Links = links };
+                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
             }
 
             var extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
@@ -140,7 +140,7 @@ public sealed class PlaywrightTools
                         if (snapshot.Links.Count > 0)
                         {
                             links = NormalizeLinks(snapshot.Links, currentUrl);
-                            snapshot = snapshot with { Url = currentUrl, Links = links };
+                            snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
                         }
 
                         extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
@@ -250,6 +250,26 @@ public sealed class PlaywrightTools
         }
 
         return normalized;
+    }
+
+    private static PageSnapshot ReplaceSnapshotLinks(
+        PageSnapshot snapshot,
+        IReadOnlyList<PageLinkSnapshot> links,
+        string? overrideUrl = null)
+    {
+        var mergedSection = new PageSectionSnapshot(
+            title: snapshot.Title,
+            mainText: snapshot.MainText,
+            links: links.ToList(),
+            actions: snapshot.Actions.ToList(),
+            tables: snapshot.Tables.ToList(),
+            forms: snapshot.Forms.ToList(),
+            images: snapshot.Images.ToList());
+
+        return new PageSnapshot(
+            url: overrideUrl ?? snapshot.Url,
+            title: snapshot.Title,
+            sections: [mergedSection]);
     }
 
     private static string? NormalizeLinkUrl(string? url, Uri? baseUri)

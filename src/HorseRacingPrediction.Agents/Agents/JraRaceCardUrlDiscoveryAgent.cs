@@ -472,17 +472,25 @@ internal sealed class JraRaceCardUrlDiscoveryAgent
         var snapshot = await _browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
         var links = await _browser.GetLinksAsync(maxResults: 300, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return snapshot with
-        {
-            Links = snapshot.Links
-                .Concat(links)
-                .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
-                .GroupBy(
-                    link => NormalizeAbsoluteUrl(link.Url, snapshot.Url) ?? NormalizeText(link.Title),
-                    StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToList(),
-        };
+        var mergedLinks = snapshot.Links
+            .Concat(links)
+            .Where(link => !string.IsNullOrWhiteSpace(link.Url) || !string.IsNullOrWhiteSpace(link.Title))
+            .GroupBy(
+                link => NormalizeAbsoluteUrl(link.Url, snapshot.Url) ?? NormalizeText(link.Title),
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+
+        var mergedSection = new PageSectionSnapshot(
+            title: snapshot.Title,
+            mainText: snapshot.MainText,
+            links: mergedLinks,
+            actions: snapshot.Actions.ToList(),
+            tables: snapshot.Tables.ToList(),
+            forms: snapshot.Forms.ToList(),
+            images: snapshot.Images.ToList());
+
+        return new PageSnapshot(snapshot.Url, snapshot.Title, [mergedSection]);
     }
 
     private static bool TryExtractLinkedDate(string url, out DateOnly linkedDate)
