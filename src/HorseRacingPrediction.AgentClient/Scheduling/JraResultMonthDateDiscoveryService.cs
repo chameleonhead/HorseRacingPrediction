@@ -82,6 +82,7 @@ public sealed class JraResultMonthDateDiscoveryService : IJraResultDateDiscovery
         var mergedSection = new PageSectionSnapshot(
             title: snapshot.Title,
             mainText: snapshot.MainText,
+            headings: [snapshot.Title],
             links: mergedLinks,
             actions: snapshot.Actions.ToList(),
             tables: snapshot.Tables.ToList(),

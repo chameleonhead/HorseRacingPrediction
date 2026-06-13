@@ -149,6 +149,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "ページ本文",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -170,6 +171,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "パラメータエラー",
                 mainText: "アクセスしたページは表示できません。",
+                headings: ["パラメータエラー"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -213,6 +215,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "2025年4月20日 東京 11R",
                 mainText: string.Empty,
+                headings: ["2025年4月20日 東京 11R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -220,6 +223,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "天皇賞（春）",
                 mainText: string.Empty,
+                headings: ["天皇賞（春）"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -227,6 +231,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "芝・右 3200m",
                 mainText: string.Empty,
+                headings: ["芝・右 3200m"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -248,6 +253,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "日本中央競馬会",
                 mainText: "2025年4月20日 東京 11R",
+                headings: ["日本中央競馬会"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -255,6 +261,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "天皇賞（春）",
                 mainText: string.Empty,
+                headings: ["天皇賞（春）"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -262,6 +269,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "芝・右 3200m",
                 mainText: string.Empty,
+                headings: ["芝・右 3200m"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -283,6 +291,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "2025年10月26日 東京 11R",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -304,6 +313,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "2025年10月26日 東京 11R",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -325,6 +335,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "東京 11R 天皇賞（秋）",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -346,6 +357,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "2025年10月26日 東京 11R",
                 mainText: "芝 1,200メートル",
+                headings: ["2025年10月26日 東京 11R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -367,6 +379,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "2025年10月26日 東京 11R",
                 mainText: "芝・右 2000m",
+                headings: ["2025年10月26日 東京 11R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -388,6 +401,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: "2026年5月2日 新潟 12R",
                 mainText: "4歳以上1勝クラス 芝 1000m",
+                headings: ["2026年5月2日 新潟 12R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -425,6 +439,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [resultTable, payoutTable])
@@ -450,6 +465,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "単勝 3 430円\n複勝 3 200円\n馬連 1-3 1250円",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -475,6 +491,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -504,6 +521,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [table])
@@ -535,6 +553,7 @@ public class JraRaceResultScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])

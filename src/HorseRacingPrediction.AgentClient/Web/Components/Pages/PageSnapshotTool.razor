@@ -32,6 +32,19 @@
             <dt>Headings / Links / Actions / Tables</dt><dd>@snapshot.Headings.Count / @snapshot.Links.Count / @snapshot.Actions.Count / @snapshot.Tables.Count</dd>
             <dt>Forms / Images</dt><dd>@snapshot.Forms.Count / @snapshot.Images.Count</dd>
         </dl>
+
+        @if (snapshot.Headings.Count > 0)
+        {
+            <details>
+                <summary>Page Headings (@snapshot.Headings.Count)</summary>
+                <div class="snapshot-chip-list">
+                    @foreach (var heading in snapshot.Headings)
+                    {
+                        <span class="pill">@heading</span>
+                    }
+                </div>
+            </details>
+        }
     </section>
 
     <section class="card">
@@ -45,6 +58,19 @@
                         <h4>#@(i + 1) @sec.Title</h4>
                         <span class="pill">Text @sec.MainText.Length chars</span>
                     </header>
+
+                    @if (sec.Headings.Count > 0)
+                    {
+                        <details>
+                            <summary>Headings (@sec.Headings.Count)</summary>
+                            <div class="snapshot-chip-list">
+                                @foreach (var heading in sec.Headings)
+                                {
+                                    <span class="pill">@heading</span>
+                                }
+                            </div>
+                        </details>
+                    }
 
                     @if (!string.IsNullOrWhiteSpace(sec.MainText))
                     {

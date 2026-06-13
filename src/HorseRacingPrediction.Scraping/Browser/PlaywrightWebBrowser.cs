@@ -80,7 +80,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var playwright = await Playwright.CreateAsync();
         var browser = await playwright.Chromium.LaunchAsync(launchOptions ?? new BrowserTypeLaunchOptions
         {
-            Headless = false,
+            Headless = true,
             Args = [
                 "--disable-gpu",
                 "--no-sandbox",
@@ -642,28 +642,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private async Task<IReadOnlyList<string>> ExtractHeadingsAsync(CancellationToken cancellationToken)
     {
-        var headings = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var locator = _page.Locator("h1, h2, h3");
-        var count = await locator.CountAsync();
-
-        for (var index = 0; index < count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var text = await GetLocatorTextAsync(locator.Nth(index));
-            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text))
-            {
-                continue;
-            }
-
-            headings.Add(text);
-            if (headings.Count >= 20)
-            {
-                break;
-            }
-        }
-
-        return headings;
+        return await ExtractHeadingsFromRootAsync(_page.Locator("body"), 20, cancellationToken);
     }
 
     private async Task<string> ExtractFormTitleAsync(ILocator form, int index)
@@ -886,7 +865,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         // まずはヘッダー・フッターを固定的に抽出しておく。
         await AddSpecialLayoutSectionAsync(
             selector: HeaderSectionSelector,
-            fixedTitle: "Header",
             sections,
             seen,
             boundedLinkLimit,
@@ -894,7 +872,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         await AddSectionsFromCandidatesAsync(
             selector: "main section, article section, [role='region'], section, article",
-            pageTitle,
             sections,
             seen,
             boundedLinkLimit,
@@ -906,7 +883,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         {
             await AddSectionsFromCandidatesAsync(
                 selector: "[role='main'] > div, main > div, article > div, [data-testid], [class*='card'], [class*='post'], [class*='article']",
-                pageTitle,
                 sections,
                 seen,
                 boundedLinkLimit,
@@ -916,7 +892,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         await AddSpecialLayoutSectionAsync(
             selector: FooterSectionSelector,
-            fixedTitle: "Footer",
             sections,
             seen,
             boundedLinkLimit,
@@ -931,27 +906,31 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         var fallbackText = TrimForSnapshot(NormalizeText(await ReadPageTextAsync()));
         var boundedFallbackLinkLimit = BoundLimit(linkLimit, MaxLinksPerSection);
+        var fallbackHeadingsTask = ExtractHeadingsAsync(cancellationToken);
         var fallbackLinksTask = ExtractLinksAsync(boundedFallbackLinkLimit, cancellationToken);
         var fallbackActionsTask = ExtractActionsAsync(cancellationToken);
         var fallbackTablesTask = ExtractTablesAsync(cancellationToken);
         var fallbackFormsTask = GetFormsAsync(cancellationToken);
         var fallbackImagesTask = ExtractImagesFromRootAsync(_page.Locator("body"), MaxImagesPerSection, cancellationToken);
-        await Task.WhenAll(fallbackLinksTask, fallbackActionsTask, fallbackTablesTask, fallbackFormsTask, fallbackImagesTask);
+        await Task.WhenAll(fallbackHeadingsTask, fallbackLinksTask, fallbackActionsTask, fallbackTablesTask, fallbackFormsTask, fallbackImagesTask);
+
+        var fallbackHeadings = (await fallbackHeadingsTask).ToList();
+        var fallbackTitle = ResolveSectionTitle(fallbackHeadings, 0);
 
         sections.Add(new PageSectionSnapshot(
-            pageTitle,
+            fallbackTitle,
             fallbackText,
             links: (await fallbackLinksTask).ToList(),
             actions: (await fallbackActionsTask).Take(MaxActionsPerSection).ToList(),
             tables: (await fallbackTablesTask).Take(MaxTablesPerSection).ToList(),
             forms: (await fallbackFormsTask).Take(MaxFormsPerSection).ToList(),
-            images: await fallbackImagesTask));
+            images: await fallbackImagesTask,
+            headings: fallbackHeadings));
         return sections;
     }
 
     private async Task AddSpecialLayoutSectionAsync(
         string selector,
-        string fixedTitle,
         List<PageSectionSnapshot> sections,
         HashSet<string> seen,
         int boundedLinkLimit,
@@ -979,7 +958,11 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 continue;
             }
 
-            var dedupeKey = BuildSectionDedupeKey(fixedTitle, mainText);
+            var headingsTask = ExtractHeadingsFromRootAsync(node, 12, cancellationToken);
+            var headings = await headingsTask;
+            var title = ResolveSectionTitle(headings, index);
+
+            var dedupeKey = BuildSectionDedupeKey(title, mainText);
             if (!seen.Add(dedupeKey))
             {
                 continue;
@@ -993,13 +976,14 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             await Task.WhenAll(linksTask, actionsTask, tablesTask, formsTask, imagesTask);
 
             sections.Add(new PageSectionSnapshot(
-                fixedTitle,
+                title,
                 mainText,
                 links: await linksTask,
                 actions: await actionsTask,
                 tables: await tablesTask,
                 forms: await formsTask,
-                images: await imagesTask));
+                images: await imagesTask,
+                headings: headings));
 
             return;
         }
@@ -1007,7 +991,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private async Task AddSectionsFromCandidatesAsync(
         string selector,
-        string pageTitle,
         List<PageSectionSnapshot> sections,
         HashSet<string> seen,
         int boundedLinkLimit,
@@ -1037,7 +1020,9 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 continue;
             }
 
-            var title = await GetSectionTitleAsync(candidate, pageTitle, index);
+            var headingsTask = ExtractHeadingsFromRootAsync(candidate, 12, cancellationToken);
+            var headings = await headingsTask;
+            var title = ResolveSectionTitle(headings, index);
             var dedupeKey = BuildSectionDedupeKey(title, mainText);
             if (!seen.Add(dedupeKey))
             {
@@ -1061,7 +1046,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 continue;
             }
 
-            sections.Add(new PageSectionSnapshot(title, mainText, links, actions, tables, forms, images));
+            sections.Add(new PageSectionSnapshot(title, mainText, links, actions, tables, headings, forms, images));
         }
     }
 
@@ -1163,6 +1148,11 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         var title = compactBuffer[0].Title;
+        var headings = compactBuffer.SelectMany(x => x.Headings)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        title = ResolveSectionTitle(headings, 0);
         var mainText = string.Join("\n", compactBuffer.Select(x => x.MainText));
         var links = compactBuffer.SelectMany(x => x.Links)
             .DistinctBy(x => x.Url, StringComparer.OrdinalIgnoreCase)
@@ -1190,6 +1180,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             links: links,
             actions: actions,
             tables: tables,
+            headings: headings,
             forms: forms,
             images: images);
     }
@@ -1211,24 +1202,40 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
     }
 
-    private async Task<string> GetSectionTitleAsync(ILocator section, string pageTitle, int index)
+    private static string ResolveSectionTitle(IReadOnlyList<string> headings, int index)
     {
-        var heading = section.Locator("h1, h2, h3, h4").First;
-        if (await heading.CountAsync() > 0)
+        if (headings.Count > 0)
         {
-            var headingText = await GetLocatorTextAsync(heading);
-            if (!string.IsNullOrWhiteSpace(headingText))
-            {
-                return headingText;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(pageTitle))
-        {
-            return pageTitle;
+            return headings[0];
         }
 
         return $"Section {index + 1}";
+    }
+
+    private async Task<List<string>> ExtractHeadingsFromRootAsync(
+        ILocator root,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var headings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var locator = root.Locator("h1, h2, h3, h4, h5, h6");
+        var count = await locator.CountAsync();
+        var boundedLimit = BoundLimit(limit, 20);
+
+        for (var index = 0; index < count && headings.Count < boundedLimit; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var text = await GetLocatorTextAsync(locator.Nth(index));
+            if (string.IsNullOrWhiteSpace(text) || !seen.Add(text))
+            {
+                continue;
+            }
+
+            headings.Add(text);
+        }
+
+        return headings;
     }
 
     private async Task<List<PageLinkSnapshot>> ExtractLinksFromRootAsync(

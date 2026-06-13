@@ -28,7 +28,7 @@ public sealed class PageSnapshot
             LazyThreadSafetyMode.ExecutionAndPublication);
         _headings = new Lazy<List<string>>(
             () => Sections
-                .Select(section => section.Title)
+                .SelectMany(section => section.Headings.Count > 0 ? section.Headings : [section.Title])
                 .Where(text => !string.IsNullOrWhiteSpace(text))
                 .Distinct(StringComparer.Ordinal)
                 .ToList(),

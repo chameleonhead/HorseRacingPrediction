@@ -160,6 +160,7 @@ public class PageDataExtractionAgentTests
             new PageSectionSnapshot(
                 title: "見出し1",
                 mainText: "本文",
+                headings: ["見出し1"],
                 links: [new PageLinkSnapshot("https://example.com/detail", "詳細")],
                 actions: [new PageActionSnapshot("もっと見る", "button")],
                 tables: [new PageTableSnapshot(["列1", "列2"], [["値1", "値2"]])])
@@ -167,6 +168,7 @@ public class PageDataExtractionAgentTests
             new PageSectionSnapshot(
                 title: "見出し2",
                 mainText: string.Empty,
+                headings: ["見出し2"],
                 links: [],
                 actions: [],
                 tables: [])

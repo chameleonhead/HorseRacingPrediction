@@ -142,6 +142,7 @@ public interface IWebBrowser : IAsyncDisposable
             links: links.ToList(),
             actions: [],
             tables: [],
+            headings: [],
             forms: [],
             images: []);
         return new PageSnapshot(url, string.Empty, [rootSection]);

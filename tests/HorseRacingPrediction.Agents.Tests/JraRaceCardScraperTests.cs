@@ -206,6 +206,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "ページ本文",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -227,6 +228,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "パラメータエラー",
                 mainText: "アクセスしたページは表示できません。",
+                headings: ["パラメータエラー"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -288,6 +290,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "2025年4月20日 東京 11R",
                 mainText: string.Empty,
+                headings: ["2025年4月20日 東京 11R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -295,6 +298,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "天皇賞（春）",
                 mainText: string.Empty,
+                headings: ["天皇賞（春）"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -302,6 +306,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "芝・右 3200m",
                 mainText: string.Empty,
+                headings: ["芝・右 3200m"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -330,6 +335,7 @@ public class JraRaceCardScraperTests
                     "4歳以上 3勝クラス（混合）［指定］ 定量 コース：2,000メートル（芝・右）",
                     "非当選・非抽選馬情報"
                 ]),
+                headings: ["JRA 日本中央競馬会"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -337,6 +343,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "検索ウィンドウ",
                 mainText: string.Empty,
+                headings: ["検索ウィンドウ"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -344,6 +351,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
                 mainText: string.Empty,
+                headings: ["出馬表 2026年5月23日（土曜）3回京都9日 10レース"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -351,6 +359,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "シドニートロフィー",
                 mainText: string.Empty,
+                headings: ["シドニートロフィー"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -358,6 +367,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "コースレコード",
                 mainText: string.Empty,
+                headings: ["コースレコード"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -365,6 +375,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "非当選・非抽選馬情報",
                 mainText: string.Empty,
+                headings: ["非当選・非抽選馬情報"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -372,6 +383,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "非当選馬",
                 mainText: string.Empty,
+                headings: ["非当選馬"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -379,6 +391,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "非抽選馬",
                 mainText: string.Empty,
+                headings: ["非抽選馬"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -386,6 +399,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "JRAからのお知らせ",
                 mainText: string.Empty,
+                headings: ["JRAからのお知らせ"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -413,6 +427,7 @@ public class JraRaceCardScraperTests
                     "10レース",
                     "4歳以上 3勝クラス（混合）［指定］ 定量 コース：2,000メートル（芝・右）"
                 ]),
+                headings: ["日本中央競馬会"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -420,6 +435,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
                 mainText: string.Empty,
+                headings: ["出馬表 2026年5月23日（土曜）3回京都9日 10レース"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -427,6 +443,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "3歳以上2勝クラス",
                 mainText: string.Empty,
+                headings: ["3歳以上2勝クラス"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -448,6 +465,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "2025年5月3日 京都 11R",
                 mainText: "2025年5月3日 京都 11R",
+                headings: ["2025年5月3日 京都 11R"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -455,6 +473,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "天皇賞（春）",
                 mainText: string.Empty,
+                headings: ["天皇賞（春）"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -476,6 +495,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "2025年4月20日 東京 11R",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -497,6 +517,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "東京 11R 天皇賞（秋）",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -518,6 +539,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "芝・右 2000m",
                 mainText: string.Empty,
+                headings: ["芝・右 2000m"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -540,6 +562,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "ダート・左 1600m",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -570,6 +593,7 @@ public class JraRaceCardScraperTests
                     "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
                     "本賞金（万円） 1着590 2着240 3着150 4着89 5着59",
                 ]),
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -627,6 +651,7 @@ public class JraRaceCardScraperTests
                     "2026年5月2日 新潟 未勝利 2着 16頭10番 11番人気",
                     "2026年3月1日 小倉 牝未勝利 16着 16頭8番 9番人気",
                 ]),
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -659,6 +684,7 @@ public class JraRaceCardScraperTests
                     "3歳 未勝利 （混合）［指定］ 馬齢 コース：1,400メートル（芝・右）",
                     "本賞金（万円） 1着590 2着240 3着150 4着89 5着59 2026年5月2日 京都 未勝利 3着 18頭11番 10番人気 2着 16頭10番 11番人気",
                 ]),
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -692,6 +718,7 @@ public class JraRaceCardScraperTests
                     "本賞金（万円） 1着4,100 2着1,600 3着1,000 4着620 5着410",
                     "付加賞（万円） 1着56.7 2着16.2 3着8.1",
                 ]),
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -718,6 +745,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "JRA 日本中央競馬会",
                 mainText: "本文へ移動する 出馬表 2026年5月23日（土曜）3回京都9日 10レース 2026年5月23日（土曜） 3回京都9日 発走時刻：15時05分 シドニートロフィー 4歳以上 3勝クラス （混合）牝（特指） 定量 コース：2,000メートル（芝・右） 本賞金（万円） 1着1,870 2着750 3着470 4着280 5着187 印刷用ページ 馬柱の見方",
+                headings: ["JRA 日本中央競馬会"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -725,6 +753,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "検索ウィンドウ",
                 mainText: string.Empty,
+                headings: ["検索ウィンドウ"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -732,6 +761,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "出馬表 2026年5月23日（土曜）3回京都9日 10レース",
                 mainText: string.Empty,
+                headings: ["出馬表 2026年5月23日（土曜）3回京都9日 10レース"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -739,6 +769,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "シドニートロフィー",
                 mainText: string.Empty,
+                headings: ["シドニートロフィー"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -746,6 +777,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "コースレコード",
                 mainText: string.Empty,
+                headings: ["コースレコード"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -753,6 +785,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "非当選・非抽選馬情報",
                 mainText: string.Empty,
+                headings: ["非当選・非抽選馬情報"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -760,6 +793,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: "JRAからのお知らせ",
                 mainText: string.Empty,
+                headings: ["JRAからのお知らせ"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -801,6 +835,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -822,6 +857,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "4歳以上2勝クラス コース：1,600ｍ（ダート左）",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -845,6 +881,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: "4歳以上2勝クラス コース：1600メートル（ダート左）",
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])
@@ -874,6 +911,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [table])
@@ -900,6 +938,7 @@ public class JraRaceCardScraperTests
             new PageSectionSnapshot(
                 title: string.Empty,
                 mainText: string.Empty,
+                headings: [string.Empty],
                 links: [],
                 actions: [],
                 tables: [])

@@ -23,6 +23,7 @@ public sealed class JraRaceResultExtractorTests
             new PageSectionSnapshot(
                 title: "2026年5月2日（土曜） 1回新潟1日",
                 mainText: "4歳以上1勝クラス 芝 1,000メートル",
+                headings: ["2026年5月2日（土曜） 1回新潟1日"],
                 links: [],
                 actions: [],
                 tables: [table])
@@ -30,6 +31,7 @@ public sealed class JraRaceResultExtractorTests
             new PageSectionSnapshot(
                 title: "12レース",
                 mainText: string.Empty,
+                headings: ["12レース"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -37,6 +39,7 @@ public sealed class JraRaceResultExtractorTests
             new PageSectionSnapshot(
                 title: "4歳以上1勝クラス",
                 mainText: string.Empty,
+                headings: ["4歳以上1勝クラス"],
                 links: [],
                 actions: [],
                 tables: [])

@@ -16,6 +16,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "競馬メニュー",
                 mainText: "競馬メニュー 開催日程 出馬表 オッズ レース結果",
+                headings: ["競馬メニュー"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -28,6 +29,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "開催日程",
                 mainText: "開催日程 2026年5月",
+                headings: ["開催日程"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -35,6 +37,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "5月",
                 mainText: string.Empty,
+                headings: ["5月"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -54,6 +57,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "今週の注目レース",
                 mainText: "今週の注目レース 5月9日～5月10日",
+                headings: ["今週の注目レース"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -66,6 +70,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "NHKマイルカップ",
                 mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 1600メートル（芝） 出馬表",
+                headings: ["NHKマイルカップ"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -85,6 +90,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "競馬メニュー",
                 mainText: "今週の開催情報",
+                headings: ["競馬メニュー"],
                 links:
                 [
                     new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/", "開催日程"),
@@ -101,6 +107,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "今週の開催情報",
                 mainText: string.Empty,
+                headings: ["今週の開催情報"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -124,6 +131,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "開催日程",
                 mainText: "開催日程 2026年5月 9 地方 東京 エプソムC(GIII) 京都 京都新聞杯(GII) 新潟 10 地方 東京 NHKマイルC(GI) 京都 新潟",
+                headings: ["開催日程"],
                 links:
                 [
                     new PageLinkSnapshot("https://www.jra.go.jp/keiba/calendar/apr.html", "4月"),
@@ -145,6 +153,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "5月",
                 mainText: string.Empty,
+                headings: ["5月"],
                 links: [],
                 actions: [],
                 tables: [])
@@ -170,6 +179,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "今週の注目レース",
                 mainText: "今週の注目レース 5月9日～5月10日",
+                headings: ["今週の注目レース"],
                 links:
                 [
                     new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc.html", "5月10日（日曜） NHKマイルカップ（GⅠ） 東京競馬場 芝1600メートル"),
@@ -201,6 +211,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "NHKマイルカップ",
                 mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 関連ニュース 第31回NHKマイルカップ（GⅠ）枠順確定",
+                headings: ["NHKマイルカップ"],
                 links:
                 [
                     new PageLinkSnapshot("https://www.jra.go.jp/keiba/g1/nmc/syutsuba.html", "出馬表"),
@@ -232,6 +243,7 @@ public class JraStructuredPageParserTests
             new PageSectionSnapshot(
                 title: "NHKマイルカップ",
                 mainText: "GⅠレース 2026年5月10日（日曜） 東京競馬場 芝1600メートル NHKマイルカップ 出馬表 出走馬情報 データ分析",
+                headings: ["NHKマイルカップ"],
                 links: [],
                 actions: [],
                 tables: [])

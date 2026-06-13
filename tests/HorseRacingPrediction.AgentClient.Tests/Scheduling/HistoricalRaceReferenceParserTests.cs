@@ -16,6 +16,7 @@ public sealed class HistoricalRaceReferenceParserTests
                 new PageSectionSnapshot(
                     title: string.Empty,
                     mainText: string.Empty,
+                    headings: [string.Empty],
                     links: Array.Empty<PageLinkSnapshot>().ToList(),
                     actions: Array.Empty<PageActionSnapshot>().ToList(),
                     tables:
@@ -51,6 +52,7 @@ public sealed class HistoricalRaceReferenceParserTests
                 new PageSectionSnapshot(
                     title: string.Empty,
                     mainText: string.Empty,
+                    headings: [string.Empty],
                     links: Array.Empty<PageLinkSnapshot>().ToList(),
                     actions: Array.Empty<PageActionSnapshot>().ToList(),
                     tables:
@@ -81,6 +83,7 @@ public sealed class HistoricalRaceReferenceParserTests
                 new PageSectionSnapshot(
                     title: string.Empty,
                     mainText: string.Empty,
+                    headings: [string.Empty],
                     links: Array.Empty<PageLinkSnapshot>().ToList(),
                     actions: Array.Empty<PageActionSnapshot>().ToList(),
                     tables:
@@ -112,6 +115,7 @@ public sealed class HistoricalRaceReferenceParserTests
                 new PageSectionSnapshot(
                     title: string.Empty,
                     mainText: string.Empty,
+                    headings: [string.Empty],
                     links: Array.Empty<PageLinkSnapshot>().ToList(),
                     actions: Array.Empty<PageActionSnapshot>().ToList(),
                     tables:

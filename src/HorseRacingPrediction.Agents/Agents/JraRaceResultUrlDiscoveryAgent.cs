@@ -294,6 +294,7 @@ internal sealed class JraRaceResultUrlDiscoveryAgent
             links: mergedLinks,
             actions: snapshot.Actions.ToList(),
             tables: snapshot.Tables.ToList(),
+            headings: snapshot.Headings.ToList(),
             forms: snapshot.Forms.ToList(),
             images: snapshot.Images.ToList());
 

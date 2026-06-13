@@ -140,6 +140,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new PageSectionSnapshot(
                 title: "2026年5月16日 東京 1R",
                 mainText: "2026年5月16日 東京 1R",
+                headings: ["2026年5月16日 東京 1R"],
                 links: [new PageLinkSnapshot(CardUrl, "1R")],
                 actions: [],
                 tables: [])
@@ -152,6 +153,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new PageSectionSnapshot(
                 title: "2026年5月16日（土曜） 2回東京1日",
                 mainText: "東京 芝 1600メートル",
+                headings: ["2026年5月16日（土曜） 2回東京1日"],
                 links: [],
                 actions: [],
                 tables: [new PageTableSnapshot(
@@ -163,6 +165,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new PageSectionSnapshot(
                 title: "1レース",
                 mainText: string.Empty,
+                headings: ["1レース"],
                 links: [],
                 actions: [],
                 tables: [])
