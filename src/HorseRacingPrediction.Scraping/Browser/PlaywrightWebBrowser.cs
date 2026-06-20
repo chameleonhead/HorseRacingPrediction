@@ -883,7 +883,10 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             sections,
             seen,
             boundedLinkLimit,
-            cancellationToken);
+            cancellationToken,
+            fallbackTitle: "Header");
+
+        var sectionCountAfterHeader = sections.Count;
 
         await AddSectionsFromCandidatesAsync(
             selector: "main section, article section, [role='region'], section, article",
@@ -905,12 +908,37 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 enforceQualityThreshold: true);
         }
 
+            if (sections.Count == sectionCountAfterHeader)
+            {
+                await AddSectionsFromStructuralBlocksAsync(
+                    pageTitle,
+                    sections,
+                    seen,
+                    boundedLinkLimit,
+                    cancellationToken);
+
+                if (sections.Count == sectionCountAfterHeader)
+                {
+                    await AddBodyFallbackSectionAsync(
+                        pageTitle,
+                        sections,
+                        boundedLinkLimit,
+                        cancellationToken);
+                }
+            }
+
         await AddSpecialLayoutSectionAsync(
             selector: FooterSectionSelector,
             sections,
             seen,
             boundedLinkLimit,
-            cancellationToken);
+            cancellationToken,
+            fallbackTitle: "Footer");
+
+        if (sections.Count > 0 && sections.All(section => section.Tables.Count == 0))
+        {
+            await AttachGlobalTablesAsync(sections, cancellationToken);
+        }
 
         sections = MergeCompactSections(sections);
 
@@ -944,12 +972,251 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return sections;
     }
 
+    private async Task AddBodyFallbackSectionAsync(
+        string pageTitle,
+        List<PageSectionSnapshot> sections,
+        int boundedLinkLimit,
+        CancellationToken cancellationToken)
+    {
+        var root = await FindBodyFallbackRootAsync(cancellationToken);
+        if (root is null)
+        {
+            return;
+        }
+
+        var mainText = await TryReadLimitedInnerTextAsync(root, MaxSectionTextLength);
+        var headingsTask = ExtractHeadingsFromRootAsync(root, 12, cancellationToken);
+        var linksTask = ExtractLinksFromRootAsync(root, boundedLinkLimit, cancellationToken);
+        var actionsTask = ExtractActionsFromRootAsync(root, MaxActionsPerSection, cancellationToken);
+        var tablesTask = ExtractTablesFromRootAsync(root, MaxTablesPerSection, cancellationToken);
+        var formsTask = ExtractFormsFromRootAsync(root, MaxFormsPerSection, cancellationToken);
+        var imagesTask = ExtractImagesFromRootAsync(root, MaxImagesPerSection, cancellationToken);
+        await Task.WhenAll(linksTask, actionsTask, tablesTask, formsTask, imagesTask, headingsTask);
+
+        var headings = (await headingsTask).ToList();
+        var links = (await linksTask).ToList();
+        var actions = (await actionsTask).ToList();
+        var tables = (await tablesTask).ToList();
+        var forms = (await formsTask).ToList();
+        var images = (await imagesTask).ToList();
+
+        if (string.IsNullOrWhiteSpace(mainText)
+            && headings.Count == 0
+            && links.Count == 0
+            && actions.Count == 0
+            && tables.Count == 0
+            && forms.Count == 0
+            && images.Count == 0)
+        {
+            return;
+        }
+
+        var title = headings.Count > 0
+            ? headings[0]
+            : string.IsNullOrWhiteSpace(pageTitle)
+                ? "Section 1"
+                : pageTitle;
+
+        sections.Add(new PageSectionSnapshot(
+            title,
+            mainText,
+            links,
+            actions,
+            tables,
+            headings,
+            forms,
+            images));
+    }
+
+    private async Task AddSectionsFromStructuralBlocksAsync(
+        string pageTitle,
+        List<PageSectionSnapshot> sections,
+        HashSet<string> seen,
+        int boundedLinkLimit,
+        CancellationToken cancellationToken)
+    {
+        var container = await FindStructuralSectionContainerAsync(cancellationToken);
+        if (container is null)
+        {
+            return;
+        }
+
+        var blocks = container.Locator(":scope > *");
+        var blockCount = await blocks.CountAsync();
+        var structuralIndex = 0;
+
+        for (var index = 0; index < blockCount; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (sections.Count >= MaxSnapshotSectionCount)
+            {
+                return;
+            }
+
+            var block = blocks.Nth(index);
+            if (!await IsElementRenderedAsync(block)
+                || await IsLayoutHeaderOrFooterAsync(block))
+            {
+                continue;
+            }
+
+            var mainText = await TryReadLimitedInnerTextAsync(block, MaxSectionTextLength);
+            var headingsTask = ExtractHeadingsFromRootAsync(block, 12, cancellationToken);
+            var linksTask = ExtractLinksFromRootAsync(block, boundedLinkLimit, cancellationToken);
+            var actionsTask = ExtractActionsFromRootAsync(block, MaxActionsPerSection, cancellationToken);
+            var tablesTask = ExtractTablesFromRootAsync(block, MaxTablesPerSection, cancellationToken);
+            var formsTask = ExtractFormsFromRootAsync(block, MaxFormsPerSection, cancellationToken);
+            var imagesTask = ExtractImagesFromRootAsync(block, MaxImagesPerSection, cancellationToken);
+            await Task.WhenAll(headingsTask, linksTask, actionsTask, tablesTask, formsTask, imagesTask);
+
+            var headings = (await headingsTask).ToList();
+            var links = (await linksTask).ToList();
+            var actions = (await actionsTask).ToList();
+            var tables = (await tablesTask).ToList();
+            var forms = (await formsTask).ToList();
+            var images = (await imagesTask).ToList();
+
+            if (string.IsNullOrWhiteSpace(mainText)
+                && headings.Count == 0
+                && links.Count == 0
+                && actions.Count == 0
+                && tables.Count == 0
+                && forms.Count == 0
+                && images.Count == 0)
+            {
+                continue;
+            }
+
+            var title = ResolveStructuralSectionTitle(pageTitle, headings, structuralIndex, links.Count, mainText.Length);
+            var dedupeKey = BuildSectionDedupeKey(title, mainText);
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            sections.Add(new PageSectionSnapshot(
+                title,
+                mainText,
+                links,
+                actions,
+                tables,
+                headings,
+                forms,
+                images));
+
+            structuralIndex++;
+        }
+    }
+
+    private async Task<ILocator?> FindStructuralSectionContainerAsync(CancellationToken cancellationToken)
+    {
+        var candidates = _page.Locator("#wrapper, #container, #content, #contents, main, [role='main'], article, body");
+        var count = await candidates.CountAsync();
+
+        for (var index = 0; index < count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var candidate = candidates.Nth(index);
+            if (!await IsElementRenderedAsync(candidate))
+            {
+                continue;
+            }
+
+            var childBlocks = candidate.Locator(":scope > *");
+            if (await childBlocks.CountAsync() >= 2)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<bool> IsLayoutHeaderOrFooterAsync(ILocator block)
+        => await block.EvaluateAsync<bool>(
+            """
+            (node) => {
+                if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+                    return false;
+                }
+
+                return node.matches("header, [role='banner'], #header, [id$='-header' i], [id*='_header' i], .header, [class*='header'], footer, [role='contentinfo'], #footer, [id$='-footer' i], [id*='_footer' i], .footer, [class*='footer']");
+            }
+            """);
+
+    private static string ResolveStructuralSectionTitle(
+        string pageTitle,
+        IReadOnlyList<string> headings,
+        int structuralIndex,
+        int linkCount,
+        int textLength)
+    {
+        if (headings.Count > 0)
+        {
+            return headings[0];
+        }
+
+        if (linkCount >= 8 && textLength <= 1200)
+        {
+            return "Related Links";
+        }
+
+        if (structuralIndex == 0 && !string.IsNullOrWhiteSpace(pageTitle))
+        {
+            return pageTitle;
+        }
+
+        return $"Section {structuralIndex + 1}";
+    }
+
+    private async Task<ILocator?> FindBodyFallbackRootAsync(CancellationToken cancellationToken)
+    {
+        var candidates = _page.Locator("main, [role='main'], article, body");
+        var count = await candidates.CountAsync();
+
+        for (var index = 0; index < count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var candidate = candidates.Nth(index);
+            if (await IsElementRenderedAsync(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task AttachGlobalTablesAsync(List<PageSectionSnapshot> sections, CancellationToken cancellationToken)
+    {
+        var tables = await ExtractTablesAsync(cancellationToken);
+        if (tables.Count == 0)
+        {
+            return;
+        }
+
+        var targetSection = sections
+            .OrderByDescending(section => section.MainText.Length)
+            .ThenByDescending(section => section.Headings.Count)
+            .FirstOrDefault();
+
+        if (targetSection is null)
+        {
+            return;
+        }
+
+        targetSection.Tables.AddRange(tables.Take(MaxTablesPerSection));
+    }
+
     private async Task AddSpecialLayoutSectionAsync(
         string selector,
         List<PageSectionSnapshot> sections,
         HashSet<string> seen,
         int boundedLinkLimit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? fallbackTitle = null)
     {
         var nodes = _page.Locator(selector);
         var count = await nodes.CountAsync();
@@ -975,7 +1242,11 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
             var headingsTask = ExtractHeadingsFromRootAsync(node, 12, cancellationToken);
             var headings = await headingsTask;
-            var title = ResolveSectionTitle(headings, index);
+            var title = headings.Count > 0
+                ? headings[0]
+                : !string.IsNullOrWhiteSpace(fallbackTitle)
+                    ? fallbackTitle
+                    : ResolveSectionTitle(headings, index);
 
             var dedupeKey = BuildSectionDedupeKey(title, mainText);
             if (!seen.Add(dedupeKey))
