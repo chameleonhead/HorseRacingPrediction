@@ -1,5 +1,3 @@
-using HorseRacingPrediction.Agents.Contracts;
-
 namespace HorseRacingPrediction.Api.Contracts;
 
 public sealed class SearchPredictionTicketsRequest

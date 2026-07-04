@@ -5,7 +5,7 @@ using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Agents.JraAgent;
-using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,14 +31,11 @@ public sealed class CollectionExecutionService : BackgroundService
     private readonly AgentProcessingOptions _options;
     private readonly ProcessingStateStore _stateStore;
     private readonly IWebBrowserSessionFactory _browserSessionFactory;
-    private readonly IChatClient _chatClient;
-    private readonly WebFetchOptions _webFetchOptions;
-    private readonly PageDataExtractionAgent? _pageDataExtractionAgent;
     private readonly DataCollectionWriteTools _writeTools;
     private readonly IRaceQueryService _raceQueryService;
     private readonly IJraResultDateDiscoveryService _resultDateDiscoveryService;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
-    private readonly RaceTextInsightCollector _insightCollector;
+    private readonly RaceTextInsightCollector? _insightCollector;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
@@ -47,29 +44,23 @@ public sealed class CollectionExecutionService : BackgroundService
         IOptions<AgentProcessingOptions> options,
         ProcessingStateStore stateStore,
         IWebBrowserSessionFactory browserSessionFactory,
-        IChatClient chatClient,
-        IOptions<WebFetchOptions> webFetchOptions,
-        PageDataExtractionAgent? pageDataExtractionAgent,
         DataCollectionWriteTools writeTools,
         IRaceQueryService raceQueryService,
         IJraResultDateDiscoveryService resultDateDiscoveryService,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
-        RaceTextInsightCollector insightCollector,
         CollectionExecutionTrigger executionTrigger,
+        IServiceProvider serviceProvider,
         ILoggerFactory loggerFactory,
         ILogger<CollectionExecutionService> logger)
     {
         _options = options.Value;
         _stateStore = stateStore;
         _browserSessionFactory = browserSessionFactory;
-        _chatClient = chatClient;
-        _webFetchOptions = webFetchOptions.Value;
-        _pageDataExtractionAgent = pageDataExtractionAgent;
         _writeTools = writeTools;
         _raceQueryService = raceQueryService;
         _resultDateDiscoveryService = resultDateDiscoveryService;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
-        _insightCollector = insightCollector;
+        _insightCollector = serviceProvider.GetService<RaceTextInsightCollector>();
         _executionTrigger = executionTrigger;
         _loggerFactory = loggerFactory;
         _logger = logger;
@@ -540,7 +531,7 @@ public sealed class CollectionExecutionService : BackgroundService
 
                     await _stateStore.EnqueuePredictionCandidatesAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
 
-                    if (_options.EnableTextInsightCollection)
+                    if (_options.EnableTextInsightCollection && _insightCollector is not null)
                     {
                         foreach (var raceId in distinctRaceIds)
                         {

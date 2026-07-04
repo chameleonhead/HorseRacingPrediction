@@ -2,7 +2,7 @@ using EventFlow;
 using EventFlow.Commands;
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
-using AgentContracts = HorseRacingPrediction.Agents.Contracts;
+using ApiContracts = HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -12,6 +12,7 @@ using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using AppReadModels = HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Memos;
@@ -455,7 +456,7 @@ public static class EndpointExtensions
                         x.RacecourseCode,
                         x.RaceNumber,
                         x.RaceName,
-                        (AgentContracts.RaceStatus)(int)x.Status,
+                        (ApiContracts.RaceStatus)(int)x.Status,
                         x.EntryCount,
                         x.WinningHorseName,
                         x.ResultDeclaredAt))
@@ -973,7 +974,7 @@ public static class EndpointExtensions
             async (string raceId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 using var dbContext = dbContextProvider.CreateContext();
-                var readModel = await dbContext.Set<RacePredictionContextReadModel>()
+                var readModel = await dbContext.Set<AppReadModels.RacePredictionContextReadModel>()
                     .AsNoTracking()
                     .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken)
                     .ConfigureAwait(false);
@@ -1012,7 +1013,7 @@ public static class EndpointExtensions
 
                 var horseNamesById = horseIds.Count == 0
                     ? new Dictionary<string, string>(StringComparer.Ordinal)
-                    : await dbContext.Set<HorseReadModel>()
+                    : await dbContext.Set<AppReadModels.HorseReadModel>()
                         .AsNoTracking()
                         .Where(x => horseIds.Contains(x.HorseId))
                         .ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal, cancellationToken)
@@ -1032,7 +1033,7 @@ public static class EndpointExtensions
                 
                 var jockeyNamesById = jockeyIds.Count == 0
                     ? new Dictionary<string, string>(StringComparer.Ordinal)
-                    : await dbContext.Set<JockeyReadModel>()
+                    : await dbContext.Set<AppReadModels.JockeyReadModel>()
                         .AsNoTracking()
                         .Where(x => jockeyIds.Contains(x.JockeyId))
                         .ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, StringComparer.Ordinal, cancellationToken)
@@ -1083,7 +1084,7 @@ public static class EndpointExtensions
                     readModel.RacecourseCode,
                     readModel.RaceNumber,
                     readModel.RaceName,
-                    (AgentContracts.RaceStatus)(int)readModel.Status,
+                    (ApiContracts.RaceStatus)(int)readModel.Status,
                     null, null,
                     readModel.GradeCode,
                     readModel.SurfaceCode,
@@ -1117,7 +1118,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Get race prediction context", Description = "Returns prediction context read model including entries, weather and track conditions")]
             async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
+                var query = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
@@ -1127,7 +1128,7 @@ public static class EndpointExtensions
             })
             .WithName("GetRacePredictionContext")
             .WithTags("Race API")
-            .Produces<AgentContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1253,8 +1254,8 @@ public static class EndpointExtensions
                         x.ConfidenceScore,
                         x.SummaryComment,
                         x.PredictedAt,
-                        (AgentContracts.TicketStatus)(int)x.TicketStatus,
-                        (AgentContracts.EvaluationStatus)(int)x.EvaluationStatus,
+                        (ApiContracts.TicketStatus)(int)x.TicketStatus,
+                        (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,
                         x.Marks.Count)));
             })
             .WithName("SearchPredictionTickets")
@@ -1267,7 +1268,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
             async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<HorseReadModel>(horseId);
+                var query = new ReadModelByIdQuery<AppReadModels.HorseReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
@@ -1277,7 +1278,7 @@ public static class EndpointExtensions
             })
             .WithName("GetHorseProfile")
             .WithTags("Horse API")
-            .Produces<AgentContracts.HorseReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.HorseReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1294,12 +1295,12 @@ public static class EndpointExtensions
                     return Results.BadRequest(new[] { pagingError });
 
                 using var dbContext = dbContextProvider.CreateContext();
-                var allHorses = await dbContext.Set<HorseReadModel>()
+                var allHorses = await dbContext.Set<AppReadModels.HorseReadModel>()
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                IEnumerable<HorseReadModel> filtered = allHorses;
+                IEnumerable<AppReadModels.HorseReadModel> filtered = allHorses;
 
                 if (!string.IsNullOrWhiteSpace(request.HorseId))
                     filtered = filtered.Where(x => string.Equals(x.HorseId, request.HorseId, StringComparison.OrdinalIgnoreCase));
@@ -1360,7 +1361,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Get horse race history", Description = "Returns race history read model for a horse")]
             async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId);
+                var query = new ReadModelByIdQuery<AppReadModels.HorseRaceHistoryReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.HorseId))
@@ -1370,7 +1371,7 @@ public static class EndpointExtensions
             })
             .WithName("GetHorseRaceHistory")
             .WithTags("Horse API")
-            .Produces<AgentContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1403,7 +1404,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Get jockey race history", Description = "Returns race history read model for a jockey")]
             async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId);
+                var query = new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
@@ -1413,7 +1414,7 @@ public static class EndpointExtensions
             })
             .WithName("GetJockeyRaceHistory")
             .WithTags("Jockey API")
-            .Produces<AgentContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1421,7 +1422,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Get jockey profile", Description = "Returns jockey profile read model")]
             async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
-                var query = new ReadModelByIdQuery<JockeyReadModel>(jockeyId);
+                var query = new ReadModelByIdQuery<AppReadModels.JockeyReadModel>(jockeyId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.JockeyId))
@@ -1431,7 +1432,7 @@ public static class EndpointExtensions
             })
             .WithName("GetJockeyProfile")
             .WithTags("Jockey API")
-            .Produces<AgentContracts.JockeyReadModel>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.JockeyReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -1448,12 +1449,12 @@ public static class EndpointExtensions
                     return Results.BadRequest(new[] { pagingError });
 
                 using var dbContext = dbContextProvider.CreateContext();
-                var allJockeys = await dbContext.Set<JockeyReadModel>()
+                var allJockeys = await dbContext.Set<AppReadModels.JockeyReadModel>()
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                IEnumerable<JockeyReadModel> filtered = allJockeys;
+                IEnumerable<AppReadModels.JockeyReadModel> filtered = allJockeys;
 
                 if (!string.IsNullOrWhiteSpace(request.JockeyId))
                     filtered = filtered.Where(x => string.Equals(x.JockeyId, request.JockeyId, StringComparison.OrdinalIgnoreCase));
@@ -1735,7 +1736,7 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
             async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
             {
-                var raceQuery = new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId);
+                var raceQuery = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var raceContext = await queryProcessor.ProcessAsync(raceQuery, cancellationToken).ConfigureAwait(false);
 
                 if (raceContext is null || string.IsNullOrEmpty(raceContext.RaceId))
@@ -1744,9 +1745,9 @@ public static class EndpointExtensions
                 var result = await predictor.PredictAsync(
                     raceContext,
                     async (horseId, ct) => await queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
+                        new ReadModelByIdQuery<AppReadModels.HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
                     async (jockeyId, ct) => await queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
+                        new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                     cancellationToken).ConfigureAwait(false);
 
                 var response = new MlPredictionResponse(
@@ -1772,7 +1773,7 @@ public static class EndpointExtensions
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
-                var finishedRaces = allRaces.Where(r => r.Status == RaceStatus.ResultDeclared).ToList();
+                var finishedRaces = allRaces.Where(r => r.Status == HorseRacingPrediction.Domain.Races.RaceStatus.ResultDeclared).ToList();
 
                 if (finishedRaces.Count == 0)
                     return Results.BadRequest(new[] { "訓練に使用できる完了済みレースがありません。" });
@@ -1780,11 +1781,11 @@ public static class EndpointExtensions
                 await predictor.TrainAsync(
                     finishedRaces,
                     async (raceId, ct) => await queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), ct).ConfigureAwait(false),
+                        new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId), ct).ConfigureAwait(false),
                     async (horseId, ct) => await queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
+                        new ReadModelByIdQuery<AppReadModels.HorseRaceHistoryReadModel>(horseId), ct).ConfigureAwait(false),
                     async (jockeyId, ct) => await queryProcessor.ProcessAsync(
-                        new ReadModelByIdQuery<JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
+                        new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                     cancellationToken).ConfigureAwait(false);
 
                 return Results.Ok(new { TrainedRaceCount = finishedRaces.Count, IsModelTrained = predictor.IsModelTrained });
@@ -1810,7 +1811,7 @@ public static class EndpointExtensions
     {
         using var dbContext = dbContextProvider.CreateContext();
 
-        var horseExists = await dbContext.Set<HorseReadModel>()
+        var horseExists = await dbContext.Set<AppReadModels.HorseReadModel>()
             .AsNoTracking()
             .AnyAsync(x => x.HorseId == request.HorseId, cancellationToken)
             .ConfigureAwait(false);
@@ -1835,7 +1836,7 @@ public static class EndpointExtensions
 
         if (!string.IsNullOrWhiteSpace(request.JockeyId))
         {
-            var jockeyExists = await dbContext.Set<JockeyReadModel>()
+            var jockeyExists = await dbContext.Set<AppReadModels.JockeyReadModel>()
                 .AsNoTracking()
                 .AnyAsync(x => x.JockeyId == request.JockeyId, cancellationToken)
                 .ConfigureAwait(false);
@@ -1919,7 +1920,9 @@ public static class EndpointExtensions
         return new PagedResponse<TResponse>(items, page, pageSize, totalCount, totalPages);
     }
 
-    private static IOrderedEnumerable<HorseReadModel>? SortHorses(IEnumerable<HorseReadModel> source, SearchHorsesRequest request)
+    private static IOrderedEnumerable<HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel>? SortHorses(
+        IEnumerable<HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel> source,
+        SearchHorsesRequest request)
         => (request.SortBy ?? "registeredName").ToLowerInvariant() switch
         {
             "registeredname" => (request.SortDescending ?? false)
@@ -1934,7 +1937,9 @@ public static class EndpointExtensions
             _ => null
         };
 
-    private static IOrderedEnumerable<JockeyReadModel>? SortJockeys(IEnumerable<JockeyReadModel> source, SearchJockeysRequest request)
+    private static IOrderedEnumerable<HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel>? SortJockeys(
+        IEnumerable<HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel> source,
+        SearchJockeysRequest request)
         => (request.SortBy ?? "displayName").ToLowerInvariant() switch
         {
             "displayname" => (request.SortDescending ?? false)
@@ -1949,7 +1954,9 @@ public static class EndpointExtensions
             _ => null
         };
 
-    private static IOrderedEnumerable<TrainerReadModel>? SortTrainers(IEnumerable<TrainerReadModel> source, SearchTrainersRequest request)
+    private static IOrderedEnumerable<AppReadModels.TrainerReadModel>? SortTrainers(
+        IEnumerable<AppReadModels.TrainerReadModel> source,
+        SearchTrainersRequest request)
         => (request.SortBy ?? "displayName").ToLowerInvariant() switch
         {
             "displayname" => (request.SortDescending ?? false)
@@ -1964,8 +1971,8 @@ public static class EndpointExtensions
             _ => null
         };
 
-    private static IOrderedEnumerable<PredictionTicketReadModel>? SortPredictionTickets(
-        IEnumerable<PredictionTicketReadModel> source,
+    private static IOrderedEnumerable<AppReadModels.PredictionTicketReadModel>? SortPredictionTickets(
+        IEnumerable<AppReadModels.PredictionTicketReadModel> source,
         SearchPredictionTicketsRequest request)
         => (request.SortBy ?? "predictedAt").ToLowerInvariant() switch
         {
@@ -1984,7 +1991,7 @@ public static class EndpointExtensions
             _ => null
         };
 
-    private static AgentContracts.RacePredictionContextReadModel ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
+    private static ApiContracts.RacePredictionContextReadModel ToAgentRacePredictionContext(HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel model)
         => new()
         {
             RaceId = model.RaceId,
@@ -1992,14 +1999,14 @@ public static class EndpointExtensions
             RacecourseCode = model.RacecourseCode,
             RaceNumber = model.RaceNumber,
             RaceName = model.RaceName,
-            Status = (AgentContracts.RaceStatus)(int)model.Status,
+            Status = (ApiContracts.RaceStatus)(int)model.Status,
             GradeCode = model.GradeCode,
             SurfaceCode = model.SurfaceCode,
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
-            Entries = model.Entries.Select(x => new AgentContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode)).ToList(),
-            WeatherObservations = model.WeatherObservations.Select(x => new AgentContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
-            TrackConditionObservations = model.TrackConditionObservations.Select(x => new AgentContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
+            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode)).ToList(),
+            WeatherObservations = model.WeatherObservations.Select(x => new ApiContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
+            TrackConditionObservations = model.TrackConditionObservations.Select(x => new ApiContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
 
     private static RaceEntryResponse ToRaceEntryResponse(
@@ -2025,7 +2032,7 @@ public static class EndpointExtensions
             entry.DeclaredWeightDiff,
             entry.RunningStyleCode);
 
-    private static RaceEntryResponse ToRaceEntryResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
+    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2043,7 +2050,8 @@ public static class EndpointExtensions
             null,
             null);
 
-    private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(WeatherObservationSnapshot observation)
+    private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(
+        HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)
         => new(
             observation.ObservationTime,
             observation.WeatherCode,
@@ -2053,14 +2061,15 @@ public static class EndpointExtensions
             observation.WindDirectionCode,
             observation.WindSpeedMeterPerSecond);
 
-    private static RaceTrackConditionResponse ToRaceTrackConditionResponse(TrackConditionSnapshot condition)
+    private static RaceTrackConditionResponse ToRaceTrackConditionResponse(
+        HorseRacingPrediction.Application.Queries.ReadModels.TrackConditionSnapshot condition)
         => new(
             condition.ObservationTime,
             condition.TurfConditionCode,
             condition.DirtConditionCode,
             condition.GoingDescriptionText);
 
-    private static RaceEntryResultResponse ToRaceEntryResultResponse(EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
+    private static RaceEntryResultResponse ToRaceEntryResultResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2119,7 +2128,7 @@ public static class EndpointExtensions
             ? trainerName
             : null;
 
-    private static RacePayoutResultResponse ToRacePayoutResultResponse(PayoutResultSnapshot payoutResult)
+    private static RacePayoutResultResponse ToRacePayoutResultResponse(AppReadModels.PayoutResultSnapshot payoutResult)
         => new(
             payoutResult.DeclaredAt,
             payoutResult.WinPayouts.Select(ToRacePayoutEntryResponse).ToList(),
@@ -2128,7 +2137,7 @@ public static class EndpointExtensions
             payoutResult.ExactaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
             payoutResult.TrifectaPayouts.Select(ToRacePayoutEntryResponse).ToList());
 
-    private static RacePayoutEntryResponse ToRacePayoutEntryResponse(PayoutEntrySnapshot payout)
+    private static RacePayoutEntryResponse ToRacePayoutEntryResponse(AppReadModels.PayoutEntrySnapshot payout)
         => new(payout.Combination, payout.Amount);
 
     private static RaceOddsResponse BuildUnavailableOddsResponse()
@@ -2138,7 +2147,7 @@ public static class EndpointExtensions
             [],
             []);
 
-    private static AgentContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
+    private static ApiContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()
         {
             HorseId = model.HorseId,
@@ -2146,30 +2155,30 @@ public static class EndpointExtensions
             NormalizedName = model.NormalizedName,
             SexCode = model.SexCode,
             BirthDate = model.BirthDate,
-            Aliases = model.Aliases.Select(x => new AgentContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new ApiContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    private static AgentContracts.JockeyReadModel ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
+    private static ApiContracts.JockeyReadModel ToAgentJockey(HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,
             DisplayName = model.DisplayName,
             NormalizedName = model.NormalizedName,
             AffiliationCode = model.AffiliationCode,
-            Aliases = model.Aliases.Select(x => new AgentContracts.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
+            Aliases = model.Aliases.Select(x => new ApiContracts.JockeyAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 
-    private static AgentContracts.HorseRaceHistoryReadModel ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
+    private static ApiContracts.HorseRaceHistoryReadModel ToAgentHorseRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.HorseRaceHistoryReadModel model)
         => new()
         {
             HorseId = model.HorseId,
-            Entries = model.Entries.Select(x => new AgentContracts.HorseRaceHistoryEntry(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new ApiContracts.HorseRaceHistoryEntry(x.RaceId, x.EntryId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.GateNumber, x.AssignedWeight, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.JockeyId, x.TrainerId, x.FinishPosition, x.LastThreeFurlongTime, x.CornerPositions, x.PrizeMoney)).ToList()
         };
 
-    private static AgentContracts.JockeyRaceHistoryReadModel ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
+    private static ApiContracts.JockeyRaceHistoryReadModel ToAgentJockeyRaceHistory(HorseRacingPrediction.Application.Queries.ReadModels.JockeyRaceHistoryReadModel model)
         => new()
         {
             JockeyId = model.JockeyId,
-            Entries = model.Entries.Select(x => new AgentContracts.JockeyRaceHistoryEntry(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
+            Entries = model.Entries.Select(x => new ApiContracts.JockeyRaceHistoryEntry(x.RaceId, x.EntryId, x.HorseId, x.RaceDate, x.RacecourseCode, x.SurfaceCode, x.DistanceMeters, x.DirectionCode, x.GradeCode, x.FinishPosition, x.PrizeMoney)).ToList()
         };
 }
