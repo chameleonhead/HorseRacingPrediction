@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HorseRacingPrediction.Agents\HorseRacingPrediction.Agents.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+    <ProjectReference Include="..\HorseRacingPrediction.Scraping\HorseRacingPrediction.Scraping.csproj" />
   </ItemGroup>
 
 </Project>

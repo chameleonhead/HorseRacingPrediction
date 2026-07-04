@@ -1,5 +1,5 @@
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.Scraping.Workflow;
 
 namespace HorseRacingPrediction.AgentClient.Tests.Scheduling;
 

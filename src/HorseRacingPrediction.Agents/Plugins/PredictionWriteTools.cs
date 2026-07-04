@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;

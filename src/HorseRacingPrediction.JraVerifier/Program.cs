@@ -1,10 +1,10 @@
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Agents.JraAgent;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
-using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.Scraping.Workflow;
 using HorseRacingPrediction.JraVerifier;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -360,7 +360,7 @@ async Task VerifyResultDayAsync(DateOnly raceDate, TimeSpan timeout)
             continue;
         }
 
-        await using var taskAgent = await JraTaskAgent.CreateAsync();
+        await using var taskAgent = await JraSiteDataCollector.CreateAsync();
         var result = await taskAgent.RequestRaceResultAsync(item.RaceDate.Value, racecourse, item.RaceNumber.Value, cts.Token);
         Console.WriteLine($"  - click result success={result.Success} course={racecourse} race={item.RaceNumber} source={result.SourceUrl}");
     }

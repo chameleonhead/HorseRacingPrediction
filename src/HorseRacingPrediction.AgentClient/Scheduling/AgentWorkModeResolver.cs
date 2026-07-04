@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.Scraping.Workflow;
 
 namespace HorseRacingPrediction.AgentClient.Scheduling;
 

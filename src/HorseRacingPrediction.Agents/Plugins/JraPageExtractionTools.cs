@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Agents.JraAgent;
+using HorseRacingPrediction.Scraping.JraNavigation;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;
@@ -36,7 +36,7 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     private static readonly string[] RaceCardKeywords = ["出馬表"];
 
     private readonly SemaphoreSlim _lock = new(1, 1);
-    private JraTaskAgent? _taskAgent;
+    private JraSiteDataCollector? _collector;
 
     [Description("JRA専用セッションを開始してURLを開きます。以後の操作は同じPlaywrightセッションで継続されます。")]
     public async Task<string> OpenJraPage(
@@ -156,10 +156,10 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         await _lock.WaitAsync();
         try
         {
-            if (_taskAgent is not null)
+            if (_collector is not null)
             {
-                await _taskAgent.DisposeAsync();
-                _taskAgent = null;
+                await _collector.DisposeAsync();
+                _collector = null;
             }
         }
         finally
@@ -185,10 +185,10 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         await _lock.WaitAsync();
         try
         {
-            if (_taskAgent is not null)
+            if (_collector is not null)
             {
-                await _taskAgent.DisposeAsync();
-                _taskAgent = null;
+                await _collector.DisposeAsync();
+                _collector = null;
             }
         }
         finally
@@ -198,13 +198,13 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
         }
     }
 
-    private async Task<string> WithSessionAsync(Func<JraTaskAgent, Task<string>> action)
+    private async Task<string> WithSessionAsync(Func<JraSiteDataCollector, Task<string>> action)
     {
         await _lock.WaitAsync();
         try
         {
-            _taskAgent ??= await JraTaskAgent.CreateAsync();
-            return await action(_taskAgent);
+            _collector ??= await JraSiteDataCollector.CreateAsync();
+            return await action(_collector);
         }
         finally
         {
@@ -213,7 +213,7 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     }
 
     private static async Task NavigateByKeywordsAsync(
-        JraTaskAgent taskAgent,
+        JraSiteDataCollector collector,
         IReadOnlyList<string> keywords,
         int maxSteps,
         List<string> route,
@@ -221,14 +221,14 @@ public sealed class JraPageExtractionTools : IAsyncDisposable
     {
         for (var i = 0; i < maxSteps; i++)
         {
-            var snapshot = await taskAgent.GetPageSnapshotAsync(maxLinks: 60, cancellationToken: cancellationToken);
+            var snapshot = await collector.GetPageSnapshotAsync(maxLinks: 60, cancellationToken: cancellationToken);
             var candidate = SelectBestClickableText(snapshot, keywords);
             if (string.IsNullOrWhiteSpace(candidate))
             {
                 return;
             }
 
-            await taskAgent.FollowAsync(candidate, cancellationToken);
+            await collector.FollowAsync(candidate, cancellationToken);
             route.Add(candidate);
         }
     }

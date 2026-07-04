@@ -33,7 +33,7 @@ tests/
 - **Api層**: エンドポイント定義は `EndpointExtensions.cs` に集約。`Program.cs` は DI 設定と `app.MapApiEndpoints()` のみ。
 - **EventFlow 登録**: `AddDefaults` は Domain アセンブリと Application アセンブリの両方をスキャンする。
 
-設計ドキュメント: [docs/domain-design.md](docs/domain-design.md), [docs/automation-design.md](docs/automation-design.md)
+設計ドキュメント: [docs/domain-design.md](../docs/domain-design.md), [docs/automation-design.md](../docs/automation-design.md), [docs/system-architecture.md](../docs/system-architecture.md), [docs/collector-design.md](../docs/collector-design.md), [docs/predictor-design.md](../docs/predictor-design.md)
 
 ## Build and Test
 

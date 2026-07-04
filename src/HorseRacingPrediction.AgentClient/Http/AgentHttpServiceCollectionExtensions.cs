@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.AgentClient.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -25,8 +25,6 @@ public static class AgentHttpServiceCollectionExtensions
         services.AddHttpClient<IDataCollectionWriteService, HttpDataCollectionWriteService>(ConfigureClient);
         services.AddHttpClient<IMemoWriteService, HttpMemoWriteService>(ConfigureClient);
 
-        services.AddTransient<RaceQueryTools>();
-        services.AddTransient<PredictionWriteTools>();
         services.AddTransient<DataCollectionWriteTools>();
 
         return services;

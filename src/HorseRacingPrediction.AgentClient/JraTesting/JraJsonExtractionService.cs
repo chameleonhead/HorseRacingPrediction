@@ -1,5 +1,5 @@
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Agents.JraAgent;
+using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Playwright;
 

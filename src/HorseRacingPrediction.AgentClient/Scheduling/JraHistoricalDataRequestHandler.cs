@@ -1,7 +1,7 @@
 using System.Globalization;
-using HorseRacingPrediction.Agents.Contracts;
-using HorseRacingPrediction.Agents.JraAgent;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.AgentClient.Scheduling;
 

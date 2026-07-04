@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -108,10 +108,10 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(
             HttpMethod.Get,
             $"/api/races/{raceId}/context",
-            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.Agents.Contracts.RacePredictionContextReadModel
+            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextReadModel
             {
                 RaceId = raceId,
-                Status = HorseRacingPrediction.Agents.Contracts.RaceStatus.Draft,
+                Status = HorseRacingPrediction.ApiClient.Contracts.RaceStatus.Draft,
                 Entries = []
             }));
         handler.Add(HttpMethod.Patch, $"/api/races/{raceId}", new HttpResponseMessage(HttpStatusCode.OK));
@@ -197,13 +197,13 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(
             HttpMethod.Get,
             $"/api/races/{raceId}/context",
-            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.Agents.Contracts.RacePredictionContextReadModel
+            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextReadModel
             {
                 RaceId = raceId,
-                Status = HorseRacingPrediction.Agents.Contracts.RaceStatus.CardPublished,
+                Status = HorseRacingPrediction.ApiClient.Contracts.RaceStatus.CardPublished,
                 Entries =
                 [
-                    new HorseRacingPrediction.Agents.Contracts.RacePredictionContextEntry(
+                    new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextEntry(
                         "entry-1",
                         horseId,
                         1,

@@ -1,10 +1,12 @@
 # JRA Page Map Blueprint
 
+> このコンポーネントは Collector の実装詳細である。全体構成・責務境界は [collector-design.md](collector-design.md) を参照。
+
 ## 目的
 
 JRA サイトから構造化データを継続的に取得するために、ページ遷移とページ解析を分離する。
 
-- 遷移は JraTaskAgent と Browser が担う
+- 遷移は JraSiteDataCollector と Browser が担う
 - 判定は JraPageKindDetector が担う
 - 構造化抽出は structured page parser 群が担う
 - 後続の業務処理は typed page model と extraction envelope を受け取る
@@ -141,7 +143,7 @@ NavigationMode は次を区別する。
 - ScheduleCalendar parser
 - HoldingList parser
 - RaceList parser
-- JraTaskAgent の開催日程収集を calendar 起点へ変更
+- JraSiteDataCollector の開催日程収集を calendar 起点へ変更
 
 ### Phase 2
 
@@ -155,7 +157,7 @@ NavigationMode は次を区別する。
 - confidence の洗練
 - directNextLinks の公開
 - snapshot golden tests の整備
-- JraTaskAgent の shortcut navigation を structured next links ベースへ寄せる
+- JraSiteDataCollector の shortcut navigation を structured next links ベースへ寄せる
 
 ## 現在の復旧対象
 
@@ -167,4 +169,4 @@ NavigationMode は次を区別する。
 - page map blueprint
 - thisweek / G1 special page の page kind
 
-これを基点に、JraTaskAgent と plugin / verifier への再接続を進める。
+これを基点に、JraSiteDataCollector と plugin / verifier への再接続を進める。

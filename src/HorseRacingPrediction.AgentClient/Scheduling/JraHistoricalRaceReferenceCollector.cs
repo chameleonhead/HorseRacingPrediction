@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.JraAgent;
+using HorseRacingPrediction.Scraping.JraNavigation;
 using Microsoft.Extensions.Logging;
 
 namespace HorseRacingPrediction.AgentClient.Scheduling;
@@ -21,7 +21,7 @@ public sealed class JraHistoricalRaceReferenceCollector : IHistoricalRaceReferen
         var resolvedRacecourse = JraRacecourseResolver.ResolveDisplayName(racecourse)
             ?? throw new InvalidOperationException($"JRA 競馬場名へ変換できませんでした: {racecourse}");
 
-        await using var taskAgent = await JraTaskAgent.CreateAsync().ConfigureAwait(false);
+        await using var taskAgent = await JraSiteDataCollector.CreateAsync().ConfigureAwait(false);
 
         var raceCard = await taskAgent
             .RequestRaceCardAsync(raceDate, resolvedRacecourse, raceNumber, cancellationToken)

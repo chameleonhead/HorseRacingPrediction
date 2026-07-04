@@ -6,6 +6,11 @@ CQRS+ES と ASP.NET Core Web API を前提にした競馬予想アプリケー�
 
 - [docs/domain-design.md](docs/domain-design.md): CQRS+ES 前提の競馬予想ドメイン設計
 - [docs/automation-design.md](docs/automation-design.md): 自動処理の責務設計
+- [docs/system-architecture.md](docs/system-architecture.md): Api / Collector / Predictor の3サービス構成と LLM 利用方針
+- [docs/collector-design.md](docs/collector-design.md): Collector（JRA機械的収集）の設計
+- [docs/predictor-design.md](docs/predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
+- [docs/jra-site-data-collector.md](docs/jra-site-data-collector.md): JraSiteDataCollector（Collectorが使うJRAナビゲーション）の設計仕様
+- [docs/jra-page-map-blueprint.md](docs/jra-page-map-blueprint.md): JRAページ判定・構造化抽出の責務分割
 - [docs/lightsail-deployment.md](docs/lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
 
 ## 現時点の方針

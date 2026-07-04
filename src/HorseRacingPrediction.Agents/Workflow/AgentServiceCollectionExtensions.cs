@@ -87,89 +87,13 @@ public static class AgentServiceCollectionExtensions
     }
 
     /// <summary>
-    /// <see cref="JraRaceResultCollectionWorkflow"/>、<see cref="JraRaceResultUrlDiscoveryAgent"/>、
-    /// および <see cref="JraRaceResultScraper"/> を DI コンテナに登録する。
-    /// <para>
-    /// このワークフローは AI が成績 URL を発見し、
-    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
-    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
-    /// </para>
-    /// <para>
-    /// 使用例（Program.cs または テスト初期化）:
-    /// <code>
-    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
-    /// builder.Services.AddWebBrowserAgent();
-    /// builder.Services.AddJraRaceResultCollectionWorkflow();
-    /// </code>
-    /// </para>
-    /// </summary>
-    public static IServiceCollection AddJraRaceResultCollectionWorkflow(this IServiceCollection services)
-    {
-        services.AddTransient<JraRaceResultScraper>(sp =>
-        {
-            var browser = sp.GetRequiredService<IWebBrowser>();
-            return new JraRaceResultScraper(browser);
-        });
-        services.AddTransient<JraRaceResultCollectionWorkflow>(sp =>
-            new JraRaceResultCollectionWorkflow(
-                sp.GetRequiredService<IWebBrowser>(),
-                sp.GetRequiredService<JraRaceResultScraper>(),
-                sp.GetRequiredService<DataCollectionWriteTools>(),
-                sp.GetRequiredService<IRaceQueryService>(),
-                sp.GetService<ILogger<JraRaceResultCollectionWorkflow>>(),
-                sp.GetService<ILoggerFactory>()));
-        return services;
-    }
-
-    /// <summary>
-    /// <see cref="JraRaceScheduleCollectionWorkflow"/> を DI コンテナに登録する。
-    /// <para>
-    /// JRA サイト構成に沿ったクリック遷移で、今後開催予定の開催日一覧を収集する。
-    /// </para>
-    /// </summary>
-    public static IServiceCollection AddJraRaceScheduleCollectionWorkflow(this IServiceCollection services)
-    {
-        services.AddTransient<JraRaceScheduleCollectionWorkflow>();
-        return services;
-    }
-
-    /// <summary>
-    /// <see cref="JraRaceCardCollectionWorkflow"/>、<see cref="JraRaceCardUrlDiscoveryAgent"/>、
-    /// および <see cref="JraRaceCardScraper"/> を DI コンテナに登録する。
-    /// <para>
-    /// このワークフローは AI が出馬表 URL を発見し、
-    /// Playwright が各ページをスクレイプして DB へ保存するという構成になっており、
-    /// AI によるページ読み取りを最小限に抑えてトークン消費を削減する。
-    /// </para>
-    /// <para>
-    /// 使用例（Program.cs または テスト初期化）:
-    /// <code>
-    /// builder.Services.AddHorseRacingAgentDomainSupport(connectionString);
-    /// builder.Services.AddWebBrowserAgent();
-    /// builder.Services.AddJraRaceCardCollectionWorkflow();
-    /// </code>
-    /// </para>
-    /// </summary>
-    public static IServiceCollection AddJraRaceCardCollectionWorkflow(this IServiceCollection services)
-    {
-        services.AddTransient<JraRaceCardCollectionWorkflow>(sp =>
-        {
-            var browser = sp.GetRequiredService<IWebBrowser>();
-
-            return new JraRaceCardCollectionWorkflow(
-                browser,
-                sp.GetRequiredService<JraRaceCardScraper>(),
-                sp.GetRequiredService<DataCollectionWriteTools>());
-        });
-        return services;
-    }
-
-    /// <summary>
     /// <see cref="PredictionWorkflow"/> および 3 つの予測エージェントを
     /// DI コンテナに登録する。
     /// </summary>
     public static IServiceCollection AddPredictionWorkflow(this IServiceCollection services)
     {
+        services.AddTransient<RaceQueryTools>();
+        services.AddTransient<PredictionWriteTools>();
         services.AddTransient<RaceContextAgent>(sp =>
         {
             var chatClient = sp.GetRequiredService<IChatClient>();

@@ -1,5 +1,5 @@
-using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Scraping.Workflow;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

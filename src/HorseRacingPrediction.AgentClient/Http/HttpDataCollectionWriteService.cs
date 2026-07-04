@@ -3,8 +3,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using HorseRacingPrediction.Agents.Contracts;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.AgentClient.Scheduling;
 
 namespace HorseRacingPrediction.AgentClient.Http;

@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.JraVerifier;
 

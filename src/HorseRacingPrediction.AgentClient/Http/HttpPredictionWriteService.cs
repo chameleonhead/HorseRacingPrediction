@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.AgentClient.Http;
 

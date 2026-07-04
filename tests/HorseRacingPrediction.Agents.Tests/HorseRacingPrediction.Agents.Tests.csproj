@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Agents\HorseRacingPrediction.Agents.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Scraping\HorseRacingPrediction.Scraping.csproj" />
   </ItemGroup>
 
 </Project>

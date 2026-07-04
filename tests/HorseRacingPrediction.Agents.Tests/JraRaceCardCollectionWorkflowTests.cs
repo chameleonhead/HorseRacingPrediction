@@ -1,7 +1,7 @@
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
-using HorseRacingPrediction.Agents.Workflow;
+using HorseRacingPrediction.Scraping.Workflow;
 
 namespace HorseRacingPrediction.Agents.Tests;
 

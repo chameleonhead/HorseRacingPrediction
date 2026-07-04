@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
-using HorseRacingPrediction.Agents.Contracts;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.ApiClient.Contracts;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Plugins;

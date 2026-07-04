@@ -1,8 +1,7 @@
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Workflow;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -28,9 +27,9 @@ builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<JraResultDateParser>();
 builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
 builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, JraHistoricalRaceReferenceCollector>();
-builder.Services.AddSingleton<IJraRaceResultLookup, JraTaskAgentRaceResultLookup>();
+builder.Services.AddSingleton<IJraRaceResultLookup, JraSiteDataCollectorRaceResultLookup>();
 builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
-builder.Services.AddSingleton<IJraProfileLookup, JraTaskAgentProfileLookup>();
+builder.Services.AddSingleton<IJraProfileLookup, JraSiteDataCollectorProfileLookup>();
 builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 

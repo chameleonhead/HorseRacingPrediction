@@ -1,7 +1,7 @@
 @page "/races/{RaceId}"
 @inject ApiBrowseClient Api
-@inject HorseRacingPrediction.Agents.Workflow.JraRaceCardCollectionWorkflow RaceCardWorkflow
-@inject HorseRacingPrediction.Agents.Workflow.JraRaceResultCollectionWorkflow RaceResultWorkflow
+@inject HorseRacingPrediction.Scraping.Workflow.JraRaceCardCollectionWorkflow RaceCardWorkflow
+@inject HorseRacingPrediction.Scraping.Workflow.JraRaceResultCollectionWorkflow RaceResultWorkflow
 
 <h1>レース詳細</h1>
 <p class="hint"><a href="races">← レース検索へ戻る</a></p>
@@ -175,8 +175,8 @@ else
                 race.RacecourseCode,
                 race.RaceNumber.Value);
 
-            HorseRacingPrediction.Agents.Workflow.JraRaceResultCollectionResult? resultResult = null;
-            if (race.Status >= HorseRacingPrediction.Agents.Contracts.RaceStatus.ResultDeclared)
+            HorseRacingPrediction.Scraping.Workflow.JraRaceResultCollectionResult? resultResult = null;
+            if (race.Status >= HorseRacingPrediction.ApiClient.Contracts.RaceStatus.ResultDeclared)
             {
                 resultResult = await RaceResultWorkflow.CollectRaceAsync(
                     race.RaceDate.Value,

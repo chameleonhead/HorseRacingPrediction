@@ -1,4 +1,5 @@
-using HorseRacingPrediction.Agents.Contracts;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.ApiClient.Contracts;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
 

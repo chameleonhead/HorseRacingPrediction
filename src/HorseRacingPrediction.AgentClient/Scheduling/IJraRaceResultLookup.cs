@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Agents.JraAgent;
+using HorseRacingPrediction.Scraping.JraNavigation;
 
 namespace HorseRacingPrediction.AgentClient.Scheduling;
 

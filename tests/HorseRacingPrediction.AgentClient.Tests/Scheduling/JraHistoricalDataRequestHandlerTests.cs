@@ -1,7 +1,7 @@
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Agents.Contracts;
-using HorseRacingPrediction.Agents.JraAgent;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 

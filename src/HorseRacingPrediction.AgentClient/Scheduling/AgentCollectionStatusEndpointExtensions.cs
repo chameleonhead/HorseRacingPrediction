@@ -10,7 +10,7 @@ public static class AgentCollectionStatusEndpointExtensions
                 DateOnly from,
                 DateOnly to,
                 ProcessingStateStore stateStore,
-                HorseRacingPrediction.Agents.Plugins.IRaceQueryService raceQueryService,
+                HorseRacingPrediction.ApiClient.IRaceQueryService raceQueryService,
                 CancellationToken cancellationToken) =>
             {
                 if (from > to)

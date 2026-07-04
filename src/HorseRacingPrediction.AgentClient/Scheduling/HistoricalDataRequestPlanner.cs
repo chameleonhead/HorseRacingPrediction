@@ -1,5 +1,5 @@
-using HorseRacingPrediction.Agents.Contracts;
-using HorseRacingPrediction.Agents.Plugins;
+using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging;
 
 namespace HorseRacingPrediction.AgentClient.Scheduling;
