@@ -2,7 +2,7 @@ using EventFlow;
 using EventFlow.Commands;
 using EventFlow.EntityFramework;
 using EventFlow.Queries;
-using ApiContracts = HorseRacingPrediction.Api.Contracts;
+using ApiContracts = HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Application.Commands.Horses;
@@ -1750,16 +1750,16 @@ public static class EndpointExtensions
                         new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId), ct).ConfigureAwait(false),
                     cancellationToken).ConfigureAwait(false);
 
-                var response = new MlPredictionResponse(
+                var response = new ApiContracts.MlPredictionResponse(
                     result.RaceId,
-                    result.Rankings.Select(r => new MlHorsePredictionDto(
+                    result.Rankings.Select(r => new ApiContracts.MlHorsePrediction(
                         r.EntryId, r.HorseId, r.HorseNumber, r.PredictedScore, r.PredictedRank)).ToList());
 
                 return Results.Ok(response);
             })
             .WithName("GetMlPrediction")
             .WithTags("Race API")
-            .Produces<MlPredictionResponse>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.MlPredictionResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 

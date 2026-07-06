@@ -100,29 +100,88 @@ public class JraJsonExtractionServiceTests
     [TestMethod]
     public async Task ExtractAsync_WithNonJraUrl_ThrowsArgumentException()
     {
-        var service = new JraJsonExtractionService(
-            new FakeWebBrowserSessionFactory(new PageSnapshot(
-                string.Empty,
-                string.Empty,
-                [
-                    new PageSectionSnapshot(
-                        title: string.Empty,
-                        mainText: string.Empty,
-                        headings: [string.Empty],
-                        links: Array.Empty<PageLinkSnapshot>().ToList(),
-                        actions: Array.Empty<PageActionSnapshot>().ToList(),
-                        tables: Array.Empty<PageTableSnapshot>().ToList())
-                ])),
-            NullLogger<JraJsonExtractionService>.Instance);
+        var service = CreateService();
 
+        await AssertThrowsArgumentExceptionAsync(
+            () => service.ExtractAsync("https://example.com/", includeSnapshot: false));
+    }
+
+    [TestMethod]
+    public async Task ExtractAsync_WithSpoofedJraSuffixDomain_ThrowsArgumentException()
+    {
+        var service = CreateService();
+
+        await AssertThrowsArgumentExceptionAsync(
+            () => service.ExtractAsync("https://jra.go.jp.evil.com/", includeSnapshot: false));
+    }
+
+    [TestMethod]
+    public async Task ExtractAsync_WithEmptyUrl_ThrowsArgumentException()
+    {
+        var service = CreateService();
+
+        await AssertThrowsArgumentExceptionAsync(
+            () => service.ExtractAsync(string.Empty, includeSnapshot: false));
+    }
+
+    [TestMethod]
+    public async Task ExtractAsync_WithRelativeUrl_ThrowsArgumentException()
+    {
+        var service = CreateService();
+
+        await AssertThrowsArgumentExceptionAsync(
+            () => service.ExtractAsync("/keiba/", includeSnapshot: false));
+    }
+
+    [TestMethod]
+    public async Task ExtractAsync_WithNonHttpScheme_ThrowsArgumentException()
+    {
+        var service = CreateService();
+
+        await AssertThrowsArgumentExceptionAsync(
+            () => service.ExtractAsync("ftp://www.jra.go.jp/", includeSnapshot: false));
+    }
+
+    [TestMethod]
+    public async Task ExtractAsync_WithBareJraDomain_DoesNotThrow()
+    {
+        var service = CreateService();
+
+        var result = await service.ExtractAsync("https://jra.go.jp/", includeSnapshot: false);
+
+        Assert.AreEqual("https://jra.go.jp/", result.InputUrl);
+    }
+
+    private static async Task AssertThrowsArgumentExceptionAsync(Func<Task> action)
+    {
         try
         {
-            await service.ExtractAsync("https://example.com/", includeSnapshot: false);
+            await action();
             Assert.Fail("ArgumentException が送出される想定でした。");
         }
         catch (ArgumentException)
         {
         }
+    }
+
+    private static JraJsonExtractionService CreateService()
+    {
+        var emptySnapshot = new PageSnapshot(
+            string.Empty,
+            string.Empty,
+            [
+                new PageSectionSnapshot(
+                    title: string.Empty,
+                    mainText: string.Empty,
+                    headings: [string.Empty],
+                    links: Array.Empty<PageLinkSnapshot>().ToList(),
+                    actions: Array.Empty<PageActionSnapshot>().ToList(),
+                    tables: Array.Empty<PageTableSnapshot>().ToList())
+            ]);
+
+        return new JraJsonExtractionService(
+            new FakeWebBrowserSessionFactory(emptySnapshot),
+            NullLogger<JraJsonExtractionService>.Instance);
     }
 
     private static T? GetProperty<T>(object instance, string propertyName)

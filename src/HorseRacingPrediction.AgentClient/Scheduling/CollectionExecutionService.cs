@@ -1,5 +1,5 @@
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.Scraping.Workflow;

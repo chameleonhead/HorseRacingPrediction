@@ -176,7 +176,7 @@ else
                 race.RaceNumber.Value);
 
             HorseRacingPrediction.Scraping.Workflow.JraRaceResultCollectionResult? resultResult = null;
-            if (race.Status >= HorseRacingPrediction.ApiClient.Contracts.RaceStatus.ResultDeclared)
+            if (race.Status >= HorseRacingPrediction.Contracts.RaceStatus.ResultDeclared)
             {
                 resultResult = await RaceResultWorkflow.CollectRaceAsync(
                     race.RaceDate.Value,

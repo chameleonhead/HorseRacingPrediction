@@ -53,6 +53,23 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - 単体では、Microsoft Agent Framework の DevUI・API ブラウジング用 Web UI（`Web/ApiBrowsing`）・JRA 抽出検証用エンドポイント（`JraTesting`）を提供する、開発・検証専用アプリケーションとして動作する
 - プロダクション用途の実行主体ではない（Collector / Predictor がそれを担う）
 
+## プロジェクト依存関係
+
+Api / Collector / Predictor は互いに直接参照しない。三者が共有するのは、DTO のみを持つ `HorseRacingPrediction.Contracts`（ロジックを持たないリーフプロジェクト）だけである。
+
+```
+HorseRacingPrediction.Api ──────────┐
+                                     ▼
+HorseRacingPrediction.Collector ──▶ HorseRacingPrediction.ApiClient ──▶ HorseRacingPrediction.Contracts
+                                     ▲
+HorseRacingPrediction.Predictor ─────┘
+```
+
+- `Contracts`: `RacePredictionContextReadModel` / `HorseReadModel` / `RaceStatus` などの読み取り用 DTO のみ。他プロジェクトへの参照を持たない
+- `ApiClient`: `IRaceQueryService` / `IPredictionWriteService` / `IDataCollectionWriteService` などのクライアント側インターフェースと `DataCollectionWriteTools` を持つ。`Contracts` を参照する
+- `Api` は自身のエンドポイント用 DTO（`Api/Contracts/`）を別途持つが、クライアントと共有する読み取り用 DTO は `Contracts` を参照して再利用し、二重定義しない
+- Collector・Predictor は `ApiClient`（および `Scraping`）のみを参照し、Api プロジェクトも互いのプロジェクトも参照しない。HTTP（`X-Api-Key` 付き）でのみ Api と通信する
+
 ## LLM 利用方針（最重要の前提変更）
 
 | サービス | 処理 | LLM 利用 | 実行頻度の目安 | 理由 |

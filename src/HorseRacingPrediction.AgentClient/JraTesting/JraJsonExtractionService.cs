@@ -179,6 +179,8 @@ public sealed class JraJsonExtractionService
             or JraPageKind.GradeOneSpecial
             or JraPageKind.RaceCard;
 
+    private const string JraDomainSuffix = "jra.go.jp";
+
     private static string ValidateUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -195,6 +197,12 @@ public sealed class JraJsonExtractionService
             && !uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("http または https の URL を指定してください。", nameof(url));
+        }
+
+        if (!uri.Host.Equals(JraDomainSuffix, StringComparison.OrdinalIgnoreCase)
+            && !uri.Host.EndsWith("." + JraDomainSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"JRA公式サイト（{JraDomainSuffix}）の URL を指定してください。", nameof(url));
         }
 
         return uri.ToString();

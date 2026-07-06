@@ -1,4 +1,4 @@
-using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.ApiClient;
 

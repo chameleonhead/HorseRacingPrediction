@@ -6,7 +6,7 @@ public sealed record RaceDetailDto(
     string? RacecourseCode,
     int? RaceNumber,
     string? RaceName,
-    HorseRacingPrediction.ApiClient.Contracts.RaceStatus Status,
+    HorseRacingPrediction.Contracts.RaceStatus Status,
     int? MeetingNumber,
     int? DayNumber,
     string? GradeCode,

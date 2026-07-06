@@ -6,7 +6,7 @@ using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Contracts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

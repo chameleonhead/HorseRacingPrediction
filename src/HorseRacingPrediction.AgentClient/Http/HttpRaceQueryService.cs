@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.AgentClient.Http;

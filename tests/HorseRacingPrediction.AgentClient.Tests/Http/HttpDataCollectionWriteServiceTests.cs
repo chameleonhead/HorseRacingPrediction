@@ -108,10 +108,10 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(
             HttpMethod.Get,
             $"/api/races/{raceId}/context",
-            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextReadModel
+            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.Contracts.RacePredictionContextReadModel
             {
                 RaceId = raceId,
-                Status = HorseRacingPrediction.ApiClient.Contracts.RaceStatus.Draft,
+                Status = HorseRacingPrediction.Contracts.RaceStatus.Draft,
                 Entries = []
             }));
         handler.Add(HttpMethod.Patch, $"/api/races/{raceId}", new HttpResponseMessage(HttpStatusCode.OK));
@@ -197,13 +197,13 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(
             HttpMethod.Get,
             $"/api/races/{raceId}/context",
-            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextReadModel
+            StubHttpMessageHandler.JsonResponse(new HorseRacingPrediction.Contracts.RacePredictionContextReadModel
             {
                 RaceId = raceId,
-                Status = HorseRacingPrediction.ApiClient.Contracts.RaceStatus.CardPublished,
+                Status = HorseRacingPrediction.Contracts.RaceStatus.CardPublished,
                 Entries =
                 [
-                    new HorseRacingPrediction.ApiClient.Contracts.RacePredictionContextEntry(
+                    new HorseRacingPrediction.Contracts.RacePredictionContextEntry(
                         "entry-1",
                         horseId,
                         1,

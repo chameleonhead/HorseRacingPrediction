@@ -1,5 +1,5 @@
 using System.Globalization;
-using HorseRacingPrediction.ApiClient.Contracts;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.ApiClient;
 

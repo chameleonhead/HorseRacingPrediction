@@ -6,7 +6,7 @@ public sealed record RaceSummaryDto(
     string? RacecourseCode,
     int? RaceNumber,
     string? RaceName,
-    HorseRacingPrediction.ApiClient.Contracts.RaceStatus Status,
+    HorseRacingPrediction.Contracts.RaceStatus Status,
     int? EntryCount,
     string? WinningHorseName,
     DateTimeOffset? ResultDeclaredAt);
