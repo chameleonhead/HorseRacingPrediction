@@ -3,7 +3,7 @@ using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Playwright;
 
-namespace HorseRacingPrediction.AgentClient.JraTesting;
+namespace HorseRacingPrediction.Collector.JraTesting;
 
 public sealed class JraJsonExtractionService
 {

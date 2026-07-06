@@ -1,0 +1,17 @@
+@namespace HorseRacingPrediction.Collector.Web.Components.Layout
+@inherits LayoutComponentBase
+
+<div class="page">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">🐎</span>
+            <span class="brand-text">Collector Console</span>
+        </div>
+        <NavMenu />
+    </aside>
+    <main class="content">
+        <article class="content-inner">
+            @Body
+        </article>
+    </main>
+</div>

@@ -2,9 +2,11 @@
 
 ## 位置づけ
 
-`HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。
+`HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。バックグラウンドでの収集処理に加え、その収集バッチ処理の状況を確認・操作するための Web UI / API も自身で提供する（旧 `AgentClient` が担っていた機能を移管したもの）。
 
 全体構成は [system-architecture.md](system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
+
+> `HorseRacingPrediction.AgentClient` は将来的に廃止予定であり、データ収集に関わるバッチ処理・状況管理エンドポイント・監視画面・テストコードは本プロジェクトへ移管済みである（2026-07-07）。AgentClient に残っているのは、LLM DevUI（Microsoft Agent Framework）と、予想結果を含む汎用データ参照用の Web UI（レース/馬/騎手/調教師の一覧・詳細）のみである。
 
 ## 責務境界
 
@@ -59,6 +61,38 @@
 | `ResultDayCollectionState` / `ResultDayCollectionStatusEntity` / `ResultDayCollectionStatusReadModel` | 日単位の結果収集完了状態 |
 | `RaceDataCollectionErrorCode` / `RaceDataCollectionErrorDescriptor` / `RaceDataCollectionErrorClassifier` | 失敗要因の分類 |
 
+### 収集状況の監視・操作（Web UI / API）
+
+Collector は `Microsoft.NET.Sdk.Web` ベースの ASP.NET Core アプリとして、収集バッチ処理の状況を確認・操作するための Minimal API と Blazor Server 画面を自身でホストする。
+
+#### API エンドポイント（`Scheduling/Agent*EndpointExtensions.cs`）
+
+| エンドポイント | 役割 |
+|---|---|
+| `GET /agent/job-statuses` | ジョブ一覧を JobType / Status で絞り込んで取得する |
+| `GET /agent/jobs/{jobId}` | ジョブ詳細（ペイロード・エラー内容含む）を取得する |
+| `GET /agent/result-day-statuses` | 日単位の結果収集状況を期間指定で取得する |
+| `GET /agent/race-collection-statuses` | レース単位の収集状況を期間指定で取得する（`IRaceQueryService` でレース名を補完） |
+| `GET /agent/acquisition-statuses` | 馬・騎手・調教師のプロフィール取得状況を期間・種別で取得する |
+| `POST /agent/job-statuses/{jobType}/{deduplicationKey}/requeue` | 指定ジョブを強制再キューする |
+| `POST /agent/result-day-statuses/{providerType}/{targetDate}/requeue` | 日単位の収集を Discovery/Collection モードで再投入する |
+| `POST /agent/result-day-jobs/trigger` | 任意の日付・プロバイダで日次収集を新規投入する |
+
+これらは旧 `AgentClient` の `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` をそのまま移管したものである。ただし `AgentClient` にあった `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。Collector と Predictor は別々の SQLite ジョブストア（`collector-processing-jobs.db` / `predictor-processing-jobs.db`）を使うため、Collector からの予想ジョブ投入は Predictor 側に反映されず意味を持たないためである。
+
+#### Blazor Server 画面（`Web/Components/Pages/`）
+
+| パス | 画面 | 内容 |
+|---|---|---|
+| `/jobs` | ジョブ一覧 | JobType/Status フィルタ、再キュー、日次収集の新規投入 |
+| `/jobs/{JobId}` | ジョブ詳細 | ペイロード・エラー内容の確認、再キュー |
+| `/result-days` | 日次収集状況 | Discovery/Collection 単位の再投入 |
+| `/acquisition-statuses` | 取得ステータス | 馬・騎手・調教師のプロフィール取得結果一覧 |
+| `/jra-tool` | JRA URL 抽出ツール（デバッグ） | 任意 URL のページ種別判定・JSON 抽出結果を確認 |
+| `/snapshot-tool` | PageSnapshot ビューア（デバッグ） | 任意 URL の `PageSnapshot` をセクション構造で確認 |
+
+JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` など）に実装されており、Collector 自身のスクレイピング・抽出ロジックの動作確認に使う。
+
 ### ジョブペイロード種別（実装済み）
 
 - `RaceCardCollectionJobPayload` — 出馬表収集
@@ -99,3 +133,4 @@
 - ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行するかどうか
 - 地方競馬など JRA 以外のデータソースを Provider として追加する場合の抽象化
 - `RaceTextInsightCollector` を有効化する場合のコスト対効果の再評価
+- `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装など、Collector と Predictor が `HorseRacingPrediction.AgentClient` からソースリンクで共有しているコードの移管先（`ApiClient` への統合など）。`HorseRacingPrediction.AgentClient` を完全に廃止するには、この共有コードの移管が前提になる

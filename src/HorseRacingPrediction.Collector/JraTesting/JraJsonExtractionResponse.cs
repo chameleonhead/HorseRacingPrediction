@@ -1,6 +1,6 @@
 using HorseRacingPrediction.Scraping.Browser;
 
-namespace HorseRacingPrediction.AgentClient.JraTesting;
+namespace HorseRacingPrediction.Collector.JraTesting;
 
 public sealed record JraJsonExtractionResponse(
     string InputUrl,

@@ -1,6 +1,7 @@
 using HorseRacingPrediction.AgentClient.Scheduling;
+using HorseRacingPrediction.Collector.Scheduling;
 
-namespace HorseRacingPrediction.AgentClient.Tests.Scheduling;
+namespace HorseRacingPrediction.Collector.Tests.Scheduling;
 
 [TestClass]
 public sealed class ScrapingRegistrationServiceTests

@@ -1,8 +1,8 @@
-using HorseRacingPrediction.AgentClient.JraTesting;
+using HorseRacingPrediction.Collector.JraTesting;
 using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace HorseRacingPrediction.AgentClient.Tests;
+namespace HorseRacingPrediction.Collector.Tests;
 
 [TestClass]
 public class JraJsonExtractionServiceTests

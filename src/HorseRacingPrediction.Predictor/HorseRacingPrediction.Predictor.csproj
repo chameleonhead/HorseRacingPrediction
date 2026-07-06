@@ -25,12 +25,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\AgentAcquisitionStatusEndpointExtensions.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\AgentCollectionStatusEndpointExtensions.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\AgentDashboardEndpointExtensions.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\ScrapingRegistrationService.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\CollectionExecutionService.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\HistoricalDataRequestExecutionService.cs" />
     <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\PredictionExecutionService.cs" />
     <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\RaceTextInsightCollector.cs" />
   </ItemGroup>

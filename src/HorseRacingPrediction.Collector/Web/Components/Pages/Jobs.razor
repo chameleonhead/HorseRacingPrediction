@@ -40,13 +40,6 @@
         </label>
         <button class="btn" @onclick="TriggerResultDayAsync">日次収集を投入</button>
     </div>
-    <div class="toolbar">
-        <label>
-            予想 RaceId:
-            <input @bind="newRaceId" placeholder="例: 2026010110201" />
-        </label>
-        <button class="btn" @onclick="TriggerPredictionAsync">予想ジョブを投入</button>
-    </div>
     @if (!string.IsNullOrEmpty(message))
     {
         <p class="hint">@message</p>
@@ -102,7 +95,6 @@ else
 
     private DateOnly newResultDay = DateOnly.FromDateTime(DateTime.Today);
     private string newProvider = "JRA";
-    private string? newRaceId;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -151,19 +143,6 @@ else
             priority: 200);
         ExecutionTrigger.Signal();
         message = $"日次収集ジョブを投入しました: {provider} {newResultDay:yyyy-MM-dd}";
-        await LoadAsync();
-    }
-
-    private async Task TriggerPredictionAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newRaceId))
-        {
-            message = "RaceId を入力してください。";
-            return;
-        }
-        var rid = newRaceId.Trim();
-        await Store.EnqueuePredictionCandidatesAsync(new[] { rid }, DateTimeOffset.UtcNow);
-        message = $"予想ジョブを投入しました: {rid}";
         await LoadAsync();
     }
 

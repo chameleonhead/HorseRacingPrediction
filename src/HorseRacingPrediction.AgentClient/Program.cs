@@ -1,5 +1,4 @@
 using HorseRacingPrediction.AgentClient.Http;
-using HorseRacingPrediction.AgentClient.JraTesting;
 using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.AgentClient.Web.ApiBrowsing;
 using HorseRacingPrediction.AgentClient.Web.Components;
@@ -135,13 +134,9 @@ builder.Services.AddSingleton<IJraRaceResultLookup, JraSiteDataCollectorRaceResu
 builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
 builder.Services.AddSingleton<IJraProfileLookup, JraSiteDataCollectorProfileLookup>();
 builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
-builder.Services.AddSingleton<JraJsonExtractionService>();
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<RaceTextInsightCollector>();
-builder.Services.AddHostedService<ScrapingRegistrationService>();
-builder.Services.AddHostedService<CollectionExecutionService>();
-builder.Services.AddHostedService<HistoricalDataRequestExecutionService>();
 builder.Services.AddHostedService<PredictionExecutionService>();
 
 // -------------------------------------------------------------------
@@ -179,10 +174,6 @@ app.UseAntiforgery();
 
 app.MapOpenAIResponses();
 app.MapOpenAIConversations();
-app.MapAgentCollectionStatusEndpoints();
-app.MapAgentAcquisitionStatusEndpoints();
-app.MapAgentDashboardEndpoints();
-app.MapJraJsonTesterEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

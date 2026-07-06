@@ -38,6 +38,7 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - JRA 公式サイトを Playwright による機械的スクレイピングで巡回し、Api へ収集データを登録する
 - ページ遷移・抽出処理に LLM は使わない
 - 補助的な LLM 機能（任意情報源からの展望・調子コメント収集）は実装として残すが、既定で無効化している
+- 収集バッチ処理の状況を確認・操作する Minimal API と Blazor Server 画面を自身でホストする（`Microsoft.NET.Sdk.Web`。旧 AgentClient から移管）
 - 詳細: [collector-design.md](collector-design.md)
 
 ### Predictor
@@ -46,11 +47,13 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - 確定した予想票をもとに、SNS 投稿文をマルチエージェント LLM ワークフローで生成する
 - 詳細: [predictor-design.md](predictor-design.md)
 
-### AgentClient（共有ソース + 開発用 DevUI）
+### AgentClient（共有ソース + 開発用 DevUI・廃止予定）
 
-- `HorseRacingPrediction.AgentClient` は、Collector と Predictor が `Compile Include` でソースリンクする Http / Scheduling 系コードの実体を持つ
-  - プロジェクト参照ではなくファイルリンクのため、Collector と Predictor はそれぞれ不要なクラス（相手側専用の HostedService など）を `Compile Remove` で除外している
-- 単体では、Microsoft Agent Framework の DevUI・API ブラウジング用 Web UI（`Web/ApiBrowsing`）・JRA 抽出検証用エンドポイント（`JraTesting`）を提供する、開発・検証専用アプリケーションとして動作する
+- **廃止予定。** データ収集に関わるバッチ処理・状況管理エンドポイント・監視画面・テストコードは Collector へ移管済み（2026-07-07）
+- `HorseRacingPrediction.AgentClient` は、Collector と Predictor が `Compile Include` でソースリンクする Http / Scheduling 系の**共有コード**（`ProcessingStateStore`, `AgentProcessingOptions`, HTTP クライアント実装など）の実体を今も持つ
+  - プロジェクト参照ではなくファイルリンクのため、Collector と Predictor はそれぞれ不要なクラスを `Compile Remove` で除外している
+  - これらの共有コードを本当に AgentClient から独立させるかどうかは今後の課題（[collector-design.md](collector-design.md) の「今後の課題」参照）
+- 単体では、Microsoft Agent Framework の DevUI と、予想結果を含む汎用データ参照用 Web UI（`Web/ApiBrowsing`: レース/馬/騎手/調教師の一覧・詳細）のみを提供する
 - プロダクション用途の実行主体ではない（Collector / Predictor がそれを担う）
 
 ## プロジェクト依存関係

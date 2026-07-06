@@ -1,4 +1,6 @@
-namespace HorseRacingPrediction.AgentClient.Scheduling;
+using HorseRacingPrediction.AgentClient.Scheduling;
+
+namespace HorseRacingPrediction.Collector.Scheduling;
 
 public static class AgentAcquisitionStatusEndpointExtensions
 {

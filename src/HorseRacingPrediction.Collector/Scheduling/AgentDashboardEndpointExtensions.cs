@@ -1,4 +1,6 @@
-namespace HorseRacingPrediction.AgentClient.Scheduling;
+using HorseRacingPrediction.AgentClient.Scheduling;
+
+namespace HorseRacingPrediction.Collector.Scheduling;
 
 public static class AgentDashboardEndpointExtensions
 {
@@ -161,34 +163,6 @@ public static class AgentDashboardEndpointExtensions
                     providerType = normalizedProviderType,
                     targetDate,
                     queuedJobType = AgentJobType.ResultDayDiscoveryRequest
-                });
-            });
-
-        endpoints.MapPost(
-            "/agent/prediction-jobs/trigger",
-            async (
-                string raceId,
-                ProcessingStateStore stateStore,
-                CancellationToken cancellationToken) =>
-            {
-                if (string.IsNullOrWhiteSpace(raceId))
-                {
-                    return Results.ValidationProblem(new Dictionary<string, string[]>
-                    {
-                        ["raceId"] = ["raceId は必須です。"]
-                    });
-                }
-
-                var normalizedRaceId = raceId.Trim();
-                var now = DateTimeOffset.UtcNow;
-                await stateStore
-                    .EnqueuePredictionCandidatesAsync([normalizedRaceId], now, cancellationToken)
-                    .ConfigureAwait(false);
-
-                return Results.Ok(new
-                {
-                    raceId = normalizedRaceId,
-                    queuedJobType = AgentJobType.PredictionExecution
                 });
             });
 

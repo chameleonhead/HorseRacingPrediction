@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.AgentClient.JraTesting;
+namespace HorseRacingPrediction.Collector.JraTesting;
 
 public static class JraJsonTesterEndpointExtensions
 {
