@@ -12,3 +12,8 @@ output "app_directory" {
   description = "Remote application directory used by docker compose."
   value       = var.app_directory
 }
+
+output "public_hostname" {
+  description = "sslip.io hostname clients should use for HTTPS access. Caddy obtains a browser-trusted Let's Encrypt certificate for this name automatically."
+  value       = local.public_hostname
+}

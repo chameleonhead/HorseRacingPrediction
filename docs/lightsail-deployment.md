@@ -323,14 +323,17 @@ gh run view --log
 
 ## 11. 動作確認をする
 
-独自ドメインがない場合は、`LIGHTSAIL_HOST` 向けの自己署名証明書をデプロイ時に自動生成します。ブラウザや `curl` では信頼されないため、確認時は `-k` を付けてください。
-
-独自ドメインがある場合は、`LIGHTSAIL_DOMAIN_NAME` と `LIGHTSAIL_ACME_EMAIL` を GitHub Secrets に設定してください。Caddy がドメイン側だけ公開証明書を自動取得します。
+独自ドメインを登録していなくても、デプロイ時に `LIGHTSAIL_HOST`（静的IP）から `<IPをハイフン区切りにした文字列>.sslip.io` という形式のホスト名を自動的に導出し、Caddy がそのホスト名で Let's Encrypt の証明書を自動取得します。sslip.io はそのホスト名をそのまま埋め込まれたIPに解決するワイルドカードDNSサービスで、ドメインを購入・所有しなくても CA 発行の正規証明書を得られます。そのため `curl` や実クライアントは `-k` なしでそのまま接続できます。
 
 ```bash
-curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/index.html
-curl -I https://${LIGHTSAIL_DOMAIN_NAME}/swagger/v1/swagger.json
+export LIGHTSAIL_PUBLIC_HOSTNAME="$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io"
+curl -I https://${LIGHTSAIL_PUBLIC_HOSTNAME}/swagger/index.html
+curl -I https://${LIGHTSAIL_PUBLIC_HOSTNAME}/swagger/v1/swagger.json
 ```
+
+独自ドメインを別途用意している場合は、`LIGHTSAIL_DOMAIN_NAME`（と任意で `LIGHTSAIL_ACME_EMAIL`）を GitHub Secrets に設定すれば、そちらが優先されます（sslip.io は使われません）。
+
+自己署名証明書での直接IPアクセス（デバッグ用）は引き続き有効です。
 
 ```bash
 curl -k -I https://${LIGHTSAIL_HOST}/swagger/index.html
@@ -340,7 +343,7 @@ curl -k -I https://${LIGHTSAIL_HOST}/swagger/v1/swagger.json
 API キー付きの確認例:
 
 ```bash
-curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_DOMAIN_NAME}/api/races
+curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/races
 curl -k -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_HOST}/api/races
 ```
 
@@ -367,6 +370,7 @@ curl -k -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_HOST}/api/races
 
 ## 運用メモ
 
+- 独自ドメイン未設定時は、静的IPから導出した `sslip.io` ホスト名で Caddy が自動的に信頼された証明書を取得する（`.github/workflows/app-deploy.yml` 内で導出）
 - API キーは `HORSE_RACING_API_KEY` としてコンテナへ注入される
 - SQLite ファイルはサーバー上の `/opt/horse-racing-prediction/app/data/eventstore.db` に保存される
 - バックアップは Lightsail のスナップショットで取得する

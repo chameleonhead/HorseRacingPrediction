@@ -1,6 +1,9 @@
 locals {
   instance_name = "${var.project_name}-api"
   key_pair_name = "${var.project_name}-deploy-key"
+  # sslip.io resolves "<ip-with-dashes>.sslip.io" to the embedded IP, so Caddy can obtain
+  # a CA-trusted Let's Encrypt certificate without owning a domain.
+  public_hostname = "${replace(aws_lightsail_static_ip.api.ip_address, ".", "-")}.sslip.io"
 }
 
 resource "aws_lightsail_key_pair" "deploy" {
