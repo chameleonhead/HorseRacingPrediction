@@ -1,7 +1,5 @@
 using HorseRacingPrediction.AgentClient.Http;
 using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.AgentClient.Web.ApiBrowsing;
-using HorseRacingPrediction.AgentClient.Web.Components;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.ChatClients;
@@ -146,20 +144,6 @@ builder.AddOpenAIResponses();
 builder.AddOpenAIConversations();
 
 // -------------------------------------------------------------------
-// Web UI（Blazor Server）・API 参照用 HttpClient
-// -------------------------------------------------------------------
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-builder.Services.AddHttpClient<ApiBrowseClient>((sp, client) =>
-{
-    var options = sp.GetRequiredService<IOptions<ApiClientOptions>>().Value;
-    if (!string.IsNullOrWhiteSpace(options.BaseUrl))
-        client.BaseAddress = new Uri(options.BaseUrl);
-    if (!string.IsNullOrWhiteSpace(options.ApiKey))
-        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-});
-
-// -------------------------------------------------------------------
 // DevUI（開発時のみ）
 // -------------------------------------------------------------------
 if (builder.Environment.IsDevelopment())
@@ -174,9 +158,6 @@ app.UseAntiforgery();
 
 app.MapOpenAIResponses();
 app.MapOpenAIConversations();
-
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
 
 if (app.Environment.IsDevelopment())
 {

@@ -111,7 +111,7 @@ public sealed class HttpRaceQueryService : IRaceQueryService
 
     public async Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync($"/races/{Uri.EscapeDataString(raceId)}/ml-prediction", cancellationToken).ConfigureAwait(false);
+        var response = await _httpClient.GetAsync($"/api/races/{Uri.EscapeDataString(raceId)}/ml-prediction", cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 

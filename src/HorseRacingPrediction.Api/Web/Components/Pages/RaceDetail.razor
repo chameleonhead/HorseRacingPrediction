@@ -1,0 +1,219 @@
+@page "/races/{RaceId}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<h1>レース詳細</h1>
+<p class="hint"><a href="races">← レース検索へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@(race.RaceName ?? race.RaceId)</h2>
+        <dl class="meta">
+            <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
+            <dt>日付</dt><dd>@race.RaceDate</dd>
+            <dt>競馬場 / R</dt><dd>@race.RacecourseCode / @race.RaceNumber</dd>
+            <dt>状態</dt><dd>@race.Status</dd>
+            <dt>距離 / 馬場</dt><dd>@FormatDistanceSurface(race.DistanceMeters, race.SurfaceCode, race.DirectionCode)</dd>
+            <dt>Grade</dt><dd>@(string.IsNullOrWhiteSpace(race.GradeCode) ? "未設定" : race.GradeCode)</dd>
+            <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
+            <dt>勝ち馬</dt>
+            <dd>
+                @if (!string.IsNullOrEmpty(race.WinningHorseId))
+                {
+                    <a href="@($"horses/{Uri.EscapeDataString(race.WinningHorseId!)}")">@race.WinningHorseName</a>
+                }
+                else { @race.WinningHorseName }
+            </dd>
+        </dl>
+    </section>
+
+    @if (race.Entries.Count > 0)
+    {
+        <section class="card">
+            <h3>出走表</h3>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>枠番</th>
+                        <th>馬番</th>
+                        <th>馬名</th>
+                        <th>性齢</th>
+                        <th>負担体重</th>
+                        <th>馬体重</th>
+                        <th>騎手</th>
+                        <th>調教師</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
+                    {
+                        <tr>
+                            <td>@e.GateNumber</td>
+                            <td>@e.HorseNumber</td>
+                            <td><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a></td>
+                            <td>@e.SexCode @e.Age</td>
+                            <td>@e.AssignedWeight</td>
+                            <td>@FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(e.JockeyId))
+                                {
+                                    <a href="@($"jockeys/{Uri.EscapeDataString(e.JockeyId!)}")">@e.JockeyName</a>
+                                }
+                            </td>
+                            <td>@if (!string.IsNullOrEmpty(e.TrainerId)) { <a href="@($"trainers/{Uri.EscapeDataString(e.TrainerId!)}")">@e.TrainerName</a> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (race.EntryResults.Count > 0)
+    {
+        <section class="card">
+            <h3>結果</h3>
+            <table class="data">
+                <thead>
+                    <tr>
+                        <th>着順</th>
+                        <th>馬番</th>
+                        <th>馬名</th>
+                        <th>タイム</th>
+                        <th>着差</th>
+                        <th>上り3F</th>
+                        <th>賞金</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue))
+                    {
+                        <tr>
+                            <td>@r.FinishPosition</td>
+                            <td>@r.HorseNumber</td>
+                            <td><a href="@($"horses/{Uri.EscapeDataString(r.HorseId)}")">@(r.HorseName ?? r.HorseId)</a></td>
+                            <td>@r.OfficialTime</td>
+                            <td>@r.MarginText</td>
+                            <td>@r.LastThreeFurlongTime</td>
+                            <td>@r.PrizeMoney</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(race.StewardReportText))
+    {
+        <section class="card">
+            <h3>レース概況</h3>
+            <pre class="payload">@race.StewardReportText</pre>
+        </section>
+    }
+
+    <section class="card">
+        <h3>データ訂正</h3>
+        <p class="hint">誤登録されたデータの訂正用です。理由の記録が残ります。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
+        <div class="form-grid">
+            <label>レース名<input @bind="correctRaceName" /></label>
+            <label>競馬場コード<input @bind="correctRacecourseCode" /></label>
+            <label>レース番号<input type="number" @bind="correctRaceNumber" /></label>
+            <label>グレード<input @bind="correctGradeCode" /></label>
+            <label>馬場<input @bind="correctSurfaceCode" /></label>
+            <label>距離(m)<input type="number" @bind="correctDistanceMeters" /></label>
+            <label>回り<input @bind="correctDirectionCode" /></label>
+            <label>訂正理由<input @bind="correctReason" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存</button>
+        </div>
+        @if (correctErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <MemoPanel SubjectType="Race" SubjectId="@RaceId" />
+}
+
+@code {
+    [Parameter] public string RaceId { get; set; } = string.Empty;
+
+    private bool loading;
+    private RaceResponse? race;
+
+    private string? correctRaceName;
+    private string? correctRacecourseCode;
+    private int? correctRaceNumber;
+    private string? correctGradeCode;
+    private string? correctSurfaceCode;
+    private int? correctDistanceMeters;
+    private string? correctDirectionCode;
+    private string? correctReason;
+    private bool correcting;
+    private IReadOnlyList<string> correctErrors = Array.Empty<string>();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            race = await Api.GetRaceAsync(RaceId);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task CorrectAsync()
+    {
+        correcting = true;
+        try
+        {
+            var result = await Api.CorrectRaceDataAsync(RaceId, new CorrectRaceDataRequest(
+                correctRaceName, correctRacecourseCode, correctRaceNumber, correctGradeCode,
+                correctSurfaceCode, correctDistanceMeters, correctDirectionCode, correctReason));
+            correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success)
+            {
+                correctRaceName = null; correctRacecourseCode = null; correctRaceNumber = null;
+                correctGradeCode = null; correctSurfaceCode = null; correctDistanceMeters = null;
+                correctDirectionCode = null; correctReason = null;
+                await LoadAsync();
+            }
+        }
+        finally
+        {
+            correcting = false;
+        }
+    }
+
+    private static string FormatBodyWeight(decimal? bodyWeight, decimal? bodyWeightDiff)
+    {
+        if (!bodyWeight.HasValue)
+        {
+            return string.Empty;
+        }
+
+        if (!bodyWeightDiff.HasValue || bodyWeightDiff.Value == 0m)
+        {
+            return bodyWeight.Value.ToString("0.#");
+        }
+
+        var diffPrefix = bodyWeightDiff.Value > 0m ? "+" : string.Empty;
+        return $"{bodyWeight.Value:0.#} ({diffPrefix}{bodyWeightDiff.Value:0.#})";
+    }
+
+    private static string FormatDistanceSurface(int? distanceMeters, string? surfaceCode, string? directionCode)
+    {
+        var distance = distanceMeters.HasValue ? $"{distanceMeters.Value}m" : "未設定";
+        var surface = string.IsNullOrWhiteSpace(surfaceCode) ? "未設定" : surfaceCode;
+        var direction = string.IsNullOrWhiteSpace(directionCode) ? string.Empty : $" {directionCode}";
+        return $"{distance} / {surface}{direction}";
+    }
+}

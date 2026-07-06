@@ -1,0 +1,196 @@
+@inject AdminApiClient Api
+
+<section class="card">
+    <h3>メモ</h3>
+
+    @if (loading)
+    {
+        <p>読み込み中…</p>
+    }
+    else
+    {
+        @if (memos.Count == 0)
+        {
+            <p class="hint">メモはまだありません。</p>
+        }
+        else
+        {
+            <ul class="memo-list">
+                @foreach (var memo in memos)
+                {
+                    <li class="memo-item">
+                        @if (editingMemoId == memo.MemoId)
+                        {
+                            <div class="form-grid">
+                                <label>種別<input @bind="editMemoType" /></label>
+                                <label>内容<textarea @bind="editContent" rows="3"></textarea></label>
+                            </div>
+                            <div class="toolbar">
+                                <button class="btn primary small" @onclick="() => SaveEditAsync(memo.MemoId)">保存</button>
+                                <button class="btn small" @onclick="CancelEdit">キャンセル</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="memo-header">
+                                <span class="pill">@memo.MemoType</span>
+                                <span class="hint">@memo.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                                @if (memo.Subjects.Count > 1)
+                                {
+                                    @foreach (var s in memo.Subjects)
+                                    {
+                                        <span class="pill pill-default">@s.SubjectType:@s.SubjectId</span>
+                                    }
+                                }
+                            </div>
+                            <p class="memo-content">@memo.Content</p>
+                            <div class="toolbar">
+                                <button class="btn small" @onclick="() => StartEdit(memo)">編集</button>
+                                @if (deleteArmedMemoId == memo.MemoId)
+                                {
+                                    <span class="hint">本当に削除しますか？</span>
+                                    <button class="btn small" @onclick="() => DeleteAsync(memo.MemoId)">削除する</button>
+                                    <button class="btn small" @onclick="() => deleteArmedMemoId = null">キャンセル</button>
+                                }
+                                else
+                                {
+                                    <button class="btn small" @onclick="() => deleteArmedMemoId = memo.MemoId">削除</button>
+                                }
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        <div class="form-grid">
+            <label>種別<input @bind="newMemoType" placeholder="例: 展望, 注意点" /></label>
+            <label>内容<textarea @bind="newContent" rows="3"></textarea></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="AddAsync" disabled="@saving">メモを追加</button>
+        </div>
+
+        @if (errors.Count > 0)
+        {
+            <ul class="error-list">
+                @foreach (var e in errors) { <li>@e</li> }
+            </ul>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string SubjectType { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string SubjectId { get; set; } = string.Empty;
+
+    private bool loading;
+    private bool saving;
+    private IReadOnlyList<MemoResponse> memos = Array.Empty<MemoResponse>();
+    private IReadOnlyList<string> errors = Array.Empty<string>();
+
+    private string? newMemoType;
+    private string? newContent;
+
+    private string? editingMemoId;
+    private string? editMemoType;
+    private string? editContent;
+
+    private string? deleteArmedMemoId;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            memos = await Api.GetMemosBySubjectAsync(SubjectType, SubjectId);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newMemoType) || string.IsNullOrWhiteSpace(newContent))
+        {
+            errors = new[] { "種別と内容を入力してください。" };
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var request = new CreateMemoRequest(
+                AuthorId: null,
+                MemoType: newMemoType!,
+                Content: newContent!,
+                CreatedAt: DateTimeOffset.UtcNow,
+                Subjects: new[] { new MemoSubjectDto(SubjectType, SubjectId) });
+
+            var result = await Api.CreateMemoAsync(request);
+            if (result.Success)
+            {
+                newMemoType = null;
+                newContent = null;
+                errors = Array.Empty<string>();
+                await LoadAsync();
+            }
+            else
+            {
+                errors = result.Errors;
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void StartEdit(MemoResponse memo)
+    {
+        editingMemoId = memo.MemoId;
+        editMemoType = memo.MemoType;
+        editContent = memo.Content;
+        deleteArmedMemoId = null;
+    }
+
+    private void CancelEdit()
+    {
+        editingMemoId = null;
+    }
+
+    private async Task SaveEditAsync(string memoId)
+    {
+        var request = new UpdateMemoRequest(MemoType: editMemoType, Content: editContent);
+        var result = await Api.UpdateMemoAsync(memoId, request);
+        if (result.Success)
+        {
+            editingMemoId = null;
+            errors = Array.Empty<string>();
+            await LoadAsync();
+        }
+        else
+        {
+            errors = result.Errors;
+        }
+    }
+
+    private async Task DeleteAsync(string memoId)
+    {
+        var result = await Api.DeleteMemoAsync(memoId);
+        deleteArmedMemoId = null;
+        if (result.Success)
+        {
+            errors = Array.Empty<string>();
+            await LoadAsync();
+        }
+        else
+        {
+            errors = result.Errors;
+        }
+    }
+}

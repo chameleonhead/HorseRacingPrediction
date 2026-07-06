@@ -1732,7 +1732,7 @@ public static class EndpointExtensions
         // ML予測 API
         // ------------------------------------------------------------------ //
 
-        app.MapGet("/races/{raceId}/ml-prediction",
+        app.MapGet("/api/races/{raceId}/ml-prediction",
             [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
             async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
             {
@@ -1763,7 +1763,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
-        app.MapPost("/ml/train",
+        app.MapPost("/api/ml/train",
             [SwaggerOperation(Summary = "ML再訓練", Description = "過去レース結果を使ってML.NETモデルを再訓練します。")]
             async (IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 IRacePredictor predictor, CancellationToken cancellationToken) =>

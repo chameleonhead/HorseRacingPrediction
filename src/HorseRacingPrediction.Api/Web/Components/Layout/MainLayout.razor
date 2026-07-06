@@ -1,0 +1,20 @@
+@namespace HorseRacingPrediction.Api.Web.Components.Layout
+@inherits LayoutComponentBase
+
+<div class="page">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">🐎</span>
+            <span class="brand-text">競馬DB管理</span>
+        </div>
+        <NavMenu />
+        <form method="post" action="/logout" class="logout-form">
+            <button class="btn small" type="submit">ログアウト</button>
+        </form>
+    </aside>
+    <main class="content">
+        <article class="content-inner">
+            @Body
+        </article>
+    </main>
+</div>

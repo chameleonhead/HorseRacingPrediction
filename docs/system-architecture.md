@@ -30,7 +30,12 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 
 - レース・馬・騎手・調教師・予想票・結果・払戻を CQRS + Event Sourcing で管理する
 - 書き込みはコマンドエンドポイント、読み取りは用途別 ReadModel で提供する
-- 認証は `X-Api-Key`
+- 機械間通信（Collector / Predictor）向けの JSON API は例外なく `/api` 配下に置き、`X-Api-Key` ヘッダーで認証する（ML 予測系の `/api/races/{raceId}/ml-prediction`, `/api/ml/train` を含む）
+- Collector と同様に、自身で Blazor Server 製の管理画面（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions` などルート直下）をホストする（`Microsoft.NET.Sdk.Web`。旧 AgentClient の `Web/ApiBrowsing` を移管・拡張し、2026-07-07 に単なる参照ツールから馬・騎手・調教師の登録／編集／別名統合／データ訂正、レース・予想票のデータ訂正、メモの CRUD ができるメンテナンスツールへ変更）
+  - JSON API が常に `/api` 配下、管理UIが常にルート直下という規約により両者のパスは重ならないため、認証免除の判定は管理UIのルート名（`/races`, `/horses` など）を明示的に列挙するだけでよい（`Security/ApiKeyApplicationBuilderExtensions.cs`）
+  - 管理画面は Cookie 認証で保護する。ログイン画面（`/login`）はユーザー名固定「user」、パスワードは `ApiKey:Key`（JSON API と同じ値）で認証する
+  - 管理画面はコマンド/クエリを直接実行するのではなく、既存の JSON API を自己ループバック HTTP で呼び出す（`Web/ApiBrowsing/AdminApiClient`）。ここでも自プロセス自身の `X-Api-Key` を自動付与する
+  - メンテナンスは既存 API コマンドの範囲内に限定し、レース・予想票の新規作成やライフサイクル進行（出走登録・結果確定など）は対象外（Collector / Predictor の自動処理が担う）
 - 詳細: [domain-design.md](domain-design.md), [automation-design.md](automation-design.md)
 
 ### Collector
@@ -53,7 +58,8 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - `HorseRacingPrediction.AgentClient` は、Collector と Predictor が `Compile Include` でソースリンクする Http / Scheduling 系の**共有コード**（`ProcessingStateStore`, `AgentProcessingOptions`, HTTP クライアント実装など）の実体を今も持つ
   - プロジェクト参照ではなくファイルリンクのため、Collector と Predictor はそれぞれ不要なクラスを `Compile Remove` で除外している
   - これらの共有コードを本当に AgentClient から独立させるかどうかは今後の課題（[collector-design.md](collector-design.md) の「今後の課題」参照）
-- 単体では、Microsoft Agent Framework の DevUI と、予想結果を含む汎用データ参照用 Web UI（`Web/ApiBrowsing`: レース/馬/騎手/調教師の一覧・詳細）のみを提供する
+- 単体では、Microsoft Agent Framework の DevUI のみを提供する
+- 旧 `Web/ApiBrowsing`（レース/馬/騎手/調教師の一覧・詳細を表示する読み取り専用 Web UI）は 2026-07-07 に Api プロジェクトへ移管し、メンテナンスツールとして拡張した（上記「Api」参照）。AgentClient 側からは削除済み
 - プロダクション用途の実行主体ではない（Collector / Predictor がそれを担う）
 
 ## プロジェクト依存関係

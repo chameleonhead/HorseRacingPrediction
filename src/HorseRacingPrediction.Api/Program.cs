@@ -3,6 +3,8 @@ using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web;
+using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
@@ -25,9 +27,14 @@ builder.Services.Configure<ApiKeyOptions>(options =>
 
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddEndpointsApiExplorer();
+
+builder.Services.AddAdminAuthentication();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddSingleton<AdminApiBaseAddressResolver>();
+builder.Services.AddHttpClient<AdminApiClient>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
@@ -96,9 +103,14 @@ app.UseForwardedHeaders();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseApiKeyProtection();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
 
 app.MapApiEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
 

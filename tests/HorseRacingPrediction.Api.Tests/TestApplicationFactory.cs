@@ -3,6 +3,7 @@ using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
@@ -29,6 +30,8 @@ internal static class TestApplicationFactory
             opts.Key = TestApiKey;
         });
         builder.Services.AddSingleton<ApiKeyEndpointFilter>();
+        builder.Services.AddAdminAuthentication();
+        builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
         var dbContextProvider = new SqliteDbContextProvider(connectionString);
         builder.Services.AddSingleton(dbContextProvider);
@@ -64,7 +67,11 @@ internal static class TestApplicationFactory
 
         var app = builder.Build();
         app.UseApiKeyProtection();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseAntiforgery();
         app.MapApiEndpoints();
+        app.MapAdminEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

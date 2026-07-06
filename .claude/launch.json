@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--no-build", "--project", "src/HorseRacingPrediction.Collector/HorseRacingPrediction.Collector.csproj", "--urls", "http://127.0.0.1:5299"],
       "port": 5299
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--no-build", "--project", "src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj", "--urls", "http://127.0.0.1:5177", "--environment", "Development"],
+      "port": 5177
     }
   ]
 }

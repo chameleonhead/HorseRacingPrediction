@@ -1,0 +1,100 @@
+@page "/races"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<h1>レース検索</h1>
+<div class="toolbar">
+    <label>From: <input type="date" @bind="from" /></label>
+    <label>To: <input type="date" @bind="to" /></label>
+    <label>競馬場: <input @bind="racecourse" placeholder="例: 05 東京" /></label>
+    <label>レース番号: <input type="number" @bind="raceNo" min="1" max="12" /></label>
+    <label>レース名: <input @bind="raceName" /></label>
+    <label>勝ち馬: <input @bind="winningHorse" /></label>
+    <button class="btn primary" @onclick="LoadAsync">検索</button>
+</div>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (result is null) { <p>検索結果がありません。</p> }
+else if (result.Items.Count == 0) { <p>該当レースはありません。</p> }
+else
+{
+    <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
+    <table class="data">
+        <thead>
+            <tr>
+                <th>日付</th>
+                <th>競馬場</th>
+                <th>R</th>
+                <th>レース名</th>
+                <th>状態</th>
+                <th>頭数</th>
+                <th>勝ち馬</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in result.Items)
+            {
+                <tr>
+                    <td>@r.RaceDate</td>
+                    <td>@r.RacecourseCode</td>
+                    <td>@r.RaceNumber</td>
+                    <td><a href="@($"races/{Uri.EscapeDataString(r.RaceId)}")">@(r.RaceName ?? r.RaceId)</a></td>
+                    <td>@r.Status</td>
+                    <td>@r.EntryCount</td>
+                    <td>@r.WinningHorseName</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="toolbar">
+        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoPageAsync(page - 1)">前</button>
+        <span>@(page) / @result.TotalPages</span>
+        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoPageAsync(page + 1)">次</button>
+    </div>
+}
+
+@code {
+    private DateOnly? from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
+    private DateOnly? to = DateOnly.FromDateTime(DateTime.Today);
+    private string? racecourse;
+    private int? raceNo;
+    private string? raceName;
+    private string? winningHorse;
+    private int page = 1;
+    private int pageSize = 50;
+    private bool loading;
+    private PagedResponse<RaceSummaryResponse>? result;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            result = await Api.SearchRacesAsync(new SearchRacesRequest
+            {
+                RaceDateFrom = from,
+                RaceDateTo = to,
+                RacecourseCode = racecourse,
+                RaceNumber = raceNo,
+                RaceName = raceName,
+                WinningHorseName = winningHorse,
+                Page = page,
+                PageSize = pageSize,
+                SortBy = "raceDate",
+                SortDescending = true
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task GoPageAsync(int p)
+    {
+        page = p;
+        await LoadAsync();
+    }
+}

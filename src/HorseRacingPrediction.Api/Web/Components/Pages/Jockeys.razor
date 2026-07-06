@@ -1,0 +1,123 @@
+@page "/jockeys"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Nav
+
+<h1>騎手検索</h1>
+<div class="toolbar">
+    <label>キーワード: <input @bind="query" placeholder="騎手名 / ID" /></label>
+    <button class="btn primary" @onclick="LoadAsync">検索</button>
+    <button class="btn" @onclick="() => showRegisterForm = !showRegisterForm">新規登録@(showRegisterForm ? "を閉じる" : "")</button>
+</div>
+
+@if (showRegisterForm)
+{
+    <section class="card">
+        <h3>騎手の新規登録</h3>
+        <div class="form-grid">
+            <label>表示名<input @bind="newDisplayName" /></label>
+            <label>正規化名<input @bind="newNormalizedName" /></label>
+            <label>所属<input @bind="newAffiliationCode" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary" @onclick="RegisterAsync" disabled="@registering">登録</button>
+        </div>
+        @if (registerErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in registerErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+}
+
+@if (loading) { <p>読み込み中…</p> }
+else if (result is null || result.Items.Count == 0) { <p>該当データはありません。</p> }
+else
+{
+    <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
+    <table class="data">
+        <thead>
+            <tr><th>騎手名</th><th>所属</th><th>別名数</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var j in result.Items)
+            {
+                <tr>
+                    <td><a href="@($"jockeys/{Uri.EscapeDataString(j.JockeyId)}")">@j.DisplayName</a></td>
+                    <td>@j.AffiliationCode</td>
+                    <td>@j.AliasCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="toolbar">
+        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
+        <span>@(page) / @result.TotalPages</span>
+        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
+    </div>
+}
+
+@code {
+    private string? query;
+    private int page = 1;
+    private int pageSize = 50;
+    private bool loading;
+    private PagedResponse<JockeySummaryResponse>? result;
+
+    private bool showRegisterForm;
+    private bool registering;
+    private string? newDisplayName;
+    private string? newNormalizedName;
+    private string? newAffiliationCode;
+    private IReadOnlyList<string> registerErrors = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            result = await Api.SearchJockeysAsync(new SearchJockeysRequest
+            {
+                Query = query,
+                Page = page,
+                PageSize = pageSize
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+
+    private async Task RegisterAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newDisplayName) || string.IsNullOrWhiteSpace(newNormalizedName))
+        {
+            registerErrors = new[] { "表示名と正規化名は必須です。" };
+            return;
+        }
+
+        registering = true;
+        try
+        {
+            var result = await Api.RegisterJockeyAsync(new RegisterJockeyRequest(
+                newDisplayName!, newNormalizedName!, newAffiliationCode));
+
+            if (result.Success)
+            {
+                Nav.NavigateTo($"/jockeys/{Uri.EscapeDataString(result.Value!)}");
+            }
+            else
+            {
+                registerErrors = result.Errors;
+            }
+        }
+        finally
+        {
+            registering = false;
+        }
+    }
+}

@@ -1,0 +1,196 @@
+@page "/trainers/{TrainerId}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<h1>調教師詳細</h1>
+<p class="hint"><a href="trainers">← 調教師検索へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (trainer is null) { <p>TrainerId「@TrainerId」の調教師は見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@trainer.DisplayName</h2>
+        <dl class="meta">
+            <dt>TrainerId</dt><dd><code>@trainer.TrainerId</code></dd>
+            <dt>正規化名</dt><dd>@trainer.NormalizedName</dd>
+            <dt>所属</dt><dd>@trainer.AffiliationCode</dd>
+        </dl>
+    </section>
+
+    @if (trainer.Aliases.Count > 0)
+    {
+        <section class="card">
+            <h3>別名</h3>
+            <ul>
+                @foreach (var a in trainer.Aliases)
+                {
+                    <li><span class="pill">@a.AliasType</span> @a.AliasValue <span class="hint">(出典: @a.SourceName@(a.IsPrimary ? " / 主別名" : ""))</span></li>
+                }
+            </ul>
+        </section>
+    }
+
+    <section class="card">
+        <h3>プロフィール更新</h3>
+        <div class="form-grid">
+            <label>表示名<input @bind="editDisplayName" /></label>
+            <label>正規化名<input @bind="editNormalizedName" /></label>
+            <label>所属<input @bind="editAffiliationCode" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="UpdateProfileAsync" disabled="@updating">更新</button>
+        </div>
+        @if (updateErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in updateErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <section class="card">
+        <h3>別名の追加・統合</h3>
+        <div class="form-grid">
+            <label>種別<input @bind="aliasType" placeholder="例: netkeiba" /></label>
+            <label>値<input @bind="aliasValue" /></label>
+            <label>出典<input @bind="aliasSourceName" /></label>
+            <label><input type="checkbox" @bind="aliasIsPrimary" /> 主別名にする</label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="MergeAliasAsync" disabled="@mergingAlias">追加</button>
+        </div>
+        @if (aliasErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in aliasErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <section class="card">
+        <h3>データ訂正</h3>
+        <p class="hint">誤登録されたデータの訂正用です。理由の記録が残ります。</p>
+        <div class="form-grid">
+            <label>表示名<input @bind="correctDisplayName" /></label>
+            <label>正規化名<input @bind="correctNormalizedName" /></label>
+            <label>所属<input @bind="correctAffiliationCode" /></label>
+            <label>訂正理由<input @bind="correctReason" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存</button>
+        </div>
+        @if (correctErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <MemoPanel SubjectType="Trainer" SubjectId="@TrainerId" />
+}
+
+@code {
+    [Parameter] public string TrainerId { get; set; } = string.Empty;
+
+    private bool loading;
+    private TrainerProfileResponse? trainer;
+
+    private string? editDisplayName;
+    private string? editNormalizedName;
+    private string? editAffiliationCode;
+    private bool updating;
+    private IReadOnlyList<string> updateErrors = Array.Empty<string>();
+
+    private string? aliasType;
+    private string? aliasValue;
+    private string? aliasSourceName;
+    private bool aliasIsPrimary;
+    private bool mergingAlias;
+    private IReadOnlyList<string> aliasErrors = Array.Empty<string>();
+
+    private string? correctDisplayName;
+    private string? correctNormalizedName;
+    private string? correctAffiliationCode;
+    private string? correctReason;
+    private bool correcting;
+    private IReadOnlyList<string> correctErrors = Array.Empty<string>();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            trainer = await Api.GetTrainerAsync(TrainerId);
+            if (trainer is not null)
+            {
+                editDisplayName = trainer.DisplayName;
+                editNormalizedName = trainer.NormalizedName;
+                editAffiliationCode = trainer.AffiliationCode;
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task UpdateProfileAsync()
+    {
+        updating = true;
+        try
+        {
+            var result = await Api.UpdateTrainerProfileAsync(TrainerId, new UpdateTrainerProfileRequest(
+                editDisplayName, editNormalizedName, editAffiliationCode));
+            updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success) await LoadAsync();
+        }
+        finally
+        {
+            updating = false;
+        }
+    }
+
+    private async Task MergeAliasAsync()
+    {
+        if (string.IsNullOrWhiteSpace(aliasType) || string.IsNullOrWhiteSpace(aliasValue) || string.IsNullOrWhiteSpace(aliasSourceName))
+        {
+            aliasErrors = new[] { "種別・値・出典はすべて必須です。" };
+            return;
+        }
+
+        mergingAlias = true;
+        try
+        {
+            var result = await Api.MergeTrainerAliasAsync(TrainerId, new MergeAliasRequest(
+                aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary));
+            aliasErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success)
+            {
+                aliasType = null; aliasValue = null; aliasSourceName = null; aliasIsPrimary = false;
+                await LoadAsync();
+            }
+        }
+        finally
+        {
+            mergingAlias = false;
+        }
+    }
+
+    private async Task CorrectAsync()
+    {
+        correcting = true;
+        try
+        {
+            var result = await Api.CorrectTrainerDataAsync(TrainerId, new CorrectTrainerDataRequest(
+                correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason));
+            correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success)
+            {
+                correctDisplayName = null; correctNormalizedName = null; correctAffiliationCode = null; correctReason = null;
+                await LoadAsync();
+            }
+        }
+        finally
+        {
+            correcting = false;
+        }
+    }
+}

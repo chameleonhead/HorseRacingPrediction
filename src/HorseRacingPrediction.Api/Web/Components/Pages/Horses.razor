@@ -1,0 +1,145 @@
+@page "/horses"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Nav
+
+<h1>馬検索</h1>
+<div class="toolbar">
+    <label>キーワード: <input @bind="query" placeholder="馬名 / ID" /></label>
+    <label>
+        性:
+        <select @bind="sexCode">
+            <option value="">(指定なし)</option>
+            <option value="M">牡</option>
+            <option value="F">牝</option>
+            <option value="G">セン</option>
+        </select>
+    </label>
+    <button class="btn primary" @onclick="LoadAsync">検索</button>
+    <button class="btn" @onclick="() => showRegisterForm = !showRegisterForm">新規登録@(showRegisterForm ? "を閉じる" : "")</button>
+</div>
+
+@if (showRegisterForm)
+{
+    <section class="card">
+        <h3>馬の新規登録</h3>
+        <div class="form-grid">
+            <label>登録名<input @bind="newRegisteredName" /></label>
+            <label>正規化名<input @bind="newNormalizedName" /></label>
+            <label>
+                性:
+                <select @bind="newSexCode">
+                    <option value="">(指定なし)</option>
+                    <option value="M">牡</option>
+                    <option value="F">牝</option>
+                    <option value="G">セン</option>
+                </select>
+            </label>
+            <label>生年月日<input type="date" @bind="newBirthDate" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary" @onclick="RegisterAsync" disabled="@registering">登録</button>
+        </div>
+        @if (registerErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in registerErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+}
+
+@if (loading) { <p>読み込み中…</p> }
+else if (result is null || result.Items.Count == 0) { <p>該当データはありません。</p> }
+else
+{
+    <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
+    <table class="data">
+        <thead>
+            <tr><th>馬名</th><th>性</th><th>生年月日</th><th>別名数</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var h in result.Items)
+            {
+                <tr>
+                    <td><a href="@($"horses/{Uri.EscapeDataString(h.HorseId)}")">@h.RegisteredName</a></td>
+                    <td>@h.SexCode</td>
+                    <td>@h.BirthDate</td>
+                    <td>@h.AliasCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="toolbar">
+        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
+        <span>@(page) / @result.TotalPages</span>
+        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
+    </div>
+}
+
+@code {
+    private string? query;
+    private string? sexCode;
+    private int page = 1;
+    private int pageSize = 50;
+    private bool loading;
+    private PagedResponse<HorseSummaryResponse>? result;
+
+    private bool showRegisterForm;
+    private bool registering;
+    private string? newRegisteredName;
+    private string? newNormalizedName;
+    private string? newSexCode;
+    private DateOnly? newBirthDate;
+    private IReadOnlyList<string> registerErrors = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            result = await Api.SearchHorsesAsync(new SearchHorsesRequest
+            {
+                Query = query,
+                SexCode = sexCode,
+                Page = page,
+                PageSize = pageSize
+            });
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+
+    private async Task RegisterAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newRegisteredName) || string.IsNullOrWhiteSpace(newNormalizedName))
+        {
+            registerErrors = new[] { "登録名と正規化名は必須です。" };
+            return;
+        }
+
+        registering = true;
+        try
+        {
+            var result = await Api.RegisterHorseAsync(new RegisterHorseRequest(
+                newRegisteredName!, newNormalizedName!, newSexCode, newBirthDate));
+
+            if (result.Success)
+            {
+                Nav.NavigateTo($"/horses/{Uri.EscapeDataString(result.Value!)}");
+            }
+            else
+            {
+                registerErrors = result.Errors;
+            }
+        }
+        finally
+        {
+            registering = false;
+        }
+    }
+}
