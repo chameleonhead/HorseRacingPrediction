@@ -5,14 +5,18 @@ apk add --no-cache openssl >/dev/null
 
 generated_config=/config/Caddyfile.generated
 global_block=
+redirect_block=
 domain_block=
 ip_block=
+has_domain=0
 
 is_ipv4() {
     echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
 if [ -n "${DOMAIN_NAME:-}" ] && ! is_ipv4 "$DOMAIN_NAME"; then
+    has_domain=1
+
     if [ -n "${ACME_EMAIL:-}" ]; then
         global_block=$(cat <<EOF
 {
@@ -26,6 +30,28 @@ EOF
 https://$DOMAIN_NAME {
     encode zstd gzip
     reverse_proxy api:8080
+}
+EOF
+)
+fi
+
+# The redirect must not match $DOMAIN_NAME: Caddy's automatic HTTPS already redirects
+# and serves that domain's ACME HTTP-01 challenge on :80. A blanket catch-all here would
+# intercept /.well-known/acme-challenge/* too and break certificate issuance/renewal.
+if [ "$has_domain" = "1" ]; then
+    redirect_block=$(cat <<EOF
+:80 {
+    @not_acme_domain {
+        not host $DOMAIN_NAME
+    }
+    redir @not_acme_domain https://{host}{uri} permanent
+}
+EOF
+)
+else
+    redirect_block=$(cat <<EOF
+:80 {
+    redir https://{host}{uri} permanent
 }
 EOF
 )
@@ -81,8 +107,9 @@ if [ -z "$domain_block" ] && [ -z "$ip_block" ]; then
     exit 1
 fi
 
-awk -v global_block="$global_block" -v domain_block="$domain_block" -v ip_block="$ip_block" '
+awk -v global_block="$global_block" -v redirect_block="$redirect_block" -v domain_block="$domain_block" -v ip_block="$ip_block" '
     $0 == "__GLOBAL_BLOCK__" { print global_block; next }
+    $0 == "__REDIRECT_BLOCK__" { print redirect_block; next }
     $0 == "__DOMAIN_BLOCK__" { print domain_block; next }
     $0 == "__IP_BLOCK__" { print ip_block; next }
     { print }

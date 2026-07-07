@@ -1,8 +1,6 @@
 __GLOBAL_BLOCK__
 
-:80 {
-    redir https://{host}{uri} permanent
-}
+__REDIRECT_BLOCK__
 
 __DOMAIN_BLOCK__
 __IP_BLOCK__
