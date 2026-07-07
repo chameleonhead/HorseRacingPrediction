@@ -17,8 +17,8 @@ permissions:
   packages: write
 
 concurrency:
-  group: app-production-deploy
-  cancel-in-progress: true
+  group: horse-racing-prediction-production-deploy
+  cancel-in-progress: false
 
 env:
   APP_DIRECTORY: /opt/horse-racing-prediction/app
@@ -64,6 +64,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Wait for SSH availability
+        run: |
+          for i in $(seq 1 30); do
+            if timeout 5 bash -c "echo > /dev/tcp/${{ secrets.LIGHTSAIL_HOST }}/22" 2>/dev/null; then
+              echo "SSH port reachable"
+              exit 0
+            fi
+            echo "Waiting for SSH (attempt $i/30)..."
+            sleep 10
+          done
+          echo "Timed out waiting for SSH port 22" >&2
+          exit 1
+
       - name: Upload compose bundle
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -104,3 +117,17 @@ jobs:
             docker compose --env-file .env pull
             docker compose --env-file .env up -d --force-recreate --remove-orphans
             docker image prune -f
+
+      - name: Verify deployment health
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -k --max-time 5 "https://${{ secrets.LIGHTSAIL_HOST }}/swagger/v1/swagger.json" || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "API healthy (HTTP $code)"
+              exit 0
+            fi
+            echo "Waiting for API to become healthy (attempt $i/12, last=$code)..."
+            sleep 10
+          done
+          echo "API did not become healthy after deploy" >&2
+          exit 1

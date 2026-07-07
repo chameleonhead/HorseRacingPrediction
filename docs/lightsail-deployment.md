@@ -374,5 +374,7 @@ curl -k -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_HOST}/api/races
 - API キーは `HORSE_RACING_API_KEY` としてコンテナへ注入される
 - SQLite ファイルはサーバー上の `/opt/horse-racing-prediction/app/data/eventstore.db` に保存される
 - バックアップは Lightsail のスナップショットで取得する
-- `docker compose` の更新のみでアプリを入れ替えるため、インフラ workflow とアプリ workflow は独立している
+- `docker compose` の更新のみでアプリを入れ替えるため、通常はインフラ workflow とアプリ workflow は互いのコードに依存しない
+- ただし `infra-deploy` と `app-deploy` は同じ concurrency グループ（`horse-racing-prediction-production-deploy`）を共有しており、同時実行はせず直列化される。インフラ変更中に Lightsail のポート/静的IPが再構成され、アプリ側の SSH 接続がタイムアウトする事故を防ぐための措置
+- `app-deploy` はリモートへの接続前に SSH (22番) の到達性を最大5分リトライし、デプロイ後は `/swagger/v1/swagger.json` へのHTTPSアクセスで起動確認を行う。どちらか失敗した場合はジョブが失敗として報告される
 - OIDC の引き受けはローカル CLI で再現しづらいため、最終確認は `infra-deploy` workflow の plan / apply で行う
