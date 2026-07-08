@@ -206,3 +206,71 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .login-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .login-form input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
 .login-error { color: var(--danger); margin: 0; font-size: 13px; }
+
+@media (max-width: 720px) {
+    .page {
+        display: block;
+        min-height: 100vh;
+    }
+
+    .sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        height: auto;
+        max-height: 42vh;
+        padding: 10px 12px;
+        overflow-y: auto;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    }
+
+    .brand {
+        margin-bottom: 8px;
+        font-size: 16px;
+    }
+
+    .brand-mark { font-size: 19px; }
+
+    .nav {
+        flex: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        overflow-x: visible;
+        padding-bottom: 4px;
+    }
+
+    .nav-section { display: none; }
+
+    .nav-link {
+        flex: 0 0 auto;
+        padding: 7px 10px;
+        white-space: nowrap;
+        font-size: 13px;
+    }
+
+    .logout-form {
+        margin-top: 8px;
+    }
+
+    .logout-form .btn {
+        width: auto;
+    }
+
+    .content {
+        max-width: none;
+        padding: 16px 12px 40px;
+    }
+
+    h1 { font-size: 24px; }
+
+    .card {
+        padding: 14px 12px;
+        overflow-x: auto;
+    }
+
+    dl.meta {
+        grid-template-columns: 1fr;
+        gap: 2px 0;
+    }
+}
