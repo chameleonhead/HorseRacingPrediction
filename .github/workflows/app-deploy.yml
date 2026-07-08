@@ -104,11 +104,14 @@ jobs:
           envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY
           script: |
             mkdir -p "$APP_DIRECTORY/data"
-            RESOLVED_DOMAIN_NAME="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+            # Must re-export: docker compose's ${DOMAIN_NAME} substitution prefers the shell
+            # environment over --env-file, and DOMAIN_NAME above is still the (possibly empty)
+            # raw secret value, not the sslip.io fallback computed below.
+            export DOMAIN_NAME="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
             cat > "$APP_DIRECTORY/.env" <<EOF
             IMAGE_NAME=$IMAGE_NAME
             IMAGE_TAG=$IMAGE_TAG
-            DOMAIN_NAME=$RESOLVED_DOMAIN_NAME
+            DOMAIN_NAME=$DOMAIN_NAME
             LIGHTSAIL_HOST=$LIGHTSAIL_HOST
             ACME_EMAIL=$ACME_EMAIL
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
