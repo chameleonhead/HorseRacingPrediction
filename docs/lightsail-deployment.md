@@ -333,18 +333,12 @@ curl -I https://${LIGHTSAIL_PUBLIC_HOSTNAME}/swagger/v1/swagger.json
 
 独自ドメインを別途用意している場合は、`LIGHTSAIL_DOMAIN_NAME`（と任意で `LIGHTSAIL_ACME_EMAIL`）を GitHub Secrets に設定すれば、そちらが優先されます（sslip.io は使われません）。
 
-自己署名証明書での直接IPアクセス（デバッグ用）は引き続き有効です。
-
-```bash
-curl -k -I https://${LIGHTSAIL_HOST}/swagger/index.html
-curl -k -I https://${LIGHTSAIL_HOST}/swagger/v1/swagger.json
-```
+自己署名証明書は使用していません。IP に直接 HTTPS でアクセスすること（`https://${LIGHTSAIL_HOST}/...`）はサポートしておらず、`http://${LIGHTSAIL_HOST}/...` へのアクセスは上記のホスト名へ 301 リダイレクトされます。すべての通信経路が最終的に信頼された証明書での HTTPS に行き着く構成です。
 
 API キー付きの確認例:
 
 ```bash
 curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/races
-curl -k -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_HOST}/api/races
 ```
 
 ## GitHub Secrets 一覧

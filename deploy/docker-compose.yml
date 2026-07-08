@@ -30,9 +30,7 @@ services:
       - ./start-caddy.sh:/usr/local/bin/start-caddy.sh:ro
       - caddy_data:/data
       - caddy_config:/config
-      - caddy_certs:/certs
 
 volumes:
   caddy_data:
   caddy_config:
-  caddy_certs:

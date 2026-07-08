@@ -122,14 +122,18 @@ jobs:
             docker image prune -f
 
       - name: Verify deployment health
+        env:
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
         run: |
-          for i in $(seq 1 12); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -k --max-time 5 "https://${{ secrets.LIGHTSAIL_HOST }}/swagger/v1/swagger.json" || echo "000")
+          RESOLVED_DOMAIN_NAME="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+          for i in $(seq 1 18); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "https://${RESOLVED_DOMAIN_NAME}/swagger/v1/swagger.json" || echo "000")
             if [ "$code" = "200" ]; then
               echo "API healthy (HTTP $code)"
               exit 0
             fi
-            echo "Waiting for API to become healthy (attempt $i/12, last=$code)..."
+            echo "Waiting for API to become healthy (attempt $i/18, last=$code)..."
             sleep 10
           done
           echo "API did not become healthy after deploy" >&2
