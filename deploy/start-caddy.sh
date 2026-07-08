@@ -8,15 +8,12 @@ global_block=
 redirect_block=
 domain_block=
 ip_block=
-has_domain=0
 
 is_ipv4() {
     echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
 if [ -n "${DOMAIN_NAME:-}" ] && ! is_ipv4 "$DOMAIN_NAME"; then
-    has_domain=1
-
     if [ -n "${ACME_EMAIL:-}" ]; then
         global_block=$(cat <<EOF
 {
@@ -35,22 +32,13 @@ EOF
 )
 fi
 
-# The redirect must not match $DOMAIN_NAME: Caddy's automatic HTTPS already redirects
-# and serves that domain's ACME HTTP-01 challenge on :80. A blanket catch-all here would
-# intercept /.well-known/acme-challenge/* too and break certificate issuance/renewal.
-if [ "$has_domain" = "1" ]; then
+# Scoped to the literal IP host only (never an unscoped ":80" block). An unscoped ":80"
+# block makes Caddy treat port 80 as fully user-owned and it stops inserting its own
+# ACME HTTP-01 challenge responder / redirect for $DOMAIN_NAME's automatic HTTPS, even
+# when the block's own matcher excludes that host. Scoping to the IP host avoids that.
+if [ -n "${LIGHTSAIL_HOST:-}" ]; then
     redirect_block=$(cat <<EOF
-:80 {
-    @not_acme_domain {
-        not host $DOMAIN_NAME
-    }
-    redir @not_acme_domain https://{host}{uri} permanent
-}
-EOF
-)
-else
-    redirect_block=$(cat <<EOF
-:80 {
+http://$LIGHTSAIL_HOST {
     redir https://{host}{uri} permanent
 }
 EOF
