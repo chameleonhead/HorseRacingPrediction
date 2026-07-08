@@ -14,7 +14,7 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 | 1 | AI エージェントが JRA サイトを自律探索して収集する | 機械的スクレイピングに統一する | 再現性・監査性・再試行制御を優先するため（[collector-design.md](collector-design.md)） |
 | 2 | 予想生成も LLM 主導のマルチエージェント（RaceContextAgent → HorseAnalysisAgent → PredictionAgent）で行う | 予想生成は ML.NET + API データのみで行い、LLM は使わない | 予想は高頻度（レース毎・出走馬毎）に実行されるため、LLM 呼び出しコストが運用上のボトルネックになる |
 | 3 | 投稿文整形は「補助的にAIを使える」程度の位置づけ | 予想確定後の SNS 投稿文生成に、マルチエージェント LLM を明確に採用する | 投稿文生成は 1 予想票あたり数回程度の低頻度処理であり、LLM の「自然な文章表現」という強みが活きる領域 |
-| 4 | AgentClient が収集・予想・投稿を一体で担うジョブ実行クライアント | Collector（収集）と Predictor（予想・投稿文生成）に分離する | 責務単位でプロセスを分離し、スケジュールや障害影響範囲を独立させる（直近コミットで実施済み） |
+| 4 | 旧ジョブ実行クライアントが収集・予想・投稿を一体で担う | Collector（収集）と Predictor（予想・投稿文生成）に分離する | 責務単位でプロセスを分離し、スケジュールや障害影響範囲を独立させる（直近コミットで実施済み） |
 
 ## サービス構成
 
@@ -31,7 +31,7 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - レース・馬・騎手・調教師・予想票・結果・払戻を CQRS + Event Sourcing で管理する
 - 書き込みはコマンドエンドポイント、読み取りは用途別 ReadModel で提供する
 - 機械間通信（Collector / Predictor）向けの JSON API は例外なく `/api` 配下に置き、`X-Api-Key` ヘッダーで認証する（ML 予測系の `/api/races/{raceId}/ml-prediction`, `/api/ml/train` を含む）
-- Collector と同様に、自身で Blazor Server 製の管理画面（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions` などルート直下）をホストする（`Microsoft.NET.Sdk.Web`。旧 AgentClient の `Web/ApiBrowsing` を移管・拡張し、2026-07-07 に単なる参照ツールから馬・騎手・調教師の登録／編集／別名統合／データ訂正、レース・予想票のデータ訂正、メモの CRUD ができるメンテナンスツールへ変更）
+- Collector と同様に、自身で Blazor Server 製の管理画面（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions` などルート直下）をホストする（`Microsoft.NET.Sdk.Web`。旧読み取り UI を移管・拡張し、2026-07-07 に単なる参照ツールから馬・騎手・調教師の登録／編集／別名統合／データ訂正、レース・予想票のデータ訂正、メモの CRUD ができるメンテナンスツールへ変更）
   - JSON API が常に `/api` 配下、管理UIが常にルート直下という規約により両者のパスは重ならないため、認証免除の判定は管理UIのルート名（`/races`, `/horses` など）を明示的に列挙するだけでよい（`Security/ApiKeyApplicationBuilderExtensions.cs`）
   - 管理画面は Cookie 認証で保護する。ログイン画面（`/login`）はユーザー名固定「user」、パスワードは `ApiKey:Key`（JSON API と同じ値）で認証する
   - 管理画面はコマンド/クエリを直接実行するのではなく、既存の JSON API を自己ループバック HTTP で呼び出す（`Web/ApiBrowsing/AdminApiClient`）。ここでも自プロセス自身の `X-Api-Key` を自動付与する
@@ -41,9 +41,8 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 ### Collector
 
 - JRA 公式サイトを Playwright による機械的スクレイピングで巡回し、Api へ収集データを登録する
-- ページ遷移・抽出処理に LLM は使わない
-- 補助的な LLM 機能（任意情報源からの展望・調子コメント収集）は実装として残すが、既定で無効化している
-- 収集バッチ処理の状況を確認・操作する Minimal API と Blazor Server 画面を自身でホストする（`Microsoft.NET.Sdk.Web`。旧 AgentClient から移管）
+- ページ遷移・抽出処理に LLM は使わず、AI エージェントや `Microsoft.Extensions.AI` 依存も持たない
+- 収集バッチ処理の状況を確認・操作する Minimal API と Blazor Server 画面を自身でホストする（`Microsoft.NET.Sdk.Web`。旧ジョブ実行クライアントから移管）
 - 詳細: [collector-design.md](collector-design.md)
 
 ### Predictor
@@ -52,39 +51,35 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 - 確定した予想票をもとに、SNS 投稿文をマルチエージェント LLM ワークフローで生成する
 - 詳細: [predictor-design.md](predictor-design.md)
 
-### AgentClient（共有ソース + 開発用 DevUI・廃止予定）
+### 旧ジョブ実行クライアント
 
-- **廃止予定。** データ収集に関わるバッチ処理・状況管理エンドポイント・監視画面・テストコードは Collector へ移管済み（2026-07-07）
-- `HorseRacingPrediction.AgentClient` は、Collector と Predictor が `Compile Include` でソースリンクする Http / Scheduling 系の**共有コード**（`ProcessingStateStore`, `AgentProcessingOptions`, HTTP クライアント実装など）の実体を今も持つ
-  - プロジェクト参照ではなくファイルリンクのため、Collector と Predictor はそれぞれ不要なクラスを `Compile Remove` で除外している
-  - これらの共有コードを本当に AgentClient から独立させるかどうかは今後の課題（[collector-design.md](collector-design.md) の「今後の課題」参照）
-- 単体では、Microsoft Agent Framework の DevUI のみを提供する
-- 旧 `Web/ApiBrowsing`（レース/馬/騎手/調教師の一覧・詳細を表示する読み取り専用 Web UI）は 2026-07-07 に Api プロジェクトへ移管し、メンテナンスツールとして拡張した（上記「Api」参照）。AgentClient 側からは削除済み
-- プロダクション用途の実行主体ではない（Collector / Predictor がそれを担う）
+- 廃止済み。HTTP クライアント、ジョブ状態管理、収集バッチ、関連テストは Collector へ移管した（2026-07-08）
+- Predictor と JraVerifier は、移管済みの HTTP / Scheduling 補助型を利用するため Collector を参照する
+- AI エージェント、任意テキスト収集、Microsoft Agent Framework の DevUI ホストは Collector へ移管しない
 
 ## プロジェクト依存関係
 
-Api / Collector / Predictor は互いに直接参照しない。三者が共有するのは、DTO のみを持つ `HorseRacingPrediction.Contracts`（ロジックを持たないリーフプロジェクト）だけである。
+Api は Collector / Predictor を参照しない。Collector は収集実行と旧共有補助型（HTTP クライアント、ジョブ状態管理、Scheduling DTO）を所有し、Predictor と JraVerifier はその補助型を利用するため Collector を参照する。
 
 ```
 HorseRacingPrediction.Api ──────────┐
                                      ▼
 HorseRacingPrediction.Collector ──▶ HorseRacingPrediction.ApiClient ──▶ HorseRacingPrediction.Contracts
-                                     ▲
+          ▲                          ▲
+          │                          │
 HorseRacingPrediction.Predictor ─────┘
 ```
 
 - `Contracts`: `RacePredictionContextReadModel` / `HorseReadModel` / `RaceStatus` などの読み取り用 DTO のみ。他プロジェクトへの参照を持たない
 - `ApiClient`: `IRaceQueryService` / `IPredictionWriteService` / `IDataCollectionWriteService` などのクライアント側インターフェースと `DataCollectionWriteTools` を持つ。`Contracts` を参照する
 - `Api` は自身のエンドポイント用 DTO（`Api/Contracts/`）を別途持つが、クライアントと共有する読み取り用 DTO は `Contracts` を参照して再利用し、二重定義しない
-- Collector・Predictor は `ApiClient`（および `Scraping`）のみを参照し、Api プロジェクトも互いのプロジェクトも参照しない。HTTP（`X-Api-Key` 付き）でのみ Api と通信する
+- Collector・Predictor は HTTP（`X-Api-Key` 付き）でのみ Api と通信する。Predictor から Collector への参照は、移管済み補助型の利用に限る
 
 ## LLM 利用方針（最重要の前提変更）
 
 | サービス | 処理 | LLM 利用 | 実行頻度の目安 | 理由 |
 |---|---|---|---|---|
 | Collector | JRA ページ遷移・構造化抽出 | 使わない | レース・開催ごとに高頻度 | 再現性・監査性・コストを優先 |
-| Collector | 任意情報源からの展望・調子コメント収集（`RaceTextInsightCollector`） | 実装は残すが既定で無効（`EnableTextInsightCollection: false`） | クエリテンプレート数 × レース数 | 高頻度な補助 LLM 呼び出しのコストが問題化したため停止中 |
 | Predictor | 予想生成（順位・印・信頼度・根拠） | 使わない（ML.NET + API データのみ） | レース・出走馬ごとに高頻度 | LLM 主導3エージェント構成は呼び出しコストの観点で不採用に変更し、`ApiOnlyPredictionWorkflow` に一本化する |
 | Predictor | 予想確定後の SNS 投稿文生成 | 使う（マルチエージェント・視点分担型） | 予想票確定ごとに低頻度（1回程度） | 低頻度かつ表現生成が主目的であり、LLM の強みが活きる |
 

@@ -4,12 +4,9 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.Scraping.Workflow;
 using HorseRacingPrediction.Scraping.JraNavigation;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-
-using HorseRacingPrediction.AgentClient.Scheduling;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
@@ -36,7 +33,6 @@ public sealed class CollectionExecutionService : BackgroundService
     private readonly IRaceQueryService _raceQueryService;
     private readonly IJraResultDateDiscoveryService _resultDateDiscoveryService;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
-    private readonly RaceTextInsightCollector? _insightCollector;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
@@ -50,7 +46,6 @@ public sealed class CollectionExecutionService : BackgroundService
         IJraResultDateDiscoveryService resultDateDiscoveryService,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
         CollectionExecutionTrigger executionTrigger,
-        IServiceProvider serviceProvider,
         ILoggerFactory loggerFactory,
         ILogger<CollectionExecutionService> logger)
     {
@@ -61,7 +56,6 @@ public sealed class CollectionExecutionService : BackgroundService
         _raceQueryService = raceQueryService;
         _resultDateDiscoveryService = resultDateDiscoveryService;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
-        _insightCollector = serviceProvider.GetService<RaceTextInsightCollector>();
         _executionTrigger = executionTrigger;
         _loggerFactory = loggerFactory;
         _logger = logger;
@@ -521,6 +515,15 @@ public sealed class CollectionExecutionService : BackgroundService
                             .EnsureRequestsForRaceAsync(raceId, now, cancellationToken)
                             .ConfigureAwait(false);
 
+                        if (plan.RequestedHorseHistoryCount > 0 || plan.RequestedJockeyHistoryCount > 0)
+                        {
+                            _logger.LogInformation(
+                                "[収集実行] 馬・騎手情報取得要求を登録しました。RaceId={RaceId} HorseRequests={HorseRequests} JockeyRequests={JockeyRequests}",
+                                raceId,
+                                plan.RequestedHorseHistoryCount,
+                                plan.RequestedJockeyHistoryCount);
+                        }
+
                         if (plan.RequestedRaceResultCount > 0)
                         {
                             _logger.LogInformation(
@@ -531,14 +534,6 @@ public sealed class CollectionExecutionService : BackgroundService
                     }
 
                     await _stateStore.EnqueuePredictionCandidatesAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
-
-                    if (_options.EnableTextInsightCollection && _insightCollector is not null)
-                    {
-                        foreach (var raceId in distinctRaceIds)
-                        {
-                            await _insightCollector.CollectForRaceAsync(raceId, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
                 }
 
                 await _stateStore.CompleteJobAsync(AgentJobType.RaceCardCollection, job.DeduplicationKey, cancellationToken)

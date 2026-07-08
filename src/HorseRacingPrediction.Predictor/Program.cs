@@ -1,5 +1,6 @@
-using HorseRacingPrediction.AgentClient.Http;
-using HorseRacingPrediction.AgentClient.Scheduling;
+using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Collector.Scheduling;
+using HorseRacingPrediction.Predictor.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -20,7 +21,7 @@ builder.Services.Configure<AgentProcessingOptions>(
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<ApiOnlyPredictionWorkflow>();
-builder.Services.AddHostedService<PredictionExecutionService>();
+builder.Services.AddHostedService<HorseRacingPrediction.Predictor.Scheduling.PredictionExecutionService>();
 
 var host = builder.Build();
 await host.RunAsync();

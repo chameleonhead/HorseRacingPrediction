@@ -1,5 +1,5 @@
-using HorseRacingPrediction.AgentClient.Http;
-using HorseRacingPrediction.AgentClient.Scheduling;
+using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.ApiClient;

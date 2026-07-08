@@ -1,11 +1,9 @@
-using HorseRacingPrediction.AgentClient.Http;
-using HorseRacingPrediction.AgentClient.Scheduling;
-using HorseRacingPrediction.Collector.JraTesting;
+using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Scheduling;
+using HorseRacingPrediction.Collector.JraTesting;
 using HorseRacingPrediction.Collector.Web.Components;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Workflow;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +32,7 @@ builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceR
 builder.Services.AddSingleton<IJraProfileLookup, JraSiteDataCollectorProfileLookup>();
 builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
+builder.Services.AddTransient<HistoricalDataRequestTracker>();
 
 builder.Services.AddHostedService<ScrapingRegistrationService>();
 builder.Services.AddHostedService<CollectionExecutionService>();

@@ -198,7 +198,7 @@ src/HorseRacingPrediction.Scraping/JraNavigation/
 └── JraSiteDataCollector.cs      # 公開 API + セッション管理
 ```
 
-Collector 側の呼び出し元（`JraSiteDataCollectorProfileLookup`, `JraSiteDataCollectorRaceResultLookup`）は `src/HorseRacingPrediction.AgentClient/Scheduling/` にあり、Collector と AgentClient の両方にソースリンクされる。
+Collector 側の呼び出し元（`JraSiteDataCollectorProfileLookup`, `JraSiteDataCollectorRaceResultLookup`）は `src/HorseRacingPrediction.Collector/Scheduling/` にある。
 
 ---
 

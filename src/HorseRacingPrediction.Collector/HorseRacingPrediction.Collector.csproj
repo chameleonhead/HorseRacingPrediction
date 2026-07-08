@@ -22,15 +22,4 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\HorseRacingPrediction.AgentClient\Http\**\*.cs" Link="Http\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\HorseRacingPrediction.AgentClient\Scheduling\**\*.cs" Link="Scheduling\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\PredictionExecutionService.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\HistoricalDataRequestTracker.cs" />
-    <Compile Remove="..\HorseRacingPrediction.AgentClient\Scheduling\RaceTextInsightCollector.cs" />
-  </ItemGroup>
-
 </Project>

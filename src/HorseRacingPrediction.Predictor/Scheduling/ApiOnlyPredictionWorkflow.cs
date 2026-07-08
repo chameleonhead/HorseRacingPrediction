@@ -3,7 +3,7 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging;
 
-namespace HorseRacingPrediction.AgentClient.Scheduling;
+namespace HorseRacingPrediction.Predictor.Scheduling;
 
 public sealed class ApiOnlyPredictionWorkflow
 {

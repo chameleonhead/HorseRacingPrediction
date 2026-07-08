@@ -2,25 +2,17 @@
 
 ## 位置づけ
 
-`HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。バックグラウンドでの収集処理に加え、その収集バッチ処理の状況を確認・操作するための Web UI / API も自身で提供する（旧 `AgentClient` が担っていた機能を移管したもの）。
+`HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。バックグラウンドでの収集処理に加え、その収集バッチ処理の状況を確認・操作するための Web UI / API も自身で提供する。
 
 全体構成は [system-architecture.md](system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
 
-> `HorseRacingPrediction.AgentClient` は将来的に廃止予定であり、データ収集に関わるバッチ処理・状況管理エンドポイント・監視画面・テストコードは本プロジェクトへ移管済みである（2026-07-07）。AgentClient に残っているのは、LLM DevUI（Microsoft Agent Framework）と、予想結果を含む汎用データ参照用の Web UI（レース/馬/騎手/調教師の一覧・詳細）のみである。
+> 旧ジョブ実行クライアントの HTTP クライアント、ジョブ状態管理、収集バッチ、関連テストは Collector へ移管済みである（2026-07-08）。AI エージェント、LLM 呼び出し、任意テキスト収集、予想実行は Collector の責務から外している。
 
 ## 責務境界
 
 - **やること**: JRA サイトの巡回、構造化データの抽出、Api への冪等登録、失敗時の再試行
 - **やらないこと**: 予想生成、SNS 投稿文生成（いずれも Predictor の責務、[predictor-design.md](predictor-design.md)）
-- **LLM 利用**: 原則使わない。ページ遷移・抽出は機械的ロジックのみで行う（理由: [system-architecture.md](system-architecture.md) の LLM 利用方針）
-
-### 例外: RaceTextInsightCollector（既定オフ）
-
-任意情報源（展望・馬場傾向・注目馬コメントなど自由記述中心のページ）から `WebBrowserAgent`（LLM）を使って情報を収集し、Memo として Api に登録する機能が実装として存在する（`Scheduling/RaceTextInsightCollector.cs`）。
-
-- `AgentProcessingOptions.EnableTextInsightCollection` で有効・無効を切り替え可能
-- Collector の `appsettings.json` では **既定で `false`**（無効）
-- LLM 呼び出しコストの問題により、現時点では運用対象外という位置づけとする。有効化する場合は、クエリテンプレート数 × 対象レース数に比例して LLM 呼び出しが増える点に注意する
+- **LLM 利用**: 使わない。AI エージェント、`HorseRacingPrediction.Agents` 参照、`Microsoft.Extensions.AI` 依存は持たず、ページ遷移・抽出は機械的ロジックのみで行う（理由: [system-architecture.md](system-architecture.md) の LLM 利用方針）
 
 ## JRA スクレイピング制約（必須）
 
@@ -78,7 +70,7 @@ Collector は `Microsoft.NET.Sdk.Web` ベースの ASP.NET Core アプリとし�
 | `POST /agent/result-day-statuses/{providerType}/{targetDate}/requeue` | 日単位の収集を Discovery/Collection モードで再投入する |
 | `POST /agent/result-day-jobs/trigger` | 任意の日付・プロバイダで日次収集を新規投入する |
 
-これらは旧 `AgentClient` の `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` をそのまま移管したものである。ただし `AgentClient` にあった `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。Collector と Predictor は別々の SQLite ジョブストア（`collector-processing-jobs.db` / `predictor-processing-jobs.db`）を使うため、Collector からの予想ジョブ投入は Predictor 側に反映されず意味を持たないためである。
+これらは旧ジョブ実行クライアントの `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` を移管したものである。ただし `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。Collector と Predictor は別々の SQLite ジョブストア（`collector-processing-jobs.db` / `predictor-processing-jobs.db`）を使うため、Collector からの予想ジョブ投入は Predictor 側に反映されず意味を持たないためである。
 
 #### Blazor Server 画面（`Web/Components/Pages/`）
 
@@ -118,12 +110,12 @@ JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` な�
 
 ## 主要設定（`AgentProcessingOptions`）
 
-`appsettings.json` の `AgentProcessing` セクションで、以下の主要項目を制御する。詳細な既定値はコード（`AgentClient/Scheduling/AgentProcessingOptions.cs`）を参照。
+`appsettings.json` の `AgentProcessing` セクションで、以下の主要項目を制御する。詳細な既定値はコード（`Scheduling/AgentProcessingOptions.cs`）を参照。
 
 - 収集系: `ScrapingIntervalMinutes`, `CollectionExecutionIntervalMinutes`, `CollectionBatchSize`, `CollectionLeaseMinutes`
 - 結果収集対象範囲: `ResultLookbackDays`, `InitialResultBackfillYears`, `LiveResultLookbackDays`, `PreRaceResultLookbackDays`, `ResultLookaheadDays`
 - 過去データ補完: `HistoricalRequestExecutionIntervalMinutes`, `HistoricalRequestBatchSize`, `HistoricalRequestLeaseMinutes`, `HistoricalRequestMaxAttempts`
-- 機能フラグ: `EnableScheduleCollection`, `EnableRaceCardCollection`, `EnableRaceResultCollection`, `EnableTextInsightCollection`（既定 false）
+- 機能フラグ: `EnableScheduleCollection`, `EnableRaceCardCollection`, `EnableRaceResultCollection`
 - 同時実行制御: `MaxConcurrentJobs`（既定 1。単一実行制御はジョブ種別ごとではなくグローバルなリースで保証する）
 
 ## 今後の課題（未着手・要検討）
@@ -132,5 +124,4 @@ JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` な�
 
 - ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行するかどうか
 - 地方競馬など JRA 以外のデータソースを Provider として追加する場合の抽象化
-- `RaceTextInsightCollector` を有効化する場合のコスト対効果の再評価
-- `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装など、Collector と Predictor が `HorseRacingPrediction.AgentClient` からソースリンクで共有しているコードの移管先（`ApiClient` への統合など）。`HorseRacingPrediction.AgentClient` を完全に廃止するには、この共有コードの移管が前提になる
+- Collector が所有する `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装を、将来的に専用共有ライブラリへ分離するかどうか

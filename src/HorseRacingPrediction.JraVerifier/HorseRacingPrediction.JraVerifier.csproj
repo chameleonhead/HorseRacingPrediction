@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HorseRacingPrediction.Collector\HorseRacingPrediction.Collector.csproj" />
     <ProjectReference Include="..\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
     <ProjectReference Include="..\HorseRacingPrediction.Scraping\HorseRacingPrediction.Scraping.csproj" />
-    <ProjectReference Include="..\HorseRacingPrediction.AgentClient\HorseRacingPrediction.AgentClient.csproj" />
   </ItemGroup>
 
 </Project>

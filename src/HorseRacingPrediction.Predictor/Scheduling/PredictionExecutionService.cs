@@ -1,8 +1,9 @@
+using HorseRacingPrediction.Collector.Scheduling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace HorseRacingPrediction.AgentClient.Scheduling;
+namespace HorseRacingPrediction.Predictor.Scheduling;
 
 public sealed class PredictionExecutionService : BackgroundService
 {

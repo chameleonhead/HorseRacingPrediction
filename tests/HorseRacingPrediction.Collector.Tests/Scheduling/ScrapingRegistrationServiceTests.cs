@@ -1,4 +1,3 @@
-using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Collector.Scheduling;
 
 namespace HorseRacingPrediction.Collector.Tests.Scheduling;

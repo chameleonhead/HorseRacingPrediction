@@ -1,4 +1,3 @@
-using HorseRacingPrediction.AgentClient.Scheduling;
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Workflow;
 
