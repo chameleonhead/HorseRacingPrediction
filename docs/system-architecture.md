@@ -59,21 +59,22 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 
 ## プロジェクト依存関係
 
-Api は Collector / Predictor を参照しない。Collector は収集実行と旧共有補助型（HTTP クライアント、ジョブ状態管理、Scheduling DTO）を所有し、Predictor と JraVerifier はその補助型を利用するため Collector を参照する。
+Api は Collector / Predictor を参照しない。Collector は収集実行と旧共有補助型（HTTP クライアント、ジョブ状態管理、Scheduling DTO）を所有し、Predictor と JraVerifier はその補助型を利用するため Collector を参照する。Predictor はフェーズ2（SNS 投稿文生成）のために `HorseRacingPrediction.Agents` も参照する。
 
 ```
 HorseRacingPrediction.Api ──────────┐
                                      ▼
 HorseRacingPrediction.Collector ──▶ HorseRacingPrediction.ApiClient ──▶ HorseRacingPrediction.Contracts
-          ▲                          ▲
-          │                          │
-HorseRacingPrediction.Predictor ─────┘
+          ▲                          ▲                                          ▲
+          │                          │                                          │
+HorseRacingPrediction.Predictor ─────┴──────────────────────▶ HorseRacingPrediction.Agents
 ```
 
-- `Contracts`: `RacePredictionContextReadModel` / `HorseReadModel` / `RaceStatus` などの読み取り用 DTO のみ。他プロジェクトへの参照を持たない
+- `Contracts`: `RacePredictionContextReadModel` / `HorseReadModel` / `RaceStatus` / `PredictionTicketSummaryReadModel` などの読み取り用 DTO のみ。他プロジェクトへの参照を持たない
 - `ApiClient`: `IRaceQueryService` / `IPredictionWriteService` / `IDataCollectionWriteService` などのクライアント側インターフェースと `DataCollectionWriteTools` を持つ。`Contracts` を参照する
 - `Api` は自身のエンドポイント用 DTO（`Api/Contracts/`）を別途持つが、クライアントと共有する読み取り用 DTO は `Contracts` を参照して再利用し、二重定義しない
-- Collector・Predictor は HTTP（`X-Api-Key` 付き）でのみ Api と通信する。Predictor から Collector への参照は、移管済み補助型の利用に限る
+- Collector・Predictor は HTTP（`X-Api-Key` 付き）でのみ Api と通信する。Predictor から Collector への参照は、移管済み補助型（HTTP クライアント、`IMemoWriteService`）の利用に限る
+- `Agents` は `RaceQueryTools`（`IRaceQueryService` 経由）を通じて Api のデータを読み取るのみで、書き込みは Predictor 側が `IMemoWriteService` で行う（Agents は Collector を参照しない）
 
 ## LLM 利用方針（最重要の前提変更）
 

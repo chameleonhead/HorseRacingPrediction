@@ -130,9 +130,53 @@ public sealed class HttpRaceQueryService : IRaceQueryService
                 x.PredictedRank)).ToList());
     }
 
+    public async Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}", cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        var dto = await response.Content.ReadFromJsonAsync<PredictionTicketResponseDto>(JsonOptions, cancellationToken).ConfigureAwait(false);
+        if (dto is null || string.IsNullOrWhiteSpace(dto.PredictionTicketId))
+            return null;
+
+        return new PredictionTicketSummaryReadModel(
+            dto.PredictionTicketId,
+            dto.RaceId,
+            dto.PredictorType,
+            dto.PredictorId,
+            dto.ConfidenceScore,
+            dto.SummaryComment,
+            dto.PredictedAt,
+            dto.Marks.Select(x => new PredictionMarkEntry(
+                x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment)).ToList());
+    }
+
     private sealed record PagedResponseDto<T>(IReadOnlyList<T> Items);
 
     private sealed record RaceSummaryDto(string RaceId, DateOnly? RaceDate, string? RacecourseCode, int? RaceNumber);
+}
+
+internal sealed class PredictionTicketResponseDto
+{
+    public string PredictionTicketId { get; set; } = string.Empty;
+    public string? RaceId { get; set; }
+    public string? PredictorType { get; set; }
+    public string? PredictorId { get; set; }
+    public decimal ConfidenceScore { get; set; }
+    public string? SummaryComment { get; set; }
+    public DateTimeOffset? PredictedAt { get; set; }
+    public List<PredictionMarkResponseDto> Marks { get; set; } = [];
+}
+
+internal sealed class PredictionMarkResponseDto
+{
+    public string EntryId { get; set; } = string.Empty;
+    public string MarkCode { get; set; } = string.Empty;
+    public int PredictedRank { get; set; }
+    public decimal Score { get; set; }
+    public string? Comment { get; set; }
 }
 
 internal sealed class MemoResponseDto

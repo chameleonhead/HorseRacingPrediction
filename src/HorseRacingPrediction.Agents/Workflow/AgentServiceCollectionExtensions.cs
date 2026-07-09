@@ -6,6 +6,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -172,6 +173,31 @@ public static class AgentServiceCollectionExtensions
             instructions: PredictionAgent.SystemPrompt,
             tools: CreatePredictionTools(services));
     }
+
+    /// <summary>
+    /// <see cref="PostGenerationWorkflow"/> と、その3並行草稿エージェント
+    /// (<see cref="HonmeiCommentaryAgent"/> / <see cref="AnaCommentaryAgent"/> / <see cref="DataRationaleAgent"/>) と
+    /// 統合エージェント (<see cref="StoryPostComposerAgent"/>) を DI コンテナに登録する。
+    /// </summary>
+    public static IServiceCollection AddPostGenerationWorkflow(this IServiceCollection services)
+    {
+        services.TryAddTransient<RaceQueryTools>();
+
+        services.AddTransient<HonmeiCommentaryAgent>(sp =>
+            new HonmeiCommentaryAgent(sp.GetRequiredService<IChatClient>(), CreateRaceQueryOnlyTools(sp)));
+        services.AddTransient<AnaCommentaryAgent>(sp =>
+            new AnaCommentaryAgent(sp.GetRequiredService<IChatClient>(), CreateRaceQueryOnlyTools(sp)));
+        services.AddTransient<DataRationaleAgent>(sp =>
+            new DataRationaleAgent(sp.GetRequiredService<IChatClient>(), CreateRaceQueryOnlyTools(sp)));
+        services.AddTransient<StoryPostComposerAgent>(sp =>
+            new StoryPostComposerAgent(sp.GetRequiredService<IChatClient>(), CreateRaceQueryOnlyTools(sp)));
+        services.AddTransient<PostGenerationWorkflow>();
+
+        return services;
+    }
+
+    private static List<AITool> CreateRaceQueryOnlyTools(IServiceProvider services) =>
+        new(services.GetRequiredService<RaceQueryTools>().GetAITools());
 
     private static List<AITool> CreateRaceQueryAndWebFetchTools(IServiceProvider services)
     {

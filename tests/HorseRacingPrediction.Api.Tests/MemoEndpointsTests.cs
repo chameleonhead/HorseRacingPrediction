@@ -64,6 +64,25 @@ public class MemoEndpointsTests
     }
 
     [TestMethod]
+    public async Task CreateMemo_DuplicateMemoId_ReturnsConflict()
+    {
+        var memoId = $"memo-{Guid.NewGuid()}";
+        var request = new CreateMemoRequest(
+            AuthorId: "author-1",
+            MemoType: "SnsStoryPost",
+            Content: "初回の投稿文",
+            CreatedAt: DateTimeOffset.UtcNow,
+            Subjects: new[] { new MemoSubjectDto("Race", "race-dup-1") },
+            MemoId: memoId);
+
+        var firstResponse = await _client.PostAsJsonAsync("/api/memos", request);
+        Assert.AreEqual(HttpStatusCode.Created, firstResponse.StatusCode);
+
+        var secondResponse = await _client.PostAsJsonAsync("/api/memos", request);
+        Assert.AreEqual(HttpStatusCode.Conflict, secondResponse.StatusCode);
+    }
+
+    [TestMethod]
     public async Task GetMemosBySubject_AfterCreate_ReturnsMemos()
     {
         var memoId = $"memo-{Guid.NewGuid()}";

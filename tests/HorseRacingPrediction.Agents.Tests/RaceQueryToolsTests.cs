@@ -135,6 +135,7 @@ public class RaceQueryToolsTests
         Assert.IsTrue(tools.Any(t => t.Name == "GetJockeyRaceStats"), "GetJockeyRaceStats が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "GetRaceFieldAnalysis"), "GetRaceFieldAnalysis が登録されていること");
         Assert.IsTrue(tools.Any(t => t.Name == "GetMlPrediction"), "GetMlPrediction が登録されていること");
+        Assert.IsTrue(tools.Any(t => t.Name == "GetPredictionTicket"), "GetPredictionTicket が登録されていること");
     }
 
     // ------------------------------------------------------------------ //
@@ -250,6 +251,44 @@ public class RaceQueryToolsTests
     }
 
     // ------------------------------------------------------------------ //
+    // GetPredictionTicket
+    // ------------------------------------------------------------------ //
+
+    [TestMethod]
+    public async Task GetPredictionTicket_ExistingTicket_ReturnsMarkdown()
+    {
+        _fakeService.PredictionTicket = new PredictionTicketSummaryReadModel(
+            "prediction-001",
+            "race-001",
+            "ApiOnlyPredictor",
+            "api-only-v1",
+            82.5m,
+            "上位馬中心の堅い決着",
+            DateTimeOffset.Parse("2026-07-09T00:00:00Z"),
+            [
+                new PredictionMarkEntry("entry-01", "◎", 1, 90m, "ML予測1位"),
+                new PredictionMarkEntry("entry-02", "○", 2, 85m, "ML予測2位")
+            ]);
+
+        var result = await _sut.GetPredictionTicket("prediction-001");
+
+        StringAssert.Contains(result, "prediction-001", "予測票IDが含まれること");
+        StringAssert.Contains(result, "◎", "本命印が含まれること");
+        StringAssert.Contains(result, "entry-01", "エントリーIDが含まれること");
+    }
+
+    [TestMethod]
+    public async Task GetPredictionTicket_NotFound_ReturnsMessage()
+    {
+        _fakeService.PredictionTicket = null;
+
+        var result = await _sut.GetPredictionTicket("prediction-999");
+
+        StringAssert.Contains(result, "prediction-999", "検索IDが含まれること");
+        StringAssert.Contains(result, "見つかりませんでした", "見つからないメッセージが含まれること");
+    }
+
+    // ------------------------------------------------------------------ //
     // Fake IRaceQueryService
     // ------------------------------------------------------------------ //
 
@@ -263,6 +302,7 @@ public class RaceQueryToolsTests
         public HorseRaceHistoryReadModel? HorseHistoryModel { get; set; }
         public JockeyRaceHistoryReadModel? JockeyHistoryModel { get; set; }
         public MlPredictionResponse? MlPrediction { get; set; }
+        public PredictionTicketSummaryReadModel? PredictionTicket { get; set; }
 
         public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(RegisteredRaces.Where(x => x.RaceDate == raceDate).ToList());
@@ -287,6 +327,9 @@ public class RaceQueryToolsTests
 
         public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult(MlPrediction);
+
+        public Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+            => Task.FromResult(PredictionTicket);
     }
 }
 

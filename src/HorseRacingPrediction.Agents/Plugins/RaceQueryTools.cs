@@ -136,7 +136,8 @@ public sealed class RaceQueryTools
         AIFunctionFactory.Create(GetHorseRaceStats),
         AIFunctionFactory.Create(GetJockeyRaceStats),
         AIFunctionFactory.Create(GetRaceFieldAnalysis),
-        AIFunctionFactory.Create(GetMlPrediction)
+        AIFunctionFactory.Create(GetMlPrediction),
+        AIFunctionFactory.Create(GetPredictionTicket)
     ];
 
     // ------------------------------------------------------------------ //
@@ -323,6 +324,38 @@ public sealed class RaceQueryTools
         foreach (var row in prediction.Rankings.OrderBy(x => x.PredictedRank))
         {
             sb.AppendLine($"| {row.PredictedRank} | {row.HorseNumber} | {row.HorseId} | {row.EntryId} | {row.PredictedScore:F3} |");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 指定した予測票 ID の確定済み予測票（印・スコア・コメント）を取得する。
+    /// </summary>
+    [Description("指定した予測票 ID の確定済み予測票（各出走馬の予測印・スコア・コメント）を Markdown 形式で取得します。投稿文生成エージェントが本命・穴馬・データ根拠を把握するために使います。")]
+    public async Task<string> GetPredictionTicket(
+        [Description("予測票 ID")] string predictionTicketId,
+        CancellationToken cancellationToken = default)
+    {
+        var model = await _queryService.GetPredictionTicketAsync(predictionTicketId, cancellationToken);
+
+        if (model is null || string.IsNullOrEmpty(model.PredictionTicketId))
+            return $"予測票 ID '{predictionTicketId}' は見つかりませんでした。";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"## 予測票: {model.PredictionTicketId}");
+        sb.AppendLine($"- レースID: {model.RaceId ?? "不明"}");
+        sb.AppendLine($"- 予測者: {model.PredictorType ?? "不明"} ({model.PredictorId ?? "不明"})");
+        sb.AppendLine($"- 信頼度スコア: {model.ConfidenceScore:F1}");
+        if (!string.IsNullOrWhiteSpace(model.SummaryComment))
+            sb.AppendLine($"- サマリー: {model.SummaryComment}");
+        sb.AppendLine();
+        sb.AppendLine("### 予測印一覧");
+        sb.AppendLine("| 予測印 | 予測順位 | エントリーID | スコア | コメント |");
+        sb.AppendLine("|--------|---------|--------------|--------|----------|");
+        foreach (var mark in model.Marks.OrderBy(x => x.PredictedRank))
+        {
+            sb.AppendLine($"| {mark.MarkCode} | {mark.PredictedRank} | {mark.EntryId} | {mark.Score:F1} | {mark.Comment ?? "-"} |");
         }
 
         return sb.ToString();

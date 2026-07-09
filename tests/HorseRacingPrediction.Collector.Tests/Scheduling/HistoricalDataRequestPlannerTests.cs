@@ -163,6 +163,9 @@ public sealed class HistoricalDataRequestPlannerTests
 
         public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult<MlPredictionResponse?>(null);
+
+        public Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+            => Task.FromResult<PredictionTicketSummaryReadModel?>(null);
     }
 
     private sealed class StubHistoricalRaceReferenceCollector : IHistoricalRaceReferenceCollector

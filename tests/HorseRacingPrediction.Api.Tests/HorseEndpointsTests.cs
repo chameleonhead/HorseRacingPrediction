@@ -174,7 +174,7 @@ public class HorseEndpointsTests
         var history = await response.Content.ReadFromJsonAsync<HorseRaceHistoryReadModel>(JsonOptions);
         Assert.IsNotNull(history);
         Assert.AreEqual(horseId, history.HorseId);
-        Assert.HasCount(1, history.Entries);
+        Assert.AreEqual(1, history.Entries.Count);
         Assert.AreEqual(raceId, history.Entries[0].RaceId);
         Assert.AreEqual(entryId, history.Entries[0].EntryId);
         Assert.AreEqual(1, history.Entries[0].FinishPosition);

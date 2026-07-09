@@ -370,7 +370,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
 
     private static string CleanRaceName(string name)
     {
-        var parts = name.Split([' ', '\u3000', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var parts = name.Split(new[] {' ', '\u3000', '\t'}, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length > 0 ? string.Join(" ", parts) : name;
     }
 
@@ -596,7 +596,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
                     continue;
                 }
 
-                var parts = cellText.Split([' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries);
+                var parts = cellText.Split(new[] {' ', '\n', '\t'}, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2)
                 {
                     var amount = ParsePayoutAmount(parts[^1]);

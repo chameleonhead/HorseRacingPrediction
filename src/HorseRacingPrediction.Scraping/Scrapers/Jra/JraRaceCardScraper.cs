@@ -205,7 +205,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
                 .Append(snapshot.MainText));
 
         return source
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries)
             .Select(x => x.Trim())
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToList();
@@ -769,7 +769,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         name = Regex.Replace(name, @"\s+G[ⅠⅡⅢ1-3]$", string.Empty, RegexOptions.CultureInvariant).Trim();
 
         // グレード表記（GⅠ等）が混入している場合はスペースで分割して先頭部分を使う
-        var parts = name.Split([' ', '\u3000', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var parts = name.Split(new[] {' ', '\u3000', '\t'}, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length > 0 ? string.Join(" ", parts) : name;
     }
 
@@ -981,7 +981,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
     private static string ExtractHorseName(string cellText)
     {
         var first = cellText.TrimStart()
-            .Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] {' ', '\t', '\n', '\r'}, StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault();
         return first ?? cellText.Trim();
     }
@@ -1084,7 +1084,7 @@ public sealed class JraRaceCardScraper : IScraper<JraRaceCardData>
         }
 
         var tokens = segment
-            .Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] {' ', '\t', '\n', '\r'}, StringSplitOptions.RemoveEmptyEntries)
             .ToArray();
 
         if (tokens.Length == 0)

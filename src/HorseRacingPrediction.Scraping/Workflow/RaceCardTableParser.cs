@@ -9,7 +9,7 @@ internal static class RaceCardTableParser
         if (string.IsNullOrWhiteSpace(markdown))
             return [];
 
-        var lines = markdown.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var lines = markdown.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries);
         for (var index = 0; index < lines.Length - 1; index++)
         {
             if (!IsTableRow(lines[index]) || !IsSeparatorRow(lines[index + 1]))
