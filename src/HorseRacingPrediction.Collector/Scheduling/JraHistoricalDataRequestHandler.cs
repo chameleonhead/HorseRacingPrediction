@@ -1,6 +1,7 @@
 using System.Globalization;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
@@ -42,8 +43,8 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
                     $"Horse profile seed data was not found via API. HorseId={payload.HorseId}");
             }
 
-            JraExtractionEnvelope<JraEntityProfile> extraction = await _profileLookup
-                .GetHorseProfileAsync(horse.RegisteredName, cancellationToken)
+            JraExtractionEnvelope<JraHorseProfileData> extraction = await _profileLookup
+                .GetHorseProfileWithHistoryAsync(horse.RegisteredName, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!extraction.Success || extraction.Data is null)
@@ -52,18 +53,21 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
                     $"Failed to fetch JRA horse profile. HorseId={payload.HorseId}, Error={extraction.Error ?? "unknown"}");
             }
 
-            JraEntityProfile profile = extraction.Data;
+            JraEntityProfile profile = extraction.Data.Profile;
+            var horseName = profile.DisplayName ?? horse.RegisteredName;
+            var sexCode = profile.SexCode ?? horse.SexCode;
+
             await _dataCollectionWriteService.UpsertHorseAsync(
-                profile.DisplayName ?? horse.RegisteredName,
+                horseName,
                 horse.NormalizedName,
-                profile.SexCode ?? horse.SexCode,
+                sexCode,
                 FormatDate(profile.BirthDate ?? horse.BirthDate),
                 cancellationToken).ConfigureAwait(false);
 
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Horse,
                 AgentAcquisitionOperationType.ProfileSync,
-                profile.DisplayName ?? horse.RegisteredName,
+                horseName,
                 RaceDataCollectionState.Succeeded,
                 ProviderType,
                 payload.HorseId,
@@ -73,8 +77,11 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
                 errorReason: null,
                 cancellationToken).ConfigureAwait(false);
 
-            return HistoricalDataRequestExecutionResult.PermanentFailure(
-                $"JRA horse profile synchronized for HorseId={payload.HorseId}, but structured horse race history persistence is not implemented yet.");
+            var persistedCount = await PersistRaceHistoryAsync(
+                horseName, sexCode, extraction.Data.RaceHistory, cancellationToken).ConfigureAwait(false);
+
+            return HistoricalDataRequestExecutionResult.Success(
+                $"JRA horse profile synchronized for HorseId={payload.HorseId}. RaceHistoryEntriesPersisted={persistedCount}/{extraction.Data.RaceHistory.Count}.");
         }
         catch (Exception ex)
         {
@@ -165,6 +172,91 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
             return HistoricalDataRequestExecutionResult.Retry(
                 $"Jockey history synchronization failed for JockeyId={payload.JockeyId}. {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 競走馬情報ページから抽出した過去の競走成績を、レース・出走・結果として Api へ登録する。
+    /// 1件のレースが登録に必要な情報（開催日・競馬場・R・レース名・馬番）を欠く場合はスキップし、
+    /// 個々のレースの登録失敗が他のレースの登録を止めないようにする。
+    /// </summary>
+    private async Task<int> PersistRaceHistoryAsync(
+        string horseName,
+        string? sexCode,
+        IReadOnlyList<JraHorseRaceHistoryEntryData> raceHistory,
+        CancellationToken cancellationToken)
+    {
+        var persistedCount = 0;
+
+        foreach (var entry in raceHistory)
+        {
+            if (entry.RaceDate is null
+                || string.IsNullOrWhiteSpace(entry.Racecourse)
+                || entry.RaceNumber is not > 0
+                || string.IsNullOrWhiteSpace(entry.RaceName)
+                || entry.HorseNumber is not > 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                var raceId = await _dataCollectionWriteService.UpsertRaceAsync(
+                    entry.RaceDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    entry.Racecourse,
+                    entry.RaceNumber.Value,
+                    entry.RaceName,
+                    entryCount: null,
+                    gradeCode: null,
+                    entry.SurfaceCode,
+                    entry.DistanceMeters,
+                    directionCode: null,
+                    cancellationToken).ConfigureAwait(false);
+
+                await _dataCollectionWriteService.UpsertRaceEntryAsync(
+                    raceId,
+                    entry.HorseNumber.Value,
+                    horseName,
+                    entry.JockeyName,
+                    trainerName: null,
+                    entry.GateNumber,
+                    entry.AssignedWeight,
+                    sexCode,
+                    age: null,
+                    entry.BodyWeight,
+                    entry.BodyWeightDiff,
+                    cancellationToken).ConfigureAwait(false);
+
+                var winningHorseName = entry.FinishPosition == 1 ? horseName : entry.WinnerOrRunnerUpHorseName;
+                if (!string.IsNullOrWhiteSpace(winningHorseName))
+                {
+                    await _dataCollectionWriteService.DeclareRaceResultAsync(
+                        raceId,
+                        winningHorseName,
+                        declaredAt: null,
+                        winningHorseId: null,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                await _dataCollectionWriteService.DeclareRaceEntryResultAsync(
+                    raceId,
+                    entry.HorseNumber.Value,
+                    entry.FinishPosition,
+                    entry.OfficialTime,
+                    entry.MarginText,
+                    entry.LastThreeFurlongTime,
+                    entry.AbnormalResultCode,
+                    entry.PrizeMoney,
+                    cancellationToken).ConfigureAwait(false);
+
+                persistedCount++;
+            }
+            catch (Exception)
+            {
+                // 1走分の登録に失敗しても、他のレースの登録は継続する。
+            }
+        }
+
+        return persistedCount;
     }
 
     private static string? FormatDate(DateOnly? value)
