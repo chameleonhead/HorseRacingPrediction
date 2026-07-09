@@ -47,64 +47,79 @@ Predictor の責務は 2 フェーズに分かれる。
 - `HorseRacingPrediction.Agents.Agents.HorseAnalysisAgent`
 - `HorseRacingPrediction.Agents.Agents.PredictionAgent`
 
-## フェーズ2: SNS 投稿文生成（新規・マルチエージェント LLM）
+## フェーズ2: SNS 投稿文生成（実装済み・ストーリー仕立て・マルチエージェント LLM）
 
 ### 目的
 
-確定した予想票（`PredictionTicket` + `PredictionMark` + `PredictionRationale`）を入力に、X などの SNS に投稿するためのメッセージを生成する。
+確定した予想票（`PredictionTicket` + `PredictionMark` + `PredictionRationale`）を入力に、X などの SNS に投稿する「ストーリー仕立て」のメッセージを生成する。単なる予想印の列挙ではなく、読み手が最後まで読みたくなる一つの物語として組み立てる点がフェーズ2の要件である。
 
 ### 実行頻度とコストの考え方
 
 予想票の確定ごとに 1 回程度の実行を想定する（レース数 × 数エージェント呼び出し）。フェーズ1（予想生成）が出走馬単位・高頻度で LLM を使わないのに対し、フェーズ2は低頻度かつ「表現生成」という LLM の強みが活きる領域であるため、ここに限定してマルチエージェント LLM を採用する。
 
-### エージェント構成（視点分担型）
+### ストーリー構成（起承転結）
 
-1つの投稿文を、異なる視点を担当する複数エージェントが並行に草稿を作り、統合エージェントが1つの投稿文にまとめる構成（Parallelization → 統合、[.github/skills/agent-design](../.github/skills/agent-design/SKILL.md) の Orchestrator-workers に近いパターン）を採る。
+`StoryPostComposerAgent` は、3エージェントの草稿を単純結合するのではなく、以下の4段構成（起承転結）を持つ一つの物語として再構成する。
+
+| 段 | 内容 | 主な入力ソース |
+|---|---|---|
+| 起（舞台設定） | レース名・条件・見どころを短く提示し読み手を引き込む | `RaceQueryTools.GetRacePredictionContext` |
+| 承（本命の掘り下げ） | 本命馬（◎）を推す理由をデータと絡めて掘り下げる | `HonmeiCommentaryAgent` + `DataRationaleAgent` の草稿 |
+| 転（視点の転換） | 穴馬・対抗目線を提示し、意外性・妙味で物語に転換を加える | `AnaCommentaryAgent` の草稿 |
+| 結（結論・CTA） | ◎宣言と一言、必要なら購入検討を促す一文で締める | 予想票の確定印一覧 |
+
+文字数上限・ハッシュタグ方針は `PostGenerationOptions`（Predictor 側設定）で制御し、`StoryPostComposerAgent` のプロンプトへ実行時に注入する。
+
+### エージェント構成（視点分担型 → ストーリー統合）
+
+1つの投稿文を、異なる視点を担当する複数エージェントが並行に草稿を作り、統合エージェントが起承転結の物語1本にまとめる構成（Parallelization → 統合、[.github/skills/agent-design](../.github/skills/agent-design/SKILL.md) の Orchestrator-workers に近いパターン）を採る。
 
 | エージェント | 入力 | 出力 | 役割 |
 |---|---|---|---|
 | `HonmeiCommentaryAgent`（本命解説） | ◎本命馬の `PredictionMark` + `PredictionRationale` | 短文コメント | 本命馬を推す理由を簡潔に言語化する |
 | `AnaCommentaryAgent`（穴馬解説） | ▲単穴・△連下の `PredictionMark` + `PredictionRationale` | 短文コメント | 妙味のある馬・注目ポイントを言語化する |
 | `DataRationaleAgent`（データ根拠） | ML 予測スコア・過去成績など数値的根拠 | 短文コメント | 数値的根拠を簡潔に要約する |
-| `PostComposerAgent`（統合） | 上記3エージェントの出力 + 媒体制約（文字数・体裁） | 投稿用テキスト（媒体別） | 3つの草稿を1つの投稿文に統合し、文字数調整・ハッシュタグ選定を行う |
+| `StoryPostComposerAgent`（ストーリー統合） | 上記3エージェントの出力 + レースコンテキスト + 媒体制約（文字数・体裁） | 投稿用テキスト（起承転結） | 3つの草稿を起承転結の物語1本に再構成し、文字数調整・ハッシュタグ選定を行う |
 
 - `HonmeiCommentaryAgent` / `AnaCommentaryAgent` / `DataRationaleAgent` は並行実行する（互いに依存しない）
-- `PostComposerAgent` は3エージェントの出力が揃った後に実行する（Prompt chaining の最終ステップに相当）
+- `StoryPostComposerAgent` は3エージェントの出力が揃った後に実行する（Prompt chaining の最終ステップに相当）
 - 各エージェントは [.github/skills/agent-design](../.github/skills/agent-design/SKILL.md) の基本構造（`ChatClientAgent` ラッパー、1ファイル1クラス、`AgentName` / `SystemPrompt` 定数）に従って実装する
 
-### ワークフロー
+### ワークフロー: `PostGenerationWorkflow`
 
 ```
 PredictionTicket (確定済み)
         │
         ├──▶ HonmeiCommentaryAgent ──┐
-        ├──▶ AnaCommentaryAgent ─────┼──▶ PostComposerAgent ──▶ 投稿用テキスト
+        ├──▶ AnaCommentaryAgent ─────┼──▶ StoryPostComposerAgent ──▶ 投稿用テキスト（起承転結）
         └──▶ DataRationaleAgent ─────┘
 ```
 
-新規ワークフロークラス（例: `PostGenerationWorkflow`）を `HorseRacingPrediction.Agents/Workflow/` に追加し、3エージェントの並行実行後に統合エージェントへ結果を渡す。既存の `PredictionWorkflow`（Prompt chaining のみ）とは異なり、並行実行 + 統合のステップを持つ点が構造上の差分になる。
+`src/HorseRacingPrediction.Agents/Workflow/PostGenerationWorkflow.cs` に実装する。3エージェントを `Task.WhenAll` で並行実行し、揃った草稿を `StoryPostComposerAgent` に渡す構造上、既存の `PredictionWorkflow`（`WorkflowBuilder` による Prompt chaining のみ）とは異なり、並行実行 + 統合のステップを持つ。
 
 ### 入力データの取得
 
-投稿文生成エージェントに渡す予想票データは、既存の `RaceQueryTools` / `IRaceQueryService` を再利用して取得する想定とする（予想票確定後の `PredictionTicket` を読み取り専用で参照するツールが必要であれば追加する）。
+投稿文生成エージェントに渡すデータは、既存の `RaceQueryTools` / `IRaceQueryService` を再利用して取得する。確定済み `PredictionTicket`（印・スコア・コメント）を参照するため、`IRaceQueryService.GetPredictionTicketAsync` / `RaceQueryTools.GetPredictionTicket` を追加した。
 
-### 出力の保存先（要検討事項）
+### 出力の保存先: `Memo` 集約（決定）
 
-生成した投稿文の保存先は未確定。以下いずれかを検討する。
+生成した投稿文は既存の `Memo` 集約に保存する。
 
-- 既存の `Memo` 集約（`RaceId` に紐づく自由記述として保存できる）を再利用する
-- 予想票専用の新しい ReadModel／付随情報として保持する
+- `MemoType`: `"SnsStoryPost"`
+- `Subjects`: `[{ SubjectType: "Race", SubjectId: raceId }]`
+- `MemoId`: `memo-post-{predictionTicketId}`（決定論的 ID。同一予想票に対する再生成は同じ `MemoId` を指す）
 
-いずれの場合も、Api への書き込みは冪等にし、同一予想票に対する再生成を許容する設計にする。
+書き込みは `IMemoWriteService.CreateOrUpdateRaceMemoAsync` で行う。まず作成を試み、`409 Conflict`（`MemoId` が既に存在＝再生成）の場合は更新にフォールバックする。これにより Api への書き込みは冪等になり、同一予想票に対する再生成を許容する。この create→conflict→update フォールバックを機能させるため、Api 側 `POST /api/memos` は他の集約（Horse/Jockey/Trainer/Race）と同様に「既に作成済み」の `InvalidOperationException` を `409 Conflict` へ変換するよう修正した。
+
+### 起動トリガー: `PredictionExecutionService` のフック
+
+`ApiOnlyPredictionWorkflow` 自体は LLM 不使用の原則を保つ。`PredictionExecutionService.RunOneCycleAsync` が予想票の確定（`FinalizePredictionTicketAsync` 相当）に成功した直後に `PostGenerationWorkflow.RunAsync(predictionTicketId)` を呼び出す。投稿文生成が失敗しても予想自体は成功済みのため、別の try/catch でラップしログ警告のみに留め、予想の再キューには影響させない。
 
 ### スコープ外（明示）
 
 - 実際に X などの SNS へ API 経由で投稿する処理は、本ドキュメントの対象外とする
-- 投稿文生成までを Predictor の責務とし、投稿の実行（認証・レート制限・投稿失敗時の扱いなど）は別途スコープを切って検討する
+- 投稿文生成までを Predictor の責務とし、投稿の実行(認証・レート制限・投稿失敗時の扱いなど)は別途スコープを切って検討する
 
-## 今後の実装ステップ
+## 実装状況
 
-1. `PredictionTicket` 確定後に投稿文生成を起動するトリガー（`PredictionExecutionService` 完了後のフック、または別のポーリングサービス）を追加する
-2. `HonmeiCommentaryAgent` / `AnaCommentaryAgent` / `DataRationaleAgent` / `PostComposerAgent` を実装する
-3. 生成結果の保存先を決定し、書き込みサービスを追加する
-4. 媒体別（X 以外の SNS を追加する場合）のバリアント生成方針を `PostComposerAgent` のプロンプトに反映する
+フェーズ1・フェーズ2ともに実装済み。Predictor プロセスは `HorseRacingPrediction.Agents` を参照し、`PostGenerationOptions`（`appsettings.json` の `PostGeneration` セクション）で有効化・文字数上限・ハッシュタグを制御する。IChatClient の実体は `LMStudioChatClient`（`LMStudio` セクションで接続先を設定）を使用する。

@@ -34,4 +34,8 @@ public interface IRaceQueryService
 
     Task<MlPredictionResponse?> GetMlPredictionAsync(
         string raceId, CancellationToken cancellationToken = default);
+
+    /// <summary>指定した予測票 ID の確定済み予測票（印・スコア・コメント）を取得する。</summary>
+    Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(
+        string predictionTicketId, CancellationToken cancellationToken = default);
 }

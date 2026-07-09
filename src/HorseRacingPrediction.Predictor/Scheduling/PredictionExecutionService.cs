@@ -14,6 +14,7 @@ public sealed class PredictionExecutionService : BackgroundService
     private readonly ProcessingStateStore _stateStore;
     private readonly HistoricalDataRequestTracker _historicalDataRequestTracker;
     private readonly ApiOnlyPredictionWorkflow _predictionWorkflow;
+    private readonly PostGenerationExecutionStep _postGenerationStep;
     private readonly ILogger<PredictionExecutionService> _logger;
 
     public PredictionExecutionService(
@@ -21,12 +22,14 @@ public sealed class PredictionExecutionService : BackgroundService
         ProcessingStateStore stateStore,
         HistoricalDataRequestTracker historicalDataRequestTracker,
         ApiOnlyPredictionWorkflow predictionWorkflow,
+        PostGenerationExecutionStep postGenerationStep,
         ILogger<PredictionExecutionService> logger)
     {
         _options = options.Value;
         _stateStore = stateStore;
         _historicalDataRequestTracker = historicalDataRequestTracker;
         _predictionWorkflow = predictionWorkflow;
+        _postGenerationStep = postGenerationStep;
         _logger = logger;
     }
 
@@ -123,6 +126,10 @@ public sealed class PredictionExecutionService : BackgroundService
                     result.PredictionSummary.Length);
 
                 await _stateStore.MarkPredictionCompletedAsync(raceId, cancellationToken).ConfigureAwait(false);
+
+                await _postGenerationStep
+                    .RunAsync(result.PredictionTicketId, raceId, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {

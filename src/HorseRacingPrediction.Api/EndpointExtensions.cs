@@ -1626,14 +1626,22 @@ public static class EndpointExtensions
                     subjects,
                     links);
 
-                var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/memos/{memoId.Value}", new { MemoId = memoId.Value })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                try
+                {
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Created($"/api/memos/{memoId.Value}", new { MemoId = memoId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Memo is already created.", StringComparison.Ordinal))
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
             })
             .WithName("CreateMemo")
             .WithTags("Memo API")
             .Produces(StatusCodes.Status201Created)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .WithOpenApi();

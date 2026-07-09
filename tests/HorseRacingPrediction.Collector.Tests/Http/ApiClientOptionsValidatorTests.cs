@@ -13,7 +13,7 @@ public sealed class ApiClientOptionsValidatorTests
 
         var result = sut.Validate(name: null, new ApiClientOptions());
 
-        Assert.AreEqual(ValidateOptionsResult.Fail([]).Failed.GetType(), result.Failed.GetType());
+        Assert.AreEqual(ValidateOptionsResult.Fail(Array.Empty<string>()).Failed.GetType(), result.Failed.GetType());
         Assert.IsTrue(result.Failed, "validation should fail when BaseUrl and ApiKey are missing");
         Assert.IsTrue(result.Failures.Any(message => message.Contains("BaseUrl", StringComparison.Ordinal)));
         Assert.IsTrue(result.Failures.Any(message => message.Contains("ApiKey", StringComparison.Ordinal)));

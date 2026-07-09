@@ -41,7 +41,7 @@ public sealed class JraScheduleCalendarParser : IJraStructuredPageParser<JraSche
         var cells = snapshot.Tables
             .SelectMany(table => table.Rows)
             .SelectMany(row => row)
-            .Concat(snapshot.MainText.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Concat(snapshot.MainText.Split(new[] {'\n', '\r'}, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .Distinct(StringComparer.Ordinal)
             .ToList();

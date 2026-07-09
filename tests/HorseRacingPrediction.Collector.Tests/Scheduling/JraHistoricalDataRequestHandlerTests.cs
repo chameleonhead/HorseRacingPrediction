@@ -381,5 +381,8 @@ public sealed class JraHistoricalDataRequestHandlerTests
 
         public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+
+        public Task<PredictionTicketSummaryReadModel?> GetPredictionTicketAsync(string predictionTicketId, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 }

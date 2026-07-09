@@ -276,7 +276,7 @@ internal static class JraPageParserText
         }
 
         var tail = url[(index + marker.Length)..];
-        var segment = tail.Split(['/', '.'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var segment = tail.Split(new[] {'/', '.'}, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         return string.IsNullOrWhiteSpace(segment) ? null : segment;
     }
 
