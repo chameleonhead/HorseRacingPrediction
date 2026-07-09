@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -133,5 +134,57 @@ public class HorseEndpointsTests
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task GetHorseRaceHistory_AfterRaceResultDeclared_ListsPastRace()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var entryId = $"entry-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2025, 12, 28), "NAKAYAMA", 11, "有馬記念", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("レースヒストリーテスト号", "racehistorytest", "M", null, horseId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(16),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/result",
+            new DeclareRaceResultRequest("レースヒストリーテスト号", DateTimeOffset.UtcNow),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries/{entryId}/result",
+            new DeclareEntryResultRequest(1, "2:31.5", null, "34.0", null, 12000m),
+            JsonOptions);
+
+        var response = await _client.GetAsync($"/api/horses/{horseId}/race-history");
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var history = await response.Content.ReadFromJsonAsync<HorseRaceHistoryReadModel>(JsonOptions);
+        Assert.IsNotNull(history);
+        Assert.AreEqual(horseId, history.HorseId);
+        Assert.HasCount(1, history.Entries);
+        Assert.AreEqual(raceId, history.Entries[0].RaceId);
+        Assert.AreEqual(entryId, history.Entries[0].EntryId);
+        Assert.AreEqual(1, history.Entries[0].FinishPosition);
+    }
+
+    [TestMethod]
+    public async Task GetHorseRaceHistory_ForUnknownHorse_ReturnsNotFound()
+    {
+        var response = await _client.GetAsync($"/api/horses/horse-{Guid.NewGuid()}/race-history");
+
+        Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

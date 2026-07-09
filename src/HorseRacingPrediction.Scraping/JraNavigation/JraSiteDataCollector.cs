@@ -80,6 +80,18 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         string horseName, CancellationToken cancellationToken = default)
         => await RequestProfileTypedAsync(horseName, JraPageKind.HorseProfile, cancellationToken);
 
+    /// <summary>
+    /// 競走馬情報ページへクリック遷移し、プロフィールと過去の競走成績（<see cref="JraHorseScraper"/> による解析）を
+    /// あわせて抽出する。
+    /// </summary>
+    public async Task<JraExtractionEnvelope<JraHorseProfileData>> RequestHorseProfileWithHistoryAsync(
+        string horseName, CancellationToken cancellationToken = default)
+    {
+        var envelope = await RequestProfileAsync(
+            horseName, JraPageKind.HorseProfile, ExtractHorseProfileWithHistoryAsync, cancellationToken);
+        return envelope.ToTyped<JraHorseProfileData>();
+    }
+
     public async Task<JraExtractionEnvelope<JraEntityProfile>> RequestJockeyProfileAsync(
         string jockeyName, CancellationToken cancellationToken = default)
         => await RequestProfileTypedAsync(jockeyName, JraPageKind.JockeyProfile, cancellationToken);
@@ -353,8 +365,19 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         return envelope.ToTyped<T>();
     }
 
-    private async Task<JraExtractionEnvelope> RequestProfileAsync(
+    private Task<JraExtractionEnvelope> RequestProfileAsync(
         string entityName, JraPageKind expectedKind, CancellationToken ct)
+        => RequestProfileAsync(entityName, expectedKind, ExtractCurrentAsync, ct);
+
+    /// <summary>
+    /// エンティティ名でクリック遷移してプロフィールページへ移動し、<paramref name="extractStep"/> で
+    /// 抽出処理を行う。抽出後は必ず元のページへ戻る。
+    /// </summary>
+    private async Task<JraExtractionEnvelope> RequestProfileAsync(
+        string entityName,
+        JraPageKind expectedKind,
+        Func<List<string>, Stopwatch, CancellationToken, Task<JraExtractionEnvelope>> extractStep,
+        CancellationToken ct)
     {
         var sw    = Stopwatch.StartNew();
         var steps = new List<string>();
@@ -402,7 +425,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
             if (!clicked)
                 throw new InvalidOperationException($"テキスト '{entityName}' に一致するクリック可能要素が見つかりませんでした。");
 
-            var result = await ExtractCurrentAsync(steps, sw, ct);
+            var result = await extractStep(steps, sw, ct);
 
             await Browser.GoBackAsync(ct);
             steps.Add("back");
@@ -635,6 +658,25 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
 
         var data = await extractor.ExtractAsync(Browser, ct);
         return new JraExtractionEnvelope(true, kind, url,
+            new JraNavigationTrace(steps, sw.Elapsed), data);
+    }
+
+    private async Task<JraExtractionEnvelope> ExtractHorseProfileWithHistoryAsync(
+        List<string> steps, Stopwatch sw, CancellationToken ct)
+    {
+        ThrowIfDisposed();
+        var url = Browser.CurrentUrl ?? string.Empty;
+        var data = await new JraHorseScraper(Browser).ScrapeCurrentPageAsync(ct);
+
+        if (data is null)
+        {
+            return JraExtractionEnvelope.Failure(JraPageKind.HorseProfile, url,
+                new JraNavigationTrace(steps, sw.Elapsed),
+                "競走馬情報ページから構造化データを抽出できませんでした。");
+        }
+
+        _memory.RecordNavigation(url, JraPageKind.HorseProfile);
+        return new JraExtractionEnvelope(true, JraPageKind.HorseProfile, url,
             new JraNavigationTrace(steps, sw.Elapsed), data);
     }
 

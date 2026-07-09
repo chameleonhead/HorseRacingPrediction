@@ -24,7 +24,11 @@ public sealed class JraProfileExtractor : IPageExtractor
         return ParseProfile(snapshot, url, kind);
     }
 
-    private static JraEntityProfile ParseProfile(PageSnapshot snapshot, string url, JraPageKind kind)
+    /// <summary>
+    /// <see cref="Scrapers.Jra.JraHorseScraper"/> など、同一ページから追加情報を抽出する
+    /// スクレイパーが再利用できるよう internal 公開する。
+    /// </summary>
+    internal static JraEntityProfile ParseProfile(PageSnapshot snapshot, string url, JraPageKind kind)
     {
         var entityKind = kind switch
         {

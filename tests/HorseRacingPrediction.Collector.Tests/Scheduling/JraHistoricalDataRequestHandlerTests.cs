@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,7 +30,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
     }
 
     [TestMethod]
-    public async Task HandleHorseHistoryRequestAsync_SynchronizesHorseProfileBeforePermanentFailure()
+    public async Task HandleHorseHistoryRequestAsync_SynchronizesProfileAndPersistsRaceHistory()
     {
         var raceQueryService = new StubRaceQueryService
         {
@@ -55,26 +56,155 @@ public sealed class JraHistoricalDataRequestHandlerTests
             "手塚貴久",
             new Dictionary<string, string>(),
             "https://example.test/horse");
+        var raceHistory = new List<JraHorseRaceHistoryEntryData>
+        {
+            new(
+                RaceDate: new DateOnly(2023, 5, 28),
+                Racecourse: "東京",
+                RaceNumber: 11,
+                RaceName: "日本ダービー",
+                GateNumber: 1,
+                HorseNumber: 1,
+                FinishPosition: 1,
+                AbnormalResultCode: null,
+                JockeyName: "横山武史",
+                AssignedWeight: 57.0m,
+                SurfaceCode: "芝",
+                DistanceMeters: 2400,
+                OfficialTime: "2:22.5",
+                MarginText: null,
+                LastThreeFurlongTime: "33.8",
+                BodyWeight: 468m,
+                BodyWeightDiff: 2m,
+                WinnerOrRunnerUpHorseName: "タスティエーラ",
+                PrizeMoney: 20000m),
+            new(
+                RaceDate: new DateOnly(2023, 10, 29),
+                Racecourse: "東京",
+                RaceNumber: 11,
+                RaceName: "天皇賞(秋)",
+                GateNumber: 3,
+                HorseNumber: 6,
+                FinishPosition: 2,
+                AbnormalResultCode: null,
+                JockeyName: "横山武史",
+                AssignedWeight: 58.0m,
+                SurfaceCode: "芝",
+                DistanceMeters: 2000,
+                OfficialTime: "1:56.9",
+                MarginText: "クビ",
+                LastThreeFurlongTime: "33.5",
+                BodyWeight: 470m,
+                BodyWeightDiff: 2m,
+                WinnerOrRunnerUpHorseName: "イクイノックス",
+                PrizeMoney: 9000m),
+        };
         var profileLookup = new StubJraProfileLookup
         {
-            HorseProfile = new JraExtractionEnvelope<JraEntityProfile>(
+            HorseProfileWithHistory = new JraExtractionEnvelope<JraHorseProfileData>(
                 true,
                 JraPageKind.HorseProfile,
                 "https://example.test/horse",
                 new JraNavigationTrace(Array.Empty<string>(), TimeSpan.Zero),
-                horseProfile),
+                new JraHorseProfileData(horseProfile, raceHistory)),
         };
         var sut = new JraHistoricalDataRequestHandler(raceQueryService, writeService, profileLookup, CreateStatusRecorder());
 
         var result = await sut.HandleHorseHistoryRequestAsync(
             new HorseHistoryCollectionRequestPayload("horse-1", "race-1", "JRA"));
 
-        Assert.IsFalse(result.Succeeded);
-        Assert.IsTrue(result.IsPermanentFailure);
+        Assert.IsTrue(result.Succeeded, result.Message);
+        Assert.IsFalse(result.IsPermanentFailure);
         Assert.AreEqual("ソールオリエンス", writeService.UpsertedHorseName);
         Assert.AreEqual("牡", writeService.UpsertedHorseSexCode);
         Assert.AreEqual("2020-02-24", writeService.UpsertedHorseBirthDate);
-        Assert.IsTrue(result.Message?.Contains("profile synchronized", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(result.Message?.Contains("RaceHistoryEntriesPersisted=2/2", StringComparison.Ordinal));
+
+        Assert.HasCount(2, writeService.UpsertedRaces);
+        Assert.AreEqual("日本ダービー", writeService.UpsertedRaces[0].RaceName);
+        Assert.AreEqual("東京", writeService.UpsertedRaces[0].RacecourseCode);
+        Assert.AreEqual(11, writeService.UpsertedRaces[0].RaceNumber);
+
+        Assert.HasCount(2, writeService.UpsertedRaceEntries);
+        Assert.AreEqual("ソールオリエンス", writeService.UpsertedRaceEntries[0].HorseName);
+        Assert.AreEqual(1, writeService.UpsertedRaceEntries[0].HorseNumber);
+
+        Assert.HasCount(2, writeService.DeclaredRaceResults);
+        Assert.AreEqual("ソールオリエンス", writeService.DeclaredRaceResults[0].WinningHorseName, "自身が勝った場合は自身の馬名");
+        Assert.AreEqual("イクイノックス", writeService.DeclaredRaceResults[1].WinningHorseName, "自身が負けた場合は勝ち馬の馬名");
+
+        Assert.HasCount(2, writeService.DeclaredRaceEntryResults);
+        Assert.AreEqual(1, writeService.DeclaredRaceEntryResults[0].FinishPosition);
+        Assert.AreEqual(2, writeService.DeclaredRaceEntryResults[1].FinishPosition);
+    }
+
+    [TestMethod]
+    public async Task HandleHorseHistoryRequestAsync_SkipsRaceHistoryEntriesMissingRequiredFields()
+    {
+        var raceQueryService = new StubRaceQueryService
+        {
+            Horse = new HorseReadModel
+            {
+                HorseId = "horse-1",
+                RegisteredName = "ソールオリエンス",
+                NormalizedName = "ソールオリエンス",
+            },
+        };
+        var writeService = new StubDataCollectionWriteService();
+        var horseProfile = new JraEntityProfile(
+            "horse",
+            "ソールオリエンス",
+            "牡",
+            new DateOnly(2020, 2, 24),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Dictionary<string, string>(),
+            "https://example.test/horse");
+        var raceHistory = new List<JraHorseRaceHistoryEntryData>
+        {
+            new(
+                RaceDate: null,
+                Racecourse: "東京",
+                RaceNumber: 11,
+                RaceName: "馬番不明レース",
+                GateNumber: null,
+                HorseNumber: null,
+                FinishPosition: null,
+                AbnormalResultCode: null,
+                JockeyName: null,
+                AssignedWeight: null,
+                SurfaceCode: null,
+                DistanceMeters: null,
+                OfficialTime: null,
+                MarginText: null,
+                LastThreeFurlongTime: null,
+                BodyWeight: null,
+                BodyWeightDiff: null,
+                WinnerOrRunnerUpHorseName: null,
+                PrizeMoney: null),
+        };
+        var profileLookup = new StubJraProfileLookup
+        {
+            HorseProfileWithHistory = new JraExtractionEnvelope<JraHorseProfileData>(
+                true,
+                JraPageKind.HorseProfile,
+                "https://example.test/horse",
+                new JraNavigationTrace(Array.Empty<string>(), TimeSpan.Zero),
+                new JraHorseProfileData(horseProfile, raceHistory)),
+        };
+        var sut = new JraHistoricalDataRequestHandler(raceQueryService, writeService, profileLookup, CreateStatusRecorder());
+
+        var result = await sut.HandleHorseHistoryRequestAsync(
+            new HorseHistoryCollectionRequestPayload("horse-1", "race-1", "JRA"));
+
+        Assert.IsTrue(result.Succeeded, result.Message);
+        Assert.IsTrue(result.Message?.Contains("RaceHistoryEntriesPersisted=0/1", StringComparison.Ordinal));
+        Assert.IsEmpty(writeService.UpsertedRaces);
     }
 
     [TestMethod]
@@ -142,10 +272,15 @@ public sealed class JraHistoricalDataRequestHandlerTests
     {
         public JraExtractionEnvelope<JraEntityProfile>? HorseProfile { get; set; }
 
+        public JraExtractionEnvelope<JraHorseProfileData>? HorseProfileWithHistory { get; set; }
+
         public JraExtractionEnvelope<JraEntityProfile>? JockeyProfile { get; set; }
 
         public Task<JraExtractionEnvelope<JraEntityProfile>> GetHorseProfileAsync(string horseName, CancellationToken cancellationToken = default)
             => Task.FromResult(HorseProfile!);
+
+        public Task<JraExtractionEnvelope<JraHorseProfileData>> GetHorseProfileWithHistoryAsync(string horseName, CancellationToken cancellationToken = default)
+            => Task.FromResult(HorseProfileWithHistory!);
 
         public Task<JraExtractionEnvelope<JraEntityProfile>> GetJockeyProfileAsync(string jockeyName, CancellationToken cancellationToken = default)
             => Task.FromResult(JockeyProfile!);
@@ -163,6 +298,14 @@ public sealed class JraHistoricalDataRequestHandlerTests
 
         public string? UpsertedJockeyName { get; private set; }
 
+        public List<(string RaceDate, string RacecourseCode, int RaceNumber, string RaceName)> UpsertedRaces { get; } = [];
+
+        public List<(string RaceId, int HorseNumber, string HorseName)> UpsertedRaceEntries { get; } = [];
+
+        public List<(string RaceId, string WinningHorseName)> DeclaredRaceResults { get; } = [];
+
+        public List<(string RaceId, int HorseNumber, int? FinishPosition)> DeclaredRaceEntryResults { get; } = [];
+
         public Task<string> UpsertHorseAsync(string registeredName, string? normalizedName, string? sexCode, string? birthDate, CancellationToken cancellationToken = default)
         {
             UpsertedHorseName = registeredName;
@@ -179,19 +322,31 @@ public sealed class JraHistoricalDataRequestHandlerTests
         }
 
         public Task<string> UpsertRaceAsync(string raceDate, string racecourseCode, int raceNumber, string raceName, int? entryCount, string? gradeCode, string? surfaceCode, int? distanceMeters, string? directionCode, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            UpsertedRaces.Add((raceDate, racecourseCode, raceNumber, raceName));
+            return Task.FromResult($"race-{UpsertedRaces.Count}");
+        }
 
         public Task<string> UpsertTrainerAsync(string displayName, string? normalizedName, string? affiliationCode, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task<string> UpsertRaceEntryAsync(string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName, int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight, decimal? declaredWeightDiff, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            UpsertedRaceEntries.Add((raceId, horseNumber, horseName));
+            return Task.FromResult($"{raceId}-{horseNumber}");
+        }
 
         public Task<string> DeclareRaceResultAsync(string raceId, string winningHorseName, string? declaredAt, string? winningHorseId, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            DeclaredRaceResults.Add((raceId, winningHorseName));
+            return Task.FromResult(raceId);
+        }
 
         public Task<string> DeclareRaceEntryResultAsync(string raceId, int horseNumber, int? finishPosition, string? officialTime, string? marginText, string? lastThreeFurlongTime, string? abnormalResultCode, decimal? prizeMoney, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            DeclaredRaceEntryResults.Add((raceId, horseNumber, finishPosition));
+            return Task.FromResult($"{raceId}-{horseNumber}");
+        }
 
         public Task<string> DeclareRacePayoutsAsync(string raceId, string? winPayoutsJson, string? placePayoutsJson, string? quinellaPayoutsJson, string? exactaPayoutsJson, string? trifectaPayoutsJson, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
