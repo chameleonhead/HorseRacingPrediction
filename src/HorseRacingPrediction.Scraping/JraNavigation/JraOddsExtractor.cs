@@ -33,11 +33,11 @@ public sealed class JraOddsExtractor : IPageExtractor
 
             var headers = table.Headers.Select(h => h.Trim()).ToList();
 
-            var horseNoIdx  = FindHeaderIndex(headers, "馬番", "番号");
-            var horseNmIdx  = FindHeaderIndex(headers, "馬名");
-            var winIdx      = FindHeaderIndex(headers, "単勝");
-            var popIdx      = FindHeaderIndex(headers, "人気");
-            var placeIdx    = FindHeaderIndex(headers, "複勝");
+            var horseNoIdx = FindHeaderIndex(headers, "馬番", "番号");
+            var horseNmIdx = FindHeaderIndex(headers, "馬名");
+            var winIdx = FindHeaderIndex(headers, "単勝");
+            var popIdx = FindHeaderIndex(headers, "人気");
+            var placeIdx = FindHeaderIndex(headers, "複勝");
 
             if (horseNoIdx < 0 || winIdx < 0) continue;
 
@@ -46,10 +46,10 @@ public sealed class JraOddsExtractor : IPageExtractor
                 var horseNoRaw = GetCell(row, horseNoIdx);
                 if (!int.TryParse(horseNoRaw, out var horseNo)) continue;
 
-                var horseName  = GetCell(row, horseNmIdx);
-                var winRaw     = GetCell(row, winIdx);
-                var popRaw     = GetCell(row, popIdx);
-                var placeRaw   = GetCell(row, placeIdx);
+                var horseName = GetCell(row, horseNmIdx);
+                var winRaw = GetCell(row, winIdx);
+                var popRaw = GetCell(row, popIdx);
+                var placeRaw = GetCell(row, placeIdx);
 
                 winOdds.Add(new JraWinOddsEntry(
                     horseNo,

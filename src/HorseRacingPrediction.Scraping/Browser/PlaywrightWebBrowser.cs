@@ -908,24 +908,24 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 enforceQualityThreshold: true);
         }
 
-            // セマンティックな section/article が一部だけ存在するページでは、
-            // その外側にある本文（レース概要など）が欠落し得る。候補が取れていても
-            // トップレベルの構造ブロックを補完し、既存セクションと重なるものは除外する。
-            await AddSectionsFromStructuralBlocksAsync(
+        // セマンティックな section/article が一部だけ存在するページでは、
+        // その外側にある本文（レース概要など）が欠落し得る。候補が取れていても
+        // トップレベルの構造ブロックを補完し、既存セクションと重なるものは除外する。
+        await AddSectionsFromStructuralBlocksAsync(
+            pageTitle,
+            sections,
+            seen,
+            boundedLinkLimit,
+            cancellationToken);
+
+        if (sections.Count == sectionCountAfterHeader)
+        {
+            await AddBodyFallbackSectionAsync(
                 pageTitle,
                 sections,
-                seen,
                 boundedLinkLimit,
                 cancellationToken);
-
-            if (sections.Count == sectionCountAfterHeader)
-            {
-                await AddBodyFallbackSectionAsync(
-                    pageTitle,
-                    sections,
-                    boundedLinkLimit,
-                    cancellationToken);
-            }
+        }
 
         await AddSpecialLayoutSectionAsync(
             selector: FooterSectionSelector,

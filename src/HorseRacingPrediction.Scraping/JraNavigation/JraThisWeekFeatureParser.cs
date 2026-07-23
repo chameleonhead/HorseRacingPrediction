@@ -19,7 +19,7 @@ public sealed class JraThisWeekFeatureParser : IJraStructuredPageParser<JraThisW
     public JraStructuredPageParseResult<JraThisWeekPage> Parse(PageSnapshot snapshot)
     {
         var issues = new List<JraPageParseIssue>();
-        var dateRangeLabel = snapshot.MainText.Split(new[] {'\n', '\r'}, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var dateRangeLabel = snapshot.MainText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(line => line.Contains("月", StringComparison.Ordinal)
                 && line.Contains("日", StringComparison.Ordinal)
                 && (line.Contains("～", StringComparison.Ordinal) || line.Contains("-", StringComparison.Ordinal)));

@@ -120,36 +120,36 @@ public sealed class PlaywrightTools
                 }
                 else
                 {
-                try
-                {
-                    _logger.LogInformation(
-                        "PlaywrightTools BrowserReadPage follow detail link. CurrentUrl={CurrentUrl} DetailLinkText={DetailLinkText}",
-                        currentUrl,
-                        safeDetailClickText);
-                    rawText = await _browser.ClickAsync(safeDetailClickText, ct);
-                    currentUrl = NormalizePageUrl(_browser.CurrentUrl) ?? currentUrl;
+                    try
+                    {
+                        _logger.LogInformation(
+                            "PlaywrightTools BrowserReadPage follow detail link. CurrentUrl={CurrentUrl} DetailLinkText={DetailLinkText}",
+                            currentUrl,
+                            safeDetailClickText);
+                        rawText = await _browser.ClickAsync(safeDetailClickText, ct);
+                        currentUrl = NormalizePageUrl(_browser.CurrentUrl) ?? currentUrl;
 
-                    if (!IsDomainAllowed(currentUrl))
-                    {
-                        try { await _browser.GoBackAsync(ct); } catch { }
-                    }
-                    else
-                    {
-                        snapshot = await _browser.GetPageSnapshotAsync(GetPageLinkLimit(), ct);
-                        links = NormalizeLinks(await _browser.GetLinksAsync(GetPageLinkLimit(), ct), currentUrl);
-                        if (snapshot.Links.Count > 0)
+                        if (!IsDomainAllowed(currentUrl))
                         {
-                            links = NormalizeLinks(snapshot.Links, currentUrl);
-                            snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
+                            try { await _browser.GoBackAsync(ct); } catch { }
                         }
+                        else
+                        {
+                            snapshot = await _browser.GetPageSnapshotAsync(GetPageLinkLimit(), ct);
+                            links = NormalizeLinks(await _browser.GetLinksAsync(GetPageLinkLimit(), ct), currentUrl);
+                            if (snapshot.Links.Count > 0)
+                            {
+                                links = NormalizeLinks(snapshot.Links, currentUrl);
+                                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
+                            }
 
-                        extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
+                            extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
+                        }
                     }
-                }
-                catch (InvalidOperationException)
-                {
-                    // 詳細クリックが失敗した場合は初回取得結果をそのまま使う。
-                }
+                    catch (InvalidOperationException)
+                    {
+                        // 詳細クリックが失敗した場合は初回取得結果をそのまま使う。
+                    }
                 }
             }
 
@@ -353,7 +353,7 @@ public sealed class PlaywrightTools
 
         sb.AppendLine();
         sb.AppendLine("## 検索結果リンク");
-    AppendLinks(sb, links, "検索結果リンクが見つかりませんでした。", groupByRegion: false);
+        AppendLinks(sb, links, "検索結果リンクが見つかりませんでした。", groupByRegion: false);
 
         if (!string.IsNullOrWhiteSpace(formattedText))
         {

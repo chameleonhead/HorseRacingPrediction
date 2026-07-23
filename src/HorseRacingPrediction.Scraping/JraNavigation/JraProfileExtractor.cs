@@ -32,24 +32,24 @@ public sealed class JraProfileExtractor : IPageExtractor
     {
         var entityKind = kind switch
         {
-            JraPageKind.HorseProfile   => "horse",
-            JraPageKind.JockeyProfile  => "jockey",
+            JraPageKind.HorseProfile => "horse",
+            JraPageKind.JockeyProfile => "jockey",
             JraPageKind.TrainerProfile => "trainer",
-            _                          => "unknown",
+            _ => "unknown",
         };
 
         var facts = ExtractFacts(snapshot);
         AugmentFactsFromMainText(snapshot.MainText, facts);
 
         var displayName = ExtractDisplayName(snapshot, facts);
-        var sexCode     = FindFactValue(facts, "性別", "性齢")?.TrimStart() is { } sv
+        var sexCode = FindFactValue(facts, "性別", "性齢")?.TrimStart() is { } sv
                           ? ParseSexCode(sv) : null;
-        var birthDate   = ParseDateOnly(FindFactValue(facts, "生年月日", "誕生日", "生年月"));
+        var birthDate = ParseDateOnly(FindFactValue(facts, "生年月日", "誕生日", "生年月"));
         var affiliation = FindFactValue(facts, "所属", "所属厩舎", "拠点");
-        var debutYear   = ParseYear(FindFactValue(facts, "デビュー年", "開業", "初騎乗", "デビュー", "初出走"));
-        var sireName    = FindFactValue(facts, "父");
-        var damName     = FindFactValue(facts, "母");
-        var ownerName   = FindFactValue(facts, "馬主名", "馬主");
+        var debutYear = ParseYear(FindFactValue(facts, "デビュー年", "開業", "初騎乗", "デビュー", "初出走"));
+        var sireName = FindFactValue(facts, "父");
+        var damName = FindFactValue(facts, "母");
+        var ownerName = FindFactValue(facts, "馬主名", "馬主");
         var breederName = FindFactValue(facts, "生産牧場", "生産者");
         var trainerName = FindFactValue(facts, "調教師名", "調教師", "厩舎");
 
@@ -120,17 +120,17 @@ public sealed class JraProfileExtractor : IPageExtractor
     {
         if (string.IsNullOrWhiteSpace(mainText)) return;
 
-        TryAdd(facts, "性別",    Regex.Match(mainText, @"性別\s+([牡牝騸セ])"));
+        TryAdd(facts, "性別", Regex.Match(mainText, @"性別\s+([牡牝騸セ])"));
         TryAdd(facts, "生年月日", Regex.Match(mainText, @"生年月日\s+(\d{4}年\d{1,2}月\d{1,2}日)"));
         TryAdd(facts, "調教師名", Regex.Match(mainText, @"調教師名\s+([\p{L}\p{N}]+(?:\s+[\p{L}\p{N}]+)?)"));
-        TryAdd(facts, "馬主名",   Regex.Match(mainText,
+        TryAdd(facts, "馬主名", Regex.Match(mainText,
             @"馬主名\s+(.+?)(?=\s+母\s+|\s+馬齢\s+|\s+調教師名\s+|\s+母の父\s+|\s+生年月日\s+|$)",
             RegexOptions.Singleline));
         TryAdd(facts, "生産牧場", Regex.Match(mainText, @"生産牧場\s+(\S+)"));
-        TryAdd(facts, "父",       Regex.Match(mainText, @"(?:^|[ 　\n])父\s+(\S+)"));
-        TryAdd(facts, "母",       Regex.Match(mainText, @"(?:^|[ 　\n])母\s+(\S+)"));
-        TryAdd(facts, "毛色",     Regex.Match(mainText, @"毛色\s+(\S+)"));
-        TryAdd(facts, "馬齢",     Regex.Match(mainText, @"馬齢\s+(\d+歳)"));
+        TryAdd(facts, "父", Regex.Match(mainText, @"(?:^|[ 　\n])父\s+(\S+)"));
+        TryAdd(facts, "母", Regex.Match(mainText, @"(?:^|[ 　\n])母\s+(\S+)"));
+        TryAdd(facts, "毛色", Regex.Match(mainText, @"毛色\s+(\S+)"));
+        TryAdd(facts, "馬齢", Regex.Match(mainText, @"馬齢\s+(\d+歳)"));
     }
 
     private static void TryAdd(Dictionary<string, string> facts, string key, Match m,

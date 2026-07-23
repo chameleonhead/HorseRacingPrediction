@@ -51,8 +51,8 @@ public sealed class JraRaceResultExtractor : IPageExtractor
         var surfaceCode = ParseSurfaceCode(metadataText);
         var distanceMeters = ParseDistanceMeters(metadataText);
         var directionCode = ParseDirectionCode(metadataText);
-        var entries  = new List<JraResultEntry>();
-        var payouts  = new List<JraPayoutSummary>();
+        var entries = new List<JraResultEntry>();
+        var payouts = new List<JraPayoutSummary>();
 
         foreach (var table in snapshot.Tables)
         {
@@ -60,13 +60,13 @@ public sealed class JraRaceResultExtractor : IPageExtractor
             var headers = table.Headers.Select(h => h.Trim()).ToList();
 
             // 着順テーブル
-            var posIdx     = FindHeaderIndex(headers, "着順", "着");
-            var gateNoIdx  = FindHeaderIndex(headers, "枠番", "枠");
+            var posIdx = FindHeaderIndex(headers, "着順", "着");
+            var gateNoIdx = FindHeaderIndex(headers, "枠番", "枠");
             var horseNoIdx = FindHeaderIndex(headers, "馬番");
             var horseNmIdx = FindHeaderIndex(headers, "馬名");
-            var sexAgeIdx  = FindHeaderIndex(headers, "性齢");
-            var jockeyIdx  = FindHeaderIndex(headers, "騎手");
-            var timeIdx    = FindHeaderIndex(headers, "タイム", "走破時計");
+            var sexAgeIdx = FindHeaderIndex(headers, "性齢");
+            var jockeyIdx = FindHeaderIndex(headers, "騎手");
+            var timeIdx = FindHeaderIndex(headers, "タイム", "走破時計");
             var assignedWeightIdx = FindHeaderIndex(headers, "斤量", "負担重量", "負担体重");
             var bodyWeightIdx = FindHeaderIndex(headers, "馬体重");
 
@@ -95,17 +95,17 @@ public sealed class JraRaceResultExtractor : IPageExtractor
             }
 
             // 払戻金テーブル（式別・組合せ・払戻金 の 3 列構造を目安にする）
-            var betTypeIdx    = FindHeaderIndex(headers, "式別", "馬券", "賭式");
-            var comboIdx      = FindHeaderIndex(headers, "組合せ", "馬番号");
-            var payoutAmtIdx  = FindHeaderIndex(headers, "払戻金", "払戻");
+            var betTypeIdx = FindHeaderIndex(headers, "式別", "馬券", "賭式");
+            var comboIdx = FindHeaderIndex(headers, "組合せ", "馬番号");
+            var payoutAmtIdx = FindHeaderIndex(headers, "払戻金", "払戻");
 
             if (betTypeIdx >= 0 || (payoutAmtIdx >= 0 && payouts.Count == 0))
             {
                 foreach (var row in table.Rows)
                 {
                     var betType = NullIfEmpty(GetCell(row, betTypeIdx));
-                    var combo   = NullIfEmpty(GetCell(row, comboIdx));
-                    var payout  = NullIfEmpty(GetCell(row, payoutAmtIdx));
+                    var combo = NullIfEmpty(GetCell(row, comboIdx));
+                    var payout = NullIfEmpty(GetCell(row, payoutAmtIdx));
 
                     if (betType is null && combo is null && payout is null) continue;
 

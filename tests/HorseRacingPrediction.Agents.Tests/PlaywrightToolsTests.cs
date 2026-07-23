@@ -27,8 +27,8 @@ public class PlaywrightToolsTests
             SearchResultsToFetch = 3,
             MaxLinksPerPage = 5,
         });
-                var extractionAgent = new PageDataExtractionAgent(new StaticChatClient(
-                        """
+        var extractionAgent = new PageDataExtractionAgent(new StaticChatClient(
+                """
                         {
                             "contentMarkdown": "整形済み本文",
                             "shouldFollowDetailLink": false,

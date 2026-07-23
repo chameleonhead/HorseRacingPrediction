@@ -31,10 +31,10 @@ public static class TrainingDataBuilder
             var fieldSize = entries.Count;
             var raceDate = race.RaceDate ?? DateOnly.FromDateTime(DateTime.Today);
 
-            var leaderCount      = entries.Count(e => e.RunningStyleCode == "逃");
+            var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");
             var frontRunnerCount = entries.Count(e => e.RunningStyleCode == "先");
             var paceType = leaderCount >= 3 ? "HiPace" : leaderCount == 2 ? "MidPace" : "SlowPace";
-            var fieldSizeEffect  = Math.Min(100f, (fieldSize - 6) * 100f / 12f);
+            var fieldSizeEffect = Math.Min(100f, (fieldSize - 6) * 100f / 12f);
 
             foreach (var entryResult in race.EntryResults)
             {
@@ -43,7 +43,7 @@ public static class TrainingDataBuilder
                 var entry = entries.FirstOrDefault(e => e.EntryId == entryResult.EntryId);
                 if (entry is null) continue;
 
-                var horseHistory  = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
+                var horseHistory = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
                 var jockeyHistory = entry.JockeyId is null ? null
                     : await getJockeyHistory(entry.JockeyId, cancellationToken).ConfigureAwait(false);
                 horseHistory = horseHistory?.AsOf(raceDate, race.RaceId);
@@ -76,7 +76,7 @@ public static class TrainingDataBuilder
             "先" => 1.5f + leaderCount + (frontRunnerCount / 2f),
             "差" => 1.5f + leaderCount + frontRunnerCount + 2f,
             "追" => 1.5f + leaderCount + frontRunnerCount + 5f,
-            _    => 8f,
+            _ => 8f,
         };
     }
 }

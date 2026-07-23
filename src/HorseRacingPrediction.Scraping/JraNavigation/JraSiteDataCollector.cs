@@ -39,9 +39,9 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
     private JraSiteDataCollector(PlaywrightWebBrowser browser, JraSessionMemory memory,
         JraNavigationPlanner planner, JraExtractorRegistry registry)
     {
-        _browser  = browser;
-        _memory   = memory;
-        _planner  = planner;
+        _browser = browser;
+        _memory = memory;
+        _planner = planner;
         _registry = registry;
     }
 
@@ -49,7 +49,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
     {
         _ = cancellationToken;
         var browser = await PlaywrightWebBrowser.CreateAsync();
-        var memory  = new JraSessionMemory();
+        var memory = new JraSessionMemory();
         var planner = new JraNavigationPlanner();
         var registry = new JraExtractorRegistry(
         [
@@ -317,7 +317,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         DateOnly date, string racecourse, int raceNumber,
         JraPageKind targetKind, CancellationToken ct)
     {
-        var sw    = Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         var steps = new List<string>();
         ThrowIfDisposed();
         try
@@ -379,11 +379,11 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         Func<List<string>, Stopwatch, CancellationToken, Task<JraExtractionEnvelope>> extractStep,
         CancellationToken ct)
     {
-        var sw    = Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         var steps = new List<string>();
         ThrowIfDisposed();
 
-        var savedUrl  = Browser.CurrentUrl;
+        var savedUrl = Browser.CurrentUrl;
         var savedKind = _memory.CurrentPageKind;
 
         try
@@ -503,7 +503,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         await Browser.ClickAsync("出馬表", ct);
         steps.Add("click: 出馬表");
 
-        var holdingsUrl      = Browser.CurrentUrl;
+        var holdingsUrl = Browser.CurrentUrl;
         var holdingsSnapshot = await Browser.GetPageSnapshotAsync(maxLinks: 300, cancellationToken: ct);
 
         if (!ContainsExactRequestedDate(holdingsSnapshot, date))
@@ -539,7 +539,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
             }
         }
 
-        var holdings         = ExtractHoldingLabels(holdingsSnapshot);
+        var holdings = ExtractHoldingLabels(holdingsSnapshot);
 
         if (holdings.Count == 0)
         {
@@ -643,9 +643,9 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
         List<string> steps, Stopwatch sw, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        var url      = Browser.CurrentUrl ?? string.Empty;
+        var url = Browser.CurrentUrl ?? string.Empty;
         var snapshot = await Browser.GetPageSnapshotAsync(maxLinks: 20, cancellationToken: ct);
-        var kind     = JraPageKindDetector.Detect(url, snapshot);
+        var kind = JraPageKindDetector.Detect(url, snapshot);
         _memory.RecordNavigation(url, kind);
 
         var extractor = _registry.GetFor(kind);
@@ -690,7 +690,7 @@ public sealed class JraSiteDataCollector : IAsyncDisposable
 
     private void SyncMemoryFromUrl()
     {
-        var url  = _browser?.CurrentUrl ?? string.Empty;
+        var url = _browser?.CurrentUrl ?? string.Empty;
         var kind = JraPageKindDetector.Detect(url, snapshot: null);
         _memory.RecordNavigation(url, kind);
     }

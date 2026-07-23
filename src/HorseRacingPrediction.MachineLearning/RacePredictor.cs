@@ -86,20 +86,20 @@ public sealed class RacePredictor : IRacePredictor
         var entries = raceContext.Entries;
         var fieldSize = entries.Count;
 
-        var leaderCount      = entries.Count(e => e.RunningStyleCode == "逃");
+        var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");
         var frontRunnerCount = entries.Count(e => e.RunningStyleCode == "先");
         var paceType = leaderCount >= 3 ? "HiPace" : leaderCount == 2 ? "MidPace" : "SlowPace";
-        var fieldSizeEffect  = Math.Min(100f, (fieldSize - 6) * 100f / 12f);
+        var fieldSizeEffect = Math.Min(100f, (fieldSize - 6) * 100f / 12f);
         var raceDate = raceContext.RaceDate ?? DateOnly.FromDateTime(DateTime.Today);
 
         var inputTasks = entries.Select(async entry =>
         {
-            var horseHistory  = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
+            var horseHistory = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
             var jockeyHistory = entry.JockeyId is null ? null
                 : await getJockeyHistory(entry.JockeyId, cancellationToken).ConfigureAwait(false);
             horseHistory = horseHistory?.AsOf(raceDate, raceContext.RaceId);
             jockeyHistory = jockeyHistory?.AsOf(raceDate, raceContext.RaceId);
-            var expectedPos   = EstimatePosition(entry.RunningStyleCode, leaderCount, frontRunnerCount);
+            var expectedPos = EstimatePosition(entry.RunningStyleCode, leaderCount, frontRunnerCount);
             return (entry, FeatureMapper.Build(
                 entry, horseHistory, jockeyHistory,
                 leaderCount, frontRunnerCount, paceType, fieldSizeEffect, expectedPos, raceDate));
@@ -201,12 +201,12 @@ public sealed class RacePredictor : IRacePredictor
         var trainer = _mlContext.Regression.Trainers.FastTree(
             new FastTreeRegressionTrainer.Options
             {
-                NumberOfTrees        = 200,
-                NumberOfLeaves       = 31,
+                NumberOfTrees = 200,
+                NumberOfLeaves = 31,
                 MinimumExampleCountPerLeaf = 5,
-                LearningRate         = 0.05,
-                LabelColumnName      = "Label",
-                FeatureColumnName    = "Features",
+                LearningRate = 0.05,
+                LabelColumnName = "Label",
+                FeatureColumnName = "Features",
             });
 
         return featureConcat.Append(trainer);
@@ -220,7 +220,7 @@ public sealed class RacePredictor : IRacePredictor
             "先" => 1.5f + leaderCount + (frontRunnerCount / 2f),
             "差" => 1.5f + leaderCount + frontRunnerCount + 2f,
             "追" => 1.5f + leaderCount + frontRunnerCount + 5f,
-            _    => 8f,
+            _ => 8f,
         };
     }
 }

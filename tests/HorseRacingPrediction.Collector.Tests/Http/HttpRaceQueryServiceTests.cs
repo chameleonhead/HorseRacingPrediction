@@ -38,7 +38,7 @@ public sealed class HttpRaceQueryServiceTests
         Assert.IsNotNull(result);
         Assert.AreEqual("prediction-001", result!.PredictionTicketId);
         Assert.AreEqual("race-001", result.RaceId);
-        Assert.AreEqual(1, result.Marks.Count);
+        Assert.HasCount(1, result.Marks);
         Assert.AreEqual("◎", result.Marks[0].MarkCode);
     }
 

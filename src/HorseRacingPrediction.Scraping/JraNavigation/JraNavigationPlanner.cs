@@ -13,12 +13,12 @@ public sealed class JraNavigationPlanner
     private static readonly IReadOnlyDictionary<(JraPageKind From, JraPageKind To), string[]> PageTransitionHints
         = new Dictionary<(JraPageKind, JraPageKind), string[]>
         {
-            [(JraPageKind.RaceCard, JraPageKind.Odds)]   = ["オッズ"],
-            [(JraPageKind.RaceCard, JraPageKind.Result)]  = ["払戻金", "レース結果", "結果"],
-            [(JraPageKind.Odds,     JraPageKind.RaceCard)] = ["出馬表"],
-            [(JraPageKind.Odds,     JraPageKind.Result)]  = ["払戻金", "レース結果"],
-            [(JraPageKind.Result,   JraPageKind.RaceCard)] = ["出馬表"],
-            [(JraPageKind.Result,   JraPageKind.Odds)]    = ["オッズ"],
+            [(JraPageKind.RaceCard, JraPageKind.Odds)] = ["オッズ"],
+            [(JraPageKind.RaceCard, JraPageKind.Result)] = ["払戻金", "レース結果", "結果"],
+            [(JraPageKind.Odds, JraPageKind.RaceCard)] = ["出馬表"],
+            [(JraPageKind.Odds, JraPageKind.Result)] = ["払戻金", "レース結果"],
+            [(JraPageKind.Result, JraPageKind.RaceCard)] = ["出馬表"],
+            [(JraPageKind.Result, JraPageKind.Odds)] = ["オッズ"],
         };
 
     /// <summary>

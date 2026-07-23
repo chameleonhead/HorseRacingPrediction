@@ -43,7 +43,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]
-            async (RegisterHorseRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (RegisterHorseRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -75,7 +75,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPut("/horses/{horseId}",
             [SwaggerOperation(Summary = "Update horse profile", Description = "Updates profile information of an existing horse")]
-            async (string horseId, UpdateHorseProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string horseId, UpdateHorseProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new UpdateHorseProfileCommand(
                     new HorseId(horseId),
@@ -99,7 +99,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/horses/{horseId}/aliases",
             [SwaggerOperation(Summary = "Merge horse alias", Description = "Adds or updates an alias for a horse from an external data source")]
-            async (string horseId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string horseId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new MergeHorseAliasCommand(
                     new HorseId(horseId),
@@ -122,7 +122,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPatch("/horses/{horseId}",
             [SwaggerOperation(Summary = "Correct horse data", Description = "Corrects horse master data with an optional audit reason")]
-            async (string horseId, CorrectHorseDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string horseId, CorrectHorseDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CorrectHorseDataCommand(
                     new HorseId(horseId),
@@ -146,7 +146,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/jockeys",
             [SwaggerOperation(Summary = "Register jockey", Description = "Registers a new jockey")]
-            async (RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (RegisterJockeyRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -176,7 +176,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPut("/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Update jockey profile", Description = "Updates profile information of an existing jockey")]
-            async (string jockeyId, UpdateJockeyProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string jockeyId, UpdateJockeyProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new UpdateJockeyProfileCommand(
                     new JockeyId(jockeyId),
@@ -198,7 +198,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/jockeys/{jockeyId}/aliases",
             [SwaggerOperation(Summary = "Merge jockey alias", Description = "Adds or updates an alias for a jockey from an external data source")]
-            async (string jockeyId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string jockeyId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new MergeJockeyAliasCommand(
                     new JockeyId(jockeyId),
@@ -221,7 +221,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPatch("/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Correct jockey data", Description = "Corrects jockey master data with an optional audit reason")]
-            async (string jockeyId, CorrectJockeyDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string jockeyId, CorrectJockeyDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CorrectJockeyDataCommand(
                     new JockeyId(jockeyId),
@@ -244,7 +244,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/trainers",
             [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
-            async (RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (RegisterTrainerRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -274,7 +274,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPut("/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Update trainer profile", Description = "Updates profile information of an existing trainer")]
-            async (string trainerId, UpdateTrainerProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string trainerId, UpdateTrainerProfileRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new UpdateTrainerProfileCommand(
                     new TrainerId(trainerId),
@@ -296,7 +296,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/trainers/{trainerId}/aliases",
             [SwaggerOperation(Summary = "Merge trainer alias", Description = "Adds or updates an alias for a trainer from an external data source")]
-            async (string trainerId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string trainerId, MergeAliasRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new MergeTrainerAliasCommand(
                     new TrainerId(trainerId),
@@ -319,7 +319,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPatch("/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Correct trainer data", Description = "Corrects trainer master data with an optional audit reason")]
-            async (string trainerId, CorrectTrainerDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string trainerId, CorrectTrainerDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CorrectTrainerDataCommand(
                     new TrainerId(trainerId),
@@ -342,7 +342,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races",
             [SwaggerOperation(Summary = "Create race", Description = "Creates a race aggregate in Draft state")]
-            async (CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (CreateRaceRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -374,7 +374,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races",
             [SwaggerOperation(Summary = "Search races", Description = "Returns paged race summaries filtered by date, course, status, race name and result information")]
-            async ([AsParameters] SearchRacesRequest request,
+        async ([AsParameters] SearchRacesRequest request,
                 IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
@@ -479,7 +479,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/card/publish",
             [SwaggerOperation(Summary = "Publish race card", Description = "Moves lifecycle from Draft to CardPublished")]
-            async (string raceId, PublishRaceCardRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, PublishRaceCardRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -504,7 +504,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/result",
             [SwaggerOperation(Summary = "Declare race result", Description = "Declares result and moves lifecycle to ResultDeclared")]
-            async (string raceId, DeclareRaceResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, DeclareRaceResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -533,7 +533,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/entries",
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
-            async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+        async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 await EnsureRelatedSubjectsAsync(request, commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
 
@@ -567,7 +567,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/weather",
             [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
-            async (string raceId, RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new RecordWeatherObservationCommand(
                     new RaceId(raceId),
@@ -593,7 +593,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/track-condition",
             [SwaggerOperation(Summary = "Record track condition", Description = "Records a track condition observation for a race")]
-            async (string raceId, RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new RecordTrackConditionObservationCommand(
                     new RaceId(raceId),
@@ -616,7 +616,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/open-pre-race",
             [SwaggerOperation(Summary = "Open pre-race", Description = "Moves race lifecycle from CardPublished to PreRaceOpen")]
-            async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new OpenPreRaceCommand(new RaceId(raceId));
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
@@ -633,7 +633,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/start",
             [SwaggerOperation(Summary = "Start race", Description = "Moves race lifecycle from PreRaceOpen to InProgress")]
-            async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new StartRaceCommand(new RaceId(raceId));
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
@@ -650,7 +650,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/entries/{entryId}/result",
             [SwaggerOperation(Summary = "Declare entry result", Description = "Declares finish result for a specific entry after race result is declared")]
-            async (string raceId, string entryId, DeclareEntryResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, string entryId, DeclareEntryResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -685,7 +685,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/payout",
             [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
-            async (string raceId, DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -721,7 +721,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/close",
             [SwaggerOperation(Summary = "Close race lifecycle", Description = "Closes the race lifecycle from ResultDeclared or PayoutDeclared state")]
-            async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CloseRaceLifecycleCommand(new RaceId(raceId));
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
@@ -738,7 +738,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPatch("/races/{raceId}",
             [SwaggerOperation(Summary = "Correct race data", Description = "Corrects race metadata such as name, racecourse, grade, surface or distance")]
-            async (string raceId, CorrectRaceDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, CorrectRaceDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CorrectRaceDataCommand(
                     new RaceId(raceId),
@@ -765,7 +765,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions",
             [SwaggerOperation(Summary = "Create prediction ticket", Description = "Creates one prediction ticket for a race")]
-            async (CreatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (CreatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var predictionTicketId = string.IsNullOrWhiteSpace(request.PredictionTicketId)
                     ? PredictionTicketId.New : new PredictionTicketId(request.PredictionTicketId);
@@ -791,7 +791,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/marks",
             [SwaggerOperation(Summary = "Add prediction mark", Description = "Appends a mark record to prediction ticket")]
-            async (string predictionTicketId, AddPredictionMarkRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, AddPredictionMarkRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new AddPredictionMarkCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -815,7 +815,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/betting-suggestions",
             [SwaggerOperation(Summary = "Add betting suggestion", Description = "Appends a betting suggestion to prediction ticket")]
-            async (string predictionTicketId, AddBettingSuggestionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, AddBettingSuggestionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new AddBettingSuggestionCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -838,7 +838,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/rationales",
             [SwaggerOperation(Summary = "Add prediction rationale", Description = "Appends a rationale entry to prediction ticket")]
-            async (string predictionTicketId, AddPredictionRationaleRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, AddPredictionRationaleRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new AddPredictionRationaleCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -862,7 +862,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/finalize",
             [SwaggerOperation(Summary = "Finalize prediction ticket", Description = "Moves prediction ticket from Draft to Finalized")]
-            async (string predictionTicketId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new FinalizePredictionTicketCommand(new PredictionTicketId(predictionTicketId));
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
@@ -879,7 +879,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/withdraw",
             [SwaggerOperation(Summary = "Withdraw prediction ticket", Description = "Withdraws a prediction ticket with an optional reason")]
-            async (string predictionTicketId, WithdrawPredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, WithdrawPredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new WithdrawPredictionTicketCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -899,7 +899,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPatch("/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Correct prediction metadata", Description = "Corrects confidence score or summary comment of a prediction ticket")]
-            async (string predictionTicketId, CorrectPredictionMetadataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, CorrectPredictionMetadataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new CorrectPredictionMetadataCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -921,7 +921,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/evaluate",
             [SwaggerOperation(Summary = "Evaluate prediction ticket", Description = "Records evaluation result by comparing prediction against actual race result")]
-            async (string predictionTicketId, EvaluatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, EvaluatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new EvaluatePredictionTicketCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -947,7 +947,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/recalculate-evaluation",
             [SwaggerOperation(Summary = "Recalculate prediction evaluation", Description = "Recalculates evaluation of a prediction ticket with updated data")]
-            async (string predictionTicketId, RecalculatePredictionEvaluationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, RecalculatePredictionEvaluationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new RecalculatePredictionEvaluationCommand(
                     new PredictionTicketId(predictionTicketId),
@@ -973,7 +973,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}",
             [SwaggerOperation(Summary = "Get race", Description = "Returns race read model with current status and result information")]
-            async (string raceId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+        async (string raceId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 using var dbContext = dbContextProvider.CreateContext();
                 var readModel = await dbContext.Set<AppReadModels.RacePredictionContextReadModel>()
@@ -1020,19 +1020,19 @@ public static class EndpointExtensions
                         .Where(x => horseIds.Contains(x.HorseId))
                         .ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal, cancellationToken)
                         .ConfigureAwait(false);
-                
+
                 var jockeyIds = readModel.Entries
                     .Select(x => x.JockeyId)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
-                
+
                 var trainerIds = readModel.Entries
                     .Select(x => x.TrainerId)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
-                
+
                 var jockeyNamesById = jockeyIds.Count == 0
                     ? new Dictionary<string, string>(StringComparer.Ordinal)
                     : await dbContext.Set<AppReadModels.JockeyReadModel>()
@@ -1040,7 +1040,7 @@ public static class EndpointExtensions
                         .Where(x => jockeyIds.Contains(x.JockeyId))
                         .ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, StringComparer.Ordinal, cancellationToken)
                         .ConfigureAwait(false);
-                
+
                 var trainerNamesById = trainerIds.Count == 0
                     ? new Dictionary<string, string>(StringComparer.Ordinal)
                     : await dbContext.Set<TrainerReadModel>()
@@ -1118,7 +1118,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}/context",
             [SwaggerOperation(Summary = "Get race prediction context", Description = "Returns prediction context read model including entries, weather and track conditions")]
-            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1136,7 +1136,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}/comparison",
             [SwaggerOperation(Summary = "Get prediction comparison view", Description = "Returns prediction vs result comparison for a race")]
-            async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<PredictionComparisonViewReadModel>(raceId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1154,7 +1154,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
-            async (string predictionTicketId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<PredictionTicketReadModel>(predictionTicketId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1184,7 +1184,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/predictions",
             [SwaggerOperation(Summary = "Search prediction tickets", Description = "Returns paged prediction ticket summaries filtered by race, predictor, ticket status, evaluation status and confidence score")]
-            async ([AsParameters] SearchPredictionTicketsRequest request,
+        async ([AsParameters] SearchPredictionTicketsRequest request,
                 IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
@@ -1268,7 +1268,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/horses/{horseId}",
             [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
-            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<AppReadModels.HorseReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1286,7 +1286,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/horses",
             [SwaggerOperation(Summary = "Search horses", Description = "Returns paged horse summaries filtered by identifiers, names, sex, birth date and aliases")]
-            async ([AsParameters] SearchHorsesRequest request,
+        async ([AsParameters] SearchHorsesRequest request,
                 IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
@@ -1361,7 +1361,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/horses/{horseId}/race-history",
             [SwaggerOperation(Summary = "Get horse race history", Description = "Returns race history read model for a horse")]
-            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<AppReadModels.HorseRaceHistoryReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1379,7 +1379,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/horses/{horseId}/weight-history",
             [SwaggerOperation(Summary = "Get horse weight history", Description = "Returns horse body weight history across races")]
-            async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<HorseWeightHistoryReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1404,7 +1404,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/jockeys/{jockeyId}/race-history",
             [SwaggerOperation(Summary = "Get jockey race history", Description = "Returns race history read model for a jockey")]
-            async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<AppReadModels.JockeyRaceHistoryReadModel>(jockeyId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1422,7 +1422,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Get jockey profile", Description = "Returns jockey profile read model")]
-            async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<AppReadModels.JockeyReadModel>(jockeyId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1440,7 +1440,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/jockeys",
             [SwaggerOperation(Summary = "Search jockeys", Description = "Returns paged jockey summaries filtered by identifiers, names, affiliation and aliases")]
-            async ([AsParameters] SearchJockeysRequest request,
+        async ([AsParameters] SearchJockeysRequest request,
                 IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
@@ -1508,7 +1508,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Get trainer profile", Description = "Returns trainer profile read model")]
-            async (string trainerId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string trainerId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<TrainerReadModel>(trainerId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1535,7 +1535,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/trainers",
             [SwaggerOperation(Summary = "Search trainers", Description = "Returns paged trainer summaries filtered by identifiers, names, affiliation and aliases")]
-            async ([AsParameters] SearchTrainersRequest request,
+        async ([AsParameters] SearchTrainersRequest request,
                 IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 CancellationToken cancellationToken) =>
             {
@@ -1603,7 +1603,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/memos",
             [SwaggerOperation(Summary = "Create memo", Description = "Creates a memo that can be attached to any combination of subjects (horse, trainer, jockey, race)")]
-            async (CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 if (request.Subjects is null || request.Subjects.Count == 0)
                     return Results.BadRequest(new[] { "At least one subject is required." });
@@ -1650,7 +1650,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPut("/memos/{memoId}",
             [SwaggerOperation(Summary = "Update memo", Description = "Updates content or links of an existing memo")]
-            async (string memoId, UpdateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string memoId, UpdateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var links = request.Links?.Select(l =>
                     new MemoLink(l.LinkId, Enum.Parse<MemoLinkType>(l.LinkType, ignoreCase: true), l.Title, l.Url, l.StorageKey))
@@ -1671,7 +1671,7 @@ public static class EndpointExtensions
 
         writeGroup.MapDelete("/memos/{memoId}",
             [SwaggerOperation(Summary = "Delete memo", Description = "Deletes a memo")]
-            async (string memoId, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string memoId, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 var command = new DeleteMemoCommand(new MemoId(memoId));
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
@@ -1688,7 +1688,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPut("/memos/{memoId}/subjects",
             [SwaggerOperation(Summary = "Change memo subjects", Description = "Replaces the full list of subjects for a memo")]
-            async (string memoId, ChangeMemoSubjectsRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string memoId, ChangeMemoSubjectsRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 if (request.Subjects is null || request.Subjects.Count == 0)
                     return Results.BadRequest(new[] { "At least one subject is required." });
@@ -1712,7 +1712,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/memos/by-subject/{subjectType}/{subjectId}",
             [SwaggerOperation(Summary = "Get memos by subject", Description = "Returns all memos for a given subject (e.g. Horse, Trainer, Jockey, Race). Use subjectType=Horse and subjectId=<horseId>.")]
-            async (string subjectType, string subjectId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string subjectType, string subjectId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
             {
                 if (!Enum.TryParse<MemoSubjectType>(subjectType, ignoreCase: true, out var parsedType))
                     return Results.BadRequest(new[] { $"Unknown subjectType '{subjectType}'." });
@@ -1744,7 +1744,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}/ml-prediction",
             [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
-            async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
+        async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
             {
                 var raceQuery = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var raceContext = await queryProcessor.ProcessAsync(raceQuery, cancellationToken).ConfigureAwait(false);
@@ -1775,7 +1775,7 @@ public static class EndpointExtensions
 
         app.MapPost("/api/ml/train",
             [SwaggerOperation(Summary = "ML再訓練", Description = "過去レース結果を使ってML.NETモデルを再訓練します。")]
-            async (IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider,
+        async (IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider,
                 IRacePredictor predictor, CancellationToken cancellationToken) =>
             {
                 using var dbContext = dbContextProvider.CreateContext();
