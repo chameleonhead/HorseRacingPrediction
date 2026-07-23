@@ -38,7 +38,9 @@ public sealed class HistoricalDataRequestPlanner
         }
 
         var entityPlan = await EnsureEntityHistoryRequestsAsync(context, raceId, now, cancellationToken).ConfigureAwait(false);
-        if (entityPlan.RequestedHorseHistoryCount == 0 && entityPlan.RequestedJockeyHistoryCount == 0)
+        if (entityPlan.RequestedHorseHistoryCount == 0
+            && entityPlan.RequestedJockeyHistoryCount == 0
+            && entityPlan.RequestedTrainerProfileCount == 0)
         {
             return entityPlan;
         }
@@ -47,7 +49,8 @@ public sealed class HistoricalDataRequestPlanner
         return new HistoricalDataRequestPlan(
             entityPlan.RequestedHorseHistoryCount,
             entityPlan.RequestedJockeyHistoryCount,
-            raceResultPlan.RequestedRaceResultCount);
+            raceResultPlan.RequestedRaceResultCount,
+            entityPlan.RequestedTrainerProfileCount);
     }
 
     private async Task<HistoricalDataRequestPlan> EnsureEntityHistoryRequestsAsync(
@@ -58,6 +61,7 @@ public sealed class HistoricalDataRequestPlanner
     {
         var horseIds = new HashSet<string>(StringComparer.Ordinal);
         var jockeyIds = new HashSet<string>(StringComparer.Ordinal);
+        var trainerIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var entry in context.Entries)
         {
@@ -67,15 +71,18 @@ public sealed class HistoricalDataRequestPlanner
                 horseIds.Add(entry.HorseId);
             }
 
-            if (string.IsNullOrWhiteSpace(entry.JockeyId))
+            if (!string.IsNullOrWhiteSpace(entry.JockeyId))
             {
-                continue;
+                var jockeyHistory = await _raceQueryService.GetJockeyRaceHistoryAsync(entry.JockeyId, cancellationToken).ConfigureAwait(false);
+                if (jockeyHistory is null || jockeyHistory.Entries.Count == 0)
+                {
+                    jockeyIds.Add(entry.JockeyId);
+                }
             }
 
-            var jockeyHistory = await _raceQueryService.GetJockeyRaceHistoryAsync(entry.JockeyId, cancellationToken).ConfigureAwait(false);
-            if (jockeyHistory is null || jockeyHistory.Entries.Count == 0)
+            if (!string.IsNullOrWhiteSpace(entry.TrainerId))
             {
-                jockeyIds.Add(entry.JockeyId);
+                trainerIds.Add(entry.TrainerId);
             }
         }
 
@@ -101,7 +108,18 @@ public sealed class HistoricalDataRequestPlanner
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
-        return new HistoricalDataRequestPlan(horseIds.Count, jockeyIds.Count, 0);
+        foreach (var trainerId in trainerIds)
+        {
+            await _stateStore.EnqueueJobAsync(
+                AgentJobType.TrainerProfileCollectionRequest,
+                AgentJobKeyFactory.BuildTrainerProfileCollectionRequestKey(JraProviderType, trainerId),
+                AgentJobPayloadSerializer.Serialize(new TrainerProfileCollectionRequestPayload(trainerId, raceId, JraProviderType)),
+                now,
+                priority: 140,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        return new HistoricalDataRequestPlan(horseIds.Count, jockeyIds.Count, 0, trainerIds.Count);
     }
 
     private async Task<HistoricalDataRequestPlan> EnsureRaceResultRequestsAsync(

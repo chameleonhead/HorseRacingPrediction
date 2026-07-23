@@ -23,6 +23,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
     [TestCleanup]
     public void Cleanup()
     {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (Directory.Exists(_stateDirectory))
         {
             Directory.Delete(_stateDirectory, recursive: true);
@@ -116,6 +117,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
         Assert.IsTrue(result.Succeeded, result.Message);
         Assert.IsFalse(result.IsPermanentFailure);
         Assert.AreEqual("ソールオリエンス", writeService.UpsertedHorseName);
+        Assert.AreEqual("社台レースホース", writeService.UpsertedHorseOwnerName);
         Assert.AreEqual("牡", writeService.UpsertedHorseSexCode);
         Assert.AreEqual("2020-02-24", writeService.UpsertedHorseBirthDate);
         Assert.IsTrue(result.Message?.Contains("RaceHistoryEntriesPersisted=2/2", StringComparison.Ordinal));
@@ -208,7 +210,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
     }
 
     [TestMethod]
-    public async Task HandleJockeyHistoryRequestAsync_SynchronizesJockeyProfileBeforePermanentFailure()
+    public async Task HandleJockeyHistoryRequestAsync_SynchronizesJockeyProfileSuccessfully()
     {
         var raceQueryService = new StubRaceQueryService
         {
@@ -248,11 +250,43 @@ public sealed class JraHistoricalDataRequestHandlerTests
         var result = await sut.HandleJockeyHistoryRequestAsync(
             new JockeyHistoryCollectionRequestPayload("jockey-1", "race-1", "JRA"));
 
-        Assert.IsFalse(result.Succeeded);
-        Assert.IsTrue(result.IsPermanentFailure);
+        Assert.IsTrue(result.Succeeded, result.Message);
         Assert.AreEqual("横山武史", writeService.UpsertedJockeyName);
         Assert.AreEqual("美浦", writeService.UpsertedJockeyAffiliationCode);
         Assert.IsTrue(result.Message?.Contains("profile synchronized", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
+    public async Task HandleTrainerProfileRequestAsync_SynchronizesTrainerProfileSuccessfully()
+    {
+        var raceQueryService = new StubRaceQueryService
+        {
+            Trainer = new TrainerReadModel
+            {
+                TrainerId = "trainer-1",
+                DisplayName = "手塚貴久",
+                NormalizedName = "手塚貴久",
+            },
+        };
+        var profile = new JraEntityProfile(
+            "trainer", "手塚貴久", null, null, "美浦", 1999,
+            null, null, null, null, null,
+            new Dictionary<string, string>(), "https://example.test/trainer");
+        var profileLookup = new StubJraProfileLookup
+        {
+            TrainerProfile = new JraExtractionEnvelope<JraEntityProfile>(
+                true, JraPageKind.TrainerProfile, profile.SourceUrl,
+                new JraNavigationTrace(Array.Empty<string>(), TimeSpan.Zero), profile),
+        };
+        var writeService = new StubDataCollectionWriteService();
+        var sut = new JraHistoricalDataRequestHandler(raceQueryService, writeService, profileLookup, CreateStatusRecorder());
+
+        var result = await sut.HandleTrainerProfileRequestAsync(
+            new TrainerProfileCollectionRequestPayload("trainer-1", "race-1", "JRA"));
+
+        Assert.IsTrue(result.Succeeded, result.Message);
+        Assert.AreEqual("手塚貴久", writeService.UpsertedTrainerName);
+        Assert.AreEqual("美浦", writeService.UpsertedTrainerAffiliationCode);
     }
 
     private AgentAcquisitionStatusRecorder CreateStatusRecorder()
@@ -275,6 +309,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
         public JraExtractionEnvelope<JraHorseProfileData>? HorseProfileWithHistory { get; set; }
 
         public JraExtractionEnvelope<JraEntityProfile>? JockeyProfile { get; set; }
+        public JraExtractionEnvelope<JraEntityProfile>? TrainerProfile { get; set; }
 
         public Task<JraExtractionEnvelope<JraEntityProfile>> GetHorseProfileAsync(string horseName, CancellationToken cancellationToken = default)
             => Task.FromResult(HorseProfile!);
@@ -284,6 +319,9 @@ public sealed class JraHistoricalDataRequestHandlerTests
 
         public Task<JraExtractionEnvelope<JraEntityProfile>> GetJockeyProfileAsync(string jockeyName, CancellationToken cancellationToken = default)
             => Task.FromResult(JockeyProfile!);
+
+        public Task<JraExtractionEnvelope<JraEntityProfile>> GetTrainerProfileAsync(string trainerName, CancellationToken cancellationToken = default)
+            => Task.FromResult(TrainerProfile!);
     }
 
     private sealed class StubDataCollectionWriteService : IDataCollectionWriteService
@@ -293,10 +331,13 @@ public sealed class JraHistoricalDataRequestHandlerTests
         public string? UpsertedHorseName { get; private set; }
 
         public string? UpsertedHorseSexCode { get; private set; }
+        public string? UpsertedHorseOwnerName { get; private set; }
 
         public string? UpsertedJockeyAffiliationCode { get; private set; }
 
         public string? UpsertedJockeyName { get; private set; }
+        public string? UpsertedTrainerName { get; private set; }
+        public string? UpsertedTrainerAffiliationCode { get; private set; }
 
         public List<(string RaceDate, string RacecourseCode, int RaceNumber, string RaceName)> UpsertedRaces { get; } = [];
 
@@ -314,6 +355,12 @@ public sealed class JraHistoricalDataRequestHandlerTests
             return Task.FromResult("horse-1");
         }
 
+        public Task<string> UpsertHorseWithOwnerAsync(string registeredName, string? normalizedName, string? sexCode, string? birthDate, string? ownerName, CancellationToken cancellationToken = default)
+        {
+            UpsertedHorseOwnerName = ownerName;
+            return UpsertHorseAsync(registeredName, normalizedName, sexCode, birthDate, cancellationToken);
+        }
+
         public Task<string> UpsertJockeyAsync(string displayName, string? normalizedName, string? affiliationCode, CancellationToken cancellationToken = default)
         {
             UpsertedJockeyName = displayName;
@@ -328,7 +375,11 @@ public sealed class JraHistoricalDataRequestHandlerTests
         }
 
         public Task<string> UpsertTrainerAsync(string displayName, string? normalizedName, string? affiliationCode, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            UpsertedTrainerName = displayName;
+            UpsertedTrainerAffiliationCode = affiliationCode;
+            return Task.FromResult("trainer-1");
+        }
 
         public Task<string> UpsertRaceEntryAsync(string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName, int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight, decimal? declaredWeightDiff, CancellationToken cancellationToken = default)
         {
@@ -357,6 +408,7 @@ public sealed class JraHistoricalDataRequestHandlerTests
         public HorseReadModel? Horse { get; set; }
 
         public JockeyReadModel? Jockey { get; set; }
+        public TrainerReadModel? Trainer { get; set; }
 
         public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
@@ -369,6 +421,9 @@ public sealed class JraHistoricalDataRequestHandlerTests
 
         public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
             => Task.FromResult(Jockey);
+
+        public Task<TrainerReadModel?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Trainer);
 
         public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();

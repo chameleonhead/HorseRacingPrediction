@@ -21,6 +21,7 @@ public sealed class HistoricalDataRequestPlannerTests
     [TestCleanup]
     public void Cleanup()
     {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (Directory.Exists(_stateDirectory))
         {
             Directory.Delete(_stateDirectory, recursive: true);
@@ -28,7 +29,7 @@ public sealed class HistoricalDataRequestPlannerTests
     }
 
     [TestMethod]
-    public async Task EnsureRequestsForRaceAsync_WhenHistoryIsMissing_SchedulesHorseAndJockeyRequests()
+    public async Task EnsureRequestsForRaceAsync_WhenHistoryIsMissing_SchedulesEntityRequests()
     {
         var historicalRaceReferenceCollector = new StubHistoricalRaceReferenceCollector
         {
@@ -48,7 +49,7 @@ public sealed class HistoricalDataRequestPlannerTests
                 RaceNumber = 11,
                 Entries =
                 [
-                    new RacePredictionContextEntry("entry-1", "horse-1", 1, "jockey-1", null, null, null, null, null, null, null, null)
+                    new RacePredictionContextEntry("entry-1", "horse-1", 1, "jockey-1", "trainer-1", null, null, null, null, null, null, null)
                 ]
             }
         };
@@ -67,18 +68,25 @@ public sealed class HistoricalDataRequestPlannerTests
         Assert.AreEqual(1, plan.RequestedHorseHistoryCount);
         Assert.AreEqual(1, plan.RequestedJockeyHistoryCount);
         Assert.AreEqual(2, plan.RequestedRaceResultCount);
+        Assert.AreEqual(1, plan.RequestedTrainerProfileCount);
 
         var activeHorsePayloads = await store.GetActiveJobPayloadsAsync(AgentJobType.HorseHistoryCollectionRequest);
         var activeJockeyPayloads = await store.GetActiveJobPayloadsAsync(AgentJobType.JockeyHistoryCollectionRequest);
         var activeRaceResultPayloads = await store.GetActiveJobPayloadsAsync(AgentJobType.HistoricalRaceResultCollectionRequest);
+        var activeTrainerPayloads = await store.GetActiveJobPayloadsAsync(AgentJobType.TrainerProfileCollectionRequest);
 
         Assert.HasCount(1, activeHorsePayloads);
         Assert.HasCount(1, activeJockeyPayloads);
         Assert.HasCount(2, activeRaceResultPayloads);
+        Assert.HasCount(1, activeTrainerPayloads);
 
         var horsePayload = AgentJobPayloadSerializer.Deserialize<HorseHistoryCollectionRequestPayload>(activeHorsePayloads[0]);
         Assert.AreEqual("horse-1", horsePayload.HorseId);
         Assert.AreEqual("race-1", horsePayload.RequestedByRaceId);
+
+        var trainerPayload = AgentJobPayloadSerializer.Deserialize<TrainerProfileCollectionRequestPayload>(activeTrainerPayloads[0]);
+        Assert.AreEqual("trainer-1", trainerPayload.TrainerId);
+        Assert.AreEqual("race-1", trainerPayload.RequestedByRaceId);
     }
 
     [TestMethod]

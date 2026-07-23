@@ -6,17 +6,19 @@ namespace HorseRacingPrediction.Application.Commands.Horses;
 public sealed class RegisterHorseCommand : Command<HorseAggregate, HorseId>
 {
     public RegisterHorseCommand(HorseId aggregateId, string registeredName, string normalizedName,
-        string? sexCode = null, DateOnly? birthDate = null)
+        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null)
         : base(aggregateId)
     {
         RegisteredName = registeredName;
         NormalizedName = normalizedName;
         SexCode = sexCode;
         BirthDate = birthDate;
+        OwnerName = ownerName;
     }
 
     public string RegisteredName { get; }
     public string NormalizedName { get; }
     public string? SexCode { get; }
     public DateOnly? BirthDate { get; }
+    public string? OwnerName { get; }
 }

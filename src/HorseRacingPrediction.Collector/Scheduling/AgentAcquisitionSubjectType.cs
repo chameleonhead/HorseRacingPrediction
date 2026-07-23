@@ -5,4 +5,5 @@ public enum AgentAcquisitionSubjectType
     Horse = 0,
     Jockey = 1,
     Trainer = 2,
+    Owner = 3,
 }

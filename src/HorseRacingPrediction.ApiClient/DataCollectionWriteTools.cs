@@ -43,9 +43,10 @@ public sealed class DataCollectionWriteTools
         [Description("正規化名。省略時は馬名をそのまま使います")] string? normalizedName = null,
         [Description("性別コード。牡, 牝, セ など")] string? sexCode = null,
         [Description("生年月日。YYYY-MM-DD 形式。分かる場合のみ")] string? birthDate = null,
+        [Description("JRA 競走馬情報に掲載される馬主名")] string? ownerName = null,
         CancellationToken cancellationToken = default)
     {
-        return await _service.UpsertHorseAsync(registeredName, normalizedName, sexCode, birthDate, cancellationToken);
+        return await _service.UpsertHorseWithOwnerAsync(registeredName, normalizedName, sexCode, birthDate, ownerName, cancellationToken);
     }
 
     [Description("騎手を作成または更新し、騎手 ID を返します。")]

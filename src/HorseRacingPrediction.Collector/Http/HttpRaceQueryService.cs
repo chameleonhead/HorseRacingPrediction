@@ -61,6 +61,16 @@ public sealed class HttpRaceQueryService : IRaceQueryService
         return await response.Content.ReadFromJsonAsync<JockeyReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<TrainerReadModel?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TrainerReadModel>(JsonOptions, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient

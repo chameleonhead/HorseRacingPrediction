@@ -22,6 +22,9 @@ public sealed class HistoricalDataRequestTracker
         var raceResultPayloads = await _stateStore
             .GetActiveJobPayloadsAsync(AgentJobType.HistoricalRaceResultCollectionRequest, cancellationToken)
             .ConfigureAwait(false);
+        var trainerPayloads = await _stateStore
+            .GetActiveJobPayloadsAsync(AgentJobType.TrainerProfileCollectionRequest, cancellationToken)
+            .ConfigureAwait(false);
 
         var pendingHorseRequests = horsePayloads
             .Select(AgentJobPayloadSerializer.Deserialize<HorseHistoryCollectionRequestPayload>)
@@ -32,7 +35,10 @@ public sealed class HistoricalDataRequestTracker
         var pendingRaceResultRequests = raceResultPayloads
             .Select(AgentJobPayloadSerializer.Deserialize<HistoricalRaceResultCollectionRequestPayload>)
             .Count(x => string.Equals(x.RequestedByRaceId, raceId, StringComparison.Ordinal));
+        var pendingTrainerRequests = trainerPayloads
+            .Select(AgentJobPayloadSerializer.Deserialize<TrainerProfileCollectionRequestPayload>)
+            .Count(x => string.Equals(x.RequestedByRaceId, raceId, StringComparison.Ordinal));
 
-        return new HistoricalRequestSummary(pendingHorseRequests, pendingJockeyRequests, pendingRaceResultRequests);
+        return new HistoricalRequestSummary(pendingHorseRequests, pendingJockeyRequests, pendingRaceResultRequests, pendingTrainerRequests);
     }
 }

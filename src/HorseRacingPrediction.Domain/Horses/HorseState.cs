@@ -15,6 +15,7 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
     public string? NormalizedName { get; private set; }
     public string? SexCode { get; private set; }
     public DateOnly? BirthDate { get; private set; }
+    public string? OwnerName { get; private set; }
     public IReadOnlyCollection<AliasDetails> Aliases => _aliases.AsReadOnly();
 
     public void Apply(HorseRegistered e)
@@ -24,6 +25,7 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
         NormalizedName = e.NormalizedName;
         SexCode = e.SexCode;
         BirthDate = e.BirthDate;
+        OwnerName = e.OwnerName;
     }
 
     public void Apply(HorseProfileUpdated e)
@@ -32,6 +34,7 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
         if (e.NormalizedName != null) NormalizedName = e.NormalizedName;
         if (e.SexCode != null) SexCode = e.SexCode;
         if (e.BirthDate.HasValue) BirthDate = e.BirthDate;
+        if (e.OwnerName != null) OwnerName = e.OwnerName;
     }
 
     public void Apply(HorseAliasMerged e)

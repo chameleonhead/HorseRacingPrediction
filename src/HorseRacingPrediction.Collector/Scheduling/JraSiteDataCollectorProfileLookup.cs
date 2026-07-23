@@ -28,4 +28,12 @@ public sealed class JraSiteDataCollectorProfileLookup : IJraProfileLookup
         await using var taskAgent = await JraSiteDataCollector.CreateAsync().ConfigureAwait(false);
         return await taskAgent.RequestJockeyProfileAsync(jockeyName, cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task<JraExtractionEnvelope<JraEntityProfile>> GetTrainerProfileAsync(
+        string trainerName,
+        CancellationToken cancellationToken = default)
+    {
+        await using var taskAgent = await JraSiteDataCollector.CreateAsync(cancellationToken).ConfigureAwait(false);
+        return await taskAgent.RequestTrainerProfileAsync(trainerName, cancellationToken).ConfigureAwait(false);
+    }
 }

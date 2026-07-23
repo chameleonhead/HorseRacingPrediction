@@ -15,6 +15,7 @@ public class HorseReadModel : IReadModel,
     public string NormalizedName { get; private set; } = string.Empty;
     public string? SexCode { get; private set; }
     public DateOnly? BirthDate { get; private set; }
+    public string? OwnerName { get; private set; }
     public List<HorseAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
@@ -27,6 +28,7 @@ public class HorseReadModel : IReadModel,
         NormalizedName = e.NormalizedName;
         SexCode = e.SexCode;
         BirthDate = e.BirthDate;
+        OwnerName = e.OwnerName;
         return Task.CompletedTask;
     }
 
@@ -39,6 +41,7 @@ public class HorseReadModel : IReadModel,
         if (e.NormalizedName != null) NormalizedName = e.NormalizedName;
         if (e.SexCode != null) SexCode = e.SexCode;
         if (e.BirthDate.HasValue) BirthDate = e.BirthDate;
+        if (e.OwnerName != null) OwnerName = e.OwnerName;
         return Task.CompletedTask;
     }
 

@@ -44,7 +44,7 @@ public class HorseEndpointsTests
         var horseId = $"horse-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("オルフェーヴル", "orfevr", "M", null, horseId),
+            new RegisterHorseRequest("オルフェーヴル", "orfevr", "M", null, horseId, "サンデーレーシング"),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/horses/{horseId}");
@@ -55,6 +55,7 @@ public class HorseEndpointsTests
         Assert.AreEqual(horseId, profile.HorseId);
         Assert.AreEqual("オルフェーヴル", profile.RegisteredName);
         Assert.AreEqual("orfevr", profile.NormalizedName);
+        Assert.AreEqual("サンデーレーシング", profile.OwnerName);
     }
 
     [TestMethod]

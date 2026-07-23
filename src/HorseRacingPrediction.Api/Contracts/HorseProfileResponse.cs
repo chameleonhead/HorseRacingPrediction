@@ -6,4 +6,5 @@ public sealed record HorseProfileResponse(
     string NormalizedName,
     string? SexCode,
     DateOnly? BirthDate,
-    IReadOnlyList<AliasResponse> Aliases);
+    IReadOnlyList<AliasResponse> Aliases,
+    string? OwnerName = null);

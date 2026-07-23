@@ -7,7 +7,7 @@ public sealed class UpdateHorseProfileCommandHandler : CommandHandler<HorseAggre
 {
     public override Task ExecuteAsync(HorseAggregate aggregate, UpdateHorseProfileCommand command, CancellationToken cancellationToken)
     {
-        aggregate.UpdateProfile(command.RegisteredName, command.NormalizedName, command.SexCode, command.BirthDate);
+        aggregate.UpdateProfile(command.RegisteredName, command.NormalizedName, command.SexCode, command.BirthDate, command.OwnerName);
         return Task.CompletedTask;
     }
 }

@@ -65,7 +65,7 @@ Collector は `Microsoft.NET.Sdk.Web` ベースの ASP.NET Core アプリとし�
 | `GET /agent/jobs/{jobId}` | ジョブ詳細（ペイロード・エラー内容含む）を取得する |
 | `GET /agent/result-day-statuses` | 日単位の結果収集状況を期間指定で取得する |
 | `GET /agent/race-collection-statuses` | レース単位の収集状況を期間指定で取得する（`IRaceQueryService` でレース名を補完） |
-| `GET /agent/acquisition-statuses` | 馬・騎手・調教師のプロフィール取得状況を期間・種別で取得する |
+| `GET /agent/acquisition-statuses` | 馬・騎手・調教師・馬主のプロフィール取得状況を期間・種別で取得する |
 | `POST /agent/job-statuses/{jobType}/{deduplicationKey}/requeue` | 指定ジョブを強制再キューする |
 | `POST /agent/result-day-statuses/{providerType}/{targetDate}/requeue` | 日単位の収集を Discovery/Collection モードで再投入する |
 | `POST /agent/result-day-jobs/trigger` | 任意の日付・プロバイダで日次収集を新規投入する |
@@ -79,7 +79,7 @@ Collector は `Microsoft.NET.Sdk.Web` ベースの ASP.NET Core アプリとし�
 | `/jobs` | ジョブ一覧 | JobType/Status フィルタ、再キュー、日次収集の新規投入 |
 | `/jobs/{JobId}` | ジョブ詳細 | ペイロード・エラー内容の確認、再キュー |
 | `/result-days` | 日次収集状況 | Discovery/Collection 単位の再投入 |
-| `/acquisition-statuses` | 取得ステータス | 馬・騎手・調教師のプロフィール取得結果一覧 |
+| `/acquisition-statuses` | 取得ステータス | 馬・騎手・調教師・馬主のプロフィール取得結果一覧 |
 | `/jra-tool` | JRA URL 抽出ツール（デバッグ） | 任意 URL のページ種別判定・JSON 抽出結果を確認 |
 | `/snapshot-tool` | PageSnapshot ビューア（デバッグ） | 任意 URL の `PageSnapshot` をセクション構造で確認 |
 

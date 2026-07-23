@@ -7,5 +7,6 @@ public sealed class HorseReadModel
     public string NormalizedName { get; set; } = string.Empty;
     public string? SexCode { get; set; }
     public DateOnly? BirthDate { get; set; }
+    public string? OwnerName { get; set; }
     public List<HorseAliasEntry> Aliases { get; set; } = [];
 }

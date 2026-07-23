@@ -515,13 +515,16 @@ public sealed class CollectionExecutionService : BackgroundService
                             .EnsureRequestsForRaceAsync(raceId, now, cancellationToken)
                             .ConfigureAwait(false);
 
-                        if (plan.RequestedHorseHistoryCount > 0 || plan.RequestedJockeyHistoryCount > 0)
+                        if (plan.RequestedHorseHistoryCount > 0
+                            || plan.RequestedJockeyHistoryCount > 0
+                            || plan.RequestedTrainerProfileCount > 0)
                         {
                             _logger.LogInformation(
-                                "[収集実行] 馬・騎手情報取得要求を登録しました。RaceId={RaceId} HorseRequests={HorseRequests} JockeyRequests={JockeyRequests}",
+                                "[収集実行] 馬・騎手・調教師情報取得要求を登録しました。RaceId={RaceId} HorseRequests={HorseRequests} JockeyRequests={JockeyRequests} TrainerRequests={TrainerRequests}",
                                 raceId,
                                 plan.RequestedHorseHistoryCount,
-                                plan.RequestedJockeyHistoryCount);
+                                plan.RequestedJockeyHistoryCount,
+                                plan.RequestedTrainerProfileCount);
                         }
 
                         if (plan.RequestedRaceResultCount > 0)

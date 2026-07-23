@@ -25,6 +25,9 @@ public static class AgentJobKeyFactory
     public static string BuildJockeyHistoryCollectionRequestKey(string providerType, string jockeyId)
         => $"{providerType}:jockey-history:{jockeyId}";
 
+    public static string BuildTrainerProfileCollectionRequestKey(string providerType, string trainerId)
+        => $"{providerType}:trainer-profile:{trainerId}";
+
     public static string BuildRaceCardCollectionKey(string providerType, DateOnly raceDate)
         => $"{providerType}:race-card:{raceDate:yyyy-MM-dd}";
 

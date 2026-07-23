@@ -7,4 +7,5 @@ public sealed record RegisterHorseRequest(
     [property: Required, StringLength(128, MinimumLength = 1)] string NormalizedName,
     string? SexCode,
     DateOnly? BirthDate,
-    string? HorseId = null);
+    string? HorseId = null,
+    string? OwnerName = null);

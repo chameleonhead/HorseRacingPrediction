@@ -4,4 +4,5 @@ public sealed record UpdateHorseProfileRequest(
     string? RegisteredName,
     string? NormalizedName,
     string? SexCode,
-    DateOnly? BirthDate);
+    DateOnly? BirthDate,
+    string? OwnerName = null);

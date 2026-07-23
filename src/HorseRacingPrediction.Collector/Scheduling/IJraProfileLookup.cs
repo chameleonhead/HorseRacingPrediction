@@ -20,4 +20,8 @@ public interface IJraProfileLookup
     Task<JraExtractionEnvelope<JraEntityProfile>> GetJockeyProfileAsync(
         string jockeyName,
         CancellationToken cancellationToken = default);
+
+    Task<JraExtractionEnvelope<JraEntityProfile>> GetTrainerProfileAsync(
+        string trainerName,
+        CancellationToken cancellationToken = default);
 }

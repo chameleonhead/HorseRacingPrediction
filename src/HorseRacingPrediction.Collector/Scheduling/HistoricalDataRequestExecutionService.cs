@@ -71,6 +71,7 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
         await ExecuteHistoricalRaceResultRequestsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteHorseHistoryRequestsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteJockeyHistoryRequestsAsync(now, cancellationToken).ConfigureAwait(false);
+        await ExecuteTrainerProfileRequestsAsync(now, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ExecuteHistoricalRaceResultRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)
@@ -148,6 +149,31 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
                 cancellationToken).ConfigureAwait(false);
 
             LogResult(AgentJobType.JockeyHistoryCollectionRequest, payload.ProviderType, payload.JockeyId, result);
+        }
+    }
+
+    private async Task ExecuteTrainerProfileRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var jobs = await _stateStore.AcquireReadyJobsAsync(
+            AgentJobType.TrainerProfileCollectionRequest,
+            now,
+            TimeSpan.Zero,
+            _options.HistoricalRequestBatchSize,
+            TimeSpan.FromMinutes(Math.Max(1, _options.HistoricalRequestLeaseMinutes)),
+            cancellationToken).ConfigureAwait(false);
+
+        foreach (var job in jobs)
+        {
+            var payload = AgentJobPayloadSerializer.Deserialize<TrainerProfileCollectionRequestPayload>(job.Payload);
+            var result = await ExecuteWithHandlerAsync(
+                payload.ProviderType,
+                job.DeduplicationKey,
+                AgentJobType.TrainerProfileCollectionRequest,
+                now,
+                handler => handler.HandleTrainerProfileRequestAsync(payload, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
+
+            LogResult(AgentJobType.TrainerProfileCollectionRequest, payload.ProviderType, payload.TrainerId, result);
         }
     }
 

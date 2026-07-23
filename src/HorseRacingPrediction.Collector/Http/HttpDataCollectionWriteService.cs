@@ -151,11 +151,20 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         patchResponse.EnsureSuccessStatusCode();
     }
 
-    public async Task<string> UpsertHorseAsync(
+    public Task<string> UpsertHorseAsync(
         string registeredName,
         string? normalizedName,
         string? sexCode,
         string? birthDate,
+        CancellationToken cancellationToken = default)
+        => UpsertHorseWithOwnerAsync(registeredName, normalizedName, sexCode, birthDate, null, cancellationToken);
+
+    public async Task<string> UpsertHorseWithOwnerAsync(
+        string registeredName,
+        string? normalizedName,
+        string? sexCode,
+        string? birthDate,
+        string? ownerName,
         CancellationToken cancellationToken = default)
     {
         ValidateRequiredText(registeredName, nameof(registeredName));
@@ -176,14 +185,15 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                     RegisteredName = registeredName,
                     NormalizedName = normalized,
                     SexCode = sexCode,
-                    BirthDate = parsedBirthDate
+                    BirthDate = parsedBirthDate,
+                    OwnerName = ownerName
                 };
                 var response = await _httpClient
                     .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
                     .ConfigureAwait(false);
                 if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
                 {
-                    await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
+                    await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {
@@ -192,7 +202,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             }
             else
             {
-                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, cancellationToken).ConfigureAwait(false);
+                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName, cancellationToken).ConfigureAwait(false);
             }
 
             await _statusRecorder.RecordAsync(
@@ -668,7 +678,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 .ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.Conflict)
             {
-                await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, cancellationToken).ConfigureAwait(false);
+                await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, null, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -680,7 +690,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         if (!string.IsNullOrWhiteSpace(horseName))
         {
-            await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, cancellationToken).ConfigureAwait(false);
+            await UpdateHorseAsync(horseId, resolvedName, normalizedName, sexCode, null, null, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -793,6 +803,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string normalizedName,
         string? sexCode,
         DateOnly? birthDate,
+        string? ownerName,
         CancellationToken cancellationToken)
     {
         var updateRequest = new
@@ -800,7 +811,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             RegisteredName = registeredName,
             NormalizedName = normalizedName,
             SexCode = sexCode,
-            BirthDate = birthDate
+            BirthDate = birthDate,
+            OwnerName = ownerName
         };
         var response = await _httpClient
             .PutAsJsonAsync($"/api/horses/{Uri.EscapeDataString(horseId)}", updateRequest, cancellationToken)

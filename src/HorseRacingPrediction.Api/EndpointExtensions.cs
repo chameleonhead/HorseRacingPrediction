@@ -53,7 +53,8 @@ public static class EndpointExtensions
                         request.RegisteredName,
                         request.NormalizedName,
                         request.SexCode,
-                        request.BirthDate);
+                        request.BirthDate,
+                        request.OwnerName);
 
                     var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                     return result.IsSuccess
@@ -81,7 +82,8 @@ public static class EndpointExtensions
                     request.RegisteredName,
                     request.NormalizedName,
                     request.SexCode,
-                    request.BirthDate);
+                    request.BirthDate,
+                    request.OwnerName);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -2163,6 +2165,7 @@ public static class EndpointExtensions
             NormalizedName = model.NormalizedName,
             SexCode = model.SexCode,
             BirthDate = model.BirthDate,
+            OwnerName = model.OwnerName,
             Aliases = model.Aliases.Select(x => new ApiContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 

@@ -16,6 +16,7 @@ else
             <dt>正規化名</dt><dd>@horse.NormalizedName</dd>
             <dt>性</dt><dd>@horse.SexCode</dd>
             <dt>生年月日</dt><dd>@horse.BirthDate</dd>
+            <dt>馬主</dt><dd>@horse.OwnerName</dd>
         </dl>
     </section>
 
@@ -39,6 +40,7 @@ else
             <label>正規化名<input @bind="editNormalizedName" /></label>
             <label>性<input @bind="editSexCode" /></label>
             <label>生年月日<input type="date" @bind="editBirthDate" /></label>
+            <label>馬主<input @bind="editOwnerName" /></label>
         </div>
         <div class="toolbar">
             <button class="btn primary small" @onclick="UpdateProfileAsync" disabled="@updating">更新</button>
@@ -98,6 +100,7 @@ else
     private string? editNormalizedName;
     private string? editSexCode;
     private DateOnly? editBirthDate;
+    private string? editOwnerName;
     private bool updating;
     private IReadOnlyList<string> updateErrors = Array.Empty<string>();
 
@@ -130,6 +133,7 @@ else
                 editNormalizedName = horse.NormalizedName;
                 editSexCode = horse.SexCode;
                 editBirthDate = horse.BirthDate;
+                editOwnerName = horse.OwnerName;
             }
         }
         finally
@@ -144,7 +148,7 @@ else
         try
         {
             var result = await Api.UpdateHorseProfileAsync(HorseId, new UpdateHorseProfileRequest(
-                editRegisteredName, editNormalizedName, editSexCode, editBirthDate));
+                editRegisteredName, editNormalizedName, editSexCode, editBirthDate, editOwnerName));
             updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
             if (result.Success) await LoadAsync();
         }

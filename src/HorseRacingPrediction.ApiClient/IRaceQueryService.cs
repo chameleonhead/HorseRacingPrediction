@@ -23,6 +23,10 @@ public interface IRaceQueryService
     Task<JockeyReadModel?> GetJockeyAsync(
         string jockeyId, CancellationToken cancellationToken = default);
 
+    Task<TrainerReadModel?> GetTrainerAsync(
+        string trainerId, CancellationToken cancellationToken = default)
+        => Task.FromResult<TrainerReadModel?>(null);
+
     Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(
         string subjectType, string subjectId, CancellationToken cancellationToken = default);
 

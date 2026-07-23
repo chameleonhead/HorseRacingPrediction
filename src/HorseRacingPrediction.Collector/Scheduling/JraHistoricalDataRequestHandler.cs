@@ -57,11 +57,12 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
             var horseName = profile.DisplayName ?? horse.RegisteredName;
             var sexCode = profile.SexCode ?? horse.SexCode;
 
-            await _dataCollectionWriteService.UpsertHorseAsync(
+            await _dataCollectionWriteService.UpsertHorseWithOwnerAsync(
                 horseName,
                 horse.NormalizedName,
                 sexCode,
                 FormatDate(profile.BirthDate ?? horse.BirthDate),
+                profile.OwnerName ?? horse.OwnerName,
                 cancellationToken).ConfigureAwait(false);
 
             await _statusRecorder.RecordAsync(
@@ -76,6 +77,22 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
                 errorCode: null,
                 errorReason: null,
                 cancellationToken).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(profile.OwnerName))
+            {
+                await _statusRecorder.RecordAsync(
+                    AgentAcquisitionSubjectType.Owner,
+                    AgentAcquisitionOperationType.ProfileSync,
+                    profile.OwnerName,
+                    RaceDataCollectionState.Succeeded,
+                    ProviderType,
+                    DeterministicIdGenerator.BuildEntityId("owner", profile.OwnerName),
+                    payload.RequestedByRaceId,
+                    extraction.SourceUrl,
+                    errorCode: null,
+                    errorReason: null,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             var persistedCount = await PersistRaceHistoryAsync(
                 horseName, sexCode, extraction.Data.RaceHistory, cancellationToken).ConfigureAwait(false);
@@ -150,8 +167,8 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
                 errorReason: null,
                 cancellationToken).ConfigureAwait(false);
 
-            return HistoricalDataRequestExecutionResult.PermanentFailure(
-                $"JRA jockey profile synchronized for JockeyId={payload.JockeyId}, but structured jockey race history persistence is not implemented yet.");
+            return HistoricalDataRequestExecutionResult.Success(
+                $"JRA jockey profile synchronized for JockeyId={payload.JockeyId}.");
         }
         catch (Exception ex)
         {
@@ -171,6 +188,77 @@ public sealed class JraHistoricalDataRequestHandler : IHistoricalDataRequestHand
 
             return HistoricalDataRequestExecutionResult.Retry(
                 $"Jockey history synchronization failed for JockeyId={payload.JockeyId}. {ex.Message}");
+        }
+    }
+
+    public async Task<HistoricalDataRequestExecutionResult> HandleTrainerProfileRequestAsync(
+        TrainerProfileCollectionRequestPayload payload,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            TrainerReadModel? trainer = await _raceQueryService
+                .GetTrainerAsync(payload.TrainerId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (trainer is null || string.IsNullOrWhiteSpace(trainer.DisplayName))
+            {
+                return HistoricalDataRequestExecutionResult.PermanentFailure(
+                    $"Trainer profile seed data was not found via API. TrainerId={payload.TrainerId}");
+            }
+
+            JraExtractionEnvelope<JraEntityProfile> extraction = await _profileLookup
+                .GetTrainerProfileAsync(trainer.DisplayName, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!extraction.Success || extraction.Data is null)
+            {
+                return HistoricalDataRequestExecutionResult.Retry(
+                    $"Failed to fetch JRA trainer profile. TrainerId={payload.TrainerId}, Error={extraction.Error ?? "unknown"}");
+            }
+
+            var profile = extraction.Data;
+            var trainerName = profile.DisplayName ?? trainer.DisplayName;
+            await _dataCollectionWriteService.UpsertTrainerAsync(
+                trainerName,
+                trainer.NormalizedName,
+                profile.Affiliation ?? trainer.AffiliationCode,
+                cancellationToken).ConfigureAwait(false);
+
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Trainer,
+                AgentAcquisitionOperationType.ProfileSync,
+                trainerName,
+                RaceDataCollectionState.Succeeded,
+                ProviderType,
+                payload.TrainerId,
+                payload.RequestedByRaceId,
+                extraction.SourceUrl,
+                errorCode: null,
+                errorReason: null,
+                cancellationToken).ConfigureAwait(false);
+
+            return HistoricalDataRequestExecutionResult.Success(
+                $"JRA trainer profile synchronized for TrainerId={payload.TrainerId}.");
+        }
+        catch (Exception ex)
+        {
+            var error = RaceDataCollectionErrorClassifier.Classify(ex.Message, ex);
+            await _statusRecorder.RecordAsync(
+                AgentAcquisitionSubjectType.Trainer,
+                AgentAcquisitionOperationType.ProfileSync,
+                payload.TrainerId,
+                RaceDataCollectionState.Failed,
+                ProviderType,
+                payload.TrainerId,
+                payload.RequestedByRaceId,
+                sourceUrl: null,
+                error.Code,
+                error.Reason,
+                cancellationToken).ConfigureAwait(false);
+
+            return HistoricalDataRequestExecutionResult.Retry(
+                $"Trainer profile synchronization failed for TrainerId={payload.TrainerId}. {ex.Message}");
         }
     }
 

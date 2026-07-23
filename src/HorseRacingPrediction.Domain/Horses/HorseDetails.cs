@@ -6,4 +6,5 @@ public sealed record HorseDetails(
     string? NormalizedName,
     string? SexCode,
     DateOnly? BirthDate,
+    string? OwnerName,
     IReadOnlyCollection<AliasDetails> Aliases);

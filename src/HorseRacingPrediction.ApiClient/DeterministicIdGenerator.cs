@@ -15,6 +15,7 @@ public static class DeterministicIdGenerator
     private static readonly Guid HorseNamespaceId = new("1c86504c-11bb-4e95-b997-94d64f0569f3");
     private static readonly Guid JockeyNamespaceId = new("ec7d5b11-f383-4860-88b7-37ef25e4cc81");
     private static readonly Guid TrainerNamespaceId = new("36d7318f-bf48-488f-b0d8-0e2c942b36d2");
+    private static readonly Guid OwnerNamespaceId = new("b947e179-75c6-4a4e-b6c5-a3c9056d31ef");
     private static readonly Guid RaceNamespaceId = new("d54c5101-305d-42aa-a8df-3c52ca96a6ef");
 
     /// <summary>レース日・競馬場コード・レース番号から決定論的なレース ID を生成する。</summary>
@@ -37,6 +38,7 @@ public static class DeterministicIdGenerator
             "horse" => HorseNamespaceId,
             "jockey" => JockeyNamespaceId,
             "trainer" => TrainerNamespaceId,
+            "owner" => OwnerNamespaceId,
             _ => throw new InvalidOperationException($"未知の ID prefix です: {prefix}")
         };
 

@@ -39,7 +39,7 @@ public class HorseCommandTests
     {
         var horseId = HorseId.New;
         var command = new RegisterHorseCommand(horseId, "ディープインパクト", "ディープインパクト",
-            sexCode: "M", birthDate: new DateOnly(2002, 3, 25));
+            sexCode: "M", birthDate: new DateOnly(2002, 3, 25), ownerName: "金子真人ホールディングス");
 
         var result = await _commandBus.PublishAsync(command, CancellationToken.None);
 
@@ -48,6 +48,7 @@ public class HorseCommandTests
         var details = aggregate.GetDetails();
         Assert.AreEqual("ディープインパクト", details.RegisteredName);
         Assert.AreEqual("M", details.SexCode);
+        Assert.AreEqual("金子真人ホールディングス", details.OwnerName);
     }
 
     [TestMethod]
