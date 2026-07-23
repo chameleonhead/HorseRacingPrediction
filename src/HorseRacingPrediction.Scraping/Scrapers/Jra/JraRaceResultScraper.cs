@@ -61,6 +61,10 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
         CancellationToken cancellationToken = default)
     {
         var snapshot = await _browser.GetPageSnapshotAsync(1, cancellationToken);
+        // JRA の結果ページではコース情報が semantic section の外側に置かれることがあり、
+        // 構造化スナップショットだけでは「コース：1,700 メートル（ダート・右）」が
+        // 欠落する。本文全体も取得し、メタデータ解析のフォールバックに使う。
+        var pageContent = await _browser.GetPageContentAsync(cancellationToken);
         var url = _browser.CurrentUrl ?? string.Empty;
 
         if (IsKnownErrorPage(url, snapshot))
@@ -68,7 +72,7 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
             return null;
         }
 
-        var metadata = ParseRaceMetadata(snapshot);
+        var metadata = ParseRaceMetadata(snapshot, pageContent);
         var entries = ParseResultEntries(snapshot.Tables);
         var payouts = ParsePayouts(snapshot.MainText, snapshot.Tables);
 
@@ -152,10 +156,10 @@ public sealed class JraRaceResultScraper : IScraper<JraRaceResultData>
     // メタ情報の解析
     // ------------------------------------------------------------------ //
 
-    private static RaceMetadata ParseRaceMetadata(PageSnapshot snapshot)
+    private static RaceMetadata ParseRaceMetadata(PageSnapshot snapshot, string? pageContent = null)
     {
         var headingsText = string.Join("\n", snapshot.Headings);
-        var searchText = $"{snapshot.Title}\n{headingsText}\n{snapshot.MainText}";
+        var searchText = $"{snapshot.Title}\n{headingsText}\n{snapshot.MainText}\n{pageContent}";
 
         var raceName = ExtractRaceName(snapshot);
         // 競馬場・レース番号はヘッダー優先（MainText に他開催名が混入するため）

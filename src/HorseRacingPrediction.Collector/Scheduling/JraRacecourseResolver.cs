@@ -39,4 +39,15 @@ public static class JraRacecourseResolver
             ? canonical
             : Aliases.FirstOrDefault(x => trimmed.Contains(x.Value, StringComparison.Ordinal)).Value;
     }
+
+    public static HorseRacingPrediction.Scraping.Scrapers.Jra.JraRaceResultUrl Normalize(
+        HorseRacingPrediction.Scraping.Scrapers.Jra.JraRaceResultUrl url)
+    {
+        var racecourse = ResolveDisplayName(url.Racecourse)
+            ?? ResolveDisplayName(url.RacecourseCode);
+
+        return string.Equals(url.Racecourse, racecourse, StringComparison.Ordinal)
+            ? url
+            : url with { Racecourse = racecourse };
+    }
 }

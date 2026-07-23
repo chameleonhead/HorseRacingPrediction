@@ -244,6 +244,34 @@ public class JraRaceResultScraperTests
     }
 
     [TestMethod]
+    public async Task ScrapeAsync_UsesFullPageContentWhenCourseMetadataIsOutsideSnapshotSections()
+    {
+        _fakeWebBrowser.Snapshot = new PageSnapshot(
+            "https://www.jra.go.jp/test",
+            "レース結果 JRA",
+            [
+                new PageSectionSnapshot(
+                    title: "3歳以上1勝クラス",
+                    mainText: "結果テーブル",
+                    headings: ["3歳以上1勝クラス"],
+                    links: [],
+                    actions: [],
+                    tables: [])
+            ]);
+        _fakeWebBrowser.PageContent =
+            "2026年6月27日（土曜） 1回函館5日 12レース " +
+            "3歳以上1勝クラス コース：1,700 メートル（ダート・右）";
+
+        var result = await _sut.ScrapeAsync("https://www.jra.go.jp/test");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("1勝クラス", result.Grade);
+        Assert.AreEqual("ダート", result.CourseType);
+        Assert.AreEqual(1700, result.Distance);
+        Assert.AreEqual("右", result.Direction);
+    }
+
+    [TestMethod]
     public async Task ScrapeAsync_DoesNotTreatJraBoilerplateAsRaceName()
     {
         _fakeWebBrowser.Snapshot = new PageSnapshot(
@@ -531,6 +559,7 @@ public class JraRaceResultScraperTests
     private sealed class FakeWebBrowser : IWebBrowser
     {
         public PageSnapshot? Snapshot { get; set; }
+        public string PageContent { get; set; } = string.Empty;
 
         private string? _currentUrl = "https://www.jra.go.jp/test";
 
@@ -577,7 +606,7 @@ public class JraRaceResultScraperTests
             => Task.FromResult(string.Empty);
 
         public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(string.Empty);
+            => Task.FromResult(PageContent);
 
         public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(
             int maxResults = 10, CancellationToken cancellationToken = default)

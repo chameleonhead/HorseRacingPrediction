@@ -654,7 +654,8 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
         var workflow = CreateRaceResultWorkflow(browser);
-        return await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        var urls = await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        return urls.Select(JraRacecourseResolver.Normalize).ToList();
     }
 
     private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(

@@ -908,23 +908,23 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 enforceQualityThreshold: true);
         }
 
+            // セマンティックな section/article が一部だけ存在するページでは、
+            // その外側にある本文（レース概要など）が欠落し得る。候補が取れていても
+            // トップレベルの構造ブロックを補完し、既存セクションと重なるものは除外する。
+            await AddSectionsFromStructuralBlocksAsync(
+                pageTitle,
+                sections,
+                seen,
+                boundedLinkLimit,
+                cancellationToken);
+
             if (sections.Count == sectionCountAfterHeader)
             {
-                await AddSectionsFromStructuralBlocksAsync(
+                await AddBodyFallbackSectionAsync(
                     pageTitle,
                     sections,
-                    seen,
                     boundedLinkLimit,
                     cancellationToken);
-
-                if (sections.Count == sectionCountAfterHeader)
-                {
-                    await AddBodyFallbackSectionAsync(
-                        pageTitle,
-                        sections,
-                        boundedLinkLimit,
-                        cancellationToken);
-                }
             }
 
         await AddSpecialLayoutSectionAsync(
@@ -1061,6 +1061,11 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             var mainText = await TryReadLimitedInnerTextAsync(block, MaxSectionTextLength);
+            if (IsTextCoveredByExistingSections(mainText, sections))
+            {
+                continue;
+            }
+
             var headingsTask = ExtractHeadingsFromRootAsync(block, 12, cancellationToken);
             var linksTask = ExtractLinksFromRootAsync(block, boundedLinkLimit, cancellationToken);
             var actionsTask = ExtractActionsFromRootAsync(block, MaxActionsPerSection, cancellationToken);
@@ -1106,6 +1111,24 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
             structuralIndex++;
         }
+    }
+
+    internal static bool IsTextCoveredByExistingSections(
+        string? candidateText,
+        IReadOnlyList<PageSectionSnapshot> sections)
+    {
+        var candidate = NormalizeText(candidateText);
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return true;
+        }
+
+        return sections.Any(section =>
+        {
+            var existing = NormalizeText(section.MainText);
+            return !string.IsNullOrWhiteSpace(existing)
+                && existing.Contains(candidate, StringComparison.Ordinal);
+        });
     }
 
     private async Task<ILocator?> FindStructuralSectionContainerAsync(CancellationToken cancellationToken)
