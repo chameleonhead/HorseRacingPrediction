@@ -23,11 +23,15 @@ internal static class ReadModelTestHelpers
 
     /// <summary>履歴エントリーを追加する（勝率計算のため）</summary>
     public static void AddHistoryEntry(
-        this HorseRaceHistoryReadModel model, string horseId, int finishPosition)
+        this HorseRaceHistoryReadModel model,
+        string horseId,
+        int finishPosition,
+        DateOnly? raceDate = null,
+        string? raceId = null)
     {
         model.Entries.Add(new HorseRaceHistoryEntry(
-            $"race-{Guid.NewGuid()}", $"entry-{Guid.NewGuid()}",
-            DateOnly.Parse("2024-01-01"), null, null, null, null, null,
+            raceId ?? $"race-{Guid.NewGuid()}", $"entry-{Guid.NewGuid()}",
+            raceDate ?? DateOnly.Parse("2024-01-01"), null, null, null, null, null,
             null, null, null, null, null, null, null,
             finishPosition, null, null, null));
     }

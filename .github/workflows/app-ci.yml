@@ -1,0 +1,60 @@
+name: app-ci
+
+on:
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+      - "*.sln"
+      - "*.props"
+      - "*.json"
+      - .config/**
+      - .github/workflows/app-ci.yml
+  push:
+    branches:
+      - main
+    paths:
+      - src/**
+      - tests/**
+      - "*.sln"
+      - "*.props"
+      - "*.json"
+      - .config/**
+      - .github/workflows/app-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet restore HorseRacingPrediction.sln
+
+      - name: Verify formatting
+        run: dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes
+
+      - name: Build
+        run: dotnet build HorseRacingPrediction.sln --no-restore --configuration Release
+
+      - name: Verify database migration model
+        run: dotnet ef migrations has-pending-model-changes --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release
+
+      - name: Apply migrations to an empty SQLite database
+        run: dotnet ef database update --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release --connection "Data Source=${{ runner.temp }}/eventstore-ci.db"
+
+      - name: Test
+        run: dotnet test HorseRacingPrediction.sln --no-build --configuration Release --collect:"XPlat Code Coverage"
+
+      - name: Check vulnerable dependencies
+        run: dotnet list HorseRacingPrediction.sln package --vulnerable --include-transitive

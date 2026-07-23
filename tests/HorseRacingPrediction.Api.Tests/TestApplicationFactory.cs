@@ -10,6 +10,7 @@ using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -33,9 +34,15 @@ internal static class TestApplicationFactory
         builder.Services.AddAdminAuthentication();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
-        var dbContextProvider = new SqliteDbContextProvider(connectionString);
-        builder.Services.AddSingleton(dbContextProvider);
-        builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(dbContextProvider);
+        builder.Services.AddSingleton(_ =>
+        {
+            var provider = new SqliteDbContextProvider(connectionString);
+            using var context = provider.CreateContext();
+            context.Database.EnsureCreated();
+            return provider;
+        });
+        builder.Services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(
+            services => services.GetRequiredService<SqliteDbContextProvider>());
 
         builder.Services.AddSingleton<HorseWeightHistoryLocator>();
         builder.Services.AddSingleton<PredictionComparisonViewLocator>();

@@ -9,6 +9,8 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Infrastructure.Tests;
@@ -27,6 +29,8 @@ public class EventPersistenceTests
         services.AddLogging();
 
         var dbContextProvider = new SqliteDbContextProvider("DataSource=:memory:");
+        using (var context = dbContextProvider.CreateContext())
+            context.Database.EnsureCreated();
         services.AddSingleton(dbContextProvider);
         services.AddSingleton<IDbContextProvider<EventStoreDbContext>>(dbContextProvider);
 
@@ -147,6 +151,7 @@ public class EventPersistenceTests
             });
 
             using var serviceProvider = services.BuildServiceProvider();
+            await serviceProvider.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
             var commandBus = serviceProvider.GetRequiredService<ICommandBus>();
             var aggregateStore = serviceProvider.GetRequiredService<IAggregateStore>();
             var raceId = RaceId.New;
@@ -167,6 +172,7 @@ public class EventPersistenceTests
         }
         finally
         {
+            SqliteConnection.ClearAllPools();
             if (File.Exists(databasePath))
             {
                 File.Delete(databasePath);

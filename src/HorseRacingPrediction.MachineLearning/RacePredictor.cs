@@ -97,6 +97,8 @@ public sealed class RacePredictor : IRacePredictor
             var horseHistory  = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
             var jockeyHistory = entry.JockeyId is null ? null
                 : await getJockeyHistory(entry.JockeyId, cancellationToken).ConfigureAwait(false);
+            horseHistory = horseHistory?.AsOf(raceDate, raceContext.RaceId);
+            jockeyHistory = jockeyHistory?.AsOf(raceDate, raceContext.RaceId);
             var expectedPos   = EstimatePosition(entry.RunningStyleCode, leaderCount, frontRunnerCount);
             return (entry, FeatureMapper.Build(
                 entry, horseHistory, jockeyHistory,

@@ -29,7 +29,7 @@ public sealed class ProcessingStateStore
         var dbPath = Path.Combine(stateDirectory, jobStoreFileName);
 
         _dbContextOptions = new DbContextOptionsBuilder<ProcessingStateDbContext>()
-            .UseSqlite($"Data Source={dbPath}")
+            .UseSqlite($"Data Source={dbPath};Pooling=False")
             .Options;
 
         _logger = logger;

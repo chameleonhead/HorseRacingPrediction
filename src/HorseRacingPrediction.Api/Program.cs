@@ -13,6 +13,7 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,8 +36,24 @@ builder.Services.AddHttpClient<AdminApiClient>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+
+    foreach (var configuredProxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+    {
+        if (IPAddress.TryParse(configuredProxy, out var proxyAddress))
+            options.KnownProxies.Add(proxyAddress);
+    }
+
+    foreach (var configuredNetwork in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+    {
+        var parts = configuredNetwork.Split('/', 2);
+        if (parts.Length == 2
+            && IPAddress.TryParse(parts[0], out var networkAddress)
+            && int.TryParse(parts[1], out var prefixLength))
+        {
+            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(networkAddress, prefixLength));
+        }
+    }
 });
 builder.Services.AddSwaggerGen(options =>
 {
@@ -68,7 +85,7 @@ builder.Services.AddSwaggerGen(options =>
 var connectionString = builder.Configuration.GetConnectionString("EventStore")
     ?? "Data Source=eventstore.db";
 
-builder.Services.AddSqliteDbContextProvider(connectionString);
+builder.Services.AddSqliteDbContextProvider(connectionString, builder.Configuration);
 
 builder.Services.AddSingleton<HorseWeightHistoryLocator>();
 builder.Services.AddSingleton<PredictionComparisonViewLocator>();
@@ -98,6 +115,8 @@ builder.Services.AddEventFlow(options =>
 });
 
 var app = builder.Build();
+
+await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 
 app.UseForwardedHeaders();
 app.UseSwagger();

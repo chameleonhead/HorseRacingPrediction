@@ -15,6 +15,25 @@ public class JockeyRaceHistoryReadModel : IReadModel,
     public string JockeyId { get; private set; } = string.Empty;
     public List<JockeyRaceHistoryEntry> Entries { get; private set; } = [];
 
+    /// <summary>
+    /// 指定日時点で利用可能だった履歴だけを持つスナップショットを返す。
+    /// 対象日当日の結果と学習対象レース自身は、予測時点では未知なので含めない。
+    /// </summary>
+    public JockeyRaceHistoryReadModel AsOf(DateOnly raceDate, string? excludedRaceId = null)
+    {
+        return new JockeyRaceHistoryReadModel
+        {
+            JockeyId = JockeyId,
+            Entries = Entries
+                .Where(entry =>
+                    entry.RaceDate.HasValue
+                    && entry.RaceDate.Value < raceDate
+                    && (excludedRaceId is null
+                        || !string.Equals(entry.RaceId, excludedRaceId, StringComparison.Ordinal)))
+                .ToList()
+        };
+    }
+
     // ------------------------------------------------------------------ //
     // Group C: 騎手統計パラメーター
     // ------------------------------------------------------------------ //

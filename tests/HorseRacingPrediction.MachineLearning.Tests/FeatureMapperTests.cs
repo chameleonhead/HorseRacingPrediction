@@ -80,6 +80,22 @@ public class FeatureMapperTests
         Assert.AreEqual(0f, input.JockeyChanged, "騎手継続→0");
     }
 
+    [TestMethod]
+    public void HorseHistory_AsOf_ExcludesCurrentAndFutureResults()
+    {
+        var history = new HorseRaceHistoryReadModel();
+        history.SetTestData("h1");
+        history.AddHistoryEntry("h1", 1, DateOnly.Parse("2024-01-01"), "past");
+        history.AddHistoryEntry("h1", 2, DateOnly.Parse("2024-02-01"), "target");
+        history.AddHistoryEntry("h1", 3, DateOnly.Parse("2024-03-01"), "future");
+
+        var snapshot = history.AsOf(DateOnly.Parse("2024-02-01"), "target");
+
+        Assert.AreEqual(1, snapshot.TotalRaceCount);
+        Assert.AreEqual("past", snapshot.Entries.Single().RaceId);
+        Assert.AreEqual(3, history.TotalRaceCount, "元のReadModelは変更しない");
+    }
+
     // ------------------------------------------------------------------ //
     // helpers
     // ------------------------------------------------------------------ //

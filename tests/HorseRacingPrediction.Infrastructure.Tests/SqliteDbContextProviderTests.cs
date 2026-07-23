@@ -1,5 +1,7 @@
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Infrastructure.Tests;
 
@@ -27,17 +29,32 @@ public class SqliteDbContextProviderTests
     }
 
     [TestMethod]
-    public void Constructor_CreatesSchemaAutomatically()
+    public async Task Migrator_CreatesSchemaAndMigrationHistory()
     {
         using var provider = new SqliteDbContextProvider();
-        using var context = provider.CreateContext();
+        var migrator = CreateMigrator(provider);
 
-        var tableNames = context.Model.GetEntityTypes()
-            .Select(t => t.GetTableName())
-            .ToList();
+        await migrator.MigrateAsync();
 
-        Assert.IsTrue(tableNames.Contains("EventEntity"));
-        Assert.IsTrue(tableNames.Contains("SnapshotEntity"));
+        await using var context = provider.CreateContext();
+        var applied = (await context.Database.GetAppliedMigrationsAsync()).ToList();
+        Assert.IsTrue(applied.Single().EndsWith("_InitialEventStore", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task Migrator_BaselinesExistingEnsureCreatedDatabase()
+    {
+        using var provider = new SqliteDbContextProvider();
+        await using (var legacyContext = provider.CreateContext())
+            await legacyContext.Database.EnsureCreatedAsync();
+
+        var migrator = CreateMigrator(provider);
+        await migrator.MigrateAsync();
+
+        await using var context = provider.CreateContext();
+        var applied = (await context.Database.GetAppliedMigrationsAsync()).ToList();
+        Assert.AreEqual(1, applied.Count);
+        Assert.IsTrue(applied[0].EndsWith("_InitialEventStore", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -45,5 +62,13 @@ public class SqliteDbContextProviderTests
     {
         var provider = new SqliteDbContextProvider();
         provider.Dispose();
+    }
+
+    private static SqliteDatabaseMigrator CreateMigrator(SqliteDbContextProvider provider)
+    {
+        return new SqliteDatabaseMigrator(
+            provider,
+            Options.Create(new SqliteMigrationOptions { BackupBeforeMigration = false }),
+            NullLogger<SqliteDatabaseMigrator>.Instance);
     }
 }

@@ -11,15 +11,17 @@ public class SqliteDbContextProvider : IDbContextProvider<EventStoreDbContext>, 
 
     public SqliteDbContextProvider(string connectionString = "DataSource=:memory:")
     {
-        _connection = new SqliteConnection(connectionString);
+        var connectionStringBuilder = new SqliteConnectionStringBuilder(connectionString)
+        {
+            Pooling = false
+        };
+        _connection = new SqliteConnection(connectionStringBuilder.ConnectionString);
         _connection.Open();
 
         _options = new DbContextOptionsBuilder<EventStoreDbContext>()
             .UseSqlite(_connection)
             .Options;
 
-        using var context = new EventStoreDbContext(_options);
-        context.Database.EnsureCreated();
     }
 
     public EventStoreDbContext CreateContext()

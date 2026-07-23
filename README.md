@@ -66,6 +66,25 @@ dotnet run --project src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csp
 - Swagger UI: `/swagger`
 - OpenAPI JSON: `/swagger/v1/swagger.json`
 
+### SQLite スキーマ変更
+
+DBモデルを変更した場合は、ローカルツールを復元してMigrationを追加します。
+
+```bash
+dotnet tool restore
+dotnet ef migrations add <MigrationName> \
+  --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj \
+  --context EventStoreDbContext \
+  --output-dir Persistence/Migrations
+dotnet ef migrations has-pending-model-changes \
+  --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj
+dotnet test HorseRacingPrediction.sln
+```
+
+生成されたMigration、ModelSnapshot、対応テストを同じ変更に含めてください。
+API起動時に未適用Migrationが自動適用されます。既存DBは初回のみスキーマを照合して
+`InitialEventStore` を適用済みとして登録します。照合に失敗した場合はDBを変更せず起動を停止します。
+
 ### EventFlow 実装メモ
 
 - EventFlow v1 系では `EventFlow.AspNetCore` ではなく `EventFlow` パッケージを優先

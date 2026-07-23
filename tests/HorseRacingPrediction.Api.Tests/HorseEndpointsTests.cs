@@ -158,7 +158,18 @@ public class HorseEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, entryId),
+            new RegisterEntryRequest(
+                horseId,
+                1,
+                null,
+                null,
+                1,
+                57.0m,
+                "M",
+                4,
+                450.0m,
+                0.0m,
+                EntryId: entryId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/result",

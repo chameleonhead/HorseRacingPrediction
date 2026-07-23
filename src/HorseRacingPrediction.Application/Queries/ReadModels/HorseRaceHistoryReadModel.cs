@@ -15,6 +15,25 @@ public class HorseRaceHistoryReadModel : IReadModel,
     public string HorseId { get; private set; } = string.Empty;
     public List<HorseRaceHistoryEntry> Entries { get; private set; } = [];
 
+    /// <summary>
+    /// 指定日時点で利用可能だった履歴だけを持つスナップショットを返す。
+    /// 対象日当日の結果と学習対象レース自身は、予測時点では未知なので含めない。
+    /// </summary>
+    public HorseRaceHistoryReadModel AsOf(DateOnly raceDate, string? excludedRaceId = null)
+    {
+        return new HorseRaceHistoryReadModel
+        {
+            HorseId = HorseId,
+            Entries = Entries
+                .Where(entry =>
+                    entry.RaceDate.HasValue
+                    && entry.RaceDate.Value < raceDate
+                    && (excludedRaceId is null
+                        || !string.Equals(entry.RaceId, excludedRaceId, StringComparison.Ordinal)))
+                .ToList()
+        };
+    }
+
     // ------------------------------------------------------------------ //
     // Group B: 基本集計パラメーター
     // ------------------------------------------------------------------ //

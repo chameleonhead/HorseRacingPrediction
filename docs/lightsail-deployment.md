@@ -367,6 +367,29 @@ curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/rac
 - 独自ドメイン未設定時は、静的IPから導出した `sslip.io` ホスト名で Caddy が自動的に信頼された証明書を取得する（`.github/workflows/app-deploy.yml` 内で導出）
 - API キーは `HORSE_RACING_API_KEY` としてコンテナへ注入される
 - SQLite ファイルはサーバー上の `/opt/horse-racing-prediction/app/data/eventstore.db` に保存される
+
+## SQLite Migration とバックアップ
+
+デプロイ時はAPIコンテナを停止してから、次のバックアップを作成する。
+
+```text
+/opt/horse-racing-prediction/app/data/backups/eventstore-predeploy-YYYYMMDD-HHMMSS.db
+```
+
+その後、新しいAPIコンテナの起動時に以下を自動実行する。
+
+1. `PRAGMA quick_check` による整合性確認
+2. Migration直前のSQLiteオンラインバックアップ
+3. 既存DBの初回ベースライン検証
+4. EF Core Migration適用
+5. 適用後の整合性確認
+
+バックアップはデプロイ前コピーとMigration前コピーをそれぞれ直近7世代保持する。
+Migrationまたは整合性確認に失敗した場合、APIはリクエスト受付前に終了する。
+
+復旧時はコンテナを停止し、現在のDBを別名へ退避したうえで、選択したバックアップを
+`eventstore.db` として復元し、直前のイメージタグで `docker compose up -d` を実行する。
+稼働中のSQLiteファイルを直接上書きしてはならない。
 - バックアップは Lightsail のスナップショットで取得する
 - `docker compose` の更新のみでアプリを入れ替えるため、通常はインフラ workflow とアプリ workflow は互いのコードに依存しない
 - ただし `infra-deploy` と `app-deploy` は同じ concurrency グループ（`horse-racing-prediction-production-deploy`）を共有しており、同時実行はせず直列化される。インフラ変更中に Lightsail のポート/静的IPが再構成され、アプリ側の SSH 接続がタイムアウトする事故を防ぐための措置

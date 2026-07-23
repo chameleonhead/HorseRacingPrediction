@@ -46,6 +46,8 @@ public static class TrainingDataBuilder
                 var horseHistory  = await getHorseHistory(entry.HorseId, cancellationToken).ConfigureAwait(false);
                 var jockeyHistory = entry.JockeyId is null ? null
                     : await getJockeyHistory(entry.JockeyId, cancellationToken).ConfigureAwait(false);
+                horseHistory = horseHistory?.AsOf(raceDate, race.RaceId);
+                jockeyHistory = jockeyHistory?.AsOf(raceDate, race.RaceId);
 
                 var expectedPos = EstimatePosition(entry.RunningStyleCode, leaderCount, frontRunnerCount);
 

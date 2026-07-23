@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - src/**
+      - tests/**
+      - .config/**
       - Dockerfile
       - .dockerignore
       - deploy/**
@@ -24,7 +26,38 @@ env:
   APP_DIRECTORY: /opt/horse-racing-prediction/app
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet restore HorseRacingPrediction.sln
+
+      - name: Build
+        run: dotnet build HorseRacingPrediction.sln --no-restore --configuration Release
+
+      - name: Verify database migration model
+        run: dotnet ef migrations has-pending-model-changes --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release
+
+      - name: Apply migrations to an empty SQLite database
+        run: dotnet ef database update --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release --connection "Data Source=${{ runner.temp }}/eventstore-ci.db"
+
+      - name: Test
+        run: dotnet test HorseRacingPrediction.sln --no-build --configuration Release
+
+      - name: Check vulnerable dependencies
+        run: dotnet list HorseRacingPrediction.sln package --vulnerable --include-transitive
+
   build-and-push:
+    needs: verify
     runs-on: ubuntu-latest
     outputs:
       image_name: ${{ steps.image.outputs.image_name }}
@@ -104,6 +137,7 @@ jobs:
           envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY
           script: |
             mkdir -p "$APP_DIRECTORY/data"
+            mkdir -p "$APP_DIRECTORY/data/backups"
             # Must re-export: docker compose's ${DOMAIN_NAME} substitution prefers the shell
             # environment over --env-file, and DOMAIN_NAME above is still the (possibly empty)
             # raw secret value, not the sslip.io fallback computed below.
@@ -118,6 +152,13 @@ jobs:
             EOF
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
+            docker compose --env-file .env stop api || true
+            if [ -f "$APP_DIRECTORY/data/eventstore.db" ]; then
+              cp "$APP_DIRECTORY/data/eventstore.db" \
+                "$APP_DIRECTORY/data/backups/eventstore-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
+            fi
+            find "$APP_DIRECTORY/data/backups" -type f -name 'eventstore-predeploy-*.db' \
+              -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
             docker compose --env-file .env up -d --force-recreate --remove-orphans
             docker image prune -f
 
