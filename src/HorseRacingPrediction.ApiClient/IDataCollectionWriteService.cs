@@ -68,6 +68,25 @@ public interface IDataCollectionWriteService
         decimal? declaredWeightDiff,
         CancellationToken cancellationToken = default);
 
+    Task<string> UpsertRaceEntryWithOwnerAsync(
+        string raceId,
+        int horseNumber,
+        string horseName,
+        string? jockeyName,
+        string? trainerName,
+        int? gateNumber,
+        decimal? assignedWeight,
+        string? sexCode,
+        int? age,
+        decimal? declaredWeight,
+        decimal? declaredWeightDiff,
+        string? ownerName,
+        CancellationToken cancellationToken = default)
+        => UpsertRaceEntryAsync(
+            raceId, horseNumber, horseName, jockeyName, trainerName,
+            gateNumber, assignedWeight, sexCode, age, declaredWeight,
+            declaredWeightDiff, cancellationToken);
+
     /// <summary>レース全体の確定結果（勝ち馬）を宣言し、確認メッセージを返す。</summary>
     Task<string> DeclareRaceResultAsync(
         string raceId,

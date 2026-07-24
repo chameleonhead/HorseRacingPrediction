@@ -52,7 +52,7 @@ else
                                 <td>@(entry.FinishPosition?.ToString() ?? "—")</td>
                                 <td>
                                     @if (string.IsNullOrWhiteSpace(entry.JockeyId)) { <span>—</span> }
-                                    else { <a href="@($"jockeys/{entry.JockeyId}")">@entry.JockeyId</a> }
+                                    else { <a href="@($"jockeys/{entry.JockeyId}")">@JockeyName(entry.JockeyId)</a> }
                                 </td>
                                 <td>@(entry.DeclaredWeight is null ? "—" : $"{entry.DeclaredWeight}kg")</td>
                             </tr>
@@ -139,6 +139,7 @@ else
     private bool loading;
     private HorseProfileResponse? horse;
     private HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? raceHistory;
+    private IReadOnlyDictionary<string, string> jockeyNames = new Dictionary<string, string>();
 
     private string? editRegisteredName;
     private string? editNormalizedName;
@@ -175,6 +176,7 @@ else
             await Task.WhenAll(profileTask, historyTask);
             horse = await profileTask;
             raceHistory = await historyTask;
+            jockeyNames = await LoadJockeyNamesAsync(raceHistory);
             if (horse is not null)
             {
                 editRegisteredName = horse.RegisteredName;
@@ -192,6 +194,27 @@ else
 
     private static string Display(string? value)
         => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private string JockeyName(string jockeyId)
+        => jockeyNames.TryGetValue(jockeyId, out var name) ? name : jockeyId;
+
+    private async Task<IReadOnlyDictionary<string, string>> LoadJockeyNamesAsync(
+        HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? history)
+    {
+        if (history is null)
+            return new Dictionary<string, string>();
+
+        var ids = history.Entries
+            .Select(x => x.JockeyId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var profiles = await Task.WhenAll(ids.Select(id => Api.GetJockeyAsync(id)));
+        return profiles
+            .Where(x => x is not null)
+            .ToDictionary(x => x!.JockeyId, x => x!.DisplayName, StringComparer.Ordinal);
+    }
 
     private async Task UpdateProfileAsync()
     {

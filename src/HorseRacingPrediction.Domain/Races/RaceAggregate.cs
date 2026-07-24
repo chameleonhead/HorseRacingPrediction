@@ -59,7 +59,7 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
         decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
-        string? runningStyleCode = null)
+        string? runningStyleCode = null, string? ownerName = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -72,7 +72,8 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             sexCode, age, declaredWeight, declaredWeightDiff,
             runningStyleCode,
             _state.RaceDate, _state.RacecourseCode, _state.SurfaceCode,
-            _state.DistanceMeters, _state.DirectionCode, _state.GradeCode));
+            _state.DistanceMeters, _state.DirectionCode, _state.GradeCode,
+            ownerName));
     }
 
     public void RecordWeatherObservation(DateTimeOffset observationTime,

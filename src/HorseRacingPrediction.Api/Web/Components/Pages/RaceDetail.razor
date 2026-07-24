@@ -40,6 +40,7 @@ else
                         <th>枠番</th>
                         <th>馬番</th>
                         <th>馬名</th>
+                        <th>馬主</th>
                         <th>性齢</th>
                         <th>負担体重</th>
                         <th>馬体重</th>
@@ -54,6 +55,7 @@ else
                             <td>@e.GateNumber</td>
                             <td>@e.HorseNumber</td>
                             <td><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a></td>
+                            <td>@(string.IsNullOrWhiteSpace(e.OwnerName) ? "未登録" : e.OwnerName)</td>
                             <td>@e.SexCode @e.Age</td>
                             <td>@e.AssignedWeight</td>
                             <td>@FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</td>

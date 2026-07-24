@@ -82,12 +82,13 @@ public sealed class DataCollectionWriteTools
         [Description("馬齢")] int? age = null,
         [Description("馬体重")] decimal? declaredWeight = null,
         [Description("馬体重増減")] decimal? declaredWeightDiff = null,
+        [Description("出走時点の馬主名")] string? ownerName = null,
         CancellationToken cancellationToken = default)
     {
-        return await _service.UpsertRaceEntryAsync(
+        return await _service.UpsertRaceEntryWithOwnerAsync(
             raceId, horseNumber, horseName, jockeyName, trainerName,
             gateNumber, assignedWeight, sexCode, age,
-            declaredWeight, declaredWeightDiff,
+            declaredWeight, declaredWeightDiff, ownerName,
             cancellationToken);
     }
 

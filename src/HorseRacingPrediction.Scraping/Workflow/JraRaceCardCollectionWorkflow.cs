@@ -280,6 +280,7 @@ public sealed class JraRaceCardCollectionWorkflow
                 age: age,
                 declaredWeight: entry.BodyWeight,
                 declaredWeightDiff: entry.BodyWeightDiff,
+                ownerName: entry.OwnerName,
                 cancellationToken: cancellationToken);
         }
 

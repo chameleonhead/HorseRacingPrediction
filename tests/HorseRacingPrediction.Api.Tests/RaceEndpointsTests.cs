@@ -310,7 +310,7 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             "/api/horses",
-            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId),
+            new RegisterHorseRequest("イクイノックス", "イクイノックス", "M", null, horseId, "現在の馬主"),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/card/publish",
@@ -464,7 +464,10 @@ public class RaceEndpointsTests
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m, null, entryId),
+            new RegisterEntryRequest(
+                horseId, 1, null, null, 1, 57.0m, "M", 4, 450.0m, 0.0m,
+                EntryId: entryId,
+                OwnerName: "レース時点の馬主"),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/weather",
@@ -503,6 +506,7 @@ public class RaceEndpointsTests
         Assert.AreEqual(entryId, race.Entries[0].EntryId);
         Assert.AreEqual(horseId, race.Entries[0].HorseId);
         Assert.AreEqual("イクイノックス", race.Entries[0].HorseName);
+        Assert.AreEqual("レース時点の馬主", race.Entries[0].OwnerName);
         Assert.AreEqual(1, race.WeatherObservations.Count);
         Assert.AreEqual("晴れ", race.WeatherObservations[0].WeatherText);
         Assert.AreEqual(1, race.TrackConditionObservations.Count);

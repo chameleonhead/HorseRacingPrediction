@@ -551,7 +551,8 @@ public static class EndpointExtensions
                     request.Age,
                     request.DeclaredWeight,
                     request.DeclaredWeightDiff,
-                    request.RunningStyleCode);
+                    request.RunningStyleCode,
+                    request.OwnerName);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -1055,7 +1056,8 @@ public static class EndpointExtensions
                         ResolveHorseName(horseNamesById, x.HorseId),
                         ResolveJockeyName(jockeyNamesById, x.JockeyId),
                         ResolveTrainerName(trainerNamesById, x.TrainerId),
-                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber))).ToList()
+                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
+                        x.OwnerName)).ToList()
                     : resultReadModel?.EntryResults.Select(x => ToRaceEntryResponse(
                         x,
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
@@ -2024,7 +2026,8 @@ public static class EndpointExtensions
         string? horseName,
         string? jockeyName,
         string? trainerName,
-        int? gateNumber)
+        int? gateNumber,
+        string? ownerName)
         => new(
             entry.EntryId,
             entry.HorseId,
@@ -2040,7 +2043,8 @@ public static class EndpointExtensions
             entry.Age,
             entry.DeclaredWeight,
             entry.DeclaredWeightDiff,
-            entry.RunningStyleCode);
+            entry.RunningStyleCode,
+            ownerName);
 
     private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
         => new(
@@ -2053,6 +2057,7 @@ public static class EndpointExtensions
             null,
             null,
             gateNumber,
+            null,
             null,
             null,
             null,
@@ -2127,6 +2132,7 @@ public static class EndpointExtensions
         => !string.IsNullOrWhiteSpace(horseId) && horseNamesById.TryGetValue(horseId, out var horseName)
             ? horseName
             : null;
+
 
     private static string? ResolveJockeyName(IReadOnlyDictionary<string, string> jockeyNamesById, string? jockeyId)
         => !string.IsNullOrWhiteSpace(jockeyId) && jockeyNamesById.TryGetValue(jockeyId, out var jockeyName)

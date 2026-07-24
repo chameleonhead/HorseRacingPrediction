@@ -31,12 +31,13 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.AreEqual("race-2026-05-16-東京-1", result.SavedRaceIds[0]);
         Assert.AreEqual(1, fakeService.UpsertRaceEntryCalls[0].HorseNumber);
         Assert.AreEqual("テストホース", fakeService.UpsertRaceEntryCalls[0].HorseName);
+        Assert.AreEqual("テスト馬主", fakeService.UpsertRaceEntryCalls[0].OwnerName);
     }
 
     private sealed class FakeDataCollectionWriteService : IDataCollectionWriteService
     {
         public sealed record UpsertRaceCall(string RaceDate, string RacecourseCode, int RaceNumber, string RaceName);
-        public sealed record UpsertRaceEntryCall(string RaceId, int HorseNumber, string HorseName);
+        public sealed record UpsertRaceEntryCall(string RaceId, int HorseNumber, string HorseName, string? OwnerName = null);
 
         public List<UpsertRaceCall> UpsertRaceCalls { get; } = [];
         public List<UpsertRaceEntryCall> UpsertRaceEntryCalls { get; } = [];
@@ -94,6 +95,25 @@ public sealed class JraRaceCardCollectionWorkflowTests
             CancellationToken cancellationToken = default)
         {
             UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(raceId, horseNumber, horseName));
+            return Task.FromResult($"entry-{raceId}-{horseNumber}");
+        }
+
+        public Task<string> UpsertRaceEntryWithOwnerAsync(
+            string raceId,
+            int horseNumber,
+            string horseName,
+            string? jockeyName,
+            string? trainerName,
+            int? gateNumber,
+            decimal? assignedWeight,
+            string? sexCode,
+            int? age,
+            decimal? declaredWeight,
+            decimal? declaredWeightDiff,
+            string? ownerName,
+            CancellationToken cancellationToken = default)
+        {
+            UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(raceId, horseNumber, horseName, ownerName));
             return Task.FromResult($"entry-{raceId}-{horseNumber}");
         }
 
@@ -157,9 +177,9 @@ public sealed class JraRaceCardCollectionWorkflowTests
                 links: [],
                 actions: [],
                 tables: [new PageTableSnapshot(
-                ["馬番", "馬名", "騎手", "調教師", "性齢", "斤量", "枠番", "馬体重"],
+                ["馬番", "馬名", "騎手", "調教師", "馬主", "性齢", "斤量", "枠番", "馬体重"],
                 [
-                    ["1", "テストホース", "テスト騎手", "テスト調教師", "牡3", "55.0", "1", "480(+2)"]
+                    ["1", "テストホース", "テスト騎手", "テスト調教師", "テスト馬主", "牡3", "55.0", "1", "480(+2)"]
                 ])])
             ,
             new PageSectionSnapshot(
