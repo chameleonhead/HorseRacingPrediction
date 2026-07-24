@@ -18,6 +18,46 @@ else
         </dl>
     </section>
 
+    <section class="card">
+        <h3>騎乗履歴</h3>
+        @if (raceHistory is null || raceHistory.Entries.Count == 0)
+        {
+            <p class="hint">騎乗履歴はありません。</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>競馬場</th>
+                            <th>コース</th>
+                            <th>距離</th>
+                            <th>着順</th>
+                            <th>競走馬</th>
+                            <th>賞金</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in raceHistory.Entries.OrderByDescending(x => x.RaceDate))
+                        {
+                            <tr>
+                                <td><a href="@($"races/{entry.RaceId}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "—")</a></td>
+                                <td>@Display(entry.RacecourseCode)</td>
+                                <td>@Display(entry.SurfaceCode)</td>
+                                <td>@(entry.DistanceMeters is null ? "—" : $"{entry.DistanceMeters}m")</td>
+                                <td>@(entry.FinishPosition?.ToString() ?? "—")</td>
+                                <td><a href="@($"horses/{entry.HorseId}")">@entry.HorseId</a></td>
+                                <td>@(entry.PrizeMoney is null ? "—" : $"{entry.PrizeMoney:N0}")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
     @if (jockey.Aliases.Count > 0)
     {
         <section class="card">
@@ -90,6 +130,7 @@ else
 
     private bool loading;
     private JockeyProfileResponse? jockey;
+    private HorseRacingPrediction.Contracts.JockeyRaceHistoryReadModel? raceHistory;
 
     private string? editDisplayName;
     private string? editNormalizedName;
@@ -118,7 +159,11 @@ else
         loading = true;
         try
         {
-            jockey = await Api.GetJockeyAsync(JockeyId);
+            var profileTask = Api.GetJockeyAsync(JockeyId);
+            var historyTask = Api.GetJockeyRaceHistoryAsync(JockeyId);
+            await Task.WhenAll(profileTask, historyTask);
+            jockey = await profileTask;
+            raceHistory = await historyTask;
             if (jockey is not null)
             {
                 editDisplayName = jockey.DisplayName;
@@ -131,6 +176,9 @@ else
             loading = false;
         }
     }
+
+    private static string Display(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
     private async Task UpdateProfileAsync()
     {
