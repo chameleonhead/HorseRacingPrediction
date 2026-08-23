@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Api\HorseRacingPrediction.Api.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.CollectionOperations\HorseRacingPrediction.CollectionOperations.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Contracts\HorseRacingPrediction.Contracts.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Infrastructure\HorseRacingPrediction.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.MachineLearning\HorseRacingPrediction.MachineLearning.csproj" />

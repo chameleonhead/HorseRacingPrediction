@@ -2,9 +2,9 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public sealed class AgentAcquisitionStatusRecorder
 {
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
 
-    public AgentAcquisitionStatusRecorder(ProcessingStateStore stateStore)
+    public AgentAcquisitionStatusRecorder(IProcessingStateStore stateStore)
     {
         _stateStore = stateStore;
     }

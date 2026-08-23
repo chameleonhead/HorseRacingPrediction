@@ -11,7 +11,7 @@ public static class AgentCollectionStatusEndpointExtensions
             async (
                 DateOnly from,
                 DateOnly to,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 HorseRacingPrediction.ApiClient.IRaceQueryService raceQueryService,
                 CancellationToken cancellationToken) =>
             {

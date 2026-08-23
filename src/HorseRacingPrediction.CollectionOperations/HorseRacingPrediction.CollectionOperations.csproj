@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
+    <ProjectReference Include="..\HorseRacingPrediction.ApiClient\HorseRacingPrediction.ApiClient.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AcquiredProcessingJob.cs" Link="Scheduling\AcquiredProcessingJob.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionOperationType.cs" Link="Scheduling\AgentAcquisitionOperationType.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionStatusEndpointExtensions.cs" Link="Scheduling\AgentAcquisitionStatusEndpointExtensions.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentCollectionStatusEndpointExtensions.cs" Link="Scheduling\AgentCollectionStatusEndpointExtensions.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentDashboardEndpointExtensions.cs" Link="Scheduling\AgentDashboardEndpointExtensions.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionStatusEntity.cs" Link="Scheduling\AgentAcquisitionStatusEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionStatusKeyFactory.cs" Link="Scheduling\AgentAcquisitionStatusKeyFactory.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionStatusReadModel.cs" Link="Scheduling\AgentAcquisitionStatusReadModel.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentAcquisitionSubjectType.cs" Link="Scheduling\AgentAcquisitionSubjectType.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobDetailReadModel.cs" Link="Scheduling\AgentJobDetailReadModel.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobKeyFactory.cs" Link="Scheduling\AgentJobKeyFactory.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobPayloadSerializer.cs" Link="Scheduling\AgentJobPayloadSerializer.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobStatus.cs" Link="Scheduling\AgentJobStatus.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobStatusReadModel.cs" Link="Scheduling\AgentJobStatusReadModel.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentJobType.cs" Link="Scheduling\AgentJobType.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentProcessingOptions.cs" Link="Scheduling\AgentProcessingOptions.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\CollectionExecutionTrigger.cs" Link="Scheduling\CollectionExecutionTrigger.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\IProcessingStateStore.cs" Link="Scheduling\IProcessingStateStore.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\HttpProcessingStateStoreProxy.cs" Link="Scheduling\HttpProcessingStateStoreProxy.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingJobEntity.cs" Link="Scheduling\ProcessingJobEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingMarkerEntity.cs" Link="Scheduling\ProcessingMarkerEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingStateDbContext.cs" Link="Scheduling\ProcessingStateDbContext.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingStateRpcEndpointExtensions.cs" Link="Scheduling\ProcessingStateRpcEndpointExtensions.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingStateStore.cs" Link="Scheduling\ProcessingStateStore.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceDataCollectionErrorCode.cs" Link="Scheduling\RaceDataCollectionErrorCode.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceDataCollectionKeyFactory.cs" Link="Scheduling\RaceDataCollectionKeyFactory.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceDataCollectionState.cs" Link="Scheduling\RaceDataCollectionState.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceDataCollectionStatusEntity.cs" Link="Scheduling\RaceDataCollectionStatusEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceDataCollectionStatusReadModel.cs" Link="Scheduling\RaceDataCollectionStatusReadModel.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\RaceResultAcquisitionOrigin.cs" Link="Scheduling\RaceResultAcquisitionOrigin.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayCollectionState.cs" Link="Scheduling\ResultDayCollectionState.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayCollectionStatusEntity.cs" Link="Scheduling\ResultDayCollectionStatusEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayCollectionStatusKeyFactory.cs" Link="Scheduling\ResultDayCollectionStatusKeyFactory.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayCollectionStatusReadModel.cs" Link="Scheduling\ResultDayCollectionStatusReadModel.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayDiscoveryRequestPayload.cs" Link="Scheduling\ResultDayDiscoveryRequestPayload.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ResultDayRequeueMode.cs" Link="Scheduling\ResultDayRequeueMode.cs" />
+  </ItemGroup>
+</Project>

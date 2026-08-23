@@ -7,11 +7,14 @@ using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
+using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -24,6 +27,9 @@ internal static class TestApplicationFactory
     {
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseTestServer();
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole();
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 
         builder.Services.Configure<ApiKeyOptions>(opts =>
         {
@@ -50,6 +56,14 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<HorseRaceHistoryLocator>();
         builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
         builder.Services.AddRacePredictor();
+        builder.Services.Configure<AgentProcessingOptions>(options =>
+        {
+            options.StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-api-tests", Guid.NewGuid().ToString("N"));
+            options.JobStoreFileName = "collection-tasks.db";
+            options.UseApiStateStore = false;
+        });
+        builder.Services.AddSingleton<ProcessingStateStore>();
+        builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 
         builder.Services.AddEventFlow(options =>
         {
@@ -79,6 +93,8 @@ internal static class TestApplicationFactory
         app.UseAntiforgery();
         app.MapApiEndpoints();
         app.MapAdminEndpoints();
+        app.MapProcessingStateRpcEndpoint();
+        app.MapAgentDashboardEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

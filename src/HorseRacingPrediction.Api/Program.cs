@@ -7,6 +7,7 @@ using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -93,6 +94,10 @@ builder.Services.AddSingleton<MemoBySubjectLocator>();
 builder.Services.AddSingleton<HorseRaceHistoryLocator>();
 builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
 builder.Services.AddRacePredictor();
+builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
+builder.Services.AddSingleton<ProcessingStateStore>();
+builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
+builder.Services.AddSingleton<CollectionExecutionTrigger>();
 
 builder.Services.AddEventFlow(options =>
 {
@@ -130,6 +135,10 @@ app.UseAntiforgery();
 
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
+app.MapAgentDashboardEndpoints();
+app.MapAgentCollectionStatusEndpoints();
+app.MapAgentAcquisitionStatusEndpoints();
+app.MapProcessingStateRpcEndpoint();
 
 app.Run();
 

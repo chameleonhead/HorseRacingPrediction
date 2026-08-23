@@ -9,13 +9,13 @@ public sealed class HistoricalDataRequestPlanner
     private static readonly string JraProviderType = "JRA";
 
     private readonly IRaceQueryService _raceQueryService;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly IHistoricalRaceReferenceCollector _historicalRaceReferenceCollector;
     private readonly ILogger<HistoricalDataRequestPlanner> _logger;
 
     public HistoricalDataRequestPlanner(
         IRaceQueryService raceQueryService,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         IHistoricalRaceReferenceCollector historicalRaceReferenceCollector,
         ILogger<HistoricalDataRequestPlanner> logger)
     {

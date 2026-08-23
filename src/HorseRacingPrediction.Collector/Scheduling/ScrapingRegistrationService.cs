@@ -17,14 +17,14 @@ public sealed class ScrapingRegistrationService : BackgroundService
 
     private readonly AgentProcessingOptions _options;
     private readonly JraRaceScheduleCollectionWorkflow _scheduleCollectionWorkflow;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILogger<ScrapingRegistrationService> _logger;
 
     public ScrapingRegistrationService(
         IOptions<AgentProcessingOptions> options,
         JraRaceScheduleCollectionWorkflow scheduleCollectionWorkflow,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         CollectionExecutionTrigger executionTrigger,
         ILogger<ScrapingRegistrationService> logger)
     {
@@ -72,7 +72,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         }
     }
 
-    private async Task RunOneCycleAsync(CancellationToken cancellationToken)
+    public async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
         var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
         var today = DateOnly.FromDateTime(now.Date);

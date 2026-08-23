@@ -13,7 +13,7 @@ public static class AgentAcquisitionStatusEndpointExtensions
                 DateOnly to,
                 AgentAcquisitionSubjectType? subjectType,
                 RaceDataCollectionState? status,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CancellationToken cancellationToken) =>
             {
                 if (from > to)

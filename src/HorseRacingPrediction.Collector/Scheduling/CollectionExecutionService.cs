@@ -27,7 +27,7 @@ public sealed class CollectionExecutionService : BackgroundService
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly IWebBrowserSessionFactory _browserSessionFactory;
     private readonly DataCollectionWriteTools _writeTools;
     private readonly IRaceQueryService _raceQueryService;
@@ -39,7 +39,7 @@ public sealed class CollectionExecutionService : BackgroundService
 
     public CollectionExecutionService(
         IOptions<AgentProcessingOptions> options,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         IWebBrowserSessionFactory browserSessionFactory,
         DataCollectionWriteTools writeTools,
         IRaceQueryService raceQueryService,
@@ -112,7 +112,7 @@ public sealed class CollectionExecutionService : BackgroundService
         }
     }
 
-    private async Task RunOneCycleAsync(CancellationToken cancellationToken)
+    public async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
 

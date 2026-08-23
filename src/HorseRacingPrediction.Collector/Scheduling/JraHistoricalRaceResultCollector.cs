@@ -8,12 +8,12 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
 {
     private readonly IJraRaceResultLookup _raceResultLookup;
     private readonly DataCollectionWriteTools _writeTools;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
 
     public JraHistoricalRaceResultCollector(
         IJraRaceResultLookup raceResultLookup,
         DataCollectionWriteTools writeTools,
-        ProcessingStateStore stateStore)
+        IProcessingStateStore stateStore)
     {
         _raceResultLookup = raceResultLookup;
         _writeTools = writeTools;

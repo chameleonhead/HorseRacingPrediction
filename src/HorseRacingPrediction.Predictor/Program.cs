@@ -21,6 +21,7 @@ builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 
 builder.Services.AddSingleton<ProcessingStateStore>();
+builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<ApiOnlyPredictionWorkflow>();
 

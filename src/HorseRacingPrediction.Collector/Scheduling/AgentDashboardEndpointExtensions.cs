@@ -12,7 +12,7 @@ public static class AgentDashboardEndpointExtensions
                 string? jobType,
                 AgentJobStatus? status,
                 int? limit,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CancellationToken cancellationToken) =>
             {
                 var items = await stateStore
@@ -23,7 +23,7 @@ public static class AgentDashboardEndpointExtensions
 
         endpoints.MapGet(
             "/agent/jobs/{jobId}",
-            async (string jobId, ProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+            async (string jobId, IProcessingStateStore stateStore, CancellationToken cancellationToken) =>
             {
                 var detail = await stateStore.GetJobDetailAsync(jobId, cancellationToken).ConfigureAwait(false);
                 return detail is null ? Results.NotFound() : Results.Ok(detail);
@@ -31,7 +31,7 @@ public static class AgentDashboardEndpointExtensions
 
         endpoints.MapGet(
             "/agent/result-day-statuses",
-            async (DateOnly from, DateOnly to, ProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+            async (DateOnly from, DateOnly to, IProcessingStateStore stateStore, CancellationToken cancellationToken) =>
             {
                 if (from > to)
                 {
@@ -50,7 +50,7 @@ public static class AgentDashboardEndpointExtensions
             async (
                 string jobType,
                 string deduplicationKey,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
@@ -71,7 +71,7 @@ public static class AgentDashboardEndpointExtensions
                 string providerType,
                 DateOnly targetDate,
                 ResultDayRequeueMode? mode,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
@@ -128,7 +128,7 @@ public static class AgentDashboardEndpointExtensions
             async (
                 DateOnly targetDate,
                 string? providerType,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {

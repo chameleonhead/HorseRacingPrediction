@@ -1,0 +1,68 @@
+@page "/collection-tasks"
+@inject IProcessingStateStore Store
+
+<h1>収集タスク・状態</h1>
+
+<div class="toolbar">
+    <label>JobType <input @bind="jobType" /></label>
+    <label>
+        Status
+        <select @bind="status">
+            <option value="">すべて</option>
+            @foreach (var value in Enum.GetValues<AgentJobStatus>())
+            {
+                <option value="@value">@value</option>
+            }
+        </select>
+    </label>
+    <button class="btn primary" @onclick="LoadAsync">再読み込み</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <p>@message</p>
+}
+
+<table class="data">
+    <thead>
+        <tr><th>種類</th><th>キー</th><th>状態</th><th>試行</th><th>開始</th><th>更新</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var task in tasks)
+        {
+            <tr>
+                <td>@task.JobType</td>
+                <td>@task.DeduplicationKey</td>
+                <td>@task.Status</td>
+                <td>@task.AttemptCount</td>
+                <td>@Format(task.StartedAt)</td>
+                <td>@Format(task.UpdatedAt)</td>
+                <td><button class="btn" @onclick="() => RequeueAsync(task)">再投入</button></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private IReadOnlyList<AgentJobStatusReadModel> tasks = [];
+    private string? jobType;
+    private string? status;
+    private string? message;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        AgentJobStatus? parsed = Enum.TryParse<AgentJobStatus>(status, out var value) ? value : null;
+        tasks = await Store.GetJobStatusesAsync(string.IsNullOrWhiteSpace(jobType) ? null : jobType, parsed, 200);
+    }
+
+    private async Task RequeueAsync(AgentJobStatusReadModel task)
+    {
+        var changed = await Store.ForceRequeueJobAsync(task.JobType, task.DeduplicationKey, DateTimeOffset.UtcNow);
+        message = changed ? "再投入しました。" : "対象タスクを更新できませんでした。";
+        await LoadAsync();
+    }
+
+    private static string Format(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+}

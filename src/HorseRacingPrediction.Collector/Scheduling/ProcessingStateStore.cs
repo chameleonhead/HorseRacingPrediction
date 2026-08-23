@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
-public sealed class ProcessingStateStore
+public sealed class ProcessingStateStore : IProcessingStateStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly DbContextOptions<ProcessingStateDbContext> _dbContextOptions;
@@ -248,7 +248,7 @@ public sealed class ProcessingStateStore
         }
     }
 
-    public async Task<IReadOnlyList<(string DeduplicationKey, string Payload)>> AcquireReadyJobsAsync(
+    public async Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(
         string jobType,
         DateTimeOffset now,
         TimeSpan minAge,
@@ -306,7 +306,7 @@ public sealed class ProcessingStateStore
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return readyJobs
-                .Select(x => (x.DeduplicationKey, x.Payload))
+                .Select(x => new AcquiredProcessingJob(x.DeduplicationKey, x.Payload))
                 .ToList();
         }
         finally

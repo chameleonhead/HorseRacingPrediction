@@ -11,7 +11,7 @@ public sealed class PredictionExecutionService : BackgroundService
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly HistoricalDataRequestTracker _historicalDataRequestTracker;
     private readonly ApiOnlyPredictionWorkflow _predictionWorkflow;
     private readonly PostGenerationExecutionStep _postGenerationStep;
@@ -19,7 +19,7 @@ public sealed class PredictionExecutionService : BackgroundService
 
     public PredictionExecutionService(
         IOptions<AgentProcessingOptions> options,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         HistoricalDataRequestTracker historicalDataRequestTracker,
         ApiOnlyPredictionWorkflow predictionWorkflow,
         PostGenerationExecutionStep postGenerationStep,
