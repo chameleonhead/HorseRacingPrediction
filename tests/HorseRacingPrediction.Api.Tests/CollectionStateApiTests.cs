@@ -24,4 +24,18 @@ public sealed class CollectionStateApiTests
         Assert.AreEqual("test-key", acquired[0].DeduplicationKey);
         Assert.AreEqual("{\"value\":1}", acquired[0].Payload);
     }
+
+    [TestMethod]
+    public async Task WorkerProxy_ReturnsNull_WhenApiOwnedStoreHasNoStatus()
+    {
+        var (app, _) = await TestApplicationFactory.CreateAsync();
+        await using var appScope = app;
+        using var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var proxy = HttpProcessingStateStoreProxy.Create(client);
+
+        var status = await proxy.GetResultDayCollectionStatusAsync("JRA", new DateOnly(2099, 1, 1));
+
+        Assert.IsNull(status);
+    }
 }

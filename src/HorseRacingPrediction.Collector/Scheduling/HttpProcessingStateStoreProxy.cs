@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
 
@@ -48,6 +49,9 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
     {
         using var response = await _client.PostAsJsonAsync($"api/internal/collection/state/{method}", request, JsonOptions, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
+        if (response.StatusCode == HttpStatusCode.NoContent || response.Content.Headers.ContentLength == 0)
+            return default!;
+
         return (await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false))!;
     }
 }
