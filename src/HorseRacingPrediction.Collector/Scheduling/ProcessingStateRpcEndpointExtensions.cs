@@ -11,7 +11,8 @@ public static class ProcessingStateRpcEndpointExtensions
 
     public static IEndpointRouteBuilder MapProcessingStateRpcEndpoint(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/internal/collection/state/{method}", InvokeAsync);
+        app.MapPost("/api/internal/collection/state/{method}", InvokeAsync)
+            .ExcludeFromDescription();
         return app;
     }
 

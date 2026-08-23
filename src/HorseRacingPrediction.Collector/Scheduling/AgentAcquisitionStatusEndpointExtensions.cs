@@ -7,7 +7,7 @@ public static class AgentAcquisitionStatusEndpointExtensions
     public static IEndpointRouteBuilder MapAgentAcquisitionStatusEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(
-            "/agent/acquisition-statuses",
+            "/api/collection/acquisitions",
             async (
                 DateOnly from,
                 DateOnly to,
@@ -28,7 +28,10 @@ public static class AgentAcquisitionStatusEndpointExtensions
                     .GetAgentAcquisitionStatusesAsync(from, to, subjectType, status, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Ok(items);
-            });
+            })
+            .WithName("GetCollectionAcquisitions")
+            .WithTags("Collection Tasks API")
+            .WithSummary("Get collection acquisition statuses");
 
         return endpoints;
     }
