@@ -352,31 +352,16 @@ public static class EndpointExtensions
                         request.RaceDate,
                         request.RacecourseCode,
                         request.RaceNumber,
-                        request.RaceName);
+                        request.RaceName,
+                        gradeCode: request.GradeCode,
+                        surfaceCode: request.SurfaceCode,
+                        distanceMeters: request.DistanceMeters,
+                        directionCode: request.DirectionCode);
 
                     var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                    if (!result.IsSuccess)
-                        return Results.BadRequest(new[] { "Command execution failed." });
-
-                    if (!string.IsNullOrWhiteSpace(request.GradeCode)
-                        || !string.IsNullOrWhiteSpace(request.SurfaceCode)
-                        || request.DistanceMeters.HasValue
-                        || !string.IsNullOrWhiteSpace(request.DirectionCode))
-                    {
-                        var metadataResult = await commandBus.PublishAsync(
-                            new CorrectRaceDataCommand(
-                                raceId,
-                                gradeCode: request.GradeCode,
-                                surfaceCode: request.SurfaceCode,
-                                distanceMeters: request.DistanceMeters,
-                                directionCode: request.DirectionCode,
-                                reason: "Provided when race was created"),
-                            cancellationToken).ConfigureAwait(false);
-                        if (!metadataResult.IsSuccess)
-                            return Results.BadRequest(new[] { "Race metadata registration failed." });
-                    }
-
-                    return Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value });
+                    return result.IsSuccess
+                        ? Results.Created($"/api/races/{raceId.Value}", new { RaceId = raceId.Value })
+                        : Results.BadRequest(new[] { "Command execution failed." });
                 }
                 catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Race is already created.", StringComparison.Ordinal))
                 {
@@ -1087,7 +1072,8 @@ public static class EndpointExtensions
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
-                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
+                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)),
+                        ResolveOwnerName(ownerNamesByHorseId, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
 
                 var winningHorseId = resultReadModel?.WinningHorseId;
                 if (string.IsNullOrWhiteSpace(winningHorseId))
@@ -2040,7 +2026,7 @@ public static class EndpointExtensions
             SurfaceCode = model.SurfaceCode,
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
-            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode)).ToList(),
+            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName)).ToList(),
             WeatherObservations = model.WeatherObservations.Select(x => new ApiContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new ApiContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
@@ -2070,7 +2056,7 @@ public static class EndpointExtensions
             entry.RunningStyleCode,
             ownerName);
 
-    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
+    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName, string? ownerName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2087,7 +2073,7 @@ public static class EndpointExtensions
             null,
             null,
             null,
-            null);
+            ownerName);
 
     private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)
