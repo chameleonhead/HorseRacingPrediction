@@ -88,11 +88,9 @@ app.MapRazorComponents<App>()
 
 if (runOnce)
 {
-    await app.StartAsync();
     using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(13));
     await app.Services.GetRequiredService<CollectionRunCoordinator>()
         .RunOnceAsync(CollectionRunMode.All, deadline.Token);
-    await app.StopAsync();
 }
 else
 {
