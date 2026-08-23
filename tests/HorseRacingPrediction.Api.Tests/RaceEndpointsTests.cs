@@ -75,6 +75,57 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task CreateRace_WithCollectedMetadata_PersistsMetadata()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var request = new CreateRaceRequest(
+            new DateOnly(2026, 8, 9), "札幌", 4, "3歳未勝利", raceId,
+            GradeCode: "未勝利",
+            SurfaceCode: "ダート",
+            DistanceMeters: 1700,
+            DirectionCode: "右");
+
+        var createResponse = await _client.PostAsJsonAsync("/api/races", request, JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.IsNotNull(race);
+        Assert.AreEqual("未勝利", race.GradeCode);
+        Assert.AreEqual("ダート", race.SurfaceCode);
+        Assert.AreEqual(1700, race.DistanceMeters);
+        Assert.AreEqual("右", race.DirectionCode);
+    }
+
+    [TestMethod]
+    public async Task GetRace_UsesHorseProfileOwner_WhenEntryOwnerIsMissing()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        var horseId = $"horse-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync(
+            "/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 8, 9), "札幌", 4, "3歳未勝利", raceId),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest("テストホース", "テストホース", "M", null, horseId, "テスト馬主"),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/card/publish",
+            new PublishRaceCardRequest(1),
+            JsonOptions);
+        await _client.PostAsJsonAsync(
+            $"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(horseId, 1, null, null, null, null, null, null, null, null),
+            JsonOptions);
+
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+
+        Assert.IsNotNull(race);
+        Assert.AreEqual(1, race.Entries.Count);
+        Assert.AreEqual("テスト馬主", race.Entries[0].OwnerName);
+    }
+
+    [TestMethod]
     public async Task SearchRaces_FiltersSortsAndPages()
     {
         var key = Guid.NewGuid().ToString("N");
