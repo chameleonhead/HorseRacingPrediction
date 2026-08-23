@@ -136,7 +136,6 @@ app.UseAntiforgery();
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
 app.MapAgentDashboardEndpoints();
-app.MapAgentCollectionStatusEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
 
