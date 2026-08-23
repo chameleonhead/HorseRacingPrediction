@@ -120,8 +120,10 @@ JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` な�
 
 ## 今後の課題（未着手・要検討）
 
+Lambda 対応と、タスク状態・管理画面を Api 側へ移す具体案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+
 以下は旧ドキュメントで検討していたが、現時点では未着手または方針未確定の項目。着手する場合は本ドキュメントを更新すること。
 
-- ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行するかどうか
+- ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行する（段階的移行案を上記文書で検討済み）
 - 地方競馬など JRA 以外のデータソースを Provider として追加する場合の抽象化
 - Collector が所有する `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装を、将来的に専用共有ライブラリへ分離するかどうか

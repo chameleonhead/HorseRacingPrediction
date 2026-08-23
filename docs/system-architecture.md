@@ -7,6 +7,8 @@
 
 Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor 側の詳細は [predictor-design.md](predictor-design.md) を参照。API・ドメインモデルは [domain-design.md](domain-design.md) を参照。
 
+Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+
 ## 方針転換の背景
 
 | # | 当初の前提 | 現在の前提 | 理由 |
