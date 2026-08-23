@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+if [ -z "${AWS_LAMBDA_RUNTIME_API:-}" ]; then
+  exec dotnet /var/task/HorseRacingPrediction.Collector.dll --once
+fi
+
+while true; do
+  headers_file="/tmp/lambda-headers"
+  event_file="/tmp/lambda-event.json"
+  curl -sS -D "$headers_file" -o "$event_file" \
+    "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/next"
+  request_id="$(sed -n 's/^[Ll]ambda-[Rr]untime-[Aa]ws-[Rr]equest-[Ii]d:[[:space:]]*\(.*\)\r$/\1/p' "$headers_file")"
+
+  if dotnet /var/task/HorseRacingPrediction.Collector.dll --once; then
+    curl -sS -X POST \
+      "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/${request_id}/response" \
+      -H 'Content-Type: application/json' -d '{"status":"completed"}' >/dev/null
+  else
+    curl -sS -X POST \
+      "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/${request_id}/error" \
+      -H 'Content-Type: application/json' -d '{"errorMessage":"Collector execution failed"}' >/dev/null
+  fi
+done

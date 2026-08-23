@@ -3,11 +3,16 @@ WORKDIR /src
 
 COPY HorseRacingPrediction.sln ./
 COPY src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj src/HorseRacingPrediction.Api/
+COPY src/HorseRacingPrediction.ApiClient/HorseRacingPrediction.ApiClient.csproj src/HorseRacingPrediction.ApiClient/
 COPY src/HorseRacingPrediction.Agents/HorseRacingPrediction.Agents.csproj src/HorseRacingPrediction.Agents/
 COPY src/HorseRacingPrediction.Application/HorseRacingPrediction.Application.csproj src/HorseRacingPrediction.Application/
 COPY src/HorseRacingPrediction.Domain/HorseRacingPrediction.Domain.csproj src/HorseRacingPrediction.Domain/
 COPY src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj src/HorseRacingPrediction.Infrastructure/
 COPY src/HorseRacingPrediction.MachineLearning/HorseRacingPrediction.MachineLearning.csproj src/HorseRacingPrediction.MachineLearning/
+COPY src/HorseRacingPrediction.Collector/HorseRacingPrediction.Collector.csproj src/HorseRacingPrediction.Collector/
+COPY src/HorseRacingPrediction.CollectionOperations/HorseRacingPrediction.CollectionOperations.csproj src/HorseRacingPrediction.CollectionOperations/
+COPY src/HorseRacingPrediction.Contracts/HorseRacingPrediction.Contracts.csproj src/HorseRacingPrediction.Contracts/
+COPY src/HorseRacingPrediction.Scraping/HorseRacingPrediction.Scraping.csproj src/HorseRacingPrediction.Scraping/
 RUN dotnet restore src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj
 
 COPY . .

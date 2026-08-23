@@ -9,14 +9,17 @@ on:
       - tests/**
       - .config/**
       - Dockerfile
+      - Dockerfile.collector-lambda
       - .dockerignore
       - deploy/**
+      - infra/collector-lambda/**
       - .github/workflows/app-deploy.yml
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: horse-racing-prediction-production-deploy
@@ -157,7 +160,13 @@ jobs:
               cp "$APP_DIRECTORY/data/eventstore.db" \
                 "$APP_DIRECTORY/data/backups/eventstore-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
             fi
+            if [ -f "$APP_DIRECTORY/data/collection-tasks.db" ]; then
+              cp "$APP_DIRECTORY/data/collection-tasks.db" \
+                "$APP_DIRECTORY/data/backups/collection-tasks-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
+            fi
             find "$APP_DIRECTORY/data/backups" -type f -name 'eventstore-predeploy-*.db' \
+              -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
+            find "$APP_DIRECTORY/data/backups" -type f -name 'collection-tasks-predeploy-*.db' \
               -printf '%T@ %p\n' | sort -nr | tail -n +8 | cut -d' ' -f2- | xargs -r rm --
             docker compose --env-file .env up -d --force-recreate --remove-orphans
             docker image prune -f
@@ -179,3 +188,70 @@ jobs:
           done
           echo "API did not become healthy after deploy" >&2
           exit 1
+
+  deploy-collector-lambda:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: infra/collector-lambda
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-collector-lambda
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - id: api-url
+        name: Resolve API base URL
+        shell: bash
+        env:
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+          echo "value=https://${domain}" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize collector infrastructure
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ secrets.TF_STATE_KEY }}-collector-lambda" \
+            -backend-config="region=${{ secrets.TF_STATE_REGION }}"
+
+      - name: Ensure ECR repository exists
+        run: |
+          terraform apply -input=false -auto-approve \
+            -target=aws_ecr_repository.collector \
+            -target=aws_ecr_lifecycle_policy.collector \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="api_base_url=${{ steps.api-url.outputs.value }}"
+
+      - id: ecr
+        name: Resolve ECR repository
+        run: echo "repository=$(terraform output -raw repository_url)" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push collector image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.collector-lambda
+          push: true
+          tags: ${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}
+
+      - name: Apply collector Lambda infrastructure
+        run: |
+          terraform apply -input=false -auto-approve \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="api_base_url=${{ steps.api-url.outputs.value }}" \
+            -var="api_key=${{ secrets.LIGHTSAIL_API_KEY }}" \
+            -var="image_uri=${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}"

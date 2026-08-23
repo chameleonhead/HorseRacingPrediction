@@ -10,6 +10,9 @@ on:
       - "*.json"
       - .config/**
       - .github/workflows/app-ci.yml
+      - Dockerfile.collector-lambda
+      - deploy/lambda-bootstrap
+      - infra/collector-lambda/**
   push:
     branches:
       - main
