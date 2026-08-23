@@ -80,6 +80,31 @@ public sealed class ScrapingRegistrationService : BackgroundService
         var workMode = AgentWorkMode.Idle;
         var queuedJobs = false;
 
+        // 成績収集の計画はJRA予定ページの応答に依存しないため、外部アクセスより先に登録する。
+        // 予定収集が遅延・タイムアウトしても、独立したタスクの実行をブロックしない。
+        if (_options.EnableRaceResultCollection)
+        {
+            var planningPayload = new ResultBackfillPlanningRequestPayload(
+                JraProviderType,
+                Math.Max(1, _options.InitialResultBackfillYears));
+            await _stateStore.EnqueueJobAsync(
+                AgentJobType.ResultBackfillPlanningRequest,
+                AgentJobKeyFactory.BuildResultBackfillPlanningRequestKey(JraProviderType),
+                AgentJobPayloadSerializer.Serialize(planningPayload),
+                now,
+                priority: 40,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            queuedJobs = true;
+
+            var currentMonth = new DateOnly(today.Year, today.Month, 1);
+            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(currentMonth, now, cancellationToken).ConfigureAwait(false);
+
+            var previousMonth = currentMonth.AddMonths(-1);
+            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(previousMonth, now, cancellationToken).ConfigureAwait(false);
+
+            _executionTrigger.Signal();
+        }
+
         if (_options.EnableScheduleCollection)
         {
             _logger.LogInformation("[収集登録] 予定収集開始: ReferenceDate={Date} LookaheadDays={LookaheadDays}",
@@ -125,27 +150,6 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 queuedJobs = true;
                 _logger.LogInformation("[収集登録] 出馬表収集ジョブを登録しました。Date={Date}", date);
             }
-        }
-
-        if (_options.EnableRaceResultCollection)
-        {
-            var planningPayload = new ResultBackfillPlanningRequestPayload(
-                JraProviderType,
-                Math.Max(1, _options.InitialResultBackfillYears));
-            await _stateStore.EnqueueJobAsync(
-                AgentJobType.ResultBackfillPlanningRequest,
-                AgentJobKeyFactory.BuildResultBackfillPlanningRequestKey(JraProviderType),
-                AgentJobPayloadSerializer.Serialize(planningPayload),
-                now,
-                priority: 40,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            queuedJobs = true;
-
-            var currentMonth = new DateOnly(today.Year, today.Month, 1);
-            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(currentMonth, now, cancellationToken).ConfigureAwait(false);
-
-            var previousMonth = currentMonth.AddMonths(-1);
-            queuedJobs |= await ScheduleResultMonthDiscoveryAsync(previousMonth, now, cancellationToken).ConfigureAwait(false);
         }
 
         if (queuedJobs)
