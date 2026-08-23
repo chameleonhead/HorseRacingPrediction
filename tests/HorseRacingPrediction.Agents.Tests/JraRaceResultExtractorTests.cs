@@ -64,6 +64,31 @@ public sealed class JraRaceResultExtractorTests
         Assert.AreEqual(4, result.Entries[0].GateNumber);
     }
 
+    [TestMethod]
+    public async Task ExtractAsync_PrefersSelectedRaceHeading_WhenNavigationContainsOtherRacecourses()
+    {
+        var snapshot = new PageSnapshot(
+            "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1001202601060420260809/AF",
+            "レース結果 JRA",
+            [
+                new PageSectionSnapshot(
+                    title: "レース結果 2026年8月9日（日曜）1回札幌6日 4レース",
+                    mainText: "2回新潟6日 2回中京6日 1回札幌6日 3歳未勝利 コース：1,700メートル（ダート・右）",
+                    headings: ["レース結果 2026年8月9日（日曜）1回札幌6日 4レース", "3歳未勝利"],
+                    links: [],
+                    actions: [],
+                    tables: [])
+            ]);
+
+        var result = await new JraRaceResultExtractor().ExtractAsync(new FakeWebBrowser(snapshot)) as JraRaceResultSummary;
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("札幌", result.Racecourse);
+        Assert.AreEqual("未勝利", result.GradeCode);
+        Assert.AreEqual("ダート", result.SurfaceCode);
+        Assert.AreEqual(1700, result.DistanceMeters);
+    }
+
     private sealed class FakeWebBrowser : IWebBrowser
     {
         private readonly PageSnapshot _snapshot;
