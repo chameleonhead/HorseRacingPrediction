@@ -13,4 +13,6 @@ public sealed record JraJsonExtractionResponse(
     int LinkCount,
     object? Data,
     PageSnapshot? Snapshot,
-    string? Error = null);
+    string? Error = null,
+    string? StructureFingerprint = null,
+    IReadOnlyList<string>? ValidationIssues = null);

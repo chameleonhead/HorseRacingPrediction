@@ -2,6 +2,8 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Playwright;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HorseRacingPrediction.Collector.JraTesting;
 
@@ -52,7 +54,9 @@ public sealed class JraJsonExtractionService
             LinkCount: snapshot.Links.Count,
             Data: ToJsonFriendlyData(extraction.Data),
             Snapshot: includeSnapshot ? snapshot : null,
-            Error: extraction.Error);
+            Error: extraction.Error,
+            StructureFingerprint: BuildStructureFingerprint(pageKind, snapshot),
+            ValidationIssues: BuildValidationIssues(pageKind, extraction.Data));
     }
 
     private async Task<IWebBrowser> CreateBrowserAsync(bool headless, CancellationToken cancellationToken)
@@ -124,6 +128,42 @@ public sealed class JraJsonExtractionService
             },
             _ => data,
         };
+
+    private static string BuildStructureFingerprint(JraPageKind pageKind, PageSnapshot snapshot)
+    {
+        var structure = string.Join("\n",
+            new[] { pageKind.ToString(), $"tables:{snapshot.Tables.Count}" }
+                .Concat(snapshot.Tables.Select((table, index) =>
+                    $"{index}:{string.Join('|', table.Headers.Select(NormalizeStructureText))}")));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(structure))).ToLowerInvariant();
+    }
+
+    private static string NormalizeStructureText(string value)
+        => string.Concat(value.Where(character => !char.IsWhiteSpace(character)));
+
+    private static IReadOnlyList<string> BuildValidationIssues(JraPageKind pageKind, object? data)
+    {
+        var issues = new List<string>();
+        if (pageKind == JraPageKind.Result && data is JraRaceResultSummary result)
+        {
+            if (string.IsNullOrWhiteSpace(result.GradeCode)) issues.Add("gradeCode is missing");
+            if (string.IsNullOrWhiteSpace(result.SurfaceCode)) issues.Add("surfaceCode is missing");
+            if (result.DistanceMeters is null or <= 0) issues.Add("distanceMeters is missing");
+            if (result.Entries.Count == 0) issues.Add("result entries are missing");
+        }
+
+        if (pageKind == JraPageKind.RaceCard && data is JraRaceCardData raceCard)
+        {
+            if (string.IsNullOrWhiteSpace(raceCard.Grade)) issues.Add("grade is missing");
+            if (string.IsNullOrWhiteSpace(raceCard.CourseType)) issues.Add("courseType is missing");
+            if (raceCard.Distance is null or <= 0) issues.Add("distance is missing");
+            if (raceCard.Entries.Count == 0) issues.Add("race-card entries are missing");
+            else if (raceCard.Entries.All(entry => string.IsNullOrWhiteSpace(entry.OwnerName)))
+                issues.Add("owner names are missing from all race-card entries");
+        }
+
+        return issues;
+    }
 
     private static async Task<ExtractionOutcome> ExtractCoreAsync(
         IWebBrowser browser,
