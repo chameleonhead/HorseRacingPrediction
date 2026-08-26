@@ -1,5 +1,42 @@
 # Collector の Lambda 対応アーキテクチャ案
 
+> 2026-08-26 方針確定: ジョブコントローラーは Api が所有する。SQS は配送通知に限定し、タスク本文・状態・依存関係・リース・再試行の正本は Api のタスクストアとする。Collector は計画・ポーリング・一括取得を行わず、通知で指定された単一タスクを実行する Worker とする。
+
+## 確定する制御境界
+
+### Api（Job Controller）
+
+- 定期計画を起動し、実行すべきタスクと依存関係を確定する
+- タスク作成と同一トランザクションで dispatch outbox を記録する
+- outbox dispatcher が SQS へ `taskId` 通知を送信する
+- SQS の重複配送を前提に、lease token 付きで単一タスクを取得させる
+- 完了・失敗・再試行結果を受け、必要な子タスクを作成する
+- 管理画面からの再投入も同じ outbox 経路へ流す
+
+### SQS
+
+- タスク本文を正本として保持しない
+- `{ taskId, jobType, deduplicationKey }` の配送通知だけを持つ
+- visibility timeout と DLQ により Lambda 呼び出し失敗を吸収する
+- Standard Queue の少なくとも1回配送を前提とし、重複排除は Api が担う
+
+### Collector Worker
+
+- SQS イベントからタスク識別子を受け取る
+- Api から対象タスクを lease token 付きで取得する
+- 1 invocation で1タスクだけ実行する
+- 実行結果を Api へ返し、自身では次のタスクを選択・計画しない
+- ローカル実行時も Api が返す1件の通知を同じ Worker へ渡す
+
+### 整合性規則
+
+1. タスクと outbox は同じ SQLite トランザクションで保存する。
+2. SQS 送信成功後に outbox を dispatched にする。送信後の更新失敗は重複通知として許容する。
+3. Worker の acquire は `Ready -> Running` の条件更新で lease token を発行する。
+4. 完了・再投入は同じ lease token を要求し、期限切れ Worker の遅延更新を拒否する。
+5. Lambda の残り時間が安全猶予未満ならタスクを開始しない。
+6. Lambda lease は timeout より短くし、SQS visibility timeout は Lambda timeout より長くする。
+
 ## 結論
 
 Collector を次の 3 つの責務に分ける。
