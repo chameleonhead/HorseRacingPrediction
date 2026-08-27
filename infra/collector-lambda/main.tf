@@ -2,6 +2,8 @@ locals {
   function_enabled = var.image_uri != ""
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_ecr_repository" "collector" {
   name                 = "horse-racing-prediction-collector"
   image_tag_mutability = "IMMUTABLE"
@@ -23,6 +25,29 @@ resource "aws_ecr_lifecycle_policy" "collector" {
         countNumber = 20
       }
       action = { type = "expire" }
+    }]
+  })
+}
+
+resource "aws_ecr_repository_policy" "collector_lambda" {
+  repository = aws_ecr_repository.collector.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "LambdaECRImageRetrievalPolicy"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+      Action = [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ]
+      Condition = {
+        StringLike = {
+          "aws:sourceArn" = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:horse-racing-prediction-collector"
+        }
+      }
     }]
   })
 }
@@ -114,6 +139,12 @@ resource "aws_lambda_function" "collector" {
   timeout                        = 900
   memory_size                    = 2048
   reserved_concurrent_executions = 1
+
+  depends_on = [
+    aws_ecr_repository_policy.collector_lambda,
+    aws_iam_role_policy_attachment.logs,
+    aws_iam_role_policy.collector_queue_consumer
+  ]
 
   ephemeral_storage { size = 2048 }
 
