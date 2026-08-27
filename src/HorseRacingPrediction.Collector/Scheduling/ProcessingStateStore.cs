@@ -470,6 +470,80 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<PendingJobFailureNotification>> GetPendingJobFailureNotificationsAsync(
+        DateTimeOffset now,
+        int maxCount,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var candidates = await dbContext.JobFailureNotifications
+                .Where(x => x.PublishedAt == null)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            return candidates
+                .Where(x => x.AvailableAt <= now)
+                .OrderBy(x => x.AvailableAt)
+                .ThenBy(x => x.CreatedAt)
+                .Take(Math.Max(1, maxCount))
+                .Select(x => new PendingJobFailureNotification(
+                    x.NotificationId,
+                    x.JobId,
+                    x.JobType,
+                    x.DeduplicationKey,
+                    x.Status,
+                    x.Error,
+                    x.AttemptCount,
+                    x.FailedAt,
+                    x.PublishAttemptCount))
+                .ToList();
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkJobFailureNotificationPublishedAsync(
+        string notificationId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var notification = await dbContext.JobFailureNotifications
+                .FindAsync([notificationId], cancellationToken).ConfigureAwait(false);
+            if (notification is null) return;
+            notification.PublishedAt = now;
+            notification.LastPublishError = null;
+            notification.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkJobFailureNotificationPublishFailedAsync(
+        string notificationId,
+        DateTimeOffset now,
+        string error,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var notification = await dbContext.JobFailureNotifications
+                .FindAsync([notificationId], cancellationToken).ConfigureAwait(false);
+            if (notification is null) return;
+            notification.PublishAttemptCount += 1;
+            notification.LastPublishError = error;
+            notification.AvailableAt = now.AddMinutes(Math.Min(30, Math.Max(1, notification.PublishAttemptCount)));
+            notification.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task RequeueJobAsync(
         string jobType,
         string deduplicationKey,
@@ -1118,6 +1192,27 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             "CREATE INDEX IF NOT EXISTS ix_collection_dispatch_outbox_pending ON collection_dispatch_outbox(dispatched_at, available_at);");
         dbContext.Database.ExecuteSqlRaw(
             """
+            CREATE TABLE IF NOT EXISTS job_failure_notification_outbox (
+                notification_id TEXT NOT NULL PRIMARY KEY,
+                job_id TEXT NOT NULL,
+                job_type TEXT NOT NULL,
+                deduplication_key TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error TEXT NULL,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                failed_at TEXT NOT NULL,
+                available_at TEXT NOT NULL,
+                publish_attempt_count INTEGER NOT NULL DEFAULT 0,
+                published_at TEXT NULL,
+                last_publish_error TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """);
+        dbContext.Database.ExecuteSqlRaw(
+            "CREATE INDEX IF NOT EXISTS ix_job_failure_notification_outbox_pending ON job_failure_notification_outbox(published_at, available_at);");
+        dbContext.Database.ExecuteSqlRaw(
+            """
             CREATE TABLE IF NOT EXISTS race_data_collection_statuses (
                 race_key TEXT NOT NULL PRIMARY KEY,
                 race_date TEXT NOT NULL,
@@ -1288,6 +1383,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 return;
             }
 
+            var previousStatus = job.Status;
             job.Status = status;
             if (availableAt.HasValue)
             {
@@ -1297,7 +1393,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.LeaseExpiresAt = null;
             job.LeaseToken = null;
             job.LastError = error;
-            job.UpdatedAt = DateTimeOffset.UtcNow;
+            var now = DateTimeOffset.UtcNow;
+            job.UpdatedAt = now;
+            QueueFailureNotification(dbContext, job, previousStatus, status, error, now);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -1365,6 +1463,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             if (job is null) return false;
 
             var now = DateTimeOffset.UtcNow;
+            var previousStatus = job.Status;
             job.Status = status;
             job.LeaseToken = null;
             job.LeaseExpiresAt = null;
@@ -1376,6 +1475,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 job.AttemptCount += 1;
                 QueueDispatch(dbContext, job, availableAt.Value);
             }
+            QueueFailureNotification(dbContext, job, previousStatus, status, error, now);
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
@@ -1395,6 +1495,32 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             AvailableAt = availableAt,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private static void QueueFailureNotification(
+        ProcessingStateDbContext dbContext,
+        ProcessingJobEntity job,
+        AgentJobStatus previousStatus,
+        AgentJobStatus status,
+        string? error,
+        DateTimeOffset now)
+    {
+        if (previousStatus == status || status is not (AgentJobStatus.Failed or AgentJobStatus.DeadLetter)) return;
+
+        dbContext.JobFailureNotifications.Add(new JobFailureNotificationEntity
+        {
+            NotificationId = Guid.NewGuid().ToString("N"),
+            JobId = job.JobId,
+            JobType = job.JobType,
+            DeduplicationKey = job.DeduplicationKey,
+            Status = status.ToString(),
+            Error = error,
+            AttemptCount = job.AttemptCount,
+            FailedAt = now,
+            AvailableAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
         });
     }
 

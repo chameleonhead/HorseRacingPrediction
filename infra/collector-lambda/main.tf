@@ -85,6 +85,64 @@ resource "aws_sqs_queue" "collector" {
   })
 }
 
+resource "aws_sns_topic" "collector_alerts" {
+  name = "horse-racing-prediction-collector-alerts"
+}
+
+resource "aws_sns_topic_subscription" "collector_alert_email" {
+  count     = trimspace(var.alert_email) != "" ? 1 : 0
+  topic_arn = aws_sns_topic.collector_alerts.arn
+  protocol  = "email"
+  endpoint  = trimspace(var.alert_email)
+}
+
+resource "aws_cloudwatch_metric_alarm" "collector_lambda_errors" {
+  count               = local.function_enabled ? 1 : 0
+  alarm_name          = "horse-racing-prediction-collector-lambda-errors"
+  alarm_description   = "Collector Lambda returned an error."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.collector[0].function_name }
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.collector_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "collector_dlq_messages" {
+  alarm_name          = "horse-racing-prediction-collector-dlq-messages"
+  alarm_description   = "Collector messages reached the SQS dead-letter queue."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  dimensions          = { QueueName = aws_sqs_queue.collector_dlq.name }
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.collector_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "collector_oldest_message" {
+  alarm_name          = "horse-racing-prediction-collector-oldest-message"
+  alarm_description   = "Collector queue has a visible message older than 20 minutes."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  dimensions          = { QueueName = aws_sqs_queue.collector.name }
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
+  threshold           = 1200
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.collector_alerts.arn]
+}
+
 resource "aws_iam_role_policy" "collector_queue_consumer" {
   role = aws_iam_role.collector.id
   policy = jsonencode({
@@ -106,11 +164,18 @@ resource "aws_iam_policy" "api_queue_sender" {
   name = "horse-racing-prediction-api-collection-queue-sender"
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
-      Resource = aws_sqs_queue.collector.arn
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
+        Resource = aws_sqs_queue.collector.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = aws_sns_topic.collector_alerts.arn
+      }
+    ]
   })
 }
 

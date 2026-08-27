@@ -14,6 +14,10 @@ output "queue_arn" {
   value = aws_sqs_queue.collector.arn
 }
 
+output "collector_alert_topic_arn" {
+  value = aws_sns_topic.collector_alerts.arn
+}
+
 output "api_queue_sender_policy_arn" {
   value = aws_iam_policy.api_queue_sender.arn
 }

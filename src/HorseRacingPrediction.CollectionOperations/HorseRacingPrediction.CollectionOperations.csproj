@@ -31,6 +31,8 @@
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\CollectionTaskDispatch.cs" Link="Scheduling\CollectionTaskDispatch.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\IProcessingStateStore.cs" Link="Scheduling\IProcessingStateStore.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\HttpProcessingStateStoreProxy.cs" Link="Scheduling\HttpProcessingStateStoreProxy.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\JobFailureNotificationEntity.cs" Link="Scheduling\JobFailureNotificationEntity.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\PendingJobFailureNotification.cs" Link="Scheduling\PendingJobFailureNotification.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingJobEntity.cs" Link="Scheduling\ProcessingJobEntity.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingMarkerEntity.cs" Link="Scheduling\ProcessingMarkerEntity.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ProcessingStateDbContext.cs" Link="Scheduling\ProcessingStateDbContext.cs" />

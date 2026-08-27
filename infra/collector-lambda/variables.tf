@@ -20,3 +20,9 @@ variable "api_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "alert_email" {
+  type        = string
+  description = "Email address subscribed to collection failure alerts. Empty disables the email subscription."
+  default     = ""
+}

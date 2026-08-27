@@ -5,6 +5,8 @@ using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.CollectionController;
 using Amazon.SQS;
+using Amazon.SimpleNotificationService;
+using HorseRacingPrediction.Api.Notifications;
 using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
@@ -117,6 +119,14 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     });
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
     builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+}
+var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
+builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotificationSection);
+if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOptions.Enabled)))
+{
+    builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
+    builder.Services.AddSingleton<IJobFailureNotificationPublisher, SnsJobFailureNotificationPublisher>();
+    builder.Services.AddHostedService<JobFailureNotificationDispatcher>();
 }
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
 

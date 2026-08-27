@@ -15,6 +15,8 @@ public sealed class ProcessingStateDbContext : DbContext
 
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
 
+    public DbSet<JobFailureNotificationEntity> JobFailureNotifications => Set<JobFailureNotificationEntity>();
+
     public DbSet<RaceDataCollectionStatusEntity> RaceDataCollectionStatuses => Set<RaceDataCollectionStatusEntity>();
 
     public DbSet<AgentAcquisitionStatusEntity> AgentAcquisitionStatuses => Set<AgentAcquisitionStatusEntity>();
@@ -64,6 +66,27 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
             entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
+        });
+
+        modelBuilder.Entity<JobFailureNotificationEntity>(entity =>
+        {
+            entity.ToTable("job_failure_notification_outbox");
+            entity.HasKey(x => x.NotificationId);
+            entity.Property(x => x.NotificationId).HasColumnName("notification_id");
+            entity.Property(x => x.JobId).HasColumnName("job_id");
+            entity.Property(x => x.JobType).HasColumnName("job_type");
+            entity.Property(x => x.DeduplicationKey).HasColumnName("deduplication_key");
+            entity.Property(x => x.Status).HasColumnName("status");
+            entity.Property(x => x.Error).HasColumnName("error");
+            entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
+            entity.Property(x => x.FailedAt).HasColumnName("failed_at");
+            entity.Property(x => x.AvailableAt).HasColumnName("available_at");
+            entity.Property(x => x.PublishAttemptCount).HasColumnName("publish_attempt_count");
+            entity.Property(x => x.PublishedAt).HasColumnName("published_at");
+            entity.Property(x => x.LastPublishError).HasColumnName("last_publish_error");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(x => new { x.PublishedAt, x.AvailableAt });
         });
 
         modelBuilder.Entity<ProcessingMarkerEntity>(entity =>

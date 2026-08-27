@@ -259,6 +259,59 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task FailJobAsync_CreatesSingleFailureNotificationForStateTransition()
+    {
+        var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "failed-job", "{}", now);
+
+        await sut.FailJobAsync("RaceCardCollection", "failed-job", "browser failed");
+        await sut.FailJobAsync("RaceCardCollection", "failed-job", "browser failed again");
+
+        var notifications = await sut.GetPendingJobFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
+        Assert.HasCount(1, notifications);
+        Assert.AreEqual("RaceCardCollection", notifications[0].JobType);
+        Assert.AreEqual("failed-job", notifications[0].DeduplicationKey);
+        Assert.AreEqual("browser failed", notifications[0].Error);
+        Assert.AreEqual(nameof(AgentJobStatus.Failed), notifications[0].Status);
+    }
+
+    [TestMethod]
+    public async Task FailedJob_NotifiesAgainAfterManualRequeueAndSecondFailure()
+    {
+        var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "retry-job", "{}", now);
+        await sut.FailJobAsync("RaceCardCollection", "retry-job", "first failure");
+        var first = await sut.GetPendingJobFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
+        await sut.MarkJobFailureNotificationPublishedAsync(first[0].NotificationId, DateTimeOffset.UtcNow);
+
+        Assert.IsTrue(await sut.ForceRequeueJobAsync("RaceCardCollection", "retry-job", now.AddMinutes(1)));
+        await sut.FailJobAsync("RaceCardCollection", "retry-job", "second failure");
+
+        var second = await sut.GetPendingJobFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
+        Assert.HasCount(1, second);
+        Assert.AreEqual("second failure", second[0].Error);
+        Assert.AreNotEqual(first[0].NotificationId, second[0].NotificationId);
+    }
+
+    [TestMethod]
+    public async Task FailCollectionTaskAsync_CreatesFailureNotificationWithLeaseProtectedUpdate()
+    {
+        var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "leased-failure", "{}", now);
+        var task = await sut.AcquireCollectionTaskAsync("RaceCardCollection", "leased-failure", now, TimeSpan.FromMinutes(10));
+        Assert.IsNotNull(task);
+
+        Assert.IsTrue(await sut.FailCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken, "leased error"));
+
+        var notifications = await sut.GetPendingJobFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
+        Assert.HasCount(1, notifications);
+        Assert.AreEqual("leased error", notifications[0].Error);
+    }
+
+    [TestMethod]
     public async Task Constructor_AddsLeaseTokenColumnToExistingJobStore()
     {
         var databasePath = Path.Combine(_stateDirectory, "processing-jobs.db");

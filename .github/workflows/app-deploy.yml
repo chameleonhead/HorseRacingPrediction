@@ -160,8 +160,13 @@ jobs:
             fi
             COLLECTION_QUEUE_AWS_ACCESS_KEY_ID="$(sed -n 's/^AWS_ACCESS_KEY_ID=//p' "$APP_DIRECTORY/.env" | tail -n 1)"
             COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY="$(sed -n 's/^AWS_SECRET_ACCESS_KEY=//p' "$APP_DIRECTORY/.env" | tail -n 1)"
+            JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN="$(sed -n 's/^JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN=//p' "$APP_DIRECTORY/.env" | tail -n 1)"
             if [ -z "$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID" ] || [ -z "$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY" ]; then
               echo "Collector queue credentials are empty." >&2
+              exit 1
+            fi
+            if [ -z "$JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN" ]; then
+              echo "Collector alert topic ARN is empty." >&2
               exit 1
             fi
             # Must re-export: docker compose's ${DOMAIN_NAME} substitution prefers the shell
@@ -176,6 +181,8 @@ jobs:
             ACME_EMAIL=$ACME_EMAIL
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
             COLLECTION_QUEUE_ENABLED=$COLLECTION_QUEUE_ENABLED
+            JOB_FAILURE_NOTIFICATIONS_ENABLED=true
+            JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN=$JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN
             AWS_REGION=$AWS_REGION
             AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
@@ -298,21 +305,26 @@ jobs:
             -var="aws_region=${{ secrets.AWS_REGION }}" \
             -var="api_base_url=${{ steps.api-url.outputs.value }}" \
             -var="api_key=${{ secrets.LIGHTSAIL_API_KEY }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
             -var="image_uri=${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}"
 
       - name: Load Lightsail API queue credentials
         run: |
           access_key_id="$(terraform output -raw lightsail_api_access_key_id)"
           secret_access_key="$(terraform output -raw lightsail_api_secret_access_key)"
+          alert_topic_arn="$(terraform output -raw collector_alert_topic_arn)"
           echo "::add-mask::$access_key_id"
           echo "::add-mask::$secret_access_key"
-          echo "COLLECTION_QUEUE_AWS_ACCESS_KEY_ID=$access_key_id" >> "$GITHUB_ENV"
-          echo "COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY=$secret_access_key" >> "$GITHUB_ENV"
+          {
+            echo "COLLECTION_QUEUE_AWS_ACCESS_KEY_ID=$access_key_id"
+            echo "COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY=$secret_access_key"
+            echo "JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN=$alert_topic_arn"
+          } >> "$GITHUB_ENV"
 
       - name: Wait for SSH availability
         shell: bash
         run: |
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if timeout 5 bash -c "echo > /dev/tcp/${{ secrets.LIGHTSAIL_HOST }}/22" 2>/dev/null; then
               exit 0
             fi
@@ -328,18 +340,21 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           COLLECTION_QUEUE_AWS_ACCESS_KEY_ID: ${{ env.COLLECTION_QUEUE_AWS_ACCESS_KEY_ID }}
           COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY: ${{ env.COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY }}
+          JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN: ${{ env.JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: APP_DIRECTORY,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
+          envs: APP_DIRECTORY,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY,JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN
           script: |
             mkdir -p "$APP_DIRECTORY"
             env_file="$APP_DIRECTORY/.env"
             touch "$env_file"
-            sed -i '/^COLLECTION_QUEUE_ENABLED=/d;/^AWS_REGION=/d;/^AWS_ACCESS_KEY_ID=/d;/^AWS_SECRET_ACCESS_KEY=/d' "$env_file"
+            sed -i '/^COLLECTION_QUEUE_ENABLED=/d;/^JOB_FAILURE_NOTIFICATIONS_ENABLED=/d;/^JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN=/d;/^AWS_REGION=/d;/^AWS_ACCESS_KEY_ID=/d;/^AWS_SECRET_ACCESS_KEY=/d' "$env_file"
             {
               echo "COLLECTION_QUEUE_ENABLED=true"
+              echo "JOB_FAILURE_NOTIFICATIONS_ENABLED=true"
+              echo "JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN=$JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN"
               echo "AWS_REGION=$AWS_REGION"
               echo "AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID"
               echo "AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY"

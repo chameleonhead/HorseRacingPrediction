@@ -250,7 +250,12 @@ gh secret set LIGHTSAIL_ACME_EMAIL --body "$LIGHTSAIL_ACME_EMAIL"
 
 ```bash
 gh secret set LIGHTSAIL_API_KEY --body "$(openssl rand -base64 32)"
+gh secret set ALERT_EMAIL --body "your-alert-address@example.com"
 ```
+
+`ALERT_EMAIL` を設定すると、Collector ジョブ失敗、Lambda エラー、SQS DLQ 到達、キュー滞留を通知する
+Amazon SNS のメール購読が作成されます。初回デプロイ後に AWS Notifications から届く確認メールの
+`Confirm subscription` を実行するまで通知は配信されません。
 
 GHCR は public イメージ前提なので、`GHCR_USERNAME` と `GHCR_PAT` は不要です。
 
@@ -361,6 +366,7 @@ curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/rac
 - `LIGHTSAIL_DOMAIN_NAME` (独自ドメインを使う場合のみ。IP は設定しない)
 - `LIGHTSAIL_ACME_EMAIL` (独自ドメインを使う場合のみ)
 - `LIGHTSAIL_API_KEY`
+- `ALERT_EMAIL` (Collector 障害通知先。未設定の場合は SNS トピックのみ作成)
 
 ## 運用メモ
 
