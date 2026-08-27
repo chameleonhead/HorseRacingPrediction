@@ -658,6 +658,21 @@ public sealed class CollectionExecutionService : BackgroundService
         return urls.Select(JraRacecourseResolver.Normalize).ToList();
     }
 
+    public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return jobType switch
+        {
+            AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
+            AgentJobType.ResultMonthDiscoveryRequest => ExecuteResultMonthDiscoveryJobsAsync(now, cancellationToken),
+            AgentJobType.ResultDayDiscoveryRequest => ExecuteResultDayDiscoveryJobsAsync(now, cancellationToken),
+            AgentJobType.ResultDayCollectionRequest => ExecuteResultDayCollectionJobsAsync(now, cancellationToken),
+            AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
+            AgentJobType.ResultBackfillPlanningRequest => ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported collection job type: {jobType}")
+        };
+    }
+
     private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(
         DateOnly raceDate,
         CancellationToken cancellationToken)

@@ -152,6 +152,19 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
         }
     }
 
+    public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return jobType switch
+        {
+            AgentJobType.HistoricalRaceResultCollectionRequest => ExecuteHistoricalRaceResultRequestsAsync(now, cancellationToken),
+            AgentJobType.HorseHistoryCollectionRequest => ExecuteHorseHistoryRequestsAsync(now, cancellationToken),
+            AgentJobType.JockeyHistoryCollectionRequest => ExecuteJockeyHistoryRequestsAsync(now, cancellationToken),
+            AgentJobType.TrainerProfileCollectionRequest => ExecuteTrainerProfileRequestsAsync(now, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported historical job type: {jobType}")
+        };
+    }
+
     private async Task ExecuteTrainerProfileRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         var jobs = await _stateStore.AcquireReadyJobsAsync(

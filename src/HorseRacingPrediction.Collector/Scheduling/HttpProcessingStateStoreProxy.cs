@@ -8,6 +8,7 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 public class HttpProcessingStateStoreProxy : DispatchProxy
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly AsyncLocal<TaskScope?> CurrentTask = new();
     private HttpClient _client = null!;
 
     public static IProcessingStateStore Create(HttpClient client)
@@ -17,10 +18,47 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
         return proxy;
     }
 
+    public static IDisposable BeginTaskScope(LeasedCollectionTask task)
+    {
+        if (CurrentTask.Value is not null)
+            throw new InvalidOperationException("A collection task scope is already active.");
+        CurrentTask.Value = new TaskScope(task);
+        return new ScopeHandle();
+    }
+
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
         ArgumentNullException.ThrowIfNull(targetMethod);
         args ??= [];
+
+        var scope = CurrentTask.Value;
+        if (scope is not null
+            && targetMethod.Name == nameof(IProcessingStateStore.AcquireReadyJobsAsync)
+            && string.Equals(args[0] as string, scope.Task.JobType, StringComparison.Ordinal))
+        {
+            if (scope.Consumed)
+                return Task.FromResult<IReadOnlyList<AcquiredProcessingJob>>([]);
+            scope.Consumed = true;
+            return Task.FromResult<IReadOnlyList<AcquiredProcessingJob>>(
+                [new AcquiredProcessingJob(scope.Task.DeduplicationKey, scope.Task.Payload)]);
+        }
+
+        if (scope is not null
+            && targetMethod.Name == nameof(IProcessingStateStore.CompleteJobAsync)
+            && MatchesScope(scope, args))
+        {
+            return InvokeScopedCompleteAsync(scope.Task, args.OfType<CancellationToken>().LastOrDefault());
+        }
+
+        if (scope is not null
+            && targetMethod.Name == nameof(IProcessingStateStore.RequeueJobAsync)
+            && MatchesScope(scope, args))
+        {
+            var now = (DateTimeOffset)args[2]!;
+            var error = args[3] as string;
+            var availableAt = args.Length > 5 && args[5] is DateTimeOffset explicitAvailableAt ? explicitAvailableAt : now;
+            return InvokeScopedRequeueAsync(scope.Task, availableAt, error, args.OfType<CancellationToken>().LastOrDefault());
+        }
 
         var cancellationToken = args.OfType<CancellationToken>().LastOrDefault();
         var arguments = args
@@ -39,6 +77,30 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
             .Invoke(this, [targetMethod.Name, request, cancellationToken]);
     }
 
+    private static bool MatchesScope(TaskScope scope, object?[] args)
+        => string.Equals(args[0] as string, scope.Task.JobType, StringComparison.Ordinal)
+            && string.Equals(args[1] as string, scope.Task.DeduplicationKey, StringComparison.Ordinal);
+
+    private Task<bool> InvokeScopedCompleteAsync(LeasedCollectionTask task, CancellationToken cancellationToken)
+        => InvokeDirectAsync<bool>(
+            nameof(IProcessingStateStore.CompleteCollectionTaskAsync),
+            [task.JobType, task.DeduplicationKey, task.LeaseToken],
+            cancellationToken);
+
+    private Task<bool> InvokeScopedRequeueAsync(LeasedCollectionTask task, DateTimeOffset availableAt, string? error, CancellationToken cancellationToken)
+        => InvokeDirectAsync<bool>(
+            nameof(IProcessingStateStore.RequeueCollectionTaskAsync),
+            [task.JobType, task.DeduplicationKey, task.LeaseToken, availableAt, error],
+            cancellationToken);
+
+    private Task<T> InvokeDirectAsync<T>(string method, object?[] arguments, CancellationToken cancellationToken)
+    {
+        var serialized = arguments
+            .Select(value => JsonSerializer.SerializeToElement(value, value?.GetType() ?? typeof(object), JsonOptions))
+            .ToArray();
+        return InvokeResultAsync<T>(method, new ProcessingStateRpcRequest(method, serialized), cancellationToken);
+    }
+
     private async Task InvokeVoidAsync(string method, ProcessingStateRpcRequest request, CancellationToken cancellationToken)
     {
         using var response = await _client.PostAsJsonAsync($"api/internal/collection/state/{method}", request, JsonOptions, cancellationToken).ConfigureAwait(false);
@@ -53,5 +115,16 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
             return default!;
 
         return (await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    private sealed class TaskScope(LeasedCollectionTask task)
+    {
+        public LeasedCollectionTask Task { get; } = task;
+        public bool Consumed { get; set; }
+    }
+
+    private sealed class ScopeHandle : IDisposable
+    {
+        public void Dispose() => CurrentTask.Value = null;
     }
 }

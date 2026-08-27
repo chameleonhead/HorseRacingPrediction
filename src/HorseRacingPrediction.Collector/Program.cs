@@ -55,11 +55,10 @@ builder.Services.AddSingleton<ScrapingRegistrationService>();
 builder.Services.AddSingleton<CollectionExecutionService>();
 builder.Services.AddSingleton<HistoricalDataRequestExecutionService>();
 builder.Services.AddSingleton<CollectionRunCoordinator>();
+builder.Services.AddSingleton<CollectionTaskWorker>();
 if (!runOnce)
 {
-    builder.Services.AddHostedService(services => services.GetRequiredService<ScrapingRegistrationService>());
-    builder.Services.AddHostedService(services => services.GetRequiredService<CollectionExecutionService>());
-    builder.Services.AddHostedService(services => services.GetRequiredService<HistoricalDataRequestExecutionService>());
+    builder.Services.AddHostedService<LocalCollectionTaskWorkerService>();
 }
 
 // -------------------------------------------------------------------
@@ -88,9 +87,13 @@ app.MapRazorComponents<App>()
 
 if (runOnce)
 {
-    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(13));
-    await app.Services.GetRequiredService<CollectionRunCoordinator>()
-        .RunOnceAsync(CollectionRunMode.All, deadline.Token);
+    var notification = CollectionTaskWorker.ReadLambdaNotification(
+        Environment.GetEnvironmentVariable("COLLECTOR_EVENT_PATH"));
+    if (notification is null)
+        throw new InvalidOperationException("A collection task notification is required for --once execution.");
+
+    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+    await app.Services.GetRequiredService<CollectionTaskWorker>().RunAsync(notification, deadline.Token);
 }
 else
 {

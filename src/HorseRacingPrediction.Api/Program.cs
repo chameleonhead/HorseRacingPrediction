@@ -104,6 +104,7 @@ builder.Services.Configure<CollectionQueueOptions>(builder.Configuration.GetSect
 builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
 builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
 builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>
 {
