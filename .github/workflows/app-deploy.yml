@@ -105,7 +105,7 @@ jobs:
             ${{ steps.image.outputs.image_name }}:latest
 
   deploy:
-    needs: build-and-push
+    needs: [build-and-push, deploy-collector-lambda]
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -144,7 +144,7 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           ACME_EMAIL: ${{ secrets.LIGHTSAIL_ACME_EMAIL }}
           HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
-          COLLECTION_QUEUE_ENABLED: "false"
+          COLLECTION_QUEUE_ENABLED: "true"
           AWS_REGION: ${{ secrets.AWS_REGION }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
@@ -154,6 +154,16 @@ jobs:
           script: |
             mkdir -p "$APP_DIRECTORY/data"
             mkdir -p "$APP_DIRECTORY/data/backups"
+            if [ ! -f "$APP_DIRECTORY/.env" ]; then
+              echo "Collector infrastructure credentials are missing." >&2
+              exit 1
+            fi
+            COLLECTION_QUEUE_AWS_ACCESS_KEY_ID="$(sed -n 's/^AWS_ACCESS_KEY_ID=//p' "$APP_DIRECTORY/.env" | tail -n 1)"
+            COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY="$(sed -n 's/^AWS_SECRET_ACCESS_KEY=//p' "$APP_DIRECTORY/.env" | tail -n 1)"
+            if [ -z "$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID" ] || [ -z "$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY" ]; then
+              echo "Collector queue credentials are empty." >&2
+              exit 1
+            fi
             # Must re-export: docker compose's ${DOMAIN_NAME} substitution prefers the shell
             # environment over --env-file, and DOMAIN_NAME above is still the (possibly empty)
             # raw secret value, not the sslip.io fallback computed below.
@@ -167,7 +177,10 @@ jobs:
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
             COLLECTION_QUEUE_ENABLED=$COLLECTION_QUEUE_ENABLED
             AWS_REGION=$AWS_REGION
+            AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
             EOF
+            chmod 600 "$APP_DIRECTORY/.env"
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
             docker compose --env-file .env stop api || true
@@ -205,7 +218,7 @@ jobs:
           exit 1
 
   deploy-collector-lambda:
-    needs: deploy
+    needs: build-and-push
     runs-on: ubuntu-latest
     environment: production
     defaults:
@@ -280,7 +293,19 @@ jobs:
           echo "COLLECTION_QUEUE_AWS_ACCESS_KEY_ID=$access_key_id" >> "$GITHUB_ENV"
           echo "COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY=$secret_access_key" >> "$GITHUB_ENV"
 
-      - name: Enable API collection queue
+      - name: Wait for SSH availability
+        shell: bash
+        run: |
+          for i in $(seq 1 30); do
+            if timeout 5 bash -c "echo > /dev/tcp/${{ secrets.LIGHTSAIL_HOST }}/22" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for SSH port 22" >&2
+          exit 1
+
+      - name: Install API collection queue credentials
         uses: appleboy/ssh-action@v1.0.3
         env:
           APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
@@ -293,7 +318,9 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
           envs: APP_DIRECTORY,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
           script: |
+            mkdir -p "$APP_DIRECTORY"
             env_file="$APP_DIRECTORY/.env"
+            touch "$env_file"
             sed -i '/^COLLECTION_QUEUE_ENABLED=/d;/^AWS_REGION=/d;/^AWS_ACCESS_KEY_ID=/d;/^AWS_SECRET_ACCESS_KEY=/d' "$env_file"
             {
               echo "COLLECTION_QUEUE_ENABLED=true"
@@ -302,5 +329,3 @@ jobs:
               echo "AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY"
             } >> "$env_file"
             chmod 600 "$env_file"
-            cd "$APP_DIRECTORY"
-            docker compose --env-file .env up -d --force-recreate api

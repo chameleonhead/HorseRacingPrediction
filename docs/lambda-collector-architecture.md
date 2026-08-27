@@ -226,6 +226,10 @@ GitHub Actions が Lightsail の `.env` へ直接設定する。GitHub Secrets �
 Api コンテナには `COLLECTION_QUEUE_ENABLED=true`、`AWS_REGION`、標準 AWS 資格情報環境変数が
 渡される。Lambda 側は実行ロールで SQS を受信し、静的資格情報を持たない。
 
+デプロイは Collector 用 Terraform（IAM/SQS/Lambda）を先に適用し、資格情報を Lightsail に
+配置できた場合だけ Api コンテナを更新する。Terraform や OIDC 権限に問題がある場合は既存 Api を
+変更せずに停止するため、収集キューが無効な新バージョンだけが残る状態にはしない。
+
 ## Moto によるローカル SQS 検証
 
 `moto_server` を `http://127.0.0.1:5000` で起動し、Api に次を設定すると、本番と同じ
