@@ -226,6 +226,20 @@ GitHub Actions が Lightsail の `.env` へ直接設定する。GitHub Secrets �
 Api コンテナには `COLLECTION_QUEUE_ENABLED=true`、`AWS_REGION`、標準 AWS 資格情報環境変数が
 渡される。Lambda 側は実行ロールで SQS を受信し、静的資格情報を持たない。
 
+## Moto によるローカル SQS 検証
+
+`moto_server` を `http://127.0.0.1:5000` で起動し、Api に次を設定すると、本番と同じ
+outbox dispatcher をローカル SQS へ接続できる。
+
+- `CollectionQueue__Enabled=true`
+- `CollectionQueue__ServiceUrl=http://127.0.0.1:5000`
+- `CollectionQueue__QueueName=horse-racing-prediction-collector`
+- `AWS_ACCESS_KEY_ID=testing`
+- `AWS_SECRET_ACCESS_KEY=testing`
+- `AWS_REGION=ap-northeast-1`
+
+`ServiceUrl` はローカル検証専用で、本番では空欄のままAWS標準エンドポイントを使用する。
+
 ## 受け入れ条件
 
 - Api停止中でも Worker がローカル SQLite へ勝手にフォールバックせず、安全に失敗する

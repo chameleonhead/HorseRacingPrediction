@@ -104,7 +104,17 @@ var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOpt
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
 if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
 {
-    builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+    builder.Services.AddSingleton<IAmazonSQS>(_ =>
+    {
+        var serviceUrl = collectionQueueSection[nameof(CollectionQueueOptions.ServiceUrl)];
+        if (string.IsNullOrWhiteSpace(serviceUrl)) return new AmazonSQSClient();
+
+        return new AmazonSQSClient(new AmazonSQSConfig
+        {
+            ServiceURL = serviceUrl,
+            AuthenticationRegion = builder.Configuration["AWS_REGION"] ?? "ap-northeast-1"
+        });
+    });
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
     builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
 }
