@@ -100,10 +100,14 @@ builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSect
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
-builder.Services.Configure<CollectionQueueOptions>(builder.Configuration.GetSection(CollectionQueueOptions.SectionName));
-builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
-builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
-builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
+builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
+if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
+{
+    builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+    builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
+    builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+}
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>
