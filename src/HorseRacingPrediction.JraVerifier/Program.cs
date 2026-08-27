@@ -33,6 +33,10 @@ var raceCardUrl = optionMap.TryGetValue("race-card-url", out var directRaceCardU
     && !string.IsNullOrWhiteSpace(directRaceCardUrl)
     ? directRaceCardUrl.Trim()
     : null;
+var resultUrl = optionMap.TryGetValue("result-url", out var directResultUrl)
+    && !string.IsNullOrWhiteSpace(directResultUrl)
+    ? directResultUrl.Trim()
+    : null;
 
 var resultDates = BuildResultDates(optionMap);
 
@@ -310,7 +314,12 @@ async Task VerifyResultDayAsync(DateOnly raceDate, TimeSpan timeout)
     var workflow = new JraRaceResultCollectionWorkflow(browser, new JraRaceResultScraper(browser), writeTools);
     using var cts = new CancellationTokenSource(timeout);
     IReadOnlyList<JraRaceResultUrl> discovered;
-    try
+    if (!string.IsNullOrWhiteSpace(resultUrl))
+    {
+        discovered = [JraRaceResultUrl.ParseFromUrl(resultUrl)];
+        Console.WriteLine("  mode=direct-url");
+    }
+    else try
     {
         discovered = await workflow.DiscoverUrlsAsync(raceDate, cts.Token);
     }

@@ -98,7 +98,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             return Task.FromResult($"entry-{raceId}-{horseNumber}");
         }
 
-        public Task<string> UpsertRaceEntryWithOwnerAsync(
+        public Task<string> UpsertRaceEntryAsync(
             string raceId,
             int horseNumber,
             string horseName,

@@ -403,12 +403,12 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? declaredWeight,
         decimal? declaredWeightDiff,
         CancellationToken cancellationToken = default)
-        => await UpsertRaceEntryWithOwnerAsync(
+        => await UpsertRaceEntryAsync(
             raceId, horseNumber, horseName, jockeyName, trainerName,
             gateNumber, assignedWeight, sexCode, age, declaredWeight,
             declaredWeightDiff, ownerName: null, cancellationToken).ConfigureAwait(false);
 
-    public async Task<string> UpsertRaceEntryWithOwnerAsync(
+    public async Task<string> UpsertRaceEntryAsync(
         string raceId,
         int horseNumber,
         string horseName,

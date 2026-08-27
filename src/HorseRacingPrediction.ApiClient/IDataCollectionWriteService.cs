@@ -68,7 +68,7 @@ public interface IDataCollectionWriteService
         decimal? declaredWeightDiff,
         CancellationToken cancellationToken = default);
 
-    Task<string> UpsertRaceEntryWithOwnerAsync(
+    Task<string> UpsertRaceEntryAsync(
         string raceId,
         int horseNumber,
         string horseName,
