@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="HorseRacingPrediction.Api.Tests" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.100.4" />
     <PackageReference Include="EventFlow" Version="1.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />

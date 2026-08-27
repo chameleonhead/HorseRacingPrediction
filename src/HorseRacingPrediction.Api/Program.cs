@@ -3,6 +3,8 @@ using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.CollectionController;
+using Amazon.SQS;
 using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
@@ -98,6 +100,10 @@ builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSect
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
+builder.Services.Configure<CollectionQueueOptions>(builder.Configuration.GetSection(CollectionQueueOptions.SectionName));
+builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
+builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
+builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
 
 builder.Services.AddEventFlow(options =>
 {
