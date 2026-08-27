@@ -274,6 +274,9 @@ jobs:
           context: .
           file: ./Dockerfile.collector-lambda
           push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
           tags: ${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}
 
       - name: Apply collector Lambda infrastructure
