@@ -10,7 +10,7 @@ public sealed class RegisterEntryCommandHandler : CommandHandler<RaceAggregate, 
         aggregate.RegisterEntry(command.EntryId, command.HorseId, command.HorseNumber,
             command.JockeyId, command.TrainerId, command.GateNumber, command.AssignedWeight,
             command.SexCode, command.Age, command.DeclaredWeight, command.DeclaredWeightDiff,
-            command.RunningStyleCode);
+            command.RunningStyleCode, command.OwnerName);
         return Task.CompletedTask;
     }
 }

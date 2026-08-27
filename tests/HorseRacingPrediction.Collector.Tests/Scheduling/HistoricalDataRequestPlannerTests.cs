@@ -132,6 +132,133 @@ public sealed class HistoricalDataRequestPlannerTests
         Assert.HasCount(1, activeHorsePayloads);
     }
 
+    [TestMethod]
+    public async Task EnsureRequestsForRaceAsync_WhenHistoryExistsButProfilesAreIncomplete_SchedulesProfileRequests()
+    {
+        var raceQueryService = new StubRaceQueryService
+        {
+            RaceContext = CreateSingleEntryContext(),
+            Horse = new HorseReadModel
+            {
+                HorseId = "horse-1",
+                RegisteredName = "テストホース",
+                NormalizedName = "テストホース",
+                SexCode = "M"
+            },
+            HorseHistory = new HorseRaceHistoryReadModel
+            {
+                HorseId = "horse-1",
+                Entries = [CreateHorseHistoryEntry()]
+            },
+            Jockey = new JockeyReadModel
+            {
+                JockeyId = "jockey-1",
+                DisplayName = "テスト騎手",
+                NormalizedName = "テスト騎手"
+            },
+            JockeyHistory = new JockeyRaceHistoryReadModel
+            {
+                JockeyId = "jockey-1",
+                Entries = [CreateJockeyHistoryEntry()]
+            },
+            Trainer = new TrainerReadModel
+            {
+                TrainerId = "trainer-1",
+                DisplayName = "テスト調教師",
+                NormalizedName = "テスト調教師"
+            }
+        };
+
+        var store = CreateStore();
+        var planner = new HistoricalDataRequestPlanner(
+            raceQueryService,
+            store,
+            new StubHistoricalRaceReferenceCollector(),
+            NullLogger<HistoricalDataRequestPlanner>.Instance);
+
+        var plan = await planner.EnsureRequestsForRaceAsync(
+            "race-1",
+            new DateTimeOffset(2026, 5, 16, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.AreEqual(1, plan.RequestedHorseHistoryCount);
+        Assert.AreEqual(1, plan.RequestedJockeyHistoryCount);
+        Assert.AreEqual(1, plan.RequestedTrainerProfileCount);
+    }
+
+    [TestMethod]
+    public async Task EnsureRequestsForRaceAsync_WhenProfilesAndHistoryAreComplete_DoesNotScheduleEntityRequests()
+    {
+        var raceQueryService = new StubRaceQueryService
+        {
+            RaceContext = CreateSingleEntryContext(),
+            Horse = new HorseReadModel
+            {
+                HorseId = "horse-1",
+                RegisteredName = "テストホース",
+                NormalizedName = "テストホース",
+                SexCode = "M",
+                BirthDate = new DateOnly(2020, 3, 1),
+                OwnerName = "テスト馬主"
+            },
+            HorseHistory = new HorseRaceHistoryReadModel
+            {
+                HorseId = "horse-1",
+                Entries = [CreateHorseHistoryEntry()]
+            },
+            Jockey = new JockeyReadModel
+            {
+                JockeyId = "jockey-1",
+                DisplayName = "テスト騎手",
+                NormalizedName = "テスト騎手",
+                AffiliationCode = "美浦"
+            },
+            JockeyHistory = new JockeyRaceHistoryReadModel
+            {
+                JockeyId = "jockey-1",
+                Entries = [CreateJockeyHistoryEntry()]
+            },
+            Trainer = new TrainerReadModel
+            {
+                TrainerId = "trainer-1",
+                DisplayName = "テスト調教師",
+                NormalizedName = "テスト調教師",
+                AffiliationCode = "栗東"
+            }
+        };
+
+        var planner = new HistoricalDataRequestPlanner(
+            raceQueryService,
+            CreateStore(),
+            new StubHistoricalRaceReferenceCollector(),
+            NullLogger<HistoricalDataRequestPlanner>.Instance);
+
+        var plan = await planner.EnsureRequestsForRaceAsync(
+            "race-1",
+            new DateTimeOffset(2026, 5, 16, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.AreEqual(0, plan.RequestedHorseHistoryCount);
+        Assert.AreEqual(0, plan.RequestedJockeyHistoryCount);
+        Assert.AreEqual(0, plan.RequestedTrainerProfileCount);
+    }
+
+    private static RacePredictionContextReadModel CreateSingleEntryContext() => new()
+    {
+        RaceId = "race-1",
+        RaceDate = new DateOnly(2026, 5, 16),
+        RacecourseCode = "06",
+        RaceNumber = 11,
+        Entries =
+        [
+            new RacePredictionContextEntry("entry-1", "horse-1", 1, "jockey-1", "trainer-1", null, null, null, null, null, null, null)
+        ]
+    };
+
+    private static HorseRaceHistoryEntry CreateHorseHistoryEntry()
+        => new("past-race", "past-entry", new DateOnly(2026, 4, 1), "中山", "芝", 1600, null, null, null, null, null, null, null, "jockey-1", "trainer-1", 1, null, null, null);
+
+    private static JockeyRaceHistoryEntry CreateJockeyHistoryEntry()
+        => new("past-race", "past-entry", "horse-1", new DateOnly(2026, 4, 1), "中山", "芝", 1600, null, null, 1, null);
+
     private ProcessingStateStore CreateStore()
     {
         var options = Options.Create(new AgentProcessingOptions
@@ -147,6 +274,11 @@ public sealed class HistoricalDataRequestPlannerTests
     private sealed class StubRaceQueryService : IRaceQueryService
     {
         public RacePredictionContextReadModel? RaceContext { get; set; }
+        public HorseReadModel? Horse { get; set; }
+        public JockeyReadModel? Jockey { get; set; }
+        public TrainerReadModel? Trainer { get; set; }
+        public HorseRaceHistoryReadModel? HorseHistory { get; set; }
+        public JockeyRaceHistoryReadModel? JockeyHistory { get; set; }
 
         public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<RaceSearchSummary>>([]);
@@ -155,19 +287,22 @@ public sealed class HistoricalDataRequestPlannerTests
             => Task.FromResult(RaceContext);
 
         public Task<HorseReadModel?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
-            => Task.FromResult<HorseReadModel?>(null);
+            => Task.FromResult(Horse);
 
         public Task<JockeyReadModel?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
-            => Task.FromResult<JockeyReadModel?>(null);
+            => Task.FromResult(Jockey);
+
+        public Task<TrainerReadModel?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Trainer);
 
         public Task<MemoBySubjectReadModel?> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
             => Task.FromResult<MemoBySubjectReadModel?>(null);
 
         public Task<HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(string horseId, CancellationToken cancellationToken = default)
-            => Task.FromResult<HorseRaceHistoryReadModel?>(null);
+            => Task.FromResult(HorseHistory);
 
         public Task<JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(string jockeyId, CancellationToken cancellationToken = default)
-            => Task.FromResult<JockeyRaceHistoryReadModel?>(null);
+            => Task.FromResult(JockeyHistory);
 
         public Task<MlPredictionResponse?> GetMlPredictionAsync(string raceId, CancellationToken cancellationToken = default)
             => Task.FromResult<MlPredictionResponse?>(null);

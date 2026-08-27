@@ -7,6 +7,8 @@
 
 Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor 側の詳細は [predictor-design.md](predictor-design.md) を参照。API・ドメインモデルは [domain-design.md](domain-design.md) を参照。
 
+Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+
 ## 方針転換の背景
 
 | # | 当初の前提 | 現在の前提 | 理由 |
@@ -42,7 +44,8 @@ Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor
 
 - JRA 公式サイトを Playwright による機械的スクレイピングで巡回し、Api へ収集データを登録する
 - ページ遷移・抽出処理に LLM は使わず、AI エージェントや `Microsoft.Extensions.AI` 依存も持たない
-- 収集バッチ処理の状況を確認・操作する Minimal API と Blazor Server 画面を自身でホストする（`Microsoft.NET.Sdk.Web`。旧ジョブ実行クライアントから移管）
+- 収集タスクの正本と管理画面は Api が所有し、Collector は HTTP 経由でタスクを取得・更新する
+- ローカル常駐モードと `--once` の有限実行モードを持ち、Lambda コンテナも後者を使用する
 - 詳細: [collector-design.md](collector-design.md)
 
 ### Predictor

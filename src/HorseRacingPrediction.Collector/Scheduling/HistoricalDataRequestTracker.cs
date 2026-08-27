@@ -2,9 +2,9 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public sealed class HistoricalDataRequestTracker
 {
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
 
-    public HistoricalDataRequestTracker(ProcessingStateStore stateStore)
+    public HistoricalDataRequestTracker(IProcessingStateStore stateStore)
     {
         _stateStore = stateStore;
     }

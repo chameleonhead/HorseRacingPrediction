@@ -9,14 +9,14 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 public sealed class HistoricalDataRequestExecutionService : BackgroundService
 {
     private readonly AgentProcessingOptions _options;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly IHistoricalRaceResultCollector _historicalRaceResultCollector;
     private readonly IReadOnlyDictionary<string, IHistoricalDataRequestHandler> _handlers;
     private readonly ILogger<HistoricalDataRequestExecutionService> _logger;
 
     public HistoricalDataRequestExecutionService(
         IOptions<AgentProcessingOptions> options,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         IHistoricalRaceResultCollector historicalRaceResultCollector,
         IEnumerable<IHistoricalDataRequestHandler> handlers,
         ILogger<HistoricalDataRequestExecutionService> logger)
@@ -65,7 +65,7 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
         }
     }
 
-    private async Task RunOneCycleAsync(CancellationToken cancellationToken)
+    public async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         await ExecuteHistoricalRaceResultRequestsAsync(now, cancellationToken).ConfigureAwait(false);
@@ -150,6 +150,19 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
 
             LogResult(AgentJobType.JockeyHistoryCollectionRequest, payload.ProviderType, payload.JockeyId, result);
         }
+    }
+
+    public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return jobType switch
+        {
+            AgentJobType.HistoricalRaceResultCollectionRequest => ExecuteHistoricalRaceResultRequestsAsync(now, cancellationToken),
+            AgentJobType.HorseHistoryCollectionRequest => ExecuteHorseHistoryRequestsAsync(now, cancellationToken),
+            AgentJobType.JockeyHistoryCollectionRequest => ExecuteJockeyHistoryRequestsAsync(now, cancellationToken),
+            AgentJobType.TrainerProfileCollectionRequest => ExecuteTrainerProfileRequestsAsync(now, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported historical job type: {jobType}")
+        };
     }
 
     private async Task ExecuteTrainerProfileRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)

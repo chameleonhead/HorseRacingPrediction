@@ -27,7 +27,7 @@ public sealed class CollectionExecutionService : BackgroundService
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly IWebBrowserSessionFactory _browserSessionFactory;
     private readonly DataCollectionWriteTools _writeTools;
     private readonly IRaceQueryService _raceQueryService;
@@ -39,7 +39,7 @@ public sealed class CollectionExecutionService : BackgroundService
 
     public CollectionExecutionService(
         IOptions<AgentProcessingOptions> options,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         IWebBrowserSessionFactory browserSessionFactory,
         DataCollectionWriteTools writeTools,
         IRaceQueryService raceQueryService,
@@ -112,7 +112,7 @@ public sealed class CollectionExecutionService : BackgroundService
         }
     }
 
-    private async Task RunOneCycleAsync(CancellationToken cancellationToken)
+    public async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -656,6 +656,21 @@ public sealed class CollectionExecutionService : BackgroundService
         var workflow = CreateRaceResultWorkflow(browser);
         var urls = await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
         return urls.Select(JraRacecourseResolver.Normalize).ToList();
+    }
+
+    public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return jobType switch
+        {
+            AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
+            AgentJobType.ResultMonthDiscoveryRequest => ExecuteResultMonthDiscoveryJobsAsync(now, cancellationToken),
+            AgentJobType.ResultDayDiscoveryRequest => ExecuteResultDayDiscoveryJobsAsync(now, cancellationToken),
+            AgentJobType.ResultDayCollectionRequest => ExecuteResultDayCollectionJobsAsync(now, cancellationToken),
+            AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
+            AgentJobType.ResultBackfillPlanningRequest => ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported collection job type: {jobType}")
+        };
     }
 
     private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(

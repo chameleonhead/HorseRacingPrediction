@@ -12,7 +12,8 @@ public sealed class EntryRegistered : AggregateEvent<RaceAggregate, RaceId>
         string? runningStyleCode = null,
         DateOnly? raceDate = null, string? racecourseCode = null,
         string? surfaceCode = null, int? distanceMeters = null,
-        string? directionCode = null, string? gradeCode = null)
+        string? directionCode = null, string? gradeCode = null,
+        string? ownerName = null)
     {
         EntryId = entryId;
         HorseId = horseId;
@@ -32,6 +33,7 @@ public sealed class EntryRegistered : AggregateEvent<RaceAggregate, RaceId>
         DistanceMeters = distanceMeters;
         DirectionCode = directionCode;
         GradeCode = gradeCode;
+        OwnerName = ownerName;
     }
 
     public string EntryId { get; }
@@ -52,4 +54,5 @@ public sealed class EntryRegistered : AggregateEvent<RaceAggregate, RaceId>
     public int? DistanceMeters { get; }
     public string? DirectionCode { get; }
     public string? GradeCode { get; }
+    public string? OwnerName { get; }
 }

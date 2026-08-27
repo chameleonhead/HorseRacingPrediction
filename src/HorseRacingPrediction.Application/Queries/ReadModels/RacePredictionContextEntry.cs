@@ -12,4 +12,5 @@ public sealed record RacePredictionContextEntry(
     int? Age,
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
-    string? RunningStyleCode);
+    string? RunningStyleCode,
+    string? OwnerName = null);

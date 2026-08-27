@@ -403,6 +403,25 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? declaredWeight,
         decimal? declaredWeightDiff,
         CancellationToken cancellationToken = default)
+        => await UpsertRaceEntryWithOwnerAsync(
+            raceId, horseNumber, horseName, jockeyName, trainerName,
+            gateNumber, assignedWeight, sexCode, age, declaredWeight,
+            declaredWeightDiff, ownerName: null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<string> UpsertRaceEntryWithOwnerAsync(
+        string raceId,
+        int horseNumber,
+        string horseName,
+        string? jockeyName,
+        string? trainerName,
+        int? gateNumber,
+        decimal? assignedWeight,
+        string? sexCode,
+        int? age,
+        decimal? declaredWeight,
+        decimal? declaredWeightDiff,
+        string? ownerName,
+        CancellationToken cancellationToken = default)
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
@@ -456,6 +475,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             HorseName = horseName,
             JockeyName = cleanedJockeyName,
             TrainerName = trainerName,
+            OwnerName = ownerName,
             GateNumber = gateNumber,
             AssignedWeight = assignedWeight,
             SexCode = sexCode,

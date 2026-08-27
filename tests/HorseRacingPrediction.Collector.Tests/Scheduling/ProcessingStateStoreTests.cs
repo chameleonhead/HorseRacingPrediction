@@ -1,6 +1,7 @@
 using HorseRacingPrediction.Collector.Scheduling;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.Collector.Tests.Scheduling;
 
@@ -180,6 +181,66 @@ public sealed class ProcessingStateStoreTests
             10,
             TimeSpan.FromMinutes(5));
         CollectionAssert.AreEqual(new[] { "payload-new" }, taken.Select(x => x.Payload).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_CreatesDispatchOutboxWithTask()
+    {
+        var now = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+
+        await sut.ScheduleJobAsync("RaceCardCollection", "JRA:race-card:2026-08-30", "{}", now, priority: 100);
+
+        var dispatches = await sut.GetPendingCollectionTaskDispatchesAsync(now, 10);
+        CollectionAssert.AreEqual(
+            new[] { "RaceCardCollection" },
+            dispatches.Select(x => x.Notification.JobType).ToArray());
+        Assert.AreEqual("RaceCardCollection", dispatches[0].Notification.JobType);
+        Assert.AreEqual("JRA:race-card:2026-08-30", dispatches[0].Notification.DeduplicationKey);
+    }
+
+    [TestMethod]
+    public async Task CompleteCollectionTaskAsync_RejectsStaleLeaseToken()
+    {
+        var now = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "job-lease", "{}", now);
+        var task = await sut.AcquireCollectionTaskAsync("RaceCardCollection", "job-lease", now, TimeSpan.FromMinutes(10));
+
+        Assert.IsNotNull(task);
+        Assert.IsFalse(await sut.CompleteCollectionTaskAsync("RaceCardCollection", "job-lease", "stale-token"));
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync("RaceCardCollection", "job-lease", task.LeaseToken));
+    }
+
+    [TestMethod]
+    public async Task Constructor_AddsLeaseTokenColumnToExistingJobStore()
+    {
+        var databasePath = Path.Combine(_stateDirectory, "processing-jobs.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                CREATE TABLE jobs (
+                    job_id TEXT NOT NULL PRIMARY KEY, job_type TEXT NOT NULL,
+                    deduplication_key TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL,
+                    priority INTEGER NOT NULL, first_queued_at TEXT NOT NULL, available_at TEXT NOT NULL,
+                    started_at TEXT NULL, lease_expires_at TEXT NULL, attempt_count INTEGER NOT NULL,
+                    last_error TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        var now = DateTimeOffset.UtcNow;
+        await sut.ScheduleJobAsync("RaceCardCollection", "migration-task", "{}", now);
+
+        var leased = await sut.AcquireCollectionTaskAsync(
+            "RaceCardCollection", "migration-task", now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(leased);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(leased.LeaseToken));
     }
 
     private ProcessingStateStore CreateStore(int predictionLeaseMinutes, int maxConcurrentJobs = 1)

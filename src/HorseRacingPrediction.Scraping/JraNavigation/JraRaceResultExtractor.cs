@@ -45,7 +45,9 @@ public sealed class JraRaceResultExtractor : IPageExtractor
                 .Concat(snapshot.Headings));
         var raceName = ExtractRaceName(snapshot, metadataText) ?? snapshot.Title?.Trim();
         var raceDate = ParseRaceDate(metadataText) ?? ParseRaceDateFromUrl(url);
-        var racecourse = ParseRacecourse(metadataText) ?? ParseRacecourseFromUrl(url);
+        var racecourse = ParseRacecourse(string.Join('\n', snapshot.Headings))
+            ?? ParseRacecourseFromUrl(url)
+            ?? ParseRacecourse(metadataText);
         var raceNumber = ParseRaceNumber(metadataText) ?? ParseRaceNumberFromUrl(url);
         var gradeCode = ParseGradeCode(metadataText);
         var surfaceCode = ParseSurfaceCode(metadataText);

@@ -9,13 +9,13 @@ public sealed class HistoricalDataRequestPlanner
     private static readonly string JraProviderType = "JRA";
 
     private readonly IRaceQueryService _raceQueryService;
-    private readonly ProcessingStateStore _stateStore;
+    private readonly IProcessingStateStore _stateStore;
     private readonly IHistoricalRaceReferenceCollector _historicalRaceReferenceCollector;
     private readonly ILogger<HistoricalDataRequestPlanner> _logger;
 
     public HistoricalDataRequestPlanner(
         IRaceQueryService raceQueryService,
-        ProcessingStateStore stateStore,
+        IProcessingStateStore stateStore,
         IHistoricalRaceReferenceCollector historicalRaceReferenceCollector,
         ILogger<HistoricalDataRequestPlanner> logger)
     {
@@ -65,16 +65,18 @@ public sealed class HistoricalDataRequestPlanner
 
         foreach (var entry in context.Entries)
         {
+            var horse = await _raceQueryService.GetHorseAsync(entry.HorseId, cancellationToken).ConfigureAwait(false);
             var horseHistory = await _raceQueryService.GetHorseRaceHistoryAsync(entry.HorseId, cancellationToken).ConfigureAwait(false);
-            if (horseHistory is null || horseHistory.Entries.Count == 0)
+            if (NeedsHorseProfileSync(horse, horseHistory))
             {
                 horseIds.Add(entry.HorseId);
             }
 
             if (!string.IsNullOrWhiteSpace(entry.JockeyId))
             {
+                var jockey = await _raceQueryService.GetJockeyAsync(entry.JockeyId, cancellationToken).ConfigureAwait(false);
                 var jockeyHistory = await _raceQueryService.GetJockeyRaceHistoryAsync(entry.JockeyId, cancellationToken).ConfigureAwait(false);
-                if (jockeyHistory is null || jockeyHistory.Entries.Count == 0)
+                if (NeedsJockeyProfileSync(jockey, jockeyHistory))
                 {
                     jockeyIds.Add(entry.JockeyId);
                 }
@@ -82,13 +84,17 @@ public sealed class HistoricalDataRequestPlanner
 
             if (!string.IsNullOrWhiteSpace(entry.TrainerId))
             {
-                trainerIds.Add(entry.TrainerId);
+                var trainer = await _raceQueryService.GetTrainerAsync(entry.TrainerId, cancellationToken).ConfigureAwait(false);
+                if (NeedsTrainerProfileSync(trainer))
+                {
+                    trainerIds.Add(entry.TrainerId);
+                }
             }
         }
 
         foreach (var horseId in horseIds)
         {
-            await _stateStore.EnqueueJobAsync(
+            await _stateStore.ScheduleJobAsync(
                 AgentJobType.HorseHistoryCollectionRequest,
                 AgentJobKeyFactory.BuildHorseHistoryCollectionRequestKey(JraProviderType, horseId),
                 AgentJobPayloadSerializer.Serialize(new HorseHistoryCollectionRequestPayload(horseId, raceId, JraProviderType)),
@@ -99,7 +105,7 @@ public sealed class HistoricalDataRequestPlanner
 
         foreach (var jockeyId in jockeyIds)
         {
-            await _stateStore.EnqueueJobAsync(
+            await _stateStore.ScheduleJobAsync(
                 AgentJobType.JockeyHistoryCollectionRequest,
                 AgentJobKeyFactory.BuildJockeyHistoryCollectionRequestKey(JraProviderType, jockeyId),
                 AgentJobPayloadSerializer.Serialize(new JockeyHistoryCollectionRequestPayload(jockeyId, raceId, JraProviderType)),
@@ -110,7 +116,7 @@ public sealed class HistoricalDataRequestPlanner
 
         foreach (var trainerId in trainerIds)
         {
-            await _stateStore.EnqueueJobAsync(
+            await _stateStore.ScheduleJobAsync(
                 AgentJobType.TrainerProfileCollectionRequest,
                 AgentJobKeyFactory.BuildTrainerProfileCollectionRequestKey(JraProviderType, trainerId),
                 AgentJobPayloadSerializer.Serialize(new TrainerProfileCollectionRequestPayload(trainerId, raceId, JraProviderType)),
@@ -121,6 +127,31 @@ public sealed class HistoricalDataRequestPlanner
 
         return new HistoricalDataRequestPlan(horseIds.Count, jockeyIds.Count, 0, trainerIds.Count);
     }
+
+    private static bool NeedsHorseProfileSync(
+        HorseReadModel? horse,
+        HorseRaceHistoryReadModel? history)
+        => horse is null
+            || string.IsNullOrWhiteSpace(horse.RegisteredName)
+            || string.IsNullOrWhiteSpace(horse.SexCode)
+            || horse.BirthDate is null
+            || string.IsNullOrWhiteSpace(horse.OwnerName)
+            || history is null
+            || history.Entries.Count == 0;
+
+    private static bool NeedsJockeyProfileSync(
+        JockeyReadModel? jockey,
+        JockeyRaceHistoryReadModel? history)
+        => jockey is null
+            || string.IsNullOrWhiteSpace(jockey.DisplayName)
+            || string.IsNullOrWhiteSpace(jockey.AffiliationCode)
+            || history is null
+            || history.Entries.Count == 0;
+
+    private static bool NeedsTrainerProfileSync(TrainerReadModel? trainer)
+        => trainer is null
+            || string.IsNullOrWhiteSpace(trainer.DisplayName)
+            || string.IsNullOrWhiteSpace(trainer.AffiliationCode);
 
     private async Task<HistoricalDataRequestPlan> EnsureRaceResultRequestsAsync(
         RacePredictionContextReadModel context,

@@ -16,6 +16,9 @@ public sealed class AgentProcessingOptions
     /// <summary>ローカルジョブストアの SQLite ファイル名。</summary>
     public string JobStoreFileName { get; set; } = "processing-jobs.db";
 
+    /// <summary>Api が所有する収集状態ストアを HTTP 経由で使用するかどうか。</summary>
+    public bool UseApiStateStore { get; set; } = true;
+
     /// <summary>スクレイピング登録の実行間隔（分）。</summary>
     public int ScrapingIntervalMinutes { get; set; } = 180;
 

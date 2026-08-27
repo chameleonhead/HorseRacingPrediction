@@ -15,9 +15,52 @@ else
             <dt>HorseId</dt><dd><code>@horse.HorseId</code></dd>
             <dt>正規化名</dt><dd>@horse.NormalizedName</dd>
             <dt>性</dt><dd>@horse.SexCode</dd>
-            <dt>生年月日</dt><dd>@horse.BirthDate</dd>
-            <dt>馬主</dt><dd>@horse.OwnerName</dd>
+            <dt>生年月日</dt><dd>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</dd>
+            <dt>馬主</dt><dd>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</dd>
         </dl>
+    </section>
+
+    <section class="card">
+        <h3>出走履歴</h3>
+        @if (raceHistory is null || raceHistory.Entries.Count == 0)
+        {
+            <p class="hint">出走履歴はありません。</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>競馬場</th>
+                            <th>コース</th>
+                            <th>距離</th>
+                            <th>着順</th>
+                            <th>騎手</th>
+                            <th>馬体重</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in raceHistory.Entries.OrderByDescending(x => x.RaceDate))
+                        {
+                            <tr>
+                                <td><a href="@($"races/{entry.RaceId}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "—")</a></td>
+                                <td>@Display(entry.RacecourseCode)</td>
+                                <td>@Display(entry.SurfaceCode)</td>
+                                <td>@(entry.DistanceMeters is null ? "—" : $"{entry.DistanceMeters}m")</td>
+                                <td>@(entry.FinishPosition?.ToString() ?? "—")</td>
+                                <td>
+                                    @if (string.IsNullOrWhiteSpace(entry.JockeyId)) { <span>—</span> }
+                                    else { <a href="@($"jockeys/{entry.JockeyId}")">@JockeyName(entry.JockeyId)</a> }
+                                </td>
+                                <td>@(entry.DeclaredWeight is null ? "—" : $"{entry.DeclaredWeight}kg")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </section>
 
     @if (horse.Aliases.Count > 0)
@@ -95,6 +138,8 @@ else
 
     private bool loading;
     private HorseProfileResponse? horse;
+    private HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? raceHistory;
+    private IReadOnlyDictionary<string, string> jockeyNames = new Dictionary<string, string>();
 
     private string? editRegisteredName;
     private string? editNormalizedName;
@@ -126,7 +171,12 @@ else
         loading = true;
         try
         {
-            horse = await Api.GetHorseAsync(HorseId);
+            var profileTask = Api.GetHorseAsync(HorseId);
+            var historyTask = Api.GetHorseRaceHistoryAsync(HorseId);
+            await Task.WhenAll(profileTask, historyTask);
+            horse = await profileTask;
+            raceHistory = await historyTask;
+            jockeyNames = await LoadJockeyNamesAsync(raceHistory);
             if (horse is not null)
             {
                 editRegisteredName = horse.RegisteredName;
@@ -140,6 +190,30 @@ else
         {
             loading = false;
         }
+    }
+
+    private static string Display(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private string JockeyName(string jockeyId)
+        => jockeyNames.TryGetValue(jockeyId, out var name) ? name : jockeyId;
+
+    private async Task<IReadOnlyDictionary<string, string>> LoadJockeyNamesAsync(
+        HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? history)
+    {
+        if (history is null)
+            return new Dictionary<string, string>();
+
+        var ids = history.Entries
+            .Select(x => x.JockeyId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var profiles = await Task.WhenAll(ids.Select(id => Api.GetJockeyAsync(id)));
+        return profiles
+            .Where(x => x is not null)
+            .ToDictionary(x => x!.JockeyId, x => x!.DisplayName, StringComparer.Ordinal);
     }
 
     private async Task UpdateProfileAsync()

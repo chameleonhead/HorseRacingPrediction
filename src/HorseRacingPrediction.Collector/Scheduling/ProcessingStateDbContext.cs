@@ -13,6 +13,8 @@ public sealed class ProcessingStateDbContext : DbContext
 
     public DbSet<ProcessingMarkerEntity> Markers => Set<ProcessingMarkerEntity>();
 
+    public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
+
     public DbSet<RaceDataCollectionStatusEntity> RaceDataCollectionStatuses => Set<RaceDataCollectionStatusEntity>();
 
     public DbSet<AgentAcquisitionStatusEntity> AgentAcquisitionStatuses => Set<AgentAcquisitionStatusEntity>();
@@ -35,6 +37,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.AvailableAt).HasColumnName("available_at");
             entity.Property(x => x.StartedAt).HasColumnName("started_at");
             entity.Property(x => x.LeaseExpiresAt).HasColumnName("lease_expires_at");
+            entity.Property(x => x.LeaseToken).HasColumnName("lease_token");
             entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
             entity.Property(x => x.LastError).HasColumnName("last_error");
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
@@ -44,6 +47,23 @@ public sealed class ProcessingStateDbContext : DbContext
                 .IsUnique();
             entity.HasIndex(x => new { x.JobType, x.Status, x.AvailableAt, x.FirstQueuedAt, x.Priority });
             entity.HasIndex(x => new { x.Status, x.LeaseExpiresAt });
+        });
+
+        modelBuilder.Entity<CollectionDispatchOutboxEntity>(entity =>
+        {
+            entity.ToTable("collection_dispatch_outbox");
+            entity.HasKey(x => x.OutboxId);
+            entity.Property(x => x.OutboxId).HasColumnName("outbox_id");
+            entity.Property(x => x.TaskId).HasColumnName("task_id");
+            entity.Property(x => x.JobType).HasColumnName("job_type");
+            entity.Property(x => x.DeduplicationKey).HasColumnName("deduplication_key");
+            entity.Property(x => x.AvailableAt).HasColumnName("available_at");
+            entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
+            entity.Property(x => x.DispatchedAt).HasColumnName("dispatched_at");
+            entity.Property(x => x.LastError).HasColumnName("last_error");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
         });
 
         modelBuilder.Entity<ProcessingMarkerEntity>(entity =>

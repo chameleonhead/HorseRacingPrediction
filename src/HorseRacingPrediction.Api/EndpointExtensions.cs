@@ -352,7 +352,11 @@ public static class EndpointExtensions
                         request.RaceDate,
                         request.RacecourseCode,
                         request.RaceNumber,
-                        request.RaceName);
+                        request.RaceName,
+                        gradeCode: request.GradeCode,
+                        surfaceCode: request.SurfaceCode,
+                        distanceMeters: request.DistanceMeters,
+                        directionCode: request.DirectionCode);
 
                     var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                     return result.IsSuccess
@@ -551,7 +555,8 @@ public static class EndpointExtensions
                     request.Age,
                     request.DeclaredWeight,
                     request.DeclaredWeightDiff,
-                    request.RunningStyleCode);
+                    request.RunningStyleCode,
+                    request.OwnerName);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -1013,13 +1018,18 @@ public static class EndpointExtensions
                     .Distinct(StringComparer.Ordinal)
                     .ToList();
 
-                var horseNamesById = horseIds.Count == 0
-                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                List<AppReadModels.HorseReadModel> horseProfiles = horseIds.Count == 0
+                    ? []
                     : await dbContext.Set<AppReadModels.HorseReadModel>()
                         .AsNoTracking()
                         .Where(x => horseIds.Contains(x.HorseId))
-                        .ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal, cancellationToken)
+                        .ToListAsync(cancellationToken)
                         .ConfigureAwait(false);
+                var horseNamesById = horseProfiles
+                    .ToDictionary(x => x.HorseId, x => x.RegisteredName, StringComparer.Ordinal);
+                var ownerNamesByHorseId = horseProfiles
+                    .Where(x => !string.IsNullOrWhiteSpace(x.OwnerName))
+                    .ToDictionary(x => x.HorseId, x => x.OwnerName!, StringComparer.Ordinal);
 
                 var jockeyIds = readModel.Entries
                     .Select(x => x.JockeyId)
@@ -1055,13 +1065,15 @@ public static class EndpointExtensions
                         ResolveHorseName(horseNamesById, x.HorseId),
                         ResolveJockeyName(jockeyNamesById, x.JockeyId),
                         ResolveTrainerName(trainerNamesById, x.TrainerId),
-                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber))).ToList()
+                        ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
+                        x.OwnerName ?? ResolveOwnerName(ownerNamesByHorseId, x.HorseId))).ToList()
                     : resultReadModel?.EntryResults.Select(x => ToRaceEntryResponse(
                         x,
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
-                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
+                        ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)),
+                        ResolveOwnerName(ownerNamesByHorseId, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
 
                 var winningHorseId = resultReadModel?.WinningHorseId;
                 if (string.IsNullOrWhiteSpace(winningHorseId))
@@ -2024,7 +2036,8 @@ public static class EndpointExtensions
         string? horseName,
         string? jockeyName,
         string? trainerName,
-        int? gateNumber)
+        int? gateNumber,
+        string? ownerName)
         => new(
             entry.EntryId,
             entry.HorseId,
@@ -2040,9 +2053,10 @@ public static class EndpointExtensions
             entry.Age,
             entry.DeclaredWeight,
             entry.DeclaredWeightDiff,
-            entry.RunningStyleCode);
+            entry.RunningStyleCode,
+            ownerName);
 
-    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName)
+    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName, string? ownerName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2058,7 +2072,8 @@ public static class EndpointExtensions
             null,
             null,
             null,
-            null);
+            null,
+            ownerName);
 
     private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)
@@ -2127,6 +2142,12 @@ public static class EndpointExtensions
         => !string.IsNullOrWhiteSpace(horseId) && horseNamesById.TryGetValue(horseId, out var horseName)
             ? horseName
             : null;
+
+    private static string? ResolveOwnerName(IReadOnlyDictionary<string, string> ownerNamesByHorseId, string? horseId)
+        => !string.IsNullOrWhiteSpace(horseId) && ownerNamesByHorseId.TryGetValue(horseId, out var ownerName)
+            ? ownerName
+            : null;
+
 
     private static string? ResolveJockeyName(IReadOnlyDictionary<string, string> jockeyNamesById, string? jockeyId)
         => !string.IsNullOrWhiteSpace(jockeyId) && jockeyNamesById.TryGetValue(jockeyId, out var jockeyName)

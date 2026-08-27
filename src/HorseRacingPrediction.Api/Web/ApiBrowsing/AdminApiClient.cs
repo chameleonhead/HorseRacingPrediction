@@ -52,11 +52,25 @@ public sealed class AdminApiClient
     public Task<HorseProfileResponse?> GetHorseAsync(string horseId, CancellationToken cancellationToken = default)
         => GetJsonAsync<HorseProfileResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken);
 
+    public Task<HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel?> GetHorseRaceHistoryAsync(
+        string horseId,
+        CancellationToken cancellationToken = default)
+        => GetJsonAsync<HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel>(
+            $"/api/horses/{Uri.EscapeDataString(horseId)}/race-history",
+            cancellationToken);
+
     public Task<PagedResponse<JockeySummaryResponse>?> SearchJockeysAsync(SearchJockeysRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<JockeySummaryResponse>>($"/api/jockeys?{BuildQueryString(request)}", cancellationToken);
 
     public Task<JockeyProfileResponse?> GetJockeyAsync(string jockeyId, CancellationToken cancellationToken = default)
         => GetJsonAsync<JockeyProfileResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken);
+
+    public Task<HorseRacingPrediction.Contracts.JockeyRaceHistoryReadModel?> GetJockeyRaceHistoryAsync(
+        string jockeyId,
+        CancellationToken cancellationToken = default)
+        => GetJsonAsync<HorseRacingPrediction.Contracts.JockeyRaceHistoryReadModel>(
+            $"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history",
+            cancellationToken);
 
     public Task<PagedResponse<TrainerSummaryResponse>?> SearchTrainersAsync(SearchTrainersRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<TrainerSummaryResponse>>($"/api/trainers?{BuildQueryString(request)}", cancellationToken);

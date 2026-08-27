@@ -76,6 +76,9 @@ public class JraJsonExtractionServiceTests
         Assert.AreEqual("extractor", result.ExtractionMode);
         Assert.IsNull(result.Snapshot);
         Assert.IsNotNull(result.Data);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(result.StructureFingerprint));
+        Assert.IsNotNull(result.ValidationIssues);
+        Assert.HasCount(0, result.ValidationIssues);
 
         var data = result.Data;
         var raceName = GetProperty<string>(data, "RaceName");

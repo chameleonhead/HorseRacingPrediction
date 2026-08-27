@@ -10,7 +10,7 @@ public sealed class RegisterEntryCommand : Command<RaceAggregate, RaceId>
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
         decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
-        string? runningStyleCode = null)
+        string? runningStyleCode = null, string? ownerName = null)
         : base(aggregateId)
     {
         EntryId = entryId;
@@ -25,6 +25,7 @@ public sealed class RegisterEntryCommand : Command<RaceAggregate, RaceId>
         DeclaredWeight = declaredWeight;
         DeclaredWeightDiff = declaredWeightDiff;
         RunningStyleCode = runningStyleCode;
+        OwnerName = ownerName;
     }
 
     public string EntryId { get; }
@@ -39,4 +40,5 @@ public sealed class RegisterEntryCommand : Command<RaceAggregate, RaceId>
     public decimal? DeclaredWeight { get; }
     public decimal? DeclaredWeightDiff { get; }
     public string? RunningStyleCode { get; }
+    public string? OwnerName { get; }
 }

@@ -41,7 +41,8 @@ public static class ApiKeyApplicationBuilderExtensions
     // 両者のパスが重ならないため、UI側のルートだけを明示的に認証免除すればよい。
     private static readonly string[] AdminUiRootSegments =
     {
-        "races", "horses", "jockeys", "trainers", "predictions"
+        "races", "horses", "jockeys", "trainers", "predictions",
+        "collection-tasks"
     };
 
     private static bool IsAnonymousPath(PathString path)

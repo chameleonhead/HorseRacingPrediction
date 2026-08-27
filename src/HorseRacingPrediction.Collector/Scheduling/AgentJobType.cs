@@ -2,6 +2,7 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public static class AgentJobType
 {
+    public const string CollectionPlanning = "CollectionPlanning";
     public const string ResultBackfillPlanningRequest = "ResultBackfillPlanningRequest";
     public const string ResultMonthDiscoveryRequest = "ResultMonthDiscoveryRequest";
     public const string ResultDayDiscoveryRequest = "ResultDayDiscoveryRequest";

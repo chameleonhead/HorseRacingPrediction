@@ -68,7 +68,7 @@ public class RacePredictionContextReadModel : IReadModel,
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
             e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff,
-            e.RunningStyleCode));
+            e.RunningStyleCode, e.OwnerName));
         return Task.CompletedTask;
     }
 

@@ -6,32 +6,39 @@ public static class AgentDashboardEndpointExtensions
 {
     public static IEndpointRouteBuilder MapAgentDashboardEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet(
-            "/agent/job-statuses",
+        var collectionApi = endpoints.MapGroup("/api/collection")
+            .WithTags("Collection Tasks API");
+
+        collectionApi.MapGet(
+            "/tasks",
             async (
                 string? jobType,
                 AgentJobStatus? status,
                 int? limit,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CancellationToken cancellationToken) =>
             {
                 var items = await stateStore
                     .GetJobStatusesAsync(jobType, status, limit ?? 100, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Ok(items);
-            });
+            })
+            .WithName("GetCollectionTasks")
+            .WithSummary("Get collection tasks");
 
-        endpoints.MapGet(
-            "/agent/jobs/{jobId}",
-            async (string jobId, ProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+        collectionApi.MapGet(
+            "/tasks/{jobId}",
+            async (string jobId, IProcessingStateStore stateStore, CancellationToken cancellationToken) =>
             {
                 var detail = await stateStore.GetJobDetailAsync(jobId, cancellationToken).ConfigureAwait(false);
                 return detail is null ? Results.NotFound() : Results.Ok(detail);
-            });
+            })
+            .WithName("GetCollectionTask")
+            .WithSummary("Get collection task details");
 
-        endpoints.MapGet(
-            "/agent/result-day-statuses",
-            async (DateOnly from, DateOnly to, ProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+        collectionApi.MapGet(
+            "/result-days",
+            async (DateOnly from, DateOnly to, IProcessingStateStore stateStore, CancellationToken cancellationToken) =>
             {
                 if (from > to)
                 {
@@ -43,14 +50,16 @@ public static class AgentDashboardEndpointExtensions
 
                 var items = await stateStore.GetResultDayCollectionStatusesAsync(from, to, cancellationToken).ConfigureAwait(false);
                 return Results.Ok(items);
-            });
+            })
+            .WithName("GetCollectionResultDays")
+            .WithSummary("Get result-day collection statuses");
 
-        endpoints.MapPost(
-            "/agent/job-statuses/{jobType}/{deduplicationKey}/requeue",
+        collectionApi.MapPost(
+            "/tasks/{jobType}/{deduplicationKey}/requeue",
             async (
                 string jobType,
                 string deduplicationKey,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
@@ -63,15 +72,17 @@ public static class AgentDashboardEndpointExtensions
                 }
 
                 return success ? Results.Ok() : Results.NotFound();
-            });
+            })
+            .WithName("RequeueCollectionTask")
+            .WithSummary("Requeue a collection task");
 
-        endpoints.MapPost(
-            "/agent/result-day-statuses/{providerType}/{targetDate}/requeue",
+        collectionApi.MapPost(
+            "/result-days/{providerType}/{targetDate}/requeue",
             async (
                 string providerType,
                 DateOnly targetDate,
                 ResultDayRequeueMode? mode,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
@@ -121,14 +132,16 @@ public static class AgentDashboardEndpointExtensions
                 executionTrigger.Signal();
 
                 return Results.Ok();
-            });
+            })
+            .WithName("RequeueCollectionResultDay")
+            .WithSummary("Requeue result-day collection");
 
-        endpoints.MapPost(
-            "/agent/result-day-jobs/trigger",
+        collectionApi.MapPost(
+            "/result-days/trigger",
             async (
                 DateOnly targetDate,
                 string? providerType,
-                ProcessingStateStore stateStore,
+                IProcessingStateStore stateStore,
                 CollectionExecutionTrigger executionTrigger,
                 CancellationToken cancellationToken) =>
             {
@@ -164,7 +177,9 @@ public static class AgentDashboardEndpointExtensions
                     targetDate,
                     queuedJobType = AgentJobType.ResultDayDiscoveryRequest
                 });
-            });
+            })
+            .WithName("TriggerCollectionResultDay")
+            .WithSummary("Trigger result-day collection");
 
         return endpoints;
     }

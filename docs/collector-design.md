@@ -2,6 +2,8 @@
 
 ## 位置づけ
 
+> 2026-08-23: 収集タスクの永続化・照会 API・管理画面は Api 側へ移し、Collector はローカル常駐または `--once` で動く Worker に変更した。Lambda は `Dockerfile.collector-lambda` の同じ `--once` 経路を使用する。
+
 `HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。バックグラウンドでの収集処理に加え、その収集バッチ処理の状況を確認・操作するための Web UI / API も自身で提供する。
 
 全体構成は [system-architecture.md](system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
@@ -48,14 +50,14 @@
 
 | クラス | 役割 |
 |---|---|
-| `ProcessingStateStore` | SQLite ベースのジョブ・マーカー永続化（`ProcessingJobEntity`, `ProcessingMarkerEntity`, `ProcessingStateDbContext`） |
+| `ProcessingStateStore` | Api が所有する SQLite ベースのジョブ・マーカー永続化。契約と実装は `HorseRacingPrediction.CollectionOperations` から共有する |
 | `RaceDataCollectionState` / `RaceDataCollectionStatusEntity` / `RaceDataCollectionStatusReadModel` | レース単位の収集状態 |
 | `ResultDayCollectionState` / `ResultDayCollectionStatusEntity` / `ResultDayCollectionStatusReadModel` | 日単位の結果収集完了状態 |
 | `RaceDataCollectionErrorCode` / `RaceDataCollectionErrorDescriptor` / `RaceDataCollectionErrorClassifier` | 失敗要因の分類 |
 
-### 収集状況の監視・操作（Web UI / API）
+### 収集状況の監視・操作（Api の Web UI / API）
 
-Collector は `Microsoft.NET.Sdk.Web` ベースの ASP.NET Core アプリとして、収集バッチ処理の状況を確認・操作するための Minimal API と Blazor Server 画面を自身でホストする。
+Api が収集バッチ処理の状況を確認・操作する Minimal API と `/collection-tasks` の Blazor Server 画面をホストする。Collector は `IProcessingStateStore` の HTTP proxy を通して Api の正本を更新する。ローカルDBは `UseApiStateStore=false` を明示したテスト・開発用途に限る。
 
 #### API エンドポイント（`Scheduling/Agent*EndpointExtensions.cs`）
 
@@ -120,8 +122,10 @@ JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` な�
 
 ## 今後の課題（未着手・要検討）
 
+Lambda 対応と、タスク状態・管理画面を Api 側へ移す具体案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+
 以下は旧ドキュメントで検討していたが、現時点では未着手または方針未確定の項目。着手する場合は本ドキュメントを更新すること。
 
-- ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行するかどうか
+- ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行する（段階的移行案を上記文書で検討済み）
 - 地方競馬など JRA 以外のデータソースを Provider として追加する場合の抽象化
 - Collector が所有する `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装を、将来的に専用共有ライブラリへ分離するかどうか

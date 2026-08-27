@@ -3,10 +3,13 @@ using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.CollectionController;
+using Amazon.SQS;
 using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -93,6 +96,29 @@ builder.Services.AddSingleton<MemoBySubjectLocator>();
 builder.Services.AddSingleton<HorseRaceHistoryLocator>();
 builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
 builder.Services.AddRacePredictor();
+builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
+builder.Services.AddSingleton<ProcessingStateStore>();
+builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
+builder.Services.AddSingleton<CollectionExecutionTrigger>();
+var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
+builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
+if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
+{
+    builder.Services.AddSingleton<IAmazonSQS>(_ =>
+    {
+        var serviceUrl = collectionQueueSection[nameof(CollectionQueueOptions.ServiceUrl)];
+        if (string.IsNullOrWhiteSpace(serviceUrl)) return new AmazonSQSClient();
+
+        return new AmazonSQSClient(new AmazonSQSConfig
+        {
+            ServiceURL = serviceUrl,
+            AuthenticationRegion = builder.Configuration["AWS_REGION"] ?? "ap-northeast-1"
+        });
+    });
+    builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
+    builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+}
+builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>
 {
@@ -130,6 +156,9 @@ app.UseAntiforgery();
 
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
+app.MapAgentDashboardEndpoints();
+app.MapAgentAcquisitionStatusEndpoints();
+app.MapProcessingStateRpcEndpoint();
 
 app.Run();
 
