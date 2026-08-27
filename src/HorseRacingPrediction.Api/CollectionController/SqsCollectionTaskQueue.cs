@@ -20,12 +20,16 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
 
     public async Task SendAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.QueueUrl))
+        if (!_options.Enabled || (string.IsNullOrWhiteSpace(_options.QueueUrl) && string.IsNullOrWhiteSpace(_options.QueueName)))
             throw new InvalidOperationException("CollectionQueue is not configured.");
+
+        var queueUrl = _options.QueueUrl;
+        if (string.IsNullOrWhiteSpace(queueUrl))
+            queueUrl = (await _sqs.GetQueueUrlAsync(_options.QueueName, cancellationToken).ConfigureAwait(false)).QueueUrl;
 
         await _sqs.SendMessageAsync(new SendMessageRequest
         {
-            QueueUrl = _options.QueueUrl,
+            QueueUrl = queueUrl,
             MessageBody = JsonSerializer.Serialize(notification, JsonOptions)
         }, cancellationToken).ConfigureAwait(false);
     }

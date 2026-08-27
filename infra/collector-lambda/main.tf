@@ -44,6 +44,51 @@ resource "aws_iam_role_policy_attachment" "logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_sqs_queue" "collector_dlq" {
+  name                      = "horse-racing-prediction-collector-dlq"
+  message_retention_seconds = 1209600
+}
+
+resource "aws_sqs_queue" "collector" {
+  name                       = "horse-racing-prediction-collector"
+  visibility_timeout_seconds = 5400
+  message_retention_seconds  = 345600
+  receive_wait_time_seconds  = 20
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.collector_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+resource "aws_iam_role_policy" "collector_queue_consumer" {
+  role = aws_iam_role.collector.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:GetQueueAttributes"
+      ]
+      Resource = aws_sqs_queue.collector.arn
+    }]
+  })
+}
+
+resource "aws_iam_policy" "api_queue_sender" {
+  name = "horse-racing-prediction-api-collection-queue-sender"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+      Resource = aws_sqs_queue.collector.arn
+    }]
+  })
+}
+
 resource "aws_lambda_function" "collector" {
   count                          = local.function_enabled ? 1 : 0
   function_name                  = "horse-racing-prediction-collector"
@@ -68,29 +113,11 @@ resource "aws_lambda_function" "collector" {
   }
 }
 
-resource "aws_lambda_function_event_invoke_config" "collector" {
-  count                  = local.function_enabled ? 1 : 0
-  function_name          = aws_lambda_function.collector[0].function_name
-  maximum_retry_attempts = 0
-}
-
-resource "aws_cloudwatch_event_rule" "collector" {
-  count               = local.function_enabled ? 1 : 0
-  name                = "horse-racing-prediction-collector-schedule"
-  schedule_expression = "rate(15 minutes)"
-}
-
-resource "aws_cloudwatch_event_target" "collector" {
-  count = local.function_enabled ? 1 : 0
-  rule  = aws_cloudwatch_event_rule.collector[0].name
-  arn   = aws_lambda_function.collector[0].arn
-}
-
-resource "aws_lambda_permission" "scheduler" {
-  count         = local.function_enabled ? 1 : 0
-  statement_id  = "AllowEventBridgeInvocation"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.collector[0].function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.collector[0].arn
+resource "aws_lambda_event_source_mapping" "collector_queue" {
+  count                              = local.function_enabled ? 1 : 0
+  event_source_arn                   = aws_sqs_queue.collector.arn
+  function_name                      = aws_lambda_function.collector[0].arn
+  batch_size                         = 1
+  maximum_batching_window_in_seconds = 0
+  function_response_types            = ["ReportBatchItemFailures"]
 }

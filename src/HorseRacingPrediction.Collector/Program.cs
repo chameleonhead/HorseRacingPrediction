@@ -92,7 +92,7 @@ if (runOnce)
     if (notification is null)
         throw new InvalidOperationException("A collection task notification is required for --once execution.");
 
-    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(9));
     await app.Services.GetRequiredService<CollectionTaskWorker>().RunAsync(notification, deadline.Token);
 }
 else

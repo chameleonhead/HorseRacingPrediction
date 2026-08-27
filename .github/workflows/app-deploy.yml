@@ -133,11 +133,15 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           ACME_EMAIL: ${{ secrets.LIGHTSAIL_ACME_EMAIL }}
           HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+          COLLECTION_QUEUE_ENABLED: "true"
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          COLLECTION_QUEUE_AWS_ACCESS_KEY_ID: ${{ secrets.COLLECTION_QUEUE_AWS_ACCESS_KEY_ID }}
+          COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY: ${{ secrets.COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY
+          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
           script: |
             mkdir -p "$APP_DIRECTORY/data"
             mkdir -p "$APP_DIRECTORY/data/backups"
@@ -152,6 +156,10 @@ jobs:
             LIGHTSAIL_HOST=$LIGHTSAIL_HOST
             ACME_EMAIL=$ACME_EMAIL
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
+            COLLECTION_QUEUE_ENABLED=$COLLECTION_QUEUE_ENABLED
+            AWS_REGION=$AWS_REGION
+            AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
             EOF
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
@@ -190,7 +198,7 @@ jobs:
           exit 1
 
   deploy-collector-lambda:
-    needs: verify
+    needs: deploy
     runs-on: ubuntu-latest
     environment: production
     defaults:
