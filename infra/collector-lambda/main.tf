@@ -108,7 +108,7 @@ resource "aws_iam_policy" "api_queue_sender" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+      Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
       Resource = aws_sqs_queue.collector.arn
     }]
   })
