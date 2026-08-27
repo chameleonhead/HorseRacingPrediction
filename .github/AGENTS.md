@@ -49,6 +49,14 @@ dotnet test tests/HorseRacingPrediction.Domain.Tests
 dotnet test tests/HorseRacingPrediction.Api.Tests
 ```
 
+## Git Workflow
+
+- 変更は、1つの目的として説明できるまとまりが完成し、関連するビルド・テストが成功した時点でコミットする
+- 長時間の作業では、独立して検証可能な区切りごとにコミットし、未検証または途中状態の変更をまとめて残さない
+- コミット前に `git diff --check` と `git status` を確認し、生成物、秘密情報、目的外の変更を含めない
+- ユーザーが作成した既存変更は、内容を確認せずに上書き、取り消し、または別目的のコミットへ混在させない
+- コミットメッセージは、変更の目的が分かる簡潔な命令形にする
+
 ## Conventions
 
 ### File Organization
