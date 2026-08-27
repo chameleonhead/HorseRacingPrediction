@@ -144,15 +144,13 @@ jobs:
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           ACME_EMAIL: ${{ secrets.LIGHTSAIL_ACME_EMAIL }}
           HORSE_RACING_API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
-          COLLECTION_QUEUE_ENABLED: "true"
+          COLLECTION_QUEUE_ENABLED: "false"
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          COLLECTION_QUEUE_AWS_ACCESS_KEY_ID: ${{ secrets.COLLECTION_QUEUE_AWS_ACCESS_KEY_ID }}
-          COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY: ${{ secrets.COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY }}
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
           username: ${{ secrets.LIGHTSAIL_USERNAME }}
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
+          envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION
           script: |
             mkdir -p "$APP_DIRECTORY/data"
             mkdir -p "$APP_DIRECTORY/data/backups"
@@ -169,8 +167,6 @@ jobs:
             HORSE_RACING_API_KEY=$HORSE_RACING_API_KEY
             COLLECTION_QUEUE_ENABLED=$COLLECTION_QUEUE_ENABLED
             AWS_REGION=$AWS_REGION
-            AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID
-            AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
             EOF
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
@@ -274,3 +270,37 @@ jobs:
             -var="api_base_url=${{ steps.api-url.outputs.value }}" \
             -var="api_key=${{ secrets.LIGHTSAIL_API_KEY }}" \
             -var="image_uri=${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}"
+
+      - name: Load Lightsail API queue credentials
+        run: |
+          access_key_id="$(terraform output -raw lightsail_api_access_key_id)"
+          secret_access_key="$(terraform output -raw lightsail_api_secret_access_key)"
+          echo "::add-mask::$access_key_id"
+          echo "::add-mask::$secret_access_key"
+          echo "COLLECTION_QUEUE_AWS_ACCESS_KEY_ID=$access_key_id" >> "$GITHUB_ENV"
+          echo "COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY=$secret_access_key" >> "$GITHUB_ENV"
+
+      - name: Enable API collection queue
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          COLLECTION_QUEUE_AWS_ACCESS_KEY_ID: ${{ env.COLLECTION_QUEUE_AWS_ACCESS_KEY_ID }}
+          COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY: ${{ env.COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          envs: APP_DIRECTORY,AWS_REGION,COLLECTION_QUEUE_AWS_ACCESS_KEY_ID,COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY
+          script: |
+            env_file="$APP_DIRECTORY/.env"
+            sed -i '/^COLLECTION_QUEUE_ENABLED=/d;/^AWS_REGION=/d;/^AWS_ACCESS_KEY_ID=/d;/^AWS_SECRET_ACCESS_KEY=/d' "$env_file"
+            {
+              echo "COLLECTION_QUEUE_ENABLED=true"
+              echo "AWS_REGION=$AWS_REGION"
+              echo "AWS_ACCESS_KEY_ID=$COLLECTION_QUEUE_AWS_ACCESS_KEY_ID"
+              echo "AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY"
+            } >> "$env_file"
+            chmod 600 "$env_file"
+            cd "$APP_DIRECTORY"
+            docker compose --env-file .env up -d --force-recreate api

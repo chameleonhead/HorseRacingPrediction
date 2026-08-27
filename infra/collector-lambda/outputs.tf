@@ -17,3 +17,13 @@ output "queue_arn" {
 output "api_queue_sender_policy_arn" {
   value = aws_iam_policy.api_queue_sender.arn
 }
+
+output "lightsail_api_access_key_id" {
+  value     = aws_iam_access_key.lightsail_api.id
+  sensitive = true
+}
+
+output "lightsail_api_secret_access_key" {
+  value     = aws_iam_access_key.lightsail_api.secret
+  sensitive = true
+}

@@ -89,6 +89,22 @@ resource "aws_iam_policy" "api_queue_sender" {
   })
 }
 
+resource "aws_iam_user" "lightsail_api" {
+  name = "horse-racing-prediction-lightsail-api"
+}
+
+resource "aws_iam_user_policy_attachment" "lightsail_api_queue_sender" {
+  user       = aws_iam_user.lightsail_api.name
+  policy_arn = aws_iam_policy.api_queue_sender.arn
+}
+
+# Lightsail instances do not support EC2 instance profiles. The fixed key is
+# stored as a sensitive value in the encrypted Terraform backend and copied to
+# the instance during deployment; it is never stored as a GitHub secret.
+resource "aws_iam_access_key" "lightsail_api" {
+  user = aws_iam_user.lightsail_api.name
+}
+
 resource "aws_lambda_function" "collector" {
   count                          = local.function_enabled ? 1 : 0
   function_name                  = "horse-racing-prediction-collector"

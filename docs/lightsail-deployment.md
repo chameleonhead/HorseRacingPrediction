@@ -376,6 +376,23 @@ curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/rac
 /opt/horse-racing-prediction/app/data/backups/eventstore-predeploy-YYYYMMDD-HHMMSS.db
 ```
 
+Collector Lambda の Terraform を同じロールで適用する場合、このロールには ECR、Lambda、SQS、
+CloudWatch Logs に加え、Lightsail 上の Api 専用 IAM ユーザーを管理する次の権限が必要です。
+対象 IAM リソースは `horse-racing-prediction-lightsail-api` と
+`horse-racing-prediction-api-collection-queue-sender` に限定してください。
+
+- `iam:CreateUser` / `iam:GetUser` / `iam:DeleteUser`
+- `iam:CreateAccessKey` / `iam:GetAccessKeyLastUsed` / `iam:ListAccessKeys` / `iam:DeleteAccessKey`
+- `iam:AttachUserPolicy` / `iam:DetachUserPolicy` / `iam:ListAttachedUserPolicies`
+- `iam:CreatePolicy` / `iam:GetPolicy` / `iam:GetPolicyVersion`
+- `iam:CreatePolicyVersion` / `iam:DeletePolicyVersion` / `iam:ListPolicyVersions`
+- `iam:ListEntitiesForPolicy`
+- `iam:DeletePolicy`
+
+Api 用アクセスキーは Terraform の暗号化済み S3 backend に sensitive value として保存され、
+アプリケーションデプロイ時に Lightsail の `/opt/horse-racing-prediction/app/.env` へ直接配置されます。
+GitHub Secrets に AWS アクセスキーを登録する必要はありません。
+
 その後、新しいAPIコンテナの起動時に以下を自動実行する。
 
 1. `PRAGMA quick_check` による整合性確認

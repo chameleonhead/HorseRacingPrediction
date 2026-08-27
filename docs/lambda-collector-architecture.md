@@ -216,12 +216,15 @@ Playwright を採用しているため、設計だけで Lambda 適合を確定�
 
 ## 本番設定
 
-Api のSQS dispatcherを有効にするには、次のGitHub Environment secretsを設定する。
+Lightsail インスタンスには EC2 のインスタンスプロファイルを付与できないため、Terraform が
+`horse-racing-prediction-lightsail-api` IAM ユーザーと固定アクセスキーを作成する。このユーザーには
+Terraform output `api_queue_sender_policy_arn` のポリシーだけを付与し、Collector 用 SQS に対する
+`SendMessage` / `GetQueueAttributes` 以外を許可しない。
 
-- `COLLECTION_QUEUE_AWS_ACCESS_KEY_ID`
-- `COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY`
-
-対応するIAM principalには Terraform output `api_queue_sender_policy_arn` のポリシーだけを付与する。Apiコンテナには `COLLECTION_QUEUE_ENABLED=true`、`AWS_REGION`、標準AWS資格情報環境変数が渡される。Lambda側は実行ロールでSQSを受信し、静的資格情報を持たない。
+アクセスキーは暗号化された Terraform backend に sensitive output として保持し、デプロイ時に
+GitHub Actions が Lightsail の `.env` へ直接設定する。GitHub Secrets へのアクセスキー登録は不要。
+Api コンテナには `COLLECTION_QUEUE_ENABLED=true`、`AWS_REGION`、標準 AWS 資格情報環境変数が
+渡される。Lambda 側は実行ロールで SQS を受信し、静的資格情報を持たない。
 
 ## 受け入れ条件
 
