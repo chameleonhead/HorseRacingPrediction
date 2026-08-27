@@ -169,10 +169,9 @@ public sealed class CollectionExecutionService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[収集実行] バックフィル計画ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.ResultBackfillPlanningRequest,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -232,10 +231,9 @@ public sealed class CollectionExecutionService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[収集実行] 月次成績探索ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.ResultMonthDiscoveryRequest,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -351,19 +349,18 @@ public sealed class CollectionExecutionService : BackgroundService
                 await _stateStore.UpsertResultDayCollectionStatusAsync(
                     payload.ProviderType,
                     payload.RaceDate,
-                    ResultDayCollectionState.RetryScheduled,
+                    ResultDayCollectionState.DeadLetter,
                     expectedRaceCount: null,
                     completedRaceCount: null,
                     incompleteReason: ex.Message,
                     lastCompletedAt: null,
-                    retryAfter: now.AddHours(3),
+                    retryAfter: null,
                     lastError: ex.Message,
                     now,
                     cancellationToken).ConfigureAwait(false);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.ResultDayDiscoveryRequest,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -433,19 +430,18 @@ public sealed class CollectionExecutionService : BackgroundService
                 await _stateStore.UpsertResultDayCollectionStatusAsync(
                     payload.ProviderType,
                     payload.RaceDate,
-                    ResultDayCollectionState.RetryScheduled,
+                    ResultDayCollectionState.DeadLetter,
                     expectedRaceCount: payload.ExpectedRaceCount,
                     completedRaceCount: null,
                     incompleteReason: ex.Message,
                     lastCompletedAt: null,
-                    retryAfter: now.AddHours(3),
+                    retryAfter: null,
                     lastError: ex.Message,
                     now,
                     cancellationToken).ConfigureAwait(false);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.ResultDayCollectionRequest,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -545,10 +541,9 @@ public sealed class CollectionExecutionService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[収集実行] 出馬表収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.RaceCardCollection,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }
@@ -597,10 +592,9 @@ public sealed class CollectionExecutionService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[収集実行] 成績収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.RequeueJobAsync(
+                await _stateStore.FailJobAsync(
                     AgentJobType.RaceResultCollection,
                     job.DeduplicationKey,
-                    now,
                     ex.Message,
                     cancellationToken).ConfigureAwait(false);
             }

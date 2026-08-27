@@ -59,14 +59,15 @@ public sealed class CollectionTaskWorker
         }
         catch (Exception ex)
         {
-            await _stateStore.RequeueJobAsync(
+            var failed = await _stateStore.FailCollectionTaskAsync(
                 task.JobType,
                 task.DeduplicationKey,
-                DateTimeOffset.UtcNow,
+                task.LeaseToken,
                 ex.Message,
-                CancellationToken.None,
-                DateTimeOffset.UtcNow.AddMinutes(1)).ConfigureAwait(false);
-            throw;
+                CancellationToken.None).ConfigureAwait(false);
+            if (!failed)
+                throw new InvalidOperationException("The collection task failed, but its failed state could not be persisted.", ex);
+            return false;
         }
     }
 

@@ -213,6 +213,52 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task FailCollectionTaskAsync_MarksTaskFailedWithoutRedispatch()
+    {
+        var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "job-fast-fail", "{}", now);
+        var dispatches = await sut.GetPendingCollectionTaskDispatchesAsync(now, 10);
+        Assert.HasCount(1, dispatches);
+        var dispatch = dispatches[0];
+        await sut.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now);
+        var task = await sut.AcquireCollectionTaskAsync("RaceCardCollection", "job-fast-fail", now, TimeSpan.FromMinutes(10));
+
+        Assert.IsNotNull(task);
+        Assert.IsTrue(await sut.FailCollectionTaskAsync(
+            task.JobType,
+            task.DeduplicationKey,
+            task.LeaseToken,
+            "fatal error"));
+
+        var statuses = await sut.GetJobStatusesAsync("RaceCardCollection", AgentJobStatus.Failed, 10);
+        Assert.HasCount(1, statuses);
+        var status = statuses[0];
+        Assert.AreEqual("fatal error", status.LastError);
+        Assert.AreEqual(0, status.AttemptCount);
+        Assert.IsEmpty(await sut.GetPendingCollectionTaskDispatchesAsync(now.AddHours(1), 10));
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_DoesNotAutomaticallyReactivateFailedJob()
+    {
+        var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("ResultMonthDiscoveryRequest", "JRA:result-month:2026-08", "{}", now);
+        await sut.FailJobAsync("ResultMonthDiscoveryRequest", "JRA:result-month:2026-08", "fatal error");
+
+        await sut.ScheduleJobAsync(
+            "ResultMonthDiscoveryRequest",
+            "JRA:result-month:2026-08",
+            "{\"updated\":true}",
+            now.AddMinutes(1));
+
+        var failed = await sut.GetJobStatusesAsync("ResultMonthDiscoveryRequest", AgentJobStatus.Failed, 10);
+        Assert.HasCount(1, failed);
+        Assert.AreEqual("fatal error", failed[0].LastError);
+    }
+
+    [TestMethod]
     public async Task Constructor_AddsLeaseTokenColumnToExistingJobStore()
     {
         var databasePath = Path.Combine(_stateDirectory, "processing-jobs.db");

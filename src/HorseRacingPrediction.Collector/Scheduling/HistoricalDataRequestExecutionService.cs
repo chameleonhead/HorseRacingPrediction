@@ -201,7 +201,7 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
         if (!_handlers.TryGetValue(providerType, out var handler))
         {
             var noHandlerMessage = $"No historical data request handler is registered for provider '{providerType}'.";
-            await _stateStore.MarkJobAsDeadLetterAsync(jobType, deduplicationKey, noHandlerMessage, cancellationToken).ConfigureAwait(false);
+            await _stateStore.FailJobAsync(jobType, deduplicationKey, noHandlerMessage, cancellationToken).ConfigureAwait(false);
             return HistoricalDataRequestExecutionResult.PermanentFailure(noHandlerMessage);
         }
 
@@ -221,27 +221,8 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
             return result;
         }
 
-        if (result.IsPermanentFailure)
-        {
-            await _stateStore.MarkJobAsDeadLetterAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
-            return result;
-        }
-
-        var attemptCount = await _stateStore.GetAttemptCountAsync(jobType, deduplicationKey, cancellationToken).ConfigureAwait(false);
-        if (attemptCount >= Math.Max(1, _options.HistoricalRequestMaxAttempts))
-        {
-            await _stateStore.MarkJobAsDeadLetterAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
-            return HistoricalDataRequestExecutionResult.PermanentFailure(result.Message);
-        }
-
-        await _stateStore.RequeueJobAsync(
-            jobType,
-            deduplicationKey,
-            now.AddMinutes(Math.Max(1, _options.HistoricalRequestRetryDelayMinutes)),
-            result.Message,
-            cancellationToken).ConfigureAwait(false);
-
-        return result;
+        await _stateStore.FailJobAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
+        return HistoricalDataRequestExecutionResult.PermanentFailure(result.Message);
     }
 
     private async Task<HistoricalDataRequestExecutionResult> ExecuteDirectAsync(
@@ -267,27 +248,8 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
             return result;
         }
 
-        if (result.IsPermanentFailure)
-        {
-            await _stateStore.MarkJobAsDeadLetterAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
-            return result;
-        }
-
-        var attemptCount = await _stateStore.GetAttemptCountAsync(jobType, deduplicationKey, cancellationToken).ConfigureAwait(false);
-        if (attemptCount >= Math.Max(1, _options.HistoricalRequestMaxAttempts))
-        {
-            await _stateStore.MarkJobAsDeadLetterAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
-            return HistoricalDataRequestExecutionResult.PermanentFailure(result.Message);
-        }
-
-        await _stateStore.RequeueJobAsync(
-            jobType,
-            deduplicationKey,
-            now.AddMinutes(Math.Max(1, _options.HistoricalRequestRetryDelayMinutes)),
-            result.Message,
-            cancellationToken).ConfigureAwait(false);
-
-        return result;
+        await _stateStore.FailJobAsync(jobType, deduplicationKey, result.Message, cancellationToken).ConfigureAwait(false);
+        return HistoricalDataRequestExecutionResult.PermanentFailure(result.Message);
     }
 
     private void LogResult(string jobType, string providerType, string subjectId, HistoricalDataRequestExecutionResult result)
@@ -300,7 +262,7 @@ public sealed class HistoricalDataRequestExecutionService : BackgroundService
 
         if (result.IsPermanentFailure)
         {
-            _logger.LogWarning("[過去データ補完] DeadLetter: JobType={JobType} Provider={ProviderType} SubjectId={SubjectId} Message={Message}", jobType, providerType, subjectId, result.Message);
+            _logger.LogWarning("[過去データ補完] Failed: JobType={JobType} Provider={ProviderType} SubjectId={SubjectId} Message={Message}", jobType, providerType, subjectId, result.Message);
             return;
         }
 

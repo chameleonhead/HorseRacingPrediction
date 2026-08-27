@@ -235,7 +235,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.Priority = priority;
             job.UpdatedAt = now;
 
-            if (job.Status is AgentJobStatus.Succeeded or AgentJobStatus.Failed or AgentJobStatus.Cancelled or AgentJobStatus.DeadLetter)
+            if (job.Status is AgentJobStatus.Succeeded or AgentJobStatus.Cancelled or AgentJobStatus.DeadLetter)
             {
                 job.Status = AgentJobStatus.Ready;
                 job.AvailableAt = now;
@@ -336,6 +336,21 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task FailJobAsync(
+        string jobType,
+        string deduplicationKey,
+        string? error,
+        CancellationToken cancellationToken = default)
+    {
+        await UpdateJobStatusAsync(
+            jobType,
+            deduplicationKey,
+            AgentJobStatus.Failed,
+            null,
+            error,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
         string jobType,
         string deduplicationKey,
@@ -376,6 +391,14 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         string leaseToken,
         CancellationToken cancellationToken = default)
         => UpdateLeasedCollectionTaskAsync(jobType, deduplicationKey, leaseToken, AgentJobStatus.Succeeded, null, null, cancellationToken);
+
+    public Task<bool> FailCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        string leaseToken,
+        string? error,
+        CancellationToken cancellationToken = default)
+        => UpdateLeasedCollectionTaskAsync(jobType, deduplicationKey, leaseToken, AgentJobStatus.Failed, null, error, cancellationToken);
 
     public Task<bool> RequeueCollectionTaskAsync(
         string jobType,

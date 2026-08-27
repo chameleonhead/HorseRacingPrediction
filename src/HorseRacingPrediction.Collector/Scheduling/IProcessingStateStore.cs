@@ -13,11 +13,13 @@ public interface IProcessingStateStore
     Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(string jobType, DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(string jobType, string deduplicationKey, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<bool> CompleteCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);
+    Task<bool> FailCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, string? error, CancellationToken cancellationToken = default);
     Task<bool> RequeueCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, DateTimeOffset availableAt, string? error, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PendingCollectionTaskDispatch>> GetPendingCollectionTaskDispatchesAsync(DateTimeOffset now, int maxCount, CancellationToken cancellationToken = default);
     Task MarkCollectionTaskDispatchedAsync(string outboxId, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task MarkCollectionTaskDispatchFailedAsync(string outboxId, DateTimeOffset now, string error, CancellationToken cancellationToken = default);
     Task CompleteJobAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);
+    Task FailJobAsync(string jobType, string deduplicationKey, string? error, CancellationToken cancellationToken = default);
     Task RequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, string? error, CancellationToken cancellationToken = default, DateTimeOffset? availableAt = null);
     Task<bool> ForceRequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<int> RequeueRunningJobsAsync(IEnumerable<string> jobTypes, DateTimeOffset now, CancellationToken cancellationToken = default);

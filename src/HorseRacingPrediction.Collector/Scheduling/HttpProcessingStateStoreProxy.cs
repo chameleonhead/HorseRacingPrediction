@@ -51,6 +51,13 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
         }
 
         if (scope is not null
+            && targetMethod.Name == nameof(IProcessingStateStore.FailJobAsync)
+            && MatchesScope(scope, args))
+        {
+            return InvokeScopedFailAsync(scope.Task, args[2] as string, args.OfType<CancellationToken>().LastOrDefault());
+        }
+
+        if (scope is not null
             && targetMethod.Name == nameof(IProcessingStateStore.RequeueJobAsync)
             && MatchesScope(scope, args))
         {
@@ -86,6 +93,16 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
             nameof(IProcessingStateStore.CompleteCollectionTaskAsync),
             [task.JobType, task.DeduplicationKey, task.LeaseToken],
             cancellationToken);
+
+    private async Task InvokeScopedFailAsync(LeasedCollectionTask task, string? error, CancellationToken cancellationToken)
+    {
+        var changed = await InvokeDirectAsync<bool>(
+            nameof(IProcessingStateStore.FailCollectionTaskAsync),
+            [task.JobType, task.DeduplicationKey, task.LeaseToken, error],
+            cancellationToken).ConfigureAwait(false);
+        if (!changed)
+            throw new InvalidOperationException("The leased collection task could not be marked as failed.");
+    }
 
     private Task<bool> InvokeScopedRequeueAsync(LeasedCollectionTask task, DateTimeOffset availableAt, string? error, CancellationToken cancellationToken)
         => InvokeDirectAsync<bool>(
