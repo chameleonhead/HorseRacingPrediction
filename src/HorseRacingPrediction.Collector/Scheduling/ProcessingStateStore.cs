@@ -162,7 +162,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 return;
             }
 
-            dbContext.Jobs.Add(new ProcessingJobEntity
+            var job = new ProcessingJobEntity
             {
                 JobId = BuildJobId(jobType, deduplicationKey),
                 JobType = jobType,
@@ -174,7 +174,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 AvailableAt = now,
                 CreatedAt = now,
                 UpdatedAt = now
-            });
+            };
+            dbContext.Jobs.Add(job);
+            QueueDispatch(dbContext, job, now);
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -209,7 +211,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
             if (job is null)
             {
-                dbContext.Jobs.Add(new ProcessingJobEntity
+                var newJob = new ProcessingJobEntity
                 {
                     JobId = BuildJobId(jobType, deduplicationKey),
                     JobType = jobType,
@@ -221,7 +223,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     AvailableAt = now,
                     CreatedAt = now,
                     UpdatedAt = now
-                });
+                };
+                dbContext.Jobs.Add(newJob);
+                QueueDispatch(dbContext, newJob, now);
 
                 await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return;
@@ -238,6 +242,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 job.StartedAt = null;
                 job.LeaseExpiresAt = null;
                 job.LastError = null;
+                QueueDispatch(dbContext, job, now);
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -297,9 +302,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
             foreach (var job in readyJobs)
             {
+                var leaseToken = Guid.NewGuid().ToString("N");
                 job.Status = AgentJobStatus.Running;
                 job.StartedAt = now;
                 job.LeaseExpiresAt = now.Add(leaseDuration);
+                job.LeaseToken = leaseToken;
                 job.UpdatedAt = now;
             }
 
@@ -329,6 +336,117 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            await ReclaimExpiredLeasesAsync(dbContext, now, cancellationToken).ConfigureAwait(false);
+            var job = await dbContext.Jobs.SingleOrDefaultAsync(
+                x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
+                cancellationToken).ConfigureAwait(false);
+            if (job is null || job.Status != AgentJobStatus.Ready || job.AvailableAt > now)
+                return null;
+
+            var leaseToken = Guid.NewGuid().ToString("N");
+            var leaseExpiresAt = now.Add(leaseDuration);
+            job.Status = AgentJobStatus.Running;
+            job.StartedAt = now;
+            job.LeaseExpiresAt = leaseExpiresAt;
+            job.LeaseToken = leaseToken;
+            job.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new LeasedCollectionTask(job.JobId, job.JobType, job.DeduplicationKey, job.Payload, leaseToken, leaseExpiresAt);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public Task<bool> CompleteCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        string leaseToken,
+        CancellationToken cancellationToken = default)
+        => UpdateLeasedCollectionTaskAsync(jobType, deduplicationKey, leaseToken, AgentJobStatus.Succeeded, null, null, cancellationToken);
+
+    public Task<bool> RequeueCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        string leaseToken,
+        DateTimeOffset availableAt,
+        string? error,
+        CancellationToken cancellationToken = default)
+        => UpdateLeasedCollectionTaskAsync(jobType, deduplicationKey, leaseToken, AgentJobStatus.Ready, availableAt, error, cancellationToken);
+
+    public async Task<IReadOnlyList<PendingCollectionTaskDispatch>> GetPendingCollectionTaskDispatchesAsync(
+        DateTimeOffset now,
+        int maxCount,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var pendingCandidates = await dbContext.DispatchOutbox
+                .Where(x => x.DispatchedAt == null)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var entities = pendingCandidates
+                .Where(x => x.AvailableAt <= now)
+                .OrderBy(x => x.AvailableAt)
+                .ThenBy(x => x.CreatedAt)
+                .Take(Math.Max(1, maxCount))
+                .ToList();
+            return entities.Select(x => new PendingCollectionTaskDispatch(
+                x.OutboxId,
+                new CollectionTaskNotification(x.TaskId, x.JobType, x.DeduplicationKey),
+                x.AttemptCount)).ToList();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task MarkCollectionTaskDispatchedAsync(string outboxId, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var dispatch = await dbContext.DispatchOutbox.FindAsync([outboxId], cancellationToken).ConfigureAwait(false);
+            if (dispatch is null) return;
+            dispatch.DispatchedAt = now;
+            dispatch.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkCollectionTaskDispatchFailedAsync(string outboxId, DateTimeOffset now, string error, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var dispatch = await dbContext.DispatchOutbox.FindAsync([outboxId], cancellationToken).ConfigureAwait(false);
+            if (dispatch is null) return;
+            dispatch.AttemptCount += 1;
+            dispatch.LastError = error;
+            dispatch.AvailableAt = now.AddMinutes(Math.Min(15, Math.Max(1, dispatch.AttemptCount)));
+            dispatch.UpdatedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task RequeueJobAsync(
         string jobType,
         string deduplicationKey,
@@ -355,9 +473,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.Status = AgentJobStatus.Ready;
             job.AvailableAt = scheduledAt;
             job.LeaseExpiresAt = null;
+            job.LeaseToken = null;
             job.AttemptCount += 1;
             job.LastError = error;
             job.UpdatedAt = now;
+            QueueDispatch(dbContext, job, scheduledAt);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -390,8 +510,10 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.AvailableAt = now;
             job.StartedAt = null;
             job.LeaseExpiresAt = null;
+            job.LeaseToken = null;
             job.LastError = null;
             job.UpdatedAt = now;
+            QueueDispatch(dbContext, job, now);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -435,9 +557,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 job.Status = AgentJobStatus.Ready;
                 job.StartedAt = null;
                 job.LeaseExpiresAt = null;
+                job.LeaseToken = null;
                 job.LastError = null;
                 job.AvailableAt = now;
                 job.UpdatedAt = now;
+                QueueDispatch(dbContext, job, now);
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -947,6 +1071,28 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     {
         using var dbContext = CreateDbContext();
         dbContext.Database.EnsureCreated();
+        var leaseTokenColumnExists = dbContext.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('jobs') WHERE name = 'lease_token'")
+            .Any();
+        if (!leaseTokenColumnExists)
+            dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN lease_token TEXT NULL;");
+        dbContext.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS collection_dispatch_outbox (
+                outbox_id TEXT NOT NULL PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                job_type TEXT NOT NULL,
+                deduplication_key TEXT NOT NULL,
+                available_at TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                dispatched_at TEXT NULL,
+                last_error TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """);
+        dbContext.Database.ExecuteSqlRaw(
+            "CREATE INDEX IF NOT EXISTS ix_collection_dispatch_outbox_pending ON collection_dispatch_outbox(dispatched_at, available_at);");
         dbContext.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS race_data_collection_statuses (
@@ -1126,6 +1272,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             }
 
             job.LeaseExpiresAt = null;
+            job.LeaseToken = null;
             job.LastError = error;
             job.UpdatedAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -1160,7 +1307,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         {
             job.Status = AgentJobStatus.Ready;
             job.LeaseExpiresAt = null;
+            job.LeaseToken = null;
             job.UpdatedAt = now;
+            QueueDispatch(dbContext, job, now);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -1170,5 +1319,60 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
     private static string BuildJobId(string jobType, string deduplicationKey)
         => $"{jobType}:{deduplicationKey}";
+
+    private async Task<bool> UpdateLeasedCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        string leaseToken,
+        AgentJobStatus status,
+        DateTimeOffset? availableAt,
+        string? error,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var job = await dbContext.Jobs.SingleOrDefaultAsync(
+                x => x.JobType == jobType
+                    && x.DeduplicationKey == deduplicationKey
+                    && x.Status == AgentJobStatus.Running
+                    && x.LeaseToken == leaseToken,
+                cancellationToken).ConfigureAwait(false);
+            if (job is null) return false;
+
+            var now = DateTimeOffset.UtcNow;
+            job.Status = status;
+            job.LeaseToken = null;
+            job.LeaseExpiresAt = null;
+            job.LastError = error;
+            job.UpdatedAt = now;
+            if (availableAt.HasValue)
+            {
+                job.AvailableAt = availableAt.Value;
+                job.AttemptCount += 1;
+                QueueDispatch(dbContext, job, availableAt.Value);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static void QueueDispatch(ProcessingStateDbContext dbContext, ProcessingJobEntity job, DateTimeOffset availableAt)
+    {
+        if (!CollectionDispatchPolicy.IsDispatchable(job.JobType)) return;
+        dbContext.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+        {
+            OutboxId = Guid.NewGuid().ToString("N"),
+            TaskId = job.JobId,
+            JobType = job.JobType,
+            DeduplicationKey = job.DeduplicationKey,
+            AvailableAt = availableAt,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+    }
 
 }

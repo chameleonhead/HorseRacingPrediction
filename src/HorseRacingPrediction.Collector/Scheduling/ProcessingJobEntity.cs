@@ -12,6 +12,7 @@ public sealed class ProcessingJobEntity
     public DateTimeOffset AvailableAt { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? LeaseExpiresAt { get; set; }
+    public string? LeaseToken { get; set; }
     public int AttemptCount { get; set; }
     public string? LastError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

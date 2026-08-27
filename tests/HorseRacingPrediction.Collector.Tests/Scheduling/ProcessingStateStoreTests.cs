@@ -182,6 +182,35 @@ public sealed class ProcessingStateStoreTests
         CollectionAssert.AreEqual(new[] { "payload-new" }, taken.Select(x => x.Payload).ToArray());
     }
 
+    [TestMethod]
+    public async Task ScheduleJobAsync_CreatesDispatchOutboxWithTask()
+    {
+        var now = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+
+        await sut.ScheduleJobAsync("RaceCardCollection", "JRA:race-card:2026-08-30", "{}", now, priority: 100);
+
+        var dispatches = await sut.GetPendingCollectionTaskDispatchesAsync(now, 10);
+        CollectionAssert.AreEqual(
+            new[] { "RaceCardCollection" },
+            dispatches.Select(x => x.Notification.JobType).ToArray());
+        Assert.AreEqual("RaceCardCollection", dispatches[0].Notification.JobType);
+        Assert.AreEqual("JRA:race-card:2026-08-30", dispatches[0].Notification.DeduplicationKey);
+    }
+
+    [TestMethod]
+    public async Task CompleteCollectionTaskAsync_RejectsStaleLeaseToken()
+    {
+        var now = new DateTimeOffset(2026, 8, 27, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "job-lease", "{}", now);
+        var task = await sut.AcquireCollectionTaskAsync("RaceCardCollection", "job-lease", now, TimeSpan.FromMinutes(10));
+
+        Assert.IsNotNull(task);
+        Assert.IsFalse(await sut.CompleteCollectionTaskAsync("RaceCardCollection", "job-lease", "stale-token"));
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync("RaceCardCollection", "job-lease", task.LeaseToken));
+    }
+
     private ProcessingStateStore CreateStore(int predictionLeaseMinutes, int maxConcurrentJobs = 1)
     {
         var options = Options.Create(new AgentProcessingOptions
