@@ -43,9 +43,9 @@ Collector を次の 3 つの責務に分ける。
 
 1. **Api**: 収集タスク、リース、試行履歴、収集ステータスを永続化し、管理 API / 管理画面を提供する
 2. **Collector Worker**: Api からタスクを取得し、JRA を収集して、結果を Api へ報告する。常駐機能や UI は持たない
-3. **実行ホスト**: ローカルでは `BackgroundService`、AWS では EventBridge Scheduler から起動する Lambda とし、どちらも同じ Worker ユースケースを呼び出す
+3. **実行ホスト**: ローカルでは `BackgroundService`、AWS では SQS event source mapping から起動する Lambda とし、どちらも同じ単一タスク Worker を呼び出す
 
-初期移行では SQS を必須にせず、**Api のタスクストアをキューの正本として Worker が pull する方式**を推奨する。現在の `ProcessingStateStore` のリース・重複排除・再試行という意味論を保ちやすく、ローカルと Lambda で実行経路を共通化できるためである。将来、同時実行数や流量が増えた場合のみ、SQS を配送通知として追加する。
+実装では **Api のタスクストアを正本、SQS を配送通知**として採用した。ローカル Worker は同じ outbox から1件ずつ取得し、Lambda Worker はSQS通知で指定された1件だけを取得する。
 
 ## 目標構成
 
@@ -67,7 +67,7 @@ Collector を次の 3 つの責務に分ける。
                    ┌─────────────┴─────────────┐
                    ▼                           ▼
           Local Worker Host             Lambda Container
-          BackgroundService             EventBridge Scheduler
+          BackgroundService             SQS event source mapping
 ```
 
 Api は Collector のスクレイピング実装を参照しない。共有するのはタスク契約 DTO と HTTP クライアントだけにする。
@@ -80,7 +80,7 @@ Api は Collector のスクレイピング実装を参照しない。共有す�
 | `ProcessingStateStore` の永続化と照会 | Api/Application | acquire、完了、失敗、再投入、状態照会をユースケースとして公開する |
 | `Agent*EndpointExtensions.cs` | Api | JSON API は `/api/admin/collection/*` と `/api/internal/collection/*` に分ける |
 | Collector の Jobs/ResultDays/AcquisitionStatuses 画面 | Api の管理画面 | 既存 Api 管理画面のナビゲーションと Cookie 認証に統合する |
-| `ScrapingRegistrationService` の計画ロジック | Api 側の planning endpoint/service | EventBridge またはローカル scheduler が有限の「計画1回」を呼ぶ |
+| `ScrapingRegistrationService` の計画ロジック | Api が `CollectionPlanning` タスクを定期登録 | Worker は通知された planning 1件だけを実行する |
 | `CollectionExecutionService` / `HistoricalDataRequestExecutionService` のループ | Local Host のみ | ループ内部の1サイクルを共通 `CollectionWorker.RunAsync` に抽出する |
 | JRA debug tools | 原則ローカル専用 | ブラウザーを直接操作するため Api 管理画面には移さない。必要なら開発環境限定の Collector Tool Host とする |
 
@@ -146,24 +146,22 @@ public interface ICollectionWorker
 ### 推奨する初期構成
 
 - Lambda は Playwright/Chromium を含む **コンテナイメージ**として ECR へ配置する
-- EventBridge Scheduler が planning 用 Lambda と worker 用 Lambda を定期起動する（同一バイナリに event mode を渡してもよい）
+- SQS event source mapping が通知1件につき Worker Lambda を起動する
 - reserved concurrency は当初 `1` とし、JRA への負荷と現行 `MaxConcurrentJobs = 1` を維持する
-- Lambda timeout は 15 分、Worker の内部 deadline は 13 分程度にする
+- Lambda timeout は15分、Workerの内部deadlineは9分、タスクリースは10分にする
 - `/tmp` はブラウザーの一時ファイル専用とし、状態の正本にはしない
 - API キーなどは Secrets Manager または SSM Parameter Store から注入し、イメージや設定ファイルへ含めない
 - CloudWatch Logs に `taskId`, `jobType`, `deduplicationKey`, `attempt`, `workerId` を構造化出力する
 
-Lambda は1回最大15分で、実行環境のローカル状態を呼び出し間の永続化に使えない。そのため、現在の30分リースをそのまま使うのではなく、タスクの最大所要時間を計測し、Lambda用には10～12分程度のリース＋heartbeatを基本とする。1タスクが安定して Lambda の期限内に終わらない場合、そのタスクをページ/レース単位に分割する。分割不能なら当該ワーカーだけ ECS Fargate に残す。
+Lambda は1回最大15分で、実行環境のローカル状態を呼び出し間の永続化に使えない。Workerは9分で実処理をキャンセルし、10分リースの失効前に状態を確定する。1タスクが安定して9分以内に終わらない場合、そのタスクをページ/レース単位に分割する。分割不能なら当該ワーカーだけ ECS Fargate に残す。
 
-### SQS を初期構成に入れない理由
+### SQSを配送通知として採用する理由
 
-Api DB と SQS の二重状態を最初から導入すると、タスク作成とメッセージ送信の原子性（outbox）、再送、管理画面上の状態との整合を追加で解決する必要がある。現状は同時実行1かつ小規模なので、EventBridge 起動の Worker が Api から acquire するだけで十分である。
-
-次の条件が出たら SQS を追加する。
+Api DB とSQSを二重の正本にせず、タスク作成と同じトランザクションでoutboxを記録する。SQS送信後のoutbox更新失敗は重複通知として許容し、Apiのlease tokenで安全に排除する。これにより次を実現する。
 
 - 待ち時間を Scheduler 間隔より短くしたい
 - 複数 Lambda へ大きく並列化したい
-- Api 障害中も配送要求をバッファしたい
+- 配送済みタスクをApiやWorkerの一時障害中も保持したい
 
 その場合もタスク本文とステータスの正本は Api に残し、SQS には `taskId` の通知だけを載せる。Api は transactional outbox に記録し、dispatcher が SQS へ送る。Lambda/SQS は少なくとも1回配送なので、Api の lease token と冪等更新を引き続き必須とする。
 
@@ -194,7 +192,7 @@ Playwright を採用しているため、設計だけで Lambda 適合を確定�
 1. 収集タスク DTO/enum を Collector から依存方向が逆転しない共有プロジェクトへ移す
 2. Api に Collection Operations 用 DbContext、migration、store、internal/admin endpoints を追加
 3. Collector 画面を Api 管理画面へ移し、Api側ストアを表示・操作する
-4. 既存 SQLite からの一度限りの移行ツールを用意する（稼働中タスクは Ready に戻す）
+4. 既存タスクデータは移行せず、新しいcontroller DBを正本として開始する
 
 ### Phase 2: ローカル Worker の API 化
 
@@ -208,13 +206,22 @@ Playwright を採用しているため、設計だけで Lambda 適合を確定�
 ### Phase 3: Lambda スパイクと導入
 
 1. Lambda handler project とコンテナ Dockerfile を追加
-2. AWS SAM または CDK で ECR/Lambda/EventBridge/IAM/Logs を定義
+2. Terraform で ECR/Lambda/SQS/DLQ/IAM/Logs を定義
 3. representative tasks の性能計測を行い、メモリ、timeout、batch sizeを決定
 4. reserved concurrency 1 で本番並行検証し、ローカル Worker を停止
 
 ### Phase 4: 必要時のみスケール
 
-タスク種別ごとの Lambda 分離、SQS + outbox、PostgreSQL、並列数増加を計測結果に基づいて導入する。
+タスク種別ごとの Lambda 分離、PostgreSQL、並列数増加を計測結果に基づいて導入する。
+
+## 本番設定
+
+Api のSQS dispatcherを有効にするには、次のGitHub Environment secretsを設定する。
+
+- `COLLECTION_QUEUE_AWS_ACCESS_KEY_ID`
+- `COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY`
+
+対応するIAM principalには Terraform output `api_queue_sender_policy_arn` のポリシーだけを付与する。Apiコンテナには `COLLECTION_QUEUE_ENABLED=true`、`AWS_REGION`、標準AWS資格情報環境変数が渡される。Lambda側は実行ロールでSQSを受信し、静的資格情報を持たない。
 
 ## 受け入れ条件
 

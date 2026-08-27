@@ -59,6 +59,17 @@ jobs:
       - name: Check vulnerable dependencies
         run: dotnet list HorseRacingPrediction.sln package --vulnerable --include-transitive
 
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Validate collector Lambda Terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform -chdir=infra/collector-lambda init -backend=false -input=false
+          terraform -chdir=infra/collector-lambda validate
+
+      - name: Build collector Lambda container
+        run: docker build -f Dockerfile.collector-lambda -t collector-lambda-ci .
+
   build-and-push:
     needs: verify
     runs-on: ubuntu-latest
