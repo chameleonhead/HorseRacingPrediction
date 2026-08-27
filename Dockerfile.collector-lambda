@@ -14,7 +14,8 @@ RUN apt-get update \
 
 COPY --from=build /opt/collector ./
 COPY deploy/lambda-bootstrap /var/runtime/bootstrap
-RUN chmod +x /var/runtime/bootstrap
+RUN chmod 0755 /var/runtime/bootstrap /var/task/.playwright/node/linux-x64/node \
+    && test -x /var/task/.playwright/node/linux-x64/node
 
 ENV ASPNETCORE_URLS=http://127.0.0.1:8080
 ENTRYPOINT ["/var/runtime/bootstrap"]
