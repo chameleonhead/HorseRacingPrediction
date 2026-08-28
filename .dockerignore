@@ -4,11 +4,16 @@
 **/.vs/
 **/.vscode/
 **/TestResults/
+.git/
+.artifacts/
+.codex-runtime-logs/
+.claude/
+*.log
 **/*.user
 **/*.suo
 **/*.db
 **/*.db-*
-infra/.terraform/
+**/.terraform/
 infra/**/*.tfstate
 infra/**/*.tfstate.*
 deploy/data/

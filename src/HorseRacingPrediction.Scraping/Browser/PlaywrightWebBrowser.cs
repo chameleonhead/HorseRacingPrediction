@@ -77,35 +77,65 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         ILogger<PlaywrightWebBrowser>? logger = null)
     {
         var resolvedLogger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
-        var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(launchOptions ?? new BrowserTypeLaunchOptions
+        IPlaywright? playwright = null;
+        IBrowser? browser = null;
+        IBrowserContext? context = null;
+
+        try
+        {
+            playwright = await Playwright.CreateAsync();
+            var resolvedLaunchOptions = launchOptions ?? CreateDefaultLaunchOptions();
+            browser = await playwright.Chromium.LaunchAsync(resolvedLaunchOptions);
+            context = await browser.NewContextAsync(contextOptions ?? CreateDefaultContextOptions());
+            var page = await context.NewPageAsync();
+            resolvedLogger.LogInformation(
+                "Playwright browser created. SearchBaseUrl={SearchBaseUrl} Headless={Headless}",
+                string.IsNullOrWhiteSpace(searchBaseUrl) ? DefaultSearchBaseUrl : searchBaseUrl,
+                resolvedLaunchOptions.Headless);
+
+            return new PlaywrightWebBrowser(playwright, browser, context, page, searchBaseUrl, resolvedLogger);
+        }
+        catch
+        {
+            if (context is not null)
+            {
+                await context.DisposeAsync();
+            }
+
+            if (browser is not null)
+            {
+                await browser.DisposeAsync();
+            }
+
+            playwright?.Dispose();
+            throw;
+        }
+    }
+
+    internal static BrowserTypeLaunchOptions CreateDefaultLaunchOptions()
+        => new()
         {
             Headless = true,
+            ChromiumSandbox = false,
             Args = [
                 "--disable-gpu",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
+                "--no-zygote",
+                "--single-process",
                 "--disable-web-security",
                 "--ignore-certificate-errors",
             ]
-        });
+        };
 
-        var context = await browser.NewContextAsync(contextOptions ?? new BrowserNewContextOptions
+    private static BrowserNewContextOptions CreateDefaultContextOptions()
+        => new()
         {
             Locale = "ja-JP",
             TimezoneId = "Asia/Tokyo",
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-        });
-
-        var page = await context.NewPageAsync();
-        resolvedLogger.LogInformation(
-            "Playwright browser created. SearchBaseUrl={SearchBaseUrl} Headless={Headless}",
-            string.IsNullOrWhiteSpace(searchBaseUrl) ? DefaultSearchBaseUrl : searchBaseUrl,
-            (launchOptions ?? new BrowserTypeLaunchOptions { Headless = false }).Headless);
-
-        return new PlaywrightWebBrowser(playwright, browser, context, page, searchBaseUrl, resolvedLogger);
-    }
+        };
 
     public async Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
     {

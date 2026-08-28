@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Lambda's home directory and container filesystem are not writable. Chromium
+# writes font, configuration and browser caches during startup, so keep every
+# writable XDG location in Lambda's ephemeral storage.
+export HOME=/tmp
+export XDG_CACHE_HOME=/tmp/.cache
+export XDG_CONFIG_HOME=/tmp/.config
+mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
+
 if [ -z "${AWS_LAMBDA_RUNTIME_API:-}" ]; then
   exec dotnet /var/task/HorseRacingPrediction.Collector.dll --once
 fi

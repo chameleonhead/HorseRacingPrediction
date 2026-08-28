@@ -6,6 +6,19 @@ namespace HorseRacingPrediction.Agents.Tests;
 public sealed class PlaywrightWebBrowserSnapshotTests
 {
     [TestMethod]
+    public void DefaultLaunchOptions_AreSafeForServerlessChromium()
+    {
+        var options = PlaywrightWebBrowser.CreateDefaultLaunchOptions();
+
+        Assert.IsTrue(options.Headless);
+        Assert.IsFalse(options.ChromiumSandbox);
+        var arguments = options.Args!.ToArray();
+        CollectionAssert.Contains(arguments, "--disable-dev-shm-usage");
+        CollectionAssert.Contains(arguments, "--no-zygote");
+        CollectionAssert.Contains(arguments, "--single-process");
+    }
+
+    [TestMethod]
     public void IsTextCoveredByExistingSections_ReturnsTrueForAlreadyCapturedBlock()
     {
         var sections = CreateSections("3歳以上1勝クラス コース：1,700 メートル（ダート・右）");
