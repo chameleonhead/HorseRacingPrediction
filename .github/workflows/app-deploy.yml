@@ -305,7 +305,7 @@ jobs:
             -var="aws_region=${{ secrets.AWS_REGION }}" \
             -var="api_base_url=${{ steps.api-url.outputs.value }}" \
             -var="api_key=${{ secrets.LIGHTSAIL_API_KEY }}" \
-            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
+            -var="alert_phone_number=${{ secrets.ALERT_PHONE_NUMBER }}" \
             -var="image_uri=${{ steps.ecr.outputs.repository }}:sha-${{ github.sha }}"
 
       - name: Load Lightsail API queue credentials

@@ -21,8 +21,13 @@ variable "api_key" {
   default     = ""
 }
 
-variable "alert_email" {
+variable "alert_phone_number" {
   type        = string
-  description = "Email address subscribed to collection failure alerts. Empty disables the email subscription."
+  description = "E.164 phone number subscribed to collection failure SMS alerts. Empty disables the SMS subscription."
   default     = ""
+
+  validation {
+    condition     = trimspace(var.alert_phone_number) == "" || can(regex("^\\+[1-9][0-9]{7,14}$", trimspace(var.alert_phone_number)))
+    error_message = "alert_phone_number must be empty or an E.164 phone number such as +819012345678."
+  }
 }
