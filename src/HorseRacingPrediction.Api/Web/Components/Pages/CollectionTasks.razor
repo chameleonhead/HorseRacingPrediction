@@ -44,17 +44,27 @@
 </table>
 
 @code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "jobId")]
+    public string? JobId { get; set; }
+
     private IReadOnlyList<AgentJobStatusReadModel> tasks = [];
     private string? jobType;
     private string? status;
     private string? message;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override Task OnParametersSetAsync() => LoadAsync();
 
     private async Task LoadAsync()
     {
         AgentJobStatus? parsed = Enum.TryParse<AgentJobStatus>(status, out var value) ? value : null;
-        tasks = await Store.GetJobStatusesAsync(string.IsNullOrWhiteSpace(jobType) ? null : jobType, parsed, 200);
+        var loadedTasks = await Store.GetJobStatusesAsync(string.IsNullOrWhiteSpace(jobType) ? null : jobType, parsed, 200);
+        tasks = string.IsNullOrWhiteSpace(JobId)
+            ? loadedTasks
+            : loadedTasks.Where(x => string.Equals(x.JobId, JobId, StringComparison.Ordinal)).ToList();
+
+        if (!string.IsNullOrWhiteSpace(JobId) && tasks.Count == 0)
+            message = "指定されたジョブが見つかりませんでした。";
     }
 
     private async Task RequeueAsync(AgentJobStatusReadModel task)

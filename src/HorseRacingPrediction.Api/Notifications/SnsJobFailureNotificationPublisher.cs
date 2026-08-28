@@ -26,12 +26,12 @@ public sealed class SnsJobFailureNotificationPublisher : IJobFailureNotification
         if (string.IsNullOrWhiteSpace(_options.AdminBaseUrl))
             throw new InvalidOperationException("JobFailureNotifications:AdminBaseUrl is not configured.");
 
-        var adminUrl = $"{_options.AdminBaseUrl.TrimEnd('/')}/collection-tasks";
+        var message = BuildSmsMessage(_options.AdminBaseUrl, notification);
 
         return _sns.PublishAsync(new PublishRequest
         {
             TopicArn = _options.TopicArn,
-            Message = adminUrl,
+            Message = message,
             MessageAttributes = new Dictionary<string, MessageAttributeValue>
             {
                 ["AWS.SNS.SMS.SMSType"] = new()
@@ -41,5 +41,11 @@ public sealed class SnsJobFailureNotificationPublisher : IJobFailureNotification
                 }
             }
         }, cancellationToken);
+    }
+
+    internal static string BuildSmsMessage(string adminBaseUrl, PendingJobFailureNotification notification)
+    {
+        var jobUrl = $"{adminBaseUrl.TrimEnd('/')}/collection-tasks?jobId={Uri.EscapeDataString(notification.JobId)}";
+        return $"HRP {notification.Status} {notification.JobType}\n{jobUrl}";
     }
 }

@@ -364,8 +364,9 @@ gh secret set ALERT_PHONE_NUMBER --body "+819012345678"
 `ALERT_PHONE_NUMBER` は `+819012345678` のような E.164 形式で設定します。設定すると、Collector ジョブ失敗、
 Lambda エラー、SQS DLQ 到達、キュー滞留を通知する Amazon SNS の SMS 購読が作成されます。SMS sandbox 中は
 検証済み電話番号にしか送信できないため、事前に同じAWSリージョンで番号を検証するか、本番アクセスを申請してください。
-アプリが発行するジョブ失敗通知は1通に収めるため管理画面URLだけを送信します。CloudWatch アラームの本文は
-CloudWatch が生成するため、長さによっては複数SMSに分割されます。
+アプリが発行するジョブ失敗通知は、状態、ジョブ種別、および対象ジョブだけを表示する管理画面リンクを送信します。
+通常は1通に収まりますが、長いジョブIDはURLエンコードされるため複数SMSに分割される場合があります。
+CloudWatch アラームの本文は CloudWatch が生成するため、こちらも長さによっては複数SMSに分割されます。
 
 GHCR は public イメージ前提なので、`GHCR_USERNAME` と `GHCR_PAT` は不要です。
 
