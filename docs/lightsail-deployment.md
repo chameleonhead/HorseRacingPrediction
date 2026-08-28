@@ -93,22 +93,23 @@ aws s3api put-public-access-block \
     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
-## 2. GitHub OIDC Provider と IAM ロールを作成する
+## 2. GitHub OIDC Provider と IAM ロールを作成・更新する
+
+以下は管理者権限を持つ CloudShell セッションで実行します。OIDC Provider は未作成の場合だけ作成します。
 
 ```bash
-aws iam create-open-id-connect-provider \
-  --url https://token.actions.githubusercontent.com \
-  --client-id-list sts.amazonaws.com \
-  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+export GITHUB_OIDC_PROVIDER_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+
+if ! aws iam get-open-id-connect-provider \
+  --open-id-connect-provider-arn "$GITHUB_OIDC_PROVIDER_ARN" >/dev/null 2>&1; then
+  aws iam create-open-id-connect-provider \
+    --url https://token.actions.githubusercontent.com \
+    --client-id-list sts.amazonaws.com \
+    --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+fi
 ```
 
-作成済み確認:
-
-```bash
-aws iam list-open-id-connect-providers
-```
-
-trust policy を作成します。
+trust policy を作成し、ロールを新規作成または更新します。
 
 ```bash
 cat > /tmp/github-oidc-trust-policy.json <<EOF
@@ -118,7 +119,7 @@ cat > /tmp/github-oidc-trust-policy.json <<EOF
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "${GITHUB_OIDC_PROVIDER_ARN}"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
@@ -137,83 +138,171 @@ cat > /tmp/github-oidc-trust-policy.json <<EOF
   ]
 }
 EOF
+
+if aws iam get-role --role-name "$AWS_ROLE_NAME" >/dev/null 2>&1; then
+  aws iam update-assume-role-policy \
+    --role-name "$AWS_ROLE_NAME" \
+    --policy-document file:///tmp/github-oidc-trust-policy.json
+else
+  aws iam create-role \
+    --role-name "$AWS_ROLE_NAME" \
+    --assume-role-policy-document file:///tmp/github-oidc-trust-policy.json
+fi
 ```
 
-ロールと policy を作成して付与します。
+デプロイポリシーを作成します。Terraform state バケット自体の初期設定、Lightsail、Collector の
+ECR/SQS/Lambda、障害通知用 SNS/CloudWatch、および Collector が使用する IAM リソースを対象にします。
 
 ```bash
-aws iam create-role \
-  --role-name "$AWS_ROLE_NAME" \
-  --assume-role-policy-document file:///tmp/github-oidc-trust-policy.json
-
 cat > /tmp/github-actions-infra-policy.json <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "LightsailAccess",
+      "Sid": "LightsailDeployment",
       "Effect": "Allow",
-      "Action": [
-        "lightsail:AllocateStaticIp",
-        "lightsail:AttachStaticIp",
-        "lightsail:CloseInstancePublicPorts",
-        "lightsail:CreateInstances",
-        "lightsail:CreateInstancesFromSnapshot",
-        "lightsail:CreateKeyPair",
-        "lightsail:DeleteInstance",
-        "lightsail:DeleteKeyPair",
-        "lightsail:DetachStaticIp",
-        "lightsail:GetBlueprints",
-        "lightsail:GetBundles",
-        "lightsail:GetInstance",
-        "lightsail:GetInstancePortStates",
-        "lightsail:GetInstances",
-        "lightsail:GetKeyPair",
-        "lightsail:GetKeyPairs",
-        "lightsail:GetOperation",
-        "lightsail:GetOperations",
-        "lightsail:GetStaticIp",
-        "lightsail:GetStaticIps",
-        "lightsail:ImportKeyPair",
-        "lightsail:IsVpcPeered",
-        "lightsail:PutInstancePublicPorts",
-        "lightsail:OpenInstancePublicPorts",
-        "lightsail:ReleaseStaticIp",
-        "lightsail:TagResource",
-        "lightsail:UpdateInstanceMetadataOptions"
-      ],
+      "Action": "lightsail:*",
       "Resource": "*"
     },
     {
-      "Sid": "TerraformStateBucketAccess",
+      "Sid": "TerraformStateBucketManagement",
       "Effect": "Allow",
       "Action": [
-        "s3:ListBucket",
-        "s3:GetBucketVersioning"
+        "s3:CreateBucket", "s3:DeleteBucket", "s3:ListBucket", "s3:GetBucketLocation",
+        "s3:GetBucketVersioning", "s3:PutBucketVersioning", "s3:GetEncryptionConfiguration",
+        "s3:PutEncryptionConfiguration", "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock",
+        "s3:ListBucketVersions"
       ],
       "Resource": "arn:aws:s3:::${TF_STATE_BUCKET}"
     },
     {
-      "Sid": "TerraformStateObjectAccess",
+      "Sid": "TerraformStateObjectManagement",
       "Effect": "Allow",
       "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
+        "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectVersion"
       ],
       "Resource": "arn:aws:s3:::${TF_STATE_BUCKET}/*"
+    },
+    {
+      "Sid": "EcrAuthentication",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CollectorEcrRepository",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:${AWS_REGION}:${AWS_ACCOUNT_ID}:repository/horse-racing-prediction-collector"
+    },
+    {
+      "Sid": "CollectorSqsQueues",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": [
+        "arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:horse-racing-prediction-collector",
+        "arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:horse-racing-prediction-collector-dlq"
+      ]
+    },
+    {
+      "Sid": "SqsDiscovery",
+      "Effect": "Allow",
+      "Action": "sqs:ListQueues",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CollectorLambdaFunction",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:horse-racing-prediction-collector"
+    },
+    {
+      "Sid": "LambdaEventSourceMappings",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:GetEventSourceMapping",
+        "lambda:ListEventSourceMappings", "lambda:UpdateEventSourceMapping"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CollectorLambdaExecutionRole",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/horse-racing-prediction-collector-lambda"
+    },
+    {
+      "Sid": "LightsailApiIamUser",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": "arn:aws:iam::${AWS_ACCOUNT_ID}:user/horse-racing-prediction-lightsail-api"
+    },
+    {
+      "Sid": "ApiQueueSenderPolicy",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/horse-racing-prediction-api-collection-queue-sender"
+    },
+    {
+      "Sid": "CollectorAlertTopic",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": "arn:aws:sns:${AWS_REGION}:${AWS_ACCOUNT_ID}:horse-racing-prediction-collector-alerts"
+    },
+    {
+      "Sid": "SnsSubscriptionManagement",
+      "Effect": "Allow",
+      "Action": ["sns:GetSubscriptionAttributes", "sns:Unsubscribe"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CollectorCloudWatchAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DeleteAlarms", "cloudwatch:ListTagsForResource", "cloudwatch:PutMetricAlarm",
+        "cloudwatch:TagResource", "cloudwatch:UntagResource"
+      ],
+      "Resource": "arn:aws:cloudwatch:${AWS_REGION}:${AWS_ACCOUNT_ID}:alarm:horse-racing-prediction-collector-*"
+    },
+    {
+      "Sid": "CloudWatchAlarmDiscovery",
+      "Effect": "Allow",
+      "Action": "cloudwatch:DescribeAlarms",
+      "Resource": "*"
     }
   ]
 }
 EOF
+```
 
-aws iam create-policy \
-  --policy-name "$AWS_POLICY_NAME" \
-  --policy-document file:///tmp/github-actions-infra-policy.json
+管理ポリシーが未作成なら作成し、作成済みなら新しい version を default にします。IAM 管理ポリシーは
+最大5 version のため、更新前に古い非 default version を削除します。
+
+```bash
+export AWS_POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${AWS_POLICY_NAME}"
+
+if aws iam get-policy --policy-arn "$AWS_POLICY_ARN" >/dev/null 2>&1; then
+  aws iam list-policy-versions \
+    --policy-arn "$AWS_POLICY_ARN" \
+    --query 'Versions[?IsDefaultVersion==`false`].VersionId' \
+    --output text | tr '\t' '\n' | while read -r version_id; do
+      [ -n "$version_id" ] && aws iam delete-policy-version \
+        --policy-arn "$AWS_POLICY_ARN" \
+        --version-id "$version_id"
+    done
+  aws iam create-policy-version \
+    --policy-arn "$AWS_POLICY_ARN" \
+    --policy-document file:///tmp/github-actions-infra-policy.json \
+    --set-as-default
+else
+  aws iam create-policy \
+    --policy-name "$AWS_POLICY_NAME" \
+    --policy-document file:///tmp/github-actions-infra-policy.json
+fi
 
 aws iam attach-role-policy \
   --role-name "$AWS_ROLE_NAME" \
-  --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${AWS_POLICY_NAME}"
+  --policy-arn "$AWS_POLICY_ARN"
 ```
 
 ## 3. Lightsail 用 SSH 鍵を作成する
@@ -382,18 +471,10 @@ curl -H "X-Api-Key: <YOUR_API_KEY>" https://${LIGHTSAIL_PUBLIC_HOSTNAME}/api/rac
 /opt/horse-racing-prediction/app/data/backups/eventstore-predeploy-YYYYMMDD-HHMMSS.db
 ```
 
-Collector Lambda の Terraform を同じロールで適用する場合、このロールには ECR、Lambda、SQS、
-CloudWatch Logs に加え、Lightsail 上の Api 専用 IAM ユーザーを管理する次の権限が必要です。
-対象 IAM リソースは `horse-racing-prediction-lightsail-api` と
-`horse-racing-prediction-api-collection-queue-sender` に限定してください。
-
-- `iam:CreateUser` / `iam:GetUser` / `iam:DeleteUser`
-- `iam:CreateAccessKey` / `iam:GetAccessKeyLastUsed` / `iam:ListAccessKeys` / `iam:DeleteAccessKey`
-- `iam:AttachUserPolicy` / `iam:DetachUserPolicy` / `iam:ListAttachedUserPolicies`
-- `iam:CreatePolicy` / `iam:GetPolicy` / `iam:GetPolicyVersion`
-- `iam:CreatePolicyVersion` / `iam:DeletePolicyVersion` / `iam:ListPolicyVersions`
-- `iam:ListEntitiesForPolicy`
-- `iam:DeletePolicy`
+Collector Lambda の Terraform に必要な ECR、Lambda、SQS、SNS、CloudWatch、IAM 権限も、上記の
+`github-actions-infra-policy.json` で管理します。AWS リソースや workflow を変更した場合は、実際に必要な
+操作と ARN を確認して同じポリシーを更新してください。AWS API の仕様上リソースレベルの制限ができない
+discovery、認証、Lambda Event Source Mapping 操作などだけ `Resource = "*"` とします。
 
 Api 用アクセスキーは Terraform の暗号化済み S3 backend に sensitive value として保存され、
 アプリケーションデプロイ時に Lightsail の `/opt/horse-racing-prediction/app/.env` へ直接配置されます。

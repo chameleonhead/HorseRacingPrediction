@@ -57,6 +57,12 @@ dotnet test tests/HorseRacingPrediction.Api.Tests
 - ユーザーが作成した既存変更は、内容を確認せずに上書き、取り消し、または別目的のコミットへ混在させない
 - コミットメッセージは、変更の目的が分かる簡潔な命令形にする
 
+## AWS Deployment Policy
+
+- AWS リソース、Terraform resource、または GitHub Actions の AWS API 操作を追加・変更・削除する場合は、同じ変更内で `docs/lightsail-deployment.md` の GitHub Actions IAM ポリシーを見直す
+- IAM ポリシーには実際の workflow と Terraform が必要とする操作だけを含め、リソースレベル制限が可能な操作は本システムの ARN に限定する
+- IAM ポリシーを変更した場合は、初回作成手順だけでなく既存ポリシーの更新手順でも適用できることを確認する
+
 ## Conventions
 
 ### File Organization
