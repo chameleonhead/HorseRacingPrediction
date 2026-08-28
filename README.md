@@ -12,6 +12,7 @@ CQRS+ES と ASP.NET Core Web API を前提にした競馬予想アプリケー�
 - [docs/jra-site-data-collector.md](docs/jra-site-data-collector.md): JraSiteDataCollector（Collectorが使うJRAナビゲーション）の設計仕様
 - [docs/jra-page-map-blueprint.md](docs/jra-page-map-blueprint.md): JRAページ判定・構造化抽出の責務分割
 - [docs/lightsail-deployment.md](docs/lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
+- [docs/admin-ui-design.md](docs/admin-ui-design.md): スマートフォン対応を含む管理サイト UI / UX とジョブ運用画面の再設計
 
 ## 現時点の方針
 
