@@ -29,6 +29,7 @@
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\AgentProcessingOptions.cs" Link="Scheduling\AgentProcessingOptions.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\CollectionExecutionTrigger.cs" Link="Scheduling\CollectionExecutionTrigger.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\CollectionTaskDispatch.cs" Link="Scheduling\CollectionTaskDispatch.cs" />
+    <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\ForceRequeueJobResult.cs" Link="Scheduling\ForceRequeueJobResult.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\IProcessingStateStore.cs" Link="Scheduling\IProcessingStateStore.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\HttpProcessingStateStoreProxy.cs" Link="Scheduling\HttpProcessingStateStoreProxy.cs" />
     <Compile Include="..\HorseRacingPrediction.Collector\Scheduling\JobFailureNotificationEntity.cs" Link="Scheduling\JobFailureNotificationEntity.cs" />

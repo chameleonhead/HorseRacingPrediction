@@ -22,6 +22,7 @@ public interface IProcessingStateStore
     Task FailJobAsync(string jobType, string deduplicationKey, string? error, CancellationToken cancellationToken = default);
     Task RequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, string? error, CancellationToken cancellationToken = default, DateTimeOffset? availableAt = null);
     Task<bool> ForceRequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, CancellationToken cancellationToken = default);
+    Task<ForceRequeueJobResult> ForceRequeueJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<int> RequeueRunningJobsAsync(IEnumerable<string> jobTypes, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetActiveJobPayloadsAsync(string jobType, CancellationToken cancellationToken = default);
     Task<int> GetAttemptCountAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);

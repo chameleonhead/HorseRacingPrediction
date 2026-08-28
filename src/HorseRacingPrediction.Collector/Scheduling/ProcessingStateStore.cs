@@ -1498,6 +1498,37 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         });
     }
 
+    public async Task<ForceRequeueJobResult> ForceRequeueJobAsync(
+        string jobId,
+        DateTimeOffset expectedUpdatedAt,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var job = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken).ConfigureAwait(false);
+            if (job is null) return ForceRequeueJobResult.NotFound;
+            if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
+
+            job.Status = AgentJobStatus.Ready;
+            job.AvailableAt = now;
+            job.StartedAt = null;
+            job.LeaseExpiresAt = null;
+            job.LeaseToken = null;
+            job.LastError = null;
+            job.UpdatedAt = now;
+            QueueDispatch(dbContext, job, now);
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return ForceRequeueJobResult.Requeued;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private static void QueueFailureNotification(
         ProcessingStateDbContext dbContext,
         ProcessingJobEntity job,

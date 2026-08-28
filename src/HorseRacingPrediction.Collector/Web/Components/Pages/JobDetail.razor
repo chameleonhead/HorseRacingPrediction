@@ -31,9 +31,23 @@ else
             <dt>UpdatedAt</dt><dd>@Fmt(detail.UpdatedAt)</dd>
         </dl>
         <div class="toolbar">
-            <button class="btn primary" @onclick="RequeueAsync">再キュー</button>
+            @if (!confirmingRequeue)
+            {
+                <button class="btn primary" @onclick="() => confirmingRequeue = true">再キューする</button>
+            }
             <button class="btn" @onclick="LoadAsync">再読み込み</button>
         </div>
+        @if (confirmingRequeue)
+        {
+            <div class="confirmation" role="group" aria-label="再キューの確認">
+                <strong>このジョブを再キューしますか？</strong>
+                <p class="hint">実行中の処理と重複しないよう、表示後に状態が変わっていた場合は中止します。</p>
+                <div class="toolbar">
+                    <button class="btn primary" @onclick="RequeueAsync" disabled="@requeueing">確認して再キュー</button>
+                    <button class="btn" @onclick="() => confirmingRequeue = false" disabled="@requeueing">キャンセル</button>
+                </div>
+            </div>
+        }
         @if (!string.IsNullOrEmpty(message))
         {
             <p class="hint">@message</p>
@@ -60,6 +74,8 @@ else
     private bool loading;
     private AgentJobDetailReadModel? detail;
     private string? message;
+    private bool confirmingRequeue;
+    private bool requeueing;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -79,16 +95,23 @@ else
     private async Task RequeueAsync()
     {
         if (detail is null) return;
-        var ok = await Store.ForceRequeueJobAsync(detail.JobType, detail.DeduplicationKey, DateTimeOffset.UtcNow);
-        if (ok)
+        requeueing = true;
+        var result = await Store.ForceRequeueJobAsync(detail.JobId, detail.UpdatedAt, DateTimeOffset.UtcNow);
+        if (result == ForceRequeueJobResult.Requeued)
         {
             ExecutionTrigger.Signal();
             message = "再キューしました。";
         }
+        else if (result == ForceRequeueJobResult.Conflict)
+        {
+            message = "ジョブの状態が更新されていたため再キューしませんでした。最新状態を確認してください。";
+        }
         else
         {
-            message = "再キューに失敗しました。";
+            message = "対象のジョブが見つかりませんでした。";
         }
+        confirmingRequeue = false;
+        requeueing = false;
         await LoadAsync();
     }
 

@@ -55,6 +55,28 @@ public static class AgentDashboardEndpointExtensions
             .WithSummary("Get result-day collection statuses");
 
         collectionApi.MapPost(
+            "/tasks/{jobId}/requeue",
+            async (
+                string jobId,
+                RequeueCollectionTaskRequest request,
+                IProcessingStateStore stateStore,
+                CollectionExecutionTrigger executionTrigger,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await stateStore.ForceRequeueJobAsync(
+                    jobId, request.ExpectedUpdatedAt, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                if (result == ForceRequeueJobResult.Requeued) executionTrigger.Signal();
+                return result switch
+                {
+                    ForceRequeueJobResult.Requeued => Results.Ok(),
+                    ForceRequeueJobResult.NotFound => Results.NotFound(),
+                    _ => Results.Conflict(new { message = "ジョブが更新されています。最新状態を確認してから再実行してください。" })
+                };
+            })
+            .WithName("RequeueCollectionTaskById")
+            .WithSummary("Requeue a collection task with optimistic concurrency control");
+
+        collectionApi.MapPost(
             "/tasks/{jobType}/{deduplicationKey}/requeue",
             async (
                 string jobType,
@@ -183,4 +205,6 @@ public static class AgentDashboardEndpointExtensions
 
         return endpoints;
     }
+
+    private sealed record RequeueCollectionTaskRequest(DateTimeOffset ExpectedUpdatedAt);
 }

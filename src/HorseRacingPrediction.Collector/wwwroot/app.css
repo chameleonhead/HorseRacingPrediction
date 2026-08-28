@@ -132,6 +132,7 @@ table.data tr:last-child td { border-bottom: 0; }
 .job-list { min-width: 0; }
 .job-table td { overflow-wrap: anywhere; }
 .job-row-action { white-space: nowrap; }
+.confirmation { padding: 12px; display: grid; gap: 8px; background: #fff7df; border-left: 4px solid var(--warn); }
 
 .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef1f4; border: 1px solid var(--border); }
 .pill-ok { background: #e2f0e6; color: var(--ok); }

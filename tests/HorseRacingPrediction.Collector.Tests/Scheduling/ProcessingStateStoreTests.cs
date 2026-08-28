@@ -259,6 +259,21 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task ForceRequeueJobAsync_ByJobIdRejectsStaleUpdate()
+    {
+        var now = new DateTimeOffset(2026, 5, 12, 12, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("JobType-Concurrency", "item-1", "{}", now, priority: 10);
+        var job = (await sut.GetJobStatusesAsync("JobType-Concurrency", null, 10)).Single();
+
+        var requeued = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(1));
+        var stale = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(2));
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, requeued);
+        Assert.AreEqual(ForceRequeueJobResult.Conflict, stale);
+    }
+
+    [TestMethod]
     public async Task FailJobAsync_CreatesSingleFailureNotificationForStateTransition()
     {
         var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
