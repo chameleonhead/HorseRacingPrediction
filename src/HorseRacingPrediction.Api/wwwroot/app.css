@@ -185,6 +185,34 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .memo-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .memo-content { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
 
+.entity-section { display: grid; gap: 10px; min-width: 0; }
+.relationship-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 8px; }
+.relationship-link {
+    min-width: 0;
+    min-height: 108px;
+    padding: 12px;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    align-content: start;
+    gap: 5px;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-wrap: anywhere;
+}
+.relationship-link:hover { background: #f3f7f5; text-decoration: none; }
+.relationship-kind { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
+.history-list { list-style: none; padding: 0; margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.history-item { min-width: 0; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; border-bottom: 1px solid var(--border); }
+.history-item:last-child { border-bottom: 0; }
+.history-event, .history-field { min-width: 0; overflow-wrap: anywhere; }
+.history-event { display: grid; gap: 3px; }
+.history-race { font-weight: 700; }
+.history-result { display: grid; align-content: start; justify-items: end; white-space: nowrap; }
+.history-relations { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; padding-top: 9px; border-top: 1px solid var(--border); }
+.history-field { display: grid; grid-template-rows: auto 1fr; align-content: start; gap: 3px; }
+
 .login-body {
     display: flex;
     align-items: center;
@@ -266,8 +294,10 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
 
     .card {
         padding: 14px 12px;
-        overflow-x: auto;
+        min-width: 0;
     }
+
+    .history-relations { grid-template-columns: 1fr; gap: 8px; }
 
     dl.meta {
         grid-template-columns: 1fr;

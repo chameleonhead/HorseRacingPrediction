@@ -20,7 +20,24 @@ else
         </dl>
     </section>
 
-    <section class="card">
+    @if (relationships.Count > 0)
+    {
+        <section class="entity-section">
+            <h3>この馬に関係する人</h3>
+            <div class="relationship-grid">
+                @foreach (var relationship in relationships)
+                {
+                    <a class="relationship-link" href="@relationship.Url">
+                        <span class="relationship-kind">@relationship.Kind</span>
+                        <strong>@relationship.Name</strong>
+                        <span class="hint">@relationship.Evidence</span>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="entity-section">
         <h3>出走履歴</h3>
         @if (raceHistory is null || raceHistory.Entries.Count == 0)
         {
@@ -28,38 +45,24 @@ else
         }
         else
         {
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>日付</th>
-                            <th>競馬場</th>
-                            <th>コース</th>
-                            <th>距離</th>
-                            <th>着順</th>
-                            <th>騎手</th>
-                            <th>馬体重</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var entry in raceHistory.Entries.OrderByDescending(x => x.RaceDate))
-                        {
-                            <tr>
-                                <td><a href="@($"races/{entry.RaceId}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "—")</a></td>
-                                <td>@Display(entry.RacecourseCode)</td>
-                                <td>@Display(entry.SurfaceCode)</td>
-                                <td>@(entry.DistanceMeters is null ? "—" : $"{entry.DistanceMeters}m")</td>
-                                <td>@(entry.FinishPosition?.ToString() ?? "—")</td>
-                                <td>
-                                    @if (string.IsNullOrWhiteSpace(entry.JockeyId)) { <span>—</span> }
-                                    else { <a href="@($"jockeys/{entry.JockeyId}")">@JockeyName(entry.JockeyId)</a> }
-                                </td>
-                                <td>@(entry.DeclaredWeight is null ? "—" : $"{entry.DeclaredWeight}kg")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+            <ol class="history-list">
+                @foreach (var entry in raceHistory.Entries.OrderByDescending(x => x.RaceDate))
+                {
+                    var race = Race(entry.RaceId);
+                    <li class="history-item">
+                        <div class="history-event">
+                            <a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @Display(entry.RacecourseCode)</a>
+                            <span class="hint">@(race?.RaceName ?? FormatRaceConditions(entry.SurfaceCode, entry.DistanceMeters))</span>
+                        </div>
+                        <div class="history-result"><strong>@FormatFinish(entry.FinishPosition)</strong><span class="hint">@(entry.DeclaredWeight is null ? "馬体重 —" : $"馬体重 {entry.DeclaredWeight}kg")</span></div>
+                        <div class="history-relations">
+                            <div class="history-field"><span class="relationship-kind">騎手</span>@EntityLink("jockeys", entry.JockeyId, JockeyName(entry.JockeyId))</div>
+                            <div class="history-field"><span class="relationship-kind">調教師</span>@EntityLink("trainers", entry.TrainerId, TrainerName(entry.TrainerId))</div>
+                            <div class="history-field"><span class="relationship-kind">レース時点の馬主</span><span>@(RaceEntry(entry.RaceId)?.OwnerName ?? "—")</span></div>
+                        </div>
+                    </li>
+                }
+            </ol>
         }
     </section>
 
@@ -140,6 +143,9 @@ else
     private HorseProfileResponse? horse;
     private HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? raceHistory;
     private IReadOnlyDictionary<string, string> jockeyNames = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, string> trainerNames = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, RaceResponse> races = new Dictionary<string, RaceResponse>();
+    private IReadOnlyList<RelationshipItem> relationships = Array.Empty<RelationshipItem>();
 
     private string? editRegisteredName;
     private string? editNormalizedName;
@@ -177,6 +183,9 @@ else
             horse = await profileTask;
             raceHistory = await historyTask;
             jockeyNames = await LoadJockeyNamesAsync(raceHistory);
+            trainerNames = await LoadTrainerNamesAsync(raceHistory);
+            races = await LoadRacesAsync(raceHistory?.Entries.Select(x => x.RaceId));
+            relationships = BuildRelationships();
             if (horse is not null)
             {
                 editRegisteredName = horse.RegisteredName;
@@ -195,8 +204,27 @@ else
     private static string Display(string? value)
         => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
-    private string JockeyName(string jockeyId)
-        => jockeyNames.TryGetValue(jockeyId, out var name) ? name : jockeyId;
+    private string JockeyName(string? jockeyId)
+        => !string.IsNullOrWhiteSpace(jockeyId) && jockeyNames.TryGetValue(jockeyId, out var name) ? name : jockeyId ?? "—";
+
+    private string TrainerName(string? trainerId)
+        => !string.IsNullOrWhiteSpace(trainerId) && trainerNames.TryGetValue(trainerId, out var name) ? name : trainerId ?? "—";
+
+    private RaceResponse? Race(string raceId) => races.GetValueOrDefault(raceId);
+    private RaceEntryResponse? RaceEntry(string raceId) => Race(raceId)?.Entries.FirstOrDefault(x => x.HorseId == HorseId);
+
+    private static string FormatFinish(int? position) => position is null ? "結果 —" : $"{position}着";
+    private static string FormatRaceConditions(string? surface, int? distance)
+        => $"{Display(surface)} / {(distance is null ? "距離未登録" : $"{distance}m")}";
+
+    private RenderFragment EntityLink(string segment, string? id, string label) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "—"); return; }
+        builder.OpenElement(1, "a");
+        builder.AddAttribute(2, "href", $"{segment}/{Uri.EscapeDataString(id)}");
+        builder.AddContent(3, label);
+        builder.CloseElement();
+    };
 
     private async Task<IReadOnlyDictionary<string, string>> LoadJockeyNamesAsync(
         HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? history)
@@ -215,6 +243,33 @@ else
             .Where(x => x is not null)
             .ToDictionary(x => x!.JockeyId, x => x!.DisplayName, StringComparer.Ordinal);
     }
+
+    private async Task<IReadOnlyDictionary<string, string>> LoadTrainerNamesAsync(HorseRacingPrediction.Contracts.HorseRaceHistoryReadModel? history)
+    {
+        var ids = history?.Entries.Select(x => x.TrainerId).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!).Distinct(StringComparer.Ordinal).ToList() ?? [];
+        var profiles = await Task.WhenAll(ids.Select(id => Api.GetTrainerAsync(id)));
+        return profiles.Where(x => x is not null).ToDictionary(x => x!.TrainerId, x => x!.DisplayName, StringComparer.Ordinal);
+    }
+
+    private async Task<IReadOnlyDictionary<string, RaceResponse>> LoadRacesAsync(IEnumerable<string>? raceIds)
+    {
+        var ids = raceIds?.Distinct(StringComparer.Ordinal).ToList() ?? [];
+        var values = await Task.WhenAll(ids.Select(id => Api.GetRaceAsync(id)));
+        return values.Where(x => x is not null).Select(x => x!).ToDictionary(x => x.RaceId, StringComparer.Ordinal);
+    }
+
+    private IReadOnlyList<RelationshipItem> BuildRelationships()
+    {
+        var entries = raceHistory?.Entries ?? [];
+        var result = new List<RelationshipItem>();
+        result.AddRange(entries.Where(x => !string.IsNullOrWhiteSpace(x.JockeyId)).GroupBy(x => x.JockeyId!).OrderByDescending(x => x.Count()).Take(3)
+            .Select(x => new RelationshipItem("騎乗した騎手", JockeyName(x.Key), $"{x.Count()}戦", $"jockeys/{Uri.EscapeDataString(x.Key)}")));
+        result.AddRange(entries.Where(x => !string.IsNullOrWhiteSpace(x.TrainerId)).GroupBy(x => x.TrainerId!).OrderByDescending(x => x.Count()).Take(3)
+            .Select(x => new RelationshipItem("レース時点の調教師", TrainerName(x.Key), $"{x.Count()}戦", $"trainers/{Uri.EscapeDataString(x.Key)}")));
+        return result;
+    }
+
+    private sealed record RelationshipItem(string Kind, string Name, string Evidence, string Url);
 
     private async Task UpdateProfileAsync()
     {
