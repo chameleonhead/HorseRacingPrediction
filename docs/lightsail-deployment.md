@@ -221,7 +221,8 @@ cat > /tmp/github-actions-infra-policy.json <<EOF
       "Effect": "Allow",
       "Action": [
         "lambda:CreateEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:GetEventSourceMapping",
-        "lambda:ListEventSourceMappings", "lambda:UpdateEventSourceMapping"
+        "lambda:ListEventSourceMappings", "lambda:ListTags", "lambda:TagResource", "lambda:UntagResource",
+        "lambda:UpdateEventSourceMapping"
       ],
       "Resource": "*"
     },
@@ -303,6 +304,24 @@ fi
 aws iam attach-role-policy \
   --role-name "$AWS_ROLE_NAME" \
   --policy-arn "$AWS_POLICY_ARN"
+```
+
+Event Source Mapping の状態参照を含む必須権限が反映されたことを確認します。すべて `allowed` になってから
+`app-deploy` を再実行してください。
+
+```bash
+aws iam simulate-principal-policy \
+  --policy-source-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:role/${AWS_ROLE_NAME}" \
+  --action-names \
+    lambda:ListEventSourceMappings \
+    lambda:GetEventSourceMapping \
+    lambda:ListTags \
+  --resource-arns \
+    "arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:event-source-mapping:*" \
+  --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' \
+  --output table
+
+gh workflow run app-deploy.yml --ref "$GITHUB_BRANCH"
 ```
 
 ## 3. Lightsail 用 SSH 鍵を作成する
