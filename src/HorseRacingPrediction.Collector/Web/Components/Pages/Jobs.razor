@@ -56,7 +56,8 @@ else if (items is null || items.Count == 0)
 }
 else
 {
-    <table class="data">
+    <div class="job-list" role="region" aria-label="ジョブ検索結果">
+    <table class="data job-table">
         <thead>
             <tr>
                 <th>JobType</th>
@@ -72,17 +73,18 @@ else
             @foreach (var job in items)
             {
                 <tr>
-                    <td>@job.JobType</td>
-                    <td><a href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">@job.DeduplicationKey</a></td>
-                    <td><span class="pill @PillClass(job.Status)">@job.Status</span></td>
-                    <td>@job.AttemptCount</td>
-                    <td>@FormatDate(job.AvailableAt)</td>
-                    <td>@FormatDate(job.UpdatedAt)</td>
-                    <td><button class="btn small" @onclick="() => RequeueAsync(job)">再キュー</button></td>
+                    <td data-label="JobType">@job.JobType</td>
+                    <td data-label="対象"><a href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">@job.DeduplicationKey</a></td>
+                    <td data-label="状態"><span class="pill @PillClass(job.Status)">@job.Status</span></td>
+                    <td data-label="試行回数">@job.AttemptCount</td>
+                    <td data-label="実行可能日時">@FormatDate(job.AvailableAt)</td>
+                    <td data-label="更新日時">@FormatDate(job.UpdatedAt)</td>
+                    <td class="job-row-action"><a class="btn small" href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">詳細を見る</a></td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
 }
 
 @code {
