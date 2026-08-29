@@ -220,6 +220,16 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .object-label { display: block; margin-bottom: 2px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .race-row { grid-template-columns: minmax(240px, 1.6fr) repeat(3, minmax(90px, .55fr)); }
 .prediction-row { grid-template-columns: minmax(210px, 1.2fr) repeat(5, minmax(90px, .6fr)); }
+.race-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.race-facts > div { min-width: 0; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow-wrap: anywhere; }
+.participant-list { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.participant-row { min-width: 0; padding: 12px; display: grid; grid-template-columns: 52px minmax(180px, 1fr) auto; gap: 8px 14px; border-bottom: 1px solid var(--border); }
+.participant-row:last-child { border-bottom: 0; }
+.participant-number { display: grid; align-content: start; justify-items: center; }
+.participant-number span { color: var(--muted); font-size: 12px; }
+.participant-number strong { font-size: 20px; }
+.participant-result { display: grid; align-content: start; justify-items: end; white-space: nowrap; }
+.participant-relations { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; min-width: 0; overflow-wrap: anywhere; }
 
 .login-body {
     display: flex;
@@ -308,6 +318,9 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
     .history-relations { grid-template-columns: 1fr; gap: 8px; }
     .object-row, .race-row, .prediction-row { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
     .object-primary { grid-column: 1 / -1; }
+    .race-facts { grid-template-columns: 1fr; }
+    .participant-row { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px 10px; }
+    .participant-relations { grid-column: 1 / -1; grid-template-columns: 1fr; padding-top: 8px; border-top: 1px solid var(--border); }
 
     dl.meta {
         grid-template-columns: 1fr;
