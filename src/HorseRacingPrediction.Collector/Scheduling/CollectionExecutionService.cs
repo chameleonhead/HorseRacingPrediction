@@ -222,6 +222,7 @@ public sealed class CollectionExecutionService : BackgroundService
                         AgentJobPayloadSerializer.Serialize(dayPayload),
                         now,
                         priority: date >= todayJst.AddMonths(-1) ? 150 : 70,
+                        parentJobId: job.JobId,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
 
@@ -325,6 +326,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     AgentJobPayloadSerializer.Serialize(dayCollectionPayload),
                     now,
                     priority: 140,
+                    parentJobId: job.JobId,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 await _stateStore.UpsertResultDayCollectionStatusAsync(

@@ -40,7 +40,7 @@ public class HttpProcessingStateStoreProxy : DispatchProxy
                 return Task.FromResult<IReadOnlyList<AcquiredProcessingJob>>([]);
             scope.Consumed = true;
             return Task.FromResult<IReadOnlyList<AcquiredProcessingJob>>(
-                [new AcquiredProcessingJob(scope.Task.DeduplicationKey, scope.Task.Payload)]);
+                [new AcquiredProcessingJob(scope.Task.TaskId, scope.Task.DeduplicationKey, scope.Task.Payload)]);
         }
 
         if (scope is not null

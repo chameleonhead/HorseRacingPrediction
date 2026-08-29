@@ -197,6 +197,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         string payload,
         DateTimeOffset now,
         int priority = 0,
+        string? parentJobId = null,
         CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -217,6 +218,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     JobType = jobType,
                     DeduplicationKey = deduplicationKey,
                     Payload = payload,
+                    ParentJobId = parentJobId,
                     Status = AgentJobStatus.Ready,
                     Priority = priority,
                     FirstQueuedAt = now,
@@ -233,6 +235,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
             job.Payload = payload;
             job.Priority = priority;
+            job.ParentJobId ??= parentJobId;
             job.UpdatedAt = now;
 
             if (job.Status is AgentJobStatus.Succeeded or AgentJobStatus.Cancelled or AgentJobStatus.DeadLetter)
@@ -313,7 +316,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return readyJobs
-                .Select(x => new AcquiredProcessingJob(x.DeduplicationKey, x.Payload))
+                .Select(x => new AcquiredProcessingJob(x.JobId, x.DeduplicationKey, x.Payload))
                 .ToList();
         }
         finally
@@ -982,6 +985,13 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 .SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken)
                 .ConfigureAwait(false);
             if (entity is null) return null;
+            var relatedEntities = await dbContext.Jobs.AsNoTracking()
+                .Where(x => x.JobId == entity.ParentJobId || x.ParentJobId == entity.JobId)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var parent = relatedEntities.Where(x => x.JobId == entity.ParentJobId)
+                .Select(ToRelatedJob).SingleOrDefault();
+            var children = relatedEntities.Where(x => x.ParentJobId == entity.JobId)
+                .OrderByDescending(x => x.UpdatedAt).Select(ToRelatedJob).ToList();
             var auditEntities = await dbContext.JobOperationAudits.AsNoTracking()
                 .Where(x => x.JobId == entity.JobId)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1002,6 +1012,8 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 entity.LastError,
                 entity.CreatedAt,
                 entity.UpdatedAt,
+                parent,
+                children,
                 audits);
         }
         finally
@@ -1011,6 +1023,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     }
 
     public static string ComposeJobId(string jobType, string deduplicationKey) => BuildJobId(jobType, deduplicationKey);
+
+    private static AgentRelatedJobReadModel ToRelatedJob(ProcessingJobEntity entity)
+        => new(entity.JobId, entity.JobType, entity.DeduplicationKey, entity.Status, entity.UpdatedAt);
 
     public async Task<ResultDayCollectionStatusReadModel?> GetResultDayCollectionStatusAsync(
         string providerType,
@@ -1179,6 +1194,12 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             .Any();
         if (!leaseTokenColumnExists)
             dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN lease_token TEXT NULL;");
+        var parentJobIdColumnExists = dbContext.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('jobs') WHERE name = 'parent_job_id'")
+            .Any();
+        if (!parentJobIdColumnExists)
+            dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN parent_job_id TEXT NULL;");
+        dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS ix_jobs_parent_job_id ON jobs(parent_job_id);");
         dbContext.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS collection_dispatch_outbox (

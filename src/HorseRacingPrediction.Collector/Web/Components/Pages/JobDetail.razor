@@ -62,6 +62,26 @@ else
         </section>
     }
 
+    @if (detail.ParentJob is not null || detail.ChildJobs.Count > 0)
+    {
+        <section class="card">
+            <h3>関連ジョブ</h3>
+            @if (detail.ParentJob is not null)
+            {
+                <div><span class="object-label">親ジョブ</span><a href="@(JobUrl(detail.ParentJob.JobId))">@detail.ParentJob.JobType · @detail.ParentJob.DeduplicationKey</a> <span class="pill">@detail.ParentJob.Status</span></div>
+            }
+            @if (detail.ChildJobs.Count > 0)
+            {
+                <div class="operation-list">
+                    @foreach (var child in detail.ChildJobs)
+                    {
+                        <a class="operation-row related-job" href="@(JobUrl(child.JobId))"><span><span class="object-label">子ジョブ</span><strong>@child.JobType</strong></span><span class="hint">@child.DeduplicationKey</span><span class="pill">@child.Status</span><span class="hint">更新 @(Fmt(child.UpdatedAt))</span></a>
+                    }
+                </div>
+            }
+        </section>
+    }
+
     <section class="card">
         <h3>操作履歴</h3>
         @if (detail.AuditHistory.Count == 0) { <p class="hint">管理画面からの操作履歴はありません。</p> }
@@ -129,6 +149,7 @@ else
     private static string Fmt(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string Fmt(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     private static string OperationName(string operation) => operation == "ManualRequeue" ? "再キュー" : operation;
+    private static string JobUrl(string jobId) => $"jobs/{Uri.EscapeDataString(jobId)}";
 
     private static string FormatPayload(string? payload)
     {

@@ -279,6 +279,25 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task ScheduleJobAsync_ExposesParentAndChildJobsInDetail()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("Parent", "parent-1", "{}", now);
+        var parentId = ProcessingStateStore.ComposeJobId("Parent", "parent-1");
+        await sut.ScheduleJobAsync("Child", "child-1", "{}", now.AddMinutes(1), parentJobId: parentId);
+
+        var parent = await sut.GetJobDetailAsync(parentId);
+        var child = await sut.GetJobDetailAsync(ProcessingStateStore.ComposeJobId("Child", "child-1"));
+
+        Assert.IsNotNull(parent);
+        Assert.HasCount(1, parent.ChildJobs);
+        Assert.AreEqual("Child", parent.ChildJobs[0].JobType);
+        Assert.IsNotNull(child);
+        Assert.AreEqual(parentId, child.ParentJob?.JobId);
+    }
+
+    [TestMethod]
     public async Task FailJobAsync_CreatesSingleFailureNotificationForStateTransition()
     {
         var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);

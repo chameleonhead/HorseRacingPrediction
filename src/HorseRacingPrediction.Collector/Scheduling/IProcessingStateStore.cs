@@ -9,7 +9,7 @@ public interface IProcessingStateStore
     Task<bool> HasMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task MarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task EnqueueJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, CancellationToken cancellationToken = default);
-    Task ScheduleJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, CancellationToken cancellationToken = default);
+    Task ScheduleJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, string? parentJobId = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(string jobType, DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(string jobType, string deduplicationKey, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<bool> CompleteCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);

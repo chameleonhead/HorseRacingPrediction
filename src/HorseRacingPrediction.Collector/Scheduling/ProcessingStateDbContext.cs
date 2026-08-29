@@ -34,6 +34,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.JobType).HasColumnName("job_type");
             entity.Property(x => x.DeduplicationKey).HasColumnName("deduplication_key");
             entity.Property(x => x.Payload).HasColumnName("payload");
+            entity.Property(x => x.ParentJobId).HasColumnName("parent_job_id");
             entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>();
             entity.Property(x => x.Priority).HasColumnName("priority");
             entity.Property(x => x.FirstQueuedAt).HasColumnName("first_queued_at");
@@ -50,6 +51,7 @@ public sealed class ProcessingStateDbContext : DbContext
                 .IsUnique();
             entity.HasIndex(x => new { x.JobType, x.Status, x.AvailableAt, x.FirstQueuedAt, x.Priority });
             entity.HasIndex(x => new { x.Status, x.LeaseExpiresAt });
+            entity.HasIndex(x => x.ParentJobId);
         });
 
         modelBuilder.Entity<CollectionDispatchOutboxEntity>(entity =>
