@@ -351,6 +351,76 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task ChildJobs_AllSucceeded_CompletesParentAndResultDay()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 8, 15);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        var parentKey = AgentJobKeyFactory.BuildResultDayCollectionRequestKey("JRA", date);
+        await sut.ScheduleJobAsync(AgentJobType.ResultDayCollectionRequest, parentKey, "{}", now);
+        var parentId = $"{AgentJobType.ResultDayCollectionRequest}:{parentKey}";
+        await sut.UpsertResultDayCollectionStatusAsync("JRA", date, ResultDayCollectionState.Running, 2, 0, null, null, null, null, now);
+        await sut.ScheduleJobAsync("Child", "race-1", "{}", now, parentJobId: parentId);
+        await sut.ScheduleJobAsync("Child", "race-2", "{}", now, parentJobId: parentId);
+        await sut.WaitForDependenciesAsync(AgentJobType.ResultDayCollectionRequest, parentKey);
+
+        await sut.CompleteJobAsync("Child", "race-1");
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, (await sut.GetJobDetailAsync(parentId))!.Status);
+        await sut.CompleteJobAsync("Child", "race-2");
+
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await sut.GetJobDetailAsync(parentId))!.Status);
+        var day = await sut.GetResultDayCollectionStatusAsync("JRA", date);
+        Assert.IsNotNull(day);
+        Assert.AreEqual(ResultDayCollectionState.Complete, day.Status);
+        Assert.AreEqual(2, day.CompletedRaceCount);
+    }
+
+    [TestMethod]
+    public async Task ChildJobs_WithFailure_FailsParentAndRecordsProgress()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 8, 15);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        var parentKey = AgentJobKeyFactory.BuildResultDayCollectionRequestKey("JRA", date);
+        await sut.ScheduleJobAsync(AgentJobType.ResultDayCollectionRequest, parentKey, "{}", now);
+        var parentId = $"{AgentJobType.ResultDayCollectionRequest}:{parentKey}";
+        await sut.UpsertResultDayCollectionStatusAsync("JRA", date, ResultDayCollectionState.Running, 2, 0, null, null, null, null, now);
+        await sut.ScheduleJobAsync("Child", "race-1", "{}", now, parentJobId: parentId);
+        await sut.ScheduleJobAsync("Child", "race-2", "{}", now, parentJobId: parentId);
+        await sut.WaitForDependenciesAsync(AgentJobType.ResultDayCollectionRequest, parentKey);
+
+        await sut.CompleteJobAsync("Child", "race-1");
+        await sut.FailJobAsync("Child", "race-2", "scraping failed");
+
+        var parent = await sut.GetJobDetailAsync(parentId);
+        Assert.AreEqual(AgentJobStatus.Failed, parent!.Status);
+        StringAssert.Contains(parent.LastError, "scraping failed");
+        var day = await sut.GetResultDayCollectionStatusAsync("JRA", date);
+        Assert.IsNotNull(day);
+        Assert.AreEqual(ResultDayCollectionState.Incomplete, day.Status);
+        Assert.AreEqual(1, day.CompletedRaceCount);
+        StringAssert.Contains(day.LastError, "scraping failed");
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_DoesNotRequeueSucceededChildForSameParent()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("Parent", "day", "{}", now);
+        const string parentId = "Parent:day";
+        await sut.ScheduleJobAsync("Child", "race-1", "old", now, parentJobId: parentId);
+        await sut.CompleteJobAsync("Child", "race-1");
+
+        await sut.ScheduleJobAsync("Child", "race-1", "new", now.AddMinutes(1), parentJobId: parentId);
+
+        var child = await sut.GetJobDetailAsync("Child:race-1");
+        Assert.IsNotNull(child);
+        Assert.AreEqual(AgentJobStatus.Succeeded, child.Status);
+        Assert.IsEmpty(await sut.AcquireReadyJobsAsync("Child", now.AddMinutes(2), TimeSpan.Zero, 1, TimeSpan.FromMinutes(5)));
+    }
+
+    [TestMethod]
     public async Task Constructor_AddsLeaseTokenColumnToExistingJobStore()
     {
         var databasePath = Path.Combine(_stateDirectory, "processing-jobs.db");

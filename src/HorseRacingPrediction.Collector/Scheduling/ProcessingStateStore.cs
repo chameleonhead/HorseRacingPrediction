@@ -238,6 +238,15 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.ParentJobId ??= parentJobId;
             job.UpdatedAt = now;
 
+            // 親ジョブの再実行時も、完了済みの子タスクは再投入しない。
+            if (job.Status == AgentJobStatus.Succeeded
+                && !string.IsNullOrWhiteSpace(parentJobId)
+                && string.Equals(job.ParentJobId, parentJobId, StringComparison.Ordinal))
+            {
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             if (job.Status is AgentJobStatus.Succeeded or AgentJobStatus.Cancelled or AgentJobStatus.DeadLetter)
             {
                 job.Status = AgentJobStatus.Ready;
@@ -471,6 +480,20 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task WaitForDependenciesAsync(
+        string jobType,
+        string deduplicationKey,
+        CancellationToken cancellationToken = default)
+    {
+        await UpdateJobStatusAsync(
+            jobType,
+            deduplicationKey,
+            AgentJobStatus.WaitingDependency,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<PendingJobFailureNotification>> GetPendingJobFailureNotificationsAsync(
@@ -1437,6 +1460,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             var now = DateTimeOffset.UtcNow;
             job.UpdatedAt = now;
             QueueFailureNotification(dbContext, job, previousStatus, status, error, now);
+            await ReconcileParentJobAsync(dbContext, job, now, cancellationToken).ConfigureAwait(false);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -1518,10 +1542,72 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             }
             QueueFailureNotification(dbContext, job, previousStatus, status, error, now);
 
+            await ReconcileParentJobAsync(dbContext, job, now, cancellationToken).ConfigureAwait(false);
+
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
         finally { _gate.Release(); }
+    }
+
+    private static async Task ReconcileParentJobAsync(
+        ProcessingStateDbContext dbContext,
+        ProcessingJobEntity child,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(child.ParentJobId)
+            || child.Status is not (AgentJobStatus.Succeeded or AgentJobStatus.Failed or AgentJobStatus.DeadLetter))
+            return;
+
+        var parent = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == child.ParentJobId, cancellationToken)
+            .ConfigureAwait(false);
+        if (parent is null || parent.Status != AgentJobStatus.WaitingDependency)
+            return;
+
+        var children = await dbContext.Jobs.Where(x => x.ParentJobId == parent.JobId).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (children.Count == 0)
+            return;
+
+        var completedCount = children.Count(x => x.Status == AgentJobStatus.Succeeded);
+        var terminalCount = children.Count(x => x.Status is AgentJobStatus.Succeeded or AgentJobStatus.Failed or AgentJobStatus.DeadLetter);
+        if (terminalCount < children.Count)
+            return;
+
+        var failedChildren = children.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter).ToList();
+        var error = failedChildren.Count == 0
+            ? null
+            : string.Join(Environment.NewLine, failedChildren.Select(x => $"{x.DeduplicationKey}: {x.LastError ?? x.Status.ToString()}"));
+        parent.Status = failedChildren.Count == 0 ? AgentJobStatus.Succeeded : AgentJobStatus.Failed;
+        parent.LastError = error;
+        parent.LeaseExpiresAt = null;
+        parent.LeaseToken = null;
+        parent.UpdatedAt = now;
+
+        if (parent.JobType != AgentJobType.ResultDayCollectionRequest)
+            return;
+
+        const string marker = ":result-day-collection:";
+        var markerIndex = parent.DeduplicationKey.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex <= 0
+            || !DateOnly.TryParseExact(parent.DeduplicationKey[(markerIndex + marker.Length)..], "yyyy-MM-dd", out var raceDate))
+            return;
+        var providerType = parent.DeduplicationKey[..markerIndex];
+        var dayKey = ResultDayCollectionStatusKeyFactory.Build(providerType, raceDate);
+        var day = await dbContext.ResultDayCollectionStatuses.SingleOrDefaultAsync(x => x.DayKey == dayKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (day is null)
+            return;
+
+        day.Status = failedChildren.Count == 0 ? ResultDayCollectionState.Complete : ResultDayCollectionState.Incomplete;
+        day.ExpectedRaceCount = children.Count;
+        day.CompletedRaceCount = completedCount;
+        day.IncompleteReason = error;
+        day.LastError = error;
+        day.LastCompletedAt = failedChildren.Count == 0 ? now : null;
+        day.RetryAfter = null;
+        day.UpdatedAt = now;
     }
 
     private static void QueueDispatch(ProcessingStateDbContext dbContext, ProcessingJobEntity job, DateTimeOffset availableAt)

@@ -19,6 +19,7 @@ public interface IProcessingStateStore
     Task MarkCollectionTaskDispatchedAsync(string outboxId, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task MarkCollectionTaskDispatchFailedAsync(string outboxId, DateTimeOffset now, string error, CancellationToken cancellationToken = default);
     Task CompleteJobAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);
+    Task WaitForDependenciesAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);
     Task FailJobAsync(string jobType, string deduplicationKey, string? error, CancellationToken cancellationToken = default);
     Task RequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, string? error, CancellationToken cancellationToken = default, DateTimeOffset? availableAt = null);
     Task<bool> ForceRequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, CancellationToken cancellationToken = default);
