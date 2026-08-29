@@ -32,33 +32,12 @@
 else if (items is null || items.Count == 0) { <p>該当データはありません。</p> }
 else
 {
-    <table class="data">
-        <thead>
-            <tr>
-                <th>Subject</th>
-                <th>Operation</th>
-                <th>Provider</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Error</th>
-                <th>UpdatedAt</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var i in items)
-            {
-                <tr>
-                    <td>@i.SubjectType</td>
-                    <td>@i.OperationType</td>
-                    <td>@i.ProviderType</td>
-                    <td>@i.SubjectName</td>
-                    <td>@i.Status</td>
-                    <td>@i.ErrorReason</td>
-                    <td>@i.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="operation-list">
+        @foreach (var i in items)
+        {
+            <article class="operation-row"><div class="operation-primary"><strong>@i.SubjectName</strong><span class="hint">@i.SubjectType · @i.ProviderType</span></div><div><span class="operation-label">処理</span>@i.OperationType</div><div><span class="operation-label">状態</span><span class="pill">@i.Status</span></div><div class="operation-reason"><span class="operation-label">エラー</span>@(i.ErrorReason ?? "—")</div><div><span class="operation-label">更新</span>@i.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div></article>
+        }
+    </div>
 }
 
 @code {

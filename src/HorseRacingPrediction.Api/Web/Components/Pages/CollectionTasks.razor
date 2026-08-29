@@ -23,25 +23,12 @@
     <p>@message</p>
 }
 
-<table class="data">
-    <thead>
-        <tr><th>種類</th><th>キー</th><th>状態</th><th>試行</th><th>開始</th><th>更新</th><th></th></tr>
-    </thead>
-    <tbody>
-        @foreach (var task in tasks)
-        {
-            <tr>
-                <td>@task.JobType</td>
-                <td>@task.DeduplicationKey</td>
-                <td>@task.Status</td>
-                <td>@task.AttemptCount</td>
-                <td>@Format(task.StartedAt)</td>
-                <td>@Format(task.UpdatedAt)</td>
-                <td><button class="btn" @onclick="() => RequeueAsync(task)">再投入</button></td>
-            </tr>
-        }
-    </tbody>
-</table>
+<div class="object-list">
+    @foreach (var task in tasks)
+    {
+        <article class="object-row"><div class="object-primary"><strong>@task.JobType</strong><span class="hint">@task.DeduplicationKey</span></div><div><span class="object-label">状態</span><span class="pill">@task.Status</span></div><div><span class="object-label">試行</span>@task.AttemptCount 回</div><div><span class="object-label">更新</span>@Format(task.UpdatedAt)</div></article>
+    }
+</div>
 
 @code {
     [Parameter]
@@ -65,13 +52,6 @@
 
         if (!string.IsNullOrWhiteSpace(JobId) && tasks.Count == 0)
             message = "指定されたジョブが見つかりませんでした。";
-    }
-
-    private async Task RequeueAsync(AgentJobStatusReadModel task)
-    {
-        var changed = await Store.ForceRequeueJobAsync(task.JobType, task.DeduplicationKey, DateTimeOffset.UtcNow);
-        message = changed ? "再投入しました。" : "対象タスクを更新できませんでした。";
-        await LoadAsync();
     }
 
     private static string Format(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
