@@ -9,7 +9,19 @@
 else if (horse is null) { <p>HorseId「@HorseId」の馬は見つかりませんでした。</p> }
 else
 {
-    <section class="card">
+    <nav class="detail-tabs" aria-label="詳細セクション">
+        <ul class="detail-tab-list">
+            <li><a href="#overview">概要</a></li>
+            <li><a href="#relations">関係</a></li>
+            <li><a href="#history">履歴</a></li>
+            <li><a href="#aliases">別名</a></li>
+            <li><a href="#management">管理</a></li>
+            <li><a href="#memo">メモ</a></li>
+        </ul>
+    </nav>
+
+    <div class="detail-sections">
+    <section id="overview" class="card detail-section">
         <h2>@horse.RegisteredName</h2>
         <dl class="meta">
             <dt>HorseId</dt><dd><code>@horse.HorseId</code></dd>
@@ -20,12 +32,12 @@ else
         </dl>
     </section>
 
-    @if (participations?.Relationships.Count > 0)
+    @if (relationships.Count > 0)
     {
-        <section class="entity-section">
+        <section id="relations" class="entity-section detail-section">
             <h3>この馬に関係する人</h3>
             <div class="relationship-grid">
-                @foreach (var relationship in participations.Relationships.Take(6))
+                @foreach (var relationship in relationships.Take(6))
                 {
                     <a class="relationship-link" href="@RelationshipUrl(relationship)">
                         <span class="relationship-kind">@relationship.RelationshipName</span>
@@ -37,16 +49,16 @@ else
         </section>
     }
 
-    <section class="entity-section">
+    <section id="history" class="entity-section detail-section">
         <h3>出走履歴</h3>
-        @if (participations is null || participations.Entries.Count == 0)
+        @if (historyEntries.Count == 0)
         {
             <p class="hint">出走履歴はありません。</p>
         }
         else
         {
             <ol class="history-list">
-                @foreach (var entry in participations.Entries)
+                @foreach (var entry in historyEntries)
                 {
                     <li class="history-item">
                         <div class="history-event">
@@ -62,12 +74,18 @@ else
                     </li>
                 }
             </ol>
+            @if (historyHasMore)
+            {
+                <div class="toolbar">
+                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の100件を読み込む</button>
+                </div>
+            }
         }
     </section>
 
     @if (horse.Aliases.Count > 0)
     {
-        <section class="card">
+        <section id="aliases" class="card detail-section">
             <h3>別名</h3>
             <ul>
                 @foreach (var a in horse.Aliases)
@@ -78,62 +96,18 @@ else
         </section>
     }
 
-    <section class="card">
-        <h3>プロフィール更新</h3>
-        <div class="form-grid">
-            <label>登録名<input @bind="editRegisteredName" /></label>
-            <label>正規化名<input @bind="editNormalizedName" /></label>
-            <label>性<input @bind="editSexCode" /></label>
-            <label>生年月日<input type="date" @bind="editBirthDate" /></label>
-            <label>馬主<input @bind="editOwnerName" /></label>
-        </div>
+    <section id="management" class="card detail-section">
+        <h3>管理情報</h3>
+        <p class="hint">プロフィール更新、別名統合、データ補正は専用画面で行います。</p>
         <div class="toolbar">
-            <button class="btn primary small" @onclick="UpdateProfileAsync" disabled="@updating">更新</button>
+            <a class="btn primary small" href="@($"horses/{Uri.EscapeDataString(HorseId)}/edit")">データを補正する</a>
         </div>
-        @if (updateErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in updateErrors) { <li>@e</li> }</ul>
-        }
     </section>
 
-    <section class="card">
-        <h3>別名の追加・統合</h3>
-        <div class="form-grid">
-            <label>種別<input @bind="aliasType" placeholder="例: netkeiba" /></label>
-            <label>値<input @bind="aliasValue" /></label>
-            <label>出典<input @bind="aliasSourceName" /></label>
-            <label><input type="checkbox" @bind="aliasIsPrimary" /> 主別名にする</label>
-        </div>
-        <div class="toolbar">
-            <button class="btn primary small" @onclick="MergeAliasAsync" disabled="@mergingAlias">追加</button>
-        </div>
-        @if (aliasErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in aliasErrors) { <li>@e</li> }</ul>
-        }
-    </section>
-
-    <section class="card">
-        <h3>データ訂正</h3>
-        <p class="hint">誤登録されたデータの訂正用です。理由の記録が残ります。</p>
-        <div class="form-grid">
-            <label>登録名<input @bind="correctRegisteredName" /></label>
-            <label>正規化名<input @bind="correctNormalizedName" /></label>
-            <label>性<input @bind="correctSexCode" /></label>
-            <label>生年月日<input type="date" @bind="correctBirthDate" /></label>
-            <label>訂正理由<input @bind="correctReason" /></label>
-        </div>
-        <div class="toolbar">
-            @if (correctArmed) { <span class="hint">入力した内容で訂正しますか？</span><button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button><button class="btn small" @onclick="() => correctArmed = false">キャンセル</button> }
-            else { <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button> }
-        </div>
-        @if (correctErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
-        }
-    </section>
-
-    <MemoPanel SubjectType="Horse" SubjectId="@HorseId" />
+    <div id="memo" class="detail-section">
+        <MemoPanel SubjectType="Horse" SubjectId="@HorseId" />
+    </div>
+    </div>
 }
 
 @code {
@@ -141,7 +115,11 @@ else
 
     private bool loading;
     private HorseProfileResponse? horse;
-    private ParticipationHistoryResponse? participations;
+    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+    private IReadOnlyList<RelationshipSummaryResponse> relationships = Array.Empty<RelationshipSummaryResponse>();
+    private bool historyHasMore;
+    private bool loadingMore;
+    private const int historyBatchSize = 100;
 
     private string? editRegisteredName;
     private string? editNormalizedName;
@@ -175,10 +153,13 @@ else
         try
         {
             var profileTask = Api.GetHorseAsync(HorseId);
-            var historyTask = Api.GetHorseParticipationsAsync(HorseId);
+            var historyTask = Api.GetHorseParticipationsAsync(HorseId, historyBatchSize, 0);
             await Task.WhenAll(profileTask, historyTask);
             horse = await profileTask;
-            participations = await historyTask;
+            var history = await historyTask;
+            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryResponse>();
+            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryResponse>();
+            historyHasMore = history?.HasMore ?? false;
             if (horse is not null)
             {
                 editRegisteredName = horse.RegisteredName;
@@ -191,6 +172,27 @@ else
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task LoadMoreHistoryAsync()
+    {
+        if (loadingMore || !historyHasMore) return;
+
+        loadingMore = true;
+        try
+        {
+            var next = await Api.GetHorseParticipationsAsync(HorseId, historyBatchSize, historyEntries.Count);
+            if (next is not null)
+            {
+                historyEntries = historyEntries.Concat(next.Entries).ToList();
+                relationships = next.Relationships;
+                historyHasMore = next.HasMore;
+            }
+        }
+        finally
+        {
+            loadingMore = false;
         }
     }
 

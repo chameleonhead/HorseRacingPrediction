@@ -9,12 +9,22 @@
 else if (owner is null) { <p>指定された馬主は見つかりませんでした。</p> }
 else
 {
-    <section class="card">
+    <nav class="detail-tabs" aria-label="詳細セクション">
+        <ul class="detail-tab-list">
+            <li><a href="#overview">概要</a></li>
+            <li><a href="#relations">関係</a></li>
+            <li><a href="#merge">名寄せ</a></li>
+            <li><a href="#history">履歴</a></li>
+        </ul>
+    </nav>
+
+    <div class="detail-sections">
+    <section id="overview" class="card detail-section">
         <h2>@owner.Summary.DisplayName</h2>
         <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
         @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
     </section>
-    <section class="entity-section">
+    <section id="relations" class="entity-section detail-section">
         <h3>この馬主に関係する馬・調教師</h3>
         <div class="relationship-grid">
             @foreach (var item in owner.CurrentHorses.Concat(owner.RelatedTrainers).Take(8))
@@ -23,7 +33,7 @@ else
             }
         </div>
     </section>
-    <section class="card">
+    <section id="merge" class="card detail-section">
         <h3>馬主を名寄せする</h3>
         <p class="hint">別の馬主オブジェクトの表記をこの馬主へ統合します。出走時点の原文は変更せず、対応関係と理由を監査履歴へ残します。</p>
         <div class="form-grid"><label>統合元 OwnerId<input @bind="sourceOwnerId" /></label><label>理由<input @bind="mergeReason" /></label></div>
@@ -33,26 +43,44 @@ else
         </div>
         @if (mergeErrors.Count > 0) { <ul class="error-list">@foreach (var item in mergeErrors) { <li>@item</li> }</ul> }
     </section>
-    <section class="card">
+    <section id="history" class="card detail-section">
         <h3>名寄せ履歴</h3>
         @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
         else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@audit.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
     </section>
-    <section class="entity-section">
+    <section class="entity-section detail-section">
         <h3>所有馬の出走履歴</h3>
-        <ol class="history-list">
-            @foreach (var entry in owner.Participations)
+        @if (historyEntries.Count == 0)
+        {
+            <p class="hint">出走履歴はありません。</p>
+        }
+        else
+        {
+            <ol class="history-list">
+            @foreach (var entry in historyEntries)
             {
                 <li class="history-item"><div class="history-event"><a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @entry.RacecourseCode @entry.RaceNumber R</a><span class="hint">@(entry.RaceName ?? entry.RaceId)</span></div><div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong></div><div class="history-relations"><div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div><div class="history-field"><span class="relationship-kind">調教師</span>@(entry.TrainerName ?? "—")</div><div class="history-field"><span class="relationship-kind">騎手</span>@(entry.JockeyName ?? "—")</div></div></li>
             }
-        </ol>
+            </ol>
+            @if (historyHasMore)
+            {
+                <div class="toolbar">
+                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の10件を読み込む</button>
+                </div>
+            }
+        }
     </section>
+    </div>
 }
 
 @code {
     [Parameter] public string OwnerId { get; set; } = string.Empty;
     private bool loading;
     private OwnerDetailResponse? owner;
+    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+    private bool historyHasMore;
+    private bool loadingMore;
+    private const int historyBatchSize = 10;
     private string? sourceOwnerId;
     private string? mergeReason;
     private bool mergeArmed;
@@ -61,8 +89,38 @@ else
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
-        try { owner = await Api.GetOwnerAsync(OwnerId); }
+        try
+        {
+            owner = await Api.GetOwnerAsync(OwnerId);
+            if (owner is not null)
+            {
+                historyEntries = owner.Participations;
+                historyHasMore = owner.HasMoreParticipations;
+            }
+            else
+            {
+                historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+                historyHasMore = false;
+            }
+        }
         finally { loading = false; }
+    }
+    private async Task LoadMoreHistoryAsync()
+    {
+        if (loadingMore || !historyHasMore) return;
+
+        loadingMore = true;
+        try
+        {
+            var next = await Api.GetOwnerAsync(OwnerId, historyBatchSize, historyEntries.Count);
+            if (next is not null)
+            {
+                owner = next;
+                historyEntries = historyEntries.Concat(next.Participations).ToList();
+                historyHasMore = next.HasMoreParticipations;
+            }
+        }
+        finally { loadingMore = false; }
     }
     private async Task MergeAsync()
     {

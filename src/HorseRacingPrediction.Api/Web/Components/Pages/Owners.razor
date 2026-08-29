@@ -8,10 +8,14 @@
     <button class="btn primary" @onclick="LoadAsync">検索</button>
 </div>
 
-@if (loading) { <UiState Kind="loading" Title="馬主を読み込んでいます" /> }
+@if (loading && items.Count == 0) { <UiState Kind="loading" Title="馬主を読み込んでいます" /> }
 else if (items.Count == 0) { <UiState Title="該当する馬主はありません" Message="表記の一部を変えて検索してください。" /> }
 else
 {
+    @if (loading)
+    {
+        <p class="hint">検索中… 直前の結果を表示しています。</p>
+    }
     <div class="object-list">
         @foreach (var owner in PagedItems)
         {

@@ -9,7 +9,19 @@
 else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
 else
 {
-    <section class="card">
+    <nav class="detail-tabs" aria-label="詳細セクション">
+        <ul class="detail-tab-list">
+            <li><a href="#overview">概要</a></li>
+            <li><a href="#status">取得状況</a></li>
+            <li><a href="#participants">出走</a></li>
+            <li><a href="#report">概況</a></li>
+            <li><a href="#management">管理</a></li>
+            <li><a href="#memo">メモ</a></li>
+        </ul>
+    </nav>
+
+    <div class="detail-sections">
+    <section id="overview" class="card detail-section">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
@@ -30,7 +42,7 @@ else
         </dl>
     </section>
 
-    <section class="race-facts" aria-label="取得状況">
+    <section id="status" class="race-facts detail-section" aria-label="取得状況">
         <div><span class="object-label">天候</span>@if (race.WeatherObservations.Count == 0) { <span>未取得</span> } else { var weather = race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(weather.WeatherText ?? weather.WeatherCode ?? "取得済み")</strong> }</div>
         <div><span class="object-label">馬場</span>@if (race.TrackConditionObservations.Count == 0) { <span>未取得</span> } else { var track = race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(track.GoingDescriptionText ?? track.TurfConditionCode ?? track.DirtConditionCode ?? "取得済み")</strong> }</div>
         <div><span class="object-label">払戻</span><strong>@(race.PayoutResult is null ? (race.EntryResults.Count == 0 ? "未取得" : "該当なし・未確定") : "取得済み")</strong></div>
@@ -38,7 +50,7 @@ else
 
     @if (race.Entries.Count > 0)
     {
-        <section class="entity-section">
+        <section id="participants" class="entity-section detail-section">
             <h3>@(race.EntryResults.Count > 0 ? "出走・結果" : "出走馬")</h3>
             <ol class="participant-list">
                 @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
@@ -57,36 +69,24 @@ else
 
     @if (!string.IsNullOrWhiteSpace(race.StewardReportText))
     {
-        <section class="card">
+        <section id="report" class="card detail-section">
             <h3>レース概況</h3>
             <pre class="payload">@race.StewardReportText</pre>
         </section>
     }
 
-    <section class="card">
-        <h3>データ訂正</h3>
-        <p class="hint">誤登録されたデータの訂正用です。理由の記録が残ります。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
-        <div class="form-grid">
-            <label>レース名<input @bind="correctRaceName" /></label>
-            <label>競馬場コード<input @bind="correctRacecourseCode" /></label>
-            <label>レース番号<input type="number" @bind="correctRaceNumber" /></label>
-            <label>グレード<input @bind="correctGradeCode" /></label>
-            <label>馬場<input @bind="correctSurfaceCode" /></label>
-            <label>距離(m)<input type="number" @bind="correctDistanceMeters" /></label>
-            <label>回り<input @bind="correctDirectionCode" /></label>
-            <label>訂正理由<input @bind="correctReason" /></label>
-        </div>
+    <section id="management" class="card detail-section">
+        <h3>管理情報</h3>
+        <p class="hint">誤登録されたデータの補正は専用画面で行います。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
         <div class="toolbar">
-            @if (correctArmed) { <span class="hint">入力した内容で訂正しますか？</span><button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button><button class="btn small" @onclick="() => correctArmed = false">キャンセル</button> }
-            else { <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button> }
+            <a class="btn primary small" href="@($"races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</a>
         </div>
-        @if (correctErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
-        }
     </section>
 
-    <MemoPanel SubjectType="Race" SubjectId="@RaceId" />
+    <div id="memo" class="detail-section">
+        <MemoPanel SubjectType="Race" SubjectId="@RaceId" />
+    </div>
+    </div>
 }
 
 @code {

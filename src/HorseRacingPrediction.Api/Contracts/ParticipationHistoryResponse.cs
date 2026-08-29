@@ -4,7 +4,8 @@ public sealed record ParticipationHistoryResponse(
     string SubjectType,
     string SubjectId,
     IReadOnlyList<ParticipationHistoryEntryResponse> Entries,
-    IReadOnlyList<RelationshipSummaryResponse> Relationships);
+    IReadOnlyList<RelationshipSummaryResponse> Relationships,
+    bool HasMore = false);
 
 public sealed record ParticipationHistoryEntryResponse(
     string RaceId,
