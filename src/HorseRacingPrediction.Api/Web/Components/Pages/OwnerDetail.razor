@@ -23,6 +23,21 @@ else
             }
         </div>
     </section>
+    <section class="card">
+        <h3>馬主を名寄せする</h3>
+        <p class="hint">別の馬主オブジェクトの表記をこの馬主へ統合します。出走時点の原文は変更せず、対応関係と理由を監査履歴へ残します。</p>
+        <div class="form-grid"><label>統合元 OwnerId<input @bind="sourceOwnerId" /></label><label>理由<input @bind="mergeReason" /></label></div>
+        <div class="toolbar">
+            @if (mergeArmed) { <span class="hint">この馬主へ統合しますか？</span><button class="btn primary small" @onclick="MergeAsync" disabled="@merging">統合する</button><button class="btn small" @onclick="() => mergeArmed = false">キャンセル</button> }
+            else { <button class="btn small" @onclick="() => mergeArmed = true">統合内容を確認</button> }
+        </div>
+        @if (mergeErrors.Count > 0) { <ul class="error-list">@foreach (var item in mergeErrors) { <li>@item</li> }</ul> }
+    </section>
+    <section class="card">
+        <h3>名寄せ履歴</h3>
+        @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
+        else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@audit.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
+    </section>
     <section class="entity-section">
         <h3>所有馬の出走履歴</h3>
         <ol class="history-list">
@@ -38,11 +53,28 @@ else
     [Parameter] public string OwnerId { get; set; } = string.Empty;
     private bool loading;
     private OwnerDetailResponse? owner;
+    private string? sourceOwnerId;
+    private string? mergeReason;
+    private bool mergeArmed;
+    private bool merging;
+    private IReadOnlyList<string> mergeErrors = [];
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
         try { owner = await Api.GetOwnerAsync(OwnerId); }
         finally { loading = false; }
+    }
+    private async Task MergeAsync()
+    {
+        merging = true;
+        try
+        {
+            var result = await Api.MergeOwnerAsync(OwnerId, new MergeOwnerRequest(sourceOwnerId ?? string.Empty, mergeReason ?? string.Empty));
+            mergeErrors = result.Success ? [] : result.Errors;
+            mergeArmed = false;
+            if (result.Success) { sourceOwnerId = null; mergeReason = null; await OnParametersSetAsync(); }
+        }
+        finally { merging = false; }
     }
     private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"horses/{Uri.EscapeDataString(item.ObjectId)}" : $"trainers/{Uri.EscapeDataString(item.ObjectId)}";
 }

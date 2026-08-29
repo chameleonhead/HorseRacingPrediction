@@ -219,4 +219,24 @@ public class HorseEndpointsTests
         var detailResponse = await _client.GetAsync("/api/owners/unknown-owner");
         Assert.AreEqual(HttpStatusCode.NotFound, detailResponse.StatusCode);
     }
+
+    [TestMethod]
+    public async Task MergeOwner_CombinesAliasesAndRecordsAudit()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseA-{key}", $"owner-horse-a-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"統合先馬主{key}"), JsonOptions);
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest($"OwnerHorseB-{key}", $"owner-horse-b-{key}", "F", null, $"horse-{Guid.NewGuid()}", $"統合元馬主{key}"), JsonOptions);
+        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={key}", JsonOptions);
+        Assert.IsNotNull(owners);
+        var target = owners.Single(x => x.DisplayName.StartsWith("統合先馬主", StringComparison.Ordinal));
+        var source = owners.Single(x => x.DisplayName.StartsWith("統合元馬主", StringComparison.Ordinal));
+
+        var merge = await _client.PostAsJsonAsync($"/api/owners/{target.OwnerId}/merge", new MergeOwnerRequest(source.OwnerId, "表記が同一人物と確認できたため"), JsonOptions);
+        var detail = await _client.GetFromJsonAsync<OwnerDetailResponse>($"/api/owners/{target.OwnerId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.NoContent, merge.StatusCode);
+        Assert.IsNotNull(detail);
+        Assert.AreEqual(2, detail.Summary.NameVariants.Count);
+        Assert.IsTrue(detail.MergeHistory.Any(x => x.SourceOwnerId == source.OwnerId && x.Reason.Contains("同一人物", StringComparison.Ordinal)));
+    }
 }

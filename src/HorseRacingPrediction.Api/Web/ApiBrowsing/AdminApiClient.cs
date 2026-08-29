@@ -93,6 +93,9 @@ public sealed class AdminApiClient
     public Task<OwnerDetailResponse?> GetOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
         => GetJsonAsync<OwnerDetailResponse>($"/api/owners/{Uri.EscapeDataString(ownerId)}", cancellationToken);
 
+    public Task<AdminApiResult> MergeOwnerAsync(string ownerId, MergeOwnerRequest request, CancellationToken cancellationToken = default)
+        => SendAsync(HttpMethod.Post, $"/api/owners/{Uri.EscapeDataString(ownerId)}/merge", request, cancellationToken);
+
     public Task<PagedResponse<PredictionTicketSummaryResponse>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>($"/api/predictions?{BuildQueryString(request)}", cancellationToken);
 

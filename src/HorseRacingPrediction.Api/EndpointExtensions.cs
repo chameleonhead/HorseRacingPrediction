@@ -1727,11 +1727,58 @@ public static class EndpointExtensions
                     new RelatedObjectResponse("Horse", x.HorseId, x.RegisteredName, entries.Count(y => y.HorseId == x.HorseId))).ToList();
                 var relatedTrainers = entries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
                     new RelatedObjectResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, x.Count())).OrderByDescending(x => x.RelationshipCount).ToList();
-                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries));
+                var mergeAudits = await dbContext.OwnerMergeAudits.AsNoTracking().Where(x => x.TargetOwnerId == ownerId)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                var mergeHistory = mergeAudits.OrderByDescending(x => x.CreatedAt).Select(x => new OwnerMergeAuditResponse(
+                    x.SourceOwnerId, x.TargetOwnerId, x.SourceNames.Split('\n', StringSplitOptions.RemoveEmptyEntries), x.ActorId, x.Reason, x.CreatedAt)).ToList();
+                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory));
             })
             .WithName("GetOwner")
             .WithTags("Owner API")
             .Produces<OwnerDetailResponse>()
+            .Produces(StatusCodes.Status404NotFound);
+
+        writeGroup.MapPost("/owners/{ownerId}/merge",
+            async (string ownerId, MergeOwnerRequest request, HttpContext httpContext, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.SourceOwnerId) || string.IsNullOrWhiteSpace(request.Reason))
+                    return Results.BadRequest(new[] { "統合元の馬主と理由は必須です。" });
+                if (string.Equals(ownerId, request.SourceOwnerId, StringComparison.Ordinal))
+                    return Results.BadRequest(new[] { "同じ馬主には統合できません。" });
+
+                using var dbContext = dbContextProvider.CreateContext();
+                var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
+                var target = owners.SingleOrDefault(x => x.OwnerId == ownerId);
+                var source = owners.SingleOrDefault(x => x.OwnerId == request.SourceOwnerId);
+                if (target is null || source is null) return Results.NotFound();
+
+                var actor = httpContext.User.Identity?.Name ?? "api-key";
+                var now = DateTimeOffset.UtcNow;
+                foreach (var alias in source.NameVariants)
+                {
+                    var normalized = NormalizeOwnerName(alias);
+                    var mapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == normalized, cancellationToken).ConfigureAwait(false);
+                    if (mapping is null)
+                    {
+                        dbContext.OwnerAliasMappings.Add(new OwnerAliasMappingReadModel { NormalizedAlias = normalized, AliasName = alias, OwnerId = ownerId, ActorId = actor, Reason = request.Reason.Trim(), CreatedAt = now });
+                    }
+                    else
+                    {
+                        mapping.OwnerId = ownerId; mapping.AliasName = alias; mapping.ActorId = actor; mapping.Reason = request.Reason.Trim(); mapping.CreatedAt = now;
+                    }
+                }
+                dbContext.OwnerMergeAudits.Add(new OwnerMergeAuditReadModel
+                {
+                    AuditId = Guid.NewGuid().ToString("N"), SourceOwnerId = source.OwnerId, TargetOwnerId = ownerId,
+                    SourceNames = string.Join('\n', source.NameVariants), ActorId = actor, Reason = request.Reason.Trim(), CreatedAt = now
+                });
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return Results.NoContent();
+            })
+            .WithName("MergeOwner")
+            .WithTags("Owner API")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound);
 
         writeGroup.MapPost("/memos",
@@ -2348,17 +2395,23 @@ public static class EndpointExtensions
         var currentNames = horses.Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).Select(x => x.OwnerName!).ToList();
         var participations = contexts.SelectMany(x => x.Entries.Select(e => (x.RaceDate, e.OwnerName)))
             .Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).ToList();
+        var mappings = await dbContext.OwnerAliasMappings.AsNoTracking().ToDictionaryAsync(x => x.NormalizedAlias, x => x.OwnerId, cancellationToken).ConfigureAwait(false);
+        string OwnerGroupKey(string name)
+        {
+            var normalized = NormalizeOwnerName(name);
+            return mappings.GetValueOrDefault(normalized, CreateOwnerId(normalized));
+        }
         return currentNames.Concat(participations.Select(x => x.OwnerName!))
-            .GroupBy(NormalizeOwnerName, StringComparer.Ordinal)
+            .GroupBy(OwnerGroupKey, StringComparer.Ordinal)
             .Where(x => x.Key.Length > 0)
             .Select(group =>
             {
                 var variants = group.Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
                 var displayName = variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
-                var groupParticipations = participations.Where(x => NormalizeOwnerName(x.OwnerName!) == group.Key).ToList();
+                var groupParticipations = participations.Where(x => OwnerGroupKey(x.OwnerName!) == group.Key).ToList();
                 return new OwnerSummaryResponse(
-                    CreateOwnerId(group.Key), displayName, variants,
-                    horses.Count(x => x.OwnerName is not null && NormalizeOwnerName(x.OwnerName) == group.Key),
+                    group.Key, displayName, variants,
+                    horses.Count(x => x.OwnerName is not null && OwnerGroupKey(x.OwnerName) == group.Key),
                     groupParticipations.Count,
                     groupParticipations.Select(x => x.RaceDate).DefaultIfEmpty().Max());
             }).ToList();
