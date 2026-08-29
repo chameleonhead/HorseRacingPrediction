@@ -45,7 +45,7 @@ public sealed class SnsJobFailureNotificationPublisher : IJobFailureNotification
 
     internal static string BuildSmsMessage(string adminBaseUrl, PendingJobFailureNotification notification)
     {
-        var jobUrl = $"{adminBaseUrl.TrimEnd('/')}/collection-tasks?jobId={Uri.EscapeDataString(notification.JobId)}";
+        var jobUrl = $"{adminBaseUrl.TrimEnd('/')}/api/collection/tasks/{Uri.EscapeDataString(notification.JobId)}";
         return $"HRP {notification.Status} {notification.JobType}\n{jobUrl}";
     }
 }
