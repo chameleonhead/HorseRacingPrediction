@@ -11,7 +11,17 @@
 }
 else
 {
-    <section class="card">
+    <nav class="detail-tabs" aria-label="詳細セクション">
+        <ul class="detail-tab-list">
+            <li><a href="#overview">概要</a></li>
+            <li><a href="#errors">失敗理由</a></li>
+            <li><a href="#relations">親子タスク</a></li>
+            <li><a href="#payload">ペイロード</a></li>
+        </ul>
+    </nav>
+
+    <div class="detail-sections">
+    <section id="overview" class="card detail-section">
         <h2>@detail.JobType</h2>
         <dl class="meta">
             <dt>JobId</dt><dd><code>@detail.JobId</code></dd>
@@ -46,11 +56,11 @@ else
     </section>
     @if (!string.IsNullOrWhiteSpace(detail.LastError))
     {
-        <section class="card"><h3>失敗理由</h3><pre class="error">@detail.LastError</pre></section>
+        <section id="errors" class="card detail-section"><h3>失敗理由</h3><pre class="error">@detail.LastError</pre></section>
     }
     @if (detail.ParentJob is not null || detail.ChildJobs.Count > 0)
     {
-        <section class="card">
+        <section id="relations" class="card detail-section">
             <h3>親子タスク</h3>
             @if (detail.ParentJob is not null)
             {
@@ -64,7 +74,8 @@ else
             </div>
         </section>
     }
-    <section class="card"><h3>ペイロード</h3><pre class="payload">@detail.Payload</pre></section>
+    <section id="payload" class="card detail-section"><h3>ペイロード</h3><pre class="payload">@detail.Payload</pre></section>
+    </div>
 }
 
 @code {
