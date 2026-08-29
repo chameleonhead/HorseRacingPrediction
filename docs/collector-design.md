@@ -57,7 +57,7 @@
 
 ### 収集状況の監視・操作（Api の Web UI / API）
 
-Api が収集バッチ処理の状況を確認・操作する Minimal API と `/collection-tasks` の Blazor Server 画面をホストする。Collector は `IProcessingStateStore` の HTTP proxy を通して Api の正本を更新する。ローカルDBは `UseApiStateStore=false` を明示したテスト・開発用途に限る。
+Api が収集バッチ処理の状況を確認・操作する Minimal API をホストする。収集タスク操作は API 限定とし、Api 管理画面には表示しない。Collector は `IProcessingStateStore` の HTTP proxy を通して Api の正本を更新する。ローカルDBは `UseApiStateStore=false` を明示したテスト・開発用途に限る。
 
 #### API エンドポイント（`Scheduling/Agent*EndpointExtensions.cs`）
 

@@ -42,7 +42,6 @@ public static class ApiKeyApplicationBuilderExtensions
     private static readonly string[] AdminUiRootSegments =
     {
         "races", "horses", "jockeys", "trainers", "predictions",
-        "collection-tasks"
     };
 
     private static bool IsAnonymousPath(PathString path)

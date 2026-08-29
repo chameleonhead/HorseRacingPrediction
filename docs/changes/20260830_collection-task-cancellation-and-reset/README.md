@@ -208,3 +208,9 @@ SQS クライアントに main queue と DLQ の purge を追加し、Lightsail 
 - AWS SQS の件数メトリクスは近似値のため、初期化完了表示は AWS の即時 0 件観測ではなく、purge 成功と 60 秒の安定化完了を基準にする
 - 完全初期化は Event Store の手動補正・予想・メモも削除する。収集由来データだけを選別削除するモードは、イベント間参照を壊すため本変更には含めない
 - Terraform CLI が利用可能な CI またはデプロイ環境で `terraform fmt -check` と `terraform validate` を再実行する
+
+### 2026-08-30 UI 撤去
+
+実装後の利用者判断により、Api 管理画面の `収集タスク・状態` ナビゲーション、一覧、詳細、取消、再投入、キュー初期化、完全初期化 UI を撤去した。操作機能は `/api/collection/tasks` と `/api/collection/reset` 配下の API 限定で維持する。失敗通知のリンクも削除済み画面ではなく `GET /api/collection/tasks/{jobId}` を指すよう変更した。Collector の開発用画面は別ホストの既存機能であり、本判断の対象外とする。
+
+撤去後に Release build、Api tests 81 件、`dotnet format --verify-no-changes`、`git diff --check` の成功を確認した。
