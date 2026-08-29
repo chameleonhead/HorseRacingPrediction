@@ -124,7 +124,8 @@ else
             <label>訂正理由<input @bind="correctReason" /></label>
         </div>
         <div class="toolbar">
-            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存</button>
+            @if (correctArmed) { <span class="hint">入力した内容で訂正しますか？</span><button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button><button class="btn small" @onclick="() => correctArmed = false">キャンセル</button> }
+            else { <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button> }
         </div>
         @if (correctErrors.Count > 0)
         {
@@ -163,6 +164,7 @@ else
     private DateOnly? correctBirthDate;
     private string? correctReason;
     private bool correcting;
+    private bool correctArmed;
     private IReadOnlyList<string> correctErrors = Array.Empty<string>();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
@@ -263,6 +265,7 @@ else
             var result = await Api.CorrectHorseDataAsync(HorseId, new CorrectHorseDataRequest(
                 correctRegisteredName, correctNormalizedName, correctSexCode, correctBirthDate, correctReason));
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            correctArmed = false;
             if (result.Success)
             {
                 correctRegisteredName = null; correctNormalizedName = null; correctSexCode = null;
