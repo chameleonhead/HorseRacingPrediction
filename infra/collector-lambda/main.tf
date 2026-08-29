@@ -89,11 +89,11 @@ resource "aws_sns_topic" "collector_alerts" {
   name = "horse-racing-prediction-collector-alerts"
 }
 
-resource "aws_sns_topic_subscription" "collector_alert_email" {
-  count     = trimspace(var.alert_email) != "" ? 1 : 0
+resource "aws_sns_topic_subscription" "collector_alert_sms" {
+  count     = trimspace(var.alert_phone_number) != "" ? 1 : 0
   topic_arn = aws_sns_topic.collector_alerts.arn
-  protocol  = "email"
-  endpoint  = trimspace(var.alert_email)
+  protocol  = "sms"
+  endpoint  = trimspace(var.alert_phone_number)
 }
 
 resource "aws_cloudwatch_metric_alarm" "collector_lambda_errors" {
