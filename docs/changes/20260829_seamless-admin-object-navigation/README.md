@@ -1,9 +1,9 @@
 # 管理情報をシームレスに辿る UI
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction
 - Created: 2026-08-29
-- Updated: 2026-08-29
+- Updated: 2026-08-30
 
 ## 背景
 
@@ -376,6 +376,7 @@ flowchart LR
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj -c Debug`
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj -c Debug --no-restore`
 - `git diff --check`
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj -c Debug` を再実行し、編集画面とモバイルタブ追加後もビルド成功を確認した
 
 いずれも成功した。
 
@@ -388,9 +389,9 @@ flowchart LR
 
 ## 差分と後続作業
 
-- 一覧画面の新規登録導線は削除したが、詳細画面内の管理操作は次工程で専用画面へ切り出す余地がある
-- 馬・騎手・調教師・馬主の詳細ページは段階取得と旧結果保持を実装したが、設計書にあるモバイルのタブ化はまだ未着手である
-- 変更アクションのエラー表示方針は設計に合わせて文書化したが、専用エラーパネルの共通化は後続で行うと保守しやすい
+- 一覧画面の新規登録導線は削除し、馬・騎手・調教師・レース・馬主の詳細からは専用の管理画面または管理情報セクションへ遷移する
+- 馬・騎手・調教師・馬主・収集タスク詳細にモバイル向けのタブ切り替えを追加し、デスクトップでは見出し連続表示を維持した
+- 変更アクションのエラー表示方針は設計に合わせて文書化した。実装上は従来どおり各フォームに個別表示しているため、将来の共通化は別の保守課題とする
 
 ### 将来のデータ分析メモ
 
