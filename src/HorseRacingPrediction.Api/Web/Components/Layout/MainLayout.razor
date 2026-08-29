@@ -1,5 +1,7 @@
 @namespace HorseRacingPrediction.Api.Web.Components.Layout
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
 
 <div class="page">
     <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" @onclick="() => navOpen = !navOpen">☰ <span>メニュー</span></button>
@@ -26,4 +28,19 @@
     </main>
 </div>
 
-@code { private bool navOpen; }
+@code {
+    private bool navOpen;
+
+    protected override void OnInitialized()
+        => Navigation.LocationChanged += HandleLocationChanged;
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+    {
+        if (!navOpen) return;
+        navOpen = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+        => Navigation.LocationChanged -= HandleLocationChanged;
+}
