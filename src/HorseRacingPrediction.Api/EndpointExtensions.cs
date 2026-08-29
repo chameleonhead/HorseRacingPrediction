@@ -1773,8 +1773,13 @@ public static class EndpointExtensions
                 }
                 dbContext.OwnerMergeAudits.Add(new OwnerMergeAuditReadModel
                 {
-                    AuditId = Guid.NewGuid().ToString("N"), SourceOwnerId = source.OwnerId, TargetOwnerId = ownerId,
-                    SourceNames = string.Join('\n', source.NameVariants), ActorId = actor, Reason = request.Reason.Trim(), CreatedAt = now
+                    AuditId = Guid.NewGuid().ToString("N"),
+                    SourceOwnerId = source.OwnerId,
+                    TargetOwnerId = ownerId,
+                    SourceNames = string.Join('\n', source.NameVariants),
+                    ActorId = actor,
+                    Reason = request.Reason.Trim(),
+                    CreatedAt = now
                 });
                 await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return Results.NoContent();

@@ -1649,9 +1649,14 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.UpdatedAt = now;
             dbContext.JobOperationAudits.Add(new JobOperationAuditEntity
             {
-                AuditId = Guid.NewGuid().ToString("N"), JobId = job.JobId, Operation = "ManualRequeue",
-                PreviousStatus = previousStatus, NewStatus = AgentJobStatus.Ready,
-                ActorId = "admin-ui", Reason = "管理画面から再キュー", CreatedAt = now
+                AuditId = Guid.NewGuid().ToString("N"),
+                JobId = job.JobId,
+                Operation = "ManualRequeue",
+                PreviousStatus = previousStatus,
+                NewStatus = AgentJobStatus.Ready,
+                ActorId = "admin-ui",
+                Reason = "管理画面から再キュー",
+                CreatedAt = now
             });
             QueueDispatch(dbContext, job, now);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
