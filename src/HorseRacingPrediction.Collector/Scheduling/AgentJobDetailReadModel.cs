@@ -14,4 +14,5 @@ public sealed record AgentJobDetailReadModel(
     DateTimeOffset? LeaseExpiresAt,
     string? LastError,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<JobOperationAuditReadModel> AuditHistory);

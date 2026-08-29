@@ -133,6 +133,10 @@ table.data tr:last-child td { border-bottom: 0; }
 .job-table td { overflow-wrap: anywhere; }
 .job-row-action { white-space: nowrap; }
 .confirmation { padding: 12px; display: grid; gap: 8px; background: #fff7df; border-left: 4px solid var(--warn); }
+.audit-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.audit-list li { padding: 10px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 16px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.audit-list li:last-child { border-bottom: 0; }
+.audit-list li > div { display: grid; gap: 3px; align-content: start; }
 
 .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef1f4; border: 1px solid var(--border); }
 .pill-ok { background: #e2f0e6; color: var(--ok); }
@@ -262,6 +266,7 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
     .job-table .job-row-action { display: block; padding-top: 10px; }
     .job-table .job-row-action::before { content: none; }
     .job-table .job-row-action .btn { min-height: 44px; width: 100%; display: grid; place-items: center; }
+    .audit-list li { grid-template-columns: 1fr; }
 
     dl.meta {
         grid-template-columns: 1fr;

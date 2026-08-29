@@ -63,9 +63,20 @@ else
     }
 
     <section class="card">
-        <h3>ペイロード</h3>
-        <pre class="payload">@FormatPayload(detail.Payload)</pre>
+        <h3>操作履歴</h3>
+        @if (detail.AuditHistory.Count == 0) { <p class="hint">管理画面からの操作履歴はありません。</p> }
+        else
+        {
+            <ol class="audit-list">
+                @foreach (var audit in detail.AuditHistory)
+                {
+                    <li><div><strong>@(OperationName(audit.Operation))</strong><span class="hint">@(Fmt(audit.CreatedAt)) · @audit.ActorId</span></div><div><span class="pill">@audit.PreviousStatus → @audit.NewStatus</span><span>@audit.Reason</span></div></li>
+                }
+            </ol>
+        }
     </section>
+
+    <section class="card"><h3>ペイロード</h3><pre class="payload">@FormatPayload(detail.Payload)</pre></section>
 }
 
 @code {
@@ -117,6 +128,7 @@ else
 
     private static string Fmt(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string Fmt(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    private static string OperationName(string operation) => operation == "ManualRequeue" ? "再キュー" : operation;
 
     private static string FormatPayload(string? payload)
     {

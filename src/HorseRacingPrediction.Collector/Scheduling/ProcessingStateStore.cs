@@ -982,6 +982,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 .SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken)
                 .ConfigureAwait(false);
             if (entity is null) return null;
+            var auditEntities = await dbContext.JobOperationAudits.AsNoTracking()
+                .Where(x => x.JobId == entity.JobId)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var audits = auditEntities.OrderByDescending(x => x.CreatedAt)
+                .Select(x => new JobOperationAuditReadModel(x.AuditId, x.Operation, x.PreviousStatus, x.NewStatus, x.ActorId, x.Reason, x.CreatedAt)).ToList();
             return new AgentJobDetailReadModel(
                 entity.JobId,
                 entity.JobType,
@@ -996,7 +1001,8 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 entity.LeaseExpiresAt,
                 entity.LastError,
                 entity.CreatedAt,
-                entity.UpdatedAt);
+                entity.UpdatedAt,
+                audits);
         }
         finally
         {
@@ -1211,6 +1217,20 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             """);
         dbContext.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS ix_job_failure_notification_outbox_pending ON job_failure_notification_outbox(published_at, available_at);");
+        dbContext.Database.ExecuteSqlRaw(
+            """
+            CREATE TABLE IF NOT EXISTS job_operation_audits (
+                audit_id TEXT NOT NULL PRIMARY KEY,
+                job_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                previous_status TEXT NOT NULL,
+                new_status TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                reason TEXT NULL,
+                created_at TEXT NOT NULL
+            );
+            """);
+        dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS ix_job_operation_audits_job_created ON job_operation_audits(job_id, created_at);");
         dbContext.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS race_data_collection_statuses (
@@ -1512,6 +1532,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             if (job is null) return ForceRequeueJobResult.NotFound;
             if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
 
+            var previousStatus = job.Status;
             job.Status = AgentJobStatus.Ready;
             job.AvailableAt = now;
             job.StartedAt = null;
@@ -1519,6 +1540,12 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             job.LeaseToken = null;
             job.LastError = null;
             job.UpdatedAt = now;
+            dbContext.JobOperationAudits.Add(new JobOperationAuditEntity
+            {
+                AuditId = Guid.NewGuid().ToString("N"), JobId = job.JobId, Operation = "ManualRequeue",
+                PreviousStatus = previousStatus, NewStatus = AgentJobStatus.Ready,
+                ActorId = "admin-ui", Reason = "管理画面から再キュー", CreatedAt = now
+            });
             QueueDispatch(dbContext, job, now);
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return ForceRequeueJobResult.Requeued;

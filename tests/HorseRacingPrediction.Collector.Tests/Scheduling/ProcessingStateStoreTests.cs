@@ -268,9 +268,14 @@ public sealed class ProcessingStateStoreTests
 
         var requeued = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(1));
         var stale = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(2));
+        var detail = await sut.GetJobDetailAsync(job.JobId);
 
         Assert.AreEqual(ForceRequeueJobResult.Requeued, requeued);
         Assert.AreEqual(ForceRequeueJobResult.Conflict, stale);
+        Assert.IsNotNull(detail);
+        Assert.HasCount(1, detail.AuditHistory);
+        Assert.AreEqual("ManualRequeue", detail.AuditHistory[0].Operation);
+        Assert.AreEqual("admin-ui", detail.AuditHistory[0].ActorId);
     }
 
     [TestMethod]

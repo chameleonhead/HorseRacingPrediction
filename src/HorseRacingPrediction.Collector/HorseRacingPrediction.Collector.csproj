@@ -18,6 +18,7 @@
     <Compile Remove="Scheduling\AgentAcquisitionStatusEndpointExtensions.cs;Scheduling\AgentCollectionStatusEndpointExtensions.cs;Scheduling\AgentDashboardEndpointExtensions.cs;Scheduling\ResultDayDiscoveryRequestPayload.cs;Scheduling\ResultDayRequeueMode.cs" />
     <Compile Remove="Scheduling\RaceDataCollectionKeyFactory.cs" />
     <Compile Remove="Scheduling\HttpProcessingStateStoreProxy.cs" />
+    <Compile Remove="Scheduling\JobOperationAuditEntity.cs;Scheduling\JobOperationAuditReadModel.cs" />
   </ItemGroup>
 
   <ItemGroup>
