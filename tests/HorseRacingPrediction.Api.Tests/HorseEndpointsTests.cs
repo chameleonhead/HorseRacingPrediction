@@ -190,6 +190,14 @@ public class HorseEndpointsTests
         Assert.AreEqual(raceId, history.Entries[0].RaceId);
         Assert.AreEqual(entryId, history.Entries[0].EntryId);
         Assert.AreEqual(1, history.Entries[0].FinishPosition);
+
+        var participationResponse = await _client.GetAsync($"/api/horses/{horseId}/participations");
+        Assert.AreEqual(HttpStatusCode.OK, participationResponse.StatusCode);
+        var participations = await participationResponse.Content.ReadFromJsonAsync<ParticipationHistoryResponse>(JsonOptions);
+        Assert.IsNotNull(participations);
+        Assert.AreEqual("Horse", participations.SubjectType);
+        Assert.AreEqual("レースヒストリーテスト号", participations.Entries.Single().HorseName);
+        Assert.AreEqual(1, participations.Entries.Single().FinishPosition);
     }
 
     [TestMethod]
@@ -198,5 +206,8 @@ public class HorseEndpointsTests
         var response = await _client.GetAsync($"/api/horses/horse-{Guid.NewGuid()}/race-history");
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
+
+        var participationResponse = await _client.GetAsync($"/api/horses/horse-{Guid.NewGuid()}/participations");
+        Assert.AreEqual(HttpStatusCode.NotFound, participationResponse.StatusCode);
     }
 }

@@ -18,6 +18,51 @@ else
         </dl>
     </section>
 
+    @if (participations?.Relationships.Count > 0)
+    {
+        <section class="entity-section">
+            <h3>この調教師に関係する馬・騎手</h3>
+            <div class="relationship-grid">
+                @foreach (var relationship in participations.Relationships.Take(6))
+                {
+                    <a class="relationship-link" href="@RelationshipUrl(relationship)">
+                        <span class="relationship-kind">@relationship.RelationshipName</span>
+                        <strong>@relationship.DisplayName</strong>
+                        <span class="hint">@relationship.ParticipationCount 戦・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="entity-section">
+        <h3>管理馬の出走履歴</h3>
+        @if (participations is null || participations.Entries.Count == 0)
+        {
+            <p class="hint">出走履歴はありません。</p>
+        }
+        else
+        {
+            <ol class="history-list">
+                @foreach (var entry in participations.Entries)
+                {
+                    <li class="history-item">
+                        <div class="history-event">
+                            <a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @(entry.RacecourseCode ?? "—")@(entry.RaceNumber is null ? "" : $" {entry.RaceNumber}R")</a>
+                            <span class="hint">@(entry.RaceName ?? entry.RaceId)</span>
+                        </div>
+                        <div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong><span class="hint">@(entry.PrizeMoney is null ? "賞金 —" : $"賞金 {entry.PrizeMoney:N0}")</span></div>
+                        <div class="history-relations">
+                            <div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div>
+                            <div class="history-field"><span class="relationship-kind">騎手</span>@EntityLink("jockeys", entry.JockeyId, entry.JockeyName)</div>
+                            <div class="history-field"><span class="relationship-kind">レース時点の馬主</span><span>@(entry.OwnerName ?? "—")</span></div>
+                        </div>
+                    </li>
+                }
+            </ol>
+        }
+    </section>
+
     @if (trainer.Aliases.Count > 0)
     {
         <section class="card">
@@ -90,6 +135,7 @@ else
 
     private bool loading;
     private TrainerProfileResponse? trainer;
+    private ParticipationHistoryResponse? participations;
 
     private string? editDisplayName;
     private string? editNormalizedName;
@@ -118,7 +164,11 @@ else
         loading = true;
         try
         {
-            trainer = await Api.GetTrainerAsync(TrainerId);
+            var profileTask = Api.GetTrainerAsync(TrainerId);
+            var participationsTask = Api.GetTrainerParticipationsAsync(TrainerId);
+            await Task.WhenAll(profileTask, participationsTask);
+            trainer = await profileTask;
+            participations = await participationsTask;
             if (trainer is not null)
             {
                 editDisplayName = trainer.DisplayName;
@@ -131,6 +181,22 @@ else
             loading = false;
         }
     }
+
+    private static string RelationshipUrl(RelationshipSummaryResponse relationship) => relationship.ObjectType switch
+    {
+        "Horse" => $"horses/{Uri.EscapeDataString(relationship.ObjectId)}",
+        "Jockey" => $"jockeys/{Uri.EscapeDataString(relationship.ObjectId)}",
+        _ => "trainers"
+    };
+
+    private static RenderFragment EntityLink(string segment, string? id, string? label) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "—"); return; }
+        builder.OpenElement(1, "a");
+        builder.AddAttribute(2, "href", $"{segment}/{Uri.EscapeDataString(id)}");
+        builder.AddContent(3, string.IsNullOrWhiteSpace(label) ? id : label);
+        builder.CloseElement();
+    };
 
     private async Task UpdateProfileAsync()
     {

@@ -59,6 +59,9 @@ public sealed class AdminApiClient
             $"/api/horses/{Uri.EscapeDataString(horseId)}/race-history",
             cancellationToken);
 
+    public Task<ParticipationHistoryResponse?> GetHorseParticipationsAsync(string horseId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}/participations", cancellationToken);
+
     public Task<PagedResponse<JockeySummaryResponse>?> SearchJockeysAsync(SearchJockeysRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<JockeySummaryResponse>>($"/api/jockeys?{BuildQueryString(request)}", cancellationToken);
 
@@ -72,11 +75,17 @@ public sealed class AdminApiClient
             $"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history",
             cancellationToken);
 
+    public Task<ParticipationHistoryResponse?> GetJockeyParticipationsAsync(string jockeyId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/participations", cancellationToken);
+
     public Task<PagedResponse<TrainerSummaryResponse>?> SearchTrainersAsync(SearchTrainersRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<TrainerSummaryResponse>>($"/api/trainers?{BuildQueryString(request)}", cancellationToken);
 
     public Task<TrainerProfileResponse?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
         => GetJsonAsync<TrainerProfileResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken);
+
+    public Task<ParticipationHistoryResponse?> GetTrainerParticipationsAsync(string trainerId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}/participations", cancellationToken);
 
     public Task<PagedResponse<PredictionTicketSummaryResponse>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>($"/api/predictions?{BuildQueryString(request)}", cancellationToken);

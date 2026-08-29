@@ -64,6 +64,7 @@ internal static class TestApplicationFactory
         });
         builder.Services.AddSingleton<ProcessingStateStore>();
         builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
+        builder.Services.AddSingleton<CollectionExecutionTrigger>();
 
         builder.Services.AddEventFlow(options =>
         {

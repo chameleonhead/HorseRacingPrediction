@@ -1414,6 +1414,18 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
+        app.MapGet("/api/horses/{horseId}/participations",
+            async (string horseId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                using var dbContext = dbContextProvider.CreateContext();
+                if (!await dbContext.Horses.AsNoTracking().AnyAsync(x => x.HorseId == horseId, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
+                return Results.Ok(await BuildParticipationHistoryAsync("Horse", horseId, dbContext, cancellationToken).ConfigureAwait(false));
+            })
+            .WithName("GetHorseParticipations")
+            .WithTags("Horse API")
+            .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         app.MapGet("/api/jockeys/{jockeyId}/race-history",
             [SwaggerOperation(Summary = "Get jockey race history", Description = "Returns race history read model for a jockey")]
         async (string jockeyId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
@@ -1449,6 +1461,18 @@ public static class EndpointExtensions
             .Produces<ApiContracts.JockeyReadModel>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
+
+        app.MapGet("/api/jockeys/{jockeyId}/participations",
+            async (string jockeyId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                using var dbContext = dbContextProvider.CreateContext();
+                if (!await dbContext.Jockeys.AsNoTracking().AnyAsync(x => x.JockeyId == jockeyId, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
+                return Results.Ok(await BuildParticipationHistoryAsync("Jockey", jockeyId, dbContext, cancellationToken).ConfigureAwait(false));
+            })
+            .WithName("GetJockeyParticipations")
+            .WithTags("Jockey API")
+            .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/jockeys",
             [SwaggerOperation(Summary = "Search jockeys", Description = "Returns paged jockey summaries filtered by identifiers, names, affiliation and aliases")]
@@ -1542,6 +1566,50 @@ public static class EndpointExtensions
             .WithName("GetTrainerProfile")
             .WithTags("Trainer API")
             .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .WithOpenApi();
+
+        app.MapGet("/api/trainers/{trainerId}/participations",
+            [SwaggerOperation(Summary = "Get trainer participation history", Description = "Returns races and related horses, jockeys and owners for a trainer")]
+        async (string trainerId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                using var dbContext = dbContextProvider.CreateContext();
+                var trainerExists = await dbContext.Trainers.AsNoTracking().AnyAsync(x => x.TrainerId == trainerId, cancellationToken).ConfigureAwait(false);
+                if (!trainerExists) return Results.NotFound();
+
+                var contexts = await dbContext.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+                var matching = contexts
+                    .SelectMany(race => race.Entries.Where(entry => entry.TrainerId == trainerId).Select(entry => (race, entry)))
+                    .ToList();
+                var raceIds = matching.Select(x => x.race.RaceId).Distinct(StringComparer.Ordinal).ToList();
+                var results = await dbContext.RaceResults.AsNoTracking().Where(x => raceIds.Contains(x.RaceId)).ToListAsync(cancellationToken).ConfigureAwait(false);
+                var resultByRace = results.ToDictionary(x => x.RaceId, StringComparer.Ordinal);
+                var horses = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
+                var jockeys = await dbContext.Jockeys.AsNoTracking().ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, cancellationToken).ConfigureAwait(false);
+                var trainer = await dbContext.Trainers.AsNoTracking().SingleAsync(x => x.TrainerId == trainerId, cancellationToken).ConfigureAwait(false);
+
+                var entries = matching.Select(x =>
+                {
+                    resultByRace.TryGetValue(x.race.RaceId, out var raceResult);
+                    var entryResult = raceResult?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
+                    return new ParticipationHistoryEntryResponse(
+                        x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
+                        x.entry.HorseId, horses.GetValueOrDefault(x.entry.HorseId, x.entry.HorseId),
+                        x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
+                        trainerId, trainer.DisplayName, x.entry.OwnerName, entryResult?.FinishPosition, entryResult?.PrizeMoney);
+                }).OrderByDescending(x => x.RaceDate).ThenByDescending(x => x.RaceNumber).ToList();
+
+                var relationships = entries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
+                        new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate)))
+                    .Concat(entries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
+                        new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
+                    .OrderByDescending(x => x.ParticipationCount).ToList();
+
+                return Results.Ok(new ParticipationHistoryResponse("Trainer", trainerId, entries, relationships));
+            })
+            .WithName("GetTrainerParticipations")
+            .WithTags("Trainer API")
+            .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .WithOpenApi();
 
@@ -2177,6 +2245,48 @@ public static class EndpointExtensions
             "保存済みオッズはまだ API ReadModel に保持されていません。",
             [],
             []);
+
+    private static async Task<ParticipationHistoryResponse> BuildParticipationHistoryAsync(
+        string subjectType,
+        string subjectId,
+        EventStoreDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var contexts = await dbContext.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var matching = contexts.SelectMany(race => race.Entries
+            .Where(entry => subjectType == "Horse" ? entry.HorseId == subjectId : entry.JockeyId == subjectId)
+            .Select(entry => (race, entry))).ToList();
+        var raceIds = matching.Select(x => x.race.RaceId).Distinct(StringComparer.Ordinal).ToList();
+        var resultByRace = (await dbContext.RaceResults.AsNoTracking().Where(x => raceIds.Contains(x.RaceId)).ToListAsync(cancellationToken).ConfigureAwait(false))
+            .ToDictionary(x => x.RaceId, StringComparer.Ordinal);
+        var horses = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
+        var jockeys = await dbContext.Jockeys.AsNoTracking().ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, cancellationToken).ConfigureAwait(false);
+        var trainers = await dbContext.Trainers.AsNoTracking().ToDictionaryAsync(x => x.TrainerId, x => x.DisplayName, cancellationToken).ConfigureAwait(false);
+
+        var entries = matching.Select(x =>
+        {
+            resultByRace.TryGetValue(x.race.RaceId, out var raceResult);
+            var entryResult = raceResult?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
+            return new ParticipationHistoryEntryResponse(
+                x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
+                x.entry.HorseId, horses.GetValueOrDefault(x.entry.HorseId, x.entry.HorseId),
+                x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
+                x.entry.TrainerId, x.entry.TrainerId is null ? null : trainers.GetValueOrDefault(x.entry.TrainerId, x.entry.TrainerId),
+                x.entry.OwnerName, entryResult?.FinishPosition, entryResult?.PrizeMoney);
+        }).OrderByDescending(x => x.RaceDate).ThenByDescending(x => x.RaceNumber).ToList();
+
+        IEnumerable<RelationshipSummaryResponse> relationships = subjectType == "Horse"
+            ? entries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
+                    new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate)))
+                .Concat(entries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
+                    new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "レース時点の調教師", x.Count(), x.Max(y => y.RaceDate))))
+            : entries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
+                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate)))
+                .Concat(entries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
+                    new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "同じ出走の調教師", x.Count(), x.Max(y => y.RaceDate))));
+
+        return new ParticipationHistoryResponse(subjectType, subjectId, entries, relationships.OrderByDescending(x => x.ParticipationCount).ToList());
+    }
 
     private static ApiContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()
