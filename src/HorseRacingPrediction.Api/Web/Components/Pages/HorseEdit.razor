@@ -1,0 +1,204 @@
+@page "/horses/{HorseId}/edit"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Nav
+
+<h1>馬の管理情報</h1>
+<p class="hint"><a href="@($"horses/{Uri.EscapeDataString(HorseId)}")">← 馬詳細へ戻る</a></p>
+
+@if (loading)
+{
+    <UiState Kind="loading" Title="馬の管理情報を読み込んでいます" />
+}
+else if (horse is null)
+{
+    <UiState Title="馬が見つかりません" Message="対象の HorseId を確認してください。" />
+}
+else
+{
+    <section class="card">
+        <h2>@horse.RegisteredName</h2>
+        <dl class="meta">
+            <dt>HorseId</dt><dd><code>@horse.HorseId</code></dd>
+            <dt>正規化名</dt><dd>@horse.NormalizedName</dd>
+            <dt>性</dt><dd>@horse.SexCode</dd>
+            <dt>生年月日</dt><dd>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</dd>
+            <dt>馬主</dt><dd>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</dd>
+        </dl>
+    </section>
+
+    <section class="card">
+        <h3>プロフィール更新</h3>
+        <div class="form-grid">
+            <label>登録名<input @bind="editRegisteredName" /></label>
+            <label>正規化名<input @bind="editNormalizedName" /></label>
+            <label>性<input @bind="editSexCode" /></label>
+            <label>生年月日<input type="date" @bind="editBirthDate" /></label>
+            <label>馬主<input @bind="editOwnerName" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="UpdateProfileAsync" disabled="@updating">更新</button>
+            <button class="btn small" @onclick="Back">キャンセル</button>
+        </div>
+        @if (updateErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in updateErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <section class="card">
+        <h3>別名の追加・統合</h3>
+        <div class="form-grid">
+            <label>種別<input @bind="aliasType" placeholder="例: netkeiba" /></label>
+            <label>値<input @bind="aliasValue" /></label>
+            <label>出典<input @bind="aliasSourceName" /></label>
+            <label><input type="checkbox" @bind="aliasIsPrimary" /> 主別名にする</label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="MergeAliasAsync" disabled="@mergingAlias">追加</button>
+            <button class="btn small" @onclick="Back">キャンセル</button>
+        </div>
+        @if (aliasErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in aliasErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+
+    <section class="card">
+        <h3>データ補正</h3>
+        <p class="hint">誤登録されたデータの補正用です。理由は任意です。</p>
+        <div class="form-grid">
+            <label>登録名<input @bind="correctRegisteredName" /></label>
+            <label>正規化名<input @bind="correctNormalizedName" /></label>
+            <label>性<input @bind="correctSexCode" /></label>
+            <label>生年月日<input type="date" @bind="correctBirthDate" /></label>
+            <label>補正理由<input @bind="correctReason" /></label>
+        </div>
+        <div class="toolbar">
+            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">補正を保存する</button>
+            <button class="btn small" @onclick="Back">キャンセル</button>
+        </div>
+        @if (correctErrors.Count > 0)
+        {
+            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string HorseId { get; set; } = string.Empty;
+
+    private bool loading;
+    private HorseProfileResponse? horse;
+
+    private string? editRegisteredName;
+    private string? editNormalizedName;
+    private string? editSexCode;
+    private DateOnly? editBirthDate;
+    private string? editOwnerName;
+    private bool updating;
+    private IReadOnlyList<string> updateErrors = Array.Empty<string>();
+
+    private string? aliasType;
+    private string? aliasValue;
+    private string? aliasSourceName;
+    private bool aliasIsPrimary;
+    private bool mergingAlias;
+    private IReadOnlyList<string> aliasErrors = Array.Empty<string>();
+
+    private string? correctRegisteredName;
+    private string? correctNormalizedName;
+    private string? correctSexCode;
+    private DateOnly? correctBirthDate;
+    private string? correctReason;
+    private bool correcting;
+    private IReadOnlyList<string> correctErrors = Array.Empty<string>();
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            horse = await Api.GetHorseAsync(HorseId);
+            if (horse is not null)
+            {
+                editRegisteredName = horse.RegisteredName;
+                editNormalizedName = horse.NormalizedName;
+                editSexCode = horse.SexCode;
+                editBirthDate = horse.BirthDate;
+                editOwnerName = horse.OwnerName;
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void Back() => Nav.NavigateTo($"horses/{Uri.EscapeDataString(HorseId)}");
+
+    private async Task UpdateProfileAsync()
+    {
+        updating = true;
+        try
+        {
+            var result = await Api.UpdateHorseProfileAsync(HorseId, new UpdateHorseProfileRequest(
+                editRegisteredName, editNormalizedName, editSexCode, editBirthDate, editOwnerName));
+            updateErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success) Back();
+        }
+        finally
+        {
+            updating = false;
+        }
+    }
+
+    private async Task MergeAliasAsync()
+    {
+        if (string.IsNullOrWhiteSpace(aliasType) || string.IsNullOrWhiteSpace(aliasValue) || string.IsNullOrWhiteSpace(aliasSourceName))
+        {
+            aliasErrors = new[] { "種別・値・出典はすべて必須です。" };
+            return;
+        }
+
+        mergingAlias = true;
+        try
+        {
+            var result = await Api.MergeHorseAliasAsync(HorseId, new MergeAliasRequest(
+                aliasType!, aliasValue!, aliasSourceName!, aliasIsPrimary));
+            aliasErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success)
+            {
+                aliasType = null; aliasValue = null; aliasSourceName = null; aliasIsPrimary = false;
+                Back();
+            }
+        }
+        finally
+        {
+            mergingAlias = false;
+        }
+    }
+
+    private async Task CorrectAsync()
+    {
+        correcting = true;
+        try
+        {
+            var result = await Api.CorrectHorseDataAsync(HorseId, new CorrectHorseDataRequest(
+                correctRegisteredName, correctNormalizedName, correctSexCode, correctBirthDate, correctReason));
+            correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            if (result.Success)
+            {
+                correctRegisteredName = null; correctNormalizedName = null; correctSexCode = null;
+                correctBirthDate = null; correctReason = null;
+                Back();
+            }
+        }
+        finally
+        {
+            correcting = false;
+        }
+    }
+}
