@@ -315,6 +315,8 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
         min-width: 0;
     }
 
+    table.data { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+
     .history-relations { grid-template-columns: 1fr; gap: 8px; }
     .object-row, .race-row, .prediction-row { grid-template-columns: 1fr 1fr; gap: 10px 14px; }
     .object-primary { grid-column: 1 / -1; }

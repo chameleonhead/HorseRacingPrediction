@@ -246,6 +246,8 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
         min-width: 0;
     }
 
+    table.data:not(.job-table) { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+
     .toolbar { align-items: stretch; }
     .toolbar label { width: 100%; align-items: stretch; flex-direction: column; }
     .toolbar input, .toolbar select, .toolbar .btn { min-height: 44px; width: 100%; }
