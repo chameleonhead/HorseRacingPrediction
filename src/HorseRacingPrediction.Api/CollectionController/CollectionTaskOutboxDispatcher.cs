@@ -8,6 +8,7 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
     private readonly ProcessingStateStore _store;
     private readonly ICollectionTaskQueue _queue;
     private readonly CollectionQueueOptions _options;
+    private readonly CollectionMaintenanceState _maintenance;
     private readonly ILogger<CollectionTaskOutboxDispatcher> _logger;
 
     public CollectionTaskOutboxDispatcher(
@@ -15,10 +16,21 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
         ICollectionTaskQueue queue,
         IOptions<CollectionQueueOptions> options,
         ILogger<CollectionTaskOutboxDispatcher> logger)
+        : this(store, queue, options, new CollectionMaintenanceState(), logger)
+    {
+    }
+
+    public CollectionTaskOutboxDispatcher(
+        ProcessingStateStore store,
+        ICollectionTaskQueue queue,
+        IOptions<CollectionQueueOptions> options,
+        CollectionMaintenanceState maintenance,
+        ILogger<CollectionTaskOutboxDispatcher> logger)
     {
         _store = store;
         _queue = queue;
         _options = options.Value;
+        _maintenance = maintenance;
         _logger = logger;
     }
 
@@ -40,6 +52,7 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
 
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
+        if (_maintenance.IsActive) return;
         var now = DateTimeOffset.UtcNow;
         var dispatches = await _store.GetPendingCollectionTaskDispatchesAsync(
             now,

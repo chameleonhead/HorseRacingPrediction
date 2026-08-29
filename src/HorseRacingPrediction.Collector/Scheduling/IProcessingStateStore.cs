@@ -11,6 +11,7 @@ public interface IProcessingStateStore
     Task EnqueueJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, CancellationToken cancellationToken = default);
     Task ScheduleJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, string? parentJobId = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(string jobType, DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
+    Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(string jobType, string deduplicationKey, long dispatchGeneration, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(string jobType, string deduplicationKey, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<bool> CompleteCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);
     Task<bool> FailCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, string? error, CancellationToken cancellationToken = default);
@@ -24,6 +25,7 @@ public interface IProcessingStateStore
     Task RequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, string? error, CancellationToken cancellationToken = default, DateTimeOffset? availableAt = null);
     Task<bool> ForceRequeueJobAsync(string jobType, string deduplicationKey, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<ForceRequeueJobResult> ForceRequeueJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, DateTimeOffset now, CancellationToken cancellationToken = default);
+    Task<ForceRequeueJobResult> CancelJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string actorId, string reason, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<int> RequeueRunningJobsAsync(IEnumerable<string> jobTypes, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GetActiveJobPayloadsAsync(string jobType, CancellationToken cancellationToken = default);
     Task<int> GetAttemptCountAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);

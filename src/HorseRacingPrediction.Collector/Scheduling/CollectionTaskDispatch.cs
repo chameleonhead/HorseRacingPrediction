@@ -3,7 +3,8 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 public sealed record CollectionTaskNotification(
     string TaskId,
     string JobType,
-    string DeduplicationKey);
+    string DeduplicationKey,
+    long DispatchGeneration = 0);
 
 public sealed record PendingCollectionTaskDispatch(
     string OutboxId,
@@ -24,6 +25,7 @@ public sealed class CollectionDispatchOutboxEntity
     public string TaskId { get; set; } = string.Empty;
     public string JobType { get; set; } = string.Empty;
     public string DeduplicationKey { get; set; } = string.Empty;
+    public long DispatchGeneration { get; set; }
     public DateTimeOffset AvailableAt { get; set; }
     public int AttemptCount { get; set; }
     public DateTimeOffset? DispatchedAt { get; set; }

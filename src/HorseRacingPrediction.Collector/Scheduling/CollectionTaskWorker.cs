@@ -34,6 +34,7 @@ public sealed class CollectionTaskWorker
         var task = await _stateStore.AcquireCollectionTaskAsync(
             notification.JobType,
             notification.DeduplicationKey,
+            notification.DispatchGeneration,
             DateTimeOffset.UtcNow,
             TimeSpan.FromMinutes(10),
             cancellationToken).ConfigureAwait(false);

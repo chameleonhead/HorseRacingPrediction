@@ -167,8 +167,13 @@ resource "aws_iam_policy" "api_queue_sender" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
+        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
         Resource = aws_sqs_queue.collector.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
+        Resource = aws_sqs_queue.collector_dlq.arn
       },
       {
         Effect   = "Allow"

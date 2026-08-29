@@ -3,7 +3,7 @@
 @inject CollectionExecutionTrigger ExecutionTrigger
 
 <h1>収集タスク詳細</h1>
-<p class="hint"><a href="collection-tasks">← 収集タスク一覧へ戻る</a></p>
+<p class="hint"><a href="/collection-tasks">← 収集タスク一覧へ戻る</a></p>
 
 @if (detail is null)
 {
@@ -14,8 +14,8 @@ else
     <nav class="detail-tabs" aria-label="詳細セクション">
         <ul class="detail-tab-list">
             <li><a href="#overview">概要</a></li>
-            <li><a href="#errors">失敗理由</a></li>
-            <li><a href="#relations">親子タスク</a></li>
+            @if (!string.IsNullOrWhiteSpace(detail.LastError)) { <li><a href="#errors">失敗理由</a></li> }
+            @if (detail.ParentJob is not null || detail.ChildJobs.Count > 0) { <li><a href="#relations">親子タスク</a></li> }
             <li><a href="#payload">ペイロード</a></li>
         </ul>
     </nav>
@@ -35,6 +35,7 @@ else
             @if (!confirmingRequeue)
             {
                 <button class="btn primary" @onclick="() => confirmingRequeue = true">再投入する</button>
+                <button class="btn" @onclick="() => confirmingCancel = true">取り消す</button>
             }
             <button class="btn" @onclick="LoadAsync">再読み込み</button>
         </div>
@@ -46,6 +47,17 @@ else
                 <div class="toolbar">
                     <button class="btn primary" @onclick="RequeueAsync" disabled="@requeueing">確認して再投入</button>
                     <button class="btn" @onclick="() => confirmingRequeue = false" disabled="@requeueing">キャンセル</button>
+                </div>
+            </div>
+        }
+        @if (confirmingCancel)
+        {
+            <div class="confirmation" role="group" aria-label="取消の確認">
+                <strong>このジョブを取り消しますか？</strong>
+                <label>理由 <input @bind="cancelReason" /></label>
+                <div class="toolbar">
+                    <button class="btn primary" @onclick="CancelAsync" disabled="@(cancelling || string.IsNullOrWhiteSpace(cancelReason))">確認して取り消す</button>
+                    <button class="btn" @onclick="() => confirmingCancel = false" disabled="@cancelling">キャンセル</button>
                 </div>
             </div>
         }
@@ -84,6 +96,9 @@ else
     private string? message;
     private bool confirmingRequeue;
     private bool requeueing;
+    private bool confirmingCancel;
+    private bool cancelling;
+    private string cancelReason = string.Empty;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -119,6 +134,29 @@ else
         }
     }
 
+    private async Task CancelAsync()
+    {
+        if (detail is null || string.IsNullOrWhiteSpace(cancelReason)) return;
+        cancelling = true;
+        try
+        {
+            var result = await Store.CancelJobAsync(detail.JobId, detail.UpdatedAt, "admin-ui", cancelReason, DateTimeOffset.UtcNow);
+            message = result switch
+            {
+                ForceRequeueJobResult.Requeued => "取り消しました。",
+                ForceRequeueJobResult.Conflict => "ジョブの状態が更新されていたため取り消しませんでした。",
+                _ => "対象のジョブが見つかりませんでした。"
+            };
+        }
+        finally
+        {
+            confirmingCancel = false;
+            cancelling = false;
+            cancelReason = string.Empty;
+            await LoadAsync();
+        }
+    }
+
     private static string Fmt(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
-    private static string Url(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
+    private static string Url(string jobId) => $"/collection-tasks/{Uri.EscapeDataString(jobId)}";
 }

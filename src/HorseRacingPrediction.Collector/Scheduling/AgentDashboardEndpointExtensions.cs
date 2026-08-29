@@ -77,6 +77,30 @@ public static class AgentDashboardEndpointExtensions
             .WithSummary("Requeue a collection task with optimistic concurrency control");
 
         collectionApi.MapPost(
+            "/tasks/{jobId}/cancel",
+            async (
+                string jobId,
+                CancelCollectionTaskRequest request,
+                IProcessingStateStore stateStore,
+                CancellationToken cancellationToken) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.Reason))
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["reason"] = ["取消理由は必須です。"] });
+
+                var result = await stateStore.CancelJobAsync(
+                    jobId, request.ExpectedUpdatedAt, "admin-api", request.Reason, DateTimeOffset.UtcNow, cancellationToken)
+                    .ConfigureAwait(false);
+                return result switch
+                {
+                    ForceRequeueJobResult.Requeued => Results.Ok(),
+                    ForceRequeueJobResult.NotFound => Results.NotFound(),
+                    _ => Results.Conflict(new { message = "ジョブが更新されています。最新状態を確認してください。" })
+                };
+            })
+            .WithName("CancelCollectionTaskById")
+            .WithSummary("Cancel a collection task with optimistic concurrency control");
+
+        collectionApi.MapPost(
             "/tasks/{jobType}/{deduplicationKey}/requeue",
             async (
                 string jobType,
@@ -206,5 +230,6 @@ public static class AgentDashboardEndpointExtensions
         return endpoints;
     }
 
-    private sealed record RequeueCollectionTaskRequest(DateTimeOffset ExpectedUpdatedAt);
+    private sealed record RequeueCollectionTaskRequest(DateTimeOffset ExpectedUpdatedAt, string? Reason = null);
+    private sealed record CancelCollectionTaskRequest(DateTimeOffset ExpectedUpdatedAt, string Reason);
 }

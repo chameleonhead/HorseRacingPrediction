@@ -42,6 +42,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.StartedAt).HasColumnName("started_at");
             entity.Property(x => x.LeaseExpiresAt).HasColumnName("lease_expires_at");
             entity.Property(x => x.LeaseToken).HasColumnName("lease_token");
+            entity.Property(x => x.DispatchGeneration).HasColumnName("dispatch_generation");
             entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
             entity.Property(x => x.LastError).HasColumnName("last_error");
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
@@ -62,6 +63,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.TaskId).HasColumnName("task_id");
             entity.Property(x => x.JobType).HasColumnName("job_type");
             entity.Property(x => x.DeduplicationKey).HasColumnName("deduplication_key");
+            entity.Property(x => x.DispatchGeneration).HasColumnName("dispatch_generation");
             entity.Property(x => x.AvailableAt).HasColumnName("available_at");
             entity.Property(x => x.AttemptCount).HasColumnName("attempt_count");
             entity.Property(x => x.DispatchedAt).HasColumnName("dispatched_at");

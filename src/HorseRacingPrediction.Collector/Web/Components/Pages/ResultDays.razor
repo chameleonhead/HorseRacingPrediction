@@ -76,5 +76,5 @@ else
     }
 
     private static string CollectionJobUrl(ResultDayCollectionStatusReadModel status)
-        => $"jobs/{Uri.EscapeDataString(ProcessingStateStore.ComposeJobId(AgentJobType.ResultDayCollectionRequest, AgentJobKeyFactory.BuildResultDayCollectionRequestKey(status.ProviderType, status.TargetDate)))}";
+        => $"/jobs/{Uri.EscapeDataString(ProcessingStateStore.ComposeJobId(AgentJobType.ResultDayCollectionRequest, AgentJobKeyFactory.BuildResultDayCollectionRequestKey(status.ProviderType, status.TargetDate)))}";
 }

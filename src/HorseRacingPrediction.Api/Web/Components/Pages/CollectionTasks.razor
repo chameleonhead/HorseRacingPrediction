@@ -1,7 +1,33 @@
 @page "/collection-tasks"
 @inject IProcessingStateStore Store
+@inject ProcessingStateStore ConcreteStore
+@inject HorseRacingPrediction.Api.CollectionController.CollectionResetCoordinator ResetCoordinator
 
 <h1>収集タスク・状態</h1>
+
+<details class="card">
+    <summary>復旧・初期化</summary>
+    <p class="hint">キュー初期化は収集済みデータを保持します。完全初期化は予想・メモ・手動補正を含む全データをバックアップ後に削除します。</p>
+    @if (resetPreview is not null)
+    {
+        <p>未配送 outbox: @resetPreview.PendingOutboxCount 件</p>
+        <ul>@foreach (var item in resetPreview.JobsByStatus) { <li>@item.Key: @item.Value 件</li> }</ul>
+        <details><summary>完全初期化で削除されるタスク DB</summary><ul>@foreach (var item in resetPreview.TableCounts) { <li>@item.Key: @item.Value 件</li> }</ul></details>
+    }
+    @if (eventStoreCounts is not null)
+    {
+        <details><summary>完全初期化で削除される Event Store</summary><ul>@foreach (var item in eventStoreCounts) { <li>@item.Key: @item.Value 件</li> }</ul></details>
+    }
+    <label>理由 <input @bind="resetReason" /></label>
+    <label>確認文 <input @bind="resetConfirmation" /></label>
+    <label>再認証パスワード <input type="password" @bind="resetPassword" autocomplete="current-password" /></label>
+    <div class="toolbar">
+        <button class="btn" @onclick="StartQueueReset" disabled="@resetBusy">キューを初期化</button>
+        <button class="btn" @onclick="StartFullReset" disabled="@resetBusy">収集データを完全初期化</button>
+        <button class="btn" @onclick="RefreshResetStatus">状態を更新</button>
+    </div>
+    @if (resetStatus is not null) { <p role="status">@resetStatus.State: @resetStatus.Message @resetStatus.BackupDirectory</p> }
+</details>
 
 <div class="toolbar">
     <label>JobType <input @bind="jobType" /></label>
@@ -45,9 +71,20 @@
     private readonly Dictionary<string, ResultDayCollectionState> resultDayStates = new(StringComparer.Ordinal);
     private int page = 1;
     private const int pageSize = 50;
+    private string resetReason = string.Empty;
+    private string resetConfirmation = string.Empty;
+    private string resetPassword = string.Empty;
+    private bool resetBusy;
+    private HorseRacingPrediction.Api.CollectionController.CollectionResetStatus? resetStatus;
+    private CollectionResetPreview? resetPreview;
+    private IReadOnlyDictionary<string, long>? eventStoreCounts;
     private IEnumerable<AgentJobStatusReadModel> PagedTasks => tasks.Skip((page - 1) * pageSize).Take(pageSize);
 
-    protected override Task OnParametersSetAsync() => LoadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        await LoadResetPreviewAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -72,7 +109,7 @@
     }
 
     private static string Format(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
-    private static string DetailUrl(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
+    private static string DetailUrl(string jobId) => $"/collection-tasks/{Uri.EscapeDataString(jobId)}";
     private static string ErrorSummary(string error) => error.Length <= 100 ? error : $"{error[..100]}…";
     private Task GoPage(int value) { page = value; return Task.CompletedTask; }
     private bool HasStateMismatch(AgentJobStatusReadModel task)
@@ -93,5 +130,42 @@
         provider = index > 0 ? key[..index] : string.Empty;
         date = default;
         return index > 0 && DateOnly.TryParseExact(key[(index + marker.Length)..], "yyyy-MM-dd", out date);
+    }
+
+    private Task RefreshResetStatus()
+    {
+        resetStatus = ResetCoordinator.GetStatus();
+        resetBusy = resetStatus.State == "Running";
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadResetPreviewAsync()
+    {
+        resetPreview = await ConcreteStore.GetResetPreviewAsync();
+        eventStoreCounts = await ResetCoordinator.GetEventStoreTableCountsAsync();
+        await RefreshResetStatus();
+    }
+
+    private Task StartQueueReset()
+    {
+        if (resetConfirmation != "キューを初期化" || string.IsNullOrWhiteSpace(resetReason))
+        {
+            message = "理由と確認文「キューを初期化」を入力してください。";
+            return Task.CompletedTask;
+        }
+        resetBusy = ResetCoordinator.TryStartQueueReset("admin-ui", resetReason);
+        return RefreshResetStatus();
+    }
+
+    private Task StartFullReset()
+    {
+        if (resetConfirmation != "収集データを完全初期化" || string.IsNullOrWhiteSpace(resetReason))
+        {
+            message = "理由と確認文「収集データを完全初期化」を入力してください。";
+            return Task.CompletedTask;
+        }
+        resetBusy = ResetCoordinator.TryStartFullReset("admin-ui", resetReason, resetPassword);
+        resetPassword = string.Empty;
+        return RefreshResetStatus();
     }
 }

@@ -33,4 +33,19 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
             MessageBody = JsonSerializer.Serialize(notification, JsonOptions)
         }, cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task PurgeAsync(CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled) return;
+        var queueUrl = await ResolveQueueUrlAsync(_options.QueueUrl, _options.QueueName, cancellationToken).ConfigureAwait(false);
+        var deadLetterQueueUrl = await ResolveQueueUrlAsync(
+            _options.DeadLetterQueueUrl, _options.DeadLetterQueueName, cancellationToken).ConfigureAwait(false);
+        await _sqs.PurgeQueueAsync(queueUrl, cancellationToken).ConfigureAwait(false);
+        await _sqs.PurgeQueueAsync(deadLetterQueueUrl, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> ResolveQueueUrlAsync(string configuredUrl, string queueName, CancellationToken cancellationToken)
+        => string.IsNullOrWhiteSpace(configuredUrl)
+            ? (await _sqs.GetQueueUrlAsync(queueName, cancellationToken).ConfigureAwait(false)).QueueUrl
+            : configuredUrl;
 }
