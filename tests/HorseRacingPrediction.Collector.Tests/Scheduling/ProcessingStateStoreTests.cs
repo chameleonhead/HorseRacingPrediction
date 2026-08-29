@@ -451,6 +451,72 @@ public sealed class ProcessingStateStoreTests
         Assert.IsFalse(string.IsNullOrWhiteSpace(leased.LeaseToken));
     }
 
+    [TestMethod]
+    public async Task AcquireCollectionTaskAsync_RejectsNotificationFromPreviousGeneration()
+    {
+        var sut = CreateStore(5);
+        var now = DateTimeOffset.UtcNow;
+        await sut.ScheduleJobAsync("RaceCardCollection", "generation-task", "{}", now);
+        var first = (await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        var detail = await sut.GetJobDetailAsync(first.Notification.TaskId);
+        Assert.IsNotNull(detail);
+
+        var result = await sut.ForceRequeueJobAsync(detail.JobId, detail.UpdatedAt, now.AddSeconds(2));
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, result);
+        var dispatches = await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(3), 10);
+        var latest = dispatches.MaxBy(x => x.Notification.DispatchGeneration)!;
+
+        var staleLease = await sut.AcquireCollectionTaskAsync(
+            first.Notification.JobType, first.Notification.DeduplicationKey, first.Notification.DispatchGeneration,
+            now.AddSeconds(4), TimeSpan.FromMinutes(5));
+        Assert.IsNull(staleLease);
+
+        var currentLease = await sut.AcquireCollectionTaskAsync(
+            latest.Notification.JobType, latest.Notification.DeduplicationKey, latest.Notification.DispatchGeneration,
+            now.AddSeconds(4), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(currentLease);
+    }
+
+    [TestMethod]
+    public async Task CancelJobAsync_InvalidatesRunningLease()
+    {
+        var sut = CreateStore(5);
+        var now = DateTimeOffset.UtcNow;
+        await sut.ScheduleJobAsync("RaceCardCollection", "cancel-task", "{}", now);
+        var dispatch = (await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        var lease = await sut.AcquireCollectionTaskAsync(
+            dispatch.Notification.JobType, dispatch.Notification.DeduplicationKey, dispatch.Notification.DispatchGeneration,
+            now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var detail = await sut.GetJobDetailAsync(dispatch.Notification.TaskId);
+        Assert.IsNotNull(detail);
+
+        var result = await sut.CancelJobAsync(detail.JobId, detail.UpdatedAt, "test", "stuck", now.AddSeconds(3));
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, result);
+        Assert.IsFalse(await sut.CompleteCollectionTaskAsync(lease.JobType, lease.DeduplicationKey, lease.LeaseToken));
+        Assert.AreEqual(AgentJobStatus.Cancelled, (await sut.GetJobDetailAsync(detail.JobId))!.Status);
+    }
+
+    [TestMethod]
+    public async Task BackupAndResetAsync_CreatesVerifiedBackupAndEmptyCurrentStore()
+    {
+        var sut = CreateStore(5);
+        var now = DateTimeOffset.UtcNow;
+        await sut.ScheduleJobAsync("RaceCardCollection", "reset-task", "{}", now);
+        var backupDirectory = Path.Combine(_stateDirectory, "backups", "full-reset-test");
+
+        var backupPath = await sut.BackupAndResetAsync(backupDirectory);
+
+        Assert.IsTrue(File.Exists(backupPath));
+        Assert.IsEmpty(await sut.GetJobStatusesAsync(null, null, 100));
+        await using var connection = new SqliteConnection($"Data Source={backupPath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM jobs;";
+        Assert.AreEqual(1L, Convert.ToInt64(await command.ExecuteScalarAsync()));
+    }
+
     private ProcessingStateStore CreateStore(int predictionLeaseMinutes, int maxConcurrentJobs = 1)
     {
         var options = Options.Create(new AgentProcessingOptions

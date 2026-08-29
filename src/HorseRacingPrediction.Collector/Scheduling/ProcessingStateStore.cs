@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -11,6 +12,8 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     private readonly DbContextOptions<ProcessingStateDbContext> _dbContextOptions;
     private readonly AgentProcessingOptions _options;
     private readonly ILogger<ProcessingStateStore> _logger;
+    private readonly string _dbPath;
+    private readonly string _stateDirectory;
 
     public ProcessingStateStore(IOptions<AgentProcessingOptions> options, ILogger<ProcessingStateStore> logger)
     {
@@ -20,6 +23,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         var stateDirectory = string.IsNullOrWhiteSpace(dir)
             ? Path.Combine(AppContext.BaseDirectory, "agent-processing-state")
             : dir;
+        _stateDirectory = Path.GetFullPath(stateDirectory);
 
         Directory.CreateDirectory(stateDirectory);
 
@@ -27,6 +31,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             ? "processing-jobs.db"
             : _options.JobStoreFileName;
         var dbPath = Path.Combine(stateDirectory, jobStoreFileName);
+        _dbPath = Path.GetFullPath(dbPath);
 
         _dbContextOptions = new DbContextOptionsBuilder<ProcessingStateDbContext>()
             .UseSqlite($"Data Source={dbPath};Pooling=False")
@@ -363,9 +368,18 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
+        string jobType,
+        string deduplicationKey,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+        => AcquireCollectionTaskAsync(jobType, deduplicationKey, -1, now, leaseDuration, cancellationToken);
+
     public async Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
         string jobType,
         string deduplicationKey,
+        long dispatchGeneration,
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
@@ -378,7 +392,8 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             var job = await dbContext.Jobs.SingleOrDefaultAsync(
                 x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
                 cancellationToken).ConfigureAwait(false);
-            if (job is null || job.Status != AgentJobStatus.Ready || job.AvailableAt > now)
+            if (job is null || job.Status != AgentJobStatus.Ready || job.AvailableAt > now
+                || (dispatchGeneration >= 0 && job.DispatchGeneration != dispatchGeneration))
                 return null;
 
             var leaseToken = Guid.NewGuid().ToString("N");
@@ -441,7 +456,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 .ToList();
             return entities.Select(x => new PendingCollectionTaskDispatch(
                 x.OutboxId,
-                new CollectionTaskNotification(x.TaskId, x.JobType, x.DeduplicationKey),
+                new CollectionTaskNotification(x.TaskId, x.JobType, x.DeduplicationKey, x.DispatchGeneration),
                 x.AttemptCount)).ToList();
         }
         finally
@@ -480,6 +495,148 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionResetPreview> GetResetPreviewAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var statuses = await dbContext.Jobs.GroupBy(x => x.Status)
+                .Select(x => new { Status = x.Key, Count = x.Count() })
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var pendingOutbox = await dbContext.DispatchOutbox.CountAsync(x => x.DispatchedAt == null, cancellationToken)
+                .ConfigureAwait(false);
+            var connection = (SqliteConnection)dbContext.Database.GetDbConnection();
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            var names = new List<string>();
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;";
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) names.Add(reader.GetString(0));
+            }
+            var counts = new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (var name in names)
+            {
+                await using var count = connection.CreateCommand();
+                count.CommandText = $"SELECT COUNT(*) FROM \"{name.Replace("\"", "\"\"")}\";";
+                counts[name] = Convert.ToInt64(await count.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+            }
+            return new CollectionResetPreview(statuses.ToDictionary(x => x.Status, x => x.Count), pendingOutbox, counts);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<int> CancelAllActiveJobsAsync(string actorId, string reason, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var jobs = await dbContext.Jobs
+                .Where(x => x.Status != AgentJobStatus.Succeeded && x.Status != AgentJobStatus.Cancelled)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var job in jobs)
+            {
+                var previous = job.Status;
+                job.Status = AgentJobStatus.Cancelled;
+                job.DispatchGeneration += 1;
+                job.LeaseToken = null;
+                job.LeaseExpiresAt = null;
+                job.StartedAt = null;
+                job.UpdatedAt = now;
+                dbContext.JobOperationAudits.Add(new JobOperationAuditEntity
+                {
+                    AuditId = Guid.NewGuid().ToString("N"),
+                    JobId = job.JobId,
+                    Operation = "QueueReset",
+                    PreviousStatus = previous,
+                    NewStatus = AgentJobStatus.Cancelled,
+                    ActorId = actorId,
+                    Reason = reason,
+                    CreatedAt = now
+                });
+            }
+            var pending = await dbContext.DispatchOutbox.Where(x => x.DispatchedAt == null)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var dispatch in pending)
+            {
+                dispatch.DispatchedAt = now;
+                dispatch.LastError = "Invalidated by queue reset.";
+                dispatch.UpdatedAt = now;
+            }
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return jobs.Count;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<string> BackupAndResetAsync(string backupDirectory, CancellationToken cancellationToken = default)
+    {
+        var backupPath = await BackupDatabaseAsync(backupDirectory, cancellationToken).ConfigureAwait(false);
+        await ResetDatabaseAsync(cancellationToken).ConfigureAwait(false);
+        return backupPath;
+    }
+
+    public async Task<string> BackupDatabaseAsync(string backupDirectory, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureSafeDatabasePath(_dbPath, _stateDirectory);
+            Directory.CreateDirectory(backupDirectory);
+            var backupPath = Path.Combine(backupDirectory, Path.GetFileName(_dbPath));
+            await using (var source = new SqliteConnection($"Data Source={_dbPath};Pooling=False"))
+            await using (var destination = new SqliteConnection($"Data Source={backupPath};Pooling=False"))
+            {
+                await source.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await destination.OpenAsync(cancellationToken).ConfigureAwait(false);
+                source.BackupDatabase(destination);
+                await VerifySqliteAsync(source, cancellationToken).ConfigureAwait(false);
+                await VerifySqliteAsync(destination, cancellationToken).ConfigureAwait(false);
+            }
+
+            return backupPath;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task ResetDatabaseAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureSafeDatabasePath(_dbPath, _stateDirectory);
+            SqliteConnection.ClearAllPools();
+            await using (var dbContext = CreateDbContext())
+            {
+                await dbContext.Database.EnsureDeletedAsync(cancellationToken).ConfigureAwait(false);
+                await dbContext.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
+            }
+            InitializeDatabase();
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static void EnsureSafeDatabasePath(string databasePath, string allowedDirectory)
+    {
+        var root = Path.GetPathRoot(allowedDirectory);
+        if (string.Equals(allowedDirectory.TrimEnd(Path.DirectorySeparatorChar), root?.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The configured state directory is too broad for a destructive reset.");
+        var relative = Path.GetRelativePath(allowedDirectory, databasePath);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+            throw new InvalidOperationException("The task database is outside the configured state directory.");
+    }
+
+    private static async Task VerifySqliteAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        var result = Convert.ToString(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"SQLite integrity check failed: {result}");
     }
 
     public async Task WaitForDependenciesAsync(
@@ -1222,6 +1379,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             .Any();
         if (!parentJobIdColumnExists)
             dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN parent_job_id TEXT NULL;");
+        var dispatchGenerationColumnExists = dbContext.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('jobs') WHERE name = 'dispatch_generation'")
+            .Any();
+        if (!dispatchGenerationColumnExists)
+            dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN dispatch_generation INTEGER NOT NULL DEFAULT 0;");
         dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS ix_jobs_parent_job_id ON jobs(parent_job_id);");
         dbContext.Database.ExecuteSqlRaw(
             """
@@ -1240,6 +1402,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             """);
         dbContext.Database.ExecuteSqlRaw(
             "CREATE INDEX IF NOT EXISTS ix_collection_dispatch_outbox_pending ON collection_dispatch_outbox(dispatched_at, available_at);");
+        var outboxGenerationColumnExists = dbContext.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('collection_dispatch_outbox') WHERE name = 'dispatch_generation'")
+            .Any();
+        if (!outboxGenerationColumnExists)
+            dbContext.Database.ExecuteSqlRaw("ALTER TABLE collection_dispatch_outbox ADD COLUMN dispatch_generation INTEGER NOT NULL DEFAULT 0;");
         dbContext.Database.ExecuteSqlRaw(
             """
             CREATE TABLE IF NOT EXISTS job_failure_notification_outbox (
@@ -1247,6 +1414,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 job_id TEXT NOT NULL,
                 job_type TEXT NOT NULL,
                 deduplication_key TEXT NOT NULL,
+                dispatch_generation INTEGER NOT NULL DEFAULT 0,
                 status TEXT NOT NULL,
                 error TEXT NULL,
                 attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -1613,12 +1781,14 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     private static void QueueDispatch(ProcessingStateDbContext dbContext, ProcessingJobEntity job, DateTimeOffset availableAt)
     {
         if (!CollectionDispatchPolicy.IsDispatchable(job.JobType)) return;
+        job.DispatchGeneration += 1;
         dbContext.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
         {
             OutboxId = Guid.NewGuid().ToString("N"),
             TaskId = job.JobId,
             JobType = job.JobType,
             DeduplicationKey = job.DeduplicationKey,
+            DispatchGeneration = job.DispatchGeneration,
             AvailableAt = availableAt,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -1659,6 +1829,63 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 CreatedAt = now
             });
             QueueDispatch(dbContext, job, now);
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return ForceRequeueJobResult.Requeued;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<ForceRequeueJobResult> CancelJobAsync(
+        string jobId,
+        DateTimeOffset expectedUpdatedAt,
+        string actorId,
+        string reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("取消理由は必須です。", nameof(reason));
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var job = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken).ConfigureAwait(false);
+            if (job is null) return ForceRequeueJobResult.NotFound;
+            if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
+
+            var previousStatus = job.Status;
+            job.Status = AgentJobStatus.Cancelled;
+            job.DispatchGeneration += 1;
+            job.LeaseToken = null;
+            job.LeaseExpiresAt = null;
+            job.StartedAt = null;
+            job.UpdatedAt = now;
+
+            var pendingDispatches = await dbContext.DispatchOutbox
+                .Where(x => x.TaskId == job.JobId && x.DispatchedAt == null)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var dispatch in pendingDispatches)
+            {
+                dispatch.DispatchedAt = now;
+                dispatch.LastError = "Cancelled before dispatch.";
+                dispatch.UpdatedAt = now;
+            }
+
+            dbContext.JobOperationAudits.Add(new JobOperationAuditEntity
+            {
+                AuditId = Guid.NewGuid().ToString("N"),
+                JobId = job.JobId,
+                Operation = "ManualCancel",
+                PreviousStatus = previousStatus,
+                NewStatus = AgentJobStatus.Cancelled,
+                ActorId = string.IsNullOrWhiteSpace(actorId) ? "admin-ui" : actorId,
+                Reason = reason.Trim(),
+                CreatedAt = now
+            });
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return ForceRequeueJobResult.Requeued;
         }

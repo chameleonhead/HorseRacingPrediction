@@ -515,6 +515,17 @@ Migrationまたは整合性確認に失敗した場合、APIはリクエスト�
 
 復旧時はコンテナを停止し、現在のDBを別名へ退避したうえで、選択したバックアップを
 `eventstore.db` として復元し、直前のイメージタグで `docker compose up -d` を実行する。
+
+### 管理画面からの完全初期化と復元
+
+`収集タスク・状態` の `収集データを完全初期化` は、SQS と DLQ を消去し、次の両 DB を空の最新スキーマへ再作成する。
+
+- `/opt/horse-racing-prediction/app/data/eventstore.db`
+- `/opt/horse-racing-prediction/app/data/collection-tasks.db`
+
+実行前の整合性確認済みバックアップと `manifest.json` は `/opt/horse-racing-prediction/app/data/backups/full-reset-<UTC timestamp>/` に保存される。復元時はサービスを停止し、現在の DB、`-wal`、`-shm` を別名で退避してから、manifest に記録された2つのバックアップを元のファイル名へコピーする。その後 `docker compose up -d` を実行し、起動ログの migration と integrity check を確認する。
+
+完全初期化中の工程は `/opt/horse-racing-prediction/app/data/reset-state.json` に保存される。Api が途中で再起動した場合は同じバックアップディレクトリを使って処理を再開するため、初期化完了または失敗確認前にこのファイルやバックアップを削除しない。
 稼働中のSQLiteファイルを直接上書きしてはならない。
 - バックアップは Lightsail のスナップショットで取得する
 - `docker compose` の更新のみでアプリを入れ替えるため、通常はインフラ workflow とアプリ workflow は互いのコードに依存しない

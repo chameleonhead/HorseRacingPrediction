@@ -3,7 +3,7 @@
 @inject CollectionExecutionTrigger ExecutionTrigger
 
 <h1>ジョブ詳細</h1>
-<p class="hint"><a href="jobs">← ジョブ一覧へ戻る</a></p>
+<p class="hint"><a href="/jobs">← ジョブ一覧へ戻る</a></p>
 
 @if (loading)
 {
@@ -149,7 +149,7 @@ else
     private static string Fmt(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string Fmt(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
     private static string OperationName(string operation) => operation == "ManualRequeue" ? "再キュー" : operation;
-    private static string JobUrl(string jobId) => $"jobs/{Uri.EscapeDataString(jobId)}";
+    private static string JobUrl(string jobId) => $"/jobs/{Uri.EscapeDataString(jobId)}";
 
     private static string FormatPayload(string? payload)
     {

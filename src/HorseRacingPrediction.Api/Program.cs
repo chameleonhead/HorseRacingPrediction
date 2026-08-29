@@ -102,6 +102,7 @@ builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSect
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
+builder.Services.AddSingleton<CollectionMaintenanceState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
 if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
@@ -120,6 +121,11 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
     builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
 }
+else
+{
+    builder.Services.AddSingleton<ICollectionTaskQueue, NullCollectionTaskQueue>();
+}
+builder.Services.AddSingleton<CollectionResetCoordinator>();
 var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
 builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotificationSection);
 if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOptions.Enabled)))
@@ -153,6 +159,7 @@ builder.Services.AddEventFlow(options =>
 var app = builder.Build();
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
+app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
 
 app.UseForwardedHeaders();
 app.UseSwagger();
@@ -162,11 +169,27 @@ app.UseStaticFiles();
 app.UseApiKeyProtection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.Use(async (context, next) =>
+{
+    var maintenance = context.RequestServices.GetRequiredService<CollectionMaintenanceState>();
+    var isMutation = !HttpMethods.IsGet(context.Request.Method)
+        && !HttpMethods.IsHead(context.Request.Method)
+        && !HttpMethods.IsOptions(context.Request.Method);
+    if (maintenance.IsActive && isMutation
+        && !context.Request.Path.StartsWithSegments("/api/collection/reset"))
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new { message = "収集データベースのメンテナンス中です。" });
+        return;
+    }
+    await next();
+});
 app.UseAntiforgery();
 
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
 app.MapAgentDashboardEndpoints();
+app.MapCollectionResetEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
 
