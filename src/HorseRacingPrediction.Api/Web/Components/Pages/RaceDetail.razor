@@ -48,7 +48,7 @@ else
                         <div class="participant-number"><span>@e.GateNumber 枠</span><strong>@e.HorseNumber</strong></div>
                         <div class="object-primary"><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a><span class="hint">@e.SexCode@e.Age · @FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</span></div>
                         <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果 —" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム —")</span></div>
-                        <div class="participant-relations"><div><span class="object-label">騎手</span>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</div><div><span class="object-label">調教師</span>@EntityLink("trainers", e.TrainerId, e.TrainerName)</div><div><span class="object-label">レース時点の馬主</span>@(e.OwnerName ?? "未登録")</div></div>
+                        <div class="participant-relations"><div><span class="object-label">騎手</span>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</div><div><span class="object-label">調教師</span>@EntityLink("trainers", e.TrainerId, e.TrainerName)</div><div><span class="object-label">レース時点の馬主</span>@EntityLink("owners", e.OwnerId, e.OwnerName)</div></div>
                     </li>
                 }
             </ol>

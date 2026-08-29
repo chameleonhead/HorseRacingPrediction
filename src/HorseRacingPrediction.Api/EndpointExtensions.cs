@@ -1060,6 +1060,8 @@ public static class EndpointExtensions
                         .Where(x => trainerIds.Contains(x.TrainerId))
                         .ToDictionaryAsync(x => x.TrainerId, x => x.DisplayName, StringComparer.Ordinal, cancellationToken)
                         .ConfigureAwait(false);
+                var ownerMappings = await dbContext.OwnerAliasMappings.AsNoTracking()
+                    .ToDictionaryAsync(x => x.NormalizedAlias, x => x.OwnerId, cancellationToken).ConfigureAwait(false);
 
                 var entryResponses = readModel.Entries.Count > 0
                     ? readModel.Entries.Select(x => ToRaceEntryResponse(
@@ -1068,14 +1070,16 @@ public static class EndpointExtensions
                         ResolveJockeyName(jockeyNamesById, x.JockeyId),
                         ResolveTrainerName(trainerNamesById, x.TrainerId),
                         ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
-                        x.OwnerName ?? ResolveOwnerName(ownerNamesByHorseId, x.HorseId))).ToList()
+                        x.OwnerName ?? ResolveOwnerName(ownerNamesByHorseId, x.HorseId),
+                        ResolveOwnerId(x.OwnerName ?? ResolveOwnerName(ownerNamesByHorseId, x.HorseId), ownerMappings))).ToList()
                     : resultReadModel?.EntryResults.Select(x => ToRaceEntryResponse(
                         x,
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveGateNumber(entryGateNumbersByEntryId, resultEntryGateNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)),
-                        ResolveOwnerName(ownerNamesByHorseId, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [];
+                        ResolveOwnerName(ownerNamesByHorseId, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)),
+                        ResolveOwnerId(ResolveOwnerName(ownerNamesByHorseId, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)), ownerMappings))).ToList() ?? [];
 
                 var winningHorseId = resultReadModel?.WinningHorseId;
                 if (string.IsNullOrWhiteSpace(winningHorseId))
@@ -2205,7 +2209,8 @@ public static class EndpointExtensions
         string? jockeyName,
         string? trainerName,
         int? gateNumber,
-        string? ownerName)
+        string? ownerName,
+        string? ownerId)
         => new(
             entry.EntryId,
             entry.HorseId,
@@ -2222,9 +2227,10 @@ public static class EndpointExtensions
             entry.DeclaredWeight,
             entry.DeclaredWeightDiff,
             entry.RunningStyleCode,
-            ownerName);
+            ownerName,
+            ownerId);
 
-    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName, string? ownerName)
+    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2241,7 +2247,8 @@ public static class EndpointExtensions
             null,
             null,
             null,
-            ownerName);
+            ownerName,
+            ownerId);
 
     private static RaceWeatherObservationResponse ToRaceWeatherObservationResponse(
         HorseRacingPrediction.Application.Queries.ReadModels.WeatherObservationSnapshot observation)
@@ -2315,6 +2322,13 @@ public static class EndpointExtensions
         => !string.IsNullOrWhiteSpace(horseId) && ownerNamesByHorseId.TryGetValue(horseId, out var ownerName)
             ? ownerName
             : null;
+
+    private static string? ResolveOwnerId(string? ownerName, IReadOnlyDictionary<string, string> mappings)
+    {
+        if (string.IsNullOrWhiteSpace(ownerName)) return null;
+        var normalized = NormalizeOwnerName(ownerName);
+        return mappings.GetValueOrDefault(normalized, CreateOwnerId(normalized));
+    }
 
 
     private static string? ResolveJockeyName(IReadOnlyDictionary<string, string> jockeyNamesById, string? jockeyId)
