@@ -1,0 +1,39 @@
+@page "/owners"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<h1>馬主</h1>
+<div class="toolbar">
+    <label>馬主名・表記: <input @bind="query" /></label>
+    <button class="btn primary" @onclick="LoadAsync">検索</button>
+</div>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (items.Count == 0) { <p>該当する馬主はありません。</p> }
+else
+{
+    <div class="object-list">
+        @foreach (var owner in items)
+        {
+            <article class="object-row">
+                <div class="object-primary"><a href="@($"owners/{owner.OwnerId}")">@owner.DisplayName</a><span class="hint">表記 @owner.NameVariants.Count 件</span></div>
+                <div><span class="object-label">現在の所有馬</span>@owner.CurrentHorseCount 頭</div>
+                <div><span class="object-label">出走</span>@owner.ParticipationCount 戦</div>
+                <div><span class="object-label">最終出走</span>@(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</div>
+            </article>
+        }
+    </div>
+}
+
+@code {
+    private string? query;
+    private bool loading;
+    private IReadOnlyList<OwnerSummaryResponse> items = [];
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try { items = await Api.SearchOwnersAsync(query); }
+        finally { loading = false; }
+    }
+}

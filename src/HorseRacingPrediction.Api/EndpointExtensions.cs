@@ -25,6 +25,8 @@ using HorseRacingPrediction.MachineLearning.Prediction;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore.Annotations;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HorseRacingPrediction.Api;
 
@@ -1681,6 +1683,57 @@ public static class EndpointExtensions
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .WithOpenApi();
 
+        app.MapGet("/api/owners",
+            async (string? query, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                using var dbContext = dbContextProvider.CreateContext();
+                var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(query))
+                    owners = owners.Where(x => x.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        || x.NameVariants.Any(y => y.Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
+                return Results.Ok(owners.OrderByDescending(x => x.ParticipationCount).ThenBy(x => x.DisplayName).ToList());
+            })
+            .WithName("SearchOwners")
+            .WithTags("Owner API")
+            .Produces<IReadOnlyList<OwnerSummaryResponse>>();
+
+        app.MapGet("/api/owners/{ownerId}",
+            async (string ownerId, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                using var dbContext = dbContextProvider.CreateContext();
+                var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
+                var owner = owners.SingleOrDefault(x => x.OwnerId == ownerId);
+                if (owner is null) return Results.NotFound();
+
+                var names = owner.NameVariants.ToHashSet(StringComparer.Ordinal);
+                var contexts = await dbContext.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+                var matching = contexts.SelectMany(r => r.Entries.Where(e => e.OwnerName is not null && names.Contains(e.OwnerName)).Select(e => (race: r, entry: e))).ToList();
+                var raceIds = matching.Select(x => x.race.RaceId).Distinct().ToList();
+                var resultByRace = (await dbContext.RaceResults.AsNoTracking().Where(x => raceIds.Contains(x.RaceId)).ToListAsync(cancellationToken).ConfigureAwait(false)).ToDictionary(x => x.RaceId);
+                var horses = await dbContext.Horses.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+                var jockeys = await dbContext.Jockeys.AsNoTracking().ToDictionaryAsync(x => x.JockeyId, x => x.DisplayName, cancellationToken).ConfigureAwait(false);
+                var trainers = await dbContext.Trainers.AsNoTracking().ToDictionaryAsync(x => x.TrainerId, x => x.DisplayName, cancellationToken).ConfigureAwait(false);
+                var entries = matching.Select(x =>
+                {
+                    resultByRace.TryGetValue(x.race.RaceId, out var result);
+                    var entryResult = result?.EntryResults.FirstOrDefault(y => y.EntryId == x.entry.EntryId);
+                    var horseName = horses.FirstOrDefault(y => y.HorseId == x.entry.HorseId)?.RegisteredName ?? x.entry.HorseId;
+                    return new ParticipationHistoryEntryResponse(x.race.RaceId, x.race.RaceDate, x.race.RacecourseCode, x.race.RaceNumber, x.race.RaceName,
+                        x.entry.HorseId, horseName, x.entry.JockeyId, x.entry.JockeyId is null ? null : jockeys.GetValueOrDefault(x.entry.JockeyId, x.entry.JockeyId),
+                        x.entry.TrainerId, x.entry.TrainerId is null ? null : trainers.GetValueOrDefault(x.entry.TrainerId, x.entry.TrainerId), x.entry.OwnerName,
+                        entryResult?.FinishPosition, entryResult?.PrizeMoney);
+                }).OrderByDescending(x => x.RaceDate).ToList();
+                var currentHorses = horses.Where(x => x.OwnerName is not null && names.Contains(x.OwnerName)).Select(x =>
+                    new RelatedObjectResponse("Horse", x.HorseId, x.RegisteredName, entries.Count(y => y.HorseId == x.HorseId))).ToList();
+                var relatedTrainers = entries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
+                    new RelatedObjectResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, x.Count())).OrderByDescending(x => x.RelationshipCount).ToList();
+                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries));
+            })
+            .WithName("GetOwner")
+            .WithTags("Owner API")
+            .Produces<OwnerDetailResponse>()
+            .Produces(StatusCodes.Status404NotFound);
+
         writeGroup.MapPost("/memos",
             [SwaggerOperation(Summary = "Create memo", Description = "Creates a memo that can be attached to any combination of subjects (horse, trainer, jockey, race)")]
         async (CreateMemoRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
@@ -2287,6 +2340,42 @@ public static class EndpointExtensions
 
         return new ParticipationHistoryResponse(subjectType, subjectId, entries, relationships.OrderByDescending(x => x.ParticipationCount).ToList());
     }
+
+    private static async Task<List<OwnerSummaryResponse>> BuildOwnersAsync(EventStoreDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var horses = await dbContext.Horses.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var contexts = await dbContext.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var currentNames = horses.Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).Select(x => x.OwnerName!).ToList();
+        var participations = contexts.SelectMany(x => x.Entries.Select(e => (x.RaceDate, e.OwnerName)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).ToList();
+        return currentNames.Concat(participations.Select(x => x.OwnerName!))
+            .GroupBy(NormalizeOwnerName, StringComparer.Ordinal)
+            .Where(x => x.Key.Length > 0)
+            .Select(group =>
+            {
+                var variants = group.Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
+                var displayName = variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
+                var groupParticipations = participations.Where(x => NormalizeOwnerName(x.OwnerName!) == group.Key).ToList();
+                return new OwnerSummaryResponse(
+                    CreateOwnerId(group.Key), displayName, variants,
+                    horses.Count(x => x.OwnerName is not null && NormalizeOwnerName(x.OwnerName) == group.Key),
+                    groupParticipations.Count,
+                    groupParticipations.Select(x => x.RaceDate).DefaultIfEmpty().Max());
+            }).ToList();
+    }
+
+    private static string NormalizeOwnerName(string value)
+        => value.Normalize(NormalizationForm.FormKC)
+            .Replace("株式会社", "", StringComparison.Ordinal)
+            .Replace("（株）", "", StringComparison.Ordinal)
+            .Replace("(株)", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal)
+            .Replace("　", "", StringComparison.Ordinal)
+            .Trim()
+            .ToUpperInvariant();
+
+    private static string CreateOwnerId(string normalizedName)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedName)))[..20].ToLowerInvariant();
 
     private static ApiContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()

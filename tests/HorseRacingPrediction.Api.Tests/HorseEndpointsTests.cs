@@ -210,4 +210,13 @@ public class HorseEndpointsTests
         var participationResponse = await _client.GetAsync($"/api/horses/horse-{Guid.NewGuid()}/participations");
         Assert.AreEqual(HttpStatusCode.NotFound, participationResponse.StatusCode);
     }
+
+    [TestMethod]
+    public async Task Owners_ListAndUnknownDetail_ReturnExpectedStatuses()
+    {
+        var listResponse = await _client.GetAsync("/api/owners");
+        Assert.AreEqual(HttpStatusCode.OK, listResponse.StatusCode);
+        var detailResponse = await _client.GetAsync("/api/owners/unknown-owner");
+        Assert.AreEqual(HttpStatusCode.NotFound, detailResponse.StatusCode);
+    }
 }

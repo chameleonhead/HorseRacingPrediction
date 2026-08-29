@@ -1,0 +1,48 @@
+@page "/owners/{OwnerId}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<h1>馬主詳細</h1>
+<p class="hint"><a href="owners">← 馬主一覧へ戻る</a></p>
+
+@if (loading) { <p>読み込み中…</p> }
+else if (owner is null) { <p>指定された馬主は見つかりませんでした。</p> }
+else
+{
+    <section class="card">
+        <h2>@owner.Summary.DisplayName</h2>
+        <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
+        @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
+    </section>
+    <section class="entity-section">
+        <h3>この馬主に関係する馬・調教師</h3>
+        <div class="relationship-grid">
+            @foreach (var item in owner.CurrentHorses.Concat(owner.RelatedTrainers).Take(8))
+            {
+                <a class="relationship-link" href="@ObjectUrl(item)"><span class="relationship-kind">@(item.ObjectType == "Horse" ? "所有した馬" : "管理した調教師")</span><strong>@item.DisplayName</strong><span class="hint">@item.RelationshipCount 戦</span></a>
+            }
+        </div>
+    </section>
+    <section class="entity-section">
+        <h3>所有馬の出走履歴</h3>
+        <ol class="history-list">
+            @foreach (var entry in owner.Participations)
+            {
+                <li class="history-item"><div class="history-event"><a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @entry.RacecourseCode @entry.RaceNumber R</a><span class="hint">@(entry.RaceName ?? entry.RaceId)</span></div><div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong></div><div class="history-relations"><div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div><div class="history-field"><span class="relationship-kind">調教師</span>@(entry.TrainerName ?? "—")</div><div class="history-field"><span class="relationship-kind">騎手</span>@(entry.JockeyName ?? "—")</div></div></li>
+            }
+        </ol>
+    </section>
+}
+
+@code {
+    [Parameter] public string OwnerId { get; set; } = string.Empty;
+    private bool loading;
+    private OwnerDetailResponse? owner;
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try { owner = await Api.GetOwnerAsync(OwnerId); }
+        finally { loading = false; }
+    }
+    private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"horses/{Uri.EscapeDataString(item.ObjectId)}" : $"trainers/{Uri.EscapeDataString(item.ObjectId)}";
+}

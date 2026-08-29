@@ -87,6 +87,12 @@ public sealed class AdminApiClient
     public Task<ParticipationHistoryResponse?> GetTrainerParticipationsAsync(string trainerId, CancellationToken cancellationToken = default)
         => GetJsonAsync<ParticipationHistoryResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}/participations", cancellationToken);
 
+    public async Task<IReadOnlyList<OwnerSummaryResponse>> SearchOwnersAsync(string? query, CancellationToken cancellationToken = default)
+        => await GetJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={Uri.EscapeDataString(query ?? string.Empty)}", cancellationToken) ?? [];
+
+    public Task<OwnerDetailResponse?> GetOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<OwnerDetailResponse>($"/api/owners/{Uri.EscapeDataString(ownerId)}", cancellationToken);
+
     public Task<PagedResponse<PredictionTicketSummaryResponse>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>($"/api/predictions?{BuildQueryString(request)}", cancellationToken);
 
