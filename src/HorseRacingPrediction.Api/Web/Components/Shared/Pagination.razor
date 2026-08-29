@@ -1,0 +1,17 @@
+@if (TotalCount > 0)
+{
+    <nav class="toolbar pager" aria-label="ページ移動">
+        <button class="btn" disabled="@(Page <= 1)" @onclick="() => ChangeAsync(Page - 1)">前</button>
+        <span>@Page / @TotalPages ページ（@TotalCount 件）</span>
+        <button class="btn" disabled="@(Page >= TotalPages)" @onclick="() => ChangeAsync(Page + 1)">次</button>
+    </nav>
+}
+
+@code {
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public int Page { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 50;
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)Math.Max(1, PageSize)));
+    private Task ChangeAsync(int page) => PageChanged.InvokeAsync(Math.Clamp(page, 1, TotalPages));
+}

@@ -33,11 +33,12 @@ else if (items is null || items.Count == 0) { <p>該当データはありませ�
 else
 {
     <div class="operation-list">
-        @foreach (var i in items)
+        @foreach (var i in PagedItems)
         {
             <article class="operation-row"><div class="operation-primary"><strong>@i.SubjectName</strong><span class="hint">@i.SubjectType · @i.ProviderType</span></div><div><span class="operation-label">処理</span>@i.OperationType</div><div><span class="operation-label">状態</span><span class="pill">@i.Status</span></div><div class="operation-reason"><span class="operation-label">エラー</span>@(i.ErrorReason ?? "—")</div><div><span class="operation-label">更新</span>@i.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div></article>
         }
     </div>
+    <Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 }
 
 @code {
@@ -47,6 +48,9 @@ else
     private RaceDataCollectionState? status;
     private bool loading;
     private IReadOnlyList<AgentAcquisitionStatusReadModel>? items;
+    private int page = 1;
+    private const int pageSize = 50;
+    private IEnumerable<AgentAcquisitionStatusReadModel> PagedItems => (items ?? []).Skip((page - 1) * pageSize).Take(pageSize);
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -57,10 +61,12 @@ else
         try
         {
             items = await Store.GetAgentAcquisitionStatusesAsync(from, to, subjectType, status);
+            page = 1;
         }
         finally
         {
             loading = false;
         }
     }
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
 }

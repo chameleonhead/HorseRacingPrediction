@@ -25,11 +25,12 @@
 }
 
 <div class="object-list">
-    @foreach (var task in tasks)
+    @foreach (var task in PagedTasks)
     {
         <article class="object-row"><div class="object-primary"><a href="@(DetailUrl(task.JobId))"><strong>@task.JobType</strong></a><span class="hint">@task.DeduplicationKey</span>@if (!string.IsNullOrWhiteSpace(task.LastError)) { <span class="error-summary">@ErrorSummary(task.LastError)</span> }@if (HasStateMismatch(task)) { <span class="error-summary">⚠ ジョブ状態と日次状態が一致していません</span> }</div><div><span class="object-label">状態</span><span class="pill">@task.Status</span></div><div><span class="object-label">試行</span>@task.AttemptCount 回</div><div><span class="object-label">更新（JST）</span>@Format(task.UpdatedAt)</div></article>
     }
 </div>
+<Pagination TotalCount="tasks.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 
 @code {
     [Parameter]
@@ -42,6 +43,9 @@
     private string? status;
     private string? message;
     private readonly Dictionary<string, ResultDayCollectionState> resultDayStates = new(StringComparer.Ordinal);
+    private int page = 1;
+    private const int pageSize = 50;
+    private IEnumerable<AgentJobStatusReadModel> PagedTasks => tasks.Skip((page - 1) * pageSize).Take(pageSize);
 
     protected override Task OnParametersSetAsync() => LoadAsync();
 
@@ -64,11 +68,13 @@
 
         if (!string.IsNullOrWhiteSpace(JobId) && tasks.Count == 0)
             message = "指定されたジョブが見つかりませんでした。";
+        page = Math.Min(page, Math.Max(1, (int)Math.Ceiling(tasks.Count / (double)pageSize)));
     }
 
     private static string Format(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string DetailUrl(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
     private static string ErrorSummary(string error) => error.Length <= 100 ? error : $"{error[..100]}…";
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
     private bool HasStateMismatch(AgentJobStatusReadModel task)
     {
         if (!resultDayStates.TryGetValue(task.JobId, out var dayState)) return false;
