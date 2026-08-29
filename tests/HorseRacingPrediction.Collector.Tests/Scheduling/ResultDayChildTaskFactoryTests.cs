@@ -20,5 +20,9 @@ public sealed class ResultDayChildTaskFactoryTests
 
         Assert.HasCount(36, children);
         Assert.AreEqual(36, children.Select(x => x.DeduplicationKey).Distinct(StringComparer.Ordinal).Count());
+        var payloads = children
+            .Select(x => AgentJobPayloadSerializer.Deserialize<HistoricalRaceResultCollectionRequestPayload>(x.Payload))
+            .ToList();
+        CollectionAssert.AreEquivalent(urls.Select(x => x.Url).ToList(), payloads.Select(x => x.SourceUrl).ToList());
     }
 }

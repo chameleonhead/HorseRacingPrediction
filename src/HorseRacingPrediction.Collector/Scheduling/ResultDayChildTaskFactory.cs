@@ -18,7 +18,7 @@ internal static class ResultDayChildTaskFactory
             ?? throw new InvalidOperationException($"レース番号を特定できません。URL={url.Url}");
         var raceId = DeterministicIdGenerator.BuildRaceId(parent.RaceDate, racecourse, raceNumber);
         var payload = new HistoricalRaceResultCollectionRequestPayload(
-            parent.RaceDate, racecourse, raceNumber, raceId, parent.ProviderType);
+            parent.RaceDate, racecourse, raceNumber, raceId, parent.ProviderType, url.Url);
         return new ResultDayChildTask(
             AgentJobKeyFactory.BuildHistoricalRaceResultCollectionRequestKey(
                 parent.ProviderType, parent.RaceDate, racecourse, raceNumber),

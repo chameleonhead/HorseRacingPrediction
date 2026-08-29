@@ -9,4 +9,8 @@ public interface IJraRaceResultLookup
         string racecourse,
         int raceNumber,
         CancellationToken cancellationToken = default);
+
+    Task<JraExtractionEnvelope<JraRaceResultSummary>> GetRaceResultByUrlAsync(
+        string sourceUrl,
+        CancellationToken cancellationToken = default);
 }

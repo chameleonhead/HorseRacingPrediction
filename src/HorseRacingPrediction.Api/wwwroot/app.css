@@ -102,6 +102,15 @@ h4 { margin: 12px 0 4px; font-size: 14px; color: var(--muted); }
     gap: 10px;
 }
 
+.confirmation {
+    margin-top: 2px;
+    padding: 12px;
+    display: grid;
+    gap: 8px;
+    background: #fff7df;
+    border-left: 4px solid var(--warn);
+}
+
 .toolbar {
     display: flex;
     gap: 12px;

@@ -1,5 +1,6 @@
 @page "/collection-tasks/{JobId}"
 @inject IProcessingStateStore Store
+@inject CollectionExecutionTrigger ExecutionTrigger
 
 <h1>収集タスク詳細</h1>
 <p class="hint"><a href="collection-tasks">← 収集タスク一覧へ戻る</a></p>
@@ -20,6 +21,28 @@ else
             <dt>開始（JST）</dt><dd>@Fmt(detail.StartedAt)</dd>
             <dt>更新（JST）</dt><dd>@Fmt(detail.UpdatedAt)</dd>
         </dl>
+        <div class="toolbar">
+            @if (!confirmingRequeue)
+            {
+                <button class="btn primary" @onclick="() => confirmingRequeue = true">再投入する</button>
+            }
+            <button class="btn" @onclick="LoadAsync">再読み込み</button>
+        </div>
+        @if (confirmingRequeue)
+        {
+            <div class="confirmation" role="group" aria-label="再投入の確認">
+                <strong>このジョブを再投入しますか？</strong>
+                <p class="hint">表示後にジョブの状態が変わっていた場合は、重複実行を防ぐため再投入しません。</p>
+                <div class="toolbar">
+                    <button class="btn primary" @onclick="RequeueAsync" disabled="@requeueing">確認して再投入</button>
+                    <button class="btn" @onclick="() => confirmingRequeue = false" disabled="@requeueing">キャンセル</button>
+                </div>
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <p class="hint" role="status">@message</p>
+        }
     </section>
     @if (!string.IsNullOrWhiteSpace(detail.LastError))
     {
@@ -47,7 +70,44 @@ else
 @code {
     [Parameter] public string JobId { get; set; } = string.Empty;
     private AgentJobDetailReadModel? detail;
-    protected override async Task OnParametersSetAsync() => detail = await Store.GetJobDetailAsync(JobId);
+    private string? message;
+    private bool confirmingRequeue;
+    private bool requeueing;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => detail = await Store.GetJobDetailAsync(JobId);
+
+    private async Task RequeueAsync()
+    {
+        if (detail is null) return;
+
+        requeueing = true;
+        try
+        {
+            var result = await Store.ForceRequeueJobAsync(
+                detail.JobId,
+                detail.UpdatedAt,
+                DateTimeOffset.UtcNow);
+            message = result switch
+            {
+                ForceRequeueJobResult.Requeued => "再投入しました。",
+                ForceRequeueJobResult.Conflict => "ジョブの状態が更新されていたため再投入しませんでした。最新状態を確認してください。",
+                _ => "対象のジョブが見つかりませんでした。"
+            };
+            if (result == ForceRequeueJobResult.Requeued)
+            {
+                ExecutionTrigger.Signal();
+            }
+        }
+        finally
+        {
+            confirmingRequeue = false;
+            requeueing = false;
+            await LoadAsync();
+        }
+    }
+
     private static string Fmt(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string Url(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
 }
