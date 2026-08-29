@@ -189,6 +189,11 @@ pre.payload { background: #f6f6f1; padding: 10px; border-radius: 8px; white-spac
     flex-wrap: wrap;
     gap: 6px;
 }
+.snapshot-record-list { min-width: 0; display: grid; gap: 8px; }
+.snapshot-record { min-width: 0; padding: 10px 12px; display: grid; gap: 4px; background: #fbfbf8; border: 1px solid var(--border); border-radius: 10px; overflow-wrap: anywhere; }
+.snapshot-record code { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; border-radius: 12px; }
+.table-scroll table.data { min-width: max-content; }
 
 .snapshot-maintext {
     max-height: 240px;
