@@ -1,5 +1,5 @@
 @page "/result-days"
-@inject ProcessingStateStore Store
+@inject IProcessingStateStore Store
 @inject CollectionExecutionTrigger ExecutionTrigger
 
 <h1>日次収集状況</h1>
@@ -11,44 +11,21 @@
 
 @if (loading)
 {
-    <p>読み込み中…</p>
+    <UiState Kind="loading" Title="日次収集状況を読み込んでいます" />
 }
 else if (items is null || items.Count == 0)
 {
-    <p>該当データはありません。</p>
+    <UiState Title="対象期間の収集状況はありません" Message="期間を変更するか、探索ジョブを開始してください。" />
 }
 else
 {
-    <table class="data">
-        <thead>
-            <tr>
-                <th>Provider</th>
-                <th>日付</th>
-                <th>Status</th>
-                <th>Expected / Completed</th>
-                <th>Incomplete Reason</th>
-                <th>UpdatedAt</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var s in items)
-            {
-                <tr>
-                    <td>@s.ProviderType</td>
-                    <td>@s.TargetDate</td>
-                    <td>@s.Status</td>
-                    <td>@s.ExpectedRaceCount / @s.CompletedRaceCount</td>
-                    <td>@s.IncompleteReason</td>
-                    <td>@s.UpdatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
-                    <td>
-                        <button class="btn small" @onclick="() => RequeueDiscoveryAsync(s)">Discovery 再投入</button>
-                        <button class="btn small" @onclick="() => RequeueCollectionAsync(s)">Collection 再投入</button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="operation-list">
+        @foreach (var s in PagedItems)
+        {
+            <article class="operation-row"><div class="operation-primary"><strong>@s.TargetDate</strong><span class="hint">@s.ProviderType · 更新 @s.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span></div><div><span class="operation-label">状態</span><span class="pill">@s.Status</span></div><div><span class="operation-label">完了</span>@s.CompletedRaceCount / @s.ExpectedRaceCount レース</div><div class="operation-reason"><span class="operation-label">未完了理由</span>@(s.IncompleteReason ?? "—")</div><div class="operation-actions"><button class="btn small" @onclick="() => RequeueDiscoveryAsync(s)">探索から再実行</button><a class="btn small" href="@CollectionJobUrl(s)">収集ジョブ詳細</a></div></article>
+        }
+    </div>
+    <Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 }
 
 @if (!string.IsNullOrEmpty(message)) { <p class="hint">@message</p> }
@@ -59,6 +36,9 @@ else
     private bool loading;
     private IReadOnlyList<ResultDayCollectionStatusReadModel>? items;
     private string? message;
+    private int page = 1;
+    private const int pageSize = 50;
+    private IEnumerable<ResultDayCollectionStatusReadModel> PagedItems => (items ?? []).Skip((page - 1) * pageSize).Take(pageSize);
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -69,12 +49,14 @@ else
         try
         {
             items = await Store.GetResultDayCollectionStatusesAsync(from, to);
+            page = 1;
         }
         finally
         {
             loading = false;
         }
     }
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
 
     private async Task RequeueDiscoveryAsync(ResultDayCollectionStatusReadModel s)
     {
@@ -93,22 +75,6 @@ else
         await LoadAsync();
     }
 
-    private async Task RequeueCollectionAsync(ResultDayCollectionStatusReadModel s)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var ok = await Store.ForceRequeueJobAsync(
-            AgentJobType.ResultDayCollectionRequest,
-            AgentJobKeyFactory.BuildResultDayCollectionRequestKey(s.ProviderType, s.TargetDate),
-            now);
-        if (ok)
-        {
-            ExecutionTrigger.Signal();
-            message = $"Collection 再投入: {s.ProviderType} {s.TargetDate}";
-        }
-        else
-        {
-            message = "Collection ジョブが存在しません。Discovery を先に実行してください。";
-        }
-        await LoadAsync();
-    }
+    private static string CollectionJobUrl(ResultDayCollectionStatusReadModel status)
+        => $"jobs/{Uri.EscapeDataString(ProcessingStateStore.ComposeJobId(AgentJobType.ResultDayCollectionRequest, AgentJobKeyFactory.BuildResultDayCollectionRequestKey(status.ProviderType, status.TargetDate)))}";
 }

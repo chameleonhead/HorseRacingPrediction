@@ -28,6 +28,13 @@ public sealed class SqliteDatabaseMigrator
         "Trainers"
     ];
 
+    private static readonly HashSet<string> CurrentEnsureCreatedTables =
+    [
+        .. InitialTables,
+        "OwnerAliasMappings",
+        "OwnerMergeAudits"
+    ];
+
     private readonly IDbContextProvider<EventStoreDbContext> _contextProvider;
     private readonly SqliteMigrationOptions _options;
     private readonly ILogger<SqliteDatabaseMigrator> _logger;
@@ -84,7 +91,9 @@ public sealed class SqliteDatabaseMigrator
         if (existingTables.Count == 0)
             return;
 
-        if (!existingTables.SetEquals(InitialTables))
+        var isInitialSchema = existingTables.SetEquals(InitialTables);
+        var isCurrentEnsureCreatedSchema = existingTables.SetEquals(CurrentEnsureCreatedTables);
+        if (!isInitialSchema && !isCurrentEnsureCreatedSchema)
         {
             var missing = InitialTables.Except(existingTables).OrderBy(x => x);
             var unexpected = existingTables.Except(InitialTables).OrderBy(x => x);
@@ -98,8 +107,11 @@ public sealed class SqliteDatabaseMigrator
         if (initialMigration is null)
             throw new InvalidOperationException("InitialEventStore migrationが見つかりません。");
 
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
+        var baselineMigrations = isCurrentEnsureCreatedSchema ? migrations : [initialMigration];
+        foreach (var migration in baselineMigrations)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
             CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
                 "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
                 "ProductVersion" TEXT NOT NULL
@@ -107,9 +119,10 @@ public sealed class SqliteDatabaseMigrator
             INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
             VALUES ($migrationId, $productVersion);
             """;
-        command.Parameters.AddWithValue("$migrationId", initialMigration);
-        command.Parameters.AddWithValue("$productVersion", "8.0.11");
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            command.Parameters.AddWithValue("$migrationId", migration);
+            command.Parameters.AddWithValue("$productVersion", "8.0.11");
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task BackupAsync(SqliteConnection source, CancellationToken cancellationToken)

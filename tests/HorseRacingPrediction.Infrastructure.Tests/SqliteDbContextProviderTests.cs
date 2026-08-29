@@ -38,7 +38,8 @@ public class SqliteDbContextProviderTests
 
         await using var context = provider.CreateContext();
         var applied = (await context.Database.GetAppliedMigrationsAsync()).ToList();
-        Assert.IsTrue(applied.Single().EndsWith("_InitialEventStore", StringComparison.Ordinal));
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_InitialEventStore", StringComparison.Ordinal)));
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -53,8 +54,9 @@ public class SqliteDbContextProviderTests
 
         await using var context = provider.CreateContext();
         var applied = (await context.Database.GetAppliedMigrationsAsync()).ToList();
-        Assert.AreEqual(1, applied.Count);
-        Assert.IsTrue(applied[0].EndsWith("_InitialEventStore", StringComparison.Ordinal));
+        Assert.AreEqual(2, applied.Count);
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_InitialEventStore", StringComparison.Ordinal)));
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)));
     }
 
     [TestMethod]

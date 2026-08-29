@@ -88,23 +88,12 @@
                     {
                         <details>
                             <summary>Links (@sec.Links.Count)</summary>
-                            <table class="data">
-                                <thead>
-                                    <tr>
-                                        <th>Title</th>
-                                        <th>Url</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var link in sec.Links)
-                                    {
-                                        <tr>
-                                            <td>@link.Title</td>
-                                            <td class="snapshot-url">@link.Url</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                            <div class="snapshot-record-list">
+                                @foreach (var link in sec.Links)
+                                {
+                                    <div class="snapshot-record"><strong>@(string.IsNullOrWhiteSpace(link.Title) ? "タイトルなし" : link.Title)</strong><code class="snapshot-url">@link.Url</code></div>
+                                }
+                            </div>
                         </details>
                     }
 
@@ -129,7 +118,7 @@
                             {
                                 var table = sec.Tables[tableIndex];
                                 <h4>Table #@(tableIndex + 1)</h4>
-                                <table class="data">
+                                <div class="table-scroll" role="region" aria-label="抽出テーブル @(tableIndex + 1)" tabindex="0"><table class="data">
                                     <thead>
                                         <tr>
                                             @foreach (var header in table.Headers)
@@ -149,7 +138,7 @@
                                             </tr>
                                         }
                                     </tbody>
-                                </table>
+                                </table></div>
                             }
                         </details>
                     }
@@ -165,27 +154,12 @@
                                     <div class="hint">@form.Method @form.Action</div>
                                     @if (form.Fields.Count > 0)
                                     {
-                                        <table class="data">
-                                            <thead>
-                                                <tr>
-                                                    <th>Label</th>
-                                                    <th>Name</th>
-                                                    <th>Kind</th>
-                                                    <th>Value</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var field in form.Fields)
-                                                {
-                                                    <tr>
-                                                        <td>@field.Label</td>
-                                                        <td>@field.Name</td>
-                                                        <td>@field.Kind</td>
-                                                        <td>@field.Value</td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
+                                        <div class="snapshot-record-list">
+                                            @foreach (var field in form.Fields)
+                                            {
+                                                <div class="snapshot-record"><strong>@(string.IsNullOrWhiteSpace(field.Label) ? field.Name : field.Label)</strong><span class="hint">@field.Kind · name=@field.Name</span><code>@field.Value</code></div>
+                                            }
+                                        </div>
                                     }
                                 </div>
                             }
@@ -196,27 +170,12 @@
                     {
                         <details>
                             <summary>Images (@sec.Images.Count)</summary>
-                            <table class="data">
-                                <thead>
-                                    <tr>
-                                        <th>Alt</th>
-                                        <th>Title</th>
-                                        <th>Region</th>
-                                        <th>Url</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var image in sec.Images)
-                                    {
-                                        <tr>
-                                            <td>@image.Alt</td>
-                                            <td>@image.Title</td>
-                                            <td>@image.Region</td>
-                                            <td class="snapshot-url">@image.Url</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
+                            <div class="snapshot-record-list">
+                                @foreach (var image in sec.Images)
+                                {
+                                    <div class="snapshot-record"><strong>@(string.IsNullOrWhiteSpace(image.Alt) ? "代替テキストなし" : image.Alt)</strong><span class="hint">@(image.Title ?? "タイトルなし") · @image.Region</span><code class="snapshot-url">@image.Url</code></div>
+                                }
+                            </div>
                         </details>
                     }
                 </article>

@@ -14,4 +14,14 @@ public sealed record AgentJobDetailReadModel(
     DateTimeOffset? LeaseExpiresAt,
     string? LastError,
     DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    AgentRelatedJobReadModel? ParentJob,
+    IReadOnlyList<AgentRelatedJobReadModel> ChildJobs,
+    IReadOnlyList<JobOperationAuditReadModel> AuditHistory);
+
+public sealed record AgentRelatedJobReadModel(
+    string JobId,
+    string JobType,
+    string DeduplicationKey,
+    AgentJobStatus Status,
     DateTimeOffset UpdatedAt);

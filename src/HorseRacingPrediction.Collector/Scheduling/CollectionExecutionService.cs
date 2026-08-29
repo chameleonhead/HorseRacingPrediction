@@ -222,6 +222,7 @@ public sealed class CollectionExecutionService : BackgroundService
                         AgentJobPayloadSerializer.Serialize(dayPayload),
                         now,
                         priority: date >= todayJst.AddMonths(-1) ? 150 : 70,
+                        parentJobId: job.JobId,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
 
@@ -325,6 +326,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     AgentJobPayloadSerializer.Serialize(dayCollectionPayload),
                     now,
                     priority: 140,
+                    parentJobId: job.JobId,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 await _stateStore.UpsertResultDayCollectionStatusAsync(
@@ -398,31 +400,36 @@ public sealed class CollectionExecutionService : BackgroundService
                     now,
                     cancellationToken).ConfigureAwait(false);
 
-                var result = await CollectRaceResultsAsync(payload.RaceDate, payload.Urls, cancellationToken).ConfigureAwait(false);
-                await RecordScheduledRaceResultStatusesAsync(result, now, cancellationToken).ConfigureAwait(false);
+                foreach (var child in ResultDayChildTaskFactory.Create(payload))
+                {
+                    await _stateStore.ScheduleJobAsync(
+                        AgentJobType.HistoricalRaceResultCollectionRequest,
+                        child.DeduplicationKey,
+                        child.Payload,
+                        now,
+                        priority: 140,
+                        parentJobId: job.JobId,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
 
-                var completedRaceCount = result.SavedRaceIds.Count;
-                var expectedRaceCount = payload.ExpectedRaceCount;
-                var isComplete = completedRaceCount >= expectedRaceCount && result.Errors.Count == 0;
-                var shouldRetry = ShouldRetryIncompleteDay(payload.RaceDate, now);
-
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    isComplete
-                        ? ResultDayCollectionState.Complete
-                        : shouldRetry ? ResultDayCollectionState.RetryScheduled : ResultDayCollectionState.Incomplete,
-                    expectedRaceCount,
-                    completedRaceCount,
-                    incompleteReason: result.Errors.Count == 0 ? null : string.Join(Environment.NewLine, result.Errors),
-                    lastCompletedAt: isComplete ? now : null,
-                    retryAfter: isComplete || !shouldRetry ? null : now.AddHours(3),
-                    lastError: result.Errors.Count == 0 ? null : string.Join(Environment.NewLine, result.Errors),
-                    now,
+                await _stateStore.WaitForDependenciesAsync(
+                    AgentJobType.ResultDayCollectionRequest,
+                    job.DeduplicationKey,
                     cancellationToken).ConfigureAwait(false);
-
-                await _stateStore.CompleteJobAsync(AgentJobType.ResultDayCollectionRequest, job.DeduplicationKey, cancellationToken)
-                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+            {
+                const string error = "ExecutionDeadlineExceeded: 日次収集の実行期限に到達しました。";
+                _logger.LogWarning(ex, "[収集実行] 日次成績収集ジョブが期限超過。Date={Date}", payload.RaceDate);
+                using var failureUpdateCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _stateStore.UpsertResultDayCollectionStatusAsync(
+                    payload.ProviderType, payload.RaceDate, ResultDayCollectionState.Incomplete,
+                    payload.ExpectedRaceCount, null, error, null, null, error, now,
+                    failureUpdateCts.Token).ConfigureAwait(false);
+                await _stateStore.FailJobAsync(
+                    AgentJobType.ResultDayCollectionRequest, job.DeduplicationKey, error,
+                    failureUpdateCts.Token).ConfigureAwait(false);
+                throw;
             }
             catch (Exception ex)
             {

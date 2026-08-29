@@ -18,43 +18,48 @@ else
         </dl>
     </section>
 
-    <section class="card">
+    @if (participations?.Relationships.Count > 0)
+    {
+        <section class="entity-section">
+            <h3>この騎手に関係する馬・調教師</h3>
+            <div class="relationship-grid">
+                @foreach (var relationship in participations.Relationships.Take(6))
+                {
+                    <a class="relationship-link" href="@RelationshipUrl(relationship)">
+                        <span class="relationship-kind">@relationship.RelationshipName</span>
+                        <strong>@relationship.DisplayName</strong>
+                        <span class="hint">@relationship.ParticipationCount 鞍・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="entity-section">
         <h3>騎乗履歴</h3>
-        @if (raceHistory is null || raceHistory.Entries.Count == 0)
+        @if (participations is null || participations.Entries.Count == 0)
         {
             <p class="hint">騎乗履歴はありません。</p>
         }
         else
         {
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>日付</th>
-                            <th>競馬場</th>
-                            <th>コース</th>
-                            <th>距離</th>
-                            <th>着順</th>
-                            <th>競走馬</th>
-                            <th>賞金</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var entry in raceHistory.Entries.OrderByDescending(x => x.RaceDate))
-                        {
-                            <tr>
-                                <td><a href="@($"races/{entry.RaceId}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "—")</a></td>
-                                <td>@Display(entry.RacecourseCode)</td>
-                                <td>@Display(entry.SurfaceCode)</td>
-                                <td>@(entry.DistanceMeters is null ? "—" : $"{entry.DistanceMeters}m")</td>
-                                <td>@(entry.FinishPosition?.ToString() ?? "—")</td>
-                                <td><a href="@($"horses/{entry.HorseId}")">@HorseName(entry.HorseId)</a></td>
-                                <td>@(entry.PrizeMoney is null ? "—" : $"{entry.PrizeMoney:N0}")</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+            <ol class="history-list">
+                @foreach (var entry in participations.Entries)
+                {
+                    <li class="history-item">
+                        <div class="history-event">
+                            <a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @Display(entry.RacecourseCode)@(entry.RaceNumber is null ? "" : $" {entry.RaceNumber}R")</a>
+                            <span class="hint">@(entry.RaceName ?? entry.RaceId)</span>
+                        </div>
+                        <div class="history-result"><strong>@FormatFinish(entry.FinishPosition)</strong><span class="hint">@(entry.PrizeMoney is null ? "賞金 —" : $"賞金 {entry.PrizeMoney:N0}")</span></div>
+                        <div class="history-relations">
+                            <div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div>
+                            <div class="history-field"><span class="relationship-kind">調教師</span>@EntityLink("trainers", entry.TrainerId, entry.TrainerName)</div>
+                            <div class="history-field"><span class="relationship-kind">レース時点の馬主</span><span>@(entry.OwnerName ?? "—")</span></div>
+                        </div>
+                    </li>
+                }
+            </ol>
         }
     </section>
 
@@ -114,7 +119,8 @@ else
             <label>訂正理由<input @bind="correctReason" /></label>
         </div>
         <div class="toolbar">
-            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存</button>
+            @if (correctArmed) { <span class="hint">入力した内容で訂正しますか？</span><button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button><button class="btn small" @onclick="() => correctArmed = false">キャンセル</button> }
+            else { <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button> }
         </div>
         @if (correctErrors.Count > 0)
         {
@@ -130,8 +136,7 @@ else
 
     private bool loading;
     private JockeyProfileResponse? jockey;
-    private HorseRacingPrediction.Contracts.JockeyRaceHistoryReadModel? raceHistory;
-    private IReadOnlyDictionary<string, string> horseNames = new Dictionary<string, string>();
+    private ParticipationHistoryResponse? participations;
 
     private string? editDisplayName;
     private string? editNormalizedName;
@@ -151,6 +156,7 @@ else
     private string? correctAffiliationCode;
     private string? correctReason;
     private bool correcting;
+    private bool correctArmed;
     private IReadOnlyList<string> correctErrors = Array.Empty<string>();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
@@ -161,11 +167,10 @@ else
         try
         {
             var profileTask = Api.GetJockeyAsync(JockeyId);
-            var historyTask = Api.GetJockeyRaceHistoryAsync(JockeyId);
+            var historyTask = Api.GetJockeyParticipationsAsync(JockeyId);
             await Task.WhenAll(profileTask, historyTask);
             jockey = await profileTask;
-            raceHistory = await historyTask;
-            horseNames = await LoadHorseNamesAsync(raceHistory);
+            participations = await historyTask;
             if (jockey is not null)
             {
                 editDisplayName = jockey.DisplayName;
@@ -182,25 +187,24 @@ else
     private static string Display(string? value)
         => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
-    private string HorseName(string horseId)
-        => horseNames.TryGetValue(horseId, out var name) ? name : horseId;
+    private static string FormatFinish(int? position) => position is null ? "結果 —" : $"{position}着";
 
-    private async Task<IReadOnlyDictionary<string, string>> LoadHorseNamesAsync(
-        HorseRacingPrediction.Contracts.JockeyRaceHistoryReadModel? history)
+    private static string RelationshipUrl(RelationshipSummaryResponse relationship) => relationship.ObjectType switch
     {
-        if (history is null)
-            return new Dictionary<string, string>();
+        "Horse" => $"horses/{Uri.EscapeDataString(relationship.ObjectId)}",
+        "Trainer" => $"trainers/{Uri.EscapeDataString(relationship.ObjectId)}",
+        _ => "jockeys"
+    };
 
-        var ids = history.Entries
-            .Select(x => x.HorseId)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        var profiles = await Task.WhenAll(ids.Select(id => Api.GetHorseAsync(id)));
-        return profiles
-            .Where(x => x is not null)
-            .ToDictionary(x => x!.HorseId, x => x!.RegisteredName, StringComparer.Ordinal);
-    }
+    private static RenderFragment EntityLink(string segment, string? id, string? label) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "—"); return; }
+        builder.OpenElement(1, "a");
+        builder.AddAttribute(2, "href", $"{segment}/{Uri.EscapeDataString(id)}");
+        builder.AddContent(3, string.IsNullOrWhiteSpace(label) ? id : label);
+        builder.CloseElement();
+    };
+
 
     private async Task UpdateProfileAsync()
     {
@@ -252,6 +256,7 @@ else
             var result = await Api.CorrectJockeyDataAsync(JockeyId, new CorrectJockeyDataRequest(
                 correctDisplayName, correctNormalizedName, correctAffiliationCode, correctReason));
             correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
+            correctArmed = false;
             if (result.Success)
             {
                 correctDisplayName = null; correctNormalizedName = null; correctAffiliationCode = null; correctReason = null;

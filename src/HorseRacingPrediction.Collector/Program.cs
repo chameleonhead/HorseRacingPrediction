@@ -93,7 +93,9 @@ if (runOnce)
         throw new InvalidOperationException("A collection task notification is required for --once execution.");
 
     using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(9));
-    await app.Services.GetRequiredService<CollectionTaskWorker>().RunAsync(notification, deadline.Token);
+    var succeeded = await app.Services.GetRequiredService<CollectionTaskWorker>().RunAsync(notification, deadline.Token);
+    if (!succeeded)
+        throw new InvalidOperationException($"Collection task failed: {notification.JobType}:{notification.DeduplicationKey}");
 }
 else
 {

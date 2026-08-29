@@ -59,6 +59,9 @@ public sealed class AdminApiClient
             $"/api/horses/{Uri.EscapeDataString(horseId)}/race-history",
             cancellationToken);
 
+    public Task<ParticipationHistoryResponse?> GetHorseParticipationsAsync(string horseId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/horses/{Uri.EscapeDataString(horseId)}/participations", cancellationToken);
+
     public Task<PagedResponse<JockeySummaryResponse>?> SearchJockeysAsync(SearchJockeysRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<JockeySummaryResponse>>($"/api/jockeys?{BuildQueryString(request)}", cancellationToken);
 
@@ -72,11 +75,26 @@ public sealed class AdminApiClient
             $"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/race-history",
             cancellationToken);
 
+    public Task<ParticipationHistoryResponse?> GetJockeyParticipationsAsync(string jockeyId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}/participations", cancellationToken);
+
     public Task<PagedResponse<TrainerSummaryResponse>?> SearchTrainersAsync(SearchTrainersRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<TrainerSummaryResponse>>($"/api/trainers?{BuildQueryString(request)}", cancellationToken);
 
     public Task<TrainerProfileResponse?> GetTrainerAsync(string trainerId, CancellationToken cancellationToken = default)
         => GetJsonAsync<TrainerProfileResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken);
+
+    public Task<ParticipationHistoryResponse?> GetTrainerParticipationsAsync(string trainerId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<ParticipationHistoryResponse>($"/api/trainers/{Uri.EscapeDataString(trainerId)}/participations", cancellationToken);
+
+    public async Task<IReadOnlyList<OwnerSummaryResponse>> SearchOwnersAsync(string? query, CancellationToken cancellationToken = default)
+        => await GetJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={Uri.EscapeDataString(query ?? string.Empty)}", cancellationToken) ?? [];
+
+    public Task<OwnerDetailResponse?> GetOwnerAsync(string ownerId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<OwnerDetailResponse>($"/api/owners/{Uri.EscapeDataString(ownerId)}", cancellationToken);
+
+    public Task<AdminApiResult> MergeOwnerAsync(string ownerId, MergeOwnerRequest request, CancellationToken cancellationToken = default)
+        => SendAsync(HttpMethod.Post, $"/api/owners/{Uri.EscapeDataString(ownerId)}/merge", request, cancellationToken);
 
     public Task<PagedResponse<PredictionTicketSummaryResponse>?> SearchPredictionsAsync(SearchPredictionTicketsRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>($"/api/predictions?{BuildQueryString(request)}", cancellationToken);

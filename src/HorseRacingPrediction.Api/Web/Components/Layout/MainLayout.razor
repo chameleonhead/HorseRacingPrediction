@@ -1,8 +1,12 @@
 @namespace HorseRacingPrediction.Api.Web.Components.Layout
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
 
 <div class="page">
-    <aside class="sidebar">
+    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" @onclick="() => navOpen = !navOpen">☰ <span>メニュー</span></button>
+    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
+    <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
             <span class="brand-mark">🐎</span>
             <span class="brand-text">競馬DB管理</span>
@@ -14,7 +18,29 @@
     </aside>
     <main class="content">
         <article class="content-inner">
-            @Body
+            <ErrorBoundary>
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent Context="exception">
+                    <section class="ui-state ui-state-error" role="alert"><strong>画面を読み込めませんでした</strong><span>通信状態を確認して、もう一度お試しください。</span><a class="btn" href="">再読み込み</a><details><summary>技術情報</summary><code>@exception.Message</code></details></section>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>
+
+@code {
+    private bool navOpen;
+
+    protected override void OnInitialized()
+        => Navigation.LocationChanged += HandleLocationChanged;
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+    {
+        if (!navOpen) return;
+        navOpen = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+        => Navigation.LocationChanged -= HandleLocationChanged;
+}

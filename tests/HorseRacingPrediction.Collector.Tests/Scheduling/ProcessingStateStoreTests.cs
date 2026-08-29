@@ -259,6 +259,45 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task ForceRequeueJobAsync_ByJobIdRejectsStaleUpdate()
+    {
+        var now = new DateTimeOffset(2026, 5, 12, 12, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("JobType-Concurrency", "item-1", "{}", now, priority: 10);
+        var job = (await sut.GetJobStatusesAsync("JobType-Concurrency", null, 10)).Single();
+
+        var requeued = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(1));
+        var stale = await sut.ForceRequeueJobAsync(job.JobId, job.UpdatedAt, now.AddMinutes(2));
+        var detail = await sut.GetJobDetailAsync(job.JobId);
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, requeued);
+        Assert.AreEqual(ForceRequeueJobResult.Conflict, stale);
+        Assert.IsNotNull(detail);
+        Assert.HasCount(1, detail.AuditHistory);
+        Assert.AreEqual("ManualRequeue", detail.AuditHistory[0].Operation);
+        Assert.AreEqual("admin-ui", detail.AuditHistory[0].ActorId);
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_ExposesParentAndChildJobsInDetail()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("Parent", "parent-1", "{}", now);
+        var parentId = ProcessingStateStore.ComposeJobId("Parent", "parent-1");
+        await sut.ScheduleJobAsync("Child", "child-1", "{}", now.AddMinutes(1), parentJobId: parentId);
+
+        var parent = await sut.GetJobDetailAsync(parentId);
+        var child = await sut.GetJobDetailAsync(ProcessingStateStore.ComposeJobId("Child", "child-1"));
+
+        Assert.IsNotNull(parent);
+        Assert.HasCount(1, parent.ChildJobs);
+        Assert.AreEqual("Child", parent.ChildJobs[0].JobType);
+        Assert.IsNotNull(child);
+        Assert.AreEqual(parentId, child.ParentJob?.JobId);
+    }
+
+    [TestMethod]
     public async Task FailJobAsync_CreatesSingleFailureNotificationForStateTransition()
     {
         var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
@@ -309,6 +348,76 @@ public sealed class ProcessingStateStoreTests
         var notifications = await sut.GetPendingJobFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
         Assert.HasCount(1, notifications);
         Assert.AreEqual("leased error", notifications[0].Error);
+    }
+
+    [TestMethod]
+    public async Task ChildJobs_AllSucceeded_CompletesParentAndResultDay()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 8, 15);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        var parentKey = AgentJobKeyFactory.BuildResultDayCollectionRequestKey("JRA", date);
+        await sut.ScheduleJobAsync(AgentJobType.ResultDayCollectionRequest, parentKey, "{}", now);
+        var parentId = $"{AgentJobType.ResultDayCollectionRequest}:{parentKey}";
+        await sut.UpsertResultDayCollectionStatusAsync("JRA", date, ResultDayCollectionState.Running, 2, 0, null, null, null, null, now);
+        await sut.ScheduleJobAsync("Child", "race-1", "{}", now, parentJobId: parentId);
+        await sut.ScheduleJobAsync("Child", "race-2", "{}", now, parentJobId: parentId);
+        await sut.WaitForDependenciesAsync(AgentJobType.ResultDayCollectionRequest, parentKey);
+
+        await sut.CompleteJobAsync("Child", "race-1");
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, (await sut.GetJobDetailAsync(parentId))!.Status);
+        await sut.CompleteJobAsync("Child", "race-2");
+
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await sut.GetJobDetailAsync(parentId))!.Status);
+        var day = await sut.GetResultDayCollectionStatusAsync("JRA", date);
+        Assert.IsNotNull(day);
+        Assert.AreEqual(ResultDayCollectionState.Complete, day.Status);
+        Assert.AreEqual(2, day.CompletedRaceCount);
+    }
+
+    [TestMethod]
+    public async Task ChildJobs_WithFailure_FailsParentAndRecordsProgress()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 8, 15);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        var parentKey = AgentJobKeyFactory.BuildResultDayCollectionRequestKey("JRA", date);
+        await sut.ScheduleJobAsync(AgentJobType.ResultDayCollectionRequest, parentKey, "{}", now);
+        var parentId = $"{AgentJobType.ResultDayCollectionRequest}:{parentKey}";
+        await sut.UpsertResultDayCollectionStatusAsync("JRA", date, ResultDayCollectionState.Running, 2, 0, null, null, null, null, now);
+        await sut.ScheduleJobAsync("Child", "race-1", "{}", now, parentJobId: parentId);
+        await sut.ScheduleJobAsync("Child", "race-2", "{}", now, parentJobId: parentId);
+        await sut.WaitForDependenciesAsync(AgentJobType.ResultDayCollectionRequest, parentKey);
+
+        await sut.CompleteJobAsync("Child", "race-1");
+        await sut.FailJobAsync("Child", "race-2", "scraping failed");
+
+        var parent = await sut.GetJobDetailAsync(parentId);
+        Assert.AreEqual(AgentJobStatus.Failed, parent!.Status);
+        StringAssert.Contains(parent.LastError, "scraping failed");
+        var day = await sut.GetResultDayCollectionStatusAsync("JRA", date);
+        Assert.IsNotNull(day);
+        Assert.AreEqual(ResultDayCollectionState.Incomplete, day.Status);
+        Assert.AreEqual(1, day.CompletedRaceCount);
+        StringAssert.Contains(day.LastError, "scraping failed");
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_DoesNotRequeueSucceededChildForSameParent()
+    {
+        var now = new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync("Parent", "day", "{}", now);
+        const string parentId = "Parent:day";
+        await sut.ScheduleJobAsync("Child", "race-1", "old", now, parentJobId: parentId);
+        await sut.CompleteJobAsync("Child", "race-1");
+
+        await sut.ScheduleJobAsync("Child", "race-1", "new", now.AddMinutes(1), parentJobId: parentId);
+
+        var child = await sut.GetJobDetailAsync("Child:race-1");
+        Assert.IsNotNull(child);
+        Assert.AreEqual(AgentJobStatus.Succeeded, child.Status);
+        Assert.IsEmpty(await sut.AcquireReadyJobsAsync("Child", now.AddMinutes(2), TimeSpan.Zero, 1, TimeSpan.FromMinutes(5)));
     }
 
     [TestMethod]

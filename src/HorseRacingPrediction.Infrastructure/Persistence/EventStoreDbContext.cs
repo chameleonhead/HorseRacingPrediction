@@ -25,6 +25,8 @@ public class EventStoreDbContext : DbContext
     public DbSet<HorseRaceHistoryReadModel> HorseRaceHistories => Set<HorseRaceHistoryReadModel>();
     public DbSet<JockeyRaceHistoryReadModel> JockeyRaceHistories => Set<JockeyRaceHistoryReadModel>();
     public DbSet<RaceSummaryReadModel> RaceSummaries => Set<RaceSummaryReadModel>();
+    public DbSet<OwnerAliasMappingReadModel> OwnerAliasMappings => Set<OwnerAliasMappingReadModel>();
+    public DbSet<OwnerMergeAuditReadModel> OwnerMergeAudits => Set<OwnerMergeAuditReadModel>();
 
     public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
         : base(options)
@@ -39,6 +41,18 @@ public class EventStoreDbContext : DbContext
         modelBuilder.Entity<RaceSummaryReadModel>(entity =>
         {
             entity.HasKey(x => x.RaceId);
+        });
+
+        modelBuilder.Entity<OwnerAliasMappingReadModel>(entity =>
+        {
+            entity.HasKey(x => x.NormalizedAlias);
+            entity.HasIndex(x => x.OwnerId);
+        });
+
+        modelBuilder.Entity<OwnerMergeAuditReadModel>(entity =>
+        {
+            entity.HasKey(x => x.AuditId);
+            entity.HasIndex(x => new { x.TargetOwnerId, x.CreatedAt });
         });
 
         modelBuilder.Entity<HorseReadModel>(entity =>

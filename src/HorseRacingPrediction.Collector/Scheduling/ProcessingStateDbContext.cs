@@ -16,6 +16,7 @@ public sealed class ProcessingStateDbContext : DbContext
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
 
     public DbSet<JobFailureNotificationEntity> JobFailureNotifications => Set<JobFailureNotificationEntity>();
+    public DbSet<JobOperationAuditEntity> JobOperationAudits => Set<JobOperationAuditEntity>();
 
     public DbSet<RaceDataCollectionStatusEntity> RaceDataCollectionStatuses => Set<RaceDataCollectionStatusEntity>();
 
@@ -33,6 +34,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.JobType).HasColumnName("job_type");
             entity.Property(x => x.DeduplicationKey).HasColumnName("deduplication_key");
             entity.Property(x => x.Payload).HasColumnName("payload");
+            entity.Property(x => x.ParentJobId).HasColumnName("parent_job_id");
             entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>();
             entity.Property(x => x.Priority).HasColumnName("priority");
             entity.Property(x => x.FirstQueuedAt).HasColumnName("first_queued_at");
@@ -49,6 +51,7 @@ public sealed class ProcessingStateDbContext : DbContext
                 .IsUnique();
             entity.HasIndex(x => new { x.JobType, x.Status, x.AvailableAt, x.FirstQueuedAt, x.Priority });
             entity.HasIndex(x => new { x.Status, x.LeaseExpiresAt });
+            entity.HasIndex(x => x.ParentJobId);
         });
 
         modelBuilder.Entity<CollectionDispatchOutboxEntity>(entity =>
@@ -87,6 +90,21 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.CreatedAt).HasColumnName("created_at");
             entity.Property(x => x.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(x => new { x.PublishedAt, x.AvailableAt });
+        });
+
+        modelBuilder.Entity<JobOperationAuditEntity>(entity =>
+        {
+            entity.ToTable("job_operation_audits");
+            entity.HasKey(x => x.AuditId);
+            entity.Property(x => x.AuditId).HasColumnName("audit_id");
+            entity.Property(x => x.JobId).HasColumnName("job_id");
+            entity.Property(x => x.Operation).HasColumnName("operation");
+            entity.Property(x => x.PreviousStatus).HasColumnName("previous_status").HasConversion<string>();
+            entity.Property(x => x.NewStatus).HasColumnName("new_status").HasConversion<string>();
+            entity.Property(x => x.ActorId).HasColumnName("actor_id");
+            entity.Property(x => x.Reason).HasColumnName("reason");
+            entity.Property(x => x.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(x => new { x.JobId, x.CreatedAt });
         });
 
         modelBuilder.Entity<ProcessingMarkerEntity>(entity =>

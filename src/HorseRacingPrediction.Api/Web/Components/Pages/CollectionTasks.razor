@@ -5,6 +5,7 @@
 
 <div class="toolbar">
     <label>JobType <input @bind="jobType" /></label>
+    <label>キー・日付 <input @bind="keyQuery" placeholder="2026-08-15 / JRA" /></label>
     <label>
         Status
         <select @bind="status">
@@ -23,25 +24,13 @@
     <p>@message</p>
 }
 
-<table class="data">
-    <thead>
-        <tr><th>種類</th><th>キー</th><th>状態</th><th>試行</th><th>開始</th><th>更新</th><th></th></tr>
-    </thead>
-    <tbody>
-        @foreach (var task in tasks)
-        {
-            <tr>
-                <td>@task.JobType</td>
-                <td>@task.DeduplicationKey</td>
-                <td>@task.Status</td>
-                <td>@task.AttemptCount</td>
-                <td>@Format(task.StartedAt)</td>
-                <td>@Format(task.UpdatedAt)</td>
-                <td><button class="btn" @onclick="() => RequeueAsync(task)">再投入</button></td>
-            </tr>
-        }
-    </tbody>
-</table>
+<div class="object-list">
+    @foreach (var task in PagedTasks)
+    {
+        <article class="object-row"><div class="object-primary"><a href="@(DetailUrl(task.JobId))"><strong>@task.JobType</strong></a><span class="hint">@task.DeduplicationKey</span>@if (!string.IsNullOrWhiteSpace(task.LastError)) { <span class="error-summary">@ErrorSummary(task.LastError)</span> }@if (HasStateMismatch(task)) { <span class="error-summary">⚠ ジョブ状態と日次状態が一致していません</span> }</div><div><span class="object-label">状態</span><span class="pill">@task.Status</span></div><div><span class="object-label">試行</span>@task.AttemptCount 回</div><div><span class="object-label">更新（JST）</span>@Format(task.UpdatedAt)</div></article>
+    }
+</div>
+<Pagination TotalCount="tasks.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 
 @code {
     [Parameter]
@@ -50,8 +39,13 @@
 
     private IReadOnlyList<AgentJobStatusReadModel> tasks = [];
     private string? jobType;
+    private string? keyQuery;
     private string? status;
     private string? message;
+    private readonly Dictionary<string, ResultDayCollectionState> resultDayStates = new(StringComparer.Ordinal);
+    private int page = 1;
+    private const int pageSize = 50;
+    private IEnumerable<AgentJobStatusReadModel> PagedTasks => tasks.Skip((page - 1) * pageSize).Take(pageSize);
 
     protected override Task OnParametersSetAsync() => LoadAsync();
 
@@ -59,20 +53,45 @@
     {
         AgentJobStatus? parsed = Enum.TryParse<AgentJobStatus>(status, out var value) ? value : null;
         var loadedTasks = await Store.GetJobStatusesAsync(string.IsNullOrWhiteSpace(jobType) ? null : jobType, parsed, 200);
+        if (!string.IsNullOrWhiteSpace(keyQuery))
+            loadedTasks = loadedTasks.Where(x => x.DeduplicationKey.Contains(keyQuery, StringComparison.OrdinalIgnoreCase)).ToList();
         tasks = string.IsNullOrWhiteSpace(JobId)
             ? loadedTasks
             : loadedTasks.Where(x => string.Equals(x.JobId, JobId, StringComparison.Ordinal)).ToList();
+        resultDayStates.Clear();
+        foreach (var task in tasks.Where(x => x.JobType == AgentJobType.ResultDayCollectionRequest))
+        {
+            if (!TryParseResultDayKey(task.DeduplicationKey, out var provider, out var date)) continue;
+            var day = await Store.GetResultDayCollectionStatusAsync(provider, date);
+            if (day is not null) resultDayStates[task.JobId] = day.Status;
+        }
 
         if (!string.IsNullOrWhiteSpace(JobId) && tasks.Count == 0)
             message = "指定されたジョブが見つかりませんでした。";
+        page = Math.Min(page, Math.Max(1, (int)Math.Ceiling(tasks.Count / (double)pageSize)));
     }
 
-    private async Task RequeueAsync(AgentJobStatusReadModel task)
+    private static string Format(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    private static string DetailUrl(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
+    private static string ErrorSummary(string error) => error.Length <= 100 ? error : $"{error[..100]}…";
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
+    private bool HasStateMismatch(AgentJobStatusReadModel task)
     {
-        var changed = await Store.ForceRequeueJobAsync(task.JobType, task.DeduplicationKey, DateTimeOffset.UtcNow);
-        message = changed ? "再投入しました。" : "対象タスクを更新できませんでした。";
-        await LoadAsync();
+        if (!resultDayStates.TryGetValue(task.JobId, out var dayState)) return false;
+        return task.Status switch
+        {
+            AgentJobStatus.Succeeded => dayState != ResultDayCollectionState.Complete,
+            AgentJobStatus.Failed or AgentJobStatus.DeadLetter => dayState is ResultDayCollectionState.Running or ResultDayCollectionState.Ready,
+            AgentJobStatus.WaitingDependency => dayState != ResultDayCollectionState.Running,
+            _ => false
+        };
     }
-
-    private static string Format(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    private static bool TryParseResultDayKey(string key, out string provider, out DateOnly date)
+    {
+        const string marker = ":result-day-collection:";
+        var index = key.IndexOf(marker, StringComparison.Ordinal);
+        provider = index > 0 ? key[..index] : string.Empty;
+        date = default;
+        return index > 0 && DateOnly.TryParseExact(key[(index + marker.Length)..], "yyyy-MM-dd", out date);
+    }
 }

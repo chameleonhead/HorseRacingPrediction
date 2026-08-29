@@ -24,23 +24,17 @@ else
     {
         <section class="card">
             <h3>印</h3>
-            <table class="data">
-                <thead>
-                    <tr><th>EntryId</th><th>印</th><th>予想着順</th><th>スコア</th><th>コメント</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var m in prediction.Marks)
-                    {
-                        <tr>
-                            <td>@m.EntryId</td>
-                            <td>@m.MarkCode</td>
-                            <td>@m.PredictedRank</td>
-                            <td>@m.Score</td>
-                            <td>@m.Comment</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            <div class="mark-list">
+                @foreach (var m in prediction.Marks)
+                {
+                    <article class="mark-row">
+                        <div class="mark-primary"><span class="pill">@m.MarkCode</span><strong>@m.EntryId</strong></div>
+                        <div><span class="object-label">予想着順</span>@m.PredictedRank</div>
+                        <div><span class="object-label">スコア</span>@m.Score</div>
+                        <div class="mark-comment"><span class="object-label">コメント</span>@(string.IsNullOrWhiteSpace(m.Comment) ? "—" : m.Comment)</div>
+                    </article>
+                }
+            </div>
         </section>
     }
 
@@ -53,7 +47,16 @@ else
             <label>訂正理由<input @bind="correctReason" /></label>
         </div>
         <div class="toolbar">
-            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存</button>
+            @if (correctArmed)
+            {
+                <span class="hint">入力した内容で訂正しますか？</span>
+                <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button>
+                <button class="btn small" @onclick="() => correctArmed = false" disabled="@correcting">キャンセル</button>
+            }
+            else
+            {
+                <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button>
+            }
         </div>
         @if (correctErrors.Count > 0)
         {
@@ -95,6 +98,7 @@ else
     private decimal? correctConfidenceScore;
     private string? correctSummaryComment;
     private string? correctReason;
+    private bool correctArmed;
     private bool correcting;
     private IReadOnlyList<string> correctErrors = Array.Empty<string>();
 
@@ -131,6 +135,7 @@ else
                 correctConfidenceScore = null; correctSummaryComment = null; correctReason = null;
                 await LoadAsync();
             }
+            correctArmed = false;
         }
         finally
         {

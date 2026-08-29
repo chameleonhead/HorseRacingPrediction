@@ -1,5 +1,5 @@
 @page "/jobs/{JobId}"
-@inject ProcessingStateStore Store
+@inject IProcessingStateStore Store
 @inject CollectionExecutionTrigger ExecutionTrigger
 
 <h1>ジョブ詳細</h1>
@@ -31,9 +31,23 @@ else
             <dt>UpdatedAt</dt><dd>@Fmt(detail.UpdatedAt)</dd>
         </dl>
         <div class="toolbar">
-            <button class="btn primary" @onclick="RequeueAsync">再キュー</button>
+            @if (!confirmingRequeue)
+            {
+                <button class="btn primary" @onclick="() => confirmingRequeue = true">再キューする</button>
+            }
             <button class="btn" @onclick="LoadAsync">再読み込み</button>
         </div>
+        @if (confirmingRequeue)
+        {
+            <div class="confirmation" role="group" aria-label="再キューの確認">
+                <strong>このジョブを再キューしますか？</strong>
+                <p class="hint">実行中の処理と重複しないよう、表示後に状態が変わっていた場合は中止します。</p>
+                <div class="toolbar">
+                    <button class="btn primary" @onclick="RequeueAsync" disabled="@requeueing">確認して再キュー</button>
+                    <button class="btn" @onclick="() => confirmingRequeue = false" disabled="@requeueing">キャンセル</button>
+                </div>
+            </div>
+        }
         @if (!string.IsNullOrEmpty(message))
         {
             <p class="hint">@message</p>
@@ -48,10 +62,41 @@ else
         </section>
     }
 
+    @if (detail.ParentJob is not null || detail.ChildJobs.Count > 0)
+    {
+        <section class="card">
+            <h3>関連ジョブ</h3>
+            @if (detail.ParentJob is not null)
+            {
+                <div><span class="object-label">親ジョブ</span><a href="@(JobUrl(detail.ParentJob.JobId))">@detail.ParentJob.JobType · @detail.ParentJob.DeduplicationKey</a> <span class="pill">@detail.ParentJob.Status</span></div>
+            }
+            @if (detail.ChildJobs.Count > 0)
+            {
+                <div class="operation-list">
+                    @foreach (var child in detail.ChildJobs)
+                    {
+                        <a class="operation-row related-job" href="@(JobUrl(child.JobId))"><span><span class="object-label">子ジョブ</span><strong>@child.JobType</strong></span><span class="hint">@child.DeduplicationKey</span><span class="pill">@child.Status</span><span class="hint">更新 @(Fmt(child.UpdatedAt))</span></a>
+                    }
+                </div>
+            }
+        </section>
+    }
+
     <section class="card">
-        <h3>ペイロード</h3>
-        <pre class="payload">@FormatPayload(detail.Payload)</pre>
+        <h3>操作履歴</h3>
+        @if (detail.AuditHistory.Count == 0) { <p class="hint">管理画面からの操作履歴はありません。</p> }
+        else
+        {
+            <ol class="audit-list">
+                @foreach (var audit in detail.AuditHistory)
+                {
+                    <li><div><strong>@(OperationName(audit.Operation))</strong><span class="hint">@(Fmt(audit.CreatedAt)) · @audit.ActorId</span></div><div><span class="pill">@audit.PreviousStatus → @audit.NewStatus</span><span>@audit.Reason</span></div></li>
+                }
+            </ol>
+        }
     </section>
+
+    <section class="card"><h3>ペイロード</h3><pre class="payload">@FormatPayload(detail.Payload)</pre></section>
 }
 
 @code {
@@ -60,6 +105,8 @@ else
     private bool loading;
     private AgentJobDetailReadModel? detail;
     private string? message;
+    private bool confirmingRequeue;
+    private bool requeueing;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -79,21 +126,30 @@ else
     private async Task RequeueAsync()
     {
         if (detail is null) return;
-        var ok = await Store.ForceRequeueJobAsync(detail.JobType, detail.DeduplicationKey, DateTimeOffset.UtcNow);
-        if (ok)
+        requeueing = true;
+        var result = await Store.ForceRequeueJobAsync(detail.JobId, detail.UpdatedAt, DateTimeOffset.UtcNow);
+        if (result == ForceRequeueJobResult.Requeued)
         {
             ExecutionTrigger.Signal();
             message = "再キューしました。";
         }
+        else if (result == ForceRequeueJobResult.Conflict)
+        {
+            message = "ジョブの状態が更新されていたため再キューしませんでした。最新状態を確認してください。";
+        }
         else
         {
-            message = "再キューに失敗しました。";
+            message = "対象のジョブが見つかりませんでした。";
         }
+        confirmingRequeue = false;
+        requeueing = false;
         await LoadAsync();
     }
 
     private static string Fmt(DateTimeOffset? d) => d?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
     private static string Fmt(DateTimeOffset d) => d.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+    private static string OperationName(string operation) => operation == "ManualRequeue" ? "再キュー" : operation;
+    private static string JobUrl(string jobId) => $"jobs/{Uri.EscapeDataString(jobId)}";
 
     private static string FormatPayload(string? payload)
     {

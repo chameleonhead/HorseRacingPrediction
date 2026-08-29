@@ -6,6 +6,7 @@ public sealed class ProcessingJobEntity
     public string JobType { get; set; } = string.Empty;
     public string DeduplicationKey { get; set; } = string.Empty;
     public string Payload { get; set; } = string.Empty;
+    public string? ParentJobId { get; set; }
     public AgentJobStatus Status { get; set; }
     public int Priority { get; set; }
     public DateTimeOffset FirstQueuedAt { get; set; }

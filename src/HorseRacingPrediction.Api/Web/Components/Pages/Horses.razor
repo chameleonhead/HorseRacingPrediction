@@ -52,22 +52,17 @@ else if (result is null || result.Items.Count == 0) { <p>該当データはあ�
 else
 {
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <table class="data">
-        <thead>
-            <tr><th>馬名</th><th>性</th><th>生年月日</th><th>別名数</th></tr>
-        </thead>
-        <tbody>
-            @foreach (var h in result.Items)
-            {
-                <tr>
-                    <td><a href="@($"horses/{Uri.EscapeDataString(h.HorseId)}")">@h.RegisteredName</a></td>
-                    <td>@h.SexCode</td>
-                    <td>@h.BirthDate</td>
-                    <td>@h.AliasCount</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="object-list">
+        @foreach (var h in result.Items)
+        {
+            <article class="object-row">
+                <div class="object-primary"><a href="@($"horses/{Uri.EscapeDataString(h.HorseId)}")">@h.RegisteredName</a><span class="hint">@h.HorseId</span></div>
+                <div><span class="object-label">性</span>@(h.SexCode ?? "—")</div>
+                <div><span class="object-label">生年月日</span>@(h.BirthDate?.ToString("yyyy/MM/dd") ?? "—")</div>
+                <div><span class="object-label">別名</span>@h.AliasCount 件</div>
+            </article>
+        }
+    </div>
     <div class="toolbar">
         <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
         <span>@(page) / @result.TotalPages</span>

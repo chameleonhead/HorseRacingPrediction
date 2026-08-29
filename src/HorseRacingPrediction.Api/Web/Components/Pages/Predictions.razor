@@ -9,38 +9,24 @@
     <button class="btn primary" @onclick="LoadAsync">検索</button>
 </div>
 
-@if (loading) { <p>読み込み中…</p> }
-else if (result is null || result.Items.Count == 0) { <p>該当する予想票はありません。</p> }
+@if (loading) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
+else if (result is null || result.Items.Count == 0) { <UiState Title="該当する予想票はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <table class="data">
-        <thead>
-            <tr>
-                <th>RaceId</th>
-                <th>予想者</th>
-                <th>状態</th>
-                <th>評価</th>
-                <th>信頼度</th>
-                <th>予想日時</th>
-                <th>印数</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var p in result.Items)
-            {
-                <tr>
-                    <td>@p.RaceId</td>
-                    <td>@p.PredictorType / @p.PredictorId</td>
-                    <td><a href="@($"predictions/{Uri.EscapeDataString(p.PredictionTicketId)}")">@p.TicketStatus</a></td>
-                    <td>@p.EvaluationStatus</td>
-                    <td>@p.ConfidenceScore</td>
-                    <td>@p.PredictedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@p.MarkCount</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="object-list">
+        @foreach (var p in result.Items)
+        {
+            <article class="object-row prediction-row">
+                <div class="object-primary"><a href="@($"predictions/{Uri.EscapeDataString(p.PredictionTicketId)}")">@p.TicketStatus</a><span class="hint">Race: @p.RaceId</span></div>
+                <div><span class="object-label">予想者</span>@p.PredictorType / @p.PredictorId</div>
+                <div><span class="object-label">評価</span>@p.EvaluationStatus</div>
+                <div><span class="object-label">信頼度</span>@p.ConfidenceScore</div>
+                <div><span class="object-label">予想日時</span>@(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—")</div>
+                <div><span class="object-label">印</span>@p.MarkCount 件</div>
+            </article>
+        }
+    </div>
     <div class="toolbar">
         <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
         <span>@(page) / @result.TotalPages</span>

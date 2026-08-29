@@ -16,4 +16,5 @@ public sealed record RaceEntryResponse(
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
     string? RunningStyleCode,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    string? OwnerId = null);

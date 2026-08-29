@@ -1,0 +1,53 @@
+@page "/collection-tasks/{JobId}"
+@inject IProcessingStateStore Store
+
+<h1>収集タスク詳細</h1>
+<p class="hint"><a href="collection-tasks">← 収集タスク一覧へ戻る</a></p>
+
+@if (detail is null)
+{
+    <p>指定されたジョブは見つかりませんでした。</p>
+}
+else
+{
+    <section class="card">
+        <h2>@detail.JobType</h2>
+        <dl class="meta">
+            <dt>JobId</dt><dd><code>@detail.JobId</code></dd>
+            <dt>キー</dt><dd><code>@detail.DeduplicationKey</code></dd>
+            <dt>状態</dt><dd><span class="pill">@detail.Status</span></dd>
+            <dt>試行回数</dt><dd>@detail.AttemptCount</dd>
+            <dt>開始（JST）</dt><dd>@Fmt(detail.StartedAt)</dd>
+            <dt>更新（JST）</dt><dd>@Fmt(detail.UpdatedAt)</dd>
+        </dl>
+    </section>
+    @if (!string.IsNullOrWhiteSpace(detail.LastError))
+    {
+        <section class="card"><h3>失敗理由</h3><pre class="error">@detail.LastError</pre></section>
+    }
+    @if (detail.ParentJob is not null || detail.ChildJobs.Count > 0)
+    {
+        <section class="card">
+            <h3>親子タスク</h3>
+            @if (detail.ParentJob is not null)
+            {
+                <p><span class="object-label">親</span><a href="@(Url(detail.ParentJob.JobId))">@detail.ParentJob.DeduplicationKey</a> <span class="pill">@detail.ParentJob.Status</span></p>
+            }
+            <div class="operation-list">
+                @foreach (var child in detail.ChildJobs)
+                {
+                    <a class="operation-row related-job" href="@(Url(child.JobId))"><strong>@child.DeduplicationKey</strong><span class="pill">@child.Status</span><span class="hint">更新（JST） @Fmt(child.UpdatedAt)</span></a>
+                }
+            </div>
+        </section>
+    }
+    <section class="card"><h3>ペイロード</h3><pre class="payload">@detail.Payload</pre></section>
+}
+
+@code {
+    [Parameter] public string JobId { get; set; } = string.Empty;
+    private AgentJobDetailReadModel? detail;
+    protected override async Task OnParametersSetAsync() => detail = await Store.GetJobDetailAsync(JobId);
+    private static string Fmt(DateTimeOffset? value) => value?.ToOffset(TimeSpan.FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    private static string Url(string jobId) => $"collection-tasks/{Uri.EscapeDataString(jobId)}";
+}

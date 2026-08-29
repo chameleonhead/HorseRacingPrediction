@@ -1,5 +1,5 @@
 @page "/jobs"
-@inject ProcessingStateStore Store
+@inject IProcessingStateStore Store
 @inject CollectionExecutionTrigger ExecutionTrigger
 @inject NavigationManager Nav
 
@@ -48,15 +48,16 @@
 
 @if (loading)
 {
-    <p>読み込み中…</p>
+    <UiState Kind="loading" Title="ジョブを読み込んでいます" />
 }
 else if (items is null || items.Count == 0)
 {
-    <p>該当ジョブはありません。</p>
+    <UiState Title="該当するジョブはありません" Message="状態またはジョブ種別を変更してください。" />
 }
 else
 {
-    <table class="data">
+    <div class="job-list" role="region" aria-label="ジョブ検索結果">
+    <table class="data job-table">
         <thead>
             <tr>
                 <th>JobType</th>
@@ -69,20 +70,22 @@ else
             </tr>
         </thead>
         <tbody>
-            @foreach (var job in items)
+            @foreach (var job in PagedItems)
             {
                 <tr>
-                    <td>@job.JobType</td>
-                    <td><a href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">@job.DeduplicationKey</a></td>
-                    <td><span class="pill @PillClass(job.Status)">@job.Status</span></td>
-                    <td>@job.AttemptCount</td>
-                    <td>@FormatDate(job.AvailableAt)</td>
-                    <td>@FormatDate(job.UpdatedAt)</td>
-                    <td><button class="btn small" @onclick="() => RequeueAsync(job)">再キュー</button></td>
+                    <td data-label="JobType">@job.JobType</td>
+                    <td data-label="対象"><a href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">@job.DeduplicationKey</a></td>
+                    <td data-label="状態"><span class="pill @PillClass(job.Status)">@job.Status</span></td>
+                    <td data-label="試行回数">@job.AttemptCount</td>
+                    <td data-label="実行可能日時">@FormatDate(job.AvailableAt)</td>
+                    <td data-label="更新日時">@FormatDate(job.UpdatedAt)</td>
+                    <td class="job-row-action"><a class="btn small" href="@($"jobs/{Uri.EscapeDataString(job.JobId)}")">詳細を見る</a></td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
+    <Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 }
 
 @code {
@@ -92,6 +95,9 @@ else
     private bool loading;
     private IReadOnlyList<AgentJobStatusReadModel>? items;
     private string? message;
+    private int page = 1;
+    private const int pageSize = 50;
+    private IEnumerable<AgentJobStatusReadModel> PagedItems => (items ?? []).Skip((page - 1) * pageSize).Take(pageSize);
 
     private DateOnly newResultDay = DateOnly.FromDateTime(DateTime.Today);
     private string newProvider = "JRA";
@@ -104,12 +110,14 @@ else
         try
         {
             items = await Store.GetJobStatusesAsync(jobTypeFilter, statusFilter, limit);
+            page = 1;
         }
         finally
         {
             loading = false;
         }
     }
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
 
     private async Task RequeueAsync(AgentJobStatusReadModel job)
     {
