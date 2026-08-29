@@ -13,7 +13,8 @@ public sealed record OwnerDetailResponse(
     IReadOnlyList<RelatedObjectResponse> CurrentHorses,
     IReadOnlyList<RelatedObjectResponse> RelatedTrainers,
     IReadOnlyList<ParticipationHistoryEntryResponse> Participations,
-    IReadOnlyList<OwnerMergeAuditResponse> MergeHistory);
+    IReadOnlyList<OwnerMergeAuditResponse> MergeHistory,
+    bool HasMoreParticipations = false);
 
 public sealed record RelatedObjectResponse(string ObjectType, string ObjectId, string DisplayName, int RelationshipCount);
 

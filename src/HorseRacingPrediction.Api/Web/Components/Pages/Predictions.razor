@@ -9,10 +9,14 @@
     <button class="btn primary" @onclick="LoadAsync">検索</button>
 </div>
 
-@if (loading) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
+@if (loading && result is null) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
 else if (result is null || result.Items.Count == 0) { <UiState Title="該当する予想票はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
+    @if (loading)
+    {
+        <p class="hint">検索中… 直前の結果を表示しています。</p>
+    }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
     <div class="object-list">
         @foreach (var p in result.Items)

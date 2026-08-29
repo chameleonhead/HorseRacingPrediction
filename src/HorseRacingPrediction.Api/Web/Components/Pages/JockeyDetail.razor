@@ -18,12 +18,12 @@ else
         </dl>
     </section>
 
-    @if (participations?.Relationships.Count > 0)
+    @if (relationships.Count > 0)
     {
         <section class="entity-section">
             <h3>この騎手に関係する馬・調教師</h3>
             <div class="relationship-grid">
-                @foreach (var relationship in participations.Relationships.Take(6))
+                @foreach (var relationship in relationships.Take(6))
                 {
                     <a class="relationship-link" href="@RelationshipUrl(relationship)">
                         <span class="relationship-kind">@relationship.RelationshipName</span>
@@ -37,14 +37,14 @@ else
 
     <section class="entity-section">
         <h3>騎乗履歴</h3>
-        @if (participations is null || participations.Entries.Count == 0)
+        @if (historyEntries.Count == 0)
         {
             <p class="hint">騎乗履歴はありません。</p>
         }
         else
         {
             <ol class="history-list">
-                @foreach (var entry in participations.Entries)
+                @foreach (var entry in historyEntries)
                 {
                     <li class="history-item">
                         <div class="history-event">
@@ -60,6 +60,12 @@ else
                     </li>
                 }
             </ol>
+            @if (historyHasMore)
+            {
+                <div class="toolbar">
+                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の10件を読み込む</button>
+                </div>
+            }
         }
     </section>
 
@@ -136,7 +142,11 @@ else
 
     private bool loading;
     private JockeyProfileResponse? jockey;
-    private ParticipationHistoryResponse? participations;
+    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+    private IReadOnlyList<RelationshipSummaryResponse> relationships = Array.Empty<RelationshipSummaryResponse>();
+    private bool historyHasMore;
+    private bool loadingMore;
+    private const int historyBatchSize = 10;
 
     private string? editDisplayName;
     private string? editNormalizedName;
@@ -167,10 +177,13 @@ else
         try
         {
             var profileTask = Api.GetJockeyAsync(JockeyId);
-            var historyTask = Api.GetJockeyParticipationsAsync(JockeyId);
+            var historyTask = Api.GetJockeyParticipationsAsync(JockeyId, historyBatchSize, 0);
             await Task.WhenAll(profileTask, historyTask);
             jockey = await profileTask;
-            participations = await historyTask;
+            var history = await historyTask;
+            historyEntries = history?.Entries ?? Array.Empty<ParticipationHistoryEntryResponse>();
+            relationships = history?.Relationships ?? Array.Empty<RelationshipSummaryResponse>();
+            historyHasMore = history?.HasMore ?? false;
             if (jockey is not null)
             {
                 editDisplayName = jockey.DisplayName;
@@ -181,6 +194,27 @@ else
         finally
         {
             loading = false;
+        }
+    }
+
+    private async Task LoadMoreHistoryAsync()
+    {
+        if (loadingMore || !historyHasMore) return;
+
+        loadingMore = true;
+        try
+        {
+            var next = await Api.GetJockeyParticipationsAsync(JockeyId, historyBatchSize, historyEntries.Count);
+            if (next is not null)
+            {
+                historyEntries = historyEntries.Concat(next.Entries).ToList();
+                relationships = next.Relationships;
+                historyHasMore = next.HasMore;
+            }
+        }
+        finally
+        {
+            loadingMore = false;
         }
     }
 

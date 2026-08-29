@@ -1,7 +1,6 @@
 @page "/horses"
 @attribute [Authorize]
 @inject AdminApiClient Api
-@inject NavigationManager Nav
 
 <h1>馬検索</h1>
 <div class="toolbar">
@@ -16,41 +15,16 @@
         </select>
     </label>
     <button class="btn primary" @onclick="LoadAsync">検索</button>
-    <button class="btn" @onclick="() => showRegisterForm = !showRegisterForm">新規登録@(showRegisterForm ? "を閉じる" : "")</button>
 </div>
 
-@if (showRegisterForm)
-{
-    <section class="card">
-        <h3>馬の新規登録</h3>
-        <div class="form-grid">
-            <label>登録名<input @bind="newRegisteredName" /></label>
-            <label>正規化名<input @bind="newNormalizedName" /></label>
-            <label>
-                性:
-                <select @bind="newSexCode">
-                    <option value="">(指定なし)</option>
-                    <option value="M">牡</option>
-                    <option value="F">牝</option>
-                    <option value="G">セン</option>
-                </select>
-            </label>
-            <label>生年月日<input type="date" @bind="newBirthDate" /></label>
-        </div>
-        <div class="toolbar">
-            <button class="btn primary" @onclick="RegisterAsync" disabled="@registering">登録</button>
-        </div>
-        @if (registerErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in registerErrors) { <li>@e</li> }</ul>
-        }
-    </section>
-}
-
-@if (loading) { <p>読み込み中…</p> }
-else if (result is null || result.Items.Count == 0) { <p>該当データはありません。</p> }
+@if (loading && result is null) { <UiState Kind="loading" Title="馬を読み込んでいます" /> }
+else if (result is null || result.Items.Count == 0) { <UiState Title="該当する馬はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
+    @if (loading)
+    {
+        <p class="hint">検索中… 直前の結果を表示しています。</p>
+    }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
     <div class="object-list">
         @foreach (var h in result.Items)
@@ -78,14 +52,6 @@ else
     private bool loading;
     private PagedResponse<HorseSummaryResponse>? result;
 
-    private bool showRegisterForm;
-    private bool registering;
-    private string? newRegisteredName;
-    private string? newNormalizedName;
-    private string? newSexCode;
-    private DateOnly? newBirthDate;
-    private IReadOnlyList<string> registerErrors = Array.Empty<string>();
-
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
@@ -108,33 +74,4 @@ else
     }
 
     private async Task GoAsync(int p) { page = p; await LoadAsync(); }
-
-    private async Task RegisterAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newRegisteredName) || string.IsNullOrWhiteSpace(newNormalizedName))
-        {
-            registerErrors = new[] { "登録名と正規化名は必須です。" };
-            return;
-        }
-
-        registering = true;
-        try
-        {
-            var result = await Api.RegisterHorseAsync(new RegisterHorseRequest(
-                newRegisteredName!, newNormalizedName!, newSexCode, newBirthDate));
-
-            if (result.Success)
-            {
-                Nav.NavigateTo($"/horses/{Uri.EscapeDataString(result.Value!)}");
-            }
-            else
-            {
-                registerErrors = result.Errors;
-            }
-        }
-        finally
-        {
-            registering = false;
-        }
-    }
 }

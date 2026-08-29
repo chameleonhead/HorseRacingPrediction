@@ -40,12 +40,25 @@ else
     </section>
     <section class="entity-section">
         <h3>所有馬の出走履歴</h3>
-        <ol class="history-list">
-            @foreach (var entry in owner.Participations)
+        @if (historyEntries.Count == 0)
+        {
+            <p class="hint">出走履歴はありません。</p>
+        }
+        else
+        {
+            <ol class="history-list">
+            @foreach (var entry in historyEntries)
             {
                 <li class="history-item"><div class="history-event"><a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @entry.RacecourseCode @entry.RaceNumber R</a><span class="hint">@(entry.RaceName ?? entry.RaceId)</span></div><div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong></div><div class="history-relations"><div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div><div class="history-field"><span class="relationship-kind">調教師</span>@(entry.TrainerName ?? "—")</div><div class="history-field"><span class="relationship-kind">騎手</span>@(entry.JockeyName ?? "—")</div></div></li>
             }
-        </ol>
+            </ol>
+            @if (historyHasMore)
+            {
+                <div class="toolbar">
+                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の10件を読み込む</button>
+                </div>
+            }
+        }
     </section>
 }
 
@@ -53,6 +66,10 @@ else
     [Parameter] public string OwnerId { get; set; } = string.Empty;
     private bool loading;
     private OwnerDetailResponse? owner;
+    private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+    private bool historyHasMore;
+    private bool loadingMore;
+    private const int historyBatchSize = 10;
     private string? sourceOwnerId;
     private string? mergeReason;
     private bool mergeArmed;
@@ -61,8 +78,38 @@ else
     protected override async Task OnParametersSetAsync()
     {
         loading = true;
-        try { owner = await Api.GetOwnerAsync(OwnerId); }
+        try
+        {
+            owner = await Api.GetOwnerAsync(OwnerId);
+            if (owner is not null)
+            {
+                historyEntries = owner.Participations;
+                historyHasMore = owner.HasMoreParticipations;
+            }
+            else
+            {
+                historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
+                historyHasMore = false;
+            }
+        }
         finally { loading = false; }
+    }
+    private async Task LoadMoreHistoryAsync()
+    {
+        if (loadingMore || !historyHasMore) return;
+
+        loadingMore = true;
+        try
+        {
+            var next = await Api.GetOwnerAsync(OwnerId, historyBatchSize, historyEntries.Count);
+            if (next is not null)
+            {
+                owner = next;
+                historyEntries = historyEntries.Concat(next.Participations).ToList();
+                historyHasMore = next.HasMoreParticipations;
+            }
+        }
+        finally { loadingMore = false; }
     }
     private async Task MergeAsync()
     {
