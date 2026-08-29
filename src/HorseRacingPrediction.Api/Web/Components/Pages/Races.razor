@@ -13,9 +13,9 @@
     <button class="btn primary" @onclick="LoadAsync">検索</button>
 </div>
 
-@if (loading) { <p>読み込み中…</p> }
+@if (loading) { <UiState Kind="loading" Title="レースを読み込んでいます" /> }
 else if (result is null) { <p>検索結果がありません。</p> }
-else if (result.Items.Count == 0) { <p>該当レースはありません。</p> }
+else if (result.Items.Count == 0) { <UiState Title="該当するレースはありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>

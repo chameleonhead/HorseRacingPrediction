@@ -16,7 +16,12 @@
     </aside>
     <main class="content">
         <article class="content-inner">
-            @Body
+            <ErrorBoundary>
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent Context="exception">
+                    <section class="ui-state ui-state-error" role="alert"><strong>画面を読み込めませんでした</strong><span>通信状態を確認して、もう一度お試しください。</span><a class="btn" href="">再読み込み</a><details><summary>技術情報</summary><code>@exception.Message</code></details></section>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>

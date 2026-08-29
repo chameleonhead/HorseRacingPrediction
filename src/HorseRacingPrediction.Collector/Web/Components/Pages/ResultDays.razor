@@ -11,11 +11,11 @@
 
 @if (loading)
 {
-    <p>読み込み中…</p>
+    <UiState Kind="loading" Title="日次収集状況を読み込んでいます" />
 }
 else if (items is null || items.Count == 0)
 {
-    <p>該当データはありません。</p>
+    <UiState Title="対象期間の収集状況はありません" Message="期間を変更するか、探索ジョブを開始してください。" />
 }
 else
 {

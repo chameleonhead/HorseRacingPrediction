@@ -8,8 +8,8 @@
     <button class="btn primary" @onclick="LoadAsync">検索</button>
 </div>
 
-@if (loading) { <p>読み込み中…</p> }
-else if (items.Count == 0) { <p>該当する馬主はありません。</p> }
+@if (loading) { <UiState Kind="loading" Title="馬主を読み込んでいます" /> }
+else if (items.Count == 0) { <UiState Title="該当する馬主はありません" Message="表記の一部を変えて検索してください。" /> }
 else
 {
     <div class="object-list">
