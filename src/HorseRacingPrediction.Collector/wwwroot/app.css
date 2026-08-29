@@ -41,6 +41,7 @@ a:hover { text-decoration: underline; }
     height: 100vh;
     overflow-y: auto;
 }
+.mobile-menu-button, .nav-backdrop { display: none; }
 
 .brand {
     display: flex;
@@ -210,15 +211,22 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
     }
 
     .sidebar {
-        position: sticky;
+        position: fixed;
         top: 0;
-        z-index: 10;
-        height: auto;
-        max-height: 38vh;
-        padding: 10px 12px;
+        left: 0;
+        z-index: 30;
+        width: min(300px, 86vw);
+        height: 100vh;
+        max-height: none;
+        padding: 18px 14px;
         overflow-y: auto;
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+        transform: translateX(-105%);
+        transition: transform .18s ease-out;
     }
+    .sidebar.open { transform: translateX(0); }
+    .mobile-menu-button { position: sticky; top: 8px; z-index: 20; display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 8px 12px 0; padding: 8px 14px; color: #fff; background: #1f2a31; border: 0; border-radius: 999px; font: inherit; font-weight: 700; }
+    .nav-backdrop { position: fixed; inset: 0; z-index: 25; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(16, 24, 28, .5); }
 
     .brand {
         margin-bottom: 8px;
@@ -228,18 +236,15 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
     .brand-mark { font-size: 19px; }
 
     .nav {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 6px;
-        overflow-x: visible;
+        flex-direction: column;
+        gap: 2px;
         padding-bottom: 4px;
     }
 
-    .nav-section { display: none; }
+    .nav-section { display: block; }
 
     .nav-link {
-        flex: 0 0 auto;
-        padding: 7px 10px;
+        padding: 10px 12px;
         white-space: nowrap;
         font-size: 13px;
     }

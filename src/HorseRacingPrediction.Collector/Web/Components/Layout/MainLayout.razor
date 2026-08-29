@@ -2,7 +2,9 @@
 @inherits LayoutComponentBase
 
 <div class="page">
-    <aside class="sidebar">
+    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" @onclick="() => navOpen = !navOpen">☰ <span>メニュー</span></button>
+    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
+    <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
             <span class="brand-mark">🐎</span>
             <span class="brand-text">Collector Console</span>
@@ -15,3 +17,5 @@
         </article>
     </main>
 </div>
+
+@code { private bool navOpen; }
