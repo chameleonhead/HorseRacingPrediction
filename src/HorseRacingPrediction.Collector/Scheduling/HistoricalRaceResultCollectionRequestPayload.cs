@@ -5,4 +5,5 @@ public sealed record HistoricalRaceResultCollectionRequestPayload(
     string Racecourse,
     int RaceNumber,
     string RequestedByRaceId,
-    string ProviderType);
+    string ProviderType,
+    string? SourceUrl = null);

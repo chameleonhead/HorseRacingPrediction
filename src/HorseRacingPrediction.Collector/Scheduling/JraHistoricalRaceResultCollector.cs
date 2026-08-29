@@ -41,7 +41,7 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                 payload.RaceNumber,
                 raceId,
                 raceName: null,
-                sourceUrl: null,
+                sourceUrl: payload.SourceUrl,
                 RaceDataCollectionState.Running,
                 RaceResultAcquisitionOrigin.HistoricalDependency,
                 payload.RequestedByRaceId,
@@ -50,9 +50,10 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                 DateTimeOffset.UtcNow,
                 cancellationToken).ConfigureAwait(false);
 
-            JraExtractionEnvelope<JraRaceResultSummary> extraction = await _raceResultLookup
-                .GetRaceResultAsync(payload.RaceDate, racecourse, payload.RaceNumber, cancellationToken)
-                .ConfigureAwait(false);
+            JraExtractionEnvelope<JraRaceResultSummary> extraction = !string.IsNullOrWhiteSpace(payload.SourceUrl)
+                ? await _raceResultLookup.GetRaceResultByUrlAsync(payload.SourceUrl, cancellationToken).ConfigureAwait(false)
+                : await _raceResultLookup.GetRaceResultAsync(
+                    payload.RaceDate, racecourse, payload.RaceNumber, cancellationToken).ConfigureAwait(false);
 
             if (!extraction.Success || extraction.Data is null)
             {
@@ -174,7 +175,7 @@ public sealed class JraHistoricalRaceResultCollector : IHistoricalRaceResultColl
                 payload.RaceNumber,
                 raceId: null,
                 raceName: null,
-                sourceUrl: null,
+                sourceUrl: payload.SourceUrl,
                 RaceDataCollectionState.Failed,
                 RaceResultAcquisitionOrigin.HistoricalDependency,
                 payload.RequestedByRaceId,

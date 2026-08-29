@@ -119,12 +119,60 @@ public sealed class JraHistoricalRaceResultCollectorTests
         Assert.HasCount(2, writeService.RecordedEntryResults);
     }
 
+    [TestMethod]
+    public async Task CollectAsync_WithDiscoveredSourceUrl_UsesThatUrlWithoutRediscovery()
+    {
+        const string sourceUrl = "https://example.test/result/2026-08-16-sapporo-01";
+        var lookup = new StubJraRaceResultLookup
+        {
+            Result = new JraExtractionEnvelope<JraRaceResultSummary>(
+                true,
+                JraPageKind.Result,
+                sourceUrl,
+                new JraNavigationTrace(Array.Empty<string>(), TimeSpan.Zero),
+                new JraRaceResultSummary(
+                    "テストレース", new DateOnly(2026, 8, 16), "札幌", 1, "未勝利", "芝", 1200, "右",
+                    [new JraResultEntry(1, 1, 1, "テスト馬", "テスト騎手", "1:09.0", 55m, "牡2", 470m, 0m)],
+                    Array.Empty<JraPayoutSummary>(), sourceUrl))
+        };
+        var writeService = new StubDataCollectionWriteService();
+        var stateStore = new ProcessingStateStore(
+            Options.Create(new AgentProcessingOptions
+            {
+                StateDirectory = Path.Combine(Path.GetTempPath(), "jra-historical-race-result-collector-tests", Guid.NewGuid().ToString("N")),
+                PredictionLeaseMinutes = 5,
+                CollectionLeaseMinutes = 5,
+            }),
+            NullLogger<ProcessingStateStore>.Instance);
+        var sut = new JraHistoricalRaceResultCollector(lookup, new DataCollectionWriteTools(writeService), stateStore);
+
+        var result = await sut.CollectAsync(new HistoricalRaceResultCollectionRequestPayload(
+            new DateOnly(2026, 8, 16), "札幌", 1, "race-1", "JRA", sourceUrl));
+
+        Assert.IsTrue(result.Succeeded);
+        Assert.AreEqual(sourceUrl, lookup.RequestedSourceUrl);
+        Assert.AreEqual(0, lookup.RediscoveryRequestCount);
+    }
+
     private sealed class StubJraRaceResultLookup : IJraRaceResultLookup
     {
         public JraExtractionEnvelope<JraRaceResultSummary>? Result { get; set; }
 
+        public string? RequestedSourceUrl { get; private set; }
+
+        public int RediscoveryRequestCount { get; private set; }
+
         public Task<JraExtractionEnvelope<JraRaceResultSummary>> GetRaceResultAsync(DateOnly raceDate, string racecourse, int raceNumber, CancellationToken cancellationToken = default)
-            => Task.FromResult(Result!);
+        {
+            RediscoveryRequestCount++;
+            return Task.FromResult(Result!);
+        }
+
+        public Task<JraExtractionEnvelope<JraRaceResultSummary>> GetRaceResultByUrlAsync(string sourceUrl, CancellationToken cancellationToken = default)
+        {
+            RequestedSourceUrl = sourceUrl;
+            return Task.FromResult(Result!);
+        }
     }
 
     private sealed class StubDataCollectionWriteService : IDataCollectionWriteService
