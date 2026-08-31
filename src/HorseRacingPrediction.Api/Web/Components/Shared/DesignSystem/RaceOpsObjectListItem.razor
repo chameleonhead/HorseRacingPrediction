@@ -1,4 +1,4 @@
-<FluentButton Appearance="@Appearance.Stealth" Href="@Href" class="object-list-item">
+<a href="@Href" class="object-list-item">
     <span class="object-list-main">
         <strong>@Title</strong>
         @if (!string.IsNullOrWhiteSpace(Description))
@@ -9,7 +9,7 @@
     <RaceOpsStatusBadge Label="@Status" Tone="@StatusTone" />
     <span class="object-list-meta">@Metadata</span>
     <span class="object-list-affordance">詳細</span>
-</FluentButton>
+</a>
 
 @code {
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;

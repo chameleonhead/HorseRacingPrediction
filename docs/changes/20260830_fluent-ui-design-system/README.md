@@ -738,6 +738,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 
-## Handoff - 2026-09-01
+## Implementation checkpoint - 2026-09-01 jobs responsive verification
 
-作業途中の再開情報は [HANDOFF.md](HANDOFF.md) に集約した。全体仕様の再掲はせず、実装済み範囲、未完了範囲、次の作業順、検証上の注意だけを記録している。
+- `/jobs` を実ブラウザーで 1440 px、720 px、320 px の viewport に切り替えて確認した。初回確認では、desktop の非表示用 `FluentButton` が grid item として残り、sidebar と main content が別の行・列へ自動配置されるレイアウト破綻を検出した。
+- desktop の mobile menu を明示的に非表示にし、sidebar と main content の grid column を固定した。main content は border-box として利用可能幅へ収まり、1440 px で横スクロールを発生させない。
+- `RaceOpsObjectListItem` は navigation であるため、Fluent Button の内部レイアウトへ一覧の grid を重ねず、semantic な anchor と domain 配置 CSS へ変更した。これにより desktop では「処理名・対象 → 状態 → 更新 → 詳細」、mobile では同じ情報優先度の 2 列配置になる。
+- 1440 px では sidebar と全幅の一覧、720 px と 320 px では off-canvas navigation、縦積み filter、一覧 item を確認した。いずれも viewport 幅を超える content はなく、320 px の一時停止確認 dialog でも説明と cancel / confirm 操作を表示できる。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
+- Browser viewport / DOM 計測: 1440 px、720 px、320 px で `documentElement.scrollWidth <= innerWidth`。320 px で収集ジョブ一覧と一時停止確認 dialog の accessible name、説明、操作を確認した。
