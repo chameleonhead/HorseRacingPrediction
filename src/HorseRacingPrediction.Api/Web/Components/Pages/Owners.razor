@@ -1,26 +1,29 @@
 @page "/owners"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
 
-<h1>馬主</h1>
-<div class="toolbar">
-    <label>馬主名・表記: <input @bind="query" /></label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
+<div class="object-header">
+    <div><p class="eyebrow">関係者</p><h1>馬主</h1><p class="hint">馬主名または登録表記で検索します。</p></div>
 </div>
+
+<FluentCard class="filter-card">
+    <div class="filter-grid">
+        <FluentTextField Label="馬主名・表記" @bind-Value="query" />
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+    </div>
+</FluentCard>
 
 @if (loading && items.Count == 0) { <UiState Kind="loading" Title="馬主を読み込んでいます" /> }
 else if (items.Count == 0) { <UiState Title="該当する馬主はありません" Message="表記の一部を変えて検索してください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
-    <div class="object-list">
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
+    <div class="data-list" aria-label="馬主一覧">
         @foreach (var owner in PagedItems)
         {
-            <article class="object-row">
-                <div class="object-primary"><a href="@($"owners/{owner.OwnerId}")">@owner.DisplayName</a><span class="hint">表記 @owner.NameVariants.Count 件</span></div>
+            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenOwner(owner.OwnerId)" @onkeydown="e => OpenOwnerFromKey(e, owner.OwnerId)">
+                <div class="object-primary"><a href="@OwnerUrl(owner.OwnerId)" @onclick:stopPropagation>@owner.DisplayName</a><span class="hint">表記 @owner.NameVariants.Count 件</span></div>
                 <div><span class="object-label">現在の所有馬</span>@owner.CurrentHorseCount 頭</div>
                 <div><span class="object-label">出走</span>@owner.ParticipationCount 戦</div>
                 <div><span class="object-label">最終出走</span>@(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</div>
@@ -37,12 +40,35 @@ else
     private int page = 1;
     private const int pageSize = 50;
     private IEnumerable<OwnerSummaryResponse> PagedItems => items.Skip((page - 1) * pageSize).Take(pageSize);
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-    private async Task LoadAsync()
+
+    protected override async Task OnInitializedAsync()
     {
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        query = q.TryGetValue("query", out var value) ? value.ToString() : null;
+        if (int.TryParse(q.TryGetValue("page", out var p) ? p.ToString() : null, out var n) && n > 0) page = n;
+        await LoadAsync(resetPage: false);
+    }
+
+    private Task SearchAsync() => LoadAsync(resetPage: true);
+
+    private async Task LoadAsync(bool resetPage)
+    {
+        if (resetPage) page = 1;
+        UpdateUrl();
         loading = true;
-        try { items = await Api.SearchOwnersAsync(query); page = 1; }
+        try { items = await Api.SearchOwnersAsync(query); }
         finally { loading = false; }
     }
-    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
+
+    private Task GoPage(int value)
+    {
+        page = value;
+        UpdateUrl();
+        return Task.CompletedTask;
+    }
+
+    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/owners", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private void OpenOwner(string id) => Navigation.NavigateTo(OwnerUrl(id));
+    private void OpenOwnerFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenOwner(id); }
+    private static string OwnerUrl(string id) => $"/owners/{Uri.EscapeDataString(id)}";
 }

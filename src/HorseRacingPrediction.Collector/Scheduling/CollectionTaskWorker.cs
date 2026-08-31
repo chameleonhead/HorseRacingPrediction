@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Hosting;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 

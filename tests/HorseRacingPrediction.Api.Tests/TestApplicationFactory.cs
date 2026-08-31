@@ -12,9 +12,12 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.FluentUI.AspNetCore.Components;
+using HorseRacingPrediction.Api.CollectionController;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -39,6 +42,9 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<ApiKeyEndpointFilter>();
         builder.Services.AddAdminAuthentication();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+        builder.Services.AddFluentUIComponents();
+        builder.Services.AddScoped<IDialogService, DialogService>();
+        builder.Services.AddScoped<IToastService, ToastService>();
 
         builder.Services.AddSingleton(_ =>
         {
@@ -60,11 +66,12 @@ internal static class TestApplicationFactory
         {
             options.StateDirectory = Path.Combine(Path.GetTempPath(), "hrp-api-tests", Guid.NewGuid().ToString("N"));
             options.JobStoreFileName = "collection-tasks.db";
-            options.UseApiStateStore = false;
         });
         builder.Services.AddSingleton<ProcessingStateStore>();
         builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
         builder.Services.AddSingleton<CollectionExecutionTrigger>();
+        builder.Services.AddSingleton<CollectionMaintenanceState>();
+        builder.Services.AddSingleton<ICollectionTaskQueue, NullCollectionTaskQueue>();
 
         builder.Services.AddEventFlow(options =>
         {
@@ -91,11 +98,30 @@ internal static class TestApplicationFactory
         app.UseApiKeyProtection();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.Use(async (context, next) =>
+        {
+            var maintenance = context.RequestServices.GetRequiredService<CollectionMaintenanceState>();
+            var isMutation = !HttpMethods.IsGet(context.Request.Method)
+                && !HttpMethods.IsHead(context.Request.Method)
+                && !HttpMethods.IsOptions(context.Request.Method);
+            if (maintenance.IsActive && isMutation
+                && !context.Request.Path.StartsWithSegments("/api/collection/reset")
+                && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await context.Response.WriteAsJsonAsync(new { message = "収集データベースのメンテナンス中です。" });
+                return;
+            }
+
+            await next();
+        });
         app.UseAntiforgery();
         app.MapApiEndpoints();
         app.MapAdminEndpoints();
         app.MapProcessingStateRpcEndpoint();
         app.MapAgentDashboardEndpoints();
+        app.MapJobManagementEndpoints();
+        app.MapAgentAcquisitionStatusEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

@@ -1,71 +1,82 @@
 @page "/predictions"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
 
-<h1>予想票検索</h1>
-<div class="toolbar">
-    <label>RaceId: <input @bind="raceId" /></label>
-    <label>予想者種別: <input @bind="predictorType" /></label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
+<div class="object-header">
+    <div><p class="eyebrow">予想</p><h1>予想票</h1><p class="hint">レースと予想者から予想票を検索します。今回、予想票は参照専用です。</p></div>
 </div>
+
+<FluentCard class="filter-card">
+    <div class="filter-grid">
+        <FluentTextField Label="RaceId" @bind-Value="raceId" />
+        <FluentTextField Label="予想者種別" @bind-Value="predictorType" />
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+    </div>
+</FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
 else if (result is null || result.Items.Count == 0) { <UiState Title="該当する予想票はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="object-list">
+    <div class="data-list" aria-label="予想票一覧">
         @foreach (var p in result.Items)
         {
-            <article class="object-row prediction-row">
-                <div class="object-primary"><a href="@($"predictions/{Uri.EscapeDataString(p.PredictionTicketId)}")">@p.TicketStatus</a><span class="hint">Race: @p.RaceId</span></div>
+            <article class="data-list-row prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
+                <div class="object-primary"><a href="@PredictionUrl(p.PredictionTicketId)" @onclick:stopPropagation>@p.TicketStatus</a><span class="hint">@RaceLink(p.RaceId)</span></div>
                 <div><span class="object-label">予想者</span>@p.PredictorType / @p.PredictorId</div>
-                <div><span class="object-label">評価</span>@p.EvaluationStatus</div>
+                <div><span class="object-label">評価</span><span class="badge info">@p.EvaluationStatus</span></div>
                 <div><span class="object-label">信頼度</span>@p.ConfidenceScore</div>
                 <div><span class="object-label">予想日時</span>@(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—")</div>
                 <div><span class="object-label">印</span>@p.MarkCount 件</div>
             </article>
         }
     </div>
-    <div class="toolbar">
-        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
-        <span>@(page) / @result.TotalPages</span>
-        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
-    </div>
+    <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
 @code {
     private string? raceId;
     private string? predictorType;
     private int page = 1;
-    private int pageSize = 50;
+    private const int pageSize = 50;
     private bool loading;
     private PagedResponse<PredictionTicketSummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        loading = true;
-        try
-        {
-            result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest
-            {
-                RaceId = raceId,
-                PredictorType = predictorType,
-                Page = page,
-                PageSize = pageSize
-            });
-        }
-        finally
-        {
-            loading = false;
-        }
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        raceId = ParseText(q, "raceId");
+        predictorType = ParseText(q, "predictorType");
+        if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
+        await LoadAsync();
     }
 
-    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+    private async Task SearchAsync() { page = 1; await LoadAsync(); }
+    private async Task LoadAsync()
+    {
+        UpdateUrl();
+        loading = true;
+        try { result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest { RaceId = raceId, PredictorType = predictorType, Page = page, PageSize = pageSize }); }
+        finally { loading = false; }
+    }
+    private async Task GoAsync(int value) { page = value; await LoadAsync(); }
+    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["raceId"] = raceId, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
+    private void OpenPrediction(string id) => Navigation.NavigateTo(PredictionUrl(id));
+    private void OpenPredictionFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenPrediction(id); }
+    private static string PredictionUrl(string id) => $"/predictions/{Uri.EscapeDataString(id)}";
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+    private static RenderFragment RaceLink(string? id) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "Race: 未設定"); return; }
+        var raceIdValue = id;
+        builder.OpenElement(1, "a");
+        builder.AddAttribute(2, "href", RaceUrl(raceIdValue));
+        builder.AddEventStopPropagationAttribute(3, "onclick", true);
+        builder.AddContent(4, $"Race: {id}");
+        builder.CloseElement();
+    };
 }

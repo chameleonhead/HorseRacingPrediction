@@ -1,77 +1,69 @@
 @page "/horses"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
 
-<h1>馬検索</h1>
-<div class="toolbar">
-    <label>キーワード: <input @bind="query" placeholder="馬名 / ID" /></label>
-    <label>
-        性:
-        <select @bind="sexCode">
-            <option value="">(指定なし)</option>
-            <option value="M">牡</option>
-            <option value="F">牝</option>
-            <option value="G">セン</option>
-        </select>
-    </label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
+<div class="object-header">
+    <div><p class="eyebrow">競走</p><h1>馬</h1><p class="hint">収集済みの馬プロフィールを検索します。</p></div>
 </div>
+
+<FluentCard class="filter-card">
+    <div class="filter-grid">
+        <FluentTextField Label="キーワード" @bind-Value="query" Placeholder="馬名 / ID" />
+        <label>性<select @bind="sexCode"><option value="">指定なし</option><option value="M">牡</option><option value="F">牝</option><option value="G">セン</option></select></label>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+    </div>
+</FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="馬を読み込んでいます" /> }
 else if (result is null || result.Items.Count == 0) { <UiState Title="該当する馬はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="object-list">
+    <div class="data-list" aria-label="馬一覧">
         @foreach (var h in result.Items)
         {
-            <article class="object-row">
-                <div class="object-primary"><a href="@($"horses/{Uri.EscapeDataString(h.HorseId)}")">@h.RegisteredName</a><span class="hint">@h.HorseId</span></div>
+            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenHorse(h.HorseId)" @onkeydown="e => OpenHorseFromKey(e, h.HorseId)">
+                <div class="object-primary"><a href="@HorseUrl(h.HorseId)" @onclick:stopPropagation>@h.RegisteredName</a><span class="hint">@h.HorseId</span></div>
                 <div><span class="object-label">性</span>@(h.SexCode ?? "—")</div>
                 <div><span class="object-label">生年月日</span>@(h.BirthDate?.ToString("yyyy/MM/dd") ?? "—")</div>
                 <div><span class="object-label">別名</span>@h.AliasCount 件</div>
             </article>
         }
     </div>
-    <div class="toolbar">
-        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
-        <span>@(page) / @result.TotalPages</span>
-        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
-    </div>
+    <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
 @code {
     private string? query;
     private string? sexCode;
     private int page = 1;
-    private int pageSize = 50;
+    private const int pageSize = 50;
     private bool loading;
     private PagedResponse<HorseSummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        loading = true;
-        try
-        {
-            result = await Api.SearchHorsesAsync(new SearchHorsesRequest
-            {
-                Query = query,
-                SexCode = sexCode,
-                Page = page,
-                PageSize = pageSize
-            });
-        }
-        finally
-        {
-            loading = false;
-        }
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        query = ParseText(q, "query");
+        sexCode = ParseText(q, "sex");
+        if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
+        await LoadAsync();
     }
 
-    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+    private async Task SearchAsync() { page = 1; await LoadAsync(); }
+    private async Task LoadAsync()
+    {
+        UpdateUrl();
+        loading = true;
+        try { result = await Api.SearchHorsesAsync(new SearchHorsesRequest { Query = query, SexCode = sexCode, Page = page, PageSize = pageSize }); }
+        finally { loading = false; }
+    }
+    private async Task GoAsync(int value) { page = value; await LoadAsync(); }
+    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/horses", new Dictionary<string, string?> { ["query"] = query, ["sex"] = sexCode, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
+    private void OpenHorse(string id) => Navigation.NavigateTo(HorseUrl(id));
+    private void OpenHorseFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenHorse(id); }
+    private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
 }

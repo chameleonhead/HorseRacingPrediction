@@ -1,0 +1,106 @@
+@page "/jobs"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+
+<div class="object-header">
+    <div><p class="eyebrow">運用</p><h1>収集ジョブ</h1><p class="hint">計画された収集処理の状態を確認します。</p></div>
+    <div class="header-actions"><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog">すべてのジョブを一時停止</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync">再開</FluentButton></div>
+</div>
+
+<FluentCard class="filter-card">
+    <div class="filter-grid">
+        <label>表示<select @bind="view"><option value="action">要対応</option><option value="running">処理中</option><option value="ready">待機中</option><option value="recent">最近完了</option><option value="all">すべて</option></select></label>
+        <FluentTextField Label="処理種別" @bind-Value="jobType" />
+        <FluentTextField Label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" />
+        <label>状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentJobStatus>()) { <option value="@value">@value</option> }</select></label>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton>
+    </div>
+</FluentCard>
+
+@if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
+else if (jobs.Count == 0) { <UiState Title="該当する収集ジョブはありません" Message="条件を変更してお試しください。" /> }
+else
+{
+    <div class="data-list" aria-label="収集ジョブ一覧">
+        @foreach (var job in jobs)
+        {
+            <article class="data-list-row selectable-row" tabindex="0" @onclick="() => OpenJob(job.JobId)" @onkeydown="e => OpenJobFromKey(e, job.JobId)">
+                <div class="object-primary"><a href="@JobUrl(job.JobId)" @onclick:stopPropagation>@DisplayJobType(job.JobType)</a><span class="hint">@job.DeduplicationKey</span></div>
+                <span class="badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span>
+                <div><span class="object-label">対象日</span>@(ExtractTargetDate(job.DeduplicationKey) ?? "未特定")</div>
+                <div><span class="object-label">優先度</span>@job.Priority</div>
+                <div><span class="object-label">更新</span><time>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</time></div>
+            </article>
+        }
+    </div>
+    @if (totalPages > 1) { <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="@(() => GoPageAsync(page - 1))">前へ</FluentButton><span>@($"{page} / {totalPages}")</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= totalPages)" OnClick="@(() => GoPageAsync(page + 1))">次へ</FluentButton></div> }
+}
+
+<FluentDialog Hidden="@(!showPauseDialog)" HiddenChanged="@(hidden => showPauseDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px, calc(100vw - 32px));">
+        <FluentDialogHeader ShowDismiss="true"><h2 id="pause-title">すべてのジョブを一時停止しますか</h2></FluentDialogHeader>
+        <FluentDialogBody>
+            <p>SQS本体とデッドレターキューを消去し、新しい配送を停止します。起動済みのジョブは完了まで進み、ReadyとPendingはDBに保持されます。</p>
+            @if (operationErrors.Count > 0) { <UiState Kind="error" Title="一時停止できませんでした" Message="@string.Join(' ', operationErrors)" /> }
+        </FluentDialogBody>
+        <FluentDialogFooter>
+                <FluentButton OnClick="@ClosePauseDialog">キャンセル</FluentButton>
+                <FluentButton Appearance="@Appearance.Accent" OnClick="@PauseAsync" Disabled="@operating">一時停止</FluentButton>
+        </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    private IReadOnlyList<AgentJobStatusReadModel> jobs = [];
+    private IReadOnlyList<AgentJobStatusReadModel> allJobs = [];
+    private string? jobType;
+    private string? targetDateText;
+    private string statusText = string.Empty;
+    private string view = "action";
+    private int page = 1;
+    private const int pageSize = 50;
+    private int totalPages;
+    private bool loading;
+    private bool operating;
+    private bool showPauseDialog;
+    private IReadOnlyList<string> operationErrors = [];
+
+    protected override Task OnInitializedAsync()
+    {
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        if (q.TryGetValue("view", out var v) && !string.IsNullOrWhiteSpace(v)) view = v!;
+        if (q.TryGetValue("page", out var p) && int.TryParse(p, out var n) && n > 0) page = n;
+        if (q.TryGetValue("jobType", out var t)) jobType = t;
+        if (q.TryGetValue("targetDate", out var d)) targetDateText = d;
+        if (q.TryGetValue("status", out var s)) statusText = s!;
+        return LoadAsync();
+    }
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try {
+            allJobs = await Api.GetJobsAsync(jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null) ?? [];
+            var filtered = view switch { "action" => allJobs.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter), "running" => allJobs.Where(x => x.Status == AgentJobStatus.Running), "ready" => allJobs.Where(x => x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency), "recent" => allJobs.Where(x => x.Status == AgentJobStatus.Succeeded), _ => allJobs };
+            if (!string.IsNullOrWhiteSpace(targetDateText))
+                filtered = filtered.Where(x => string.Equals(ExtractTargetDate(x.DeduplicationKey), targetDateText.Trim(), StringComparison.Ordinal));
+            totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count() / (double)pageSize)); page = Math.Min(page, totalPages); jobs = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(); UpdateUrl();
+        }
+        finally { loading = false; }
+    }
+    private void OpenPauseDialog() { operationErrors = []; showPauseDialog = true; }
+    private void ClosePauseDialog() => showPauseDialog = false;
+    private async Task PauseAsync() { operating = true; var result = await Api.PauseJobsAsync(); operating = false; if (result.Success) showPauseDialog = false; else operationErrors = result.Errors; }
+    private async Task ResumeAsync() { operating = true; await Api.ResumeJobsAsync(); operating = false; await LoadAsync(); }
+    private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
+    private void OpenJob(string id) => Navigation.NavigateTo(JobUrl(id));
+    private void OpenJobFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJob(id); }
+    private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
+    private static string DisplayJobType(string value) => value.Replace('-', ' ');
+    private static string StatusClass(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "ok", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "bad", AgentJobStatus.Running => "info", _ => "warn" };
+    private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
+    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jobs", new Dictionary<string, string?> { ["view"] = view, ["page"] = page.ToString(), ["jobType"] = jobType, ["targetDate"] = targetDateText, ["status"] = statusText }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private static string? ExtractTargetDate(string value)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d{4}-\d{2}-\d{2}");
+        return match.Success ? match.Value : null;
+    }
+}

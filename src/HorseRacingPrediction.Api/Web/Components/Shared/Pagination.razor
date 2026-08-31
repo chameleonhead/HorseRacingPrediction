@@ -1,9 +1,9 @@
 @if (TotalCount > 0)
 {
-    <nav class="toolbar pager" aria-label="ページ移動">
-        <button class="btn" disabled="@(Page <= 1)" @onclick="() => ChangeAsync(Page - 1)">前</button>
+    <nav class="action-bar pager" aria-label="ページ移動">
+        <button class="command-button" disabled="@(Page <= 1)" @onclick="() => ChangeAsync(Page - 1)">前</button>
         <span>@Page / @TotalPages ページ（@TotalCount 件）</span>
-        <button class="btn" disabled="@(Page >= TotalPages)" @onclick="() => ChangeAsync(Page + 1)">次</button>
+        <button class="command-button" disabled="@(Page >= TotalPages)" @onclick="() => ChangeAsync(Page + 1)">次</button>
     </nav>
 }
 

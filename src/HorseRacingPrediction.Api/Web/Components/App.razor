@@ -8,9 +8,12 @@
     <base href="/" />
     <title>競馬DB管理画面</title>
     <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
+    <FluentDialogProvider />
+    <FluentToastProvider />
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
 </body>

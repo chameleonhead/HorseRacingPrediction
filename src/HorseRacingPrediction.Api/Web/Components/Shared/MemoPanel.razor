@@ -1,6 +1,6 @@
 @inject AdminApiClient Api
 
-<section class="card">
+<section class="surface-card">
     <h3>メモ</h3>
 
     @if (loading)
@@ -25,9 +25,9 @@
                                 <label>種別<input @bind="editMemoType" /></label>
                                 <label>内容<textarea @bind="editContent" rows="3"></textarea></label>
                             </div>
-                            <div class="toolbar">
-                                <button class="btn primary small" @onclick="() => SaveEditAsync(memo.MemoId)">保存</button>
-                                <button class="btn small" @onclick="CancelEdit">キャンセル</button>
+                            <div class="action-bar">
+                                <button class="command-button command-button-primary command-button-small" @onclick="() => SaveEditAsync(memo.MemoId)">保存</button>
+                                <button class="command-button command-button-small" @onclick="CancelEdit">キャンセル</button>
                             </div>
                         }
                         else
@@ -44,17 +44,17 @@
                                 }
                             </div>
                             <p class="memo-content">@memo.Content</p>
-                            <div class="toolbar">
-                                <button class="btn small" @onclick="() => StartEdit(memo)">編集</button>
+                            <div class="action-bar">
+                                <button class="command-button command-button-small" @onclick="() => StartEdit(memo)">編集</button>
                                 @if (deleteArmedMemoId == memo.MemoId)
                                 {
                                     <span class="hint">本当に削除しますか？</span>
-                                    <button class="btn small" @onclick="() => DeleteAsync(memo.MemoId)">削除する</button>
-                                    <button class="btn small" @onclick="() => deleteArmedMemoId = null">キャンセル</button>
+                                    <button class="command-button command-button-small" @onclick="() => DeleteAsync(memo.MemoId)">削除する</button>
+                                    <button class="command-button command-button-small" @onclick="() => deleteArmedMemoId = null">キャンセル</button>
                                 }
                                 else
                                 {
-                                    <button class="btn small" @onclick="() => deleteArmedMemoId = memo.MemoId">削除</button>
+                                    <button class="command-button command-button-small" @onclick="() => deleteArmedMemoId = memo.MemoId">削除</button>
                                 }
                             </div>
                         }
@@ -67,8 +67,8 @@
             <label>種別<input @bind="newMemoType" placeholder="例: 展望, 注意点" /></label>
             <label>内容<textarea @bind="newContent" rows="3"></textarea></label>
         </div>
-        <div class="toolbar">
-            <button class="btn primary small" @onclick="AddAsync" disabled="@saving">メモを追加</button>
+        <div class="action-bar">
+            <button class="command-button command-button-primary command-button-small" @onclick="AddAsync" disabled="@saving">メモを追加</button>
         </div>
 
         @if (errors.Count > 0)

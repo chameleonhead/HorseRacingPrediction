@@ -76,7 +76,7 @@ public static class AdminEndpointExtensions
                     {{errorHtml}}
                     <label>ユーザー名<input name="username" value="user" autocomplete="username" required /></label>
                     <label>パスワード（APIキー）<input name="password" type="password" autocomplete="current-password" required autofocus /></label>
-                    <button class="btn primary" type="submit">ログイン</button>
+                    <button class="command-button command-button-primary" type="submit">ログイン</button>
                 </form>
             </body>
             </html>

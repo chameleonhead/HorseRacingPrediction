@@ -29,4 +29,5 @@ public sealed record RelationshipSummaryResponse(
     string DisplayName,
     string RelationshipName,
     int ParticipationCount,
-    DateOnly? LastParticipationDate);
+    DateOnly? LastParticipationDate,
+    decimal PrizeMoneyTotal = 0m);

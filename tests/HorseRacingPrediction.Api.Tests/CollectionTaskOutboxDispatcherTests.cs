@@ -37,6 +37,39 @@ public sealed class CollectionTaskOutboxDispatcherTests
         }
     }
 
+    [TestMethod]
+    public async Task DispatchOnceAsync_DoesNotSendWhileMaintenanceIsActive()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-dispatch-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var processingOptions = Options.Create(new AgentProcessingOptions { StateDirectory = directory });
+            var store = new ProcessingStateStore(processingOptions, NullLogger<ProcessingStateStore>.Instance);
+            var now = DateTimeOffset.UtcNow;
+            await store.ScheduleJobAsync("RaceCardCollection", "paused-task", "{}", now);
+            var queue = new RecordingQueue();
+            var maintenance = new CollectionMaintenanceState();
+            Assert.IsTrue(maintenance.TryBegin());
+            var dispatcher = new CollectionTaskOutboxDispatcher(
+                store,
+                queue,
+                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 10 }),
+                maintenance,
+                NullLogger<CollectionTaskOutboxDispatcher>.Instance);
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(0, queue.Notifications.Count);
+            var pending = await store.GetPendingCollectionTaskDispatchesAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
+            Assert.AreEqual(1, pending.Count);
+            Assert.AreEqual("paused-task", pending[0].Notification.DeduplicationKey);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private sealed class RecordingQueue : ICollectionTaskQueue
     {
         public List<CollectionTaskNotification> Notifications { get; } = [];

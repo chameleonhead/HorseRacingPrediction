@@ -1,4 +1,5 @@
 using HorseRacingPrediction.Collector.Scheduling;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -39,6 +40,7 @@ public sealed class AgentAcquisitionStatusStoreTests
             "horse-1",
             "ソールオリエンス",
             null,
+            "RaceCardCollection:20260517-tokyo-11",
             null,
             RaceDataCollectionState.Succeeded,
             null,
@@ -53,6 +55,7 @@ public sealed class AgentAcquisitionStatusStoreTests
             "横山武史",
             null,
             null,
+            null,
             RaceDataCollectionState.Failed,
             RaceDataCollectionErrorCode.ExternalRequestFailed,
             "remote request failed",
@@ -64,6 +67,7 @@ public sealed class AgentAcquisitionStatusStoreTests
             "API",
             "trainer-1",
             "手塚貴久",
+            null,
             null,
             null,
             RaceDataCollectionState.Succeeded,
@@ -82,6 +86,55 @@ public sealed class AgentAcquisitionStatusStoreTests
         Assert.AreEqual(AgentAcquisitionSubjectType.Jockey, result[1].SubjectType);
         Assert.AreEqual(RaceDataCollectionErrorCode.ExternalRequestFailed, result[1].ErrorCode);
         Assert.AreEqual(AgentAcquisitionSubjectType.Horse, result[2].SubjectType);
+        Assert.AreEqual("RaceCardCollection:20260517-tokyo-11", result[2].OriginJobId);
+    }
+
+    [TestMethod]
+    public async Task Constructor_CreatesAgentAcquisitionTableForExistingDatabase()
+    {
+        var databasePath = Path.Combine(_stateDirectory, "processing-jobs.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                CREATE TABLE jobs (
+                    job_id TEXT NOT NULL PRIMARY KEY, job_type TEXT NOT NULL,
+                    deduplication_key TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL,
+                    priority INTEGER NOT NULL, first_queued_at TEXT NOT NULL, available_at TEXT NOT NULL,
+                    started_at TEXT NULL, lease_expires_at TEXT NULL, attempt_count INTEGER NOT NULL,
+                    last_error TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var store = CreateStore();
+        var now = new DateTimeOffset(2026, 8, 30, 12, 0, 0, TimeSpan.Zero);
+        await store.UpsertAgentAcquisitionStatusAsync(
+            "Horse:EntityUpsert:既存DBテスト",
+            AgentAcquisitionSubjectType.Horse,
+            AgentAcquisitionOperationType.EntityUpsert,
+            "API",
+            "horse-existing-db",
+            "既存DBテスト",
+            null,
+            "RaceCardCollection:existing-db",
+            null,
+            RaceDataCollectionState.Succeeded,
+            null,
+            null,
+            now);
+
+        var result = await store.GetAgentAcquisitionStatusesAsync(
+            new DateOnly(2026, 8, 30),
+            new DateOnly(2026, 8, 30),
+            null,
+            null);
+
+        Assert.HasCount(1, result);
+        Assert.AreEqual("RaceCardCollection:existing-db", result[0].OriginJobId);
     }
 
     private ProcessingStateStore CreateStore()

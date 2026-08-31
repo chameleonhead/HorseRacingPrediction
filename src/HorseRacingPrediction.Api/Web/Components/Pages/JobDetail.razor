@@ -1,0 +1,124 @@
+@page "/jobs/{JobId}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@using System.Text.Json
+
+<nav class="breadcrumb" aria-label="パンくず"><a href="/jobs">収集ジョブ</a><span aria-hidden="true">/</span><span>詳細</span></nav>
+@if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
+else if (job is null) { <UiState Kind="error" Title="収集ジョブが見つかりません" Message="削除されたか、URLが正しくありません。" /> }
+else
+{
+    <div class="object-header"><div><p class="eyebrow">収集ジョブ</p><h1>@job.JobType</h1><p class="hint">@job.DeduplicationKey</p></div><span class="badge @StatusClass(job.Status)">@job.Status</span></div>
+    @if (!string.IsNullOrWhiteSpace(job.LastError)) { <section class="alert-panel" role="alert"><strong>最新の実行に失敗しました</strong><p>@job.LastError</p></section> }
+    <FluentCard><h2>基本情報</h2><dl class="detail-grid"><dt>状態</dt><dd>@job.Status</dd><dt>優先度</dt><dd>@job.Priority</dd><dt>試行回数</dt><dd>@job.AttemptCount</dd><dt>更新日時</dt><dd>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl></FluentCard>
+    <FluentCard><h2>関連</h2>
+        <div class="relationship-list">
+            @if (TargetRaceId is not null)
+            {
+                <div class="relationship-row"><span>対象レース</span><a href="@RaceUrl(TargetRaceId)">対象レースを見る</a><span class="hint">@TargetRaceId</span></div>
+            }
+            @if (TargetDate is not null)
+            {
+                <div class="relationship-row"><span>対象日</span><a href="@JobsByDateUrl(TargetDate)">同じ対象日の収集ジョブを見る</a><span class="hint">@TargetDate</span></div>
+            }
+            <div class="relationship-row"><span>診断</span><a href="#technical-details">技術情報を確認</a><span class="hint">Job ID、payload、error</span></div>
+        </div>
+    </FluentCard>
+    <FluentCard><h2>ジョブ関連図</h2>
+        <div class="job-graph-summary">
+            <div><span class="object-label">生成したジョブ</span><strong>@GeneratedChildren.Count</strong><span class="hint">生成元は完了を待ちません</span></div>
+            <div><span class="object-label">集約対象</span><strong>@AggregatedChildren.Count</strong><span class="hint">@AggregatedChildren.Count(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter) 件が要対応</span></div>
+        </div>
+        <div class="job-graph">
+            <section class="job-graph-section">
+                <h3>生成経路</h3>
+                @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.GeneratedBy)
+                {
+                    <div class="relationship-row"><span>生成元</span><a href="@JobUrl(job.ParentJob.JobId)">@DisplayJobType(job.ParentJob.JobType)</a><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></div>
+                }
+                else { <p class="hint">生成元ジョブはありません。</p> }
+                @foreach (var child in GeneratedChildren)
+                {
+                    <div class="relationship-row"><span>生成したジョブ</span><a href="@JobUrl(child.JobId)">@DisplayJobType(child.JobType)</a><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></div>
+                }
+            </section>
+            <section class="job-graph-section current-job-node">
+                <h3>現在のジョブ</h3>
+                <strong>@DisplayJobType(job.JobType)</strong>
+                <span class="hint">@job.DeduplicationKey</span>
+                <span class="badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span>
+            </section>
+            <section class="job-graph-section">
+                <h3>集約依存関係</h3>
+                @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.AggregatedBy)
+                {
+                    <div class="relationship-row"><span>集約元</span><a href="@JobUrl(job.ParentJob.JobId)">@DisplayJobType(job.ParentJob.JobType)</a><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></div>
+                }
+                @if (AggregatedChildren.Count == 0)
+                {
+                    <p class="hint">完了を待つ子ジョブはありません。</p>
+                }
+                @foreach (var child in AggregatedChildren)
+                {
+                    <div class="relationship-row"><span>集約対象</span><a href="@JobUrl(child.JobId)">@DisplayJobType(child.JobType)</a><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></div>
+                }
+                <p class="hint">集約対象がある親ジョブだけをリラン対象にします。子ジョブ単独のリランは表示しません。</p>
+            </section>
+        </div>
+    </FluentCard>
+    <FluentCard><h2>試行履歴</h2><details><summary>すべての試行を表示（@job.Attempts.Count 件）</summary><div class="attempt-list">@foreach (var attempt in job.Attempts) { <article><strong>試行 @attempt.AttemptNumber</strong><span class="badge @StatusClass(attempt.Status)">@StatusLabel(attempt.Status)</span><time>@attempt.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</time>@if (!string.IsNullOrWhiteSpace(attempt.Error)) { <pre>@attempt.Error</pre> }</article> }</div></details></FluentCard>
+    <FluentCard id="technical-details"><h2>技術情報</h2><details><summary>Job ID、payload、完全なエラーを表示</summary><dl class="detail-grid"><dt>Job ID</dt><dd><code>@job.JobId</code></dd><dt>JobType</dt><dd><code>@job.JobType</code></dd><dt>DeduplicationKey</dt><dd><code>@job.DeduplicationKey</code></dd><dt>AvailableAt</dt><dd>@job.AvailableAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd><dt>Lease</dt><dd>@job.LeaseExpiresAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl><pre class="payload">@job.Payload</pre>@if (!string.IsNullOrWhiteSpace(job.LastError)) { <pre class="payload">@job.LastError</pre> }</details></FluentCard>
+    @if (CanRerun)
+    { <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => showRerunDialog = true)">リラン</FluentButton> }
+    else if (job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter && job.ParentRelationType == JobRelationType.AggregatedBy)
+    { <p class="hint">このジョブは集約対象です。集約元ジョブから復旧してください。</p> }
+}
+
+<FluentDialog Hidden="@(!showRerunDialog || job is null)" HiddenChanged="@(hidden => showRerunDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="rerun-title" Style="width:min(520px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="rerun-title">この収集ジョブをリランしますか</h2></FluentDialogHeader>
+    <FluentDialogBody><p>親ジョブが必要な対象を再確認し、失敗した対象と前回未作成だった対象を投入します。成功済み・実行中・待機中の対象は維持します。</p><FluentTextArea Label="理由（任意）" @bind-Value="reason" /></FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showRerunDialog = false)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@RerunAsync">リラン</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    [Parameter] public string JobId { get; set; } = string.Empty;
+    private AgentJobDetailReadModel? job;
+    private bool loading = true;
+    private bool showRerunDialog;
+    private string? reason;
+    protected override async Task OnParametersSetAsync() { loading = true; job = await Api.GetJobAsync(JobId); loading = false; }
+    private IReadOnlyList<AgentRelatedJobReadModel> GeneratedChildren => job?.ChildJobs.Where(x => x.RelationType == JobRelationType.GeneratedBy).ToList() ?? [];
+    private IReadOnlyList<AgentRelatedJobReadModel> AggregatedChildren => job?.ChildJobs.Where(x => x.RelationType == JobRelationType.AggregatedBy).ToList() ?? [];
+    private string? TargetRaceId => TryGetPayloadValue("RaceId") ?? TryGetPayloadValue("RequestedByRaceId");
+    private string? TargetDate => TryGetPayloadValue("RaceDate") ?? TryGetPayloadValue("TargetDate") ?? ExtractTargetDate(job?.DeduplicationKey);
+    private bool CanRerun => job is not null
+        && job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter
+        && job.ParentRelationType != JobRelationType.AggregatedBy;
+    private async Task RerunAsync() { if (job is null) return; var result = await Api.RerunJobAsync(job.JobId, job.UpdatedAt, reason); if (result.Success) { showRerunDialog = false; job = await Api.GetJobAsync(job.JobId); } }
+    private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+    private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
+    private static string DisplayJobType(string value) => value.Replace('-', ' ');
+    private static string StatusClass(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "ok", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "bad", AgentJobStatus.Running => "info", _ => "warn" };
+    private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
+    private string? TryGetPayloadValue(string propertyName)
+    {
+        if (job is null || string.IsNullOrWhiteSpace(job.Payload)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(job.Payload);
+            if (document.RootElement.TryGetProperty(propertyName, out var value))
+                return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
+        }
+        catch (JsonException) { }
+
+        return null;
+    }
+
+    private static string? ExtractTargetDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d{4}-\d{2}-\d{2}");
+        return match.Success ? match.Value : null;
+    }
+}

@@ -3,16 +3,16 @@
 @inject AdminApiClient Api
 
 <h1>予想票詳細</h1>
-<p class="hint"><a href="predictions">← 予想票検索へ戻る</a></p>
+<p class="hint"><a href="/predictions">← 予想票検索へ戻る</a></p>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (prediction is null) { <p>PredictionTicketId「@PredictionTicketId」の予想票は見つかりませんでした。</p> }
 else
 {
-    <section class="card">
+    <section class="detail-card">
         <h2>@prediction.PredictionTicketId</h2>
         <dl class="meta">
-            <dt>RaceId</dt><dd><a href="@($"races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
+            <dt>RaceId</dt><dd><a href="@($"/races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
             <dt>予想者</dt><dd>@prediction.PredictorType / @prediction.PredictorId</dd>
             <dt>信頼度</dt><dd>@prediction.ConfidenceScore</dd>
             <dt>コメント</dt><dd>@prediction.SummaryComment</dd>
@@ -22,7 +22,7 @@ else
 
     @if (prediction.Marks.Count > 0)
     {
-        <section class="card">
+        <section class="detail-card">
             <h3>印</h3>
             <div class="mark-list">
                 @foreach (var m in prediction.Marks)
@@ -38,54 +38,9 @@ else
         </section>
     }
 
-    <section class="card">
-        <h3>データ訂正</h3>
-        <p class="hint">誤りのあった信頼度・コメントの訂正用です。理由の記録が残ります。予想票の新規作成はPredictorが自動で行うため、ここでは対象外です。</p>
-        <div class="form-grid">
-            <label>信頼度<input type="number" step="0.01" @bind="correctConfidenceScore" /></label>
-            <label>コメント<input @bind="correctSummaryComment" /></label>
-            <label>訂正理由<input @bind="correctReason" /></label>
-        </div>
-        <div class="toolbar">
-            @if (correctArmed)
-            {
-                <span class="hint">入力した内容で訂正しますか？</span>
-                <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button>
-                <button class="btn small" @onclick="() => correctArmed = false" disabled="@correcting">キャンセル</button>
-            }
-            else
-            {
-                <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button>
-            }
-        </div>
-        @if (correctErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
-        }
-    </section>
-
-    <section class="card">
-        <h3>取り下げ</h3>
-        <p class="hint">この予想票を取り下げます(元に戻せません)。</p>
-        <div class="form-grid">
-            <label>取り下げ理由<input @bind="withdrawReason" /></label>
-        </div>
-        <div class="toolbar">
-            @if (withdrawArmed)
-            {
-                <span class="hint">本当に取り下げますか？</span>
-                <button class="btn small" @onclick="WithdrawAsync" disabled="@withdrawing">取り下げる</button>
-                <button class="btn small" @onclick="() => withdrawArmed = false">キャンセル</button>
-            }
-            else
-            {
-                <button class="btn small" @onclick="() => withdrawArmed = true">取り下げ</button>
-            }
-        </div>
-        @if (withdrawErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in withdrawErrors) { <li>@e</li> }</ul>
-        }
+    <section class="detail-card">
+        <h3>予想票の操作</h3>
+        <p class="hint">予想票の編集・取り下げ操作は、予想業務の扱いを再整理するまで画面には表示しません。</p>
     </section>
 }
 
@@ -94,18 +49,6 @@ else
 
     private bool loading;
     private PredictionTicketResponse? prediction;
-
-    private decimal? correctConfidenceScore;
-    private string? correctSummaryComment;
-    private string? correctReason;
-    private bool correctArmed;
-    private bool correcting;
-    private IReadOnlyList<string> correctErrors = Array.Empty<string>();
-
-    private string? withdrawReason;
-    private bool withdrawArmed;
-    private bool withdrawing;
-    private IReadOnlyList<string> withdrawErrors = Array.Empty<string>();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -122,44 +65,4 @@ else
         }
     }
 
-    private async Task CorrectAsync()
-    {
-        correcting = true;
-        try
-        {
-            var result = await Api.CorrectPredictionMetadataAsync(PredictionTicketId, new CorrectPredictionMetadataRequest(
-                correctConfidenceScore, correctSummaryComment, correctReason));
-            correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
-            if (result.Success)
-            {
-                correctConfidenceScore = null; correctSummaryComment = null; correctReason = null;
-                await LoadAsync();
-            }
-            correctArmed = false;
-        }
-        finally
-        {
-            correcting = false;
-        }
-    }
-
-    private async Task WithdrawAsync()
-    {
-        withdrawing = true;
-        try
-        {
-            var result = await Api.WithdrawPredictionAsync(PredictionTicketId, new WithdrawPredictionTicketRequest(withdrawReason));
-            withdrawErrors = result.Success ? Array.Empty<string>() : result.Errors;
-            withdrawArmed = false;
-            if (result.Success)
-            {
-                withdrawReason = null;
-                await LoadAsync();
-            }
-        }
-        finally
-        {
-            withdrawing = false;
-        }
-    }
 }

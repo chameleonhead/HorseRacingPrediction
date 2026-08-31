@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 
 <h1>レースの管理情報</h1>
-<p class="hint"><a href="@($"races/{Uri.EscapeDataString(RaceId)}")">← レース詳細へ戻る</a></p>
+<p class="hint"><a href="@($"/races/{Uri.EscapeDataString(RaceId)}")">← レース詳細へ戻る</a></p>
 
 @if (loading)
 {
@@ -16,7 +16,7 @@ else if (race is null)
 }
 else
 {
-    <section class="card">
+    <section class="detail-card">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
@@ -27,7 +27,7 @@ else
         </dl>
     </section>
 
-    <section class="card">
+    <section class="detail-card">
         <h3>データ補正</h3>
         <p class="hint">誤登録されたデータの補正用です。理由は任意です。</p>
         <div class="form-grid">
@@ -40,9 +40,9 @@ else
             <label>回り<input @bind="correctDirectionCode" /></label>
             <label>補正理由<input @bind="correctReason" /></label>
         </div>
-        <div class="toolbar">
-            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">補正を保存する</button>
-            <button class="btn small" @onclick="Back">キャンセル</button>
+        <div class="action-row">
+            <button class="app-button primary small" @onclick="CorrectAsync" disabled="@correcting">補正を保存する</button>
+            <button class="app-button small" @onclick="Back">キャンセル</button>
         </div>
         @if (correctErrors.Count > 0)
         {
@@ -93,7 +93,7 @@ else
         }
     }
 
-    private void Back() => Nav.NavigateTo($"races/{Uri.EscapeDataString(RaceId)}");
+    private void Back() => Nav.NavigateTo($"/races/{Uri.EscapeDataString(RaceId)}");
 
     private async Task CorrectAsync()
     {
