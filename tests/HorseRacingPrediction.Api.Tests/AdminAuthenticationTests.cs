@@ -44,6 +44,21 @@ public class AdminAuthenticationTests
     }
 
     [TestMethod]
+    [DataRow("/owners")]
+    [DataRow("/jobs")]
+    [DataRow("/collection-tasks")]
+    [DataRow("/acquisition-statuses")]
+    [DataRow("/_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css")]
+    public async Task AdminUiRoutes_WithoutApiKey_AreNotBlockedByApiKeyProtection(string path)
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync(path);
+
+        Assert.AreNotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [TestMethod]
     public async Task PostLogin_WithWrongPassword_DoesNotIssueCookie()
     {
         using var client = CreateClient();

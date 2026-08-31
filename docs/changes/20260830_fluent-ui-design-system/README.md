@@ -604,3 +604,19 @@ Acceptance criteria のうち、レース詳細の単勝・複勝オッズ表示
    - 対象: すべてのサブタスク結果と作業ツリー。
    - 完了条件: 生成物を除去し、`dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`、関連テスト、`dotnet test HorseRacingPrediction.sln --no-build -v:minimal`、`git diff --check`、`git status --short` を通す。問題がなければ目的別にコミットし、本 change record の Status を `Implemented` にできるか判断する。
    - 競合注意: SQLite `eventstore.db-shm` / `eventstore.db-wal` など実行時生成物は、サーバー停止後にワークスペース内の該当ファイルだけを確認して削除する。
+
+## Implementation update - 2026-08-31 admin UI route access pass
+
+API 管理画面の実ブラウザー確認で、API key middleware が一部の管理 UI route と Fluent UI 静的資産を匿名アクセス対象として扱わず、cookie 認証画面へ到達する前に redirect loop を起こし得る不整合を修正した。
+
+- `src/HorseRacingPrediction.Api/Security/ApiKeyApplicationBuilderExtensions.cs` の管理 UI route 免除対象へ `/owners`、`/jobs`、`/collection-tasks`、`/acquisition-statuses` を追加した。
+- Fluent UI Blazor の静的資産を配信する `/_content` を API key middleware の匿名アクセス対象へ追加した。
+- `tests/HorseRacingPrediction.Api.Tests/AdminAuthenticationTests.cs` に、上記 route / 静的資産が API key 未指定でも middleware によって `401 Unauthorized` にされないことを固定する回帰テストを追加した。
+- ローカル API 起動時に生成された `src/HorseRacingPrediction.Api/eventstore.db-shm` と `src/HorseRacingPrediction.Api/eventstore.db-wal` は実行時生成物であり、コミット対象に含めない。
+
+追加検証:
+
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、93 件。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 574 件。
