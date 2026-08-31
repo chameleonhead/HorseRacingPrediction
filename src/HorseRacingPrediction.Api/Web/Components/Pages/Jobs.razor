@@ -3,37 +3,31 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<div class="object-header">
-    <div><p class="eyebrow">運用</p><h1>収集ジョブ</h1><p class="hint">計画された収集処理の状態を確認します。</p></div>
-    <div class="header-actions"><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog">すべてのジョブを一時停止</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync">再開</FluentButton></div>
-</div>
+<RaceOpsPageHeader Section="運用" Title="収集ジョブ" Description="計画された収集処理の状態を確認します。">
+    <Actions>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog">すべてのジョブを一時停止</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@operating">再開</FluentButton>
+    </Actions>
+</RaceOpsPageHeader>
 
-<FluentCard class="filter-card">
-    <div class="filter-grid">
-        <label>表示<select @bind="view"><option value="action">要対応</option><option value="running">処理中</option><option value="ready">待機中</option><option value="recent">最近完了</option><option value="all">すべて</option></select></label>
-        <FluentTextField Label="処理種別" @bind-Value="jobType" />
-        <FluentTextField Label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" />
-        <label>状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentJobStatus>()) { <option value="@value">@value</option> }</select></label>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton>
-    </div>
-</FluentCard>
+<FluentGrid class="filter-bar" Spacing="3">
+    <FluentGridItem xs="12" sm="6" md="3"><FluentSelect TOption="FilterOption" Label="表示" Items="@views" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="view" /></FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="3"><FluentTextField Label="処理種別" @bind-Value="jobType" /></FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="3"><FluentTextField Label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" /></FluentGridItem>
+    <FluentGridItem xs="12" sm="6" md="2"><FluentSelect TOption="FilterOption" Label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></FluentGridItem>
+    <FluentGridItem xs="12" md="1" class="filter-action"><FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton></FluentGridItem>
+</FluentGrid>
 
 @if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
 else if (jobs.Count == 0) { <UiState Title="該当する収集ジョブはありません" Message="条件を変更してお試しください。" /> }
 else
 {
-    <div class="data-list" aria-label="収集ジョブ一覧">
+    <RaceOpsObjectList Label="収集ジョブ一覧">
         @foreach (var job in jobs)
         {
-            <article class="data-list-row selectable-row" tabindex="0" @onclick="() => OpenJob(job.JobId)" @onkeydown="e => OpenJobFromKey(e, job.JobId)">
-                <div class="object-primary"><a href="@JobUrl(job.JobId)" @onclick:stopPropagation>@DisplayJobType(job.JobType)</a><span class="hint">@job.DeduplicationKey</span></div>
-                <span class="badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span>
-                <div><span class="object-label">対象日</span>@(ExtractTargetDate(job.DeduplicationKey) ?? "未特定")</div>
-                <div><span class="object-label">優先度</span>@job.Priority</div>
-                <div><span class="object-label">更新</span><time>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</time></div>
-            </article>
+            <RaceOpsObjectListItem Href="@JobUrl(job.JobId)" Title="@DisplayJobType(job.JobType)" Description="@DisplayTarget(job)" Status="@StatusLabel(job.Status)" StatusTone="@StatusTone(job.Status)" Metadata="@DisplayMetadata(job)" />
         }
-    </div>
+    </RaceOpsObjectList>
     @if (totalPages > 1) { <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="@(() => GoPageAsync(page - 1))">前へ</FluentButton><span>@($"{page} / {totalPages}")</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= totalPages)" OnClick="@(() => GoPageAsync(page + 1))">次へ</FluentButton></div> }
 }
 
@@ -56,6 +50,10 @@ else
     private string? targetDateText;
     private string statusText = string.Empty;
     private string view = "action";
+    private static readonly IReadOnlyList<FilterOption> views = [
+        new("action", "要対応"), new("running", "処理中"), new("ready", "待機中"), new("recent", "最近完了"), new("all", "すべて")];
+    private static readonly IReadOnlyList<FilterOption> statusFilters = [
+        new("", "すべて"), .. Enum.GetValues<AgentJobStatus>().Select(x => new FilterOption(x.ToString(), StatusLabel(x)))];
     private int page = 1;
     private const int pageSize = 50;
     private int totalPages;
@@ -74,6 +72,12 @@ else
         if (q.TryGetValue("status", out var s)) statusText = s!;
         return LoadAsync();
     }
+    private async Task SearchAsync()
+    {
+        page = 1;
+        await LoadAsync();
+    }
+
     private async Task LoadAsync()
     {
         loading = true;
@@ -91,11 +95,11 @@ else
     private async Task PauseAsync() { operating = true; var result = await Api.PauseJobsAsync(); operating = false; if (result.Success) showPauseDialog = false; else operationErrors = result.Errors; }
     private async Task ResumeAsync() { operating = true; await Api.ResumeJobsAsync(); operating = false; await LoadAsync(); }
     private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
-    private void OpenJob(string id) => Navigation.NavigateTo(JobUrl(id));
-    private void OpenJobFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJob(id); }
     private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
-    private static string DisplayJobType(string value) => value.Replace('-', ' ');
-    private static string StatusClass(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "ok", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "bad", AgentJobStatus.Running => "info", _ => "warn" };
+    private static string DisplayJobType(string value) => value switch { "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
+    private static string DisplayTarget(AgentJobStatusReadModel job) => ExtractTargetDate(job.DeduplicationKey) is { } targetDate ? $"対象日 {targetDate}" : "対象は詳細で確認";
+    private static string DisplayMetadata(AgentJobStatusReadModel job) => $"更新 {job.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm} ・ 試行 {job.AttemptCount} 回";
+    private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", _ => "warning" };
     private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
     private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jobs", new Dictionary<string, string?> { ["view"] = view, ["page"] = page.ToString(), ["jobType"] = jobType, ["targetDate"] = targetDateText, ["status"] = statusText }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
     private void NavigateIfChanged(string uri)
@@ -108,4 +112,6 @@ else
         var match = System.Text.RegularExpressions.Regex.Match(value, @"\d{4}-\d{2}-\d{2}");
         return match.Success ? match.Value : null;
     }
+
+    private sealed record FilterOption(string Value, string Label);
 }

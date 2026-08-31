@@ -683,3 +683,47 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `git diff --check`: 成功。改行コード変換の通知のみ。
 - 最終差分確認時の再ビルドは、既に起動している `HorseRacingPrediction.Api` と Visual Studio が出力 DLL を保持していたため失敗した。Razor 変更を含む直前の API ビルドは成功しており、その後の変更は CSS と文書のみである。利用中サービスを停止しないため、このチェックポイントではプロセスを終了していない。
 - 利用中プロセス停止後の再検証: `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal` は成功、警告 0。`dotnet test HorseRacingPrediction.sln --no-build -v:minimal` は成功、全 577 件。テストが生成した `eventstore.db-shm` / `eventstore.db-wal` は未追跡の実行時生成物であることを確認して除去した。
+
+## Proposed correction - 2026-09-01 custom CSS reset and component composition
+
+実装画面と承認済み `mocks/jobs.html` を同一デスクトップ幅のスクリーンショットで比較した。実装は、検索領域が不必要に高く、一覧行で処理種別の技術名・DeduplicationKey が主ラベルとなり、状態・対象・更新の視線順が分断されている。また、独自 CSS が Fluent の標準 Button / Field / Card の寸法と余白を上書きしており、モックとも Fluent UI とも異なる見た目になっている。
+
+### Proposed implementation
+
+1. `wwwroot/app.css` の既存の汎用 UI 規則を削除する。具体的には独自 Button、input、card、badge、dialog、form、table、navigation の色・枠線・角丸・影の定義を廃止する。ログイン画面とドメイン固有の行レイアウトだけを別ファイルへ残す。
+2. Fluent UI Blazor の `FluentLayout` / `FluentHeader` / `FluentBodyContent` / `FluentNavMenu`、`FluentStack` / `FluentGrid`、`FluentCard`、`FluentButton`、`FluentTextField` / `FluentSelect` / `FluentDatePicker`、`FluentMessageBar`、`FluentDialog` を標準のまま使う。独自 CSS でこれらの視覚仕様を再定義しない。
+3. 大きな page component を API 呼び出しと URL 同期だけを担う container に分け、`Shared/DesignSystem/` に表示専用の semantic component を置く。初期対象は `RaceOpsPageHeader`、`RaceOpsFilterBar`、`RaceOpsStatusBadge`、`RaceOpsObjectList`、`RaceOpsObjectListItem`、`RaceOpsEmptyState`、`RaceOpsRelationshipList`、`RaceOpsTechnicalDetails` とする。各 component は domain API を直接呼ばず、値と callback を parameter で受ける。
+4. `/jobs` を先行実装し、モックの情報順（処理名・対象 → 状態 → 更新 → 詳細）と、短い 1 行フィルター、カードではない全幅の一覧行に合わせる。技術名と DeduplicationKey は詳細の technical disclosure へ戻す。その後、同じ一覧・詳細・編集 pattern をレース、馬、騎手、調教師、馬主、予想票、データ取得状況へ展開する。
+5. モックとの比較は 1440 px desktop、720 px mobile、320 px mobile で行う。通常状態、loading、empty、error、dialog を確認し、変更セットへスクリーンショット差分と結果を記録する。
+
+### Component composition rationale
+
+- Microsoft Learn は page component を `Pages`、再利用 component を `Shared` または用途別フォルダーに置くことを案内している。したがって route と API 呼び出しを page に、繰り返す表示を `Shared/DesignSystem` に分離する。
+- Fluent UI Blazor の公式 demo は `FluentLayout`、`FluentHeader`、`FluentBodyContent`、navigation component を app shell に使い、`FluentGrid` を responsive layout に使う。app shell と表面コンポーネントを手書き CSS で再実装しない。
+- Fluent UI Blazor は provider を main layout へ配置する方式を案内している。Dialog、Toast、Tooltip、MessageBar、Menu を同じ layout root にまとめ、page 内に provider を重複配置しない。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: スクリーンショット比較、CSS reset、コンポーネント分割方針、受け入れ確認方法を追加する。
+- `docs/design-guidelines.md`: 承認後、各 semantic component の責務と、page が API 呼び出し以外の汎用 UI を持たない規則を正本へ追記する。
+
+### Acceptance criteria
+
+- `/jobs` はモックと同じ情報順・一覧密度を持ち、処理種別の英語 enum と DeduplicationKey を一覧へ表示しない。
+- 標準 Button / Field / Card / Dialog / MessageBar は独自の見た目 CSS で上書きされない。
+- 共有 component は API client に依存せず、page container が取得・操作・URL 同期を担う。
+- 1440 px、720 px、320 px で主要操作と一覧から詳細への導線が崩れない。
+
+## Implementation checkpoint - 2026-09-01 jobs composition
+
+- `wwwroot/app.css` を削除して再作成し、Fluent component の色、角丸、影、入力、Button を上書きする規則を廃止した。新しい CSS は navigation、responsive shell、一覧行、関係・履歴・競走情報などのドメイン配置だけを持つ。
+- `Shared/DesignSystem/` に page header、状態ラベル、オブジェクト一覧、オブジェクト一覧行を追加した。これらは API client を参照せず、表示値だけを parameter で受け取る。
+- `/jobs` を FluentGrid / FluentSelect / FluentTextField / FluentButton と上記 component へ移行した。処理種別の既知値を日本語の主ラベルへ変換し、DeduplicationKey を一覧から除去した。行には対象、状態、更新日時、試行回数、詳細導線を同じ順序で表示する。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。
+
+残作業: 同じ design-system component をレース、馬、騎手、調教師、馬主、予想票、データ取得状況の一覧・詳細・編集へ展開し、指定 viewport の画面比較を記録する。

@@ -1,0 +1,21 @@
+<FluentButton Appearance="@Appearance.Stealth" Href="@Href" class="object-list-item">
+    <span class="object-list-main">
+        <strong>@Title</strong>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <span>@Description</span>
+        }
+    </span>
+    <RaceOpsStatusBadge Label="@Status" Tone="@StatusTone" />
+    <span class="object-list-meta">@Metadata</span>
+    <span class="object-list-affordance">詳細</span>
+</FluentButton>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Description { get; set; }
+    [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;
+    [Parameter] public string StatusTone { get; set; } = "neutral";
+    [Parameter, EditorRequired] public string Metadata { get; set; } = string.Empty;
+}

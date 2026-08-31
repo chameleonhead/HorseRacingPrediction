@@ -1,0 +1,26 @@
+<header class="page-header">
+    <div>
+        @if (!string.IsNullOrWhiteSpace(Section))
+        {
+            <p class="page-header-section">@Section</p>
+        }
+        <h1>@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <p class="page-header-description">@Description</p>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="8" VerticalAlignment="@VerticalAlignment.Center" class="page-header-actions">
+            @Actions
+        </FluentStack>
+    }
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Section { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}
