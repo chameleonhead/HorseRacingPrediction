@@ -737,3 +737,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+
+## Handoff - 2026-09-01
+
+作業途中の再開情報は [HANDOFF.md](HANDOFF.md) に集約した。全体仕様の再掲はせず、実装済み範囲、未完了範囲、次の作業順、検証上の注意だけを記録している。
