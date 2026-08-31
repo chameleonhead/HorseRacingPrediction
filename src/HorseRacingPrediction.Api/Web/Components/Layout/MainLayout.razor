@@ -4,7 +4,7 @@
 @inject NavigationManager Navigation
 
 <div class="page">
-    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" aria-label="メニュー" @onclick="() => navOpen = !navOpen"><span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>メニュー</span></button>
+    <FluentButton class="mobile-menu-button" Appearance="@Appearance.Stealth" aria-expanded="@navOpen" aria-label="メニュー" OnClick="() => navOpen = !navOpen"><span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>メニュー</span></FluentButton>
     @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
     <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
@@ -12,7 +12,7 @@
         </div>
         <NavMenu />
         <form method="post" action="/logout" class="logout-form">
-            <button class="command-button command-button-small" type="submit">ログアウト</button>
+            <FluentButton Appearance="@Appearance.Outline" Type="@ButtonType.Submit">ログアウト</FluentButton>
         </form>
     </aside>
     <main class="content">
@@ -20,7 +20,7 @@
             <ErrorBoundary>
                 <ChildContent>@Body</ChildContent>
                 <ErrorContent Context="exception">
-                    <section class="ui-state ui-state-error" role="alert"><strong>画面を読み込めませんでした</strong><span>通信状態を確認して、もう一度お試しください。</span><a class="command-button" href="">再読み込み</a><details><summary>技術情報</summary><code>@exception.Message</code></details></section>
+                    <FluentCard class="ui-state ui-state-error" role="alert"><strong>画面を読み込めませんでした</strong><span>通信状態を確認して、もう一度お試しください。</span><FluentButton Appearance="@Appearance.Outline" Href="">再読み込み</FluentButton><details><summary>技術情報</summary><code>@exception.Message</code></details></FluentCard>
                 </ErrorContent>
             </ErrorBoundary>
         </article>

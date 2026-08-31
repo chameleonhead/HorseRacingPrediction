@@ -1,7 +1,8 @@
-<section class="ui-state @CssClass" role="@Role" aria-live="polite" aria-busy="@(Kind == "loading")">
+<FluentCard class="@($"ui-state {CssClass}")" role="@Role" aria-live="polite" aria-busy="@(Kind == "loading")">
+    @if (Kind == "loading") { <FluentProgressRing /> }
     <strong>@Title</strong>
     @if (!string.IsNullOrWhiteSpace(Message)) { <span>@Message</span> }
-</section>
+</FluentCard>
 
 @code {
     [Parameter] public string Kind { get; set; } = "empty";

@@ -658,3 +658,28 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - HTTP 確認: 未認証 `GET /` は `/login?ReturnUrl=%2F` へ redirect、ログイン画面は `login-card` / `login-button` を含み旧 `command-button` を含まない、`POST /login` with `ReturnUrl=/` は `/races` へ redirect、認証後 `/races` は 200 かつ共通エラー表示なし。
 - HTTP 確認: `/races?from=2026-08-01&to=2026-08-31&page=1`、`/jobs`、`/owners`、`/acquisition-statuses`、`/horses`、`/jockeys`、`/trainers`、`/predictions` はすべて 200、共通エラー表示なし。
+
+## Implementation correction - 2026-09-01 Fluent UI foundation alignment
+
+利用者から、実装済み画面が承認済みモックと比べて依然として手書き UI に見えるとの指摘を受け、実装を再監査した。`Microsoft.FluentUI.AspNetCore.Components` の参照、Dialog / Toast provider、一部の入力・ボタンは導入済みだった一方、テーマ、アプリシェル、共通状態表示、ページャー、旧来の操作クラスには導入漏れがあった。
+
+今回の是正では、モックの情報設計（左ナビゲーション、最大幅の本文、一覧の行レイアウト、薄い面コンテナ、緑のアクセント）を維持しながら、Fluent UI のライトテーマとアクセント色をアプリ全体へ適用する。コンポーネント標準で表せる操作・状態は `FluentButton`、`FluentCard`、`FluentProgressRing`、`FluentMessageBar` へ集約し、ページ固有 CSS は一覧行・関係・競走情報などのドメイン配置だけに限定する。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: Fluent UI 導入漏れの調査結果、是正方針、検証結果を追記する。この変更セットは実装とモックの対応関係の記録として維持する。
+- `docs/design-guidelines.md`: Fluent UI を標準コンポーネントに優先適用し、独自 CSS を OOUI の配置補助に限る規則を明文化する。デザインシステムの正本であるため、実装と同じコミットで更新する。
+
+実装結果:
+
+- `App.razor` で `FluentDesignTheme`（light / `#0F6B52`）が全管理画面を包むようにし、Dialog / Toast provider と同じテーマコンテキストで動作するようにした。
+- `MainLayout.razor`、`UiState.razor`、`Pagination.razor` を Fluent Button / Card / ProgressRing に移行した。既存ページが利用する共通状態とページングも同じ表現になる。
+- `app.css` の背景、境界、文字、状態、選択行、ナビゲーションを Fluent token 参照へ切り替え、濃いグラデーションと通常カードの影を廃止した。レース・ジョブを含む一覧の情報順とモックのレイアウトは保持する。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。
+- 最終差分確認時の再ビルドは、既に起動している `HorseRacingPrediction.Api` と Visual Studio が出力 DLL を保持していたため失敗した。Razor 変更を含む直前の API ビルドは成功しており、その後の変更は CSS と文書のみである。利用中サービスを停止しないため、このチェックポイントではプロセスを終了していない。
+- 利用中プロセス停止後の再検証: `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal` は成功、警告 0。`dotnet test HorseRacingPrediction.sln --no-build -v:minimal` は成功、全 577 件。テストが生成した `eventstore.db-shm` / `eventstore.db-wal` は未追跡の実行時生成物であることを確認して除去した。

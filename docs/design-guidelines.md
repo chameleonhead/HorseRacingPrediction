@@ -7,6 +7,7 @@
 ## Principles
 
 - Fluent UI Blazor を visual foundation と interaction primitive に使う。独自の Button、Field、palette を重ねて第二のデザインシステムを作らない。
+- アプリ起動時に `FluentDesignTheme` を配置し、ライトテーマと RaceOps の accent を一箇所で設定する。共通の loading、empty、error、ページ移動、確認操作も Fluent component を使う。独自 CSS は Fluent component の見た目を再現せず、OOUI の行・関係・ドメイン情報の配置だけを担う。
 - OOUI を composition model とし、画面を object、relationship、attribute、object-scoped action から組み立てる。
 - 同じ object はどの画面でも同じ主ラベル、状態、詳細 URL を持つ。絵文字は使用せず、必要な場合だけ Fluent システムアイコンを補助的に使う。
 - 詳細画面は「戻るリンク → 種別・状態の補助見出し → オブジェクト名の主見出し → 基本情報 → 関連 → 履歴・管理情報」の順を基本とし、戻るリンクをカード内や見出し横へ移動しない。主見出しに「馬」「騎手」などの種別名だけを表示しない。利用者向けの関係セクション見出しには「関連」を使う。

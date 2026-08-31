@@ -12,9 +12,11 @@
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
-    <FluentDialogProvider />
-    <FluentToastProvider />
-    <Routes @rendermode="InteractiveServer" />
+    <FluentDesignTheme Mode="@DesignThemeModes.Light" CustomColor="#0F6B52" StorageName="raceops-theme">
+        <FluentDialogProvider />
+        <FluentToastProvider />
+        <Routes @rendermode="InteractiveServer" />
+    </FluentDesignTheme>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>
