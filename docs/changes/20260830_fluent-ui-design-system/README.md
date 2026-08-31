@@ -749,3 +749,16 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
 - Browser viewport / DOM 計測: 1440 px、720 px、320 px で `documentElement.scrollWidth <= innerWidth`。320 px で収集ジョブ一覧と一時停止確認 dialog の accessible name、説明、操作を確認した。
+
+## WBS - 2026-09-01
+
+| ID | 作業 | 状態 | 実施主体 | 完了条件 |
+| --- | --- | --- | --- | --- |
+| W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
+| W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
+| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 未着手 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
+| W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
+| W5 | visual / responsive / accessibility 回帰 | 未着手 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
+| W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
+
+実行方針: W3 と W4 は画面・ファイルが重ならない単位に分け、軽量モデルのサブエージェントへ委譲する。root は各 checkpoint の設計整合性、統合テスト、browser 回帰だけを担当し、サブエージェントには対象 page・共有 contract・検証条件だけを渡す。
