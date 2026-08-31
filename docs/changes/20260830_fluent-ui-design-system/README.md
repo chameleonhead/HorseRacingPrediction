@@ -579,3 +579,28 @@ Acceptance criteria のうち、レース詳細の単勝・複勝オッズ表示
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 569 件。
 - `git diff --check`: 成功。`src/HorseRacingPrediction.Api/wwwroot/app.css` の CRLF 変換警告のみ。
+
+## Subtask dispatch - 2026-08-31
+
+実装完了判定前の残タスクを、競合を避けるため次の単位へ分割して投げる。各サブタスクは、修正した場合に本 change record へ変更箇所、検証結果、残課題を追記し、検証済みの一目的単位でコミットする。
+
+1. **API / ジョブ状態モデル最終監査**
+   - 担当候補: `api_route_job_final_audit`
+   - 対象: `src/HorseRacingPrediction.Api/Security`、`src/HorseRacingPrediction.Api/Web/Components/Pages/*Job*`、`src/HorseRacingPrediction.CollectionOperations/Scheduling`、関連 API / Collector テスト。
+   - 完了条件: 管理 UI route が API key middleware で阻害されないこと、旧 `/collection-tasks` が canonical `/jobs` へ誘導されること、停止・再開・リラン・再取得・生成関係・集約依存関係が本 change record と一致すること、Collector が Web / ローカル状態ストアを持たない service-only 境界であることを確認またはテストで固定する。
+   - 競合注意: 現時点で `ApiKeyApplicationBuilderExtensions.cs` と `AdminAuthenticationTests.cs` に未コミット差分があるため、先に `git diff` を確認し、同じ箇所を変更する場合は root 側の差分を前提にする。
+2. **UI 受け入れ・レイアウト監査**
+   - 担当候補: `ui_acceptance_final_audit`
+   - 対象: `src/HorseRacingPrediction.Api/Web/Components`、`src/HorseRacingPrediction.Api/wwwroot/app.css`、可能ならローカル API の実ブラウザー確認。
+   - 完了条件: Fluent UI / 共通 wrapper / 共通 CSS 文法に反する旧 `.card` / `.toolbar` / `.btn` / `.input` 依存が主要画面に残らないこと、一覧・詳細・編集・モーダル・関連リスト・バッジ・戻る導線が統一されていること、絵文字とブラウザー標準 `alert()` / `confirm()` を使用していないこと、代表画面で横スクロール崩れがないことを確認する。
+   - 競合注意: API route 修正の検証でローカル API が起動している場合があるため、bin / obj ロックを避け、必要なら一時出力先 build を使う。
+3. **文書整合・正本同期監査**
+   - 担当候補: `docs_acceptance_final_sync`
+   - 対象: `docs/admin-ui-design.md`、`docs/design-guidelines.md`、`docs/collector-design.md`、`docs/admin-ui-implementation-audit.md`、本 change record。
+   - 完了条件: 旧 Collector UI、旧 `CollectionTasks.razor`、独立した収集対象日画面、予想票編集、曖昧な親子ジョブ表現など、現在方針と矛盾する記述が残らないこと。重複するデザイン規則は `docs/design-guidelines.md` を正本に集約し、本 change record に変更箇所を記録する。
+   - 競合注意: 実装修正が発生した場合は、文書だけで完結するコミットと混ぜず、実装担当の検証結果を待って同期する。
+4. **最終検証・コミット整理**
+   - 担当候補: `final_integration_verification`
+   - 対象: すべてのサブタスク結果と作業ツリー。
+   - 完了条件: 生成物を除去し、`dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`、関連テスト、`dotnet test HorseRacingPrediction.sln --no-build -v:minimal`、`git diff --check`、`git status --short` を通す。問題がなければ目的別にコミットし、本 change record の Status を `Implemented` にできるか判断する。
+   - 競合注意: SQLite `eventstore.db-shm` / `eventstore.db-wal` など実行時生成物は、サーバー停止後にワークスペース内の該当ファイルだけを確認して削除する。
