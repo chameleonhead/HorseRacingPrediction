@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-08-30
@@ -756,7 +756,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | --- | --- | --- | --- | --- |
 | W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
-| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 設計承認待ち | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
+| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 進行中 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
 | W5 | visual / responsive / accessibility 回帰 | 未着手 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
@@ -783,3 +783,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - 馬・騎手・調教師・馬主・予想票の一覧に意味のない status badge を追加しない。
 - 状態を持つ収集ジョブ・取得状況の一覧は、日本語の status と色以外の手掛かりを維持する。
 - 行内に別 URL の関係リンクが必要なレースなどは、nested anchor を作らない。
+
+### Approval
+
+2026-09-01 に、利用者がこの condensed object item contract を承認した。

@@ -6,7 +6,10 @@
             <span>@Description</span>
         }
     </span>
-    <RaceOpsStatusBadge Label="@Status" Tone="@StatusTone" />
+    @if (!string.IsNullOrWhiteSpace(Status))
+    {
+        <RaceOpsStatusBadge Label="@Status" Tone="@StatusTone" />
+    }
     <span class="object-list-meta">@Metadata</span>
     <span class="object-list-affordance">詳細</span>
 </a>
@@ -15,7 +18,7 @@
     [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? Description { get; set; }
-    [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;
+    [Parameter] public string? Status { get; set; }
     [Parameter] public string StatusTone { get; set; } = "neutral";
     [Parameter, EditorRequired] public string Metadata { get; set; } = string.Empty;
 }
