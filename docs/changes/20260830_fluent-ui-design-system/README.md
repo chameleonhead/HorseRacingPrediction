@@ -530,6 +530,30 @@ Acceptance criteria のうち、レース詳細の単勝・複勝オッズ表示
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 569 件。
 - `git diff --check`: 成功。作業ツリー上の複数ファイルで CRLF 変換警告のみ。
 
+## Implementation update - 2026-08-31 checkpoint audit
+
+コミット前の厳しめ監査として、残タスクを `UI 受け入れ監査`、`API / 状態モデル監査`、`ドキュメント / コミット境界監査` の3系統に分解し、並列確認可能な作業単位として本 change record に記録した。
+
+追加対応:
+
+- `AGENTS.md` に、長時間・多ファイル作業では設計更新、API / 状態モデル、UI、テスト、ドキュメント反映などの検証済みチェックポイントごとに適度なタイミングでコミットする規則が維持されていることを確認した。
+- API 管理画面の主要実装に残っていた旧 `card` / `toolbar` / `btn` / `object-list` 依存を再監査し、共通の `detail-card` / `action-row` / `app-button` 系の表現へ整理済みであることを確認した。
+- 未使用の旧 `object-list` CSS 定義を削除し、旧 `.btn` / `.card` / `.toolbar` / `.object-list` セレクターが API 管理画面 CSS に残っていない状態にした。
+- 主要ページの相対 `href` が残っていないこと、実装コードでブラウザー標準 `confirm()` / `alert()` を呼び出していないことを静的に確認した。
+
+追加検証:
+
+- `rg -n -e 'class="btn' -e 'class="toolbar' -e 'class="card' -e 'class="object-list' -e '\.btn' -e '\.toolbar' -e '\.card' -e '\.object-list' src/HorseRacingPrediction.Api/Web src/HorseRacingPrediction.Api/wwwroot/app.css`: 該当なし。
+- `rg -n -P 'href="(?!/|#|@|mailto:|https?:)' src/HorseRacingPrediction.Api/Web/Components/Pages`: 該当なし。
+- `rg -n -e 'confirm\(' -e 'alert\(' src/HorseRacingPrediction.Api/Web docs/changes/20260830_fluent-ui-design-system docs/design-guidelines.md`: 実装呼び出しは該当なし。change record の禁止事項説明のみ該当。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、88 件。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 569 件。
+- `git diff --check`: 成功。
+
+残る未自動検証項目は、実ブラウザー相当の 320 / 720 / 1280 CSS px、keyboard、focus、contrast、dialog focus return、mobile drawer backdrop / Escape の視覚・操作確認である。現在の公開ツールでは新規ブラウザー操作サブエージェントを起動できないため、コード上で確認できる不整合は閉じ、change record は引き続き `Approved` のままとする。
+
 ## Remaining implementation tasks - 2026-08-31
 
 完了前に次のサブタスク単位で残件を閉じる。
