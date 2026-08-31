@@ -538,3 +538,20 @@ Acceptance criteria のうち、レース詳細の単勝・複勝オッズ表示
 2. **UI 共通化監査**: API 管理画面の主要 route と共有部品を確認し、旧 `.card` / `.toolbar` / `.btn` / `.input` 依存を Fluent UI component または共通 `data-list` / `detail-section` / `filter-card` パターンへ置き換える。完了条件は、主要画面で一覧・詳細・編集・dialog の余白、行密度、状態バッジ、戻る導線が同じ文法になること。
 3. **API / ジョブ状態モデル監査**: `/api/admin/jobs`、一時停止・再開、リラン、再取得、生成関係・集約依存関係、Collector service-only 化を変更セットと突き合わせる。完了条件は、集約対象子ジョブ単独リランが露出せず、生成元から生成先を辿れ、Collector が計画済みジョブ実行サービスとしてのみ動作することをテストで固定すること。
 4. **検証・コミット**: 上記完了後、`dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`、関連テスト、`dotnet test HorseRacingPrediction.sln --no-build -v:minimal`、`git diff --check` を実行し、検証済みチェックポイントとして目的別にコミットする。途中で大きな差分が残る場合は、文書、API/状態モデル、UI、テストの単位で分ける。
+
+## Implementation update - 2026-08-31 checkpoint commit preparation
+
+残タスクをサブタスク化し、チェックポイントコミット前の追加監査で見つかった不整合を修正した。
+
+- `docs/admin-ui-design.md` の旧 `CollectionTasks.razor` / Collector UI 前提の記述を、API 管理画面 `/jobs` を正本とし Collector は service-only とする現在方針へ更新した。
+- API 管理画面実装に残っていた旧 `.card` / `.toolbar` / `.btn` / `.input` クラス依存を、共通 `detail-card` / `action-row` / `app-button` / `text-input` パターンへ機械的に置き換えた。既存の表示構造は維持しつつ、旧命名へ依存しない状態にした。
+- 変更セットの残タスクを、文書整合監査、UI 共通化監査、API / ジョブ状態モデル監査、検証・コミットの4単位へ整理した。
+
+追加検証:
+
+- `rg -n 'class="(toolbar|btn|card|input)|\.(toolbar|btn|card|input)' src/HorseRacingPrediction.Api/Web/Components src/HorseRacingPrediction.Api/wwwroot/app.css`: 該当なし。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、88 件。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 569 件。
+- `git diff --check`: 成功。`src/HorseRacingPrediction.Api/wwwroot/app.css` の CRLF 変換警告のみ。

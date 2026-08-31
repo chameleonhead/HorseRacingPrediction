@@ -300,7 +300,6 @@ code { background: #f1efe7; padding: 1px 6px; border-radius: 4px; font-size: 12p
 .history-result { display: grid; align-content: start; justify-items: end; white-space: nowrap; }
 .history-relations { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; padding-top: 9px; border-top: 1px solid var(--border); }
 .history-field { display: grid; grid-template-rows: auto 1fr; align-content: start; gap: 3px; }
-.object-list { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .object-row { min-width: 0; padding: 12px; display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(100px, .65fr)); gap: 10px 18px; align-items: start; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .object-row:last-child { border-bottom: 0; }
 .error-summary { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
