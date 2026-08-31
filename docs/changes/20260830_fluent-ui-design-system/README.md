@@ -620,3 +620,25 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、93 件。
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 574 件。
+
+## Implementation update - 2026-09-01 UI routing and owner migration pass
+
+追加確認で、一覧ページの query string 同期と馬主一覧の既存 SQLite schema に関する不整合を修正した。
+
+- `src/HorseRacingPrediction.Api/Web/Components/Pages/Races.razor`、`Horses.razor`、`Jockeys.razor`、`Trainers.razor`、`Owners.razor`、`Jobs.razor`、`Predictions.razor` の `UpdateUrl` に同一 URL では `NavigateTo(..., replace: true)` を呼ばないガードを追加した。初期表示時に query string を正規化するだけで同一 route へ自己 redirect し続けるリスクを防ぐ。
+- `src/HorseRacingPrediction.Infrastructure/Persistence/Migrations/20260830090000_AddOwnerDisplayName.cs` に EF Core migration metadata を追加し、`EventStoreDbContextModelSnapshot.cs` へ `OwnerAliasMappings.IsDisplayName` を反映した。既存 DB で `OwnerAliasMappings` は存在するが `IsDisplayName` 列がない状態でも、起動時 migration で列が追加される。
+- `tests/HorseRacingPrediction.Infrastructure.Tests/SqliteDbContextProviderTests.cs` を更新し、`AddOwnerDisplayName` migration が新規作成 DB と既存 `EnsureCreated` DB の双方で migration history に記録されることを固定した。
+- ローカル既存 DB に対して API 起動時に `20260830090000_AddOwnerDisplayName` が適用され、`/api/owners` と `/owners` が 200 を返すことを HTTP で確認した。
+- ChatGPT の in-app browser は安定性問題があるため使用せず、今回の最終確認は HTTP と静的監査で行った。今後ブラウザー実機確認が必要な場合は、通常プロファイルではなく一時プロファイル / InPrivate の外部ブラウザーで行う。
+
+追加検証:
+
+- `Invoke-WebRequest` による cookie 認証後の主要 UI route 確認: `/races?from=2026-08-01&to=2026-08-31&page=1`、`/jobs`、`/owners`、`/acquisition-statuses`、`/horses`、`/jockeys`、`/trainers`、`/predictions` はすべて 200、共通エラー表示なし。
+- `rg -n -e 'confirm\(' -e 'alert\(' src/HorseRacingPrediction.Api/Web docs/changes/20260830_fluent-ui-design-system docs/design-guidelines.md`: 実装呼び出しは該当なし。change record の禁止事項説明のみ該当。
+- `rg -n -P 'href="(?!/|#|@|mailto:|https?:)' src/HorseRacingPrediction.Api/Web/Components/Pages`: 該当なし。
+- `rg -n 'class="(toolbar|btn|card|input)|\.(toolbar|btn|card|input)' src/HorseRacingPrediction.Api/Web/Components src/HorseRacingPrediction.Api/wwwroot/app.css`: 該当なし。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、93 件。
+- `dotnet test tests/HorseRacingPrediction.Infrastructure.Tests/HorseRacingPrediction.Infrastructure.Tests.csproj --no-build -v:minimal`: 成功、10 件。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 574 件。

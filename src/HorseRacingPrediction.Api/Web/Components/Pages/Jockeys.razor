@@ -57,7 +57,12 @@ else
         finally { loading = false; }
     }
     private async Task GoAsync(int value) { page = value; await LoadAsync(); }
-    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jockeys", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jockeys", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
     private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
     private void OpenJockey(string id) => Navigation.NavigateTo(JockeyUrl(id));
     private void OpenJockeyFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJockey(id); }

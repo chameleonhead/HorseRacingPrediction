@@ -67,7 +67,12 @@ else
         return Task.CompletedTask;
     }
 
-    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/owners", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/owners", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
     private void OpenOwner(string id) => Navigation.NavigateTo(OwnerUrl(id));
     private void OpenOwnerFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenOwner(id); }
     private static string OwnerUrl(string id) => $"/owners/{Uri.EscapeDataString(id)}";

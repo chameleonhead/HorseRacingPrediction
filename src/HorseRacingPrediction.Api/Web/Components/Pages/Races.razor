@@ -122,7 +122,13 @@ else
             ["winningHorse"] = winningHorse,
             ["page"] = page.ToString()
         };
-        Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/races", values.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+        NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/races", values.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    }
+
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
     }
 
     private static DateOnly? ParseDate(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key, DateOnly? fallback) => DateOnly.TryParse(ParseText(q, key), out var value) ? value : fallback;

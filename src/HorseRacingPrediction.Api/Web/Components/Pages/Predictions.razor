@@ -63,7 +63,12 @@ else
         finally { loading = false; }
     }
     private async Task GoAsync(int value) { page = value; await LoadAsync(); }
-    private void UpdateUrl() => Navigation.NavigateTo(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["raceId"] = raceId, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))), replace: true);
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["raceId"] = raceId, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
     private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
     private void OpenPrediction(string id) => Navigation.NavigateTo(PredictionUrl(id));
     private void OpenPredictionFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenPrediction(id); }
