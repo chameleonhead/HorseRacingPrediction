@@ -88,7 +88,7 @@ public class AdminAuthenticationTests
         var loginResponse = await client.PostAsync("/login", loginForm);
 
         Assert.AreEqual(HttpStatusCode.Redirect, loginResponse.StatusCode);
-        Assert.AreEqual("/", loginResponse.Headers.Location!.ToString());
+        Assert.AreEqual("/races", loginResponse.Headers.Location!.ToString());
         Assert.IsTrue(loginResponse.Headers.TryGetValues("Set-Cookie", out var cookies));
         var cookieHeader = cookies!.First().Split(';')[0];
 
@@ -96,9 +96,58 @@ public class AdminAuthenticationTests
         authenticatedRequest.Headers.Add("Cookie", cookieHeader);
         var adminResponse = await client.SendAsync(authenticatedRequest);
 
-        // Home.razor が /races へ即座にリダイレクトする(認可されて初めて到達する経路)。
-        Assert.AreEqual(HttpStatusCode.Redirect, adminResponse.StatusCode);
-        StringAssert.Contains(adminResponse.Headers.Location!.ToString(), "/races");
+        Assert.AreEqual(HttpStatusCode.OK, adminResponse.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task PostLogin_WithLocalReturnUrl_RedirectsToRequestedPage()
+    {
+        using var client = CreateClient();
+        var loginForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["username"] = "user",
+            ["password"] = TestApplicationFactory.TestApiKey,
+            ["ReturnUrl"] = "/owners?page=1"
+        });
+
+        var loginResponse = await client.PostAsync("/login", loginForm);
+
+        Assert.AreEqual(HttpStatusCode.Redirect, loginResponse.StatusCode);
+        Assert.AreEqual("/owners?page=1", loginResponse.Headers.Location!.ToString());
+    }
+
+    [TestMethod]
+    public async Task PostLogin_WithRootReturnUrl_RedirectsToRaces()
+    {
+        using var client = CreateClient();
+        var loginForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["username"] = "user",
+            ["password"] = TestApplicationFactory.TestApiKey,
+            ["ReturnUrl"] = "/"
+        });
+
+        var loginResponse = await client.PostAsync("/login", loginForm);
+
+        Assert.AreEqual(HttpStatusCode.Redirect, loginResponse.StatusCode);
+        Assert.AreEqual("/races", loginResponse.Headers.Location!.ToString());
+    }
+
+    [TestMethod]
+    public async Task PostLogin_WithExternalReturnUrl_FallsBackToRaces()
+    {
+        using var client = CreateClient();
+        var loginForm = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["username"] = "user",
+            ["password"] = TestApplicationFactory.TestApiKey,
+            ["ReturnUrl"] = "https://example.com/"
+        });
+
+        var loginResponse = await client.PostAsync("/login", loginForm);
+
+        Assert.AreEqual(HttpStatusCode.Redirect, loginResponse.StatusCode);
+        Assert.AreEqual("/races", loginResponse.Headers.Location!.ToString());
     }
 
     [TestMethod]

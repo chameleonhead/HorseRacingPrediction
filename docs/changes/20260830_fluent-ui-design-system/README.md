@@ -642,3 +642,19 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Infrastructure.Tests/HorseRacingPrediction.Infrastructure.Tests.csproj --no-build -v:minimal`: 成功、10 件。
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build -v:minimal`: 成功、92 件。
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、全 574 件。
+
+## Implementation update - 2026-09-01 login flow and visual pass
+
+`/` へアクセスしてログインした後にエラーになり得る導線と、ログイン画面の旧デザイン依存を修正した。
+
+- `src/HorseRacingPrediction.Api/Web/AdminEndpointExtensions.cs` のログイン処理で `ReturnUrl` を保持し、ローカル相対 URL のみへ戻すようにした。既定の遷移先と `ReturnUrl=/` は `/races` に正規化し、ログイン後に空の Home component を経由しない。
+- ログイン画面 HTML を `login-shell` / `login-card` / `login-field` / `login-button` 構成へ変更し、既存の `command-button` 依存を外した。見出し、説明文、入力、エラー表示、ボタンを Fluent 2 風の余白・境界・アクセント色へ揃えた。
+- `src/HorseRacingPrediction.Api/Web/Components/Pages/Home.razor` の `/races` 遷移を初期化中ではなく初回 render 後に実行するようにし、Server / Interactive rendering 境界での遷移例外リスクを下げた。
+- `tests/HorseRacingPrediction.Api.Tests/AdminAuthenticationTests.cs` に、ログイン後の既定遷移、ローカル `ReturnUrl` 維持、`ReturnUrl=/` の `/races` 正規化、外部 URL 拒否を固定する回帰テストを追加した。
+
+追加検証:
+
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- HTTP 確認: 未認証 `GET /` は `/login?ReturnUrl=%2F` へ redirect、ログイン画面は `login-card` / `login-button` を含み旧 `command-button` を含まない、`POST /login` with `ReturnUrl=/` は `/races` へ redirect、認証後 `/races` は 200 かつ共通エラー表示なし。
+- HTTP 確認: `/races?from=2026-08-01&to=2026-08-31&page=1`、`/jobs`、`/owners`、`/acquisition-statuses`、`/horses`、`/jockeys`、`/trainers`、`/predictions` はすべて 200、共通エラー表示なし。

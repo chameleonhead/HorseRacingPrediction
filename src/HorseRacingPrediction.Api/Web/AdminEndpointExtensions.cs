@@ -11,8 +11,8 @@ public static class AdminEndpointExtensions
 {
     public static WebApplication MapAdminEndpoints(this WebApplication app)
     {
-        app.MapGet("/login", (string? error) =>
-                Results.Content(BuildLoginHtml(error == "1"), "text/html; charset=utf-8"))
+        app.MapGet("/login", (string? error, string? returnUrl) =>
+                Results.Content(BuildLoginHtml(error == "1", NormalizeReturnUrl(returnUrl)), "text/html; charset=utf-8"))
             .WithName("AdminLoginPage");
 
         app.MapPost("/login", async (HttpContext httpContext, IOptions<ApiKeyOptions> apiKeyOptions) =>
@@ -27,7 +27,7 @@ public static class AdminEndpointExtensions
                 && string.Equals(password, expectedKey, StringComparison.Ordinal);
 
             if (!isValid)
-                return Results.Redirect("/login?error=1");
+                return Results.Redirect($"/login?error=1&returnUrl={Uri.EscapeDataString(NormalizeReturnUrl(form["ReturnUrl"].ToString()))}");
 
             var identity = new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.Name, AdminAuthenticationExtensions.AdminUserName) },
@@ -37,7 +37,7 @@ public static class AdminEndpointExtensions
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 new ClaimsPrincipal(identity)).ConfigureAwait(false);
 
-            return Results.Redirect("/");
+            return Results.Redirect(NormalizeReturnUrl(form["ReturnUrl"].ToString()));
         }).WithName("AdminLoginSubmit");
 
         app.MapPost("/logout", async (HttpContext httpContext) =>
@@ -55,7 +55,22 @@ public static class AdminEndpointExtensions
         return app;
     }
 
-    private static string BuildLoginHtml(bool showError)
+    private static string NormalizeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+            return "/races";
+
+        if (string.Equals(returnUrl, "/", StringComparison.Ordinal))
+            return "/races";
+
+        return Uri.TryCreate(returnUrl, UriKind.Relative, out _)
+            && returnUrl.StartsWith("/", StringComparison.Ordinal)
+            && !returnUrl.StartsWith("//", StringComparison.Ordinal)
+            ? returnUrl
+            : "/races";
+    }
+
+    private static string BuildLoginHtml(bool showError, string returnUrl)
     {
         var errorHtml = showError
             ? "<p class=\"login-error\">ユーザー名またはパスワードが正しくありません。</p>"
@@ -71,13 +86,26 @@ public static class AdminEndpointExtensions
                 <link rel="stylesheet" href="/app.css" />
             </head>
             <body class="login-body">
-                <form method="post" action="/login" class="login-form">
-                    <h1>競馬DB管理画面</h1>
-                    {{errorHtml}}
-                    <label>ユーザー名<input name="username" value="user" autocomplete="username" required /></label>
-                    <label>パスワード（APIキー）<input name="password" type="password" autocomplete="current-password" required autofocus /></label>
-                    <button class="command-button command-button-primary" type="submit">ログイン</button>
-                </form>
+                <main class="login-shell" aria-labelledby="login-title">
+                    <section class="login-card">
+                        <p class="login-eyebrow">Admin console</p>
+                        <h1 id="login-title">競馬DB管理画面</h1>
+                        <p class="login-description">収集状況、レース、関係者データを確認・訂正する管理画面です。</p>
+                        <form method="post" action="/login" class="login-form">
+                            <input type="hidden" name="ReturnUrl" value="{{System.Net.WebUtility.HtmlEncode(returnUrl)}}" />
+                            {{errorHtml}}
+                            <label class="login-field">
+                                <span>ユーザー名</span>
+                                <input name="username" value="user" autocomplete="username" required />
+                            </label>
+                            <label class="login-field">
+                                <span>パスワード（APIキー）</span>
+                                <input name="password" type="password" autocomplete="current-password" required autofocus />
+                            </label>
+                            <button class="login-button" type="submit">ログイン</button>
+                        </form>
+                    </section>
+                </main>
             </body>
             </html>
             """;

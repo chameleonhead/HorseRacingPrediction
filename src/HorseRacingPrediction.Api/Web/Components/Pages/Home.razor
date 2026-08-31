@@ -3,8 +3,9 @@
 @inject NavigationManager Nav
 
 @code {
-    protected override void OnInitialized()
+    protected override void OnAfterRender(bool firstRender)
     {
+        if (!firstRender) return;
         Nav.NavigateTo("/races", forceLoad: false, replace: true);
     }
 }
