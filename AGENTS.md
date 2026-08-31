@@ -18,3 +18,14 @@
 - change record の状態が `Approved` になるまでプロダクションコードを変更しない。承認とは、ユーザーが設計内容または当該 change record を明示的に確定したことを指す
 - 実装中に承認済み設計から外れる必要が生じた場合は、先に change record を更新して再承認を得る。誤字修正や設計判断を変えない補足は再承認を要しない
 - 実装完了時は、実装結果、設計との差分、実行した検証、残課題を change record に追記してから完了とする
+
+<!-- CODEGRAPH_START -->
+## CodeGraph
+
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+
+If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+<!-- CODEGRAPH_END -->
