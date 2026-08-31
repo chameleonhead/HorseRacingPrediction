@@ -727,3 +727,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `git diff --check`: 成功。改行コード変換の通知のみ。
 
 残作業: 同じ design-system component をレース、馬、騎手、調教師、馬主、予想票、データ取得状況の一覧・詳細・編集へ展開し、指定 viewport の画面比較を記録する。
+
+## Implementation checkpoint - 2026-09-01 collection header alignment
+
+- レース、馬、騎手、調教師、馬主、予想票の collection header を `RaceOpsPageHeader` へ統一した。
+- 旧一覧の行レイアウトには、Fluent component の色・形を再定義しない互換配置だけを追加した。以降の一覧移行中にも、一覧全体がカード化したり列が個別に分断されたりしない。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
