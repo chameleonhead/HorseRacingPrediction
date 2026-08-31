@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Approved
+- Status: Proposed
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-08-30
@@ -756,9 +756,30 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | --- | --- | --- | --- | --- |
 | W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
-| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 未着手 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
+| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 設計承認待ち | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
 | W5 | visual / responsive / accessibility 回帰 | 未着手 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
 
 実行方針: W3 と W4 は画面・ファイルが重ならない単位に分け、軽量モデルのサブエージェントへ委譲する。root は各 checkpoint の設計整合性、統合テスト、browser 回帰だけを担当し、サブエージェントには対象 page・共有 contract・検証条件だけを渡す。
+
+## Proposed correction - 2026-09-01 condensed object item contract
+
+収集ジョブは状態が判断の中心である一方、馬・騎手・調教師・馬主・予想票など、一覧に表示すべき利用者向け状態を持たない object がある。既存の `RaceOpsObjectListItem` は status を必須としており、全一覧への展開時に意味のない "登録済み" のようなラベルを追加するか、object の ID を主表示へ戻すことになる。
+
+### Proposed decision
+
+- `RaceOpsObjectListItem` の status は任意とする。状態がある object では、従来どおり主ラベルの次に日本語の status badge を表示する。
+- 状態がない object では status の表示領域を完全に省略し、主ラベル、主要属性 2–3 件、関係、詳細 affordance の順を保つ。空の badge やダミー状態は表示しない。
+- 主要属性と関係には利用者向けの文字列だけを渡す。内部 ID、英語 enum、raw key は技術情報または詳細に留める。race row の日付・開催場・レース番号の文脈リンクのように、別の canonical URL へ移動する要素がある場合は、行全体を一意な detail link にせず専用の row component を用いる。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 一覧共通 component の status 契約変更と実装前の承認要求を記録する。
+- `docs/design-guidelines.md`: 承認後、状態を持たない object item では status を省略する規則を正本へ追記する。現時点では設計提案のため未更新。
+
+### Acceptance criteria
+
+- 馬・騎手・調教師・馬主・予想票の一覧に意味のない status badge を追加しない。
+- 状態を持つ収集ジョブ・取得状況の一覧は、日本語の status と色以外の手掛かりを維持する。
+- 行内に別 URL の関係リンクが必要なレースなどは、nested anchor を作らない。
