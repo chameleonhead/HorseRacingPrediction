@@ -3,8 +3,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Nav
 
-<h1>馬の管理情報</h1>
-<p class="hint"><a href="@($"/horses/{Uri.EscapeDataString(HorseId)}")">← 馬詳細へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="@($"/horses/{Uri.EscapeDataString(HorseId)}")" BackLabel="← 馬詳細に戻る" Title="@(horse?.RegisteredName ?? "馬の管理情報")" Section="馬" />
 
 @if (loading)
 {
@@ -27,24 +26,20 @@ else
         </dl>
     </section>
 
-    <section class="detail-card">
-        <h3>プロフィール更新</h3>
-        <div class="form-grid">
+    <RaceOpsFormSection Title="プロフィール更新">
+        <ChildContent><div class="form-grid">
             <label>登録名<input @bind="editRegisteredName" /></label>
             <label>正規化名<input @bind="editNormalizedName" /></label>
             <label>性<input @bind="editSexCode" /></label>
             <label>生年月日<input type="date" @bind="editBirthDate" /></label>
             <label>馬主<input @bind="editOwnerName" /></label>
         </div>
-        <div class="action-row">
-            <button class="app-button primary small" @onclick="UpdateProfileAsync" disabled="@updating">更新</button>
-            <button class="app-button small" @onclick="Back">キャンセル</button>
-        </div>
         @if (updateErrors.Count > 0)
         {
             <ul class="error-list">@foreach (var e in updateErrors) { <li>@e</li> }</ul>
-        }
-    </section>
+        }</ChildContent>
+        <Actions><FluentButton Appearance="@Appearance.Accent" OnClick="@UpdateProfileAsync" Disabled="@updating">更新</FluentButton><FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton></Actions>
+    </RaceOpsFormSection>
 
     <section class="detail-card">
         <h3>別名の追加・統合</h3>

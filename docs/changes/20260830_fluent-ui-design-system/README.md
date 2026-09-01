@@ -863,3 +863,12 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Implementation checkpoint - 2026-09-01 profile edit form composition
+
+- 馬・騎手・調教師の編集画面を共通 object header へ移行した。
+- 3画面のプロフィール更新 section は `RaceOpsFormSection` と Fluent Button を使う構成に揃えた。別名・補正 section の入力契約と操作は後続 checkpoint で同じ pattern へ移行する。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
