@@ -2,15 +2,14 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<h1>予想票詳細</h1>
-<p class="hint"><a href="/predictions">← 予想票検索へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction?.SummaryComment ?? "予想票詳細")" Section="予想票" />
 
 @if (loading) { <p>読み込み中…</p> }
 else if (prediction is null) { <p>PredictionTicketId「@PredictionTicketId」の予想票は見つかりませんでした。</p> }
 else
 {
     <section class="detail-card">
-        <h2>@prediction.PredictionTicketId</h2>
+        <h2>予想票の概要</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><a href="@($"/races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
             <dt>予想者</dt><dd>@prediction.PredictorType / @prediction.PredictorId</dd>

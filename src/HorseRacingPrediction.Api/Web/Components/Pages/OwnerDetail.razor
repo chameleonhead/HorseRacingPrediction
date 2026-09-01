@@ -3,8 +3,9 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<h1>馬主詳細</h1>
-<p class="hint"><a href="/owners">← 馬主一覧へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="馬主">
+    <Actions><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenEdit">編集</FluentButton></Actions>
+</RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (owner is null) { <p>指定された馬主は見つかりませんでした。</p> }
@@ -23,7 +24,6 @@ else
     <section id="overview" class="detail-card detail-section">
         <h2>@owner.Summary.DisplayName</h2>
         <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenEdit">編集</FluentButton>
         @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
     </section>
     <section id="relations" class="entity-section detail-section">

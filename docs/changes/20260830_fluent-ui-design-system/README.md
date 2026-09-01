@@ -830,3 +830,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Implementation checkpoint - 2026-09-01 remaining object detail headers
+
+- 馬主・レース・予想票の詳細も `RaceOpsObjectHeader` へ移行した。馬主の編集は既存 dialog を開く CTA として header へ移し、レースの編集と予想票の戻る導線を同じ header grammar に揃えた。
+- 既存の概要、関係、名寄せ、オッズ、予想印、操作制約は変更していない。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。
