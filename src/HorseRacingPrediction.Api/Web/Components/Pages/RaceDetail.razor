@@ -134,7 +134,7 @@ else
         <h3>管理情報</h3>
         <p class="hint">誤登録されたデータの補正は専用画面で行います。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
         <div class="action-row">
-            <a class="app-button primary small" href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</a>
+            <FluentButton Appearance="@Appearance.Accent" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</FluentButton>
         </div>
     </section>
 

@@ -59,7 +59,7 @@ else
             @if (historyHasMore)
             {
                 <div class="action-row">
-                    <button class="app-button" @onclick="LoadMoreHistory">次の10件を読み込む</button>
+                    <FluentButton Appearance="@Appearance.Outline" OnClick="@LoadMoreHistory">次の10件を読み込む</FluentButton>
                 </div>
             }
         }

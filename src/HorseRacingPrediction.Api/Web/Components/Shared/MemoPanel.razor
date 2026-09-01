@@ -26,8 +26,8 @@
                                 <label>内容<textarea @bind="editContent" rows="3"></textarea></label>
                             </div>
                             <div class="action-bar">
-                                <button class="command-button command-button-primary command-button-small" @onclick="() => SaveEditAsync(memo.MemoId)">保存</button>
-                                <button class="command-button command-button-small" @onclick="CancelEdit">キャンセル</button>
+                                <FluentButton Appearance="@Appearance.Accent" OnClick="() => SaveEditAsync(memo.MemoId)">保存</FluentButton>
+                                <FluentButton Appearance="@Appearance.Outline" OnClick="CancelEdit">キャンセル</FluentButton>
                             </div>
                         }
                         else
@@ -45,16 +45,16 @@
                             </div>
                             <p class="memo-content">@memo.Content</p>
                             <div class="action-bar">
-                                <button class="command-button command-button-small" @onclick="() => StartEdit(memo)">編集</button>
+                                <FluentButton Appearance="@Appearance.Outline" OnClick="() => StartEdit(memo)">編集</FluentButton>
                                 @if (deleteArmedMemoId == memo.MemoId)
                                 {
                                     <span class="hint">本当に削除しますか？</span>
-                                    <button class="command-button command-button-small" @onclick="() => DeleteAsync(memo.MemoId)">削除する</button>
-                                    <button class="command-button command-button-small" @onclick="() => deleteArmedMemoId = null">キャンセル</button>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => DeleteAsync(memo.MemoId)">削除する</FluentButton>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => deleteArmedMemoId = null">キャンセル</FluentButton>
                                 }
                                 else
                                 {
-                                    <button class="command-button command-button-small" @onclick="() => deleteArmedMemoId = memo.MemoId">削除</button>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => deleteArmedMemoId = memo.MemoId">削除</FluentButton>
                                 }
                             </div>
                         }
@@ -68,7 +68,7 @@
             <label>内容<textarea @bind="newContent" rows="3"></textarea></label>
         </div>
         <div class="action-bar">
-            <button class="command-button command-button-primary command-button-small" @onclick="AddAsync" disabled="@saving">メモを追加</button>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@AddAsync" Disabled="@saving">メモを追加</FluentButton>
         </div>
 
         @if (errors.Count > 0)

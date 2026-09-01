@@ -63,7 +63,7 @@ else
             @if (historyHasMore)
             {
                 <div class="action-row">
-                    <button class="app-button" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の100件を読み込む</button>
+                    <FluentButton Appearance="@Appearance.Outline" OnClick="@LoadMoreHistoryAsync" Disabled="@loadingMore">次の100件を読み込む</FluentButton>
                 </div>
             }
         }
@@ -86,7 +86,7 @@ else
         <h3>管理情報</h3>
         <p class="hint">プロフィール更新、別名統合、データ補正は専用画面で行います。</p>
         <div class="action-row">
-            <a class="app-button primary small" href="@($"/horses/{Uri.EscapeDataString(HorseId)}/edit")">データを補正する</a>
+            <FluentButton Appearance="@Appearance.Accent" Href="@($"/horses/{Uri.EscapeDataString(HorseId)}/edit")">データを補正する</FluentButton>
         </div>
     </section>
 

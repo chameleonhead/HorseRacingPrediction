@@ -754,7 +754,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 | ID | 作業 | 状態 | 実施主体 | 完了条件 |
 | --- | --- | --- | --- | --- |
-| W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
+| W1 | 共通 design-system / app shell | 完了 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 完了 | 軽量サブエージェント + root review | header、form section、同型の関係 grid を表示専用 component に分離。ドメイン固有の行内関係は page に保持 |
@@ -927,3 +927,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 ## Documentation updates
 
 - `.gitignore`: SQLite の `*.db-shm` と `*.db-wal` を明示的に無視する規則を追加した。開発・検証中に生成されるWAL/SHMジャーナルを作業ツリーへ出さず、SQLite本体の既存 `*.db` 無視規則を補完する正本である。
+
+## Implementation checkpoint - 2026-09-01 remaining action control migration
+
+- 詳細画面の履歴追加読み込みと補正導線、馬主の履歴追加読み込み、メモの追加・編集・保存・削除確認・キャンセルを `FluentButton` へ移行した。主操作は Accent、通常操作は Outline とし、既存の handler、href、disabled 条件、削除確認段階を維持した。
+- component 配下を再走査し、操作用の `app-button` と `command-button` は残っていない。モバイルナビゲーションの背景を閉じる native button は、ラベル付きの非視覚操作領域であり Fluent Button の対象外として保持した。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、577 件。
+- `git diff --check`: 下記 commit 前確認で実行。
