@@ -759,7 +759,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 完了 | 軽量サブエージェント + root review | header、form section、同型の関係 grid を表示専用 component に分離。ドメイン固有の行内関係は page に保持 |
 | W5 | visual / responsive / accessibility 回帰 | 進行中 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
-| W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
+| W6 | 最終検証・ドキュメント同期 | 進行中 | root | solution test は成功。W5 の populated browser state と最終ドキュメント同期を残す |
 
 実行方針: W3 と W4 は画面・ファイルが重ならない単位に分け、軽量モデルのサブエージェントへ委譲する。root は各 checkpoint の設計整合性、統合テスト、browser 回帰だけを担当し、サブエージェントには対象 page・共有 contract・検証条件だけを渡す。
 
@@ -911,3 +911,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - 隔離出力の API を Development 設定で `localhost:5178` に起動し、ローカル開発設定の API key で認証した。通常の開発プロセスは起動・停止していない。
 - `/horses` の empty state と `/horses/verification-missing/edit` の not-found state を確認した。どちらも共通エラー表示を出さず横 overflow はなく、編集ページでは object header の戻る導線、種別、タイトル、not-found message が表示された。
 - 検証 SQLite は馬・関係者のデータを持たないため、馬・騎手・調教師の入力済み編集フォーム、保存状態、320 px の populated state は未確認である。既存データを作成・変更しない方針のため、データを含む検証環境で W5 を継続する。
+
+## Verification update - 2026-09-01 solution regression pass
+
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功。Contracts 38、Domain 94、Agents 177、MachineLearning 14、Infrastructure 10、Application 56、API 96、Collector 92 件、合計 577 件がすべて成功した。
+- `--no-build` は、通常出力先を利用する既存の開発プロセスを止めず、直前に隔離出力で Razor を含む API build を成功させたうえで、既存の各 test assembly を回帰確認する目的で使用した。
