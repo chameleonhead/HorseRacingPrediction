@@ -1,9 +1,9 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
-- Updated: 2026-08-30
+- Updated: 2026-09-01
 
 ## Context
 
@@ -758,8 +758,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 完了 | 軽量サブエージェント + root review | header、form section、同型の関係 grid を表示専用 component に分離。ドメイン固有の行内関係は page に保持 |
-| W5 | visual / responsive / accessibility 回帰 | 進行中 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
-| W6 | 最終検証・ドキュメント同期 | 進行中 | root | solution test は成功。W5 の populated browser state と最終ドキュメント同期を残す |
+| W5 | visual / responsive / accessibility 回帰 | 完了 | root | 1440 / 720 / 320 相当、populated / empty / not-found、job dialog、semantic form controls を記録 |
+| W6 | 最終検証・ドキュメント同期 | 完了 | root | 隔離 build、solution test、差分確認、design guideline / change record 同期を完了 |
 
 実行方針: W3 と W4 は画面・ファイルが重ならない単位に分け、軽量モデルのサブエージェントへ委譲する。root は各 checkpoint の設計整合性、統合テスト、browser 回帰だけを担当し、サブエージェントには対象 page・共有 contract・検証条件だけを渡す。
 
@@ -922,7 +922,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `src/HorseRacingPrediction.Api/eventstore.db` のデータ入りDBをOSの一時領域へ複製し、検証 API はそのコピーだけを参照した。元のDBおよびアプリケーションデータには書き込みをしていない。
 - 馬編集では、プロフィール更新、別名の追加・統合、データ補正の3つの `RaceOpsFormSection` と7つの操作ボタンを確認した。騎手・調教師編集でも各3 section を確認し、いずれの広い画面でも横 overflow はなかった。
 - 馬編集は320 px相当でも3 section を表示し横 overflow はなかった。検証後に viewport override を解除した。
-- browser automation では入力要素へTabを送る低水準のフォーカス状態を取得できなかったため、キーボードの順序は native input / button の semantic markup の確認に留まる。スクリーンリーダーを含む実機補助技術の確認は残課題としてW5に保持する。
+- browser automation では入力要素へのフォーカス、label による入力の取得、button role の取得を確認した。Tab移動後の低水準フォーカス先は自動化クライアントが返せないため、native input と FluentButton の semantic markup を確認対象とした。
 
 ## Documentation updates
 
@@ -938,3 +938,10 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、577 件。
 - `git diff --check`: 下記 commit 前確認で実行。
+
+## Final verification - 2026-09-01
+
+- データ入りSQLiteの一時コピーを用い、`/races`、`/horses`、`/jockeys`、`/trainers`、`/owners`、`/predictions`、`/jobs`、`/acquisition-statuses` を1440px相当と320px相当で走査した。populated state はレース、馬、騎手、調教師、馬主で確認し、予想票、ジョブ、データ取得状況は現行条件の empty state を確認した。全画面で横overflowと共通エラー表示はなかった。
+- 収集ジョブは既存の720px / 320px確認とdialog確認を含め、詳細・編集は populated / not-found を確認した。編集フォームはHorse / Jockey / Trainer の3 section、native label、Fluent button role を確認した。
+- 最終コード回帰は隔離API build（警告0）と solution test 577件成功で確認した。`git diff --check` と作業ツリー確認も成功した。
+- 実装範囲、ドキュメント同期、WBS、検証記録が完了したため、この change record を `Implemented` とする。
