@@ -92,6 +92,31 @@
 - 起動済みの通常出力APIはRazor更新を読み込まないため、隔離buildまたは開発サーバーを起動してから、認証済みbrowserで1280px / 720px / 320pxのvisual self-reviewを行う。
 - jockey detailのloaded API 500、各edit pageとdialogのvisual reviewは未完了。これらを確認し、不一致があれば同じ変更記録に修正と再確認結果を追記する。
 
+## Repeatable visual verification approach - 2026-09-02
+
+比較の信頼性を確保するため、以下を必須手順とする。
+
+1. 通常出力先へwarning 0 / error 0でbuildしてから、同じoutputを使うdevelopment serverを起動する。isolated outputだけではstatic web assetが不足するため、視覚比較の対象にしない。
+2. 開発設定のAPI keyでlocalhostへ認証し、一覧で実データのobject IDを取得してloaded detailを開く。API keyは画面・log・recordへ残さない。
+3. browser DOM snapshotでtablist、selected tab、tabpanel、link / button、error / disclosureを検証し、screenshotでcolor、surface、spacing、overflowを確認する。APIを直接呼び、profile・history等が200であることも別に確認して、データ取得失敗とUI失敗を混同しない。
+4. 1280px、720px、320pxを同じobject・同じtabで確認し、各screen-stateをself-review matrixへ`一致` / `不一致` / `未確認`として反映する。
+
+### Initial browser result
+
+- 通常outputを再build・再起動した後、`/horses/horse-247a0288-8e3f-5c45-a46a-f033f3fbb4e9` のloaded stateで確認した。概要・関係・履歴・管理・メモがFluent tablistとして表示され、関係tabを選択すると関係tabpanelだけが表示された。horizontal overflowはなかった。
+- 同horseのprofile、participations、race-history APIはそれぞれHTTP 200を確認した。先行のerror stateは、更新前サーバー／browser sessionを比較対象にしていたためであり、現行outputのUIエラーではない。
+
+### Continued browser result - 2026-09-02
+
+- 通常出力を再buildしたdevelopment serverで、race、owner、jockey、trainer、jobのloaded detailを実データから開いた。1280pxでは全対象で横overflowなし、race / owner / jockey / trainerではtablist、選択tab、tabpanelの遷移を確認した。
+- 320pxではrace、job、predictionのempty state、acquisitionのempty state、owner / jockey / trainer detailを確認した。全対象でdocument horizontal overflowは発生しなかった。predictionとacquisitionはローカルfixtureにloaded detailがないため、empty stateのみを確認した。
+- 狭幅のowner detailで、Fluent Tabsのoverflow menuが`FluentMenuProvider`未配置によりErrorBoundaryへ到達する不具合を再現した。`App`およびinteractiveな`MainLayout`へproviderを配置し、再build・再起動後にownerのloaded detailと編集dialog起動、jockey / trainer detailでerrorなしを再確認した。
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal` はwarning 0 / error 0で成功した。
+
+### Open verification scope
+
+- prediction / acquisitionはloaded detail用fixtureがないため、loaded detailおよび再取得dialogの実データ検証が未完了である。既存データを変更せずに確認できるfixtureを用意した時点で、この記録のmatrixを更新する。
+
 ## Documentation updates
 
 - `docs/changes/20260901_detail-design-conformance/README.md`: 本変更の要件、監査、判断、検証結果の正本として追加する。

@@ -3,6 +3,8 @@
 @implements IDisposable
 @inject NavigationManager Navigation
 
+<FluentMenuProvider />
+
 <div class="page">
     <FluentButton class="mobile-menu-button" Appearance="@Appearance.Stealth" aria-expanded="@navOpen" aria-label="メニュー" OnClick="() => navOpen = !navOpen"><span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>メニュー</span></FluentButton>
     @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
