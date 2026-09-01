@@ -852,3 +852,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Implementation checkpoint - 2026-09-01 race edit form composition
+
+- `RaceOpsFormSection` を追加し、form title、説明、入力 content、action footer を API client 非依存の表示 component に分離した。
+- レース編集は共通 object header と form section を使用し、保存・キャンセルを Fluent Button に移行した。補正契約、入力項目、エラー表示、遷移先は変更していない。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。
