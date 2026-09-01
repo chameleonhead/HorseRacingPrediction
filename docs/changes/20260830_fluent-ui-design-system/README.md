@@ -757,7 +757,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
-| W4 | 詳細・編集の共通 composition | 進行中 | 軽量サブエージェント + root review | header と form section を表示専用 component に分離し、残る関連・technical details を確認 |
+| W4 | 詳細・編集の共通 composition | 完了 | 軽量サブエージェント + root review | header、form section、同型の関係 grid を表示専用 component に分離。ドメイン固有の行内関係は page に保持 |
 | W5 | visual / responsive / accessibility 回帰 | 進行中 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
 
@@ -898,3 +898,10 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 下記 commit 前確認で実行。
+
+## W4 completion note - 2026-09-01 detail composition boundary
+
+- 読み取り専用の棚卸しで、馬主の関係 grid は馬・騎手・調教師と外見が近い一方、関係種別の生成と `RelatedObjectResponse` の契約が異なることを確認した。単一画面だけの抽象化は追加せず、現在の page に残す。
+- レース詳細の出走表と履歴内の馬・騎手・調教師・馬主リンクは、行の主題と関係の意味が一体であるため、汎用 relationship component へ移さない。
+- ジョブ詳細の関連、依存図、技術情報はリンク先、状態、診断 payload がそれぞれ固有であるため、section の抽象化で構造を隠さず page に保持する。データ取得状況の関連も subject URL の解決を page に残す。
+- この境界により、共通表示は API client 非依存の `RaceOpsObjectHeader`、`RaceOpsFormSection`、`RaceOpsRelationshipGrid` に限定し、URL 解決とドメイン固有の情報構造は各 page の責務として明確にした。
