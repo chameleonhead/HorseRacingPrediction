@@ -905,3 +905,9 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - レース詳細の出走表と履歴内の馬・騎手・調教師・馬主リンクは、行の主題と関係の意味が一体であるため、汎用 relationship component へ移さない。
 - ジョブ詳細の関連、依存図、技術情報はリンク先、状態、診断 payload がそれぞれ固有であるため、section の抽象化で構造を隠さず page に保持する。データ取得状況の関連も subject URL の解決を page に残す。
 - この境界により、共通表示は API client 非依存の `RaceOpsObjectHeader`、`RaceOpsFormSection`、`RaceOpsRelationshipGrid` に限定し、URL 解決とドメイン固有の情報構造は各 page の責務として明確にした。
+
+## Verification update - 2026-09-01 authenticated edit-page fallback pass
+
+- 隔離出力の API を Development 設定で `localhost:5178` に起動し、ローカル開発設定の API key で認証した。通常の開発プロセスは起動・停止していない。
+- `/horses` の empty state と `/horses/verification-missing/edit` の not-found state を確認した。どちらも共通エラー表示を出さず横 overflow はなく、編集ページでは object header の戻る導線、種別、タイトル、not-found message が表示された。
+- 検証 SQLite は馬・関係者のデータを持たないため、馬・騎手・調教師の入力済み編集フォーム、保存状態、320 px の populated state は未確認である。既存データを作成・変更しない方針のため、データを含む検証環境で W5 を継続する。
