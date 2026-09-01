@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-01
@@ -976,12 +976,20 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 | ID | 作業 | 状態 | 実施主体 | 完了条件 |
 | --- | --- | --- | --- | --- |
-| R1 | ジョブ一覧・詳細の状態／履歴是正 | 未着手 | root + 軽量サブエージェント | 上記1–2の受け入れ条件を満たす |
-| R2 | 取得状況の履歴・検索是正 | 未着手 | 軽量サブエージェント | 上記3の受け入れ条件を満たす |
-| R3 | collection filter・状態表示是正 | 未着手 | 軽量サブエージェント | 上記4–5の受け入れ条件を満たす |
-| R4 | shell表記・visual回帰 | 未着手 | root | 上記6とviewport回帰を満たす |
-| R5 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、browser確認、変更記録を完結 |
+| R1 | ジョブ一覧・詳細の状態／履歴是正 | 完了 | root | 上記1–2の受け入れ条件を満たす |
+| R2 | 取得状況の履歴・検索是正 | 完了 | 軽量サブエージェント | 上記3の受け入れ条件を満たす |
+| R3 | collection filter・状態表示是正 | 完了 | 軽量サブエージェント | 上記4–5の受け入れ条件を満たす |
+| R4 | shell表記・visual回帰 | 完了 | root | 上記6とviewport回帰を満たす |
+| R5 | 最終検証・ドキュメント同期 | 完了 | root | solution test、browser確認、変更記録を完結 |
 
 ### Approval
 
 2026-09-01 に、利用者が上記 remediation scope を承認した。R1〜R4を実装できる。
+
+## Remediation implementation and verification - 2026-09-01
+
+- R1: キュー停止状態を返す管理APIを追加し、ジョブ一覧では停止・再開CTAを相互排他的に表示する。操作完了後は状態と一覧を再読込する。日別サマリー、対象日リンク、詳細headerの日本語処理名・状態・更新時刻、header上のリラン、最新試行、not-found時のJob ID表示を追加した。
+- R2: 取得状態の更新履歴をSQLiteへ永続化し、履歴APIと既存DB向けの現行状態1件フォールバックを追加した。詳細へProvider・成功/失敗履歴・技術情報を、一覧へ対象名検索と2種のクイックフィルターを追加した。
+- R3/R4: レースの日本語状態・期間プリセット・適用条件解除、馬の年齢範囲、騎手/調教師の所属、shellの`データ`表記を追加した。既存URL queryとページングは維持する。
+- 隔離出力先でAPIをビルドし、警告0・エラー0を確認した。`dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal` は98件すべて成功した。履歴APIと停止状態はAPIテスト、履歴永続化はCollectorテストで検証した。
+- 一時コピーしたデータ入りSQLiteを使い、ブラウザーでレースの期間プリセット・日本語状態・条件解除、取得状況の対象名/クイックフィルター、ジョブの停止CTA、Job IDを含むnot-found、horse/jockeyの追加フィルター、shell表記を確認した。取得履歴の表示対象は検証DBに存在しないため、履歴の順序・エラー要約はAPIテストで確認した。viewport overrideは検証後に解除した。

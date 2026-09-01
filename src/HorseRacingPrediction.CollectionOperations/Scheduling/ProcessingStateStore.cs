@@ -1112,6 +1112,18 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             entity.ErrorReason = errorReason;
             entity.UpdatedAt = now;
 
+            dbContext.AgentAcquisitionHistory.Add(new AgentAcquisitionHistoryEntity
+            {
+                AcquisitionKey = acquisitionKey,
+                ProviderType = providerType,
+                Status = status,
+                ErrorCode = errorCode,
+                ErrorReason = errorReason,
+                OriginJobId = originJobId,
+                SourceUrl = sourceUrl,
+                OccurredAt = now,
+            });
+
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -1499,6 +1511,21 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             dbContext.Database.ExecuteSqlRaw("ALTER TABLE agent_acquisition_statuses ADD COLUMN origin_job_id TEXT NULL;");
         dbContext.Database.ExecuteSqlRaw(
             """
+            CREATE TABLE IF NOT EXISTS agent_acquisition_history (
+                sequence INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                acquisition_key TEXT NOT NULL,
+                provider_type TEXT NULL,
+                status TEXT NOT NULL,
+                error_code TEXT NULL,
+                error_reason TEXT NULL,
+                origin_job_id TEXT NULL,
+                source_url TEXT NULL,
+                occurred_at TEXT NOT NULL
+            );
+            """);
+        dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS ix_agent_acquisition_history_key_occurred_at ON agent_acquisition_history(acquisition_key, occurred_at);");
+        dbContext.Database.ExecuteSqlRaw(
+            """
             CREATE TABLE IF NOT EXISTS job_failure_notification_outbox (
                 notification_id TEXT NOT NULL PRIMARY KEY,
                 job_id TEXT NOT NULL,
@@ -1775,6 +1802,33 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             AttemptId = $"{job.JobId}:{number}", JobId = job.JobId, AttemptNumber = number,
             Status = status, Error = error, StartedAt = job.StartedAt ?? completedAt, CompletedAt = completedAt
         });
+    }
+
+    public async Task<IReadOnlyList<AgentAcquisitionHistoryReadModel>> GetAgentAcquisitionHistoryAsync(
+        string acquisitionKey,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var entries = await dbContext.AgentAcquisitionHistory
+                .Where(x => x.AcquisitionKey == acquisitionKey)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            return entries
+                .OrderByDescending(x => x.OccurredAt)
+                .ThenByDescending(x => x.Sequence)
+                .Select(x => new AgentAcquisitionHistoryReadModel(
+                    x.Sequence, x.AcquisitionKey, x.ProviderType, x.Status, x.ErrorCode,
+                    x.ErrorReason, x.OriginJobId, x.SourceUrl, x.OccurredAt))
+                .ToList();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task<bool> UpdateLeasedCollectionTaskAsync(

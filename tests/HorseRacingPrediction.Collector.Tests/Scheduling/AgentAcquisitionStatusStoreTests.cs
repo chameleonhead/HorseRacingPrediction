@@ -137,6 +137,24 @@ public sealed class AgentAcquisitionStatusStoreTests
         Assert.AreEqual("RaceCardCollection:existing-db", result[0].OriginJobId);
     }
 
+    [TestMethod]
+    public async Task GetAgentAcquisitionHistoryAsync_RetainsAttemptsInReverseChronologicalOrder()
+    {
+        var store = CreateStore();
+        var now = new DateTimeOffset(2026, 8, 30, 12, 0, 0, TimeSpan.Zero);
+        const string key = "Horse:ProfileSync:履歴テスト";
+
+        await store.UpsertAgentAcquisitionStatusAsync(key, AgentAcquisitionSubjectType.Horse, AgentAcquisitionOperationType.ProfileSync, "JRA", "horse-history", "履歴テスト", null, null, null, RaceDataCollectionState.Failed, RaceDataCollectionErrorCode.ExternalRequestFailed, "timeout", now);
+        await store.UpsertAgentAcquisitionStatusAsync(key, AgentAcquisitionSubjectType.Horse, AgentAcquisitionOperationType.ProfileSync, "JRA", "horse-history", "履歴テスト", null, null, null, RaceDataCollectionState.Succeeded, null, null, now.AddMinutes(1));
+
+        var history = await store.GetAgentAcquisitionHistoryAsync(key);
+
+        Assert.HasCount(2, history);
+        Assert.AreEqual(RaceDataCollectionState.Succeeded, history[0].Status);
+        Assert.AreEqual(RaceDataCollectionState.Failed, history[1].Status);
+        Assert.AreEqual("timeout", history[1].ErrorReason);
+    }
+
     private ProcessingStateStore CreateStore()
     {
         var options = Options.Create(new AgentProcessingOptions

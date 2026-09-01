@@ -22,6 +22,7 @@ public sealed class ProcessingStateDbContext : DbContext
     public DbSet<RaceDataCollectionStatusEntity> RaceDataCollectionStatuses => Set<RaceDataCollectionStatusEntity>();
 
     public DbSet<AgentAcquisitionStatusEntity> AgentAcquisitionStatuses => Set<AgentAcquisitionStatusEntity>();
+    public DbSet<AgentAcquisitionHistoryEntity> AgentAcquisitionHistory => Set<AgentAcquisitionHistoryEntity>();
 
     public DbSet<ResultDayCollectionStatusEntity> ResultDayCollectionStatuses => Set<ResultDayCollectionStatusEntity>();
 
@@ -183,6 +184,22 @@ public sealed class ProcessingStateDbContext : DbContext
 
             entity.HasIndex(x => x.UpdatedAt);
             entity.HasIndex(x => new { x.SubjectType, x.Status, x.UpdatedAt });
+        });
+
+        modelBuilder.Entity<AgentAcquisitionHistoryEntity>(entity =>
+        {
+            entity.ToTable("agent_acquisition_history");
+            entity.HasKey(x => x.Sequence);
+            entity.Property(x => x.Sequence).HasColumnName("sequence").ValueGeneratedOnAdd();
+            entity.Property(x => x.AcquisitionKey).HasColumnName("acquisition_key");
+            entity.Property(x => x.ProviderType).HasColumnName("provider_type");
+            entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>();
+            entity.Property(x => x.ErrorCode).HasColumnName("error_code").HasConversion<string>();
+            entity.Property(x => x.ErrorReason).HasColumnName("error_reason");
+            entity.Property(x => x.OriginJobId).HasColumnName("origin_job_id");
+            entity.Property(x => x.SourceUrl).HasColumnName("source_url");
+            entity.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            entity.HasIndex(x => new { x.AcquisitionKey, x.OccurredAt });
         });
 
         modelBuilder.Entity<ResultDayCollectionStatusEntity>(entity =>

@@ -8,6 +8,7 @@
 <FluentCard class="filter-card">
     <div class="filter-grid">
         <FluentTextField Label="キーワード" @bind-Value="query" Placeholder="調教師名 / ID" />
+        <FluentTextField Label="所属" @bind-Value="affiliationCode" Placeholder="例: 栗東" />
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>
@@ -29,6 +30,7 @@ else
 
 @code {
     private string? query;
+    private string? affiliationCode;
     private int page = 1;
     private const int pageSize = 50;
     private bool loading;
@@ -38,6 +40,7 @@ else
     {
         var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
         query = ParseText(q, "query");
+        affiliationCode = ParseText(q, "affiliation");
         if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
         await LoadAsync();
     }
@@ -47,11 +50,11 @@ else
     {
         UpdateUrl();
         loading = true;
-        try { result = await Api.SearchTrainersAsync(new SearchTrainersRequest { Query = query, Page = page, PageSize = pageSize }); }
+        try { result = await Api.SearchTrainersAsync(new SearchTrainersRequest { Query = query, AffiliationCode = affiliationCode, Page = page, PageSize = pageSize }); }
         finally { loading = false; }
     }
     private async Task GoAsync(int value) { page = value; await LoadAsync(); }
-    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/trainers", new Dictionary<string, string?> { ["query"] = query, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/trainers", new Dictionary<string, string?> { ["query"] = query, ["affiliation"] = affiliationCode, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
     private void NavigateIfChanged(string uri)
     {
         if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;

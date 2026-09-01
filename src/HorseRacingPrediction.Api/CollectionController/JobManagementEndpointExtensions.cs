@@ -7,6 +7,8 @@ public static class JobManagementEndpointExtensions
     public static IEndpointRouteBuilder MapJobManagementEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/admin/jobs").WithTags("Job Management API");
+        group.MapGet("/queue-state", (CollectionMaintenanceState maintenance) =>
+            Results.Ok(new { isPaused = maintenance.IsActive }));
         group.MapGet("", async (string? jobType, AgentJobStatus? status, int? limit, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));
         group.MapGet("/{jobId}", async (string jobId, ProcessingStateStore store, CancellationToken token) =>

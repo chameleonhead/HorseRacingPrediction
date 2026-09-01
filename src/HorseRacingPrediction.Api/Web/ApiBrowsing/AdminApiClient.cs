@@ -124,6 +124,9 @@ public sealed class AdminApiClient
     public Task<AdminApiResult> ResumeJobsAsync(CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, "/api/admin/jobs/resume", body: null, cancellationToken);
 
+    public Task<JobQueueStateResponse?> GetJobQueueStateAsync(CancellationToken cancellationToken = default)
+        => GetJsonAsync<JobQueueStateResponse>("/api/admin/jobs/queue-state", cancellationToken);
+
     public Task<IReadOnlyList<AgentAcquisitionStatusReadModel>?> GetAcquisitionStatusesAsync(
         DateOnly from, DateOnly to, AgentAcquisitionSubjectType? subjectType = null,
         RaceDataCollectionState? status = null, CancellationToken cancellationToken = default)
@@ -132,6 +135,9 @@ public sealed class AdminApiClient
 
     public Task<AgentAcquisitionStatusReadModel?> GetAcquisitionStatusAsync(string acquisitionKey, CancellationToken cancellationToken = default)
         => GetJsonAsync<AgentAcquisitionStatusReadModel>($"/api/collection/acquisitions/{Uri.EscapeDataString(acquisitionKey)}", cancellationToken);
+
+    public Task<IReadOnlyList<AgentAcquisitionHistoryReadModel>?> GetAcquisitionHistoryAsync(string acquisitionKey, CancellationToken cancellationToken = default)
+        => GetJsonAsync<IReadOnlyList<AgentAcquisitionHistoryReadModel>>($"/api/collection/acquisitions/{Uri.EscapeDataString(acquisitionKey)}/history", cancellationToken);
 
     public async Task<IReadOnlyList<MemoResponse>> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
         => await GetJsonAsync<IReadOnlyList<MemoResponse>>(
@@ -316,6 +322,8 @@ public sealed class AdminApiClient
     private sealed record TrainerIdResponse(string TrainerId);
     private sealed record MemoIdResponse(string MemoId);
 }
+
+public sealed record JobQueueStateResponse(bool IsPaused);
 
 public sealed record AdminApiResult(bool Success, IReadOnlyList<string> Errors)
 {

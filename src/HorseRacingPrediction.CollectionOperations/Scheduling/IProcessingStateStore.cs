@@ -37,6 +37,7 @@ public interface IProcessingStateStore
     Task<IReadOnlyList<RaceDataCollectionStatusReadModel>> GetRaceDataCollectionStatusesAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
     Task UpsertAgentAcquisitionStatusAsync(string acquisitionKey, AgentAcquisitionSubjectType subjectType, AgentAcquisitionOperationType operationType, string? providerType, string? subjectId, string subjectName, string? relatedRaceId, string? originJobId, string? sourceUrl, RaceDataCollectionState status, RaceDataCollectionErrorCode? errorCode, string? errorReason, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AgentAcquisitionStatusReadModel>> GetAgentAcquisitionStatusesAsync(DateOnly from, DateOnly to, AgentAcquisitionSubjectType? subjectType, RaceDataCollectionState? status, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AgentAcquisitionHistoryReadModel>> GetAgentAcquisitionHistoryAsync(string acquisitionKey, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AgentJobStatusReadModel>> GetJobStatusesAsync(string? jobType, AgentJobStatus? status, int limit, CancellationToken cancellationToken = default);
     Task<AgentJobDetailReadModel?> GetJobDetailAsync(string jobId, CancellationToken cancellationToken = default);
     Task<ResultDayCollectionStatusReadModel?> GetResultDayCollectionStatusAsync(string providerType, DateOnly targetDate, CancellationToken cancellationToken = default);

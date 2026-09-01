@@ -81,6 +81,29 @@ public sealed class JobManagementEndpointTests
     }
 
     [TestMethod]
+    public async Task GetAcquisitionHistory_ReturnsLatestAttemptsFirst()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app;
+        using var requestClient = client;
+        requestClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<ProcessingStateStore>();
+        var key = "Horse:ProfileSync:履歴テスト";
+        var now = new DateTimeOffset(2026, 8, 30, 9, 0, 0, TimeSpan.Zero);
+        await store.UpsertAgentAcquisitionStatusAsync(key, AgentAcquisitionSubjectType.Horse, AgentAcquisitionOperationType.ProfileSync, "JRA", "horse-history", "履歴テスト", null, null, null, RaceDataCollectionState.Failed, RaceDataCollectionErrorCode.ExternalRequestFailed, "timeout", now);
+        await store.UpsertAgentAcquisitionStatusAsync(key, AgentAcquisitionSubjectType.Horse, AgentAcquisitionOperationType.ProfileSync, "JRA", "horse-history", "履歴テスト", null, null, null, RaceDataCollectionState.Succeeded, null, null, now.AddMinutes(1));
+
+        var response = await requestClient.GetAsync($"/api/collection/acquisitions/{Uri.EscapeDataString(key)}/history");
+        var body = await response.Content.ReadFromJsonAsync<AgentAcquisitionHistoryReadModel[]>();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(body);
+        Assert.AreEqual(2, body.Length);
+        Assert.AreEqual(RaceDataCollectionState.Succeeded, body[0].Status);
+        Assert.AreEqual("timeout", body[1].ErrorReason);
+    }
+
+    [TestMethod]
     public async Task PauseAndResume_ReturnsRequeuedReadyDispatchCount()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
@@ -101,6 +124,27 @@ public sealed class JobManagementEndpointTests
         Assert.AreEqual(HttpStatusCode.OK, resume.StatusCode);
         Assert.AreEqual("Running", body!.Status);
         Assert.AreEqual(1, body.Requeued);
+    }
+
+    [TestMethod]
+    public async Task QueueState_ReflectsPauseAndResume()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app;
+        using var requestClient = client;
+        requestClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+
+        var initial = await requestClient.GetFromJsonAsync<QueueStateResponse>("/api/admin/jobs/queue-state");
+        var pause = await requestClient.PostAsync("/api/admin/jobs/pause", null);
+        var paused = await requestClient.GetFromJsonAsync<QueueStateResponse>("/api/admin/jobs/queue-state");
+        var resume = await requestClient.PostAsync("/api/admin/jobs/resume", null);
+        var resumed = await requestClient.GetFromJsonAsync<QueueStateResponse>("/api/admin/jobs/queue-state");
+
+        Assert.IsFalse(initial!.IsPaused);
+        Assert.AreEqual(HttpStatusCode.Accepted, pause.StatusCode);
+        Assert.IsTrue(paused!.IsPaused);
+        Assert.AreEqual(HttpStatusCode.OK, resume.StatusCode);
+        Assert.IsFalse(resumed!.IsPaused);
     }
 
     [TestMethod]
@@ -129,4 +173,5 @@ public sealed class JobManagementEndpointTests
 
     private sealed record ReacquireResponse(string JobId);
     private sealed record ResumeResponse(string Status, int Requeued);
+    private sealed record QueueStateResponse(bool IsPaused);
 }

@@ -5,8 +5,14 @@
 
 <RaceOpsPageHeader Section="運用" Title="収集ジョブ" Description="計画された収集処理の状態を確認します。">
     <Actions>
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog">すべてのジョブを一時停止</FluentButton>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@operating">再開</FluentButton>
+        @if (queuePaused)
+        {
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@operating">再開</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog" Disabled="@operating">すべてのジョブを一時停止</FluentButton>
+        }
     </Actions>
 </RaceOpsPageHeader>
 
@@ -17,6 +23,19 @@
     <FluentGridItem xs="12" sm="6" md="2"><FluentSelect TOption="FilterOption" Label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></FluentGridItem>
     <FluentGridItem xs="12" md="1" class="filter-action"><FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton></FluentGridItem>
 </FluentGrid>
+
+@if (DaySummaries.Count > 0)
+{
+    <section class="entity-section" aria-labelledby="job-day-summary-heading">
+        <h2 id="job-day-summary-heading">対象日別の収集状況</h2>
+        <div class="relationship-list">
+            @foreach (var summary in DaySummaries)
+            {
+                <div class="relationship-row"><span>@summary.Date</span><a href="@JobsByDateUrl(summary.Date)">同日の収集ジョブを見る</a><span class="hint">@summary.Count 件・要対応 @summary.AttentionCount 件</span></div>
+            }
+        </div>
+    </section>
+}
 
 @if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
 else if (jobs.Count == 0) { <UiState Title="該当する収集ジョブはありません" Message="条件を変更してお試しください。" /> }
@@ -59,6 +78,7 @@ else
     private int totalPages;
     private bool loading;
     private bool operating;
+    private bool queuePaused;
     private bool showPauseDialog;
     private IReadOnlyList<string> operationErrors = [];
 
@@ -82,6 +102,7 @@ else
     {
         loading = true;
         try {
+            queuePaused = (await Api.GetJobQueueStateAsync())?.IsPaused ?? false;
             allJobs = await Api.GetJobsAsync(jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null) ?? [];
             var filtered = view switch { "action" => allJobs.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter), "running" => allJobs.Where(x => x.Status == AgentJobStatus.Running), "ready" => allJobs.Where(x => x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency), "recent" => allJobs.Where(x => x.Status == AgentJobStatus.Succeeded), _ => allJobs };
             if (!string.IsNullOrWhiteSpace(targetDateText))
@@ -92,8 +113,8 @@ else
     }
     private void OpenPauseDialog() { operationErrors = []; showPauseDialog = true; }
     private void ClosePauseDialog() => showPauseDialog = false;
-    private async Task PauseAsync() { operating = true; var result = await Api.PauseJobsAsync(); operating = false; if (result.Success) showPauseDialog = false; else operationErrors = result.Errors; }
-    private async Task ResumeAsync() { operating = true; await Api.ResumeJobsAsync(); operating = false; await LoadAsync(); }
+    private async Task PauseAsync() { operating = true; var result = await Api.PauseJobsAsync(); operating = false; if (result.Success) { showPauseDialog = false; await LoadAsync(); } else operationErrors = result.Errors; }
+    private async Task ResumeAsync() { operating = true; var result = await Api.ResumeJobsAsync(); operating = false; if (result.Success) await LoadAsync(); else operationErrors = result.Errors; }
     private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
     private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
     private static string DisplayJobType(string value) => value switch { "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
@@ -113,5 +134,16 @@ else
         return match.Success ? match.Value : null;
     }
 
+    private IReadOnlyList<DaySummary> DaySummaries => allJobs
+        .Select(x => new { Job = x, Date = ExtractTargetDate(x.DeduplicationKey) })
+        .Where(x => x.Date is not null)
+        .GroupBy(x => x.Date!, StringComparer.Ordinal)
+        .OrderByDescending(x => x.Key)
+        .Take(7)
+        .Select(x => new DaySummary(x.Key, x.Count(), x.Count(item => item.Job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter)))
+        .ToList();
+    private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
+
     private sealed record FilterOption(string Value, string Label);
+    private sealed record DaySummary(string Date, int Count, int AttentionCount);
 }

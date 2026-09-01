@@ -45,6 +45,16 @@ public static class AgentAcquisitionStatusEndpointExtensions
             .WithTags("Collection Tasks API")
             .WithSummary("Get collection acquisition detail");
 
+        endpoints.MapGet("/api/collection/acquisitions/{acquisitionKey}/history",
+            async (string acquisitionKey, IProcessingStateStore stateStore, CancellationToken cancellationToken) =>
+            {
+                var history = await stateStore.GetAgentAcquisitionHistoryAsync(acquisitionKey, cancellationToken);
+                return Results.Ok(history);
+            })
+            .WithName("GetCollectionAcquisitionHistory")
+            .WithTags("Collection Tasks API")
+            .WithSummary("Get collection acquisition history");
+
         return endpoints;
     }
 }
