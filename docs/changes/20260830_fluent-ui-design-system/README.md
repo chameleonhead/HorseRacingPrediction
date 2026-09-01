@@ -1,9 +1,9 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
-- Updated: 2026-09-01
+- Updated: 2026-09-02
 
 ## Context
 
@@ -1077,3 +1077,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal -p:BaseOutputPath=...` は成功（warning 0 / error 0）。通常の出力先へのbuildは、ローカル起動中のAPI（PID 218488）とVisual StudioがDLLを保持しているためコピー段階で失敗したが、隔離出力先ではRazorを含めてコンパイルできている。
 - 起動中の`http://localhost:5178/app.css`から変更済みstylesheetが配信されることを確認した。ブラウザーの実画面再比較は次の検証で1280px / 720px / 320pxについて実施する。
+
+## Final layout and color verification - 2026-09-02
+
+- 認証済みのローカル管理画面で、`/jobs`、`/races`、`/horses`、`/jockeys`、`/trainers`、`/owners`、`/predictions`、`/acquisition-statuses` を1280px、720px、320pxで再確認した。全24条件でdocument幅はviewport幅以下となり、横overflowは発生しなかった。
+- 1280pxではleft railが240px、背景が`rgb(36, 51, 47)`（`#24332f`）、navigation textがwhiteであることを確認した。各filterはfield単位で横方向に配置され、primary searchは残余幅へ伸長し、select/dateと実行buttonは内容に応じた幅を保った。`/jobs`のfilterは高さ56pxで、実行buttonは約78pxに収まり、本文幅へ拡大していない。
+- 720pxと320pxでは全filter fieldとactionが読み順を保った1列になり、buttonは利用可能幅へ広がることを確認した。320pxではrailが左へ退避し、本文のみがviewport内に表示されるdrawer状態を確認した。
+- `/jobs`のloaded stateを画面比較し、object header、全体停止action、filter、status付きobject rowの階層と密度がモックに沿うことを確認した。Fluent controlの標準focus・色は上書きしていない。
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260902 -v:minimal`: 成功、警告0、エラー0。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功。Contracts 38、Domain 94、Agents 177、MachineLearning 14、Infrastructure 10、Application 56、API 98、Collector 93件、合計580件がすべて成功した。
+- 承認済みscope、モック適合、回帰検証、ドキュメント同期が完了したため、このchange recordを`Implemented`とする。`docs/admin-ui-design.md`と`docs/design-guidelines.md`に追加の差分はない。
