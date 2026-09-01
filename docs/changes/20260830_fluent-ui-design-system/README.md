@@ -841,3 +841,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Implementation checkpoint - 2026-09-01 operational detail headers
+
+- `RaceOpsObjectHeader` に任意の status 表示を追加した。収集ジョブとデータ取得状況は、日本語 status と tone を header に表示し、技術情報や状態遷移の意味を変えずに object header を統一した。
+- データ取得状況の詳細では、collection header を表示せず object header を用いる。完了済み元ジョブからの再取得 CTA は header に置き、実行不可の説明と既存 detail / dialog は保持した。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。

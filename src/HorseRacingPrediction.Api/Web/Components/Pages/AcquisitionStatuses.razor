@@ -4,25 +4,22 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="レース・出走馬・関係者データの取得結果を確認します。" />
+@if (string.IsNullOrWhiteSpace(AcquisitionKey))
+{
+    <RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="レース・出走馬・関係者データの取得結果を確認します。" />
+}
 @if (detail is not null)
 {
-    <FluentCard class="detail-card">
-        <a class="back-link" href="/acquisition-statuses">← 一覧に戻る</a>
-        <div class="detail-title-row">
-            <div>
-                <p class="eyebrow">データ取得状況詳細</p>
-                <h2>@detail.SubjectName</h2>
-            </div>
+    <RaceOpsObjectHeader BackHref="/acquisition-statuses" BackLabel="← データ取得状況一覧に戻る" Title="@detail.SubjectName" Section="データ取得状況" Description="@($"{SubjectLabel(detail.SubjectType)} ・ {detail.OperationType}")" Status="@StatusLabel(detail.Status)" StatusTone="@StatusTone(detail.Status)">
+        <Actions>
             @if (originJob?.Status == AgentJobStatus.Succeeded)
             {
                 <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => showReacquireDialog = true)" Disabled="@reacquiring">再取得</FluentButton>
             }
-            else if (!string.IsNullOrWhiteSpace(detail.OriginJobId))
-            {
-                <span class="hint">再取得は元ジョブ完了後に実行できます。</span>
-            }
-        </div>
+        </Actions>
+    </RaceOpsObjectHeader>
+    <FluentCard class="detail-card">
+        @if (originJob?.Status != AgentJobStatus.Succeeded && !string.IsNullOrWhiteSpace(detail.OriginJobId)) { <p class="hint">再取得は元ジョブ完了後に実行できます。</p> }
         <div class="detail-grid">
             <div><span class="object-label">状態</span><span class="badge @StatusClass(detail.Status)">@detail.Status</span></div>
             <div><span class="object-label">取得種別</span>@detail.OperationType</div>
