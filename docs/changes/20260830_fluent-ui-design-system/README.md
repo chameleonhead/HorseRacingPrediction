@@ -756,7 +756,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | --- | --- | --- | --- | --- |
 | W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
-| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 進行中 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
+| W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
 | W5 | visual / responsive / accessibility 回帰 | 未着手 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
@@ -799,5 +799,17 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 検証:
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。通常出力先は起動中の API と Visual Studio により DLL が保持されているため、利用中プロセスを停止せず隔離出力先で Razor を含む現行ソースを検証した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Implementation checkpoint - 2026-09-01 acquisition status list migration
+
+- データ取得状況の collection header を `RaceOpsPageHeader` へ統一し、一覧を `RaceOpsObjectList` / `RaceOpsObjectListItem` へ移行した。
+- 取得状態は日本語の status label と tone で示し、対象種別・取得種別、提供元、更新日時、利用者が対処に必要なエラー要約を一覧に保った。
+- 詳細、再取得 dialog、filter、pagination、URL は変更していない。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 成功。改行コード変換の通知のみ。

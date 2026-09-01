@@ -4,7 +4,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<div class="object-header"><div><p class="eyebrow">運用</p><h1>データ取得状況</h1><p class="hint">レース・出走馬・関係者データの取得結果を確認します。</p></div></div>
+<RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="レース・出走馬・関係者データの取得結果を確認します。" />
 @if (detail is not null)
 {
     <FluentCard class="detail-card">
@@ -65,7 +65,16 @@
 <FluentCard class="filter-card"><div class="filter-grid acquisition-filter"><label>開始日<input type="date" @bind="from" /></label><label>終了日<input type="date" @bind="to" /></label><label>対象<select @bind="subjectTypeText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@value</option> }</select></label><label>状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@value</option> }</select></label><FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton></div></FluentCard>
 @if (loading) { <UiState Kind="loading" Title="データ取得状況を読み込んでいます" /> }
 else if (items.Count == 0) { <UiState Title="該当する取得結果はありません" /> }
-else { <div class="data-list">@foreach (var item in items.Skip((page - 1) * pageSize).Take(pageSize)) { <article class="data-list-row acquisition-row" @onclick="@(() => Open(item.AcquisitionKey))" tabindex="0"><div class="object-primary"><strong><a href="/acquisition-statuses/@Uri.EscapeDataString(item.AcquisitionKey)" @onclick:stopPropagation="true">@item.SubjectName</a></strong><span class="hint">@item.SubjectType · @item.OperationType</span></div><span class="badge @StatusClass(item.Status)">@item.Status</span><div><span class="object-label">提供元</span>@(item.ProviderType ?? "—")</div><div><span class="object-label">更新</span>@item.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>@if (!string.IsNullOrWhiteSpace(item.ErrorReason)) { <div class="row-error" role="alert">@item.ErrorReason</div> }</article> }</div><Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" /> }
+else
+{
+    <RaceOpsObjectList Label="データ取得状況一覧">
+        @foreach (var item in items.Skip((page - 1) * pageSize).Take(pageSize))
+        {
+            <RaceOpsObjectListItem Href="@($"/acquisition-statuses/{Uri.EscapeDataString(item.AcquisitionKey)}")" Title="@item.SubjectName" Description="@($"{SubjectLabel(item.SubjectType)} ・ {item.OperationType}")" Status="@StatusLabel(item.Status)" StatusTone="@StatusTone(item.Status)" Metadata="@DisplayMetadata(item)" />
+        }
+    </RaceOpsObjectList>
+    <Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
+}
 
 <FluentDialog Hidden="@(!showReacquireDialog || detail is null)" HiddenChanged="@(hidden => showReacquireDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="reacquire-title" Style="width:min(520px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="reacquire-title">このデータを再取得しますか</h2></FluentDialogHeader>
@@ -134,6 +143,28 @@ else { <div class="data-list">@foreach (var item in items.Skip((page - 1) * page
     private async Task LoadAsync() { loading = true; try { items = await Api.GetAcquisitionStatusesAsync(from, to, Enum.TryParse<AgentAcquisitionSubjectType>(subjectTypeText, out var subject) ? subject : null, Enum.TryParse<RaceDataCollectionState>(statusText, out var state) ? state : null) ?? []; page = 1; } finally { loading = false; } }
     private Task GoPage(int value) { page = value; return Task.CompletedTask; }
     private static string StatusClass(RaceDataCollectionState value) => value switch { RaceDataCollectionState.Succeeded => "ok", RaceDataCollectionState.Failed or RaceDataCollectionState.DeadLetter => "bad", RaceDataCollectionState.Running => "info", _ => "warn" };
+    private static string StatusLabel(RaceDataCollectionState value) => value switch
+    {
+        RaceDataCollectionState.Succeeded => "完了",
+        RaceDataCollectionState.Failed => "失敗",
+        RaceDataCollectionState.DeadLetter => "要対応",
+        RaceDataCollectionState.Running => "実行中",
+        _ => "待機中"
+    };
+    private static string StatusTone(RaceDataCollectionState value) => value switch
+    {
+        RaceDataCollectionState.Succeeded => "success",
+        RaceDataCollectionState.Failed or RaceDataCollectionState.DeadLetter => "danger",
+        RaceDataCollectionState.Running => "info",
+        _ => "neutral"
+    };
+    private static string DisplayMetadata(AgentAcquisitionStatusReadModel item)
+    {
+        var updated = item.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+        return string.IsNullOrWhiteSpace(item.ErrorReason)
+            ? $"提供元 {item.ProviderType ?? "—"} ・ 更新 {updated}"
+            : $"提供元 {item.ProviderType ?? "—"} ・ 更新 {updated} ・ {item.ErrorReason}";
+    }
     private static string? SubjectUrl(AgentAcquisitionStatusReadModel item) => item.SubjectType switch
     {
         AgentAcquisitionSubjectType.Horse => $"/horses/{Uri.EscapeDataString(item.SubjectId!)}",
