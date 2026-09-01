@@ -3,8 +3,9 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<h1>調教師詳細</h1>
-<p class="hint"><a href="/trainers">← 調教師検索へ戻る</a> · <a href="/trainers/@Uri.EscapeDataString(TrainerId)/edit">編集</a></p>
+<RaceOpsObjectHeader BackHref="/trainers" BackLabel="← 調教師一覧に戻る" Title="@(trainer?.DisplayName ?? "調教師詳細")" Section="調教師">
+    <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/trainers/{Uri.EscapeDataString(TrainerId)}/edit")">編集</FluentButton></Actions>
+</RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (trainer is null) { <p>TrainerId「@TrainerId」の調教師は見つかりませんでした。</p> }

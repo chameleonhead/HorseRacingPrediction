@@ -820,3 +820,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - 1440 px: `/races`、`/horses`、`/jockeys`、`/trainers`、`/owners` は各 1 つの object list と 50 / 50 / 50 / 50 / 23 行を表示し、横 overflow と共通エラー表示はなかった。`/predictions` と `/acquisition-statuses` は現在の filter に該当データがなく empty state を表示した。
 - 320 px: `/races`、`/horses`、`/owners` は object list を表示し、`/acquisition-statuses` は empty state を表示した。いずれも横 overflow と共通エラー表示はなかった。
 - 予想票と取得状況の populated state、全一覧の keyboard / screen reader 操作、loading / error state は残作業として W5 で確認する。
+
+## Implementation checkpoint - 2026-09-01 object detail headers
+
+- `RaceOpsObjectHeader` を追加し、戻る導線、種別、主ラベル、補助説明、object-scoped action を API client 非依存の表示 component に分離した。
+- 馬・騎手・調教師詳細は共通 header へ移行し、一覧へ戻る導線と編集 CTA の位置・文法を統一した。詳細属性、関係、履歴、管理操作は既存のまま保持している。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `git diff --check`: 成功。改行コード変換の通知のみ。

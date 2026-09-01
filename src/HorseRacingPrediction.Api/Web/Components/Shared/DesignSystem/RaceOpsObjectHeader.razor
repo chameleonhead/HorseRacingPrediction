@@ -1,0 +1,29 @@
+<header class="object-header">
+    <a class="back-link" href="@BackHref">@BackLabel</a>
+    <div class="object-header-content">
+        @if (!string.IsNullOrWhiteSpace(Section))
+        {
+            <p class="eyebrow">@Section</p>
+        }
+        <h1>@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <p class="hint">@Description</p>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <FluentStack Orientation="@Orientation.Horizontal" HorizontalGap="8" class="header-actions">
+            @Actions
+        </FluentStack>
+    }
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string BackHref { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string BackLabel { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Section { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}
