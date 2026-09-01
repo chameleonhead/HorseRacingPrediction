@@ -17,17 +17,16 @@ else if (items.Count == 0) { <UiState Title="該当する馬主はありませ�
 else
 {
     @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
-    <div class="data-list" aria-label="馬主一覧">
+    <RaceOpsObjectList Label="馬主一覧">
         @foreach (var owner in PagedItems)
         {
-            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenOwner(owner.OwnerId)" @onkeydown="e => OpenOwnerFromKey(e, owner.OwnerId)">
-                <div class="object-primary"><a href="@OwnerUrl(owner.OwnerId)" @onclick:stopPropagation>@owner.DisplayName</a><span class="hint">表記 @owner.NameVariants.Count 件</span></div>
-                <div><span class="object-label">現在の所有馬</span>@owner.CurrentHorseCount 頭</div>
-                <div><span class="object-label">出走</span>@owner.ParticipationCount 戦</div>
-                <div><span class="object-label">最終出走</span>@(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</div>
-            </article>
+            <RaceOpsObjectListItem
+                Href="@OwnerUrl(owner.OwnerId)"
+                Title="@owner.DisplayName"
+                Description="@($"表記 {owner.NameVariants.Count} 件")"
+                Metadata="@DisplayMetadata(owner)" />
         }
-    </div>
+    </RaceOpsObjectList>
     <Pagination TotalCount="items.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
 }
 
@@ -71,7 +70,6 @@ else
         if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
         Navigation.NavigateTo(uri, replace: true);
     }
-    private void OpenOwner(string id) => Navigation.NavigateTo(OwnerUrl(id));
-    private void OpenOwnerFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenOwner(id); }
     private static string OwnerUrl(string id) => $"/owners/{Uri.EscapeDataString(id)}";
+    private static string DisplayMetadata(OwnerSummaryResponse owner) => $"現在の所有馬 {owner.CurrentHorseCount} 頭 ・ 出走 {owner.ParticipationCount} 戦 ・ 最終出走 {(owner.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")}";
 }

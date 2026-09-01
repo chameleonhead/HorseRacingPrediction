@@ -19,19 +19,20 @@ else
 {
     @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="data-list" aria-label="予想票一覧">
+    <RaceOpsObjectList Label="予想票一覧">
         @foreach (var p in result.Items)
         {
-            <article class="data-list-row prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
-                <div class="object-primary"><a href="@PredictionUrl(p.PredictionTicketId)" @onclick:stopPropagation>@p.TicketStatus</a><span class="hint">@RaceLink(p.RaceId)</span></div>
-                <div><span class="object-label">予想者</span>@p.PredictorType / @p.PredictorId</div>
-                <div><span class="object-label">評価</span><span class="badge info">@p.EvaluationStatus</span></div>
-                <div><span class="object-label">信頼度</span>@p.ConfidenceScore</div>
-                <div><span class="object-label">予想日時</span>@(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—")</div>
-                <div><span class="object-label">印</span>@p.MarkCount 件</div>
+            <article class="object-list-item prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
+                <span class="object-list-main">
+                    <strong>@p.TicketStatus</strong>
+                    <span class="hint">@RaceLink(p.RaceId) · @($"{p.PredictorType} / {p.PredictorId}")</span>
+                </span>
+                <span class="badge info">@p.EvaluationStatus</span>
+                <span class="object-list-meta">信頼度 @p.ConfidenceScore ・ 予想日時 @(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—") ・ 印 @p.MarkCount 件</span>
+                <span class="object-list-affordance">詳細</span>
             </article>
         }
-    </div>
+    </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 

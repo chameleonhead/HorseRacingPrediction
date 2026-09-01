@@ -18,16 +18,12 @@ else
 {
     @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="data-list" aria-label="調教師一覧">
+    <RaceOpsObjectList Label="調教師一覧">
         @foreach (var t in result.Items)
         {
-            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenTrainer(t.TrainerId)" @onkeydown="e => OpenTrainerFromKey(e, t.TrainerId)">
-                <div class="object-primary"><a href="@TrainerUrl(t.TrainerId)" @onclick:stopPropagation>@t.DisplayName</a><span class="hint">@t.TrainerId</span></div>
-                <div><span class="object-label">所属</span>@(t.AffiliationCode ?? "—")</div>
-                <div><span class="object-label">別名</span>@t.AliasCount 件</div>
-            </article>
+            <RaceOpsObjectListItem Href="@TrainerUrl(t.TrainerId)" Title="@t.DisplayName" Description="@t.TrainerId" Metadata="@TrainerMetadata(t)" />
         }
-    </div>
+    </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
@@ -65,4 +61,5 @@ else
     private void OpenTrainer(string id) => Navigation.NavigateTo(TrainerUrl(id));
     private void OpenTrainerFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenTrainer(id); }
     private static string TrainerUrl(string id) => $"/trainers/{Uri.EscapeDataString(id)}";
+    private static string TrainerMetadata(TrainerSummaryResponse trainer) => $"所属 {trainer.AffiliationCode ?? "—"} · 別名 {trainer.AliasCount} 件";
 }

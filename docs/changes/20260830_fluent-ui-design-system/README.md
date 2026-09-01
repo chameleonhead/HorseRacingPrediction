@@ -787,3 +787,17 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 ### Approval
 
 2026-09-01 に、利用者がこの condensed object item contract を承認した。
+
+## Implementation checkpoint - 2026-09-01 collection list migration
+
+- 馬、騎手、調教師、馬主の collection 一覧を `RaceOpsObjectList` と `RaceOpsObjectListItem` へ移行した。状態を持たない object は status を省略し、主ラベル、識別用の補助情報、利用者が判断する属性、詳細導線の順に表示する。
+- レースと予想票は、行内に日付・開催場・レースへの別 URL の関係リンクを持つため、page 固有の semantic row を `RaceOpsObjectList` 内へ置いた。行の primary detail 操作と関係リンクを nested anchor にせず両立している。
+- レースの row は、状態、頭数、勝ち馬を 1 つの一覧 row grammar に収め、既存のフィルター、ページ、URL 同期、loading / empty 表示を保持した。
+
+残作業: データ取得状況の一覧移行、各 collection の browser viewport 回帰、詳細・編集 composition。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。通常出力先は起動中の API と Visual Studio により DLL が保持されているため、利用中プロセスを停止せず隔離出力先で Razor を含む現行ソースを検証した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 成功。改行コード変換の通知のみ。

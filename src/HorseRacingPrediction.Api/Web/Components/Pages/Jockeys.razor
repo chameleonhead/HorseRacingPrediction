@@ -18,16 +18,12 @@ else
 {
     @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="data-list" aria-label="騎手一覧">
+    <RaceOpsObjectList Label="騎手一覧">
         @foreach (var j in result.Items)
         {
-            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenJockey(j.JockeyId)" @onkeydown="e => OpenJockeyFromKey(e, j.JockeyId)">
-                <div class="object-primary"><a href="@JockeyUrl(j.JockeyId)" @onclick:stopPropagation>@j.DisplayName</a><span class="hint">@j.JockeyId</span></div>
-                <div><span class="object-label">所属</span>@(j.AffiliationCode ?? "—")</div>
-                <div><span class="object-label">別名</span>@j.AliasCount 件</div>
-            </article>
+            <RaceOpsObjectListItem Href="@JockeyUrl(j.JockeyId)" Title="@j.DisplayName" Description="@j.JockeyId" Metadata="@JockeyMetadata(j)" />
         }
-    </div>
+    </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
@@ -65,4 +61,5 @@ else
     private void OpenJockey(string id) => Navigation.NavigateTo(JockeyUrl(id));
     private void OpenJockeyFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJockey(id); }
     private static string JockeyUrl(string id) => $"/jockeys/{Uri.EscapeDataString(id)}";
+    private static string JockeyMetadata(JockeySummaryResponse jockey) => $"所属 {jockey.AffiliationCode ?? "—"} · 別名 {jockey.AliasCount} 件";
 }

@@ -19,17 +19,12 @@ else
 {
     @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="data-list" aria-label="馬一覧">
+    <RaceOpsObjectList Label="馬一覧">
         @foreach (var h in result.Items)
         {
-            <article class="data-list-row selectable-row" tabindex="0" role="link" @onclick="() => OpenHorse(h.HorseId)" @onkeydown="e => OpenHorseFromKey(e, h.HorseId)">
-                <div class="object-primary"><a href="@HorseUrl(h.HorseId)" @onclick:stopPropagation>@h.RegisteredName</a><span class="hint">@h.HorseId</span></div>
-                <div><span class="object-label">性</span>@(h.SexCode ?? "—")</div>
-                <div><span class="object-label">生年月日</span>@(h.BirthDate?.ToString("yyyy/MM/dd") ?? "—")</div>
-                <div><span class="object-label">別名</span>@h.AliasCount 件</div>
-            </article>
+            <RaceOpsObjectListItem Href="@HorseUrl(h.HorseId)" Title="@h.RegisteredName" Description="@h.HorseId" Metadata="@HorseMetadata(h)" />
         }
-    </div>
+    </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
@@ -69,4 +64,5 @@ else
     private void OpenHorse(string id) => Navigation.NavigateTo(HorseUrl(id));
     private void OpenHorseFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenHorse(id); }
     private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
+    private static string HorseMetadata(HorseSummaryResponse horse) => $"性 {horse.SexCode ?? "—"} · 生年月日 {(horse.BirthDate?.ToString("yyyy/MM/dd") ?? "—")} · 別名 {horse.AliasCount} 件";
 }
