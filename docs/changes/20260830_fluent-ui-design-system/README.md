@@ -758,7 +758,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
 | W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
-| W5 | visual / responsive / accessibility 回帰 | 未着手 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
+| W5 | visual / responsive / accessibility 回帰 | 進行中 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
 
 実行方針: W3 と W4 は画面・ファイルが重ならない単位に分け、軽量モデルのサブエージェントへ委譲する。root は各 checkpoint の設計整合性、統合テスト、browser 回帰だけを担当し、サブエージェントには対象 page・共有 contract・検証条件だけを渡す。
@@ -813,3 +813,10 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 成功。改行コード変換の通知のみ。
+
+## Verification update - 2026-09-01 collection browser pass
+
+- 隔離出力の API を `localhost:5178` で Development 設定として起動し、認証後に一覧を確認した。通常の開発プロセスと出力 DLL は変更していない。
+- 1440 px: `/races`、`/horses`、`/jockeys`、`/trainers`、`/owners` は各 1 つの object list と 50 / 50 / 50 / 50 / 23 行を表示し、横 overflow と共通エラー表示はなかった。`/predictions` と `/acquisition-statuses` は現在の filter に該当データがなく empty state を表示した。
+- 320 px: `/races`、`/horses`、`/owners` は object list を表示し、`/acquisition-statuses` は empty state を表示した。いずれも横 overflow と共通エラー表示はなかった。
+- 予想票と取得状況の populated state、全一覧の keyboard / screen reader 操作、loading / error state は残作業として W5 で確認する。
