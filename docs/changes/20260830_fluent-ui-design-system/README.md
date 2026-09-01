@@ -757,7 +757,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | W1 | 共通 design-system / app shell | 進行中 | 軽量サブエージェント + root review | Fluent UI の対応 component へ移行し、provider は layout root の一箇所だけに置く |
 | W2 | 収集ジョブの一覧・responsive 検証 | 完了 | root | 1440 / 720 / 320 px、dialog、一覧詳細導線を確認済み |
 | W3 | collection 一覧移行（レース、馬、騎手、調教師、馬主、予想票、取得状況） | 完了 | 軽量サブエージェント | 各一覧を `RaceOpsObjectList` に統一し、page は API / URL / 状態だけを保持 |
-| W4 | 詳細・編集の共通 composition | 未着手 | 軽量サブエージェント | header、関連、technical details、form section を表示専用 component に分離 |
+| W4 | 詳細・編集の共通 composition | 進行中 | 軽量サブエージェント + root review | header と form section を表示専用 component に分離し、残る関連・technical details を確認 |
 | W5 | visual / responsive / accessibility 回帰 | 進行中 | root | 指定 viewport、loading / empty / error / dialog、キーボード導線を記録 |
 | W6 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、差分確認、design guideline / change record 完結 |
 
@@ -872,3 +872,17 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 検証:
 
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+
+## Implementation checkpoint - 2026-09-01 correction edit form composition
+
+- 馬・騎手・調教師の別名追加・統合とデータ補正を `RaceOpsFormSection` に移行し、入力、エラー、action footer をプロフィール更新と同じ composition に統一した。
+- 追加、補正保存、キャンセルは Fluent Button を使う。各 API request、必須入力、補正対象、成功時の詳細への復帰は変更していない。
+- 軽量サブエージェントが画面単位で適用した変更を root が共通 contract と隔離ビルドで統合確認した。
+
+残作業: 編集画面の browser viewport / keyboard 回帰、残る詳細の関連・technical details composition。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。通常出力先を保持する開発プロセスを停止せず、隔離出力先で Razor を含む現行ソースを検証した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 下記 commit 前確認で実行。
