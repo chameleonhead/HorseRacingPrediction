@@ -1,0 +1,24 @@
+@if (Items.Any())
+{
+    <section id="@SectionId" class="entity-section detail-section">
+        <h3>@Title</h3>
+        <div class="relationship-grid">
+            @foreach (var relationship in Items)
+            {
+                <a class="relationship-link" href="@Url(relationship)">
+                    <span class="relationship-kind">@relationship.RelationshipName</span>
+                    <strong>@relationship.DisplayName</strong>
+                    <span class="hint">@relationship.ParticipationCount @ParticipationUnit・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
+                </a>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public string SectionId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string ParticipationUnit { get; set; } = "戦";
+    [Parameter, EditorRequired] public IEnumerable<RelationshipSummaryResponse> Items { get; set; } = Array.Empty<RelationshipSummaryResponse>();
+    [Parameter, EditorRequired] public Func<RelationshipSummaryResponse, string> Url { get; set; } = default!;
+}

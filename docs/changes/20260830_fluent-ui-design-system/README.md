@@ -886,3 +886,15 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。通常出力先を保持する開発プロセスを停止せず、隔離出力先で Razor を含む現行ソースを検証した。
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
 - `git diff --check`: 下記 commit 前確認で実行。
+
+## Implementation checkpoint - 2026-09-01 relationship grid composition
+
+- `RaceOpsRelationshipGrid` を追加し、馬・騎手・調教師詳細の関連 object grid を共通表示 component に分離した。
+- 各詳細 page は関係の選別・並び順と URL の決定だけを保持する。馬は最大6件、騎手・調教師は賞金順上位5件という既存の表示条件、関係名、出走・騎乗数、最終日付、空時の section 非表示を維持した。
+- 履歴内の複数関係リンク、レース固有の出走関係、ジョブの依存関係は情報構造と導線が異なるため、この共通化の対象外とした。
+
+検証:
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260901 -v:minimal`: 成功、警告 0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 成功、96 件。
+- `git diff --check`: 下記 commit 前確認で実行。
