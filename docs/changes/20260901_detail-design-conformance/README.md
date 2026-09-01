@@ -117,6 +117,11 @@
 
 - prediction / acquisitionはloaded detail用fixtureがないため、loaded detailおよび再取得dialogの実データ検証が未完了である。既存データを変更せずに確認できるfixtureを用意した時点で、この記録のmatrixを更新する。
 
+### Shell token conformance - 2026-09-02
+
+- mockの共通shellと実装を照合し、railのpaddingを`24px 16px`、brand下の余白を`28px`、nav linkのpaddingを`10px 12px`、desktop / mobile page titleを`28px` / `24px`、filter toolbar gapを`8px`へ統一した。
+- ブラウザーが旧CSSを使用して差分判定を誤らないよう、`app.css`の参照へversion queryを付与した。再build・再起動後の実画面で、上記computed styleとhorizontal overflowなしを確認した。
+
 ## Documentation updates
 
 - `docs/changes/20260901_detail-design-conformance/README.md`: 本変更の要件、監査、判断、検証結果の正本として追加する。
