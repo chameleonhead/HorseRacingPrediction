@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-02
@@ -1087,3 +1087,33 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\\HorseRacingPrediction-verify-20260902 -v:minimal`: 成功、警告0、エラー0。
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功。Contracts 38、Domain 94、Agents 177、MachineLearning 14、Infrastructure 10、Application 56、API 98、Collector 93件、合計580件がすべて成功した。
 - 承認済みscope、モック適合、回帰検証、ドキュメント同期が完了したため、このchange recordを`Implemented`とする。`docs/admin-ui-design.md`と`docs/design-guidelines.md`に追加の差分はない。
+
+## Reopened mock conformance implementation - 2026-09-02
+
+利用者の実画面確認により、モックと実装が一致していないため直前の`Implemented`判定を差し戻す。既存のHTMLモックを画面構造、情報密度、余白、色、responsive behaviorの実装契約として再適用する。新しいデザイン判断は追加せず、利用者から明示された「モックに合わせる」を承認として扱う。
+
+### Work breakdown
+
+| ID | 作業 | 状態 | 完了条件 |
+| --- | --- | --- | --- |
+| C1 | 共通shell・brand・mobile bar | 完了 | desktop railとmobile barのbrand、色、寸法、drawer起点がモックと一致する |
+| C2 | collection header・filter・list row | 実装中 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
+| C3 | detail・edit・dialog | 未着手 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
+| C4 | responsive・keyboard・共通state | 未着手 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
+| C5 | 回帰検証・記録同期 | 未着手 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
+
+### Implementation order
+
+共通CSSとlayoutを先に確定し、一覧、詳細・編集、dialogの順に適用する。各checkpointでは対象モックと実装のスクリーンショットおよびDOM寸法を同じviewportで比較する。途中コミットは作業停止条件とせず、C5完了まで継続する。
+
+### C1 implementation and verification
+
+- desktop railとmobile barのbrandをモックと同じ`RaceOps`へ統一した。
+- 720px以下では高さ48px、背景`#24332f`、白いhamburger iconとbrandを持つsticky mobile barを追加し、drawerとbackdropの開始位置をbar直下へ揃えた。
+- 320pxの実ブラウザーでbar 48px、drawer top 48px、横overflowなし、menu buttonのaccessible name、drawerの開閉起点を確認した。
+- 隔離出力先へのAPI buildは警告0・エラー0で成功した。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 再監査、作業分割、実装結果、検証結果を追記する。
+- `docs/design-guidelines.md`と`docs/admin-ui-design.md`: 今回は既存の承認済みモックへの適合であり、設計規則の変更はない。実装中に正本との差異を発見した場合だけ同じ変更セットで更新する。

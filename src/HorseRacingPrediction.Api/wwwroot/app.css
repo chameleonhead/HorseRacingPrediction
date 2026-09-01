@@ -5,6 +5,7 @@ body { background: var(--neutral-layer-2); color: var(--neutral-foreground-rest)
 a { color: var(--accent-foreground-rest); }
 
 .page { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+.mobile-bar { display: none; }
 .mobile-menu-button { display: none; }
 .sidebar { grid-column: 1; display: flex; flex-direction: column; min-height: 100vh; padding: 24px 16px; background: #24332f; border-right: 0; color: #fff; }
 .brand { margin: 0 0 28px; color: #fff; font-size: 19px; font-weight: var(--font-weight-semibold); }
@@ -136,10 +137,13 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
 
 @media (max-width: 720px) {
     .page { display: block; }
-    .mobile-menu-button { display: inline-flex; margin: 4px; }
-    .sidebar { position: fixed; z-index: 2; inset: 0 auto 0 0; width: min(280px, 82vw); padding: 24px 16px; transform: translateX(-100%); transition: transform 160ms ease; }
+    .mobile-bar { position: sticky; z-index: 3; top: 0; display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 2px 12px; background: #24332f; color: #fff; }
+    .mobile-menu-button { display: inline-grid; width: 44px; height: 44px; padding: 0; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; }
+    .hamburger-icon { display: grid; width: 20px; gap: 4px; }
+    .hamburger-icon i { display: block; height: 2px; background: currentColor; }
+    .sidebar { position: fixed; z-index: 2; inset: 48px auto 0 0; width: min(280px, 82vw); min-height: calc(100vh - 48px); padding: 24px 16px; transform: translateX(-100%); transition: transform 160ms ease; }
     .sidebar.open { transform: translateX(0); }
-    .nav-backdrop { position: fixed; z-index: 1; inset: 0; border: 0; background: color-mix(in srgb, CanvasText 35%, transparent); }
+    .nav-backdrop { position: fixed; z-index: 1; inset: 48px 0 0; border: 0; background: color-mix(in srgb, CanvasText 35%, transparent); }
     .content { padding: 12px; }
     .page-header { display: grid; }
     .page-header h1 { font-size: 24px; }

@@ -5,12 +5,17 @@
 
 <FluentMenuProvider />
 
+<header class="mobile-bar">
+    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" aria-label="メニュー" @onclick="() => navOpen = !navOpen">
+        <span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+    </button>
+    <strong>RaceOps</strong>
+</header>
 <div class="page">
-    <FluentButton class="mobile-menu-button" Appearance="@Appearance.Stealth" aria-expanded="@navOpen" aria-label="メニュー" OnClick="() => navOpen = !navOpen"><span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>メニュー</span></FluentButton>
     @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
     <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
-            <span class="brand-text">競馬DB管理</span>
+            <span class="brand-text">RaceOps</span>
         </div>
         <NavMenu />
         <form method="post" action="/logout" class="logout-form">
