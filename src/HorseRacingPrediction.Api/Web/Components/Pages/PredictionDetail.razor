@@ -2,14 +2,14 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction?.SummaryComment ?? "予想票詳細")" Section="予想票" />
+<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction?.SummaryComment ?? "予想票詳細")" Section="レース・予想 / 予想票" />
 
 @if (loading) { <p>読み込み中…</p> }
 else if (prediction is null) { <p>PredictionTicketId「@PredictionTicketId」の予想票は見つかりませんでした。</p> }
 else
 {
-    <RaceOpsDetailTabs>
-    <FluentTab Label="概要" Id="overview"><section class="detail-card detail-section">
+    <div class="detail-stack">
+    <section class="detail-group" aria-label="概要"><section class="detail-card detail-section">
         <h2>予想票の概要</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><a href="@($"/races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
@@ -19,11 +19,11 @@ else
             <dt>予想日時</dt><dd>@prediction.PredictedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
         </dl>
     </section>
-    </FluentTab>
+    </section>
 
     @if (prediction.Marks.Count > 0)
     {
-        <FluentTab Label="印" Id="marks"><section class="detail-card detail-section">
+        <section class="detail-group" aria-label="印"><section class="detail-card detail-section">
             <h3>印</h3>
             <div class="mark-list">
                 @foreach (var m in prediction.Marks)
@@ -37,15 +37,15 @@ else
                 }
             </div>
         </section>
-        </FluentTab>
+        </section>
     }
 
-    <FluentTab Label="管理" Id="management"><section class="detail-card detail-section">
+    <section class="detail-group" aria-label="管理"><section class="detail-card detail-section">
         <h3>予想票の操作</h3>
         <p class="hint">予想票の編集・取り下げ操作は、予想業務の扱いを再整理するまで画面には表示しません。</p>
     </section>
-    </FluentTab>
-    </RaceOpsDetailTabs>
+    </section>
+    </div>
 }
 
 @code {

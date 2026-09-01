@@ -1098,8 +1098,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | --- | --- | --- | --- |
 | C1 | 共通shell・brand・mobile bar | 完了 | desktop railとmobile barのbrand、色、寸法、drawer起点がモックと一致する |
 | C2 | collection header・filter・list row | 完了 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
-| C3 | detail・edit・dialog | 実装中 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
-| C4 | responsive・keyboard・共通state | 未着手 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
+| C3 | detail・edit・dialog | 完了 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
+| C4 | responsive・keyboard・共通state | 実装中 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
 | C5 | 回帰検証・記録同期 | 未着手 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
 
 ### Implementation order
@@ -1121,6 +1121,15 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - レースとデータ取得状況の低頻度条件は`詳細条件` disclosureへ移し、通常toolbarがモックの主要条件だけで1行に収まるようにした。既存filter契約は保持する。
 - 馬・騎手・調教師の一覧から内部IDの主表示を外し、所属、生年月日、別名件数などの利用者向け属性を副表示へ移した。metadata/statusがない行は共通componentが空のgrid列を作らない。
 - 1280pxと320pxで8一覧を計測し、全画面で横overflowなしを確認した。1280pxではheaderが78–83px、通常filterが40px、mobileではcontrolが1列・40pxとなった。
+- 隔離API buildは警告0・エラー0、API testsは98件すべて成功した。
+
+### C3 implementation and verification
+
+- 馬・騎手・調教師・馬主・予想票の詳細は、タブ内にsectionを隠す実装を廃止し、モックと同じobject headerから概要、関連、履歴、管理情報へ続く連続した読み順へ変更した。レースはモックが主要ビュー切替を指定しているためタブを維持する。
+- object headerのeyebrowを各モックと同じ`group / object`へ統一した。desktopのloaded detailでheader 80px、cardのpadding 16px、radius 4pxを確認した。
+- relationship gridを、関係種別、object名、根拠を横方向に比較できる全幅行へ変更した。mobileでは関係種別とobjectを2列、根拠をobject列の次行へ再配置する。
+- edit formは最大840px、desktop 2列、mobile 1列、section padding 18px / 14pxへ揃え、actionを右寄せした。馬編集の3 sectionを1280pxと320pxで確認し、横overflowなし、全controlと6操作を表示できた。
+- populated DBの一時コピーで馬・騎手・調教師・馬主のloaded detailを1280px / 320pxで確認した。全画面で横overflowはなく、馬詳細では5 sectionが同時に表示された。
 - 隔離API buildは警告0・エラー0、API testsは98件すべて成功した。
 
 ### Documentation updates

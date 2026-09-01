@@ -2,7 +2,7 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<RaceOpsObjectHeader BackHref="/races" BackLabel="← レース一覧に戻る" Title="@(race?.RaceName ?? "レース詳細")" Section="レース">
+<RaceOpsObjectHeader BackHref="/races" BackLabel="← レース一覧に戻る" Title="@(race?.RaceName ?? "レース詳細")" Section="レース・予想 / レース">
     <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
 </RaceOpsObjectHeader>
 

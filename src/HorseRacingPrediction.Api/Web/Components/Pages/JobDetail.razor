@@ -8,7 +8,7 @@
 else if (job is null) { <UiState Kind="error" Title="収集ジョブが見つかりません" Message="@NotFoundMessage" /> }
 else
 {
-    <RaceOpsObjectHeader BackHref="/jobs" BackLabel="← 収集ジョブ一覧に戻る" Title="@DisplayJobType(job.JobType)" Section="収集ジョブ" Description="@HeaderDescription" Status="@StatusLabel(job.Status)" StatusTone="@StatusTone(job.Status)">
+    <RaceOpsObjectHeader BackHref="/jobs" BackLabel="← 収集ジョブ一覧に戻る" Title="@DisplayJobType(job.JobType)" Section="運用 / 収集ジョブ" Description="@HeaderDescription" Status="@StatusLabel(job.Status)" StatusTone="@StatusTone(job.Status)">
         <Actions>
             @if (CanRerun) { <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => showRerunDialog = true)">リラン</FluentButton> }
         </Actions>

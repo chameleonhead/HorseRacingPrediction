@@ -3,7 +3,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Nav
 
-<RaceOpsObjectHeader BackHref="@($"/jockeys/{Uri.EscapeDataString(JockeyId)}")" BackLabel="← 騎手詳細に戻る" Title="@(jockey?.DisplayName ?? "騎手の管理情報")" Section="騎手" />
+<RaceOpsObjectHeader BackHref="@($"/jockeys/{Uri.EscapeDataString(JockeyId)}")" BackLabel="← 騎手詳細に戻る" Title="@(jockey?.DisplayName ?? "騎手の管理情報")" Section="データ / 騎手" />
 
 @if (loading)
 {

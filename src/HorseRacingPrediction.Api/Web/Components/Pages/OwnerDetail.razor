@@ -3,7 +3,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="馬主">
+<RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="データ / 馬主">
     <Actions><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenEdit">編集</FluentButton></Actions>
 </RaceOpsObjectHeader>
 
@@ -11,13 +11,13 @@
 else if (owner is null) { <p>指定された馬主は見つかりませんでした。</p> }
 else
 {
-    <RaceOpsDetailTabs>
-    <FluentTab Label="概要" Id="overview"><section class="detail-card detail-section">
+    <div class="detail-stack">
+    <section class="detail-group" aria-label="概要"><section class="detail-card detail-section">
         <h2>@owner.Summary.DisplayName</h2>
         <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
         @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
-    </section></FluentTab>
-    <FluentTab Label="関係" Id="relations"><section class="entity-section detail-section">
+    </section></section>
+    <section class="detail-group" aria-label="関係"><section class="entity-section detail-section">
         <h3>この馬主に関係する馬・調教師</h3>
         <div class="relationship-grid">
             @foreach (var item in owner.CurrentHorses.Concat(owner.RelatedTrainers).Take(8))
@@ -25,14 +25,14 @@ else
                 <a class="relationship-link" href="@ObjectUrl(item)"><span class="relationship-kind">@(item.ObjectType == "Horse" ? "所有した馬" : "管理した調教師")</span><strong>@item.DisplayName</strong><span class="hint">@item.RelationshipCount 戦</span></a>
             }
         </div>
-    </section></FluentTab>
-    <FluentTab Label="名寄せ" Id="merge"><section class="detail-card detail-section"><h3>名寄せ</h3><p class="hint">別の馬主表記をこの馬主へ統合します。原文は変更せず、対応関係と理由を履歴に残します。</p><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenMerge">名寄せ候補を検索</FluentButton></section></FluentTab>
-    <FluentTab Label="名寄せ履歴" Id="history"><section class="detail-card detail-section">
+    </section></section>
+    <section class="detail-group" aria-label="名寄せ"><section class="detail-card detail-section"><h3>名寄せ</h3><p class="hint">別の馬主表記をこの馬主へ統合します。原文は変更せず、対応関係と理由を履歴に残します。</p><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenMerge">名寄せ候補を検索</FluentButton></section></section>
+    <section class="detail-group" aria-label="名寄せ履歴"><section class="detail-card detail-section">
         <h3>名寄せ履歴</h3>
         @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
         else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@audit.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
-    </section></FluentTab>
-    <FluentTab Label="出走履歴" Id="participations"><section class="entity-section detail-section">
+    </section></section>
+    <section class="detail-group" aria-label="出走履歴"><section class="entity-section detail-section">
         <h3>所有馬の出走履歴</h3>
         <div class="action-row"><label for="owner-history-search">履歴を検索</label><input id="owner-history-search" class="text-input" value="@historySearch" @oninput="OnHistorySearchInput" placeholder="馬名・競馬場・レース名" /></div>
         @if (historyEntries.Count == 0)
@@ -54,8 +54,8 @@ else
                 </div>
             }
         }
-    </section></FluentTab>
-    </RaceOpsDetailTabs>
+    </section></section>
+    </div>
 }
 
 <FluentDialog Hidden="@(!showMergeDialog)" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">

@@ -10,7 +10,7 @@
 }
 @if (detail is not null)
 {
-    <RaceOpsObjectHeader BackHref="/acquisition-statuses" BackLabel="← データ取得状況一覧に戻る" Title="@detail.SubjectName" Section="データ取得状況" Description="@($"{SubjectLabel(detail.SubjectType)} ・ {detail.OperationType}")" Status="@StatusLabel(detail.Status)" StatusTone="@StatusTone(detail.Status)">
+    <RaceOpsObjectHeader BackHref="/acquisition-statuses" BackLabel="← データ取得状況一覧に戻る" Title="@detail.SubjectName" Section="運用 / データ取得状況" Description="@($"{SubjectLabel(detail.SubjectType)} ・ {detail.OperationType}")" Status="@StatusLabel(detail.Status)" StatusTone="@StatusTone(detail.Status)">
         <Actions>
             @if (originJob?.Status == AgentJobStatus.Succeeded)
             {

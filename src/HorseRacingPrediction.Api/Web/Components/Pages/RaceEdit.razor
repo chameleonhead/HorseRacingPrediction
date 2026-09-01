@@ -3,7 +3,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Nav
 
-<RaceOpsObjectHeader BackHref="@($"/races/{Uri.EscapeDataString(RaceId)}")" BackLabel="← レース詳細に戻る" Title="@(race?.RaceName ?? "レースの管理情報")" Section="レース" />
+<RaceOpsObjectHeader BackHref="@($"/races/{Uri.EscapeDataString(RaceId)}")" BackLabel="← レース詳細に戻る" Title="@(race?.RaceName ?? "レースの管理情報")" Section="レース・予想 / レース" />
 
 @if (loading)
 {
