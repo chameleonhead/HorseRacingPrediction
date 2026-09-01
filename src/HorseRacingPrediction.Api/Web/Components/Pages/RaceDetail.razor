@@ -10,19 +10,9 @@
 else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
 else
 {
-    <nav class="detail-tabs" aria-label="詳細セクション">
-        <ul class="detail-tab-list">
-            <li><a href="#overview">概要</a></li>
-            <li><a href="#status">取得状況</a></li>
-            <li><a href="#participants">出走</a></li>
-            <li><a href="#report">概況</a></li>
-            <li><a href="#management">管理</a></li>
-            <li><a href="#memo">メモ</a></li>
-        </ul>
-    </nav>
-
-    <div class="detail-sections">
-    <section id="overview" class="detail-card detail-section">
+    <RaceOpsDetailTabs>
+    <FluentTab Label="概要" Id="overview">
+    <section class="detail-card detail-section">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
@@ -48,10 +38,11 @@ else
         <div><span class="object-label">馬場</span>@if (race.TrackConditionObservations.Count == 0) { <span>未取得</span> } else { var track = race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(track.GoingDescriptionText ?? track.TurfConditionCode ?? track.DirtConditionCode ?? "取得済み")</strong> }</div>
         <div><span class="object-label">払戻</span><strong>@(race.PayoutResult is null ? (race.EntryResults.Count == 0 ? "未取得" : "該当なし・未確定") : "取得済み")</strong></div>
     </section>
+    </FluentTab>
 
     @if (race.Odds is not null && (race.Odds.WinOdds.Count > 0 || race.Odds.PlaceOdds.Count > 0))
     {
-        <section id="odds" class="detail-card detail-section" aria-labelledby="odds-heading">
+        <FluentTab Label="オッズ" Id="odds"><section class="detail-card detail-section" aria-labelledby="odds-heading">
             <div class="section-heading">
                 <div>
                     <p class="eyebrow">MARKET DATA</p>
@@ -100,13 +91,13 @@ else
                     </div>
                 }
             </div>
-        </section>
+        </section></FluentTab>
     }
 
     @if (race.Entries.Count > 0)
     {
-        <section id="participants" class="entity-section detail-section">
-            <h3>@(race.EntryResults.Count > 0 ? "出走・結果" : "出走馬")</h3>
+        <FluentTab Label="出走表" Id="participants"><section class="entity-section detail-section">
+            <h3>出走表</h3>
             <ol class="participant-list">
                 @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
                 {
@@ -114,34 +105,52 @@ else
                     <li class="participant-row">
                         <div class="participant-number"><span>@e.GateNumber 枠</span><strong>@e.HorseNumber</strong></div>
                         <div class="object-primary"><a href="@($"/horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a><span class="hint">@e.SexCode@e.Age · @FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</span></div>
-                        <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果 —" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム —")</span></div>
+                        <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果未確定" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム未確定")</span></div>
                         <div class="participant-relations"><div><span class="object-label">騎手</span>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</div><div><span class="object-label">調教師</span>@EntityLink("trainers", e.TrainerId, e.TrainerName)</div><div><span class="object-label">レース時点の馬主</span>@EntityLink("owners", e.OwnerId, e.OwnerName)</div></div>
                     </li>
                 }
             </ol>
-        </section>
+        </section></FluentTab>
+
+        @if (race.EntryResults.Count > 0)
+        {
+            <FluentTab Label="結果" Id="results"><section class="entity-section detail-section">
+                <h3>確定結果</h3>
+                <ol class="participant-list">
+                    @foreach (var result in race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue))
+                    {
+                        var entry = race.Entries.FirstOrDefault(x => x.HorseId == result.HorseId);
+                        <li class="participant-row">
+                            <div class="participant-number"><strong>@(result.FinishPosition is null ? "—" : $"{result.FinishPosition}着")</strong></div>
+                            <div class="object-primary">@EntityLink("horses", result.HorseId, entry?.HorseName ?? result.HorseId)<span class="hint">@(result.OfficialTime ?? "タイム未登録")</span></div>
+                            <div class="participant-relations"><div><span class="object-label">馬番</span>@(entry?.HorseNumber.ToString() ?? "—")</div><div><span class="object-label">騎手</span>@EntityLink("jockeys", entry?.JockeyId, entry?.JockeyName)</div></div>
+                        </li>
+                    }
+                </ol>
+            </section></FluentTab>
+        }
     }
 
     @if (!string.IsNullOrWhiteSpace(race.StewardReportText))
     {
-        <section id="report" class="detail-card detail-section">
+        <FluentTab Label="概況" Id="report"><section class="detail-card detail-section">
             <h3>レース概況</h3>
             <pre class="payload">@race.StewardReportText</pre>
-        </section>
+        </section></FluentTab>
     }
 
-    <section id="management" class="detail-card detail-section">
+    <FluentTab Label="管理" Id="management"><section class="detail-card detail-section">
         <h3>管理情報</h3>
         <p class="hint">誤登録されたデータの補正は専用画面で行います。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
         <div class="action-row">
             <FluentButton Appearance="@Appearance.Accent" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</FluentButton>
         </div>
-    </section>
+    </section></FluentTab>
 
-    <div id="memo" class="detail-section">
+    <FluentTab Label="メモ" Id="memo"><div class="detail-section">
         <MemoPanel SubjectType="Race" SubjectId="@RaceId" />
-    </div>
-    </div>
+    </div></FluentTab>
+    </RaceOpsDetailTabs>
 }
 
 @code {

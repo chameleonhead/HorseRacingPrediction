@@ -13,9 +13,14 @@ else
             @if (CanRerun) { <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => showRerunDialog = true)">リラン</FluentButton> }
         </Actions>
     </RaceOpsObjectHeader>
-    @if (!string.IsNullOrWhiteSpace(job.LastError)) { <section class="alert-panel" role="alert"><strong>最新の実行に失敗しました</strong><p>@job.LastError</p></section> }
-    <FluentCard><h2>基本情報</h2><dl class="detail-grid"><dt>状態</dt><dd>@StatusLabel(job.Status)</dd><dt>優先度</dt><dd>@job.Priority</dd><dt>試行回数</dt><dd>@job.AttemptCount</dd><dt>更新日時</dt><dd>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl></FluentCard>
-    <FluentCard><h2>関連</h2>
+    @if (!string.IsNullOrWhiteSpace(job.LastError))
+    {
+        <FluentMessageBar Intent="@MessageIntent.Error" Title="最新の実行に失敗しました">
+            @job.LastError
+        </FluentMessageBar>
+    }
+    <FluentCard class="detail-card detail-section"><h2>基本情報</h2><dl class="detail-grid"><dt>状態</dt><dd>@StatusLabel(job.Status)</dd><dt>優先度</dt><dd>@job.Priority</dd><dt>試行回数</dt><dd>@job.AttemptCount</dd><dt>更新日時</dt><dd>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl></FluentCard>
+    <section class="entity-section detail-section"><h2>関連</h2>
         <div class="relationship-list">
             @if (TargetRaceId is not null)
             {
@@ -27,13 +32,13 @@ else
             }
             <div class="relationship-row"><span>診断</span><a href="#technical-details">技術情報を確認</a><span class="hint">Job ID、payload、error</span></div>
         </div>
-    </FluentCard>
-    <FluentCard><h2>ジョブ関連図</h2>
+    </section>
+    <FluentCard class="detail-card detail-section"><h2>ジョブ関連図</h2>
         <div class="job-graph-summary">
             <div><span class="object-label">生成したジョブ</span><strong>@GeneratedChildren.Count</strong><span class="hint">生成元は完了を待ちません</span></div>
             <div><span class="object-label">集約対象</span><strong>@AggregatedChildren.Count</strong><span class="hint">@AggregatedChildren.Count(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter) 件が要対応</span></div>
         </div>
-        <div class="job-graph">
+        <div class="job-map" aria-label="ジョブの関連">
             <section class="job-graph-section">
                 <h3>生成経路</h3>
                 @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.GeneratedBy)
@@ -70,12 +75,12 @@ else
             </section>
         </div>
     </FluentCard>
-    <FluentCard><h2>最新の試行</h2>
+    <section class="entity-section detail-section"><h2>最新の試行</h2>
         @if (LatestAttempt is null) { <p class="hint">試行履歴はありません。</p> }
         else { <article class="attempt-list"><strong>試行 @LatestAttempt.AttemptNumber</strong><span class="badge @StatusClass(LatestAttempt.Status)">@StatusLabel(LatestAttempt.Status)</span><time>@LatestAttempt.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</time>@if (!string.IsNullOrWhiteSpace(LatestAttempt.Error)) { <p>@LatestAttempt.Error</p> }</article> }
         <details><summary>すべての試行を表示（@job.Attempts.Count 件）</summary><div class="attempt-list">@foreach (var attempt in job.Attempts) { <article><strong>試行 @attempt.AttemptNumber</strong><span class="badge @StatusClass(attempt.Status)">@StatusLabel(attempt.Status)</span><time>@attempt.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</time>@if (!string.IsNullOrWhiteSpace(attempt.Error)) { <pre>@attempt.Error</pre> }</article> }</div></details>
-    </FluentCard>
-    <FluentCard id="technical-details"><h2>技術情報</h2><details><summary>Job ID、payload、完全なエラーを表示</summary><dl class="detail-grid"><dt>Job ID</dt><dd><code>@job.JobId</code></dd><dt>JobType</dt><dd><code>@job.JobType</code></dd><dt>DeduplicationKey</dt><dd><code>@job.DeduplicationKey</code></dd><dt>AvailableAt</dt><dd>@job.AvailableAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd><dt>Lease</dt><dd>@job.LeaseExpiresAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl><pre class="payload">@job.Payload</pre>@if (!string.IsNullOrWhiteSpace(job.LastError)) { <pre class="payload">@job.LastError</pre> }</details></FluentCard>
+    </section>
+    <FluentCard id="technical-details" class="detail-card detail-section"><h2>技術情報</h2><details><summary>Job ID、payload、完全なエラーを表示</summary><dl class="detail-grid"><dt>Job ID</dt><dd><code>@job.JobId</code></dd><dt>JobType</dt><dd><code>@job.JobType</code></dd><dt>DeduplicationKey</dt><dd><code>@job.DeduplicationKey</code></dd><dt>AvailableAt</dt><dd>@job.AvailableAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd><dt>Lease</dt><dd>@job.LeaseExpiresAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl><pre class="payload">@job.Payload</pre>@if (!string.IsNullOrWhiteSpace(job.LastError)) { <pre class="payload">@job.LastError</pre> }</details></FluentCard>
     @if (!CanRerun && (job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter) && job.ParentRelationType == JobRelationType.AggregatedBy)
     { <p class="hint">このジョブは集約対象です。集約元ジョブから復旧してください。</p> }
 }

@@ -48,6 +48,23 @@ a { color: var(--accent-foreground-rest); }
 .object-header-content h1 { margin: 0; font-size: var(--type-ramp-plus-3-font-size); line-height: var(--type-ramp-plus-3-line-height); }
 .object-header .status-badge, .object-header .header-actions { align-self: end; }
 
+.raceops-detail-tabs { display: block; min-width: 0; }
+.raceops-detail-tabs::part(tablist) { border-bottom: 1px solid var(--neutral-stroke-rest); }
+.raceops-detail-tabs::part(tab) { min-height: 40px; }
+.raceops-detail-tabs::part(activeIndicator) { background: var(--accent-fill-rest); }
+.raceops-detail-tabs::part(tabpanel) { padding: 16px 0 0; }
+.detail-card { padding: 16px; background: var(--neutral-layer-1); border: 1px solid var(--neutral-stroke-rest); border-radius: 8px; }
+.entity-section { padding: 0; }
+.detail-section > h2, .detail-section > h3 { margin: 0; font-size: var(--type-ramp-plus-1-font-size); }
+.detail-section > h2 + *, .detail-section > h3 + * { margin-top: 4px; }
+.detail-grid, dl.meta { gap: 12px 24px; }
+.history-item, .relationship-row, .participant-row, .mark-row { padding: 12px 4px; }
+.history-item time, .numeric, time { font-variant-numeric: tabular-nums; }
+.alert-panel { display: grid; gap: 4px; margin: 0; padding: 12px 16px; border-left: 4px solid var(--status-danger-foreground-1); background: var(--status-danger-background-1); color: var(--neutral-foreground-rest); }
+.alert-panel p { margin: 0; }
+.attempt-list { display: grid; gap: 8px; border-top: 1px solid var(--neutral-stroke-rest); }
+.attempt-list > article, .attempt-list > article { display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 8px 16px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--neutral-stroke-rest); }
+
 .object-list { border-top: 1px solid var(--neutral-stroke-rest); }
 .object-list-item { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(220px, max-content) max-content; box-sizing: border-box; width: 100%; min-height: 72px; gap: 16px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--neutral-stroke-rest); color: inherit; text-align: left; text-decoration: none; }
 .object-list-item:hover { background: var(--neutral-fill-stealth-hover); text-decoration: none; }
@@ -77,6 +94,8 @@ a { color: var(--accent-foreground-rest); }
 .detail-grid, dl.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 24px; margin: 0; }
 .detail-grid dd, dl.meta dd { margin: 0; overflow-wrap: anywhere; }
 .detail-grid dt, dl.meta dt, .object-label, .relationship-kind { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
+.detail-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 16px; }
+.detail-facts > div { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; overflow-wrap: anywhere; }
 .action-row, .header-actions, .list-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .form-grid > label { display: grid; gap: 4px; }
@@ -91,11 +110,16 @@ a { color: var(--accent-foreground-rest); }
 .history-relations, .participant-relations { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .relationship-link { display: grid; gap: 4px; min-width: 0; }
 .relationship-grid { display: grid; gap: 8px; }
-.race-facts, .odds-layout, .job-graph { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.race-facts, .odds-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .odds-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .race-facts > div, .odds-panel, .job-graph-section { padding: 12px; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; }
 .job-graph-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .job-graph-summary > div { padding: 12px; border: 1px solid var(--neutral-stroke-rest); }
+.job-map { display: grid; gap: 12px; }
+.job-map > .job-graph-section { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; }
+.job-map > .job-graph-section h3 { margin: 0; font-size: var(--type-ramp-base-font-size); }
+.job-map > .job-graph-section + .job-graph-section { position: relative; }
+.job-map > .job-graph-section + .job-graph-section::before { position: absolute; top: -13px; left: 24px; width: 2px; height: 12px; background: var(--neutral-stroke-rest); content: ""; }
 .current-job-node, .selected-row { outline: 2px solid var(--accent-fill-rest); outline-offset: -2px; }
 .payload, pre.error { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 table.data, .odds-table { width: 100%; border-collapse: collapse; }
@@ -122,7 +146,7 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
     .object-list-item { grid-template-columns: minmax(0, 1fr) max-content; }
     .object-list-meta { grid-column: 1; }
     .object-list-affordance { grid-column: 2; grid-row: 2; }
-    .relationship-row, .history-item, .participant-row, .mark-row, .race-facts, .odds-layout, .job-graph, .history-relations, .participant-relations { grid-template-columns: 1fr; }
+    .relationship-row, .history-item, .participant-row, .mark-row, .race-facts, .odds-layout, .history-relations, .participant-relations { grid-template-columns: 1fr; }
     .selectable-row { grid-template-columns: 1fr; }
     .filter-action { padding-top: 4px; }
     .filter-toolbar { display: grid; grid-template-columns: 1fr; }
@@ -131,4 +155,8 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
     .object-header { grid-template-columns: 1fr; }
     .object-header .back-link { grid-column: auto; }
     .object-header .status-badge, .object-header .header-actions { justify-self: start; }
+    .raceops-detail-tabs::part(tabpanel) { padding-top: 12px; }
+    .detail-card { padding: 12px; }
+    .detail-facts { grid-template-columns: 1fr; }
+    .attempt-list > article { grid-template-columns: 1fr max-content; }
 }

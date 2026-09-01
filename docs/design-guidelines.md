@@ -26,6 +26,45 @@
 - neutral、text、border、surface、state color は Fluent token を使う。ページ固有 CSS に色の hex 値を追加しない。
 - 状態は色だけに依存せず、日本語ラベルを必ず併記する。アイコンは任意の補助情報であり、絵文字は使用しない。
 
+### RaceOps design tokens
+
+モックの値は、以下の意味トークンとして採用する。実装では可能な限り対応する Fluent token を使い、RaceOps 固有のshell・relationship・domain layoutだけにこれらの値を参照する。ページ単位で近似色や任意の余白を増やさない。
+
+| カテゴリ | Token | 値 | 用途 |
+| --- | --- | --- | --- |
+| accent | `raceops-accent` | `#0F6B52` | primary action、active tab indicator、object link、focus indicator。 |
+| shell | `raceops-rail-background` | `#24332F` | desktop railとmobile app bar / drawerの背景。 |
+| shell | `raceops-rail-foreground` | `#E5EFEB` | rail navigation text。brandは`#FFFFFF`、section labelは`#B8C9C3`。 |
+| shell | `raceops-rail-active` | `#36564B` | active / hover navigation itemの面。 |
+| neutral | `raceops-page-background` | `#F5F5F5` | page canvas。surfaceと明確に区別する。 |
+| neutral | `raceops-surface` | `#FFFFFF` | fact panel、dialog、form sectionの面。 |
+| neutral | `raceops-text` / `raceops-muted` | `#242424` / `#616161` | primary text / supplement text。 |
+| neutral | `raceops-border` | `#E1E1E1` | list、tab strip、panelのlow-emphasis separator。 |
+| interaction | `raceops-row-hover` | `#EEF6F2` | object row、selectable candidateのhover / selected surface。 |
+| status | `success` | foreground `#107C10`、background `#E7F4E7` | 成功・完了。 |
+| status | `warning` | foreground `#8A5A00`、background `#FFF4CE` | 要確認・依存待ち。 |
+| status | `danger` | foreground `#B3261E`、background `#FDE7E6` | 失敗・破壊的操作。 |
+| status | `info` | foreground `#185ABD`、background `#E5F1FB` | 実行中・情報。 |
+
+| カテゴリ | Token | 値 | 用途 |
+| --- | --- | --- | --- |
+| spacing | `space-1`〜`space-8` | 4 / 8 / 12 / 16 / 24 / 32 px | 要素内4–12px、section内16px、page / major section 24px、large separation32px。20px、22pxなどの任意値は使わない。 |
+| layout | `rail-width` / `content-max` | 240 px / 1440 px | desktop shellの固定railと本文最大幅。 |
+| layout | `content-padding` | desktop 24 px、tablet 20 px、mobile 12 px | 本文の左右余白。 |
+| size | `control-height` / `touch-target` | 40 px / 44 px以上 | desktop controlの視覚高さとmobile操作領域。 |
+| shape | `radius-control` / `radius-surface` / `radius-dialog` | 4 / 8 / 12 px | Fluent control、通常surface、large dialogの順。statusだけ999px pillを許可する。 |
+| border | `border-subtle` / `border-focus` | 1 px / 2 px | 通常separatorとkeyboard focus。focus色はaccent。 |
+| type | `eyebrow` / `body-support` / `section-title` / `page-title` | 13 / 13 / 16 / 28 px | 補助種別、補助説明、section heading、desktop主見出し。mobile主見出しは24px。 |
+| type | `numeric` | tabular-nums | 時刻、金額、順位、count。 |
+
+#### Token application rules
+
+- tabは`space-1`のitem間隔、`space-2`の左右padding、2px accent indicator、1px neutral borderを使う。active stateはaccent text + indicatorで示し、Buttonのfillやoutlineをtab代わりに使わない。
+- detail fact panelはsurface、1px border、`space-4`の内側余白、`space-4`のfact間隔を使う。desktopでは最大3列、mobileでは1列または意味の近い2列までとする。
+- relationship / history rowは1px separator、縦12–16px・横4pxのpadding、desktop 12–16pxの列間隔を使う。hoverは`raceops-row-hover`、linkはaccentを使う。
+- error / warning / successのfeedbackはFluent MessageBarを使い、上記status toneは内容理解の補助に限る。raw error、payload、IDはsurface内のdisclosureへ入れる。
+- dialogはsurface、最大幅520px（名寄せは920px）、desktop内側余白24px、mobileはfull height / edge-to-edgeを許可する。通常cardにshadowを付けず、dialog / drawerだけelevationを使う。
+
 ### Typography, spacing, shape, and elevation
 
 - Fluent type ramp と OS UI font stack を使う。見出しは size、weight、余白を組み合わせて階層化する。
@@ -72,7 +111,7 @@ relationship は `RaceOpsEntityLink` で統一する。payload、lease、ID、ra
 
 ## Component policy
 
-1. Fluent standard: Button、TextField、Select、Checkbox、DatePicker、DataGrid、Dialog、Toast、MessageBar、ProgressRing、Tooltip、Menu。
+1. Fluent standard: Button、TextField、Select、Checkbox、DatePicker、DataGrid、Tabs、Dialog、Toast、MessageBar、ProgressRing、Tooltip、Menu。
 2. RaceOps semantic wrappers: `RaceOpsAppShell`、`RaceOpsPageHeader`、`RaceOpsObjectHeader`、`RaceOpsObjectItem`、`RaceOpsStatusBadge`、`RaceOpsRelationshipList`、`RaceOpsEmptyState`、`RaceOpsEntityLink`、`RaceOpsTechnicalDetails`。
 3. Page-specific CSS: race participation row のような domain layout だけ。Button、input、font、color を再定義しない。
 
@@ -117,6 +156,17 @@ relationship は `RaceOpsEntityLink` で統一する。payload、lease、ID、ra
 - Fluent standard component か RaceOps semantic wrapper を使い、独自の視覚 component を増やしていないか。
 - loading、empty、error、success、disabled、conflict、permission-denied を扱うか。
 - 320 / 720 / 1280 CSS px、keyboard、screen reader、200% zoom で確認したか。
+
+### Mock conformance self-review
+
+UI変更の完了前に、担当者は対象画面のモックと実装を同じ状態・viewportで比較し、以下を変更記録へ残す。依頼者が個別に指摘しなくても、このreviewを完了条件とする。
+
+1. **状態を揃える**: list、loaded detail、edit、dialog、loading、empty、errorのうち対象状態をモックと実装で揃える。fixtureがない場合は理由と代替検証を記録し、未確認を「一致」と判定しない。
+2. **構造を比較する**: shell、header、tab、toolbar、fact、section、relationship、history、dialogのDOM順と可視状態を確認する。tabは選択paneだけが可視、Buttonはobject actionだけであることを確認する。
+3. **tokenを比較する**: rail / page / surface / border / status tone、page padding、section gap、control height、type hierarchy、radiusを `RaceOps design tokens` と照合する。任意のhex、20px等の非token値、Buttonによるtab代用を検出したら不一致とする。
+4. **responsiveを比較する**: 1280px、720px、320pxで横overflow、tab strip、action、fact、relation / history row、dialog footerを確認する。mobileの操作領域は44px以上とする。
+5. **操作を比較する**: keyboardでtab移動・選択、link遷移、DialogのEscape / focus trap、disabled / busy feedbackを確認する。危険操作は実行せず、open stateまでを確認する。
+6. **結論を記録する**: 画面ごとに `一致`、`意図した差異`、`未確認`、`不一致` を記録する。不一致・未確認があれば、原因、修正、再確認結果を同じ変更記録に追記してから `Implemented` とする。
 ### 一覧行から詳細への遷移
 
 - 一覧行が単一オブジェクトを表す場合、行内の空白、主ラベル、補助属性を含む行全体を詳細への選択領域にする。

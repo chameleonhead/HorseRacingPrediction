@@ -11,19 +11,8 @@
 else if (trainer is null) { <p>TrainerId「@TrainerId」の調教師は見つかりませんでした。</p> }
 else
 {
-    <nav class="detail-tabs" aria-label="詳細セクション">
-        <ul class="detail-tab-list">
-            <li><a href="#overview">概要</a></li>
-            <li><a href="#relations">関係</a></li>
-            <li><a href="#history">履歴</a></li>
-            <li><a href="#aliases">別名</a></li>
-            <li><a href="#management">管理</a></li>
-            <li><a href="#memo">メモ</a></li>
-        </ul>
-    </nav>
-
-    <div class="detail-sections">
-    <section id="overview" class="detail-card detail-section">
+    <RaceOpsDetailTabs>
+    <FluentTab Label="概要" Id="overview"><section class="detail-card detail-section">
         <h2>@trainer.DisplayName</h2>
         <dl class="meta">
             <dt>TrainerId</dt><dd><code>@trainer.TrainerId</code></dd>
@@ -31,10 +20,11 @@ else
             <dt>所属</dt><dd>@trainer.AffiliationCode</dd>
         </dl>
     </section>
+    </FluentTab>
 
-    <RaceOpsRelationshipGrid SectionId="relations" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Items="@TopHorses" Url="@RelationshipUrl" />
+    <FluentTab Label="関係" Id="relations"><RaceOpsRelationshipGrid SectionId="relations-section" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Items="@TopHorses" Url="@RelationshipUrl" /></FluentTab>
 
-    <section id="history" class="entity-section detail-section">
+    <FluentTab Label="履歴" Id="history"><section class="entity-section detail-section">
         <h3>管理馬の出走履歴</h3>
         <div class="action-row"><label for="trainer-history-search">履歴を検索</label><input id="trainer-history-search" class="text-input" value="@historySearch" @oninput="OnHistorySearchInput" placeholder="馬名・競馬場・レース名" /></div>
         @if (historyEntries.Count == 0)
@@ -68,10 +58,11 @@ else
             }
         }
     </section>
+    </FluentTab>
 
     @if (trainer.Aliases.Count > 0)
     {
-        <section id="aliases" class="detail-card detail-section">
+        <FluentTab Label="別名" Id="aliases"><section class="detail-card detail-section">
             <h3>別名</h3>
             <ul>
                 @foreach (var a in trainer.Aliases)
@@ -80,20 +71,23 @@ else
                 }
             </ul>
         </section>
+        </FluentTab>
     }
 
-    <section id="management" class="detail-card detail-section">
+    <FluentTab Label="管理" Id="management"><section class="detail-card detail-section">
         <h3>管理情報</h3>
         <p class="hint">プロフィール更新、別名統合、データ補正は専用画面で行います。</p>
         <div class="action-row">
             <FluentButton Appearance="@Appearance.Accent" Href="@($"/trainers/{Uri.EscapeDataString(TrainerId)}/edit")">データを補正する</FluentButton>
         </div>
     </section>
+    </FluentTab>
 
-    <div id="memo" class="detail-section">
+    <FluentTab Label="メモ" Id="memo"><div class="detail-section">
         <MemoPanel SubjectType="Trainer" SubjectId="@TrainerId" />
     </div>
-    </div>
+    </FluentTab>
+    </RaceOpsDetailTabs>
 }
 
 @code {

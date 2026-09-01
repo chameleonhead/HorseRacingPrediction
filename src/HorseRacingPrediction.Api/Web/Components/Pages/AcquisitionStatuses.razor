@@ -18,9 +18,9 @@
             }
         </Actions>
     </RaceOpsObjectHeader>
-    <FluentCard class="detail-card">
+    <FluentCard class="detail-card detail-section">
         @if (originJob?.Status != AgentJobStatus.Succeeded && !string.IsNullOrWhiteSpace(detail.OriginJobId)) { <p class="hint">再取得は元ジョブ完了後に実行できます。</p> }
-            <div class="detail-grid">
+            <div class="detail-facts">
             <div><span class="object-label">状態</span><span class="badge @StatusClass(detail.Status)">@StatusLabel(detail.Status)</span></div>
             <div><span class="object-label">取得種別</span>@OperationLabel(detail.OperationType)</div>
             <div><span class="object-label">Provider</span>@(detail.ProviderType ?? "—")</div>
@@ -29,10 +29,11 @@
             <div><span class="object-label">作成日時</span>@detail.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>
             <div><span class="object-label">更新日時</span>@detail.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>
         </div>
-        @if (!string.IsNullOrWhiteSpace(reacquireMessage)) { <UiState Kind="success" Title="@reacquireMessage" /> }
-        @if (reacquireErrors.Count > 0) { <UiState Kind="error" Title="再取得を開始できませんでした" Message="@string.Join(' ', reacquireErrors)" /> }
-        @if (!string.IsNullOrWhiteSpace(detail.ErrorReason)) { <div class="row-error" role="alert"><strong>取得エラー</strong><br />@detail.ErrorReason</div> }
-        <section class="entity-section">
+        @if (!string.IsNullOrWhiteSpace(reacquireMessage)) { <FluentMessageBar Intent="@MessageIntent.Success" Title="@reacquireMessage" /> }
+        @if (reacquireErrors.Count > 0) { <FluentMessageBar Intent="@MessageIntent.Error" Title="再取得を開始できませんでした">@string.Join(' ', reacquireErrors)</FluentMessageBar> }
+        @if (!string.IsNullOrWhiteSpace(detail.ErrorReason)) { <FluentMessageBar Intent="@MessageIntent.Error" Title="取得エラー">@detail.ErrorReason</FluentMessageBar> }
+    </FluentCard>
+    <section class="entity-section detail-section">
             <h3>取得履歴</h3>
             <div class="data-list compact-list">
                 @foreach (var entry in history)
@@ -58,8 +59,8 @@
                     </article>
                 }
             </div>
-        </section>
-        <section class="entity-section">
+    </section>
+    <section class="entity-section detail-section">
             <h3>関連</h3>
             <div class="data-list compact-list">
                 @if (!string.IsNullOrWhiteSpace(detail.SubjectId) && SubjectUrl(detail) is { } subjectUrl)
@@ -84,8 +85,7 @@
                     </article>
                 }
             </div>
-        </section>
-    </FluentCard>
+    </section>
 }
 <FluentCard class="filter-card">
     <div class="filter-toolbar acquisition-filter">
