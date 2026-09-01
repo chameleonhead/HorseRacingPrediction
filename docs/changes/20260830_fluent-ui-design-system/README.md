@@ -1030,3 +1030,38 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 ### Approval
 
 上記のlayout・色是正は未承認であり、承認後にproduction codeを変更する。
+
+### Screen-by-screen collection audit
+
+同じ1280 CSS px相当で、各HTMLモックと認証済み実装の一覧初期状態を1画面ずつ比較した。全画面に共通して、`.filter-grid` の子が「native label」と「Fluent control」の別セルになっている。したがってラベルは入力の上ではなく左隣に置かれる。モックのcompact toolbarと異なり、入力の認知・スキャン順が破綻している。
+
+| 画面 | モック | 現在の実装で確認した差異 | 是正対象 |
+| --- | --- | --- | --- |
+| `/races` | 期間presetの次に検索・日付・開催場・検索を短いtoolbarへ置く | 5等分gridの2段となり、開始日ラベルと入力、終了日ラベルと入力が隣接セルへ分離する。filter面は約142px高く、一覧開始は約350pxまで下がる | label/controlを1 fieldとしてまとめ、presetと検索条件を別段だが密なtoolbarにする |
+| `/predictions` | 検索欄を可変幅、状態操作を内容幅とする | RaceIdラベル、RaceId入力、予想者種別ラベル、入力、検索が5等分セルに分離する。検索buttonは内容幅でなく約188px | 2 field + buttonのcompact toolbarにする |
+| `/horses` | 馬名検索を広く取り、性別・年齢・実行を内容幅にする | keyword/性別/年齢のlabelとcontrolが別セルで、検索buttonが第2段左端へ孤立する。filter面は約78px | field単位のgroup化と、検索buttonの内容幅化 |
+| `/jockeys` | 騎手名検索を主、所属と絞り込みを補助として横並びにする | keyword label→入力→所属 label→入力→検索という5セル分離。全controlが約185px固定で、検索欄に優先幅がない | 検索inputをflex、所属/実行を内容幅にする |
+| `/trainers` | 調教師名検索を主、所属と絞り込みを補助として横並びにする | 騎手と同じ5セル分離と固定幅。モックより入力密度が低い | jockeyと同じ共通toolbarへ統一 |
+| `/owners` | 馬主名検索を広く、名寄せ候補などを内容幅にする | label、入力、検索が3等分となり、検索buttonが約317pxまで拡大する。モックの名寄せ導線との操作階層も離れる | 検索をflex、actionを内容幅にする |
+| `/jobs` | view tab、対象検索、処理種別、対象日、絞り込みを2段の短いtoolbarに置く | `FluentGrid` の列指定が反映されず、全controlが縦積み。filterは約183px、絞り込みbuttonは本文幅約992px。headerも約112pxでモックの約81pxより高い | tab/view、field group、actionを専用toolbarへ再構成しheaderの上端揃えを直す |
+| `/acquisition-statuses` | 対象名検索を主、2つのquick filterを内容幅に置く | 対象名・日付・対象・状態のlabel/controlが5セルへ分離。quick filterと検索が各約188pxに拡大し、filter面は約89px | primary search、date/select group、quick action群を分けて密度を戻す |
+
+### Root cause and expanded implementation scope
+
+- 現行の一覧pageはnative `<label>` と `FluentTextField` / `FluentSelect` を並列のgrid childにしている。各controlがlabelを自己表示しない構成では、CSSだけでなくRazor構造をfield wrapper単位へ直す必要がある。
+- `.filter-grid` の `repeat(auto-fit, minmax(180px, 1fr))` は、control数にかかわらず残余幅を等分する。検索欄の可変幅とactionの内容幅というモックの優先度を表せない。
+- `/jobs` の `FluentGrid` はこの画面の必要なtoolbar grammarと適合せず、desktopの列レイアウトが成立していない。共通toolbar componentまたは共通CSS gridへ置換する。
+- 上記8画面に加え、モックが持つdetail/edit状態は次の監査対象とし、一覧toolbarの是正とは別にheader、section面、relation row、form grid、dialogを画面単位で確認する。
+
+### Screen-by-screen object detail audit
+
+データ入り検証DBで表示できる馬・騎手・調教師・馬主の詳細を、各モックのdetail状態と比較した。
+
+| 画面 | モック | 現在の実装で確認した差異 | 是正対象 |
+| --- | --- | --- | --- |
+| `/horses/{id}` | 戻る、種別、主タイトル、編集を約57pxのobject headerへ集約し、その直後に概要・関連を置く | `.object-header` にlayout CSSがなく、戻るリンク、種別、タイトル、編集、詳細section navが縦に流れる。headerは約128pxで、一覧モックのdetail headerより大幅に高い | object headerをgrid/flexで構成し、desktopはタイトル群・status/actionを上端揃え、mobileだけ縦積みにする |
+| `/jockeys/{id}` | header、概要、関連、履歴を同じdetail grammarで表示 | 検証対象の詳細APIがHTTP 500を返し、共通error stateのみ表示された。layout比較は不能 | API 500を別途調査し、復旧後にdetail layoutを再監査する。error state自体のlayoutは横overflowなし |
+| `/trainers/{id}` | 騎手と同じ密度のobject header、概要、関連、履歴 | 馬詳細と同じ未スタイルobject headerで約128px。モックの約57px headerより縦に長く、編集CTAもタイトルとのまとまりを失う | horseと同じ共通object headerのlayoutへ統一 |
+| `/owners/{id}` | object header直下に概要、関連、名寄せ、履歴を薄い面と全幅行で区切る | headerが約128pxで縦流れ。名寄せ・履歴のsectionは存在するが、headerとsection間の密度がモックより低い | object header共通化後にsection間隔・一覧行の密度をモックと再比較 |
+
+レース・予想票・収集ジョブ・データ取得状況のdetailは、この検証DBで対応するloaded stateを直接開けなかった。not-found/empty確認ではobject headerの共通問題を確認できるが、loaded detailのsection密度・relationship row・dialogはサンプルデータを作らない限り比較不能である。以後の実装検証では、既存APIテストのfixtureまたは一時DBにだけサンプルを投入して比較する。
