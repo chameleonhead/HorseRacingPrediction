@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-01
@@ -984,4 +984,4 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 ### Approval
 
-未承認。上記 remediation scope の明示的な承認後に、プロダクションコードを変更する。
+2026-09-01 に、利用者が上記 remediation scope を承認した。R1〜R4を実装できる。
