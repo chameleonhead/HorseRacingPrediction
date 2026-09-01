@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Implemented
+- Status: Proposed
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-01
@@ -993,3 +993,40 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - R3/R4: レースの日本語状態・期間プリセット・適用条件解除、馬の年齢範囲、騎手/調教師の所属、shellの`データ`表記を追加した。既存URL queryとページングは維持する。
 - 隔離出力先でAPIをビルドし、警告0・エラー0を確認した。`dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal` は98件すべて成功した。履歴APIと停止状態はAPIテスト、履歴永続化はCollectorテストで検証した。
 - 一時コピーしたデータ入りSQLiteを使い、ブラウザーでレースの期間プリセット・日本語状態・条件解除、取得状況の対象名/クイックフィルター、ジョブの停止CTA、Job IDを含むnot-found、horse/jockeyの追加フィルター、shell表記を確認した。取得履歴の表示対象は検証DBに存在しないため、履歴の順序・エラー要約はAPIテストで確認した。viewport overrideは検証後に解除した。
+
+## Proposed layout and color conformance remediation - 2026-09-01
+
+### Audit record
+
+1280 CSS px相当で `mocks/jobs.html` と実装 `/jobs` を比較した。モックは情報階層・操作密度の仕様でありピクセル単位の複製対象ではないが、現状にはその範囲を超える次の差異がある。
+
+| 観点 | モック | 現在の実装 | 判定 |
+| --- | --- | --- | --- |
+| shellの色 | 左railは濃い緑（`#24332f`）、白文字、選択項目だけを淡い緑にする | sidebarは白系neutral layer、本文とほぼ同じ明度 | 不一致。ナビゲーションの視覚的な区切りと競馬DB管理の主従が失われている。 |
+| headerの密度 | 1280幅で約81px、タイトル・説明・全体操作を1行のまとまりに置く | `/jobs` は約112px。操作は見出し中央寄りに置かれ、後続filterとの距離も大きい | 不一致。縦方向の密度が低く、collectionの開始位置が下がる。 |
+| filter | 検索、処理種別、対象日、実行ボタンが1行のtoolbarに収まる | `FluentGrid` の列指定が実際には適用されず、4入力が縦に並び、実行ボタンが本文幅いっぱいになる | レイアウト崩れ。desktopの一覧導線として機能していない。 |
+| 一覧 | filter直下に全幅の薄い罫線行。主ラベル・状態・更新・詳細を横方向に比較できる | filterの縦積みにより空状態/一覧が大きく下へ押し出される。実データ時も一覧に到達する前の余白が過大になる | 不一致。object list自体の行文法は維持する。 |
+| 色の役割 | 背景は薄いneutral、本文はdark neutral、強調だけ緑。statusは成功/注意/失敗の淡い背景で区別 | Fluent token使用は妥当だが、railのdark greenとwhite textが未反映で、accentの役割が不足する | shellのみモックの役割色へ戻し、入力・button・statusはFluent tokenを維持する。 |
+
+### Scope and decisions
+
+1. desktop（`> 720px`）のshellを、モックと同じ240pxのdark rail、white text、淡い緑の選択状態へ戻す。モバイルdrawerも同じ色役割を使う。
+2. collection headerはタイトル群とactionを上端で揃え、モック相当の縦密度にする。モックにないcard面や強い影は追加しない。
+3. すべてのcollection filterを共通のresponsive toolbarへ揃える。desktopは検索系入力を可変幅、select/dateを内容幅、実行buttonを内容幅にし、mobile（`<=720px`）は読み順を保った縦積みにする。`FluentGrid`の未適用な列指定には依存しない。
+4. object listは現在のFluent token・semantic markupを維持し、filter直下の過大な縦余白だけを解消する。色を独自hexでページごとに増やさない。
+
+### Acceptance criteria
+
+- `/jobs`、`/races`、`/horses`、`/jockeys`、`/trainers`、`/owners`、`/predictions`、`/acquisition-statuses` のfilterが1280pxで横方向に収まり、実行buttonが本文幅へ不必要に拡大しない。
+- 1280pxでleft railは240px、dark green背景とwhite navigation textを持ち、選択状態はaccent系の淡色で区別される。
+- 720px以下ではrailがdrawer、filterが1列となり、横overflowなしで操作できる。
+- モックのneutral background、緑accent、statusの色役割を保ち、Fluent標準controlの色・focusを上書きしない。
+- 実装後は1280px、720px、320pxでモックと実装を再比較し、結果をこの変更記録に追記する。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 上記監査結果、色とlayoutの是正判断、受け入れ条件を記録する。本変更の正本であり、`docs/design-guidelines.md` のlight theme・accent規則は変更しない。
+
+### Approval
+
+上記のlayout・色是正は未承認であり、承認後にproduction codeを変更する。
