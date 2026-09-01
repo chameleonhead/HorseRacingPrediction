@@ -3,13 +3,13 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="データ" Title="調教師" Description="調教師名またはIDで検索します。" />
+<RaceOpsPageHeader Section="データ" Title="調教師" Description="管理馬と出走履歴を確認します。" />
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField Label="キーワード" @bind-Value="query" Placeholder="調教師名 / ID" /></div>
-        <div class="filter-field filter-field-compact"><FluentTextField Label="所属" @bind-Value="affiliationCode" Placeholder="例: 栗東" /></div>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="調教師名を検索" @bind-Value="query" Placeholder="調教師名を検索" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="所属" @bind-Value="affiliationCode" Placeholder="所属" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
 </FluentCard>
 
@@ -22,7 +22,7 @@ else
     <RaceOpsObjectList Label="調教師一覧">
         @foreach (var t in result.Items)
         {
-            <RaceOpsObjectListItem Href="@TrainerUrl(t.TrainerId)" Title="@t.DisplayName" Description="@t.TrainerId" Metadata="@TrainerMetadata(t)" />
+            <RaceOpsObjectListItem Href="@TrainerUrl(t.TrainerId)" Title="@t.DisplayName" Description="@TrainerMetadata(t)" />
         }
     </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />

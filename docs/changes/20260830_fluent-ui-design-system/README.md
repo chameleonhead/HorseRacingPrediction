@@ -1097,8 +1097,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | ID | 作業 | 状態 | 完了条件 |
 | --- | --- | --- | --- |
 | C1 | 共通shell・brand・mobile bar | 完了 | desktop railとmobile barのbrand、色、寸法、drawer起点がモックと一致する |
-| C2 | collection header・filter・list row | 実装中 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
-| C3 | detail・edit・dialog | 未着手 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
+| C2 | collection header・filter・list row | 完了 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
+| C3 | detail・edit・dialog | 実装中 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
 | C4 | responsive・keyboard・共通state | 未着手 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
 | C5 | 回帰検証・記録同期 | 未着手 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
 
@@ -1112,6 +1112,16 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - 720px以下では高さ48px、背景`#24332f`、白いhamburger iconとbrandを持つsticky mobile barを追加し、drawerとbackdropの開始位置をbar直下へ揃えた。
 - 320pxの実ブラウザーでbar 48px、drawer top 48px、横overflowなし、menu buttonのaccessible name、drawerの開閉起点を確認した。
 - 隔離出力先へのAPI buildは警告0・エラー0で成功した。
+
+### C2 implementation and verification
+
+- 8一覧のeyebrowをモックと同じ`group / object`表記へ揃え、説明文も各HTMLモックの文言へ同期した。
+- 一覧filterを可視label付き56px fieldから、accessible nameとplaceholderを持つ40px toolbar controlへ変更した。1280pxではprimary searchが伸長し、補助条件とactionは内容幅を保つ。
+- 収集ジョブのview selectをモックと同じ横タブへ変更し、対象・処理名・レースのkeyword検索を追加した。view、keyword、処理種別、対象日、状態、pageはURL queryへ保持する。
+- レースとデータ取得状況の低頻度条件は`詳細条件` disclosureへ移し、通常toolbarがモックの主要条件だけで1行に収まるようにした。既存filter契約は保持する。
+- 馬・騎手・調教師の一覧から内部IDの主表示を外し、所属、生年月日、別名件数などの利用者向け属性を副表示へ移した。metadata/statusがない行は共通componentが空のgrid列を作らない。
+- 1280pxと320pxで8一覧を計測し、全画面で横overflowなしを確認した。1280pxではheaderが78–83px、通常filterが40px、mobileではcontrolが1列・40pxとなった。
+- 隔離API buildは警告0・エラー0、API testsは98件すべて成功した。
 
 ### Documentation updates
 

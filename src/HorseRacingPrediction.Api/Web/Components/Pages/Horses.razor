@@ -3,15 +3,15 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="データ" Title="馬" Description="収集済みの馬プロフィールを検索します。" />
+<RaceOpsPageHeader Section="データ" Title="馬" Description="登録馬と出走履歴を確認します。" />
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField Label="キーワード" @bind-Value="query" Placeholder="馬名 / ID" /></div>
-        <label class="filter-field filter-field-compact">性<select @bind="sexCode"><option value="">指定なし</option><option value="M">牡</option><option value="F">牝</option><option value="G">セン</option></select></label>
-        <label class="filter-field filter-field-compact">年齢（以上）<input type="number" @bind="minAge" min="0" max="40" /></label>
-        <label class="filter-field filter-field-compact">年齢（以下）<input type="number" @bind="maxAge" min="0" max="40" /></label>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="馬名を検索" @bind-Value="query" Placeholder="馬名を検索" /></div>
+        <div class="filter-field filter-field-compact"><select aria-label="性別" @bind="sexCode"><option value="">性別</option><option value="M">牡</option><option value="F">牝</option><option value="G">セン</option></select></div>
+        <div class="filter-field filter-field-compact"><input aria-label="年齢（以上）" type="number" @bind="minAge" min="0" max="40" placeholder="年齢（以上）" /></div>
+        <div class="filter-field filter-field-compact"><input aria-label="年齢（以下）" type="number" @bind="maxAge" min="0" max="40" placeholder="年齢（以下）" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
 </FluentCard>
 
@@ -24,7 +24,7 @@ else
     <RaceOpsObjectList Label="馬一覧">
         @foreach (var h in result.Items)
         {
-            <RaceOpsObjectListItem Href="@HorseUrl(h.HorseId)" Title="@h.RegisteredName" Description="@h.HorseId" Metadata="@HorseMetadata(h)" />
+            <RaceOpsObjectListItem Href="@HorseUrl(h.HorseId)" Title="@h.RegisteredName" Description="@HorseMetadata(h)" />
         }
     </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />

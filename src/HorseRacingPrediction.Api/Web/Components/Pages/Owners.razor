@@ -3,11 +3,11 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="データ" Title="馬主" Description="馬主名または登録表記で検索します。" />
+<RaceOpsPageHeader Section="データ" Title="馬主" Description="正規化された馬主と所有馬を確認します。" />
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField Label="馬主名・表記" @bind-Value="query" /></div>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="馬主名を検索" Placeholder="馬主名を検索" @bind-Value="query" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>

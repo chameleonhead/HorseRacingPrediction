@@ -3,13 +3,13 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="データ" Title="騎手" Description="騎手名またはIDで検索します。" />
+<RaceOpsPageHeader Section="データ" Title="騎手" Description="所属と騎乗履歴を確認します。" />
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField Label="キーワード" @bind-Value="query" Placeholder="騎手名 / ID" /></div>
-        <div class="filter-field filter-field-compact"><FluentTextField Label="所属" @bind-Value="affiliationCode" Placeholder="例: 美浦" /></div>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="騎手名を検索" @bind-Value="query" Placeholder="騎手名を検索" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="所属" @bind-Value="affiliationCode" Placeholder="所属" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
 </FluentCard>
 
@@ -22,7 +22,7 @@ else
     <RaceOpsObjectList Label="騎手一覧">
         @foreach (var j in result.Items)
         {
-            <RaceOpsObjectListItem Href="@JockeyUrl(j.JockeyId)" Title="@j.DisplayName" Description="@j.JockeyId" Metadata="@JockeyMetadata(j)" />
+            <RaceOpsObjectListItem Href="@JockeyUrl(j.JockeyId)" Title="@j.DisplayName" Description="@JockeyMetadata(j)" />
         }
     </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />

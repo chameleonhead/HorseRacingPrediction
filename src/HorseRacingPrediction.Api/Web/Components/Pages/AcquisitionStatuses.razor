@@ -6,7 +6,7 @@
 
 @if (string.IsNullOrWhiteSpace(AcquisitionKey))
 {
-    <RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="レース・出走馬・関係者データの取得結果を確認します。" />
+    <RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="プロフィール補完の取得状況を確認します。" />
 }
 @if (detail is not null)
 {
@@ -89,15 +89,20 @@
 }
 <FluentCard class="filter-card">
     <div class="filter-toolbar acquisition-filter">
-        <label class="filter-field filter-field-primary">対象名<input type="search" @bind="subjectQuery" placeholder="馬・騎手・調教師名を検索" /></label>
-        <label class="filter-field filter-field-compact">開始日<input type="date" @bind="from" /></label>
-        <label class="filter-field filter-field-compact">終了日<input type="date" @bind="to" /></label>
-        <label class="filter-field filter-field-compact">対象<select @bind="subjectTypeText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@SubjectLabel(value)</option> }</select></label>
-        <label class="filter-field filter-field-compact">状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select></label>
+        <div class="filter-field filter-field-primary"><input aria-label="対象名" type="search" @bind="subjectQuery" placeholder="馬・騎手・調教師名を検索" /></div>
         <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.Unacquired ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.Unacquired))">未取得のみ</FluentButton>
         <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.RetryWaiting ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.RetryWaiting))">再試行待ち</FluentButton>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton>
     </div>
+    <details class="advanced-filters">
+        <summary>詳細条件</summary>
+        <div class="advanced-filter-grid">
+            <input aria-label="開始日" type="date" @bind="from" />
+            <input aria-label="終了日" type="date" @bind="to" />
+            <select aria-label="対象" @bind="subjectTypeText"><option value="">対象: すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@SubjectLabel(value)</option> }</select>
+            <select aria-label="状態" @bind="statusText"><option value="">状態: すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select>
+        </div>
+    </details>
 </FluentCard>
 @if (loading) { <UiState Kind="loading" Title="データ取得状況を読み込んでいます" /> }
 else if (VisibleItems.Count == 0) { <UiState Title="該当する取得結果はありません" /> }

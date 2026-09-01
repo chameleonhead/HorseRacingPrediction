@@ -3,12 +3,12 @@
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="レース・予想" Title="予想票" Description="レースと予想者から予想票を検索します。今回、予想票は参照専用です。" />
+<RaceOpsPageHeader Section="レース・予想" Title="予想票" Description="レースごとの予想と評価状態を確認します。" />
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField Label="RaceId" @bind-Value="raceId" /></div>
-        <div class="filter-field filter-field-compact"><FluentTextField Label="予想者種別" @bind-Value="predictorType" /></div>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース名・開催日を検索" Placeholder="レース名・開催日を検索" @bind-Value="raceId" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="予想者種別" Placeholder="予想者種別" @bind-Value="predictorType" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>
