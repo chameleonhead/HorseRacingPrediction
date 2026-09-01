@@ -16,13 +16,15 @@
     </Actions>
 </RaceOpsPageHeader>
 
-<FluentGrid class="filter-bar" Spacing="3">
-    <FluentGridItem xs="12" sm="6" md="3"><FluentSelect TOption="FilterOption" Label="表示" Items="@views" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="view" /></FluentGridItem>
-    <FluentGridItem xs="12" sm="6" md="3"><FluentTextField Label="処理種別" @bind-Value="jobType" /></FluentGridItem>
-    <FluentGridItem xs="12" sm="6" md="3"><FluentTextField Label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" /></FluentGridItem>
-    <FluentGridItem xs="12" sm="6" md="2"><FluentSelect TOption="FilterOption" Label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></FluentGridItem>
-    <FluentGridItem xs="12" md="1" class="filter-action"><FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton></FluentGridItem>
-</FluentGrid>
+<section class="filter-bar" aria-label="収集ジョブの絞り込み">
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-compact"><FluentSelect TOption="FilterOption" Label="表示" Items="@views" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="view" /></div>
+        <div class="filter-field filter-field-primary"><FluentTextField Label="処理種別" @bind-Value="jobType" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField Label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" /></div>
+        <div class="filter-field filter-field-compact"><FluentSelect TOption="FilterOption" Label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
+    </div>
+</section>
 
 @if (DaySummaries.Count > 0)
 {

@@ -6,11 +6,11 @@
 <RaceOpsPageHeader Section="データ" Title="馬" Description="収集済みの馬プロフィールを検索します。" />
 
 <FluentCard class="filter-card">
-    <div class="filter-grid">
-        <FluentTextField Label="キーワード" @bind-Value="query" Placeholder="馬名 / ID" />
-        <label>性<select @bind="sexCode"><option value="">指定なし</option><option value="M">牡</option><option value="F">牝</option><option value="G">セン</option></select></label>
-        <label>年齢（以上）<input type="number" @bind="minAge" min="0" max="40" /></label>
-        <label>年齢（以下）<input type="number" @bind="maxAge" min="0" max="40" /></label>
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField Label="キーワード" @bind-Value="query" Placeholder="馬名 / ID" /></div>
+        <label class="filter-field filter-field-compact">性<select @bind="sexCode"><option value="">指定なし</option><option value="M">牡</option><option value="F">牝</option><option value="G">セン</option></select></label>
+        <label class="filter-field filter-field-compact">年齢（以上）<input type="number" @bind="minAge" min="0" max="40" /></label>
+        <label class="filter-field filter-field-compact">年齢（以下）<input type="number" @bind="maxAge" min="0" max="40" /></label>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>

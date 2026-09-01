@@ -6,9 +6,9 @@
 <RaceOpsPageHeader Section="データ" Title="調教師" Description="調教師名またはIDで検索します。" />
 
 <FluentCard class="filter-card">
-    <div class="filter-grid">
-        <FluentTextField Label="キーワード" @bind-Value="query" Placeholder="調教師名 / ID" />
-        <FluentTextField Label="所属" @bind-Value="affiliationCode" Placeholder="例: 栗東" />
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField Label="キーワード" @bind-Value="query" Placeholder="調教師名 / ID" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField Label="所属" @bind-Value="affiliationCode" Placeholder="例: 栗東" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>

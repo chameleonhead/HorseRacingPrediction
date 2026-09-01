@@ -6,8 +6,8 @@
 <RaceOpsPageHeader Section="データ" Title="馬主" Description="馬主名または登録表記で検索します。" />
 
 <FluentCard class="filter-card">
-    <div class="filter-grid">
-        <FluentTextField Label="馬主名・表記" @bind-Value="query" />
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField Label="馬主名・表記" @bind-Value="query" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>

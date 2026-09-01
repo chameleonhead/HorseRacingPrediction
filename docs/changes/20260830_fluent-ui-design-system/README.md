@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-01
@@ -1029,7 +1029,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 ### Approval
 
-上記のlayout・色是正は未承認であり、承認後にproduction codeを変更する。
+2026-09-01 に利用者が、モックの階層・余白・色役割と同じになるよう上記layout・色是正を実装することを承認した。
 
 ### Screen-by-screen collection audit
 
@@ -1065,3 +1065,15 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | `/owners/{id}` | object header直下に概要、関連、名寄せ、履歴を薄い面と全幅行で区切る | headerが約128pxで縦流れ。名寄せ・履歴のsectionは存在するが、headerとsection間の密度がモックより低い | object header共通化後にsection間隔・一覧行の密度をモックと再比較 |
 
 レース・予想票・収集ジョブ・データ取得状況のdetailは、この検証DBで対応するloaded stateを直接開けなかった。not-found/empty確認ではobject headerの共通問題を確認できるが、loaded detailのsection密度・relationship row・dialogはサンプルデータを作らない限り比較不能である。以後の実装検証では、既存APIテストのfixtureまたは一時DBにだけサンプルを投入して比較する。
+
+## Layout and color remediation implementation - 2026-09-01
+
+- shellをモックと同じ`#24332f`の240px dark railへ変更し、navigation text、section label、選択状態をそれぞれwhite / muted green / pale greenとして区別した。本文、Fluent control、statusのtokenは変更していない。
+- collection headerの見出しサイズと説明余白、section間隔を縮めた。`RaceOpsObjectHeader`にはdesktop gridとmobile 1列への切替を追加し、戻る・title群・status/actionが縦に分断されないようにした。
+- `/races`、`/predictions`、`/horses`、`/jockeys`、`/trainers`、`/owners`、`/jobs`、`/acquisition-statuses` のfilterを共通`filter-toolbar`へ移行した。Fluent controlはfield wrapper内に入れ、labelと入力が別のlayout cellにならないようにした。検索系は伸縮、date/selectはcompact、actionは内容幅で表示する。
+- `/jobs` は未適用の`FluentGrid`列指定を廃止し、他のcollectionと同じtoolbarに統一した。mobileではtoolbarを1列にして、actionを横幅いっぱいにする。
+
+### Verification
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal -p:BaseOutputPath=...` は成功（warning 0 / error 0）。通常の出力先へのbuildは、ローカル起動中のAPI（PID 218488）とVisual StudioがDLLを保持しているためコピー段階で失敗したが、隔離出力先ではRazorを含めてコンパイルできている。
+- 起動中の`http://localhost:5178/app.css`から変更済みstylesheetが配信されることを確認した。ブラウザーの実画面再比較は次の検証で1280px / 720px / 320pxについて実施する。

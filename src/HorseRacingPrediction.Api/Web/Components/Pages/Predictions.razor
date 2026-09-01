@@ -6,9 +6,9 @@
 <RaceOpsPageHeader Section="レース・予想" Title="予想票" Description="レースと予想者から予想票を検索します。今回、予想票は参照専用です。" />
 
 <FluentCard class="filter-card">
-    <div class="filter-grid">
-        <FluentTextField Label="RaceId" @bind-Value="raceId" />
-        <FluentTextField Label="予想者種別" @bind-Value="predictorType" />
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField Label="RaceId" @bind-Value="raceId" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField Label="予想者種別" @bind-Value="predictorType" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
 </FluentCard>

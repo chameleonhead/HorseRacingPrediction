@@ -6,29 +6,47 @@ a { color: var(--accent-foreground-rest); }
 
 .page { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
 .mobile-menu-button { display: none; }
-.sidebar { grid-column: 1; display: flex; flex-direction: column; min-height: 100vh; padding: 16px 12px; background: var(--neutral-layer-1); border-right: 1px solid var(--neutral-stroke-rest); }
-.brand { margin: 4px 8px 20px; font-size: var(--type-ramp-plus-2-font-size); font-weight: var(--font-weight-semibold); }
+.sidebar { grid-column: 1; display: flex; flex-direction: column; min-height: 100vh; padding: 16px 12px; background: #24332f; border-right: 0; color: #fff; }
+.brand { margin: 4px 8px 20px; color: #fff; font-size: var(--type-ramp-plus-2-font-size); font-weight: var(--font-weight-semibold); }
 .nav { display: grid; align-content: start; gap: 2px; }
-.nav-section { margin: 16px 8px 6px; color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-2-font-size); font-weight: var(--font-weight-semibold); }
-.nav-link { display: block; padding: 8px 12px; border-radius: 4px; color: var(--neutral-foreground-rest); text-decoration: none; }
-.nav-link:hover { background: var(--neutral-fill-stealth-hover); text-decoration: none; }
-.nav-link.active { background: var(--accent-fill-transparent-neutral); color: var(--accent-foreground-rest); font-weight: var(--font-weight-semibold); }
+.nav-section { margin: 16px 8px 6px; color: #b8c9c3; font-size: var(--type-ramp-minus-2-font-size); font-weight: var(--font-weight-semibold); }
+.nav-link { display: block; padding: 8px 12px; border-radius: 4px; color: #e5efeb; text-decoration: none; }
+.nav-link:hover { background: #30473f; color: #fff; text-decoration: none; }
+.nav-link.active { background: #36564b; color: #fff; font-weight: var(--font-weight-semibold); }
+.sidebar fluent-button { color: #fff; }
 .logout-form { margin-top: auto; padding: 16px 4px 4px; }
 
 .content { grid-column: 2; box-sizing: border-box; width: 100%; max-width: 1440px; padding: 24px; }
-.content-inner { display: grid; gap: 24px; }
+.content-inner { display: grid; gap: 16px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
-.page-header h1 { margin: 0; font-size: var(--type-ramp-plus-5-font-size); line-height: var(--type-ramp-plus-5-line-height); }
+.page-header h1 { margin: 0; font-size: var(--type-ramp-plus-3-font-size); line-height: var(--type-ramp-plus-3-line-height); }
 .page-header-section, .page-header-description, .hint, .eyebrow { margin: 0; color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
 .page-header-section, .eyebrow { margin-bottom: 4px; font-weight: var(--font-weight-semibold); }
-.page-header-description { margin-top: 8px; }
+.page-header-description { margin-top: 4px; }
 .page-header-actions { flex-wrap: wrap; justify-content: flex-end; }
 
-.filter-bar { align-items: end; padding-bottom: 16px; border-bottom: 1px solid var(--neutral-stroke-rest); }
-.filter-action { align-self: end; }
-.filter-action fluent-button { width: 100%; }
-.filter-card { display: block; margin: 0; }
-.filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; gap: 12px; }
+.filter-bar, .filter-card { display: block; margin: 0; padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--neutral-stroke-rest); background: transparent; box-shadow: none; }
+.filter-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.filter-toolbar > .filter-field { display: grid; flex: 0 1 176px; min-width: 120px; gap: 4px; }
+.filter-toolbar > .filter-field-primary { flex-basis: 280px; flex-grow: 1; }
+.filter-toolbar > .filter-field-wide { flex-basis: 220px; flex-grow: 1; }
+.filter-toolbar > .filter-field-compact { flex-basis: 144px; }
+.filter-toolbar > .filter-field > fluent-text-field,
+.filter-toolbar > .filter-field > fluent-select,
+.filter-toolbar > .filter-field > input,
+.filter-toolbar > .filter-field > select { box-sizing: border-box; width: 100%; }
+.filter-toolbar > .filter-field > label { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
+.filter-toolbar > fluent-button, .filter-toolbar > .filter-action { flex: 0 0 auto; align-self: end; }
+.filter-toolbar > .filter-action fluent-button { width: auto; }
+.filter-card > .action-row { margin-bottom: 12px; }
+.filter-card > .action-row + .filter-toolbar { margin-top: 0; }
+.filter-card > .filter-toolbar + .action-row { margin-top: 12px; margin-bottom: 0; }
+
+.object-header { display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 4px 16px; align-items: start; }
+.object-header .back-link { grid-column: 1 / -1; width: fit-content; font-size: var(--type-ramp-minus-1-font-size); }
+.object-header-content { min-width: 0; }
+.object-header-content h1 { margin: 0; font-size: var(--type-ramp-plus-3-font-size); line-height: var(--type-ramp-plus-3-line-height); }
+.object-header .status-badge, .object-header .header-actions { align-self: end; }
 
 .object-list { border-top: 1px solid var(--neutral-stroke-rest); }
 .object-list-item { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(220px, max-content) max-content; box-sizing: border-box; width: 100%; min-height: 72px; gap: 16px; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--neutral-stroke-rest); color: inherit; text-align: left; text-decoration: none; }
@@ -107,4 +125,10 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
     .relationship-row, .history-item, .participant-row, .mark-row, .race-facts, .odds-layout, .job-graph, .history-relations, .participant-relations { grid-template-columns: 1fr; }
     .selectable-row { grid-template-columns: 1fr; }
     .filter-action { padding-top: 4px; }
+    .filter-toolbar { display: grid; grid-template-columns: 1fr; }
+    .filter-toolbar > .filter-field, .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide, .filter-toolbar > .filter-field-compact, .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { width: 100%; }
+    .filter-toolbar > fluent-button, .filter-toolbar > .filter-action fluent-button { width: 100%; }
+    .object-header { grid-template-columns: 1fr; }
+    .object-header .back-link { grid-column: auto; }
+    .object-header .status-badge, .object-header .header-actions { justify-self: start; }
 }

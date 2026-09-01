@@ -13,13 +13,13 @@
         <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyConfirmedAsync">結果確定</FluentButton>
         <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyAllAsync">すべて</FluentButton>
     </div>
-    <div class="filter-grid">
-        <label>開始日<input type="date" @bind="from" /></label>
-        <label>終了日<input type="date" @bind="to" /></label>
-        <FluentTextField Label="開催場" @bind-Value="racecourse" Placeholder="例: 05 東京" />
-        <label>レース番号<input type="number" @bind="raceNo" min="1" max="12" /></label>
-        <FluentTextField Label="レース名" @bind-Value="raceName" />
-        <FluentTextField Label="勝ち馬" @bind-Value="winningHorse" />
+    <div class="filter-toolbar">
+        <label class="filter-field filter-field-compact">開始日<input type="date" @bind="from" /></label>
+        <label class="filter-field filter-field-compact">終了日<input type="date" @bind="to" /></label>
+        <div class="filter-field filter-field-compact"><FluentTextField Label="開催場" @bind-Value="racecourse" Placeholder="例: 05 東京" /></div>
+        <label class="filter-field filter-field-compact">レース番号<input type="number" @bind="raceNo" min="1" max="12" /></label>
+        <div class="filter-field filter-field-wide"><FluentTextField Label="レース名" @bind-Value="raceName" /></div>
+        <div class="filter-field filter-field-wide"><FluentTextField Label="勝ち馬" @bind-Value="winningHorse" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
     @if (HasFilters)

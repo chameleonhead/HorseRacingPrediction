@@ -87,7 +87,18 @@
         </section>
     </FluentCard>
 }
-<FluentCard class="filter-card"><div class="filter-grid acquisition-filter"><label>対象名<input type="search" @bind="subjectQuery" placeholder="馬・騎手・調教師名を検索" /></label><label>開始日<input type="date" @bind="from" /></label><label>終了日<input type="date" @bind="to" /></label><label>対象<select @bind="subjectTypeText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@SubjectLabel(value)</option> }</select></label><label>状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select></label><FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.Unacquired ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.Unacquired))">未取得のみ</FluentButton><FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.RetryWaiting ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.RetryWaiting))">再試行待ち</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton></div></FluentCard>
+<FluentCard class="filter-card">
+    <div class="filter-toolbar acquisition-filter">
+        <label class="filter-field filter-field-primary">対象名<input type="search" @bind="subjectQuery" placeholder="馬・騎手・調教師名を検索" /></label>
+        <label class="filter-field filter-field-compact">開始日<input type="date" @bind="from" /></label>
+        <label class="filter-field filter-field-compact">終了日<input type="date" @bind="to" /></label>
+        <label class="filter-field filter-field-compact">対象<select @bind="subjectTypeText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@SubjectLabel(value)</option> }</select></label>
+        <label class="filter-field filter-field-compact">状態<select @bind="statusText"><option value="">すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select></label>
+        <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.Unacquired ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.Unacquired))">未取得のみ</FluentButton>
+        <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.RetryWaiting ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.RetryWaiting))">再試行待ち</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton>
+    </div>
+</FluentCard>
 @if (loading) { <UiState Kind="loading" Title="データ取得状況を読み込んでいます" /> }
 else if (VisibleItems.Count == 0) { <UiState Title="該当する取得結果はありません" /> }
 else
