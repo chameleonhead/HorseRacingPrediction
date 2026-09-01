@@ -916,3 +916,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功。Contracts 38、Domain 94、Agents 177、MachineLearning 14、Infrastructure 10、Application 56、API 96、Collector 92 件、合計 577 件がすべて成功した。
 - `--no-build` は、通常出力先を利用する既存の開発プロセスを止めず、直前に隔離出力で Razor を含む API build を成功させたうえで、既存の各 test assembly を回帰確認する目的で使用した。
+
+## Verification update - 2026-09-01 populated edit form pass
+
+- `src/HorseRacingPrediction.Api/eventstore.db` のデータ入りDBをOSの一時領域へ複製し、検証 API はそのコピーだけを参照した。元のDBおよびアプリケーションデータには書き込みをしていない。
+- 馬編集では、プロフィール更新、別名の追加・統合、データ補正の3つの `RaceOpsFormSection` と7つの操作ボタンを確認した。騎手・調教師編集でも各3 section を確認し、いずれの広い画面でも横 overflow はなかった。
+- 馬編集は320 px相当でも3 section を表示し横 overflow はなかった。検証後に viewport override を解除した。
+- browser automation では入力要素へTabを送る低水準のフォーカス状態を取得できなかったため、キーボードの順序は native input / button の semantic markup の確認に留まる。スクリーンリーダーを含む実機補助技術の確認は残課題としてW5に保持する。
+
+## Documentation updates
+
+- `.gitignore`: SQLite の `*.db-shm` と `*.db-wal` を明示的に無視する規則を追加した。開発・検証中に生成されるWAL/SHMジャーナルを作業ツリーへ出さず、SQLite本体の既存 `*.db` 無視規則を補完する正本である。
