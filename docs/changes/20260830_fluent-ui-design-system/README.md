@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Implemented
+- Status: Proposed
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-01
@@ -945,3 +945,43 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - 収集ジョブは既存の720px / 320px確認とdialog確認を含め、詳細・編集は populated / not-found を確認した。編集フォームはHorse / Jockey / Trainer の3 section、native label、Fluent button role を確認した。
 - 最終コード回帰は隔離API build（警告0）と solution test 577件成功で確認した。`git diff --check` と作業ツリー確認も成功した。
 - 実装範囲、ドキュメント同期、WBS、検証記録が完了したため、この change record を `Implemented` とする。
+
+## Proposed remediation - 2026-09-01 mock conformance audit
+
+2026-09-01 の実装・モック監査により、直前の `Implemented` 判定を差し戻す。以下は既存モックと変更記録に明記済みだが、現行画面に未実装または不一致だった範囲である。承認後に実装する。
+
+### Scope and decisions
+
+1. 収集ジョブ一覧は、実際のキュー停止状態に応じて `すべてのジョブを一時停止` と `再開` のどちらか一方だけを表示する。操作中は重複実行を防ぎ、成功後に状態と一覧を再読込する。日別サマリーから対象日フィルターへ移動できる導線を追加する。
+2. 収集ジョブ詳細は、人が読める処理名・対象・日本語状態・更新時刻を object header に置く。DeduplicationKey は技術情報に限定し、リランCTAを header に移す。最新試行を主表示し、全試行とpayload/errorは disclosure 内に保持する。not-found表示には要求された Job ID を含める。
+3. データ取得状況は、Providerと取得履歴（成功・失敗、試行、エラー要約、技術情報）を詳細へ追加する。取得状況一覧には対象名検索と `未取得のみ` / `再試行待ち` のクイックフィルターを追加する。履歴取得に必要な read API / contract はこの変更範囲に含める。
+4. レース一覧は、日本語の状態ラベルを表示し、期間プリセット、適用フィルター要約、解除操作を追加する。既存URL query、検索、ページングを保持する。
+5. 騎手・調教師一覧には所属フィルター、馬一覧には年齢範囲フィルターを追加する。APIが既に受け付ける条件を利用し、年齢範囲は生年月日の開始・終了へ変換する。馬の通算成績は現在のread contractにないため、本 remediation の対象外とする。
+6. app shellのナビゲーションgroup名を、承認モックと同じ `データ` に統一する。予想票を参照専用とし、状態を持たないobjectでstatus badgeを省略する承認済み決定は変更しない。
+
+### Acceptance criteria
+
+- 停止中と稼働中でジョブ一覧の全体制御CTAが相互排他的であり、操作完了後の画面状態と一覧が最新化される。
+- ジョブ詳細で日本語処理名、対象、状態、最新試行、header CTA、Job IDを含むnot-found表示を確認できる。
+- 取得状況のProvider・履歴と、一覧の検索／2つのクイックフィルターを確認できる。
+- レースの日本語状態、期間プリセット、適用条件の解除、騎手・調教師の所属、馬の年齢範囲をURL保持したまま操作できる。
+- 1440 / 720 / 320 CSS pxで、追加した一覧・詳細・dialogに横overflowがなく、loading / empty / errorとキーボード操作を確認できる。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 監査結果、修正範囲、受け入れ条件、直前の完了判定の差し戻しを記録する。この変更の唯一の追加設計記録とする。
+- 既存の `docs/admin-ui-design.md` と `docs/design-guidelines.md` は、今回追加する操作・状態の要件をすでに正本として定義しているため、承認前の内容変更は不要と確認した。実装により正本との差異が見つかった場合は、同じ変更セットで追記する。
+
+### WBS remediation
+
+| ID | 作業 | 状態 | 実施主体 | 完了条件 |
+| --- | --- | --- | --- | --- |
+| R1 | ジョブ一覧・詳細の状態／履歴是正 | 未着手 | root + 軽量サブエージェント | 上記1–2の受け入れ条件を満たす |
+| R2 | 取得状況の履歴・検索是正 | 未着手 | 軽量サブエージェント | 上記3の受け入れ条件を満たす |
+| R3 | collection filter・状態表示是正 | 未着手 | 軽量サブエージェント | 上記4–5の受け入れ条件を満たす |
+| R4 | shell表記・visual回帰 | 未着手 | root | 上記6とviewport回帰を満たす |
+| R5 | 最終検証・ドキュメント同期 | 未着手 | root | solution test、browser確認、変更記録を完結 |
+
+### Approval
+
+未承認。上記 remediation scope の明示的な承認後に、プロダクションコードを変更する。
