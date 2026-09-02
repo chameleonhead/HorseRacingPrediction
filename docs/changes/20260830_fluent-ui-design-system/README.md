@@ -1245,6 +1245,16 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - ローカルの`/login?error=1`で、inputが40px・solid border・4px radius・白背景、エラーalertがsolid border・色付き背景・`role=alert`であることを確認した。
 - `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`を実行し、警告0・エラー0を確認した。
 
+## Collector API client configuration correction - 2026-09-02
+
+- Collectorは実行出力フォルダーから起動すると`appsettings.json`を読み込めず、`ApiClient:BaseUrl`と`ApiClient:ApiKey`の起動時検証に失敗していた。Collector projectで両方の設定ファイルを`PreserveNewest`で出力へコピーするようにした。
+- 出力先からCollector実行ファイルを起動し、Production環境でAPI状態取得が200となり、`OptionsValidationException`なしでhostが起動することを確認した。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: Collectorのローカル実行設定の修正と検証を追記する。
+- `docs/system-architecture.md`: API keyとAPI接続の既存記述は正本のままであり、接続契約の変更はないため更新不要。
+
 ## Input control consistency correction - 2026-09-02
 
 - 一覧検索、詳細履歴、編集フォーム、メモ、ログインに残っていたネイティブ`input`/`select`/`textarea`の既定枠を共通Fluentトークンへ統一した。高さ、余白、枠線、角丸、背景色、文字色、focus ring、textareaのリサイズを同じ規則で定義した。
