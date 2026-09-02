@@ -1,5 +1,25 @@
 /* Layout and domain information placement only. Fluent UI owns control appearance. */
-:root { color-scheme: light; }
+:root {
+    color-scheme: light;
+    --neutral-layer-1: #ffffff;
+    --neutral-layer-2: #f5f5f5;
+    --neutral-layer-3: #fafafa;
+    --neutral-fill-secondary-hover: #f0f0f0;
+    --neutral-fill-stealth-hover: #f5f5f5;
+    --neutral-foreground-rest: #242424;
+    --neutral-foreground-hint: #616161;
+    --neutral-stroke-rest: #d1d1d1;
+    --neutral-stroke-strong-rest: #8a8a8a;
+    --accent-fill-rest: #0f6b52;
+    --accent-fill-hover: #0b5b45;
+    --accent-foreground-rest: #0f6b52;
+    --focus-stroke-outer: #0f6b52;
+    --status-danger-background-1: #fdf3f4;
+    --status-danger-foreground-1: #a4262c;
+    --control-corner-radius: 4px;
+    --elevation-shadow-card-rest: 0 2px 4px rgb(0 0 0 / 14%), 0 0 2px rgb(0 0 0 / 12%);
+    --font-weight-semibold: 600;
+}
 html, body { min-height: 100%; margin: 0; }
 body { background: var(--neutral-layer-2); color: var(--neutral-foreground-rest); }
 a { color: var(--accent-foreground-rest); }

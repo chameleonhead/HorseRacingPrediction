@@ -1231,5 +1231,21 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 ## Input control consistency correction - 2026-09-02
 
+ネイティブ入力とFluent UI入力の境界、背景、フォーカス表示を全画面で同じデザイントークンにそろえる。`reboot.css`を先に読み込み、既存の共通`app.css`を後から適用することで、一覧filter、詳細履歴filter、編集form、ログインのnative input / select / textareaとFluent controlに一貫した40pxの視覚高さ、境界、角丸、focus ringを与える。既存の入力値、validation、操作契約は変更しない。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 入力コントロールの読み込み順と統一対象、検証結果を追記する。
+- `docs/design-guidelines.md`: 既存の「共通componentがcontrolの見た目を所有し、page固有CSSでinputを再定義しない」規則に従うため、正本の変更は不要。
+
+### Implementation and verification
+
+- `App.razor`のstylesheet読み込み順を`reboot.css`、`app.css`へ変更し、共通inputスタイルがFluentのrebootに上書きされないようにした。CSSキャッシュキーも更新した。
+- `:root`にFluentDesignThemeの外で使う最小限のトークンフォールバックを追加した。静的ログイン画面でも、同一の入力境界・背景・角丸、エラーalertの背景・境界を描画する。
+- ローカルの`/login?error=1`で、inputが40px・solid border・4px radius・白背景、エラーalertがsolid border・色付き背景・`role=alert`であることを確認した。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`を実行し、警告0・エラー0を確認した。
+
+## Input control consistency correction - 2026-09-02
+
 - 一覧検索、詳細履歴、編集フォーム、メモ、ログインに残っていたネイティブ`input`/`select`/`textarea`の既定枠を共通Fluentトークンへ統一した。高さ、余白、枠線、角丸、背景色、文字色、focus ring、textareaのリサイズを同じ規則で定義した。
 - `FluentTextField`、`FluentSelect`、`FluentNumberField`も同じ`control` partへ枠線とfocus状態を適用し、枠あり／枠なしの混在を解消した。チェックボックスとラジオは用途に応じたネイティブ表示を維持する。
