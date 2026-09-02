@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="データ / 馬主">
     <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/owners/{Uri.EscapeDataString(OwnerId)}/edit")">編集</FluentButton></Actions>
@@ -18,7 +19,7 @@ else
         <div class="profile-fact"><span>出走</span><strong>@owner.Summary.ParticipationCount 戦</strong></div>
     </section>
     <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="owner-top-horses" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Ranked="true" Items="@(owner.TopHorses ?? [])" Url="@OwnerRelationshipUrl" /></section>
-    <section class="detail-group" aria-label="名寄せ"><section class="detail-card detail-section"><h3>名寄せ</h3><p class="hint">別の馬主表記をこの馬主へ統合します。原文は変更せず、対応関係と理由を履歴に残します。</p><FluentButton Appearance="@Appearance.Outline" OnClick="@OpenMerge">名寄せ候補を検索</FluentButton></section></section>
+    <section class="detail-group" aria-label="名寄せ"><section class="detail-card detail-section"><h3>名寄せ</h3><p class="hint">別の馬主表記をこの馬主へ統合します。原文は変更せず、対応関係と理由を履歴に残します。</p><FluentButton id="owner-merge-trigger" Appearance="@Appearance.Outline" OnClick="@OpenMerge">名寄せ候補を検索</FluentButton></section></section>
     <section class="detail-group" aria-label="名寄せ履歴"><section class="detail-card detail-section">
         <h3>名寄せ履歴</h3>
         @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
@@ -54,7 +55,7 @@ else
     </div>
 }
 
-<FluentDialog Hidden="@(!showMergeDialog)" HiddenChanged="@(hidden => showMergeDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">
+<FluentDialog Hidden="@(!showMergeDialog)" HiddenChanged="@(hidden => showMergeDialog = !hidden)" @onkeydown="HandleMergeDialogKeyDown" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="merge-title">馬主の名寄せ</h2></FluentDialogHeader>
     <FluentDialogBody>
         <div class="merge-dialog-layout">
@@ -122,7 +123,7 @@ else
     <FluentDialogFooter><FluentButton OnClick="@CloseMerge">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@OpenMergeConfirmation" Disabled="@(merging || string.IsNullOrWhiteSpace(sourceOwnerId) || string.IsNullOrWhiteSpace(mergeReason))">内容を確認</FluentButton></FluentDialogFooter>
 </FluentDialog>
 
-<FluentDialog Hidden="@(!showMergeConfirmation)" HiddenChanged="@(hidden => showMergeConfirmation = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
+<FluentDialog Hidden="@(!showMergeConfirmation)" HiddenChanged="@(hidden => showMergeConfirmation = !hidden)" @onkeydown="HandleMergeDialogKeyDown" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="false"><h2 id="merge-confirm-title">馬主を名寄せしますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p><strong>@selectedMergeCandidate?.DisplayName</strong>を<strong>@owner?.Summary.DisplayName</strong>へ統合します。</p>
@@ -165,6 +166,13 @@ else
     private OwnerSummaryResponse? selectedMergeCandidate;
     private IEnumerable<OwnerSummaryResponse> PagedMergeCandidates => mergeCandidates.Skip((mergePage - 1) * mergePageSize).Take(mergePageSize);
     private IReadOnlyList<string> mergeErrors = [];
+    private bool restoreMergeFocus;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!restoreMergeFocus) return;
+        restoreMergeFocus = false;
+        await JS.InvokeVoidAsync("raceOps.focusById", "owner-merge-trigger");
+    }
     protected override async Task OnParametersSetAsync()
     {
         historySearch = HistorySearchQuery ?? string.Empty;
@@ -237,7 +245,11 @@ else
         showMergeConfirmation = true;
     }
     private void BackToMerge() { showMergeConfirmation = false; showMergeDialog = true; }
-    private void CloseMerge() { showMergeDialog = false; showMergeConfirmation = false; }
+    private void CloseMerge() { showMergeDialog = false; showMergeConfirmation = false; restoreMergeFocus = true; }
+    private void HandleMergeDialogKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") CloseMerge();
+    }
     private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"/horses/{Uri.EscapeDataString(item.ObjectId)}" : $"/trainers/{Uri.EscapeDataString(item.ObjectId)}";
     private static string OwnerRelationshipUrl(RelationshipSummaryResponse item) => $"/horses/{Uri.EscapeDataString(item.ObjectId)}";
 }

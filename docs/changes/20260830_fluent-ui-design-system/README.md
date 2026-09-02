@@ -350,8 +350,8 @@ UI の利用先は API 管理画面だけなので、別 Razor Class Library は
 - [x] 絵文字がUI、モック、ガイドライン例に残っておらず、アイコンを使う場合は Fluent System Icons に限定される。
 - [x] loading、empty、error、disabled、success、danger confirmation の共通表示が代表ページで確認できる。
 - [x] 既存の route、認証、検索、編集、リラン／再取得、pagination、外部リンクの回帰テストが通る。
-- [ ] Fluent UI package は stable version に固定され、production assets は CDN に依存しない。
-- [ ] `dotnet build HorseRacingPrediction.sln`、関連 test、`git diff --check` が成功する。
+- [x] Fluent UI package は stable version に固定され、production assets は CDN に依存しない。
+- [x] `dotnet build HorseRacingPrediction.sln`、関連 test、`git diff --check` が成功する。
 
 ## Delivery plan
 
@@ -1206,3 +1206,16 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、102件。
 
 残作業: 全体visual / regression検証。
+
+### Final completeness verification
+
+- 馬主名寄せの2つのFluent DialogへEscape key処理を追加し、閉じた後に起点の「名寄せ候補を検索」へフォーカスを戻す共通JS helperをlocal assetとして追加した。
+- 認証済みのローカル管理画面で`/predictions`、`/jobs`、`/owners`を1280 / 720 / 320 CSS pxで確認した。9条件すべてで横overflow、error alert、hash link、URL fragmentは0件だった。
+- populated owner detailで、上位馬ランキングに順位・戦数・勝数・最終日・賞金と馬URLが表示され、履歴filter、専用編集URL、名寄せ導線が存在することを確認した。名寄せDialogはEscapeで閉じ、`owner-merge-trigger`へフォーカスが復帰した。
+- 途中の高速な画面遷移でSQLiteの同時statementによる一過性500を1回観測したが、要求完了後の通常reloadでは馬主23件をerrorなしで表示し、その後の9 viewport条件でも再発しなかった。永続的な画面/API不具合ではないことを確認した。
+- Fluent UI package / Iconsはstable `4.14.4`へ固定され、stylesheetと今回のfocus helperは`_content` / `wwwroot`のlocal assetだけを参照し、CDN依存がない。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 警告0、エラー0。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`: 成功、合計584件（API 102、Collector 93、Agents 177、Application 56、Domain 94、Contracts 38、MachineLearning 14、Infrastructure 10）。
+- `git diff --check`: 成功。
+
+再開監査で列挙した共通alert、hash link、関係者ランキング・履歴filter、馬主編集、ジョブ全件検索、参照専用予想票、Dialog keyboard/focusの修正と検証を完了した。設計との差分と残課題はない。
