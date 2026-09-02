@@ -1099,8 +1099,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | C1 | 共通shell・brand・mobile bar | 完了 | desktop railとmobile barのbrand、色、寸法、drawer起点がモックと一致する |
 | C2 | collection header・filter・list row | 完了 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
 | C3 | detail・edit・dialog | 完了 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
-| C4 | responsive・keyboard・共通state | 実装中 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
-| C5 | 回帰検証・記録同期 | 未着手 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
+| C4 | responsive・keyboard・共通state | 完了 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
+| C5 | 回帰検証・記録同期 | 実装中 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
 
 ### Implementation order
 
@@ -1131,6 +1131,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - edit formは最大840px、desktop 2列、mobile 1列、section padding 18px / 14pxへ揃え、actionを右寄せした。馬編集の3 sectionを1280pxと320pxで確認し、横overflowなし、全controlと6操作を表示できた。
 - populated DBの一時コピーで馬・騎手・調教師・馬主のloaded detailを1280px / 320pxで確認した。全画面で横overflowはなく、馬詳細では5 sectionが同時に表示された。
 - 隔離API buildは警告0・エラー0、API testsは98件すべて成功した。
+
+### C4 implementation and verification
+
+- mobile menuは`aria-expanded`を明示的な`true` / `false`として公開し、Escapeまたはbackdropで閉じた後にmenu buttonへfocusを戻すようにした。navigation遷移時の自動closeも維持する。
+- populated DBの一時コピーを使い、8一覧と馬・騎手・調教師・馬主のloaded detail、合計12ルートを1280 / 720 / 320 CSS pxで確認した。全36条件で横overflowと共通error boundary表示はなかった。
+- 1280pxではmobile bar非表示・rail表示、720pxと320pxでは48px mobile bar表示・rail退避を確認した。馬詳細などの連続detail sectionは全viewportで5 sectionを同時に保持した。
+- 320pxでmenu buttonのクリック後に`aria-expanded=true`とdrawer表示、Escape後に`aria-expanded=false`、drawer非表示、menu buttonへのfocus復帰を確認した。
 
 ### Documentation updates
 

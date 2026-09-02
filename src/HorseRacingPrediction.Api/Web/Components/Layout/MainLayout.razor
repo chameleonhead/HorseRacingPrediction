@@ -5,14 +5,14 @@
 
 <FluentMenuProvider />
 
-<header class="mobile-bar">
-    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" aria-label="メニュー" @onclick="() => navOpen = !navOpen">
+<header class="mobile-bar" @onkeydown="HandleKeyDown">
+    <button @ref="menuButton" class="mobile-menu-button" type="button" aria-expanded="@(navOpen ? "true" : "false")" aria-label="メニュー" @onclick="ToggleNavigation">
         <span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span>
     </button>
     <strong>RaceOps</strong>
 </header>
-<div class="page">
-    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
+<div class="page" @onkeydown="HandleKeyDown">
+    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="CloseNavigationAsync"></button> }
     <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
             <span class="brand-text">RaceOps</span>
@@ -36,6 +36,7 @@
 
 @code {
     private bool navOpen;
+    private ElementReference menuButton;
 
     protected override void OnInitialized()
         => Navigation.LocationChanged += HandleLocationChanged;
@@ -45,6 +46,22 @@
         if (!navOpen) return;
         navOpen = false;
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleNavigation() => navOpen = !navOpen;
+
+    private async Task CloseNavigationAsync()
+    {
+        navOpen = false;
+        await menuButton.FocusAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (navOpen && args.Key == "Escape")
+        {
+            await CloseNavigationAsync();
+        }
     }
 
     public void Dispose()
