@@ -91,7 +91,6 @@ public static class AdminEndpointExtensions
                     <section class="login-card">
                         <p class="login-eyebrow">Admin console</p>
                         <h1 id="login-title">競馬DB管理画面</h1>
-                        <p class="login-description">収集状況、レース、関係者データを確認・訂正する管理画面です。</p>
                         <form method="post" action="/login" class="login-form">
                             <input type="hidden" name="ReturnUrl" value="{{System.Net.WebUtility.HtmlEncode(returnUrl)}}" />
                             {{errorHtml}}

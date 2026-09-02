@@ -1,6 +1,5 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -504,6 +503,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             dispatch.AttemptCount += 1;
             dispatch.LastError = error;
             dispatch.AvailableAt = now.AddMinutes(Math.Min(15, Math.Max(1, dispatch.AttemptCount)));
+            dispatch.DispatchedAt = null;
             dispatch.UpdatedAt = now;
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }

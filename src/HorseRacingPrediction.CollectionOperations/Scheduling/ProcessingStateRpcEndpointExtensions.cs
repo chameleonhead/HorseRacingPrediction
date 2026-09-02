@@ -25,45 +25,53 @@ public static class ProcessingStateRpcEndpointExtensions
         if (!string.Equals(method, request.Method, StringComparison.Ordinal))
             return Results.BadRequest("RPC method mismatch.");
 
-        var target = typeof(IProcessingStateStore).GetMethod(method);
-        if (target is null)
+        var targets = typeof(IProcessingStateStore).GetMethods().Where(m => m.Name == method);
+        if (targets is null || !targets.Any())
             return Results.NotFound();
 
-        var parameters = target.GetParameters();
-        var serializedIndex = 0;
-        var arguments = new object?[parameters.Length];
-        for (var index = 0; index < parameters.Length; index++)
+        foreach (var target in targets)
         {
-            if (parameters[index].ParameterType == typeof(CancellationToken))
+            var parameters = target.GetParameters();
+            if (parameters.Count(x => x.ParameterType != typeof(CancellationToken)) != request.Arguments.Length)
             {
-                arguments[index] = context.RequestAborted;
                 continue;
             }
+            var serializedIndex = 0;
+            var arguments = new object?[parameters.Length];
+            for (var index = 0; index < parameters.Length; index++)
+            {
+                if (parameters[index].ParameterType == typeof(CancellationToken))
+                {
+                    arguments[index] = context.RequestAborted;
+                    continue;
+                }
 
-            if (serializedIndex >= request.Arguments.Length)
-                return Results.BadRequest($"Missing argument '{parameters[index].Name}'.");
+                if (serializedIndex >= request.Arguments.Length)
+                    return Results.BadRequest($"Missing argument '{parameters[index].Name}'.");
 
-            arguments[index] = request.Arguments[serializedIndex++].Deserialize(parameters[index].ParameterType, JsonOptions);
+                arguments[index] = request.Arguments[serializedIndex++].Deserialize(parameters[index].ParameterType, JsonOptions);
+            }
+
+            if (serializedIndex != request.Arguments.Length)
+                return Results.BadRequest("Too many RPC arguments.");
+
+            try
+            {
+                var task = (Task?)target.Invoke(store, arguments)
+                    ?? throw new InvalidOperationException("State store method did not return a Task.");
+                await task.ConfigureAwait(false);
+
+                if (!target.ReturnType.IsGenericType)
+                    return Results.NoContent();
+
+                var result = task.GetType().GetProperty("Result")?.GetValue(task);
+                return Results.Json(result, JsonOptions);
+            }
+            catch (TargetInvocationException exception) when (exception.InnerException is not null)
+            {
+                throw exception.InnerException;
+            }
         }
-
-        if (serializedIndex != request.Arguments.Length)
-            return Results.BadRequest("Too many RPC arguments.");
-
-        try
-        {
-            var task = (Task?)target.Invoke(store, arguments)
-                ?? throw new InvalidOperationException("State store method did not return a Task.");
-            await task.ConfigureAwait(false);
-
-            if (!target.ReturnType.IsGenericType)
-                return Results.NoContent();
-
-            var result = task.GetType().GetProperty("Result")?.GetValue(task);
-            return Results.Json(result, JsonOptions);
-        }
-        catch (TargetInvocationException exception) when (exception.InnerException is not null)
-        {
-            throw exception.InnerException;
-        }
+        return Results.NotFound();
     }
 }
