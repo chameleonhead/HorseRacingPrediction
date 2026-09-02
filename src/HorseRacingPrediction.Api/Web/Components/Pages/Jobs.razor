@@ -35,11 +35,15 @@
 @if (DaySummaries.Count > 0)
 {
     <section class="entity-section" aria-labelledby="job-day-summary-heading">
-        <h2 id="job-day-summary-heading">対象日別の収集状況</h2>
-        <div class="relationship-list">
+        <div class="section-title"><h2 id="job-day-summary-heading">日別の収集状況</h2><span class="hint">対象日を選択して絞り込み</span></div>
+        <div class="day-summary">
             @foreach (var summary in DaySummaries)
             {
-                <div class="relationship-row"><span>@summary.Date</span><a href="@JobsByDateUrl(summary.Date)">同日の収集ジョブを見る</a><span class="hint">@summary.Count 件・要対応 @summary.AttentionCount 件</span></div>
+                <a class="day-item" href="@JobsByDateUrl(summary.Date)">
+                    <strong>@DisplayDate(summary.Date)</strong>
+                    <small>@summary.Count 件の収集ジョブ</small>
+                    <span class="day-progress"><span>@DayProgress(summary)</span><RaceOpsStatusBadge Label="@DayStatus(summary)" Tone="@DayStatusTone(summary)" /></span>
+                </a>
             }
         </div>
     </section>
@@ -156,10 +160,26 @@ else
         .GroupBy(x => x.Date!, StringComparer.Ordinal)
         .OrderByDescending(x => x.Key)
         .Take(7)
-        .Select(x => new DaySummary(x.Key, x.Count(), x.Count(item => item.Job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter)))
+        .Select(x => new DaySummary(
+            x.Key,
+            x.Count(),
+            x.Count(item => item.Job.Status == AgentJobStatus.Succeeded),
+            x.Count(item => item.Job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter),
+            x.Count(item => item.Job.Status is AgentJobStatus.Ready or AgentJobStatus.Pending or AgentJobStatus.Running or AgentJobStatus.WaitingDependency)))
         .ToList();
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
 
     private sealed record FilterOption(string Value, string Label);
-    private sealed record DaySummary(string Date, int Count, int AttentionCount);
+    private static string DisplayDate(string value) => DateOnly.TryParse(value, out var date) ? date.ToString("yyyy年M月d日") : value;
+    private static string DayProgress(DaySummary value)
+    {
+        var parts = new List<string>();
+        if (value.CompletedCount > 0) parts.Add($"{value.CompletedCount}件完了");
+        if (value.WaitingCount > 0) parts.Add($"{value.WaitingCount}件待機");
+        if (value.AttentionCount > 0) parts.Add($"{value.AttentionCount}件要対応");
+        return parts.Count == 0 ? $"{value.Count}件" : string.Join("・", parts);
+    }
+    private static string DayStatus(DaySummary value) => value.AttentionCount > 0 ? "要対応" : value.WaitingCount > 0 ? "一部待機" : "完了";
+    private static string DayStatusTone(DaySummary value) => value.AttentionCount > 0 ? "danger" : value.WaitingCount > 0 ? "warning" : "success";
+    private sealed record DaySummary(string Date, int Count, int CompletedCount, int AttentionCount, int WaitingCount);
 }

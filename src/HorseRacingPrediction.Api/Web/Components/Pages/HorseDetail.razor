@@ -11,17 +11,11 @@ else if (horse is null) { <p>HorseId「@HorseId」の馬は見つかりません
 else
 {
     <div class="detail-stack">
-    <section class="detail-group" aria-label="概要">
-    <section class="detail-card detail-section">
-        <h2>@horse.RegisteredName</h2>
-        <dl class="meta">
-            <dt>HorseId</dt><dd><code>@horse.HorseId</code></dd>
-            <dt>正規化名</dt><dd>@horse.NormalizedName</dd>
-            <dt>性</dt><dd>@horse.SexCode</dd>
-            <dt>生年月日</dt><dd>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</dd>
-            <dt>馬主</dt><dd>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</dd>
-        </dl>
-    </section>
+    <section class="profile-facts" aria-label="概要">
+        <div class="profile-fact"><span>性別</span><strong>@Display(horse.SexCode)</strong></div>
+        <div class="profile-fact"><span>生年月日</span><strong>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</strong></div>
+        <div class="profile-fact"><span>馬主</span><strong>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</strong></div>
+        <div class="profile-fact"><span>登録表記</span><strong>@(horse.Aliases.Count + 1) 件</strong></div>
     </section>
 
     <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="relations-section" Title="この馬に関係する人" Items="@relationships.Take(6)" Url="@RelationshipUrl" /></section>

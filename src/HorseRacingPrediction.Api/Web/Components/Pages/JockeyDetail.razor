@@ -12,14 +12,10 @@ else if (jockey is null) { <p>JockeyId「@JockeyId」の騎手は見つかりま
 else
 {
     <div class="detail-stack">
-    <section class="detail-group" aria-label="概要"><section class="detail-card detail-section">
-        <h2>@jockey.DisplayName</h2>
-        <dl class="meta">
-            <dt>JockeyId</dt><dd><code>@jockey.JockeyId</code></dd>
-            <dt>正規化名</dt><dd>@jockey.NormalizedName</dd>
-            <dt>所属</dt><dd>@jockey.AffiliationCode</dd>
-        </dl>
-    </section>
+    <section class="profile-facts" aria-label="概要">
+        <div class="profile-fact"><span>所属</span><strong>@(string.IsNullOrWhiteSpace(jockey.AffiliationCode) ? "未登録" : jockey.AffiliationCode)</strong></div>
+        <div class="profile-fact"><span>登録表記</span><strong>@(jockey.Aliases.Count + 1) 件</strong></div>
+        <div class="profile-fact"><span>関連する馬</span><strong>@relationships.Count(x => x.ObjectType == "Horse") 頭</strong></div>
     </section>
 
     <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="relations-section" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" ParticipationUnit="鞍" Items="@TopHorses" Url="@RelationshipUrl" /></section>

@@ -12,11 +12,11 @@ else if (owner is null) { <p>指定された馬主は見つかりませんでし
 else
 {
     <div class="detail-stack">
-    <section class="detail-group" aria-label="概要"><section class="detail-card detail-section">
-        <h2>@owner.Summary.DisplayName</h2>
-        <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
-        @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
-    </section></section>
+    <section class="profile-facts" aria-label="概要">
+        <div class="profile-fact"><span>所有頭数</span><strong>@owner.Summary.CurrentHorseCount 頭</strong></div>
+        <div class="profile-fact"><span>登録表記</span><strong>@owner.Summary.NameVariants.Count 件</strong></div>
+        <div class="profile-fact"><span>出走</span><strong>@owner.Summary.ParticipationCount 戦</strong></div>
+    </section>
     <section class="detail-group" aria-label="関係"><section class="entity-section detail-section">
         <h3>この馬主に関係する馬・調教師</h3>
         <div class="relationship-grid">
@@ -105,16 +105,35 @@ else
                 <strong>@(selectedMergeCandidate?.DisplayName ?? "未選択")</strong>
                 @if (!string.IsNullOrWhiteSpace(sourceOwnerId)) { <span class="hint">@sourceOwnerId</span> }
             </div>
+            @if (selectedMergeCandidate is not null && owner is not null)
+            {
+                <div class="merge-impact">
+                    <div><span class="object-label">所有馬</span><strong>@selectedMergeCandidate.CurrentHorseCount 頭を移動</strong></div>
+                    <div><span class="object-label">統合後</span><strong>@(owner.Summary.CurrentHorseCount + selectedMergeCandidate.CurrentHorseCount) 頭</strong></div>
+                    <div><span class="object-label">登録表記</span><strong>@selectedMergeCandidate.NameVariants.Count 件を追加</strong></div>
+                </div>
+                <p class="hint">レース時点で取得した馬主名の原文は変更しません。</p>
+            }
             </div>
             <div>
                 <p class="eyebrow">STEP 3</p>
-                <FluentTextField Label="統合する理由" @bind-Value="mergeReason" />
+                <FluentTextField Label="統合する理由（必須）" @bind-Value="mergeReason" Required="true" />
                 <p class="hint">統合の理由は名寄せ履歴に記録されます。</p>
             </div>
             @if (mergeErrors.Count > 0) { <UiState Kind="error" Title="名寄せできませんでした" Message="@string.Join(' ', mergeErrors)" /> }
         </div>
     </FluentDialogBody>
-    <FluentDialogFooter><FluentButton OnClick="@CloseMerge">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@MergeAsync" Disabled="@(merging || string.IsNullOrWhiteSpace(sourceOwnerId))">統合する</FluentButton></FluentDialogFooter>
+    <FluentDialogFooter><FluentButton OnClick="@CloseMerge">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@OpenMergeConfirmation" Disabled="@(merging || string.IsNullOrWhiteSpace(sourceOwnerId) || string.IsNullOrWhiteSpace(mergeReason))">内容を確認</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!showMergeConfirmation)" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="false"><h2 id="merge-confirm-title">馬主を名寄せしますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p><strong>@selectedMergeCandidate?.DisplayName</strong>を<strong>@owner?.Summary.DisplayName</strong>へ統合します。</p>
+        <div class="warning-note" role="alert">この操作は画面から取り消せません。レース時点の馬主名原文は保持されます。</div>
+        <dl class="meta"><dt>移動する所有馬</dt><dd>@selectedMergeCandidate?.CurrentHorseCount 頭</dd><dt>理由</dt><dd>@mergeReason</dd></dl>
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@BackToMerge">戻って確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@MergeAsync" Disabled="@merging">名寄せを実行</FluentButton></FluentDialogFooter>
 </FluentDialog>
 
 <FluentDialog Hidden="@(!showEditDialog)" Modal="true" TrapFocus="true" AriaLabelledby="owner-edit-title" Style="width:min(560px, calc(100vw - 32px));">
@@ -138,6 +157,7 @@ else
     private string? sourceOwnerId;
     private string? mergeReason;
     private bool showMergeDialog;
+    private bool showMergeConfirmation;
     private bool merging;
     private string? mergeQuery;
     private bool searchingMergeCandidates;
@@ -199,7 +219,7 @@ else
         {
             var result = await Api.MergeOwnerAsync(OwnerId, new MergeOwnerRequest(sourceOwnerId ?? string.Empty, mergeReason ?? string.Empty));
             mergeErrors = result.Success ? [] : result.Errors;
-            if (result.Success) { sourceOwnerId = null; selectedMergeCandidate = null; mergeReason = null; showMergeDialog = false; await OnParametersSetAsync(); }
+            if (result.Success) { sourceOwnerId = null; selectedMergeCandidate = null; mergeReason = null; showMergeDialog = false; showMergeConfirmation = false; await OnParametersSetAsync(); }
         }
         finally { merging = false; }
     }
@@ -222,7 +242,15 @@ else
     }
     private Task GoMergePage(int value) { mergePage = value; return Task.CompletedTask; }
     private async Task OpenMerge() { mergeErrors = []; mergeQuery = owner?.Summary.DisplayName; showMergeDialog = true; await SearchMergeCandidatesAsync(); }
-    private void CloseMerge() => showMergeDialog = false;
+    private void OpenMergeConfirmation()
+    {
+        if (selectedMergeCandidate is null || string.IsNullOrWhiteSpace(mergeReason)) { mergeErrors = ["統合元と名寄せ理由は必須です。"]; return; }
+        mergeErrors = [];
+        showMergeDialog = false;
+        showMergeConfirmation = true;
+    }
+    private void BackToMerge() { showMergeConfirmation = false; showMergeDialog = true; }
+    private void CloseMerge() { showMergeDialog = false; showMergeConfirmation = false; }
     private void OpenEdit() { editDisplayName = owner?.Summary.DisplayName; editReason = null; editErrors = []; showEditDialog = true; }
     private void CloseEdit() => showEditDialog = false;
     private async Task UpdateAsync()

@@ -68,6 +68,11 @@ a { color: var(--accent-foreground-rest); }
 .detail-stack { display: grid; gap: 16px; }
 .detail-group { display: grid; gap: 12px; min-width: 0; }
 .detail-card { padding: 16px; background: var(--neutral-layer-1); border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; }
+.profile-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--neutral-layer-1); border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; }
+.profile-fact { display: grid; gap: 4px; min-width: 0; padding: 14px 16px; border-right: 1px solid var(--neutral-stroke-rest); }
+.profile-fact:last-child { border-right: 0; }
+.profile-fact > span { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
+.profile-fact > strong { overflow-wrap: anywhere; font-size: var(--type-ramp-base-font-size); }
 .entity-section { padding: 0; }
 .detail-section > h2, .detail-section > h3 { margin: 0; font-size: var(--type-ramp-plus-1-font-size); }
 .detail-section > h2 + *, .detail-section > h3 + * { margin-top: 4px; }
@@ -154,6 +159,20 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
 .login-form, .login-field { display: grid; gap: 8px; }
 .login-button { min-height: 40px; }
 .login-error { color: var(--status-danger-foreground-1); }
+.merge-dialog-layout { display: grid; gap: 16px; }
+.merge-review { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; background: var(--neutral-layer-2); }
+.merge-selected { display: grid; gap: 2px; }
+.merge-impact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.merge-impact > div { display: grid; gap: 2px; padding: 8px; background: var(--neutral-layer-1); border-radius: 4px; }
+.warning-note { margin: 12px 0; padding: 12px; border-left: 4px solid var(--status-danger-foreground-1); background: var(--status-danger-background-1); color: var(--status-danger-foreground-1); }
+.section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.section-title h2 { margin: 0; }
+.day-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.day-item { display: block; min-width: 0; padding: 12px 14px; border: 1px solid var(--neutral-stroke-rest); border-radius: 6px; background: var(--neutral-layer-1); color: inherit; text-decoration: none; }
+.day-item:hover { border-color: var(--accent-fill-rest); background: var(--neutral-layer-2); }
+.day-item strong, .day-item small { display: block; }
+.day-item small { margin-top: 4px; color: var(--neutral-foreground-hint); }
+.day-progress { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: var(--type-ramp-minus-1-font-size); }
 
 @media (max-width: 720px) {
     .page { display: block; }
@@ -176,16 +195,28 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
     .relationship-grid .relationship-link .hint { grid-column: 2; }
     .selectable-row { grid-template-columns: 1fr; }
     .filter-action { padding-top: 4px; }
-    .filter-toolbar { display: grid; grid-template-columns: 1fr; }
+    .filter-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .filter-toolbar > .filter-field, .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide, .filter-toolbar > .filter-field-compact, .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { width: 100%; }
+    .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide { grid-column: 1 / -1; }
+    .filter-toolbar > fluent-button:last-child, .filter-toolbar > .filter-action:last-child { grid-column: 1 / -1; }
     .filter-toolbar > fluent-button, .filter-toolbar > .filter-action fluent-button { width: 100%; }
     .object-header { grid-template-columns: 1fr; }
     .object-header .back-link { grid-column: auto; }
     .object-header .status-badge, .object-header .header-actions { justify-self: start; }
     .raceops-detail-tabs::part(tabpanel) { padding-top: 12px; }
     .detail-card { padding: 12px; }
+    .profile-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .profile-fact { padding: 12px; border-bottom: 1px solid var(--neutral-stroke-rest); }
+    .profile-fact:nth-child(2n) { border-right: 0; }
     .form-grid { grid-template-columns: 1fr; }
     .form-section { padding: 14px; }
     .detail-facts { grid-template-columns: 1fr; }
     .attempt-list > article { grid-template-columns: 1fr max-content; }
+    .merge-impact { grid-template-columns: 1fr; }
+    .day-summary { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+    .filter-toolbar { grid-template-columns: 1fr; }
+    .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide { grid-column: auto; }
 }
