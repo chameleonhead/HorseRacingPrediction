@@ -4,6 +4,36 @@ html, body { min-height: 100%; margin: 0; }
 body { background: var(--neutral-layer-2); color: var(--neutral-foreground-rest); }
 a { color: var(--accent-foreground-rest); }
 
+/* Keep native controls on the same Fluent surface as FluentTextField/FluentSelect. */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    box-sizing: border-box;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--neutral-stroke-strong-rest);
+    border-radius: var(--control-corner-radius);
+    background: var(--neutral-layer-1);
+    color: var(--neutral-foreground-rest);
+    font: inherit;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus {
+    outline: 2px solid var(--focus-stroke-outer);
+    outline-offset: 1px;
+    border-color: var(--accent-fill-rest);
+}
+textarea { min-height: 88px; resize: vertical; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-fill-rest); }
+fluent-text-field::part(control), fluent-select::part(control), fluent-number-field::part(control) {
+    min-height: 40px;
+    border: 1px solid var(--neutral-stroke-strong-rest);
+    border-radius: var(--control-corner-radius);
+    background: var(--neutral-layer-1);
+}
+fluent-text-field::part(control):focus-within, fluent-select::part(control):focus-within, fluent-number-field::part(control):focus-within {
+    border-color: var(--accent-fill-rest);
+    outline: 2px solid var(--focus-stroke-outer);
+    outline-offset: 1px;
+}
+
 .page { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
 .mobile-bar { display: none; }
 .mobile-menu-button { display: none; }
@@ -44,7 +74,7 @@ a { color: var(--accent-foreground-rest); }
 .filter-toolbar > .filter-field > input,
 .filter-toolbar > .filter-field > select { box-sizing: border-box; width: 100%; }
 .filter-toolbar > .filter-field > fluent-text-field, .filter-toolbar > .filter-field > fluent-select, .filter-toolbar > fluent-button { min-height: 40px; }
-.filter-toolbar > .filter-field > input, .filter-toolbar > .filter-field > select { min-height: 40px; padding: 8px 12px; border: 1px solid var(--neutral-stroke-strong-rest); border-radius: 4px; background: var(--neutral-layer-1); color: inherit; font: inherit; }
+.filter-toolbar > .filter-field > input, .filter-toolbar > .filter-field > select { width: 100%; }
 .filter-toolbar > .filter-field > label { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
 .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { flex: 0 0 auto; align-self: end; }
 .filter-toolbar > .filter-action fluent-button { width: auto; }
@@ -55,7 +85,7 @@ a { color: var(--accent-foreground-rest); }
 .advanced-filters { margin-top: 8px; }
 .advanced-filters summary { width: fit-content; color: var(--accent-foreground-rest); cursor: pointer; font-size: var(--type-ramp-minus-1-font-size); }
 .advanced-filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 220px)); gap: 8px; margin-top: 8px; }
-.advanced-filter-grid > input, .advanced-filter-grid > select { box-sizing: border-box; min-height: 40px; padding: 8px 12px; border: 1px solid var(--neutral-stroke-strong-rest); border-radius: 4px; background: var(--neutral-layer-1); color: inherit; font: inherit; }
+.advanced-filter-grid > input, .advanced-filter-grid > select { width: 100%; }
 
 .object-header { display: grid; grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 4px 16px; align-items: start; }
 .object-header .back-link { grid-column: 1 / -1; width: fit-content; font-size: var(--type-ramp-minus-1-font-size); }

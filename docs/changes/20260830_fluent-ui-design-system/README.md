@@ -1228,3 +1228,8 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - ログインのFluent stylesheet参照、入力クラス、エラーalertをAPI endpoint testで固定した。
 - `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 警告0・エラー0。`dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 103件すべて成功。
 - `docs/design-guidelines.md` と `docs/admin-ui-design.md` は承認済みの同一モック規則を正本としており、内容変更は不要だった。
+
+## Input control consistency correction - 2026-09-02
+
+- 一覧検索、詳細履歴、編集フォーム、メモ、ログインに残っていたネイティブ`input`/`select`/`textarea`の既定枠を共通Fluentトークンへ統一した。高さ、余白、枠線、角丸、背景色、文字色、focus ring、textareaのリサイズを同じ規則で定義した。
+- `FluentTextField`、`FluentSelect`、`FluentNumberField`も同じ`control` partへ枠線とfocus状態を適用し、枠あり／枠なしの混在を解消した。チェックボックスとラジオは用途に応じたネイティブ表示を維持する。
