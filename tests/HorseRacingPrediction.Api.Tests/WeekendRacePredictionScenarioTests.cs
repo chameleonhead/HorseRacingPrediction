@@ -288,6 +288,14 @@ public class WeekendRacePredictionScenarioTests
         Assert.AreEqual(raceId, ticketFriday.RaceId);
         Assert.AreEqual(3, ticketFriday.Marks.Count, "3頭分の印が登録されているべき");
         Assert.AreEqual(0.82m, ticketFriday.ConfidenceScore);
+        Assert.AreEqual("東京優駿（日本ダービー）", ticketFriday.RaceName);
+
+        var namedSearch = await _client.GetFromJsonAsync<PagedResponse<PredictionTicketSummaryResponse>>(
+            "/api/predictions?query=%E6%9D%B1%E4%BA%AC%E5%84%AA%E9%A7%BF&page=1&pageSize=20",
+            JsonOptions);
+        Assert.IsNotNull(namedSearch);
+        var namedSummary = namedSearch.Items.Single(x => x.PredictionTicketId == ticketId);
+        Assert.AreEqual("東京優駿（日本ダービー）", namedSummary.RaceName);
 
         // ═══════════════════════════════════════════════════
         // 【土曜日】調教最終確認・天気・馬場観測

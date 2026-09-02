@@ -1172,7 +1172,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
-        async (string predictionTicketId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<PredictionTicketReadModel>(predictionTicketId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1180,6 +1180,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.PredictionTicketId))
                     return Results.NotFound();
 
+                using var dbContext = dbContextProvider.CreateContext();
+                var race = string.IsNullOrWhiteSpace(readModel.RaceId) ? null : await queryProcessor.ProcessAsync(
+                    new ReadModelByIdQuery<RacePredictionContextReadModel>(readModel.RaceId), cancellationToken).ConfigureAwait(false);
+                var horseNames = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
+                var entries = race?.Entries.ToDictionary(x => x.EntryId, x => x.HorseId, StringComparer.Ordinal) ?? [];
                 var response = new PredictionTicketResponse(
                     readModel.PredictionTicketId,
                     readModel.RaceId,
@@ -1189,8 +1194,13 @@ public static class EndpointExtensions
                     readModel.SummaryComment,
                     readModel.PredictedAt,
                     readModel.Marks
-                        .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment))
-                        .ToList());
+                        .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment,
+                            entries.GetValueOrDefault(x.EntryId),
+                            entries.TryGetValue(x.EntryId, out var horseId) ? horseNames.GetValueOrDefault(horseId) : null))
+                        .ToList(),
+                    (ApiContracts.TicketStatus)(int)readModel.TicketStatus,
+                    (ApiContracts.EvaluationStatus)(int)readModel.EvaluationStatus,
+                    race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber);
 
                 return Results.Ok(response);
             })
@@ -1217,8 +1227,21 @@ public static class EndpointExtensions
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                var races = await dbContext.RacePredictionContexts.AsNoTracking().ToDictionaryAsync(x => x.RaceId, cancellationToken).ConfigureAwait(false);
+                var horseNames = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
 
                 IEnumerable<PredictionTicketReadModel> filtered = allTickets;
+
+                if (!string.IsNullOrWhiteSpace(request.Query))
+                {
+                    var term = request.Query.Trim();
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.RaceId, term)
+                        || (x.RaceId is not null && races.TryGetValue(x.RaceId, out var race)
+                            && (ContainsIgnoreCase(race.RaceName, term)
+                                || ContainsIgnoreCase(race.RacecourseCode, term)
+                                || (race.RaceDate?.ToString("yyyy/MM/dd").Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                                || (race.RaceDate?.ToString("yyyy-MM-dd").Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))));
+                }
 
                 if (!string.IsNullOrWhiteSpace(request.PredictionTicketId))
                     filtered = filtered.Where(x => string.Equals(x.PredictionTicketId, request.PredictionTicketId, StringComparison.OrdinalIgnoreCase));
@@ -1266,7 +1289,13 @@ public static class EndpointExtensions
                     sorted,
                     page,
                     pageSize,
-                    x => new PredictionTicketSummaryResponse(
+                    x => {
+                        races.TryGetValue(x.RaceId ?? string.Empty, out var race);
+                        var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();
+                        var primaryHorseId = primaryMark is not null && race is not null
+                            ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId
+                            : null;
+                        return new PredictionTicketSummaryResponse(
                         x.PredictionTicketId,
                         x.RaceId,
                         x.PredictorType,
@@ -1276,7 +1305,9 @@ public static class EndpointExtensions
                         x.PredictedAt,
                         (ApiContracts.TicketStatus)(int)x.TicketStatus,
                         (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,
-                        x.Marks.Count)));
+                        x.Marks.Count,
+                        race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,
+                        primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId)); }));
             })
             .WithName("SearchPredictionTickets")
             .WithTags("Prediction API")

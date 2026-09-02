@@ -7,7 +7,7 @@
 
 <FluentCard class="filter-card">
     <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース名・開催日を検索" Placeholder="レース名・開催日を検索" @bind-Value="raceId" /></div>
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース名・開催日を検索" Placeholder="レース名・開催日を検索" @bind-Value="query" /></div>
         <div class="filter-field filter-field-compact"><FluentTextField aria-label="予想者種別" Placeholder="予想者種別" @bind-Value="predictorType" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
@@ -24,11 +24,11 @@ else
         {
             <article class="object-list-item prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
                 <span class="object-list-main">
-                    <strong>@p.TicketStatus</strong>
-                    <span class="hint">@RaceLink(p.RaceId) · @($"{p.PredictorType} / {p.PredictorId}")</span>
+                    <strong>@RaceDisplayName(p)</strong>
+                    <span class="hint">@(p.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定") · 本命 @(p.PrimaryHorseName ?? "—")</span>
                 </span>
-                <span class="badge info">@p.EvaluationStatus</span>
-                <span class="object-list-meta">信頼度 @p.ConfidenceScore ・ 予想日時 @(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—") ・ 印 @p.MarkCount 件</span>
+                <RaceOpsStatusBadge Label="@TicketStatusLabel(p.TicketStatus)" Tone="@TicketStatusTone(p.TicketStatus)" />
+                <span class="object-list-meta">@EvaluationStatusLabel(p.EvaluationStatus) ・ 信頼度 @p.ConfidenceScore ・ 印 @p.MarkCount 件</span>
                 <span class="object-list-affordance">詳細</span>
             </article>
         }
@@ -37,7 +37,7 @@ else
 }
 
 @code {
-    private string? raceId;
+    private string? query;
     private string? predictorType;
     private int page = 1;
     private const int pageSize = 50;
@@ -47,7 +47,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-        raceId = ParseText(q, "raceId");
+        query = ParseText(q, "query") ?? ParseText(q, "raceId");
         predictorType = ParseText(q, "predictorType");
         if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
         await LoadAsync();
@@ -58,11 +58,11 @@ else
     {
         UpdateUrl();
         loading = true;
-        try { result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest { RaceId = raceId, PredictorType = predictorType, Page = page, PageSize = pageSize }); }
+        try { result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest { Query = query, PredictorType = predictorType, Page = page, PageSize = pageSize }); }
         finally { loading = false; }
     }
     private async Task GoAsync(int value) { page = value; await LoadAsync(); }
-    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["raceId"] = raceId, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["query"] = query, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
     private void NavigateIfChanged(string uri)
     {
         if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
@@ -72,15 +72,8 @@ else
     private void OpenPrediction(string id) => Navigation.NavigateTo(PredictionUrl(id));
     private void OpenPredictionFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenPrediction(id); }
     private static string PredictionUrl(string id) => $"/predictions/{Uri.EscapeDataString(id)}";
-    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
-    private static RenderFragment RaceLink(string? id) => builder =>
-    {
-        if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "Race: 未設定"); return; }
-        var raceIdValue = id;
-        builder.OpenElement(1, "a");
-        builder.AddAttribute(2, "href", RaceUrl(raceIdValue));
-        builder.AddEventStopPropagationAttribute(3, "onclick", true);
-        builder.AddContent(4, $"Race: {id}");
-        builder.CloseElement();
-    };
+    private static string RaceDisplayName(PredictionTicketSummaryResponse value) => string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", _ => value.ToString() };
+    private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
+    private static string EvaluationStatusLabel(EvaluationStatus value) => value switch { EvaluationStatus.Ready => "評価済み", EvaluationStatus.RecalculationRequired => "再評価待ち", EvaluationStatus.Failed => "評価失敗", _ => value.ToString() };
 }

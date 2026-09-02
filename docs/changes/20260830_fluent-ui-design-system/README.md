@@ -1196,3 +1196,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、102件。
 
 残作業: 予想票のobject表現、全体visual / regression検証。
+
+### Read-only prediction checkpoint
+
+- 予想票一覧をレース名・開催場・レース番号・開催日・本命馬名中心へ変更し、Ticket ID / Race ID / Entry IDを利用者向け主表示から除外した。検索APIへレース名・開催日・開催場を対象にするqueryを追加した。
+- 予想票詳細を状態・本命・信頼度の`profile-facts`、名前付き対象レース、馬名付き印の連続した読み順へ変更し、解決できたレースと馬はcanonical URLへリンクした。参照専用のため編集・作成・取下げ操作は表示しない。
+- 承認済み文書と矛盾していた予想票モックの「予想票を作成」を削除した。全モックの別HTMLへ付けた`#detail`等とquery末尾の`#list`を除去し、遷移先で復元されず切れていたファイル間リンクを通常リンクへ直した。同一HTML内でモック状態を切り替える有効なfragmentは維持した。
+- populated scenario testへ、詳細とレース名検索結果が利用者向けレース名を返す検証を追加した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、102件。
+
+残作業: 全体visual / regression検証。

@@ -12,4 +12,9 @@ public sealed record PredictionTicketSummaryResponse(
     DateTimeOffset? PredictedAt,
     TicketStatus TicketStatus,
     EvaluationStatus EvaluationStatus,
-    int MarkCount);
+    int MarkCount,
+    string? RaceName = null,
+    DateOnly? RaceDate = null,
+    string? RacecourseCode = null,
+    int? RaceNumber = null,
+    string? PrimaryHorseName = null);

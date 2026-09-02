@@ -2,24 +2,28 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction?.SummaryComment ?? "予想票詳細")" Section="レース・予想 / 予想票" />
+<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction is null ? "予想票詳細" : $"{RaceDisplayName(prediction)} 予想票")" Section="レース・予想 / 予想票" />
 
-@if (loading) { <p>読み込み中…</p> }
-else if (prediction is null) { <p>PredictionTicketId「@PredictionTicketId」の予想票は見つかりませんでした。</p> }
+@if (loading) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
+else if (prediction is null) { <UiState Title="予想票が見つかりません" Message="一覧へ戻り、対象を選び直してください。" /> }
 else
 {
     <div class="detail-stack">
-    <section class="detail-group" aria-label="概要"><section class="detail-card detail-section">
-        <h2>予想票の概要</h2>
-        <dl class="meta">
-            <dt>RaceId</dt><dd><a href="@($"/races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
-            <dt>予想者</dt><dd>@prediction.PredictorType / @prediction.PredictorId</dd>
-            <dt>信頼度</dt><dd>@prediction.ConfidenceScore</dd>
-            <dt>コメント</dt><dd>@prediction.SummaryComment</dd>
-            <dt>予想日時</dt><dd>@prediction.PredictedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
-        </dl>
+    <section class="profile-facts" aria-label="予想票の概要">
+        <div class="profile-fact"><small>状態</small><strong><RaceOpsStatusBadge Label="@TicketStatusLabel(prediction.TicketStatus)" Tone="@TicketStatusTone(prediction.TicketStatus)" /></strong></div>
+        <div class="profile-fact"><small>本命</small><strong>@(PrimaryMark?.HorseName ?? "—")</strong></div>
+        <div class="profile-fact"><small>信頼度</small><strong>@prediction.ConfidenceScore / 100</strong></div>
     </section>
-    </section>
+
+    @if (!string.IsNullOrWhiteSpace(prediction.RaceId))
+    {
+        <section class="entity-section detail-section" aria-labelledby="prediction-related-heading">
+            <h2 id="prediction-related-heading">関連</h2>
+            <RaceOpsObjectList Label="関連するレース">
+                <RaceOpsObjectListItem Href="@RaceUrl(prediction.RaceId)" Title="@RaceDisplayName(prediction)" Description="@(prediction.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定")" Metadata="レース詳細" />
+            </RaceOpsObjectList>
+        </section>
+    }
 
     @if (prediction.Marks.Count > 0)
     {
@@ -29,7 +33,7 @@ else
                 @foreach (var m in prediction.Marks)
                 {
                     <article class="mark-row">
-                        <div class="mark-primary"><span class="pill">@m.MarkCode</span><strong>@m.EntryId</strong></div>
+                        <div class="mark-primary"><span class="pill">@m.MarkCode</span><strong>@if (!string.IsNullOrWhiteSpace(m.HorseId)) { <a href="@HorseUrl(m.HorseId)">@(m.HorseName ?? "馬詳細")</a> } else { <text>@(m.HorseName ?? "出走馬未設定")</text> }</strong></div>
                         <div><span class="object-label">予想着順</span>@m.PredictedRank</div>
                         <div><span class="object-label">スコア</span>@m.Score</div>
                         <div class="mark-comment"><span class="object-label">コメント</span>@(string.IsNullOrWhiteSpace(m.Comment) ? "—" : m.Comment)</div>
@@ -40,11 +44,6 @@ else
         </section>
     }
 
-    <section class="detail-group" aria-label="管理"><section class="detail-card detail-section">
-        <h3>予想票の操作</h3>
-        <p class="hint">予想票の編集・取り下げ操作は、予想業務の扱いを再整理するまで画面には表示しません。</p>
-    </section>
-    </section>
     </div>
 }
 
@@ -53,6 +52,7 @@ else
 
     private bool loading;
     private PredictionTicketResponse? prediction;
+    private PredictionMarkResponse? PrimaryMark => prediction?.Marks.OrderBy(x => x.PredictedRank).FirstOrDefault();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -68,5 +68,15 @@ else
             loading = false;
         }
     }
+
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+    private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
+    private static string RaceDisplayName(PredictionTicketResponse value)
+    {
+        var display = string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(display) ? "対象レース" : display;
+    }
+    private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", TicketStatus.LateSubmitted => "締切後", _ => value.ToString() };
+    private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
 
 }

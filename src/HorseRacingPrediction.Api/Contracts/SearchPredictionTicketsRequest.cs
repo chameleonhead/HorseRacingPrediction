@@ -4,6 +4,7 @@ namespace HorseRacingPrediction.Api.Contracts;
 
 public sealed class SearchPredictionTicketsRequest
 {
+    public string? Query { get; init; }
     public string? PredictionTicketId { get; init; }
     public string? RaceId { get; init; }
     public string? PredictorType { get; init; }
