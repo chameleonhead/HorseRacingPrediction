@@ -30,8 +30,10 @@ a { color: var(--accent-foreground-rest); }
 
 .filter-bar, .filter-card { display: block; margin: 0; padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--neutral-stroke-rest); background: transparent; box-shadow: none; }
 .view-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--neutral-stroke-rest); }
-.view-tabs button { padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--neutral-foreground-hint); white-space: nowrap; cursor: pointer; }
+.view-tabs button { min-height: 40px; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--neutral-foreground-hint); font: inherit; white-space: nowrap; cursor: pointer; }
 .view-tabs button.active { border-bottom-color: var(--accent-fill-rest); color: var(--accent-foreground-rest); font-weight: var(--font-weight-semibold); }
+.view-tabs button:hover { background: var(--neutral-fill-secondary-hover); color: var(--neutral-foreground-rest); }
+.view-tabs button:focus-visible { outline: 2px solid var(--focus-stroke-outer); outline-offset: -2px; }
 .filter-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
 .filter-toolbar > .filter-field { display: grid; flex: 0 1 176px; min-width: 120px; gap: 4px; }
 .filter-toolbar > .filter-field-primary { flex-basis: 280px; flex-grow: 1; }
@@ -46,6 +48,7 @@ a { color: var(--accent-foreground-rest); }
 .filter-toolbar > .filter-field > label { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
 .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { flex: 0 0 auto; align-self: end; }
 .filter-toolbar > .filter-action fluent-button { width: auto; }
+.filter-card > .view-tabs { margin-bottom: 12px; }
 .filter-card > .action-row { margin-bottom: 12px; }
 .filter-card > .action-row + .filter-toolbar { margin-top: 0; }
 .filter-card > .filter-toolbar + .action-row { margin-top: 12px; margin-bottom: 0; }
@@ -157,14 +160,20 @@ a { color: var(--accent-foreground-rest); }
 table.data, .odds-table { width: 100%; border-collapse: collapse; }
 table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; border-bottom: 1px solid var(--neutral-stroke-rest); text-align: left; }
 
-.login-body { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: var(--neutral-layer-2); }
-.login-shell { width: min(100%, 400px); }
-.login-card { display: grid; gap: 16px; padding: 24px; background: var(--neutral-layer-1); border: 1px solid var(--neutral-stroke-rest); border-radius: 8px; }
+.login-body { display: grid; min-height: 100vh; place-items: center; padding: 24px; background: var(--neutral-layer-3); color: var(--neutral-foreground-rest); }
+.login-shell { width: min(100%, 420px); }
+.login-card { display: grid; gap: 16px; padding: 32px; background: var(--neutral-layer-1); border: 1px solid var(--neutral-stroke-rest); border-radius: var(--control-corner-radius); box-shadow: var(--elevation-shadow-card-rest); }
 .login-card h1, .login-eyebrow, .login-description { margin: 0; }
-.login-eyebrow, .login-description { color: var(--neutral-foreground-hint); }
+.login-eyebrow { color: var(--accent-foreground-rest); font-size: var(--type-ramp-minus-1-font-size); font-weight: var(--font-weight-semibold); letter-spacing: .04em; text-transform: uppercase; }
+.login-description { color: var(--neutral-foreground-hint); line-height: 1.5; }
 .login-form, .login-field { display: grid; gap: 8px; }
-.login-button { min-height: 40px; }
-.login-error { color: var(--status-danger-foreground-1); }
+.login-field > span { color: var(--neutral-foreground-rest); font-weight: var(--font-weight-semibold); }
+.login-input { box-sizing: border-box; width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--neutral-stroke-strong-rest); border-radius: var(--control-corner-radius); background: var(--neutral-layer-1); color: inherit; font: inherit; }
+.login-input:focus { outline: 2px solid var(--focus-stroke-outer); outline-offset: 1px; border-color: var(--accent-fill-rest); }
+.login-button { min-height: 40px; border: 0; border-radius: var(--control-corner-radius); background: var(--accent-fill-rest); color: var(--accent-foreground-rest); font: inherit; font-weight: var(--font-weight-semibold); cursor: pointer; }
+.login-button:hover { background: var(--accent-fill-hover); }
+.login-button:focus-visible { outline: 2px solid var(--focus-stroke-outer); outline-offset: 2px; }
+.login-error { margin: 0; padding: 10px 12px; border: 1px solid var(--status-danger-foreground-1); border-radius: var(--control-corner-radius); background: var(--status-danger-background-1); color: var(--status-danger-foreground-1); }
 .merge-dialog-layout { display: grid; gap: 16px; }
 .merge-review { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; background: var(--neutral-layer-2); }
 .merge-selected { display: grid; gap: 2px; }

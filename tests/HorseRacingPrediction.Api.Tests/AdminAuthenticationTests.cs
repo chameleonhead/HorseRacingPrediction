@@ -33,6 +33,20 @@ public class AdminAuthenticationTests
     }
 
     [TestMethod]
+    public async Task GetLogin_UsesFluentTokensAndSemanticErrorAlert()
+    {
+        using var client = CreateClient();
+
+        var response = await client.GetAsync("/login?error=1");
+        var html = await response.Content.ReadAsStringAsync();
+
+        StringAssert.Contains(html, "Microsoft.FluentUI.AspNetCore.Components/css/reboot.css");
+        StringAssert.Contains(html, "class=\"login-input\"");
+        StringAssert.Contains(html, "role=\"alert\"");
+        StringAssert.Contains(html, "class=\"login-error\"");
+    }
+
+    [TestMethod]
     public async Task GetRaces_WithoutCookie_RedirectsToLogin()
     {
         using var client = CreateClient();

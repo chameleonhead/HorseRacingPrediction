@@ -7,12 +7,12 @@
 <RaceOpsPageHeader Section="レース・予想" Title="レース" Description="期間を問わず同じ行形式で検索・ページングします。" />
 
 <FluentCard class="filter-card">
-    <div class="action-row" aria-label="期間プリセット">
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyTodayAsync">今日</FluentButton>
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyWeekAsync">今週</FluentButton>
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyConfirmedAsync">結果確定</FluentButton>
-        <FluentButton Appearance="@Appearance.Outline" OnClick="@ApplyAllAsync">すべて</FluentButton>
-    </div>
+    <nav class="view-tabs" aria-label="期間プリセット">
+        <button type="button" class="@(PresetClass("today"))" aria-current="@(IsPresetActive("today") ? "page" : null)" @onclick="@ApplyTodayAsync">今日</button>
+        <button type="button" class="@(PresetClass("week"))" aria-current="@(IsPresetActive("week") ? "page" : null)" @onclick="@ApplyWeekAsync">今週</button>
+        <button type="button" class="@(PresetClass("confirmed"))" aria-current="@(IsPresetActive("confirmed") ? "page" : null)" @onclick="@ApplyConfirmedAsync">結果確定</button>
+        <button type="button" class="@(PresetClass("all"))" aria-current="@(IsPresetActive("all") ? "page" : null)" @onclick="@ApplyAllAsync">すべて</button>
+    </nav>
     <div class="filter-toolbar">
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース検索" Placeholder="レース名を検索" @bind-Value="raceName" /></div>
         <div class="filter-field filter-field-compact"><input aria-label="開始日" type="date" @bind="from" /></div>
@@ -181,6 +181,15 @@ else
     private Task ApplyWeekAsync() => ApplyPeriodAsync("week");
     private Task ApplyConfirmedAsync() => ApplyPeriodAsync("confirmed");
     private Task ApplyAllAsync() => ApplyPeriodAsync("all");
+    private bool IsPresetActive(string preset) => preset switch
+    {
+        "today" => from == DateOnly.FromDateTime(DateTime.Today) && to == from && status is null,
+        "week" => from == DateOnly.FromDateTime(DateTime.Today.AddDays(-((int)DateTime.Today.DayOfWeek + 6) % 7)) && status is null,
+        "confirmed" => from is null && to is null && status == RaceStatus.ResultDeclared,
+        "all" => from is null && to is null && status is null,
+        _ => false
+    };
+    private string PresetClass(string preset) => IsPresetActive(preset) ? "active" : string.Empty;
     private async Task ClearFiltersAsync()
     {
         from = null; to = null; racecourse = null; raceNo = null; raceName = null; winningHorse = null; status = null; page = 1;

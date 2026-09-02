@@ -73,7 +73,7 @@ public static class AdminEndpointExtensions
     private static string BuildLoginHtml(bool showError, string returnUrl)
     {
         var errorHtml = showError
-            ? "<p class=\"login-error\">ユーザー名またはパスワードが正しくありません。</p>"
+            ? "<p class=\"login-error\" role=\"alert\" aria-live=\"assertive\">ユーザー名またはパスワードが正しくありません。</p>"
             : string.Empty;
 
         return $$"""
@@ -83,6 +83,7 @@ public static class AdminEndpointExtensions
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <title>ログイン - 競馬DB管理画面</title>
+                <link rel="stylesheet" href="/_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" />
                 <link rel="stylesheet" href="/app.css" />
             </head>
             <body class="login-body">
@@ -96,11 +97,11 @@ public static class AdminEndpointExtensions
                             {{errorHtml}}
                             <label class="login-field">
                                 <span>ユーザー名</span>
-                                <input name="username" value="user" autocomplete="username" required />
+                                <input class="login-input" name="username" value="user" autocomplete="username" required />
                             </label>
                             <label class="login-field">
                                 <span>パスワード（APIキー）</span>
-                                <input name="password" type="password" autocomplete="current-password" required autofocus />
+                                <input class="login-input" name="password" type="password" autocomplete="current-password" required autofocus />
                             </label>
                             <button class="login-button" type="submit">ログイン</button>
                         </form>

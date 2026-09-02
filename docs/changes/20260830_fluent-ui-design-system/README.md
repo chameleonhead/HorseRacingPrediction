@@ -1219,3 +1219,12 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `git diff --check`: 成功。
 
 再開監査で列挙した共通alert、hash link、関係者ランキング・履歴filter、馬主編集、ジョブ全件検索、参照専用予想票、Dialog keyboard/focusの修正と検証を完了した。設計との差分と残課題はない。
+
+## Fluent login and filter conformance correction - 2026-09-02
+
+- ログインをFluent UIのrebootとデザイントークンへ接続し、入力・主操作・フォーカスリング・エラーalert（背景色、境界、`role=alert`）をモックと共通の管理画面スタイルへ統一した。
+- レース一覧の「今日」「今週」「結果確定」「すべて」を単独ボタン列から、Jobs画面と同じキーボード操作可能な下線付きview tabへ変更し、現在の条件を`aria-current`で示すようにした。
+- 既存の全一覧画面へ適用されるfilter toolbarの共通CSSを整理し、検索欄、日付欄、補助条件、検索操作がFluent token、hover、focus、720px/420pxレスポンシブ規則で一貫するようにした。
+- ログインのFluent stylesheet参照、入力クラス、エラーalertをAPI endpoint testで固定した。
+- `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal`: 警告0・エラー0。`dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build -v:minimal`: 103件すべて成功。
+- `docs/design-guidelines.md` と `docs/admin-ui-design.md` は承認済みの同一モック規則を正本としており、内容変更は不要だった。
