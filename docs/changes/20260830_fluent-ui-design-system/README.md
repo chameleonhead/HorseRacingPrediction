@@ -1177,3 +1177,13 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、100件。
 
 残作業: 関係者ランキング・履歴filter、馬主編集契約、ジョブserver-side paging、予想票のobject表現、全体visual / regression検証。
+
+### Relationship history and owner editing checkpoint
+
+- 騎手・調教師・馬主詳細の上位馬を過去3年の賞金順ランキングへ統一し、順位、出走数、1着数、最終出走日、獲得賞金を表示した。馬主詳細が調教師一覧を誤って上位馬として表示していた不整合も、所有馬集計へ修正した。
+- 3つの関係者詳細の出走履歴へ、キーワード、期間、競馬場、ページの検索状態をquery stringで保持するfilterと10件単位のpaginationを追加した。
+- 馬主の編集を専用route `/owners/{ownerId}/edit` へ分離し、表示名、登録表記、訂正理由を編集できるようにした。API契約も登録表記の追加・更新に対応し、正規化後に表示名と一致する別名を二重追跡しないようにした。
+- bUnitでランキングの順位・勝数・賞金・object linkを検証し、API testで馬主の表示名と登録表記の保存を検証した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、101件。
+
+残作業: ジョブserver-side paging、予想票のobject表現、全体visual / regression検証。

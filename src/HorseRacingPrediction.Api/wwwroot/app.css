@@ -138,6 +138,7 @@ a { color: var(--accent-foreground-rest); }
 .relationship-link { display: grid; gap: 4px; min-width: 0; }
 .relationship-grid { display: grid; gap: 0; border-top: 1px solid var(--neutral-stroke-rest); }
 .relationship-grid .relationship-link { grid-template-columns: 112px minmax(180px, 1fr) minmax(240px, 1.4fr); gap: 16px; align-items: center; padding: 13px 4px; border-bottom: 1px solid var(--neutral-stroke-rest); color: inherit; text-decoration: none; }
+.relationship-grid.ranked .relationship-link { grid-template-columns: 40px minmax(180px, 1fr) minmax(220px, 1.4fr) minmax(100px, auto); }
 .relationship-grid .relationship-link strong { color: var(--accent-foreground-rest); }
 .form-section { width: min(100%, 840px); padding: 18px; }
 .form-section > .action-row { justify-content: flex-end; margin-top: 4px; }
@@ -197,7 +198,8 @@ table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; bor
     .object-list-affordance { grid-column: 2; grid-row: 2; }
     .relationship-row, .history-item, .participant-row, .mark-row, .race-facts, .odds-layout, .history-relations, .participant-relations { grid-template-columns: 1fr; }
     .relationship-grid .relationship-link { grid-template-columns: 88px minmax(0, 1fr); gap: 5px 12px; }
-    .relationship-grid .relationship-link .hint { grid-column: 2; }
+    .relationship-grid.ranked .relationship-link { grid-template-columns: 32px minmax(0, 1fr); }
+    .relationship-grid .relationship-link .hint, .relationship-grid .relationship-link .money { grid-column: 2; }
     .selectable-row { grid-template-columns: 1fr; }
     .filter-action { padding-top: 4px; }
     .filter-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

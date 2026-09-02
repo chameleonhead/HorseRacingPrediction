@@ -2,13 +2,16 @@
 {
     <section id="@SectionId" class="entity-section detail-section">
         <h3>@Title</h3>
-        <div class="relationship-grid">
-            @foreach (var relationship in Items)
+        <div class="relationship-grid @(Ranked ? "ranked" : null)">
+            @foreach (var ranked in Items.Select((relationship, index) => (relationship, index)))
             {
+                var relationship = ranked.relationship;
                 <a class="relationship-link" href="@Url(relationship)">
-                    <span class="relationship-kind">@relationship.RelationshipName</span>
+                    @if (Ranked) { <span class="rank" aria-label="順位">@(ranked.index + 1)</span> }
+                    else { <span class="relationship-kind">@relationship.RelationshipName</span> }
                     <strong>@relationship.DisplayName</strong>
-                    <span class="hint">@relationship.ParticipationCount @ParticipationUnit・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
+                    <span class="hint">@relationship.ParticipationCount @ParticipationUnit@if (Ranked) { <text>・@relationship.FirstPlaceCount 勝</text> }・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
+                    @if (Ranked) { <span class="money">@FormatPrizeMoney(relationship.PrizeMoneyTotal)</span> }
                 </a>
             }
         </div>
@@ -19,6 +22,8 @@
     [Parameter, EditorRequired] public string SectionId { get; set; } = string.Empty;
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string ParticipationUnit { get; set; } = "戦";
+    [Parameter] public bool Ranked { get; set; }
     [Parameter, EditorRequired] public IEnumerable<RelationshipSummaryResponse> Items { get; set; } = Array.Empty<RelationshipSummaryResponse>();
     [Parameter, EditorRequired] public Func<RelationshipSummaryResponse, string> Url { get; set; } = default!;
+    private static string FormatPrizeMoney(decimal value) => value <= 0 ? "賞金 —" : $"{value:N0}円";
 }

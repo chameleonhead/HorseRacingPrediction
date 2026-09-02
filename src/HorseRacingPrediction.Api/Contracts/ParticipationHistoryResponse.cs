@@ -30,4 +30,5 @@ public sealed record RelationshipSummaryResponse(
     string RelationshipName,
     int ParticipationCount,
     DateOnly? LastParticipationDate,
-    decimal PrizeMoneyTotal = 0m);
+    decimal PrizeMoneyTotal = 0m,
+    int FirstPlaceCount = 0);

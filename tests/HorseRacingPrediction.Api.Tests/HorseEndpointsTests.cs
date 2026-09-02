@@ -254,7 +254,7 @@ public class HorseEndpointsTests
 
         var update = await _client.PutAsJsonAsync(
             $"/api/owners/{owner.OwnerId}",
-            new UpdateOwnerRequest($"更新後馬主{key}", "公式表記の訂正"),
+            new UpdateOwnerRequest($"更新後馬主{key}", "公式表記の訂正", [$"登録表記馬主{key}"]),
             JsonOptions);
         var detail = await _client.GetFromJsonAsync<OwnerDetailResponse>($"/api/owners/{owner.OwnerId}", JsonOptions);
 
@@ -262,5 +262,6 @@ public class HorseEndpointsTests
         Assert.IsNotNull(detail);
         Assert.AreEqual($"更新後馬主{key}", detail.Summary.DisplayName);
         Assert.IsTrue(detail.Summary.NameVariants.Contains($"更新前馬主{key}"));
+        Assert.IsTrue(detail.Summary.NameVariants.Contains($"登録表記馬主{key}"));
     }
 }

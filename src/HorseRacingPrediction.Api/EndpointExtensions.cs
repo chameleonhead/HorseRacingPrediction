@@ -1612,7 +1612,7 @@ public static class EndpointExtensions
 
                 var relationshipEntries = EntriesInLastThreeYears(allEntries);
                 var relationships = relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                        new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m)))
+                        new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                     .Concat(relationshipEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
                         new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
                     .OrderByDescending(x => x.ParticipationCount).ToList();
@@ -1748,7 +1748,11 @@ public static class EndpointExtensions
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 var mergeHistory = mergeAudits.OrderByDescending(x => x.CreatedAt).Select(x => new OwnerMergeAuditResponse(
                     x.SourceOwnerId, x.TargetOwnerId, x.SourceNames.Split('\n', StringSplitOptions.RemoveEmptyEntries), x.ActorId, x.Reason, x.CreatedAt)).ToList();
-                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations));
+                var ownerTopHorses = EntriesInLastThreeYears(allEntries)
+                    .GroupBy(x => (x.HorseId, x.HorseName))
+                    .Select(x => new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "所有した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                    .OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5).ToList();
+                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses));
             })
             .WithName("GetOwner")
             .WithTags("Owner API")
@@ -1773,6 +1777,20 @@ public static class EndpointExtensions
                     dbContext.OwnerAliasMappings.Add(mapping);
                 }
                 mapping.AliasName = request.DisplayName.Trim(); mapping.OwnerId = ownerId; mapping.ActorId = "Admin UI"; mapping.Reason = request.Reason.Trim(); mapping.CreatedAt = now; mapping.IsDisplayName = true;
+                foreach (var alias in (request.NameVariants ?? []).Append(request.DisplayName).Select(x => x?.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal))
+                {
+                    var aliasNormalized = NormalizeOwnerName(alias!);
+                    if (aliasNormalized == normalized) continue;
+                    var aliasMapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == aliasNormalized, cancellationToken).ConfigureAwait(false);
+                    if (aliasMapping is null)
+                    {
+                        dbContext.OwnerAliasMappings.Add(new OwnerAliasMappingReadModel { NormalizedAlias = aliasNormalized, AliasName = alias!, OwnerId = ownerId, ActorId = "Admin UI", Reason = request.Reason.Trim(), CreatedAt = now, IsDisplayName = aliasNormalized == normalized });
+                    }
+                    else
+                    {
+                        aliasMapping.AliasName = alias!; aliasMapping.OwnerId = ownerId; aliasMapping.ActorId = "Admin UI"; aliasMapping.Reason = request.Reason.Trim(); aliasMapping.CreatedAt = now; aliasMapping.IsDisplayName = aliasNormalized == normalized;
+                    }
+                }
                 await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return Results.NoContent();
             })
@@ -2447,7 +2465,7 @@ public static class EndpointExtensions
                 .Concat(allEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
                     new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "レース時点の調教師", x.Count(), x.Max(y => y.RaceDate))))
             : relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m)))
+                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
                 .Concat(relationshipEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
                     new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "同じ出走の調教師", x.Count(), x.Max(y => y.RaceDate))));
 
@@ -2482,7 +2500,8 @@ public static class EndpointExtensions
             .Where(x => x.Key.Length > 0)
             .Select(group =>
             {
-                var variants = group.Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
+                var variants = group.Concat(mappingRows.Where(x => x.OwnerId == group.Key).Select(x => x.AliasName))
+                    .Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
                 var displayName = displayNames.GetValueOrDefault(group.Key) ?? variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
                 var groupParticipations = participations.Where(x => OwnerGroupKey(x.OwnerName!) == group.Key).ToList();
                 return new OwnerSummaryResponse(

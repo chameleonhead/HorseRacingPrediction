@@ -18,11 +18,17 @@ else
         <div class="profile-fact"><span>関連する馬</span><strong>@relationships.Count(x => x.ObjectType == "Horse") 頭</strong></div>
     </section>
 
-    <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="relations-section" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Items="@TopHorses" Url="@RelationshipUrl" /></section>
+    <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="relations-section" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Ranked="true" Items="@TopHorses" Url="@RelationshipUrl" /></section>
 
     <section class="detail-group" aria-label="履歴"><section class="entity-section detail-section">
         <h3>管理馬の出走履歴</h3>
-        <div class="action-row"><label for="trainer-history-search">履歴を検索</label><input id="trainer-history-search" class="text-input" value="@historySearch" @oninput="OnHistorySearchInput" placeholder="馬名・競馬場・レース名" /></div>
+        <div class="filter-toolbar history-filter">
+            <div class="filter-field filter-field-primary"><input aria-label="管理馬の出走履歴を検索" @bind="historySearchInput" placeholder="馬名・レース名を検索" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="開始日" type="date" @bind="historyFromInput" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="終了日" type="date" @bind="historyToInput" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="開催場" @bind="historyRacecourseInput" placeholder="開催場" /></div>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@ApplyHistoryFilters">検索</FluentButton>
+        </div><p class="hint">開催日の新しい順</p>
         @if (historyEntries.Count == 0)
         {
             <p class="hint">出走履歴はありません。</p>
@@ -46,11 +52,9 @@ else
                     </li>
                 }
             </ol>
-            @if (historyHasMore)
+            @if (FilteredHistoryCount > historyBatchSize)
             {
-                <div class="action-row">
-                    <FluentButton Appearance="@Appearance.Outline" OnClick="@LoadMoreHistory">次の10件を読み込む</FluentButton>
-                </div>
+                <Pagination TotalCount="@FilteredHistoryCount" Page="@historyPage" PageSize="@historyBatchSize" PageChanged="@ChangeHistoryPage" />
             }
         }
     </section>
@@ -90,16 +94,23 @@ else
     [Parameter] public string TrainerId { get; set; } = string.Empty;
     [SupplyParameterFromQuery(Name = "historySearch")] public string? HistorySearchQuery { get; set; }
     [SupplyParameterFromQuery(Name = "historyPage")] public int? HistoryPageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyFrom")] public DateOnly? HistoryFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyTo")] public DateOnly? HistoryToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyRacecourse")] public string? HistoryRacecourseQuery { get; set; }
 
     private bool loading;
     private TrainerProfileResponse? trainer;
     private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
     private IReadOnlyList<RelationshipSummaryResponse> relationships = Array.Empty<RelationshipSummaryResponse>();
-    private bool historyHasMore;
     private const int historyBatchSize = 10;
     private string historySearch = string.Empty;
+    private string historySearchInput = string.Empty;
+    private DateOnly? historyFrom, historyFromInput, historyTo, historyToInput;
+    private string historyRacecourse = string.Empty, historyRacecourseInput = string.Empty;
     private int historyPage = 1;
-    private IEnumerable<ParticipationHistoryEntryResponse> FilteredHistory => historyEntries.Where(x => string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName} {x.RacecourseCode}".Contains(historySearch, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<ParticipationHistoryEntryResponse> MatchingHistory => historyEntries.Where(x => (string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName}".Contains(historySearch, StringComparison.OrdinalIgnoreCase)) && (!historyFrom.HasValue || x.RaceDate >= historyFrom) && (!historyTo.HasValue || x.RaceDate <= historyTo) && (string.IsNullOrWhiteSpace(historyRacecourse) || string.Equals(x.RacecourseCode, historyRacecourse, StringComparison.OrdinalIgnoreCase)));
+    private int FilteredHistoryCount => MatchingHistory.Count();
+    private IEnumerable<ParticipationHistoryEntryResponse> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
     private IEnumerable<RelationshipSummaryResponse> TopHorses => relationships.Where(x => x.ObjectType == "Horse").OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5);
 
     private string? editDisplayName;
@@ -127,6 +138,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         historySearch = HistorySearchQuery ?? string.Empty;
+        historySearchInput = historySearch; historyFrom = historyFromInput = HistoryFromQuery; historyTo = historyToInput = HistoryToQuery; historyRacecourse = historyRacecourseInput = HistoryRacecourseQuery ?? string.Empty;
         historyPage = Math.Max(1, HistoryPageQuery ?? 1);
         await LoadAsync();
     }
@@ -137,13 +149,12 @@ else
         try
         {
             var profileTask = Api.GetTrainerAsync(TrainerId);
-            var participationsTask = Api.GetTrainerParticipationsAsync(TrainerId, historyBatchSize * historyPage, 0);
+            var participationsTask = Api.GetTrainerParticipationsAsync(TrainerId, 10000, 0);
             await Task.WhenAll(profileTask, participationsTask);
             trainer = await profileTask;
             var participations = await participationsTask;
             historyEntries = participations?.Entries ?? Array.Empty<ParticipationHistoryEntryResponse>();
             relationships = participations?.Relationships ?? Array.Empty<RelationshipSummaryResponse>();
-            historyHasMore = participations?.HasMore ?? false;
             if (trainer is not null)
             {
                 editDisplayName = trainer.DisplayName;
@@ -157,20 +168,16 @@ else
         }
     }
 
-    private void LoadMoreHistory()
-    {
-        if (!historyHasMore) return;
-        NavigateHistory(historySearch, historyPage + 1);
-    }
-
-    private void OnHistorySearchInput(ChangeEventArgs args)
-        => NavigateHistory(args.Value?.ToString() ?? string.Empty, 1);
-
-    private void NavigateHistory(string search, int page)
+    private void ApplyHistoryFilters() => NavigateHistory(historySearchInput, historyFromInput, historyToInput, historyRacecourseInput, 1);
+    private Task ChangeHistoryPage(int page) { NavigateHistory(historySearch, historyFrom, historyTo, historyRacecourse, page); return Task.CompletedTask; }
+    private void NavigateHistory(string search, DateOnly? from, DateOnly? to, string racecourse, int page)
     {
         var uri = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["historySearch"] = string.IsNullOrWhiteSpace(search) ? null : search,
+            ["historyFrom"] = from,
+            ["historyTo"] = to,
+            ["historyRacecourse"] = string.IsNullOrWhiteSpace(racecourse) ? null : racecourse,
             ["historyPage"] = page <= 1 ? null : page
         });
         Navigation.NavigateTo(uri, replace: true);
