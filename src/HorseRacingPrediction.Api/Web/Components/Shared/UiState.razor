@@ -1,13 +1,19 @@
-<FluentCard class="@($"ui-state {CssClass}")" role="@Role" aria-live="polite" aria-busy="@(Kind == "loading")">
-    @if (Kind == "loading") { <FluentProgressRing /> }
-    <strong>@Title</strong>
-    @if (!string.IsNullOrWhiteSpace(Message)) { <span>@Message</span> }
-</FluentCard>
+@if (Kind == "error")
+{
+    <RaceOpsAlert Title="@Title" Message="@Message" />
+}
+else
+{
+    <FluentCard class="@($"ui-state {CssClass}")" role="status" aria-live="polite" aria-busy="@(Kind == "loading")">
+        @if (Kind == "loading") { <FluentProgressRing /> }
+        <strong>@Title</strong>
+        @if (!string.IsNullOrWhiteSpace(Message)) { <span>@Message</span> }
+    </FluentCard>
+}
 
 @code {
     [Parameter] public string Kind { get; set; } = "empty";
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
     [Parameter] public string? Message { get; set; }
     private string CssClass => $"ui-state-{Kind}";
-    private string Role => Kind == "error" ? "alert" : "status";
 }

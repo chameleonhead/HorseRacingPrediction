@@ -32,7 +32,7 @@ else
         </div>
         @if (updateErrors.Count > 0)
         {
-            <ul class="error-list">@foreach (var e in updateErrors) { <li>@e</li> }</ul>
+            <RaceOpsAlert Title="プロフィールを更新できませんでした" Messages="@updateErrors" />
         }</ChildContent>
         <Actions><FluentButton Appearance="@Appearance.Accent" OnClick="@UpdateProfileAsync" Disabled="@updating">更新</FluentButton><FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton></Actions>
     </RaceOpsFormSection>
@@ -46,7 +46,7 @@ else
         </div>
         @if (aliasErrors.Count > 0)
         {
-            <ul class="error-list">@foreach (var e in aliasErrors) { <li>@e</li> }</ul>
+            <RaceOpsAlert Title="別名を追加できませんでした" Messages="@aliasErrors" />
         }</ChildContent>
         <Actions><FluentButton Appearance="@Appearance.Accent" OnClick="@MergeAliasAsync" Disabled="@mergingAlias">追加</FluentButton><FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton></Actions>
     </RaceOpsFormSection>
@@ -60,7 +60,7 @@ else
         </div>
         @if (correctErrors.Count > 0)
         {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
+            <RaceOpsAlert Title="データを補正できませんでした" Messages="@correctErrors" />
         }</ChildContent>
         <Actions><FluentButton Appearance="@Appearance.Accent" OnClick="@CorrectAsync" Disabled="@correcting">補正を保存する</FluentButton><FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton></Actions>
     </RaceOpsFormSection>

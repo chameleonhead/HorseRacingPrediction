@@ -30,8 +30,8 @@
             <div><span class="object-label">更新日時</span>@detail.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>
         </div>
         @if (!string.IsNullOrWhiteSpace(reacquireMessage)) { <FluentMessageBar Intent="@MessageIntent.Success" Title="@reacquireMessage" /> }
-        @if (reacquireErrors.Count > 0) { <FluentMessageBar Intent="@MessageIntent.Error" Title="再取得を開始できませんでした">@string.Join(' ', reacquireErrors)</FluentMessageBar> }
-        @if (!string.IsNullOrWhiteSpace(detail.ErrorReason)) { <FluentMessageBar Intent="@MessageIntent.Error" Title="取得エラー">@detail.ErrorReason</FluentMessageBar> }
+        @if (reacquireErrors.Count > 0) { <RaceOpsAlert Title="再取得を開始できませんでした" Messages="@reacquireErrors" /> }
+        @if (!string.IsNullOrWhiteSpace(detail.ErrorReason)) { <RaceOpsAlert Title="取得エラー" Message="@detail.ErrorReason" /> }
     </FluentCard>
     <section class="entity-section detail-section">
             <h3>取得履歴</h3>

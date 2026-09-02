@@ -73,9 +73,7 @@
 
         @if (errors.Count > 0)
         {
-            <ul class="error-list">
-                @foreach (var e in errors) { <li>@e</li> }
-            </ul>
+            <RaceOpsAlert Title="メモを保存できませんでした" Messages="@errors" />
         }
     }
 </section>

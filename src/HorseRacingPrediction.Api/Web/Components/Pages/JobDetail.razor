@@ -15,9 +15,7 @@ else
     </RaceOpsObjectHeader>
     @if (!string.IsNullOrWhiteSpace(job.LastError))
     {
-        <FluentMessageBar Intent="@MessageIntent.Error" Title="最新の実行に失敗しました">
-            @job.LastError
-        </FluentMessageBar>
+        <RaceOpsAlert Title="最新の実行に失敗しました" Message="@job.LastError" />
     }
     <FluentCard class="detail-card detail-section"><h2>基本情報</h2><dl class="detail-grid"><dt>状態</dt><dd>@StatusLabel(job.Status)</dd><dt>優先度</dt><dd>@job.Priority</dd><dt>試行回数</dt><dd>@job.AttemptCount</dd><dt>更新日時</dt><dd>@job.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl></FluentCard>
     <section class="entity-section detail-section"><h2>関連</h2>
@@ -30,7 +28,7 @@ else
             {
                 <div class="relationship-row"><span>対象日</span><a href="@JobsByDateUrl(TargetDate)">同じ対象日の収集ジョブを見る</a><span class="hint">@TargetDate</span></div>
             }
-            <div class="relationship-row"><span>診断</span><a href="#technical-details">技術情報を確認</a><span class="hint">Job ID、payload、error</span></div>
+            <div class="relationship-row"><span>診断</span><FluentButton Appearance="@Appearance.Stealth" OnClick="@ShowTechnicalDetails">技術情報を確認</FluentButton><span class="hint">Job ID、payload、error</span></div>
         </div>
     </section>
     <FluentCard class="detail-card detail-section"><h2>ジョブ関連図</h2>
@@ -80,7 +78,7 @@ else
         else { <article class="attempt-list"><strong>試行 @LatestAttempt.AttemptNumber</strong><span class="badge @StatusClass(LatestAttempt.Status)">@StatusLabel(LatestAttempt.Status)</span><time>@LatestAttempt.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</time>@if (!string.IsNullOrWhiteSpace(LatestAttempt.Error)) { <p>@LatestAttempt.Error</p> }</article> }
         <details><summary>すべての試行を表示（@job.Attempts.Count 件）</summary><div class="attempt-list">@foreach (var attempt in job.Attempts) { <article><strong>試行 @attempt.AttemptNumber</strong><span class="badge @StatusClass(attempt.Status)">@StatusLabel(attempt.Status)</span><time>@attempt.StartedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</time>@if (!string.IsNullOrWhiteSpace(attempt.Error)) { <pre>@attempt.Error</pre> }</article> }</div></details>
     </section>
-    <FluentCard id="technical-details" class="detail-card detail-section"><h2>技術情報</h2><details><summary>Job ID、payload、完全なエラーを表示</summary><dl class="detail-grid"><dt>Job ID</dt><dd><code>@job.JobId</code></dd><dt>JobType</dt><dd><code>@job.JobType</code></dd><dt>DeduplicationKey</dt><dd><code>@job.DeduplicationKey</code></dd><dt>AvailableAt</dt><dd>@job.AvailableAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd><dt>Lease</dt><dd>@job.LeaseExpiresAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl><pre class="payload">@job.Payload</pre>@if (!string.IsNullOrWhiteSpace(job.LastError)) { <pre class="payload">@job.LastError</pre> }</details></FluentCard>
+    <FluentCard id="technical-details" class="detail-card detail-section"><h2>技術情報</h2><details open="@technicalDetailsOpen"><summary>Job ID、payload、完全なエラーを表示</summary><dl class="detail-grid"><dt>Job ID</dt><dd><code>@job.JobId</code></dd><dt>JobType</dt><dd><code>@job.JobType</code></dd><dt>DeduplicationKey</dt><dd><code>@job.DeduplicationKey</code></dd><dt>AvailableAt</dt><dd>@job.AvailableAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd><dt>Lease</dt><dd>@job.LeaseExpiresAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</dd></dl><pre class="payload">@job.Payload</pre>@if (!string.IsNullOrWhiteSpace(job.LastError)) { <pre class="payload">@job.LastError</pre> }</details></FluentCard>
     @if (!CanRerun && (job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter) && job.ParentRelationType == JobRelationType.AggregatedBy)
     { <p class="hint">このジョブは集約対象です。集約元ジョブから復旧してください。</p> }
 }
@@ -97,6 +95,7 @@ else
     private AgentJobDetailReadModel? job;
     private bool loading = true;
     private bool showRerunDialog;
+    private bool technicalDetailsOpen;
     private string? reason;
     protected override async Task OnParametersSetAsync() { loading = true; job = await Api.GetJobAsync(JobId); loading = false; }
     private IReadOnlyList<AgentRelatedJobReadModel> GeneratedChildren => job?.ChildJobs.Where(x => x.RelationType == JobRelationType.GeneratedBy).ToList() ?? [];
@@ -108,6 +107,7 @@ else
         && job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter
         && job.ParentRelationType != JobRelationType.AggregatedBy;
     private async Task RerunAsync() { if (job is null) return; var result = await Api.RerunJobAsync(job.JobId, job.UpdatedAt, reason); if (result.Success) { showRerunDialog = false; job = await Api.GetJobAsync(job.JobId); } }
+    private void ShowTechnicalDetails() => technicalDetailsOpen = true;
     private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
     private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";

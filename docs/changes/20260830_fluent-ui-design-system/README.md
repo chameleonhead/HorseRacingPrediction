@@ -1163,3 +1163,17 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - populated DBを使い、馬詳細の概要に内部IDが表示されないこと、馬主名寄せで理由未入力時に確認操作が無効になることを確認した。候補検索結果が0件のfixtureだったため、影響表示と最終確認への遷移はRazor buildと条件分岐の静的確認を代替検証とした。名寄せ自体は実行していない。
 - `dotnet build HorseRacingPrediction.sln --no-restore -v:minimal` は警告0・エラー0、`dotnet test HorseRacingPrediction.sln --no-build -v:minimal` は合計580件すべて成功した。
 - `Implemented` と未チェックの受け入れ基準が併存していた記録上の不整合を解消し、完了済み基準をチェック済みに更新した。
+
+## Reopened completeness correction - 2026-09-02
+
+利用者の再監査依頼により、モックと受け入れ基準に対する未実装を確認したため、修正を再開した。承認済み仕様は変更せず、共通エラー表示、リンク、関係者ランキング・履歴検索、馬主編集、ジョブ全件検索、参照専用予想票の順に是正する。
+
+### Error surface and link checkpoint
+
+- エラー表示を `RaceOpsAlert` に共通化し、error / warning / success の背景、左境界、前景色と `role=alert` / `aria-live=assertive` を固定した。`UiState`、全体ErrorBoundary、取得状況、ジョブ詳細、各編集ページ、メモ入力を同じcomponentへ統一した。
+- ジョブ詳細の `#technical-details` リンクを、技術情報disclosureを直接開く状態操作へ変更し、production UIからハッシュ依存のリンクを除去した。
+- 馬主の3つのFluent Dialogへ`HiddenChanged`を接続し、Escape / dismissで親状態も閉じるようにした。
+- bUnitをAPIテストprojectへ追加し、共通alertの意味role、状態class、aria-live、message表示と、`UiState Kind=error`からの利用を2件のcomponent testで固定した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、100件。
+
+残作業: 関係者ランキング・履歴filter、馬主編集契約、ジョブserver-side paging、予想票のobject表現、全体visual / regression検証。

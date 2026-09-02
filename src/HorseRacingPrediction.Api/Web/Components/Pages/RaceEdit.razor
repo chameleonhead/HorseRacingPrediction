@@ -40,7 +40,7 @@ else
             </div>
             @if (correctErrors.Count > 0)
             {
-                <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
+                <RaceOpsAlert Title="レースを補正できませんでした" Messages="@correctErrors" />
             }
         </ChildContent>
         <Actions>

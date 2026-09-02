@@ -123,7 +123,12 @@ a { color: var(--accent-foreground-rest); }
 .form-grid > label { display: grid; gap: 4px; }
 .error-list, .row-error, .error-summary { color: var(--status-danger-foreground-1); }
 .ui-state { display: grid; min-height: 120px; place-items: center; align-content: center; gap: 8px; text-align: center; }
-.ui-state-error { color: var(--status-danger-foreground-1); }
+.raceops-alert { display: grid; gap: 6px; margin: 0; padding: 12px 16px; border: 1px solid transparent; border-left-width: 4px; border-radius: 4px; }
+.raceops-alert strong, .raceops-alert p, .raceops-alert ul { margin: 0; }
+.raceops-alert ul { padding-left: 20px; }
+.raceops-alert-error { border-color: #d13438; background: #fde7e9; color: #8a1c20; }
+.raceops-alert-warning { border-color: #c19c00; background: #fff4ce; color: #6a4b00; }
+.raceops-alert-success { border-color: #107c10; background: #dff6dd; color: #0b5a08; }
 
 .relationship-list, .history-list, .participant-list, .mark-list, .memo-list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--neutral-stroke-rest); }
 .relationship-row, .history-item, .participant-row, .mark-row, .memo-item { display: grid; gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid var(--neutral-stroke-rest); }

@@ -58,7 +58,7 @@ else
     </div>
 }
 
-<FluentDialog Hidden="@(!showMergeDialog)" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">
+<FluentDialog Hidden="@(!showMergeDialog)" HiddenChanged="@(hidden => showMergeDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="merge-title">馬主の名寄せ</h2></FluentDialogHeader>
     <FluentDialogBody>
         <div class="merge-dialog-layout">
@@ -126,7 +126,7 @@ else
     <FluentDialogFooter><FluentButton OnClick="@CloseMerge">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@OpenMergeConfirmation" Disabled="@(merging || string.IsNullOrWhiteSpace(sourceOwnerId) || string.IsNullOrWhiteSpace(mergeReason))">内容を確認</FluentButton></FluentDialogFooter>
 </FluentDialog>
 
-<FluentDialog Hidden="@(!showMergeConfirmation)" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
+<FluentDialog Hidden="@(!showMergeConfirmation)" HiddenChanged="@(hidden => showMergeConfirmation = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="false"><h2 id="merge-confirm-title">馬主を名寄せしますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p><strong>@selectedMergeCandidate?.DisplayName</strong>を<strong>@owner?.Summary.DisplayName</strong>へ統合します。</p>
@@ -136,7 +136,7 @@ else
     <FluentDialogFooter><FluentButton OnClick="@BackToMerge">戻って確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@MergeAsync" Disabled="@merging">名寄せを実行</FluentButton></FluentDialogFooter>
 </FluentDialog>
 
-<FluentDialog Hidden="@(!showEditDialog)" Modal="true" TrapFocus="true" AriaLabelledby="owner-edit-title" Style="width:min(560px, calc(100vw - 32px));">
+<FluentDialog Hidden="@(!showEditDialog)" HiddenChanged="@(hidden => showEditDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="owner-edit-title" Style="width:min(560px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="owner-edit-title">馬主情報を訂正</h2></FluentDialogHeader>
     <FluentDialogBody><FluentTextField Label="表示名" @bind-Value="editDisplayName" /><FluentTextField Label="訂正理由（必須）" @bind-Value="editReason" />@if (editErrors.Count > 0) { <UiState Kind="error" Title="保存できませんでした" Message="@string.Join(' ', editErrors)" /> }</FluentDialogBody>
     <FluentDialogFooter><FluentButton OnClick="@CloseEdit">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@UpdateAsync" Disabled="@updating">保存</FluentButton></FluentDialogFooter>
