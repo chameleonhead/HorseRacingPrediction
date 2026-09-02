@@ -29,7 +29,7 @@ builder.Services.AddHttpClient("ProcessingState", (services, client) =>
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-});
+    });
 builder.Services.AddSingleton<IProcessingStateStore>(services =>
         HttpProcessingStateStoreProxy.Create(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));

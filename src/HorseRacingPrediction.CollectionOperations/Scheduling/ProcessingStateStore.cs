@@ -1799,8 +1799,13 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         job.AttemptCount = number;
         dbContext.JobAttempts.Add(new JobAttemptEntity
         {
-            AttemptId = $"{job.JobId}:{number}", JobId = job.JobId, AttemptNumber = number,
-            Status = status, Error = error, StartedAt = job.StartedAt ?? completedAt, CompletedAt = completedAt
+            AttemptId = $"{job.JobId}:{number}",
+            JobId = job.JobId,
+            AttemptNumber = number,
+            Status = status,
+            Error = error,
+            StartedAt = job.StartedAt ?? completedAt,
+            CompletedAt = completedAt
         });
     }
 
@@ -2139,17 +2144,28 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             var newJobId = BuildJobId(source.JobType, deduplicationKey);
             var job = new ProcessingJobEntity
             {
-                JobId = newJobId, JobType = source.JobType, DeduplicationKey = deduplicationKey,
-                Payload = source.Payload, Status = AgentJobStatus.Ready, Priority = source.Priority,
-                FirstQueuedAt = now, AvailableAt = now, CreatedAt = now, UpdatedAt = now
+                JobId = newJobId,
+                JobType = source.JobType,
+                DeduplicationKey = deduplicationKey,
+                Payload = source.Payload,
+                Status = AgentJobStatus.Ready,
+                Priority = source.Priority,
+                FirstQueuedAt = now,
+                AvailableAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
             };
             db.Jobs.Add(job);
             db.JobOperationAudits.Add(new JobOperationAuditEntity
             {
-                AuditId = Guid.NewGuid().ToString("N"), JobId = source.JobId, Operation = "Reacquire",
-                PreviousStatus = source.Status, NewStatus = source.Status,
+                AuditId = Guid.NewGuid().ToString("N"),
+                JobId = source.JobId,
+                Operation = "Reacquire",
+                PreviousStatus = source.Status,
+                NewStatus = source.Status,
                 ActorId = string.IsNullOrWhiteSpace(actorId) ? "Admin UI" : actorId,
-                Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(), CreatedAt = now
+                Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+                CreatedAt = now
             });
             QueueDispatch(db, job, now);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

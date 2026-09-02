@@ -1289,7 +1289,8 @@ public static class EndpointExtensions
                     sorted,
                     page,
                     pageSize,
-                    x => {
+                    x =>
+                    {
                         races.TryGetValue(x.RaceId ?? string.Empty, out var race);
                         var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();
                         var primaryHorseId = primaryMark is not null && race is not null
@@ -1307,7 +1308,8 @@ public static class EndpointExtensions
                         (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,
                         x.Marks.Count,
                         race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,
-                        primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId)); }));
+                        primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));
+                    }));
             })
             .WithName("SearchPredictionTickets")
             .WithTags("Prediction API")
