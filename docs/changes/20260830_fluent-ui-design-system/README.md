@@ -1,6 +1,6 @@
 # Fluent UI ベースの管理画面刷新とデザインガイドライン統合
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction team
 - Created: 2026-08-30
 - Updated: 2026-09-02
@@ -1100,7 +1100,7 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 | C2 | collection header・filter・list row | 完了 | 8一覧を同じviewportでモックと比較し、情報順、余白、行密度、control幅が一致する |
 | C3 | detail・edit・dialog | 完了 | loaded stateでobject header、facts、section、関係・履歴行、form、dialogが各モックと一致する |
 | C4 | responsive・keyboard・共通state | 完了 | 1280 / 720 / 320 CSS pxでdrawer、再配置、focus、loading / empty / errorに欠落と横overflowがない |
-| C5 | 回帰検証・記録同期 | 実装中 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
+| C5 | 回帰検証・記録同期 | 完了 | build、solution test、全画面比較、差分記録を完了しStatusを`Implemented`へ戻す |
 
 ### Implementation order
 
@@ -1138,6 +1138,14 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - populated DBの一時コピーを使い、8一覧と馬・騎手・調教師・馬主のloaded detail、合計12ルートを1280 / 720 / 320 CSS pxで確認した。全36条件で横overflowと共通error boundary表示はなかった。
 - 1280pxではmobile bar非表示・rail表示、720pxと320pxでは48px mobile bar表示・rail退避を確認した。馬詳細などの連続detail sectionは全viewportで5 sectionを同時に保持した。
 - 320pxでmenu buttonのクリック後に`aria-expanded=true`とdrawer表示、Escape後に`aria-expanded=false`、drawer非表示、menu buttonへのfocus復帰を確認した。
+
+### C5 final verification and completion
+
+- 最新ソースを隔離出力先へbuildし、Razor、共有component、CSSを含めて警告0・エラー0を確認した。
+- `dotnet test HorseRacingPrediction.sln --no-build -v:minimal`はContracts 38、Domain 94、Agents 177、MachineLearning 14、Infrastructure 10、Application 56、API 98、Collector 93件、合計580件がすべて成功した。
+- `git diff --check`で空白エラーがないこと、`git status`で目的外の変更・生成物・秘密情報がないことを確認した。
+- モックとの差分として残したのは、承認済み機能を失わないためのレース／取得状況の`詳細条件` disclosureと、レース詳細の主要ビューtabだけである。いずれもモックの段階的開示・主要ビュー切替の意図に従う。
+- C1–C5とドキュメント同期が完了したため、このchange recordを`Implemented`へ戻す。`docs/design-guidelines.md`と`docs/admin-ui-design.md`の設計規則に変更はない。
 
 ### Documentation updates
 
