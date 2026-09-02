@@ -1804,6 +1804,69 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         });
     }
 
+    public async Task<AgentJobSearchResult> SearchJobStatusesAsync(
+        string? view,
+        string? query,
+        string? targetDate,
+        string? jobType,
+        AgentJobStatus? status,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var allItems = await GetJobStatusesAsync(jobType, status, int.MaxValue, cancellationToken).ConfigureAwait(false);
+        var daySummaries = allItems
+            .Select(x => new { Job = x, Date = ExtractTargetDate(x.DeduplicationKey) })
+            .Where(x => x.Date is not null)
+            .GroupBy(x => x.Date!, StringComparer.Ordinal)
+            .OrderByDescending(x => x.Key)
+            .Take(7)
+            .Select(x => new AgentJobDaySummary(
+                x.Key,
+                x.Count(),
+                x.Count(item => item.Job.Status == AgentJobStatus.Succeeded),
+                x.Count(item => item.Job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter),
+                x.Count(item => item.Job.Status is AgentJobStatus.Ready or AgentJobStatus.Pending or AgentJobStatus.Running or AgentJobStatus.WaitingDependency)))
+            .ToList();
+
+        IEnumerable<AgentJobStatusReadModel> filtered = view switch
+        {
+            "action" => allItems.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter),
+            "running" => allItems.Where(x => x.Status == AgentJobStatus.Running),
+            "ready" => allItems.Where(x => x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency),
+            "recent" => allItems.Where(x => x.Status == AgentJobStatus.Succeeded),
+            _ => allItems
+        };
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var term = query.Trim();
+            filtered = filtered.Where(x => x.JobType.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || DisplayJobType(x.JobType).Contains(term, StringComparison.OrdinalIgnoreCase)
+                || x.DeduplicationKey.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(targetDate))
+            filtered = filtered.Where(x => string.Equals(ExtractTargetDate(x.DeduplicationKey), targetDate.Trim(), StringComparison.Ordinal));
+
+        var materialized = filtered.ToList();
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var safePage = Math.Max(1, page);
+        return new AgentJobSearchResult(materialized.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToList(), materialized.Count, daySummaries);
+    }
+
+    private static string? ExtractTargetDate(string value)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d{4}-\d{2}-\d{2}");
+        return match.Success ? match.Value : null;
+    }
+
+    private static string DisplayJobType(string value) => value switch
+    {
+        "ResultMonthDiscoveryRequest" => "月次レース結果の確認",
+        "RaceResultCollectionRequest" => "レース結果の収集",
+        "RaceCardCollectionRequest" => "出走表の収集",
+        _ => value
+    };
+
     public async Task<IReadOnlyList<AgentAcquisitionHistoryReadModel>> GetAgentAcquisitionHistoryAsync(
         string acquisitionKey,
         CancellationToken cancellationToken = default)

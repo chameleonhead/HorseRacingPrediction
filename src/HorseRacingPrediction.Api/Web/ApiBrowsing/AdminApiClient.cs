@@ -109,6 +109,9 @@ public sealed class AdminApiClient
     public Task<IReadOnlyList<AgentJobStatusReadModel>?> GetJobsAsync(string? jobType = null, AgentJobStatus? status = null, int limit = 100, CancellationToken cancellationToken = default)
         => GetJsonAsync<IReadOnlyList<AgentJobStatusReadModel>>(AppendQueryString("/api/admin/jobs", new { jobType, status, limit }), cancellationToken);
 
+    public Task<AgentJobSearchResult?> SearchJobsAsync(string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int page, int pageSize, CancellationToken cancellationToken = default)
+        => GetJsonAsync<AgentJobSearchResult>(AppendQueryString("/api/admin/jobs/search", new { view, query, targetDate, jobType, status, page, pageSize }), cancellationToken);
+
     public Task<AgentJobDetailReadModel?> GetJobAsync(string jobId, CancellationToken cancellationToken = default)
         => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/jobs/{Uri.EscapeDataString(jobId)}", cancellationToken);
 

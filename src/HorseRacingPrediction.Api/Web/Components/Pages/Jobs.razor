@@ -76,7 +76,7 @@ else
 
 @code {
     private IReadOnlyList<AgentJobStatusReadModel> jobs = [];
-    private IReadOnlyList<AgentJobStatusReadModel> allJobs = [];
+    private IReadOnlyList<AgentJobDaySummary> daySummaries = [];
     private string? keyword;
     private string? jobType;
     private string? targetDateText;
@@ -117,16 +117,12 @@ else
         loading = true;
         try {
             queuePaused = (await Api.GetJobQueueStateAsync())?.IsPaused ?? false;
-            allJobs = await Api.GetJobsAsync(jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null) ?? [];
-            var filtered = view switch { "action" => allJobs.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter), "running" => allJobs.Where(x => x.Status == AgentJobStatus.Running), "ready" => allJobs.Where(x => x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency), "recent" => allJobs.Where(x => x.Status == AgentJobStatus.Succeeded), _ => allJobs };
-            if (!string.IsNullOrWhiteSpace(keyword))
-            {
-                var term = keyword.Trim();
-                filtered = filtered.Where(x => DisplayJobType(x.JobType).Contains(term, StringComparison.OrdinalIgnoreCase) || DisplayTarget(x).Contains(term, StringComparison.OrdinalIgnoreCase) || x.DeduplicationKey.Contains(term, StringComparison.OrdinalIgnoreCase));
-            }
-            if (!string.IsNullOrWhiteSpace(targetDateText))
-                filtered = filtered.Where(x => string.Equals(ExtractTargetDate(x.DeduplicationKey), targetDateText.Trim(), StringComparison.Ordinal));
-            totalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count() / (double)pageSize)); page = Math.Min(page, totalPages); jobs = filtered.Skip((page - 1) * pageSize).Take(pageSize).ToList(); UpdateUrl();
+            var result = await Api.SearchJobsAsync(view, keyword, targetDateText, jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null, page, pageSize);
+            jobs = result?.Items ?? [];
+            daySummaries = result?.DaySummaries ?? [];
+            totalPages = Math.Max(1, (int)Math.Ceiling((result?.TotalCount ?? 0) / (double)pageSize));
+            if (page > totalPages) { page = totalPages; await LoadAsync(); return; }
+            UpdateUrl();
         }
         finally { loading = false; }
     }
@@ -154,24 +150,12 @@ else
         return match.Success ? match.Value : null;
     }
 
-    private IReadOnlyList<DaySummary> DaySummaries => allJobs
-        .Select(x => new { Job = x, Date = ExtractTargetDate(x.DeduplicationKey) })
-        .Where(x => x.Date is not null)
-        .GroupBy(x => x.Date!, StringComparer.Ordinal)
-        .OrderByDescending(x => x.Key)
-        .Take(7)
-        .Select(x => new DaySummary(
-            x.Key,
-            x.Count(),
-            x.Count(item => item.Job.Status == AgentJobStatus.Succeeded),
-            x.Count(item => item.Job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter),
-            x.Count(item => item.Job.Status is AgentJobStatus.Ready or AgentJobStatus.Pending or AgentJobStatus.Running or AgentJobStatus.WaitingDependency)))
-        .ToList();
+    private IReadOnlyList<AgentJobDaySummary> DaySummaries => daySummaries;
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
 
     private sealed record FilterOption(string Value, string Label);
     private static string DisplayDate(string value) => DateOnly.TryParse(value, out var date) ? date.ToString("yyyy年M月d日") : value;
-    private static string DayProgress(DaySummary value)
+    private static string DayProgress(AgentJobDaySummary value)
     {
         var parts = new List<string>();
         if (value.CompletedCount > 0) parts.Add($"{value.CompletedCount}件完了");
@@ -179,7 +163,6 @@ else
         if (value.AttentionCount > 0) parts.Add($"{value.AttentionCount}件要対応");
         return parts.Count == 0 ? $"{value.Count}件" : string.Join("・", parts);
     }
-    private static string DayStatus(DaySummary value) => value.AttentionCount > 0 ? "要対応" : value.WaitingCount > 0 ? "一部待機" : "完了";
-    private static string DayStatusTone(DaySummary value) => value.AttentionCount > 0 ? "danger" : value.WaitingCount > 0 ? "warning" : "success";
-    private sealed record DaySummary(string Date, int Count, int CompletedCount, int AttentionCount, int WaitingCount);
+    private static string DayStatus(AgentJobDaySummary value) => value.AttentionCount > 0 ? "要対応" : value.WaitingCount > 0 ? "一部待機" : "完了";
+    private static string DayStatusTone(AgentJobDaySummary value) => value.AttentionCount > 0 ? "danger" : value.WaitingCount > 0 ? "warning" : "success";
 }

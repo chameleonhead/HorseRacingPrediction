@@ -1187,3 +1187,12 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 - `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、101件。
 
 残作業: ジョブserver-side paging、予想票のobject表現、全体visual / regression検証。
+
+### Job search checkpoint
+
+- 既存の互換APIを維持したまま `/api/admin/jobs/search` を追加し、表示区分、キーワード、対象日、処理種別、状態、ページをサーバー側で処理する検索契約へ一覧画面を移行した。画面が先頭100件を取得してからローカルで絞り込む制限を解消した。
+- 日別状況はページ内の行ではなく、処理種別・状態までを適用した全検索母集団から直近7日分を集計する。ページング後も日別の総数、完了、待機、要対応が欠落しない。
+- API testで105件を登録し、日本語の処理名検索、2ページ目50件、日別集計105件を検証した。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、102件。
+
+残作業: 予想票のobject表現、全体visual / regression検証。

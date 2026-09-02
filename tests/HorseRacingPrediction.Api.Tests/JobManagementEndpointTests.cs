@@ -27,6 +27,29 @@ public sealed class JobManagementEndpointTests
     }
 
     [TestMethod]
+    public async Task SearchJobs_PagesAcrossAllRowsAndReturnsCompleteDaySummary()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app;
+        using var requestClient = client;
+        requestClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<ProcessingStateStore>();
+        var now = new DateTimeOffset(2026, 8, 30, 9, 0, 0, TimeSpan.Zero);
+        for (var index = 0; index < 105; index++)
+            await store.ScheduleJobAsync("RaceCardCollectionRequest", $"2026-08-30-race-{index:D3}", "{}", now.AddMinutes(index));
+
+        var response = await requestClient.GetFromJsonAsync<AgentJobSearchResult>(
+            "/api/admin/jobs/search?view=all&query=%E5%87%BA%E8%B5%B0%E8%A1%A8&page=2&pageSize=50");
+
+        Assert.IsNotNull(response);
+        Assert.AreEqual(105, response.TotalCount);
+        Assert.AreEqual(50, response.Items.Count);
+        var day = response.DaySummaries.Single(x => x.Date == "2026-08-30");
+        Assert.AreEqual(105, day.Count);
+        Assert.AreEqual(105, day.WaitingCount);
+    }
+
+    [TestMethod]
     public async Task Reacquire_SucceededJob_CreatesDifferentJob()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

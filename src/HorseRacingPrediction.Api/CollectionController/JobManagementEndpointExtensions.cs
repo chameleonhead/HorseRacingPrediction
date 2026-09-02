@@ -11,6 +11,8 @@ public static class JobManagementEndpointExtensions
             Results.Ok(new { isPaused = maintenance.IsActive }));
         group.MapGet("", async (string? jobType, AgentJobStatus? status, int? limit, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));
+        group.MapGet("/search", async (string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int? page, int? pageSize, ProcessingStateStore store, CancellationToken token) =>
+            Results.Ok(await store.SearchJobStatusesAsync(view, query, targetDate, jobType, status, page ?? 1, pageSize ?? 50, token)));
         group.MapGet("/{jobId}", async (string jobId, ProcessingStateStore store, CancellationToken token) =>
         {
             var detail = await store.GetJobDetailAsync(jobId, token);
