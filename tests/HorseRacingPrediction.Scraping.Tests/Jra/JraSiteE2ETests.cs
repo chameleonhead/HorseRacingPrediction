@@ -57,7 +57,7 @@ public sealed class JraSiteE2ETests
 
         var navigator = new JraNavigator(_browser, pageReader);
 
-        _session = new JraSession(navigator, pageReader);
+        _session = new JraSession(_browser, navigator, pageReader);
     }
 
     [TestCleanup]
