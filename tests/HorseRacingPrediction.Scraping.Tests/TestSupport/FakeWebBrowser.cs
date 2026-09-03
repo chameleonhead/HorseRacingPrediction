@@ -21,9 +21,13 @@ internal sealed class FakeWebBrowser : IWebBrowser
     /// </summary>
     private string? _submitDestinationUrl;
 
+    private readonly Stack<string?> _history = new();
+
     public string? CurrentUrl { get; private set; }
 
     public List<string> NavigatedUrls { get; } = [];
+
+    public int GoBackCallCount { get; private set; }
 
     public List<string> SetFieldCalls { get; } = [];
 
@@ -64,6 +68,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
     public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
     {
+        _history.Push(CurrentUrl);
         CurrentUrl = url;
         NavigatedUrls.Add(url);
         return Task.FromResult(string.Empty);
@@ -103,6 +108,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
         if (_clickDestinationsByText.TryGetValue(text, out var url))
         {
+            _history.Push(CurrentUrl);
             CurrentUrl = url;
             NavigatedUrls.Add(url);
             return Task.FromResult(string.Empty);
@@ -189,7 +195,17 @@ internal sealed class FakeWebBrowser : IWebBrowser
         => throw new NotSupportedException();
 
     public Task<string> GoBackAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        GoBackCallCount++;
+
+        if (_history.Count == 0)
+        {
+            throw new InvalidOperationException("No browser history to go back to.");
+        }
+
+        CurrentUrl = _history.Pop();
+        return Task.FromResult(string.Empty);
+    }
 
     public ValueTask DisposeAsync()
     {

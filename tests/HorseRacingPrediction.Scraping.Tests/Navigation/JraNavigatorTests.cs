@@ -394,4 +394,147 @@ public sealed class JraNavigatorTests
         CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
         Assert.IsTrue(browser.SelectOptionCalls.Count > 0);
     }
+
+    private static PageSnapshot BuildRaceListSnapshotWithTwoRaces(string url)
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["R", "発走時刻", "レース名"],
+            Rows:
+            [
+                ["11R", "15:40", "テストステークス"],
+                ["12R", "15:10", "テストレース12"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース一覧",
+            mainText: string.Empty,
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["2026年9月5日 中山"]);
+
+        return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_SameMeeting_SecondCallUsesGoBackShortcut()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        const string raceCardUrl11 = "https://www.jra.go.jp/keiba/sample/racecard/11/";
+        const string raceCardUrl12 = "https://www.jra.go.jp/keiba/sample/racecard/12/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshotWithTwoRaces(raceListUrl));
+        browser.SetLinks(
+            raceListUrl,
+            [
+                new PageLinkSnapshot(raceCardUrl11, "11R 出馬表"),
+                new PageLinkSnapshot(raceCardUrl12, "12R 出馬表"),
+            ]);
+        browser.SetSnapshot(raceCardUrl11, BuildRaceCardSnapshot(raceCardUrl11, "11R"));
+        browser.SetSnapshot(raceCardUrl12, BuildRaceCardSnapshot(raceCardUrl12, "12R"));
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var date = new DateOnly(2026, 9, 5);
+        var race11 = new RaceId(date, RaceCourse.Nakayama, 11);
+        var race12 = new RaceId(date, RaceCourse.Nakayama, 12);
+
+        var page1 = await navigator.ToRaceCardAsync(race11);
+        var page2 = await navigator.ToRaceCardAsync(race12);
+
+        Assert.AreEqual(JraPageKind.RaceCard, page1.Kind);
+        Assert.AreEqual(JraPageKind.RaceCard, page2.Kind);
+        Assert.AreEqual(raceCardUrl12, page2.Url);
+
+        // 2レース目は競馬トップ再訪問・「出馬表」メニュークリック・開催選択ボタン
+        // クリックを行わず、GoBackで直接レース一覧ページへ戻っているはず。
+        Assert.AreEqual(
+            1,
+            browser.ClickedTexts.Count(x => x == "出馬表"),
+            "「出馬表」メニューへのクリックは初回の1回だけであるべき。");
+        Assert.AreEqual(
+            1,
+            browser.ClickedTexts.Count(x => x == "4回中山1日"),
+            "開催選択ボタンのクリックは初回の1回だけであるべき。");
+        Assert.AreEqual(1, browser.GoBackCallCount);
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_DifferentMeeting_FallsBackToFullNavigation()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/nakayama/";
+        const string raceCardUrl11 = "https://www.jra.go.jp/keiba/sample/racecard/nakayama/11/";
+        const string raceListUrlHanshin = "https://www.jra.go.jp/keiba/sample/racelist/hanshin/";
+        const string raceCardUrlHanshin1 = "https://www.jra.go.jp/keiba/sample/racecard/hanshin/1/";
+        const string meetingSelectionMainText =
+            "9月5日 4回中山1日 9月6日 4回阪神1日";
+
+        var browser = new FakeWebBrowser();
+
+        // カレンダーには2日程（9/5 中山, 9/6 阪神）を用意する。
+        var calendarTable = new PageTableSnapshot(
+            Headers: [],
+            Rows: [["5 中山", "6 阪神", "7"]]);
+        var calendarSection = new PageSectionSnapshot(
+            title: "開催日程",
+            mainText: string.Empty,
+            links: [],
+            actions: [],
+            tables: [calendarTable],
+            headings: ["開催日程>2026年9月"]);
+        browser.SetSnapshot(CalendarUrl, new PageSnapshot(CalendarUrl, "開催日程", [calendarSection]));
+
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, meetingSelectionMainText));
+
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+        browser.SetLinks(raceListUrl, [new PageLinkSnapshot(raceCardUrl11, "11R 出馬表")]);
+        browser.SetSnapshot(raceCardUrl11, BuildRaceCardSnapshot(raceCardUrl11, "11R"));
+
+        browser.SetClickDestination("4回阪神1日", raceListUrlHanshin);
+        var hanshinListTable = new PageTableSnapshot(
+            Headers: ["R", "発走時刻", "レース名"],
+            Rows: [["1R", "10:00", "テスト1レース"]]);
+        var hanshinListSection = new PageSectionSnapshot(
+            title: "レース一覧",
+            mainText: string.Empty,
+            links: [],
+            actions: [],
+            tables: [hanshinListTable],
+            headings: ["2026年9月6日 阪神"]);
+        browser.SetSnapshot(
+            raceListUrlHanshin,
+            new PageSnapshot(raceListUrlHanshin, "2026年9月6日 阪神 レース一覧", [hanshinListSection]));
+        browser.SetLinks(
+            raceListUrlHanshin,
+            [new PageLinkSnapshot(raceCardUrlHanshin1, "1R 出馬表")]);
+        browser.SetSnapshot(raceCardUrlHanshin1, BuildRaceCardSnapshot(raceCardUrlHanshin1, "1R"));
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var race11 = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
+        var raceHanshin1 = new RaceId(new DateOnly(2026, 9, 6), RaceCourse.Hanshin, 1);
+
+        var page1 = await navigator.ToRaceCardAsync(race11);
+        var page2 = await navigator.ToRaceCardAsync(raceHanshin1);
+
+        Assert.AreEqual(JraPageKind.RaceCard, page1.Kind);
+        Assert.AreEqual(JraPageKind.RaceCard, page2.Kind);
+        Assert.AreEqual(raceCardUrlHanshin1, page2.Url);
+
+        // 開催が変わった場合はGoBackショートカットを試みず、毎回フルパスで
+        // 「出馬表」メニュー・開催選択ボタンをクリックし直すはず。
+        Assert.AreEqual(2, browser.ClickedTexts.Count(x => x == "出馬表"));
+        Assert.AreEqual(0, browser.GoBackCallCount);
+    }
 }
