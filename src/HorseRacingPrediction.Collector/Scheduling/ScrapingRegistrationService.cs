@@ -16,6 +16,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
 
     private readonly AgentProcessingOptions _options;
     private readonly IJraSessionFactory _sessionFactory;
+    private readonly JraScheduleCollectionWorkflowFactory _scheduleWorkflowFactory;
     private readonly IProcessingStateStore _stateStore;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILogger<ScrapingRegistrationService> _logger;
@@ -23,12 +24,14 @@ public sealed class ScrapingRegistrationService : BackgroundService
     public ScrapingRegistrationService(
         IOptions<AgentProcessingOptions> options,
         IJraSessionFactory sessionFactory,
+        JraScheduleCollectionWorkflowFactory scheduleWorkflowFactory,
         IProcessingStateStore stateStore,
         CollectionExecutionTrigger executionTrigger,
         ILogger<ScrapingRegistrationService> logger)
     {
         _options = options.Value;
         _sessionFactory = sessionFactory;
+        _scheduleWorkflowFactory = scheduleWorkflowFactory;
         _stateStore = stateStore;
         _executionTrigger = executionTrigger;
         _logger = logger;
@@ -97,7 +100,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
             try
             {
                 await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
-                var scheduleWorkflow = new JraScheduleCollectionWorkflow(session);
+                var scheduleWorkflow = _scheduleWorkflowFactory(session);
 
                 for (var offset = 0; offset <= Math.Max(0, _options.ScheduleLookaheadDays); offset++)
                 {

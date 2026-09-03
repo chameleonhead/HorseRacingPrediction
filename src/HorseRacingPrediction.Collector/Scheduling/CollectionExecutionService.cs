@@ -31,7 +31,9 @@ public sealed class CollectionExecutionService : BackgroundService
     private readonly AgentProcessingOptions _options;
     private readonly IProcessingStateStore _stateStore;
     private readonly IJraSessionFactory _sessionFactory;
-    private readonly IDataCollectionWriteService _writeService;
+    private readonly JraScheduleCollectionWorkflowFactory _scheduleWorkflowFactory;
+    private readonly JraRaceCardCollectionWorkflowFactory _raceCardWorkflowFactory;
+    private readonly JraRaceResultCollectionWorkflowFactory _raceResultWorkflowFactory;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly ILogger<CollectionExecutionService> _logger;
@@ -40,7 +42,9 @@ public sealed class CollectionExecutionService : BackgroundService
         IOptions<AgentProcessingOptions> options,
         IProcessingStateStore stateStore,
         IJraSessionFactory sessionFactory,
-        IDataCollectionWriteService writeService,
+        JraScheduleCollectionWorkflowFactory scheduleWorkflowFactory,
+        JraRaceCardCollectionWorkflowFactory raceCardWorkflowFactory,
+        JraRaceResultCollectionWorkflowFactory raceResultWorkflowFactory,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
         CollectionExecutionTrigger executionTrigger,
         ILogger<CollectionExecutionService> logger)
@@ -48,7 +52,9 @@ public sealed class CollectionExecutionService : BackgroundService
         _options = options.Value;
         _stateStore = stateStore;
         _sessionFactory = sessionFactory;
-        _writeService = writeService;
+        _scheduleWorkflowFactory = scheduleWorkflowFactory;
+        _raceCardWorkflowFactory = raceCardWorkflowFactory;
+        _raceResultWorkflowFactory = raceResultWorkflowFactory;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
         _executionTrigger = executionTrigger;
         _logger = logger;
@@ -288,10 +294,10 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-        var scheduleWorkflow = new JraScheduleCollectionWorkflow(session);
+        var scheduleWorkflow = _scheduleWorkflowFactory(session);
         var courses = await scheduleWorkflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
 
-        var cardWorkflow = new JraRaceCardCollectionWorkflow(session, _writeService);
+        var cardWorkflow = _raceCardWorkflowFactory(session);
         var results = new List<RaceCardCollectionResult>();
         var savedRaceIds = new List<string>();
 
@@ -319,10 +325,10 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-        var scheduleWorkflow = new JraScheduleCollectionWorkflow(session);
+        var scheduleWorkflow = _scheduleWorkflowFactory(session);
         var courses = await scheduleWorkflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
 
-        var resultWorkflow = new JraRaceResultCollectionWorkflow(session, _writeService);
+        var resultWorkflow = _raceResultWorkflowFactory(session);
         var results = new List<RaceResultCollectionResult>();
         var savedRaceIds = new List<string>();
 
