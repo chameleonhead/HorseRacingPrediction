@@ -93,12 +93,12 @@ else
     private async Task SearchAsync()
     {
         page = 1;
+        UpdateUrl();
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
-        UpdateUrl();
         loading = true;
         try
         {
@@ -123,6 +123,7 @@ else
     private async Task GoPageAsync(int value)
     {
         page = value;
+        UpdateUrl();
         await LoadAsync();
     }
 
@@ -175,6 +176,7 @@ else
             default: from = null; to = null; status = null; break;
         }
         page = 1;
+        UpdateUrl();
         await LoadAsync();
     }
     private Task ApplyTodayAsync() => ApplyPeriodAsync("today");
@@ -193,7 +195,18 @@ else
     private async Task ClearFiltersAsync()
     {
         from = null; to = null; racecourse = null; raceNo = null; raceName = null; winningHorse = null; status = null; page = 1;
+        UpdateUrl();
         await LoadAsync();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // 初回レンダリング後に URL を同期する（プリレンダリング中の NavigateTo を回避）
+            UpdateUrl();
+        }
+        return Task.CompletedTask;
     }
     private void OpenRace(string id) => Navigation.NavigateTo(RaceUrl(id));
     private void OpenRaceFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenRace(id); }
