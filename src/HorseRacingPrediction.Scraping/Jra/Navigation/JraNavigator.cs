@@ -132,11 +132,67 @@ public sealed class JraNavigator
         return page;
     }
 
-    public Task<IJraPage> ToRaceCardAsync(
+    public async Task<IJraPage> ToRaceCardAsync(
         RaceId race,
         CancellationToken cancellationToken = default)
-        => throw new NotImplementedException(
-            "ToRaceCardAsync はTask 8/9で実装予定。");
+    {
+        _logger.LogInformation(
+            "JRA navigation start. Destination=RaceCard Race={Race} CurrentUrl={CurrentUrl}",
+            race,
+            _browser.CurrentUrl);
+
+        var listPage =
+            await ToRaceListAsync(
+                race.Date,
+                race.Course,
+                cancellationToken);
+
+        if (listPage is not JraRaceListPage raceList)
+        {
+            throw new JraNavigationException(
+                $"レース一覧を取得できませんでした。 Kind={listPage.Kind}");
+        }
+
+        var summary =
+            raceList.Races
+                .SingleOrDefault(x => x.Id == race);
+
+        if (summary is null)
+        {
+            throw new JraNavigationException(
+                $"{race} がレース一覧に存在しません。");
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary.RaceCardUrl))
+        {
+            var resolvedUrl =
+                ResolveUrl(_browser.CurrentUrl, summary.RaceCardUrl)
+                ?? throw new JraNavigationException(
+                    $"URLを解決できません: {summary.RaceCardUrl}");
+
+            await _browser.NavigateAsync(
+                resolvedUrl,
+                cancellationToken);
+        }
+        else
+        {
+            await NavigateRaceNumberLinkAsync(
+                race.Number,
+                JraNavigationLinks.RaceCard,
+                cancellationToken);
+        }
+
+        var page =
+            await _pageReader.ReadAsync(
+                cancellationToken);
+
+        _logger.LogInformation(
+            "JRA navigation done. Destination=RaceCard ResolvedKind={Kind} Url={Url}",
+            page.Kind,
+            page.Url);
+
+        return page;
+    }
 
     public Task<IJraPage> ToRaceResultAsync(
         RaceId race,
@@ -260,6 +316,49 @@ public sealed class JraNavigator
         {
             throw new JraNavigationException(
                 $"{date:yyyy-MM-dd} {course} のレース一覧リンクが見つかりませんでした。");
+        }
+
+        var url =
+            ResolveUrl(_browser.CurrentUrl, target.Url)
+            ?? throw new JraNavigationException(
+                $"URLを解決できません: {target.Url}");
+
+        await _browser.NavigateAsync(
+            url,
+            cancellationToken);
+    }
+
+    private async Task NavigateRaceNumberLinkAsync(
+        int raceNumber,
+        IReadOnlyList<string> linkTextCandidates,
+        CancellationToken cancellationToken)
+    {
+        var links =
+            await _browser.GetLinksAsync(
+                cancellationToken: cancellationToken);
+
+        var numberMarkers = new[]
+        {
+            $"{raceNumber}R",
+            $"{raceNumber}レース",
+        };
+
+        var target =
+            links.FirstOrDefault(x =>
+                numberMarkers.Any(marker =>
+                    x.Title.Contains(marker, StringComparison.Ordinal)) &&
+                linkTextCandidates.Any(candidate =>
+                    x.Title.Contains(candidate, StringComparison.Ordinal)));
+
+        target ??=
+            links.FirstOrDefault(x =>
+                numberMarkers.Any(marker =>
+                    x.Title.Contains(marker, StringComparison.Ordinal)));
+
+        if (target is null)
+        {
+            throw new JraNavigationException(
+                $"{raceNumber}R のリンクが見つかりませんでした。");
         }
 
         var url =

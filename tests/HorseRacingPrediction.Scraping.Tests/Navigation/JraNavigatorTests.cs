@@ -52,8 +52,25 @@ public sealed class JraNavigatorTests
         return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
     }
 
+    private static PageSnapshot BuildRaceCardSnapshot(string url, string headingSuffix = "11R")
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["馬番", "馬名", "騎手"],
+            Rows: [["1", "テストホース", "テスト騎手"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "出馬表",
+            mainText: string.Empty,
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: [$"2026年9月5日 中山 {headingSuffix}"]);
+
+        return new PageSnapshot(url, $"2026年9月5日 中山 {headingSuffix} 出馬表", [section]);
+    }
+
     private static JraPageReader CreateReader(FakeWebBrowser browser)
-        => new(browser, [new CalendarPageParser(), new RaceListPageParser()]);
+        => new(browser, [new CalendarPageParser(), new RaceListPageParser(), new RaceCardPageParser()]);
 
     [TestMethod]
     public async Task ToKeibaTopAsync_NavigatesToKeibaTopUrl()
@@ -161,5 +178,69 @@ public sealed class JraNavigatorTests
             () => navigator.ToRaceListAsync(
                 new DateOnly(2026, 9, 5),
                 RaceCourse.Nakayama));
+    }
+
+    private static PageSnapshot BuildRaceListSnapshotWithCardLink(string url, string raceCardUrl)
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["R", "発走時刻", "レース名"],
+            Rows: [["11R", "15:40", "テストステークス"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース一覧",
+            mainText: string.Empty,
+            links: [new PageLinkSnapshot(raceCardUrl, "11R 出馬表")],
+            actions: [],
+            tables: [table],
+            headings: ["2026年9月5日 中山"]);
+
+        return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_UsesRaceListLinkToReachRaceCardPage()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        const string raceCardUrl = "https://www.jra.go.jp/keiba/sample/racecard/11/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetLinks(
+            CalendarUrl,
+            [new PageLinkSnapshot(raceListUrl, "9月5日 中山")]);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+        browser.SetLinks(
+            raceListUrl,
+            [new PageLinkSnapshot(raceCardUrl, "11R 出馬表")]);
+        browser.SetSnapshot(raceCardUrl, BuildRaceCardSnapshot(raceCardUrl));
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var raceId = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
+
+        var page = await navigator.ToRaceCardAsync(raceId);
+
+        Assert.AreEqual(JraPageKind.RaceCard, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, raceCardUrl);
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_RaceNotInList_Throws()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetLinks(
+            CalendarUrl,
+            [new PageLinkSnapshot(raceListUrl, "9月5日 中山")]);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var raceId = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 5);
+
+        await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToRaceCardAsync(raceId));
     }
 }
