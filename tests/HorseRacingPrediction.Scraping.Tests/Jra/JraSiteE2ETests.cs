@@ -199,6 +199,31 @@ public sealed class JraSiteE2ETests
         Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
     }
 
+    [TestMethod]
+    public async Task 古いRaceResult取得()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+
+        // Task 13 事前調査で確認済みの十分古いレース: 2020年5月3日 3回京都4日 11レース
+        // （第161回天皇賞(春)）。現在から見て「現在開催」「直近開催」いずれの一覧ページにも
+        // 載っていない期間であり、「過去レース結果検索」フォーム経由の遷移
+        // （ToHistoricalRaceResultAsync）を通ることを検証する。
+        var raceId = new RaceId(
+            new DateOnly(2020, 5, 3),
+            RaceCourse.Kyoto,
+            11);
+
+        var resultPage = await _session.Navigate.ToRaceResultAsync(
+            raceId,
+            cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceResultPage>(resultPage);
+        var result = (JraRaceResultPage)resultPage;
+
+        Assert.AreEqual(raceId, result.RaceId);
+        Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
+    }
+
     private async Task<(DateOnly Date, RaceCourse Course)> FindPastRaceDateAsync(
         DateOnly today,
         CancellationToken cancellationToken)

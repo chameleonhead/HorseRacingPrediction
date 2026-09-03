@@ -358,31 +358,59 @@ public sealed class JraNavigator
         RaceId race,
         CancellationToken cancellationToken)
     {
-        // 競馬トップ → レース結果 → 過去レース結果検索 → 検索フォーム → 検索結果 → 対象レース
+        // 競馬トップ → レース結果 → 過去レース結果検索 → 年月選択 → 検索実行
+        // → 開催選択（当該日・競馬場のボタン、または重賞レースなら直リンク）
+        // → （非重賞のみ）レース選択 → 対象R。
+        //
+        // Task 13 実サイト調査で判明した「過去レース結果検索」ページの実構造:
+        // 開催年(id=kaisaiY_list)・開催月(id=kaisaiM_list)は<form>タグの外にある
+        // 素のselectで、「検索」も<a href="#" onclick="getSelectData();">という
+        // JSリンクでありsubmitボタンではない。ページ内に実在する<form>
+        // (commForm01)はJSのdoAction()が裏方でcnameを注入してPOSTするための
+        // 隠しフォームに過ぎず、通常のフォーム入力の対象にはなり得ない。
+        // そのため、ここではドキュメント記載のIWebBrowserメソッドのうち
+        // SelectOptionAsync（年・月のselect操作）を用いる。
+        // GetFormsAsync/SetFieldValueAsync/SubmitFormAsyncは、この経路が
+        // 実サイトの通常フォームと噛み合わないため使用しない。
+        //
+        // 「検索」リンクは、ページヘッダーの検索ウィンドウ内にも同じ表示テキスト
+        // 「検索」を持つ要素が存在し、単純な ClickAsync("検索") では誤って
+        // ヘッダー側の要素を選んでしまうことがある（実サイトE2E再検証で判明）。
+        // 見出し「開催年月」を含むブロック(div.layout_grid)内の「検索」を
+        // クリックする ClickActionInSectionAsync で一意に特定する。
         await ToHistoricalRaceSearchAsync(cancellationToken);
 
-        await _browser.SetFieldValueAsync(
-            "開催年",
+        await _browser.SelectOptionAsync(
+            "年",
             race.Date.Year.ToString(),
             cancellationToken);
 
-        await _browser.SetFieldValueAsync(
-            "開催月",
+        await _browser.SelectOptionAsync(
+            "月",
             race.Date.Month.ToString(),
             cancellationToken);
 
-        await _browser.SetFieldValueAsync(
-            "開催日",
-            race.Date.Day.ToString(),
+        await _browser.ClickActionInSectionAsync(
+            "開催年月",
+            "検索",
             cancellationToken);
 
-        await _browser.SelectOptionAsync(
-            "競馬場",
-            RaceCourseName(race.Course),
+        // 検索結果（開催選択）ページ。重賞レースはここから直接「レース結果」ページへ
+        // リンクされているため、対象日・競馬場の開催ボタンをクリックした後の
+        // ページが既に「レース結果」であればそのまま返す。そうでなければ
+        // 「レース結果 レース選択」ページとみなし、対象R番号のリンクを辿る。
+        await ClickMeetingButtonAsync(
+            race.Date,
+            race.Course,
             cancellationToken);
 
-        await _browser.SubmitFormAsync(
-            cancellationToken: cancellationToken);
+        var afterMeeting =
+            await _pageReader.ReadAsync(cancellationToken);
+
+        if (afterMeeting.Kind == JraPageKind.RaceResult)
+        {
+            return afterMeeting;
+        }
 
         await NavigateRaceNumberLinkAsync(
             race.Number,

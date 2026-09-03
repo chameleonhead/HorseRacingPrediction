@@ -158,7 +158,26 @@ internal sealed class FakeWebBrowser : IWebBrowser
         string sectionText,
         string actionText,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        ClickedTexts.Add(actionText);
+
+        if (_clickDestinationsByText.TryGetValue(actionText, out var url))
+        {
+            CurrentUrl = url;
+            NavigatedUrls.Add(url);
+            return Task.FromResult(string.Empty);
+        }
+
+        if (_submitDestinationUrl is not null)
+        {
+            CurrentUrl = _submitDestinationUrl;
+            NavigatedUrls.Add(_submitDestinationUrl);
+            return Task.FromResult(string.Empty);
+        }
+
+        throw new InvalidOperationException(
+            $"No click destination configured for action: {actionText} (section: {sectionText})");
+    }
 
     public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(string.Empty);

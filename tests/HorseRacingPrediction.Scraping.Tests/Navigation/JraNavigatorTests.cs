@@ -372,6 +372,10 @@ public sealed class JraNavigatorTests
             BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("過去レース結果検索", searchUrl);
         browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceResultUrl);
         browser.SetLinks(searchResultUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
@@ -389,6 +393,5 @@ public sealed class JraNavigatorTests
         Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
         CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
         Assert.IsTrue(browser.SelectOptionCalls.Count > 0);
-        Assert.IsTrue(browser.SetFieldCalls.Count > 0);
     }
 }
