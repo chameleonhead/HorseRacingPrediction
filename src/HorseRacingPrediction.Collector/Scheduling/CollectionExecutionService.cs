@@ -326,7 +326,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     AgentJobKeyFactory.BuildResultDayCollectionRequestKey(payload.ProviderType, payload.RaceDate),
                     AgentJobPayloadSerializer.Serialize(dayCollectionPayload),
                     now,
-                    priority: 140,
+                    priority: 130,
                     parentJobId: job.JobId,
                     parentRelationType: JobRelationType.GeneratedBy,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -409,7 +409,7 @@ public sealed class CollectionExecutionService : BackgroundService
                         child.DeduplicationKey,
                         child.Payload,
                         now,
-                        priority: 140,
+                        priority: 120,
                         parentJobId: job.JobId,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
