@@ -8,6 +8,9 @@ namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 /// </summary>
 internal sealed class FakeWebBrowser : IWebBrowser
 {
+    public bool IsDisposed { get; private set; }
+
+
     private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new();
     private readonly Dictionary<string, List<PageLinkSnapshot>> _linksByUrl = new();
     private readonly Dictionary<string, List<PageFormSnapshot>> _formsByUrl = new();
@@ -189,5 +192,8 @@ internal sealed class FakeWebBrowser : IWebBrowser
         => throw new NotSupportedException();
 
     public ValueTask DisposeAsync()
-        => ValueTask.CompletedTask;
+    {
+        IsDisposed = true;
+        return ValueTask.CompletedTask;
+    }
 }
