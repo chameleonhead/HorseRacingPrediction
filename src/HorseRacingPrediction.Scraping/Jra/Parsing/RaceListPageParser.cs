@@ -89,8 +89,15 @@ internal sealed class RaceListPageParser
         {
             var header = headers[i];
 
+            // 実サイトのヘッダーは「レース」「番号」がセル内改行で
+            // 分割され、空白区切りの「レース 番号」として取得される
+            // （PlaywrightWebBrowser がセル内改行を空白へ正規化するため）。
+            // 空白を除去してから比較する。
+            var normalized =
+                RemoveWhitespace(header);
+
             if (header is "R" ||
-                header.Contains("レース番号", StringComparison.Ordinal))
+                normalized.Contains("レース番号", StringComparison.Ordinal))
             {
                 return i;
             }
@@ -98,6 +105,9 @@ internal sealed class RaceListPageParser
 
         return -1;
     }
+
+    private static string RemoveWhitespace(string value)
+        => string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
 
     private static int FindNameColumnIndex(
         IReadOnlyList<string> headers)

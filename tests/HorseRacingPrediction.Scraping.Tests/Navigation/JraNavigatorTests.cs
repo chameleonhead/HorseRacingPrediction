@@ -138,6 +138,21 @@ public sealed class JraNavigatorTests
         CollectionAssert.Contains(browser.NavigatedUrls, CalendarUrl);
     }
 
+    private const string MeetingSelectionUrl = "https://www.jra.go.jp/JRADB/accessD.html";
+
+    private static PageSnapshot BuildMeetingSelectionSnapshot(string url, string mainText)
+    {
+        var section = new PageSectionSnapshot(
+            title: "開催選択",
+            mainText: mainText,
+            links: [],
+            actions: [],
+            tables: [],
+            headings: ["開催選択"]);
+
+        return new PageSnapshot(url, "開催選択", [section]);
+    }
+
     [TestMethod]
     public async Task ToRaceListAsync_LinkFound_NavigatesAndReturnsRaceListPage()
     {
@@ -145,9 +160,12 @@ public sealed class JraNavigatorTests
 
         var browser = new FakeWebBrowser();
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
-        browser.SetLinks(
-            CalendarUrl,
-            [new PageLinkSnapshot(raceListUrl, "9月5日 中山")]);
+        browser.SetCurrentUrl(CalendarUrl);
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
 
         var navigator = new JraNavigator(browser, CreateReader(browser));
@@ -194,6 +212,10 @@ public sealed class JraNavigatorTests
     {
         var browser = new FakeWebBrowser();
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回阪神1日"));
 
         var navigator = new JraNavigator(browser, CreateReader(browser));
 
@@ -228,9 +250,11 @@ public sealed class JraNavigatorTests
 
         var browser = new FakeWebBrowser();
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
-        browser.SetLinks(
-            CalendarUrl,
-            [new PageLinkSnapshot(raceListUrl, "9月5日 中山")]);
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
         browser.SetLinks(
             raceListUrl,
@@ -254,9 +278,11 @@ public sealed class JraNavigatorTests
 
         var browser = new FakeWebBrowser();
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
-        browser.SetLinks(
-            CalendarUrl,
-            [new PageLinkSnapshot(raceListUrl, "9月5日 中山")]);
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
 
         var navigator = new JraNavigator(browser, CreateReader(browser));
@@ -267,18 +293,21 @@ public sealed class JraNavigatorTests
             () => navigator.ToRaceCardAsync(raceId));
     }
 
+    private const string ResultSelectionUrl = "https://www.jra.go.jp/JRADB/accessS.html";
+
     [TestMethod]
     public async Task ToRaceResultAsync_CurrentPeriod_NavigatesViaRaceResultTopAndReturnsRaceResultPage()
     {
-        const string resultTopUrl = "https://www.jra.go.jp/keiba/sample/result/";
-        const string dateResultsUrl = "https://www.jra.go.jp/keiba/sample/result/0905/";
         const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/11/";
 
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(KeibaTopUrl);
-        browser.SetLinks(KeibaTopUrl, [new PageLinkSnapshot(resultTopUrl, "レース結果")]);
-        browser.SetLinks(resultTopUrl, [new PageLinkSnapshot(dateResultsUrl, "9月5日 中山")]);
-        browser.SetLinks(dateResultsUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceResultUrl);
+        browser.SetLinks(raceResultUrl, [new PageLinkSnapshot(raceResultUrl, "11レース")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         var navigator = new JraNavigator(
@@ -298,17 +327,19 @@ public sealed class JraNavigatorTests
     [TestMethod]
     public async Task ToRaceResultAsync_RecentPeriod_NavigatesViaRecentResultsLinkAndReturnsRaceResultPage()
     {
-        const string resultTopUrl = "https://www.jra.go.jp/keiba/sample/result/";
-        const string recentResultsUrl = "https://www.jra.go.jp/keiba/sample/result/recent/";
-        const string dateResultsUrl = "https://www.jra.go.jp/keiba/sample/result/recent/0905/";
         const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/result/recent/0905/11/";
 
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(KeibaTopUrl);
-        browser.SetLinks(KeibaTopUrl, [new PageLinkSnapshot(resultTopUrl, "レース結果")]);
-        browser.SetLinks(resultTopUrl, [new PageLinkSnapshot(recentResultsUrl, "過去のレース結果")]);
-        browser.SetLinks(recentResultsUrl, [new PageLinkSnapshot(dateResultsUrl, "9月5日 中山")]);
-        browser.SetLinks(dateResultsUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        // Task16実サイト確認で判明: 「過去のレース結果」は見出しでありクリック不可。
+        // 現在開催・直近開催とも同一の開催選択ページに開催ボタンが並ぶため、
+        // Currentと全く同じ遷移で到達できる。
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceResultUrl);
+        browser.SetLinks(raceResultUrl, [new PageLinkSnapshot(raceResultUrl, "11レース")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         // 現在から57日前 (現在開催週の範囲外・最近の過去開催の範囲内)。
@@ -335,7 +366,11 @@ public sealed class JraNavigatorTests
 
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(KeibaTopUrl);
-        browser.SetLinks(KeibaTopUrl, [new PageLinkSnapshot(searchUrl, "過去レース結果検索")]);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
         browser.SetSubmitDestination(searchResultUrl);
         browser.SetLinks(searchResultUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));

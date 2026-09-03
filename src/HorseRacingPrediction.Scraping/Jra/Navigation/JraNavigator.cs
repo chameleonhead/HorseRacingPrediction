@@ -1,4 +1,5 @@
-﻿using HorseRacingPrediction.Scraping.Browser;
+﻿using System.Text.RegularExpressions;
+using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
@@ -252,22 +253,16 @@ public sealed class JraNavigator
             "JRA navigation start. Destination=HistoricalRaceSearch CurrentUrl={CurrentUrl}",
             _browser.CurrentUrl);
 
-        if (!await TryNavigateByLinkAsync(
-                JraNavigationLinks.HistoricalRaceSearch,
-                cancellationToken))
-        {
-            await _browser.NavigateAsync(
-                JraUrls.KeibaTop,
-                cancellationToken);
-
-            if (!await TryNavigateByLinkAsync(
-                    JraNavigationLinks.HistoricalRaceSearch,
-                    cancellationToken))
-            {
-                throw new JraNavigationException(
-                    "過去レース結果検索ページへ遷移できませんでした。");
-            }
-        }
+        // Task16実サイト確認で判明: 競馬メニュー配下の主要項目（出馬表・レース結果等）は
+        // href を持つ通常のリンクではなくクリックで遷移するJS要素であるため、
+        // GetLinksAsync によるURL探索ではなく ClickAsync を使う必要がある。
+        // 「過去レース結果検索」も同じメニュー階層に表示されるボタンであり、同様の
+        // 前提で ClickAsync に切り替えた（このボタン自体からの遷移先ページ構造・
+        // フォーム項目名は本タスクでは実サイトに対して未検証）。
+        await NavigateToRaceResultTopAsync(cancellationToken);
+        await _browser.ClickAsync(
+            JraNavigationLinks.HistoricalRaceSearch[0],
+            cancellationToken);
 
         var page =
             await _pageReader.ReadAsync(
@@ -282,41 +277,36 @@ public sealed class JraNavigator
     }
 
     /// <summary>
-    /// 「現在開催週」とみなす期間。実サイト確認前の暫定値であり、レース日が
-    /// 今日から前後3日以内であれば現在開催中とみなす。実ページ確認後に固定する。
+    /// 「現在開催週」とみなす期間。レース日が今日から前後3日以内であれば
+    /// 現在開催中とみなす（暫定値）。
     ///
     /// Task 16（実サイトE2Eテスト、2026-09-04実施）で判明した事項:
-    /// このしきい値そのものより手前の <see cref="NavigateToRaceDateCourseAsync"/> の
-    /// 前提が実サイトと合っていない。/keiba/calendar/ の開催日程ページは各週・各競馬場への
-    /// クリック可能なリンクを一切含まない（開催日と競馬場名が並ぶ静的なテキスト/表のみ）。
-    /// 実際に日付・競馬場を選んでレース一覧へ辿り着く導線は、競馬メニューの「出馬表」
-    /// 「レース結果」からJS遷移する /JRADB/accessD.html・accessS.html の「開催選択」
-    /// ページ側にあり、そこでは当該週の重賞・特別レースのみが個別レースへの直接リンクとして
-    /// 列挙され、開催日は見出し（タブ/アコーディオンの可能性）として表示されるのみで、
-    /// 「日付+競馬場」というテキストの組み合わせでリンクを検索する現行実装の前提
-    /// （<see cref="NavigateToRaceDateCourseAsync"/>）とは根本的に構造が異なる。
-    /// 正しい導線を確立するには開催選択ページのタブ/アコーディオン操作を別途調査する必要が
-    /// あり、本タスクの範囲では確定できなかったため、挙動を推測で書き換えることはせず、
-    /// 判明した事実のみをここに記録する（現在週RaceList/RaceCard取得のE2Eテストは
-    /// この導線不一致により実サイトに対して失敗する）。
+    /// 実サイトでは「現在開催」と「直近の過去開催」は同一の「レース結果 開催選択」
+    /// ページ（/JRADB/accessS.html）内に、開催回・競馬場・開催日番号のボタン
+    /// （例：「4回中山1日」）として一緒に列挙されている。ページ内に別タブ・別リンクは
+    /// 存在しないため、Current/Recentのどちらであっても遷移方法は同一であり、
+    /// このしきい値は「同じページに載っている範囲かどうか」の目安に過ぎない
+    /// （ページに載っていない古い開催は <see cref="ToHistoricalRaceResultAsync"/> の
+    /// 「過去レース結果検索」フォームへフォールバックする）。
     /// </summary>
     private bool IsCurrentRacePeriod(DateOnly raceDate)
         => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 3;
 
     /// <summary>
-    /// 「最近の過去開催」とみなす期間。実サイト確認前の暫定値であり、
-    /// 今日からおよそ3ヶ月（92日）以内であれば「最近」とみなす。実ページ確認後に固定する。
+    /// 「最近の過去開催」とみなす期間。今日からおよそ3ヶ月（92日）以内であれば
+    /// 「最近」とみなす（暫定値）。
     ///
     /// Task 16（実サイトE2Eテスト、2026-09-04実施）で判明した事項:
-    /// <see cref="JraNavigationLinks.RecentRaceResults"/>（"過去のレース結果"）のリンクは
-    /// 実際の /JRADB/accessS.html（レース結果 開催選択）ページ上にクリック可能な要素として
-    /// 存在しないことを確認した（IWebBrowser.ClickAsync が要素未検出の例外を送出）。
-    /// 同ページは直近の重賞・特別レースへの直接リンクと、"8月23日 （日曜）" のような
-    /// 過去開催日の見出しを列挙する構造であり、正しい「最近の過去開催」への導線は
-    /// この見出し（タブ等）経由である可能性が高いが、本タスクの範囲では確定できなかった。
-    /// このため <see cref="ToRecentRaceResultAsync"/> は実サイトに対して確実に失敗する
-    /// （<see cref="JraNavigationException"/>）。しきい値の日数自体が正しいかも未検証であり、
-    /// 併せて要フォローアップ。
+    /// 「過去のレース結果」は実サイト上ではクリック可能なリンク/ボタンではなく、
+    /// 「レース結果 開催選択」ページ内の一区画を示す見出しに過ぎない。同じページ内に
+    /// 直近8週間以上の開催日ボタンがそのまま列挙されており、追加のクリック操作なしで
+    /// 対象日・競馬場のボタンへ直接遷移できることを実サイトで確認した。
+    /// そのため <see cref="ToCurrentRaceResultAsync"/> と <see cref="ToRecentRaceResultAsync"/>
+    /// は同一の <see cref="ClickMeetingButtonAsync"/> 呼び出しに帰着する。
+    /// 92日というしきい値そのものが実際のページ掲載期間と一致しているかは未検証であり、
+    /// 掲載範囲を超える古い開催日は <see cref="ToHistoricalRaceResultAsync"/>
+    /// （過去レース結果検索フォーム）へのフォールバックが必要になるが、このフォーム経路は
+    /// 本タスクでは実サイトに対して検証できていない（要フォローアップ）。
     /// </summary>
     private bool IsRecentRacePeriod(DateOnly raceDate)
         => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 92;
@@ -325,10 +315,10 @@ public sealed class JraNavigator
         RaceId race,
         CancellationToken cancellationToken)
     {
-        // 競馬トップ → レース結果 → 対象日・競馬場 → 対象R
+        // 競馬トップ → レース結果 → 対象日・競馬場（開催選択ボタン） → 対象R
         await NavigateToRaceResultTopAsync(cancellationToken);
 
-        await NavigateToRaceDateCourseAsync(
+        await ClickMeetingButtonAsync(
             race.Date,
             race.Course,
             cancellationToken);
@@ -345,18 +335,13 @@ public sealed class JraNavigator
         RaceId race,
         CancellationToken cancellationToken)
     {
-        // 競馬トップ → レース結果 → 過去のレース結果 → 対象日・競馬場 → 対象R
+        // 実サイト確認の結果、「過去のレース結果」はページ内の見出しであり
+        // クリック可能なリンクではない。現在開催・直近開催とも同一の
+        // 「レース結果 開催選択」ページに開催ボタンが並ぶため、Currentと全く同じ
+        // 遷移で到達できる（Task16実サイト確認で判明）。
         await NavigateToRaceResultTopAsync(cancellationToken);
 
-        if (!await TryNavigateByLinkAsync(
-                JraNavigationLinks.RecentRaceResults,
-                cancellationToken))
-        {
-            throw new JraNavigationException(
-                "過去のレース結果ページへ遷移できませんでした。");
-        }
-
-        await NavigateToRaceDateCourseAsync(
+        await ClickMeetingButtonAsync(
             race.Date,
             race.Course,
             cancellationToken);
@@ -410,22 +395,16 @@ public sealed class JraNavigator
     private async Task NavigateToRaceResultTopAsync(
         CancellationToken cancellationToken)
     {
-        if (!await TryNavigateByLinkAsync(
-                JraNavigationLinks.RaceResult,
-                cancellationToken))
-        {
-            await _browser.NavigateAsync(
-                JraUrls.KeibaTop,
-                cancellationToken);
+        // Task16実サイト確認で判明: 競馬メニューの「レース結果」はhrefを持つ通常の
+        // リンクではなく、クリックで遷移するJS要素（同一URL上でPOSTしたかのように
+        // 内容が切り替わる）。GetLinksAsync では検出できないため ClickAsync を使う。
+        await _browser.NavigateAsync(
+            JraUrls.KeibaTop,
+            cancellationToken);
 
-            if (!await TryNavigateByLinkAsync(
-                    JraNavigationLinks.RaceResult,
-                    cancellationToken))
-            {
-                throw new JraNavigationException(
-                    "レース結果ページへ遷移できませんでした。");
-            }
-        }
+        await _browser.ClickAsync(
+            JraNavigationLinks.RaceResult[0],
+            cancellationToken);
     }
 
     private async Task<bool> TryNavigateByLinkAsync(
@@ -510,7 +489,45 @@ public sealed class JraNavigator
             cancellationToken);
     }
 
+    /// <summary>
+    /// 「出馬表」メニューから開催選択ページを経由して、対象日・競馬場のレース一覧
+    /// （出馬表 レース選択ページ）へ遷移する。
+    ///
+    /// Task16実サイト確認で判明: /keiba/calendar/ の開催日程ページはテーブルセルが
+    /// プレーンテキストのみで、日付・競馬場からリンクを辿ることは一切できない
+    /// （カレンダーは「その日・競馬場が開催されているか」を確認する用途のみに使う）。
+    /// 実際にレース一覧へ辿り着く導線は、競馬メニューの「出馬表」からクリック遷移する
+    /// 「出馬表 開催選択」ページ（/JRADB/accessD.html）上の、開催回・競馬場・開催日番号を
+    /// 表すボタン（例：「4回中山1日」）であり、これらもhrefを持たないJS要素である。
+    /// </summary>
     private async Task NavigateToRaceDateCourseAsync(
+        DateOnly date,
+        RaceCourse course,
+        CancellationToken cancellationToken)
+    {
+        await _browser.NavigateAsync(
+            JraUrls.KeibaTop,
+            cancellationToken);
+
+        await _browser.ClickAsync(
+            JraNavigationLinks.RaceCard[0],
+            cancellationToken);
+
+        await ClickMeetingButtonAsync(
+            date,
+            course,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 「出馬表 開催選択」または「レース結果 開催選択」ページ上で、対象日・競馬場に
+    /// 対応する開催ボタン（例：「4回中山1日」）を探してクリックする。
+    /// ボタンはhrefを持たず、日付見出し（例：「9月5日（土曜）」）の直後に開催回・
+    /// 競馬場・開催日番号のテキストが並ぶ形式のため、ページ本文のテキストから
+    /// 該当ボタンの文字列そのものを特定し、その文字列で ClickAsync する
+    /// （Task16実サイト確認で判明）。
+    /// </summary>
+    private async Task ClickMeetingButtonAsync(
         DateOnly date,
         RaceCourse course,
         CancellationToken cancellationToken)
@@ -518,37 +535,66 @@ public sealed class JraNavigator
         var courseName =
             RaceCourseName(course);
 
-        var links =
-            await _browser.GetLinksAsync(
+        var snapshot =
+            await _browser.GetPageSnapshotAsync(
                 cancellationToken: cancellationToken);
 
-        var dayMarkers = new[]
-        {
-            $"{date.Day}日",
-            $"{date.Month}/{date.Day}",
-            date.ToString("yyyy-MM-dd"),
-        };
+        var buttonText =
+            FindMeetingButtonText(snapshot.MainText, date, courseName);
 
-        var target =
-            links.FirstOrDefault(x =>
-                x.Title.Contains(courseName, StringComparison.Ordinal) &&
-                dayMarkers.Any(marker =>
-                    x.Title.Contains(marker, StringComparison.Ordinal)));
-
-        if (target is null)
+        if (buttonText is null)
         {
             throw new JraNavigationException(
-                $"{date:yyyy-MM-dd} {course} のレース一覧リンクが見つかりませんでした。");
+                $"{date:yyyy-MM-dd} {course} の開催選択ボタンが見つかりませんでした。");
         }
 
-        var url =
-            ResolveUrl(_browser.CurrentUrl, target.Url)
-            ?? throw new JraNavigationException(
-                $"URLを解決できません: {target.Url}");
-
-        await _browser.NavigateAsync(
-            url,
+        await _browser.ClickAsync(
+            buttonText,
             cancellationToken);
+    }
+
+    private static readonly Regex DateHeaderRegex =
+        new(@"\d{1,2}月\d{1,2}日", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 「開催選択」ページ本文テキストから、対象日の見出し直後～次の日付見出しまでの
+    /// 範囲を切り出し、その中から「n回{競馬場名}m日」形式の開催ボタン文字列を探す。
+    /// </summary>
+    internal static string? FindMeetingButtonText(
+        string mainText,
+        DateOnly date,
+        string courseName)
+    {
+        var dateMarker =
+            $"{date.Month}月{date.Day}日";
+
+        var startIndex =
+            mainText.IndexOf(dateMarker, StringComparison.Ordinal);
+
+        if (startIndex < 0)
+        {
+            return null;
+        }
+
+        var searchStart =
+            startIndex + dateMarker.Length;
+
+        var nextDateMatch =
+            DateHeaderRegex.Match(mainText, searchStart);
+
+        var endIndex =
+            nextDateMatch.Success ? nextDateMatch.Index : mainText.Length;
+
+        var segment =
+            mainText[searchStart..endIndex];
+
+        var buttonRegex =
+            new Regex($@"\d+回{Regex.Escape(courseName)}\d+日");
+
+        var match =
+            buttonRegex.Match(segment);
+
+        return match.Success ? match.Value : null;
     }
 
     private async Task NavigateRaceNumberLinkAsync(

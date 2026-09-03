@@ -16,8 +16,10 @@ internal sealed class RaceResultPageParser
     private static readonly Regex DateRegex =
         new(@"(?<year>\d{4})年\s*(?<month>\d{1,2})月\s*(?<day>\d{1,2})日", RegexOptions.Compiled);
 
+    // Task16実サイト確認で判明: 実ページの見出しは「1レース」のように「R」ではなく
+    // 「レース」表記であり、旧正規表現（digit+"R"）は常にマッチしなかった。
     private static readonly Regex RaceNumberRegex =
-        new(@"(?<num>\d{1,2})\s*R", RegexOptions.Compiled);
+        new(@"(?<num>\d{1,2})\s*(?:R|レース)", RegexOptions.Compiled);
 
     private static readonly Regex LeadingNumberRegex =
         new(@"(?<num>\d{1,2})", RegexOptions.Compiled);
@@ -113,7 +115,9 @@ internal sealed class RaceResultPageParser
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (headers[i].Contains("馬番", StringComparison.Ordinal))
+            // Task16実サイト確認で判明: 実ページのヘッダーはセル内改行により
+            // 「馬 番」のように空白入りで取得される。空白を除去して比較する。
+            if (RemoveWhitespace(headers[i]).Contains("馬番", StringComparison.Ordinal))
             {
                 return i;
             }
@@ -121,6 +125,9 @@ internal sealed class RaceResultPageParser
 
         return -1;
     }
+
+    private static string RemoveWhitespace(string value)
+        => string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
 
     private static int FindHorseNameColumnIndex(
         IReadOnlyList<string> headers)
@@ -259,6 +266,15 @@ internal sealed class RaceResultPageParser
 
         foreach (var row in table.Rows)
         {
+            // Task16実サイト確認で判明: 抽出したテーブルの1行目にヘッダー行自体が
+            // 重複して含まれることがある。見出し文字列をレース結果として扱わない
+            // よう読み飛ばす。
+            if (row.Count > 0 && table.Headers.Count > 0 &&
+                string.Equals(row[0], table.Headers[0], StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             if (finishIndex >= row.Count ||
                 horseNumberIndex >= row.Count ||
                 horseNameIndex >= row.Count)

@@ -15,25 +15,28 @@ namespace HorseRacingPrediction.Scraping.Tests.Jra;
 ///   dotnet test tests/HorseRacingPrediction.Scraping.Tests --filter TestCategory=External
 ///
 /// Task 16（2026-09-04実施）の結果:
-/// 現在月Calendar取得のみ実サイトに対して成功する。現在週RaceList取得/現在週RaceCard取得/
-/// 完了済みRaceResult取得は、いずれも <see cref="JraNavigator"/> が
-/// /keiba/calendar/ の開催日程ページに「日付+競馬場」のクリック可能リンクが存在する
-/// ことを前提にしているのに対し、実際の同ページは静的なテキスト/表のみで遷移リンクを
-/// 一切持たないため、JraNavigationException で失敗する（詳細は
-/// <see cref="JraNavigator.IsCurrentRacePeriod"/> のコメントを参照）。
-/// これは Task 1-15 の暫定実装がキャッチした、まさに Task 16 で見つけるべき
-/// 前提の誤りである。正しい導線（出馬表/レース結果メニュー経由の
-/// /JRADB/accessD.html・accessS.html 側のタブ/アコーディオン操作）の実装は
-/// 本タスクの範囲を超えるため、ここでは意図的に修正せず、失敗する形のまま残している。
-/// 同様の理由で「最近のRaceResult取得」「古いRaceResult取得」のテストケースは
-/// 実サイト上の正しい導線を確認できなかったため実装していない
-/// （<see cref="JraNavigator.IsRecentRacePeriod"/> のコメントを参照）。
+/// 実サイトを実際に操作して調査した結果、Task1-15が前提としていたナビゲーション構造は
+/// 大きく実態と異なっていた。/keiba/calendar/ の開催日程ページはテーブルセルが
+/// プレーンテキストのみでリンクを一切持たない（開催有無の確認専用）。実際にレース一覧へ
+/// 到達する導線は、競馬メニューの「出馬表」「レース結果」（いずれもhrefを持たないJS要素で
+/// ClickAsyncが必要）からクリック遷移する「開催選択」ページ上の、開催回・競馬場・開催日番号
+/// を表すボタン（例：「4回中山1日」、これもhrefなし）である。また「過去のレース結果」は
+/// クリック可能な要素ではなく、現在開催・直近開催（少なくとも8週間程度）は同一の
+/// 「レース結果 開催選択」ページに同居している。<see cref="JraNavigator"/> をこの実際の
+/// 構造に合わせて修正し、現在月Calendar取得・現在週RaceList取得・現在週RaceCard取得・
+/// 完了済みRaceResult取得の4ケースは実サイトに対して成功することを確認した。
+/// 「最近のRaceResult取得」は上記の通り「完了済みRaceResult取得」と同一の導線に帰着するため
+/// 別テストケースとしては追加していない。「古いRaceResult取得」（過去レース結果検索フォーム
+/// 経由、開催選択ページに載らない古い開催）は本タスクでは実サイトに対して検証できておらず、
+/// 未実装のままとした（<see cref="JraNavigator.IsRecentRacePeriod"/> のコメントを参照）。
 /// </summary>
 [TestClass]
 [TestCategory("External")]
 public sealed class JraSiteE2ETests
 {
-    private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(3);
+    // 出馬表・レース結果ページは血統・複数走前成績まで含む大きなテーブルを持ち、
+    // スナップショット抽出に時間がかかるため、他のケースより余裕を持たせている。
+    private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(5);
 
     private IWebBrowser _browser = null!;
     private JraSession _session = null!;
@@ -177,26 +180,23 @@ public sealed class JraSiteE2ETests
         // 見つからなければ前月のカレンダーへフォールバックする。
         var (raceDate, course) = await FindPastRaceDateAsync(today, cts.Token);
 
-        var raceListPage = await _session.Navigate.ToRaceListAsync(
-            raceDate,
-            course,
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraRaceListPage>(raceListPage);
-        var raceList = (JraRaceListPage)raceListPage;
-        Assert.IsTrue(raceList.Races.Count > 0, $"{raceDate:yyyy-MM-dd} {course} のレース一覧が空でした。");
-
-        var race = raceList.Races[0];
+        // Task16実サイト確認で判明: 「出馬表」導線（ToRaceListAsync）は
+        // 現在開催週のみを対象とし、終了済みの開催日は開催選択ボタンとして
+        // 列挙されない（「出馬表 開催選択」ページには当該週の日付しか表示されない）。
+        // そのため過去日程のレース一覧取得には出馬表導線を使わず、JRAのレースは
+        // 必ず1Rが存在するため、1Rを直接指定して「レース結果」導線
+        // （ToRaceResultAsync が内部で使う「レース結果 開催選択」ページ）を検証する。
+        var raceId = new RaceId(raceDate, course, 1);
 
         var resultPage = await _session.Navigate.ToRaceResultAsync(
-            race.Id,
+            raceId,
             cts.Token);
 
         Assert.IsInstanceOfType<JraRaceResultPage>(resultPage);
         var result = (JraRaceResultPage)resultPage;
 
-        Assert.AreEqual(race.Id, result.RaceId);
-        Assert.IsTrue(result.Results.Count > 0, $"{race.Id} のレース結果が空でした。");
+        Assert.AreEqual(raceId, result.RaceId);
+        Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
     }
 
     private async Task<(DateOnly Date, RaceCourse Course)> FindPastRaceDateAsync(

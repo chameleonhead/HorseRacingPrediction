@@ -16,8 +16,10 @@ internal sealed class RaceCardPageParser
     private static readonly Regex DateRegex =
         new(@"(?<year>\d{4})年\s*(?<month>\d{1,2})月\s*(?<day>\d{1,2})日", RegexOptions.Compiled);
 
+    // Task16実サイト確認で判明: 実ページの見出しは「1レース」のように「R」ではなく
+    // 「レース」表記であり、旧正規表現（digit+"R"）は常にマッチしなかった。
     private static readonly Regex RaceNumberRegex =
-        new(@"(?<num>\d{1,2})\s*R", RegexOptions.Compiled);
+        new(@"(?<num>\d{1,2})\s*(?:R|レース)", RegexOptions.Compiled);
 
     private static readonly Regex TimeRegex =
         new(@"(?<hour>\d{1,2}):(?<minute>\d{2})", RegexOptions.Compiled);
@@ -167,7 +169,10 @@ internal sealed class RaceCardPageParser
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (headers[i].Contains("斤量", StringComparison.Ordinal))
+            // Task16実サイト確認で判明: 出馬表テーブルには「斤量」単独の列は無く、
+            // 「性齢/毛色 負担重量 騎手名」という結合列に含まれる（「負担重量」表記）。
+            if (headers[i].Contains("斤量", StringComparison.Ordinal) ||
+                headers[i].Contains("負担重量", StringComparison.Ordinal))
             {
                 return i;
             }
@@ -287,24 +292,17 @@ internal sealed class RaceCardPageParser
         var assignedWeightIndex = FindAssignedWeightColumnIndex(table.Headers);
 
         var entries = new List<RaceEntry>();
+        var sequentialNumber = 0;
 
         foreach (var row in table.Rows)
         {
-            if (horseNumberIndex >= row.Count)
+            // Task16実サイト確認で判明: 抽出したテーブルの1行目にヘッダー行自体が
+            // 重複して含まれることがある（rowspanの影響と見られる）。そのまま
+            // 見出し文字列を1頭目として扱わないよう読み飛ばす。
+            if (IsHeaderRow(row, table.Headers))
             {
                 continue;
             }
-
-            var numberMatch =
-                LeadingNumberRegex.Match(row[horseNumberIndex]);
-
-            if (!numberMatch.Success)
-            {
-                continue;
-            }
-
-            var horseNumber =
-                int.Parse(numberMatch.Groups["num"].Value);
 
             if (horseNameIndex < 0 || horseNameIndex >= row.Count ||
                 string.IsNullOrWhiteSpace(row[horseNameIndex]))
@@ -312,7 +310,36 @@ internal sealed class RaceCardPageParser
                 continue;
             }
 
-            var horseName = row[horseNameIndex];
+            // Task16実サイト確認で判明: 実ページの馬名セルは
+            // 「馬名 調教師名(所属) 父：… 母：…」が1セルに結合されている
+            // （馬名 調教師名 血統 という結合ヘッダーの通り）。カタカナの馬名には
+            // 空白を含まないため、先頭の空白より前を馬名として切り出す。
+            var horseName =
+                row[horseNameIndex].Split(' ', 2)[0].Trim();
+
+            if (string.IsNullOrWhiteSpace(horseName))
+            {
+                continue;
+            }
+
+            // Task16実サイト確認で判明: 枠・馬番のセルは色付きアイコン画像で
+            // 描画されており、テキスト抽出結果が空になる（レース結果ページの
+            // 「枠6緑」のようなテキスト表現とは異なる）。空の場合は出現順の
+            // 連番を暫定的な馬番として使う。
+            sequentialNumber++;
+
+            var horseNumber = sequentialNumber;
+
+            if (horseNumberIndex >= 0 && horseNumberIndex < row.Count)
+            {
+                var numberMatch =
+                    LeadingNumberRegex.Match(row[horseNumberIndex]);
+
+                if (numberMatch.Success)
+                {
+                    horseNumber = int.Parse(numberMatch.Groups["num"].Value);
+                }
+            }
 
             int? frameNumber = null;
 
@@ -328,8 +355,8 @@ internal sealed class RaceCardPageParser
             }
 
             var jockeyName =
-                jockeyIndex >= 0 && jockeyIndex < row.Count && !string.IsNullOrWhiteSpace(row[jockeyIndex])
-                    ? row[jockeyIndex]
+                jockeyIndex >= 0 && jockeyIndex < row.Count
+                    ? ExtractJockeyName(row[jockeyIndex])
                     : null;
 
             decimal? assignedWeight = null;
@@ -354,5 +381,36 @@ internal sealed class RaceCardPageParser
         }
 
         return entries;
+    }
+
+    private static bool IsHeaderRow(
+        IReadOnlyList<string> row,
+        IReadOnlyList<string> headers)
+        => row.Count > 0 && headers.Count > 0 &&
+           string.Equals(row[0], headers[0], StringComparison.Ordinal);
+
+    /// <summary>
+    /// 「性齢/毛色 負担重量 騎手名」のように結合されたセルから騎手名だけを取り出す。
+    /// 実ページでは "牡4/栗 58.0kg △坂口 智康" のように、体重を表す "kg" の直後に
+    /// 手綱を示す記号（減量マーク）と騎手名が続く（Task16実サイト確認で判明）。
+    /// </summary>
+    private static string? ExtractJockeyName(string cell)
+    {
+        if (string.IsNullOrWhiteSpace(cell))
+        {
+            return null;
+        }
+
+        var kgIndex =
+            cell.IndexOf("kg", StringComparison.OrdinalIgnoreCase);
+
+        var rest =
+            kgIndex >= 0
+                ? cell[(kgIndex + 2)..]
+                : cell;
+
+        rest = rest.Trim().TrimStart('△', '▲', '☆', '★', '◇', '▽').Trim();
+
+        return string.IsNullOrWhiteSpace(rest) ? null : rest;
     }
 }

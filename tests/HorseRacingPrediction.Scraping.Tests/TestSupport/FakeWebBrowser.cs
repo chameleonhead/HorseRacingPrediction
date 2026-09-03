@@ -11,6 +11,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
     private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new();
     private readonly Dictionary<string, List<PageLinkSnapshot>> _linksByUrl = new();
     private readonly Dictionary<string, List<PageFormSnapshot>> _formsByUrl = new();
+    private readonly Dictionary<string, string> _clickDestinationsByText = new();
 
     /// <summary>
     /// SubmitFormAsyncが呼ばれた際に遷移する先のURL。テストで事前に設定する。
@@ -41,6 +42,16 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
     public void SetForms(string url, IEnumerable<PageFormSnapshot> forms)
         => _formsByUrl[url] = forms.ToList();
+
+    /// <summary>
+    /// ClickAsyncでtextが指定された際に遷移する先のURLを設定する。
+    /// 実サイトのメニュー項目・開催選択ボタンはhrefを持たないJS要素のため、
+    /// ナビゲーターはリンク探索ではなくClickAsyncで遷移する（Task16実サイト確認で判明）。
+    /// </summary>
+    public void SetClickDestination(string text, string url)
+        => _clickDestinationsByText[text] = url;
+
+    public List<string> ClickedTexts { get; } = [];
 
     /// <summary>
     /// SubmitFormAsync呼び出し後に遷移する先のURLを設定する。
@@ -84,7 +95,18 @@ internal sealed class FakeWebBrowser : IWebBrowser
     }
 
     public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        ClickedTexts.Add(text);
+
+        if (_clickDestinationsByText.TryGetValue(text, out var url))
+        {
+            CurrentUrl = url;
+            NavigatedUrls.Add(url);
+            return Task.FromResult(string.Empty);
+        }
+
+        throw new InvalidOperationException($"No click destination configured for text: {text}");
+    }
 
     public Task<string> SelectOptionAsync(
         string fieldText,
