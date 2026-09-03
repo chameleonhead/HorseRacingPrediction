@@ -1,10 +1,9 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Scraping.JraNavigation;
 
@@ -16,7 +15,8 @@ internal sealed class JraRaceCardUrlDiscoverer
 {
     private const string KeibaMenuUrl = "https://www.jra.go.jp/keiba/";
     private const string ThisWeekUrl = "https://www.jra.go.jp/keiba/thisweek/";
-    private static readonly TimeSpan DiscoveryStepTimeout = TimeSpan.FromSeconds(15);
+    // TODO: なぜ15秒だったのか確認する
+    private static readonly TimeSpan DiscoveryStepTimeout = TimeSpan.FromSeconds(120);
 
     private static readonly Regex MeetingLinkDateRegex = new(@"20\d{6}", RegexOptions.Compiled);
     private static readonly Regex RaceNumberRegex = new(@"(?<number>\d{1,2})R", RegexOptions.Compiled | RegexOptions.IgnoreCase);
