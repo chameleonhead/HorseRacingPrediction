@@ -20,6 +20,26 @@ internal static class RaceCourseNames
         ("小倉", RaceCourse.Kokura),
     ];
 
+    /// <summary>
+    /// <see cref="RaceCourse"/> から、JRAサイト上の日本語表記へ変換する。
+    /// <see cref="RaceCourse.Unknown"/> は永続化・遷移に使えないため例外にする。
+    /// </summary>
+    public static string GetJraName(RaceCourse course)
+    {
+        foreach (var (name, candidate) in Entries)
+        {
+            if (candidate == course)
+            {
+                return name;
+            }
+        }
+
+        throw new ArgumentOutOfRangeException(
+            nameof(course),
+            course,
+            "対応するJRA表記がありません。");
+    }
+
     public static RaceCourse Parse(string text)
     {
         foreach (var (name, course) in Entries)

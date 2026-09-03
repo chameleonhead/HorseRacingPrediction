@@ -34,4 +34,27 @@ public sealed class RaceCourseNamesTests
 
         Assert.AreEqual(0, result.Count);
     }
+
+    [TestMethod]
+    [DataRow(RaceCourse.Sapporo, "札幌")]
+    [DataRow(RaceCourse.Hakodate, "函館")]
+    [DataRow(RaceCourse.Fukushima, "福島")]
+    [DataRow(RaceCourse.Niigata, "新潟")]
+    [DataRow(RaceCourse.Tokyo, "東京")]
+    [DataRow(RaceCourse.Nakayama, "中山")]
+    [DataRow(RaceCourse.Chukyo, "中京")]
+    [DataRow(RaceCourse.Kyoto, "京都")]
+    [DataRow(RaceCourse.Hanshin, "阪神")]
+    [DataRow(RaceCourse.Kokura, "小倉")]
+    public void GetJraName_ReturnsExpectedName(RaceCourse course, string expected)
+    {
+        Assert.AreEqual(expected, RaceCourseNames.GetJraName(course));
+    }
+
+    [TestMethod]
+    public void GetJraName_Unknown_Throws()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+            () => RaceCourseNames.GetJraName(RaceCourse.Unknown));
+    }
 }
