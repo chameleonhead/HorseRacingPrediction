@@ -284,6 +284,21 @@ public sealed class JraNavigator
     /// <summary>
     /// 「現在開催週」とみなす期間。実サイト確認前の暫定値であり、レース日が
     /// 今日から前後3日以内であれば現在開催中とみなす。実ページ確認後に固定する。
+    ///
+    /// Task 16（実サイトE2Eテスト、2026-09-04実施）で判明した事項:
+    /// このしきい値そのものより手前の <see cref="NavigateToRaceDateCourseAsync"/> の
+    /// 前提が実サイトと合っていない。/keiba/calendar/ の開催日程ページは各週・各競馬場への
+    /// クリック可能なリンクを一切含まない（開催日と競馬場名が並ぶ静的なテキスト/表のみ）。
+    /// 実際に日付・競馬場を選んでレース一覧へ辿り着く導線は、競馬メニューの「出馬表」
+    /// 「レース結果」からJS遷移する /JRADB/accessD.html・accessS.html の「開催選択」
+    /// ページ側にあり、そこでは当該週の重賞・特別レースのみが個別レースへの直接リンクとして
+    /// 列挙され、開催日は見出し（タブ/アコーディオンの可能性）として表示されるのみで、
+    /// 「日付+競馬場」というテキストの組み合わせでリンクを検索する現行実装の前提
+    /// （<see cref="NavigateToRaceDateCourseAsync"/>）とは根本的に構造が異なる。
+    /// 正しい導線を確立するには開催選択ページのタブ/アコーディオン操作を別途調査する必要が
+    /// あり、本タスクの範囲では確定できなかったため、挙動を推測で書き換えることはせず、
+    /// 判明した事実のみをここに記録する（現在週RaceList/RaceCard取得のE2Eテストは
+    /// この導線不一致により実サイトに対して失敗する）。
     /// </summary>
     private bool IsCurrentRacePeriod(DateOnly raceDate)
         => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 3;
@@ -291,6 +306,17 @@ public sealed class JraNavigator
     /// <summary>
     /// 「最近の過去開催」とみなす期間。実サイト確認前の暫定値であり、
     /// 今日からおよそ3ヶ月（92日）以内であれば「最近」とみなす。実ページ確認後に固定する。
+    ///
+    /// Task 16（実サイトE2Eテスト、2026-09-04実施）で判明した事項:
+    /// <see cref="JraNavigationLinks.RecentRaceResults"/>（"過去のレース結果"）のリンクは
+    /// 実際の /JRADB/accessS.html（レース結果 開催選択）ページ上にクリック可能な要素として
+    /// 存在しないことを確認した（IWebBrowser.ClickAsync が要素未検出の例外を送出）。
+    /// 同ページは直近の重賞・特別レースへの直接リンクと、"8月23日 （日曜）" のような
+    /// 過去開催日の見出しを列挙する構造であり、正しい「最近の過去開催」への導線は
+    /// この見出し（タブ等）経由である可能性が高いが、本タスクの範囲では確定できなかった。
+    /// このため <see cref="ToRecentRaceResultAsync"/> は実サイトに対して確実に失敗する
+    /// （<see cref="JraNavigationException"/>）。しきい値の日数自体が正しいかも未検証であり、
+    /// 併せて要フォローアップ。
     /// </summary>
     private bool IsRecentRacePeriod(DateOnly raceDate)
         => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 92;
