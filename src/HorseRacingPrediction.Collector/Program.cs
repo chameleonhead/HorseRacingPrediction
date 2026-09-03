@@ -1,12 +1,12 @@
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Scheduling;
-using HorseRacingPrediction.Collector.JraTesting;
-using HorseRacingPrediction.Collector.Web.Components;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Workflow;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = Host.CreateApplicationBuilder(args);
 var runOnce = args.Contains("--once", StringComparer.OrdinalIgnoreCase);
 
 builder.Services.Configure<ApiClientOptions>(
@@ -24,23 +24,15 @@ builder.Services.AddSingleton<IWebBrowserSessionFactory, PlaywrightWebBrowserSes
 builder.Services.AddJraRaceScheduleCollectionWorkflow();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
-if (builder.Configuration.GetValue<bool>($"{AgentProcessingOptions.SectionName}:UseApiStateStore", true))
-{
-    builder.Services.AddHttpClient("ProcessingState", (services, client) =>
+builder.Services.AddHttpClient("ProcessingState", (services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     });
-    builder.Services.AddSingleton<IProcessingStateStore>(services =>
+builder.Services.AddSingleton<IProcessingStateStore>(services =>
         HttpProcessingStateStoreProxy.Create(
-            services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));
-}
-else
-{
-    builder.Services.AddSingleton<ProcessingStateStore>();
-    builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
-}
+    services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));
 builder.Services.AddSingleton<JraResultDateParser>();
 builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
 builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, JraHistoricalRaceReferenceCollector>();
@@ -61,29 +53,7 @@ if (!runOnce)
     builder.Services.AddHostedService<LocalCollectionTaskWorkerService>();
 }
 
-// -------------------------------------------------------------------
-// JRA 抽出デバッグツール
-// -------------------------------------------------------------------
-builder.Services.AddSingleton<JraJsonExtractionService>();
-
-// -------------------------------------------------------------------
-// 収集状況ダッシュボード（Blazor Server）
-// -------------------------------------------------------------------
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
 var app = builder.Build();
-
-app.UseStaticFiles();
-app.UseAntiforgery();
-
-app.MapAgentDashboardEndpoints();
-app.MapAgentCollectionStatusEndpoints();
-app.MapAgentAcquisitionStatusEndpoints();
-app.MapJraJsonTesterEndpoints();
-
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
 
 if (runOnce)
 {

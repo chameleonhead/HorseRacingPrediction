@@ -1,65 +1,68 @@
 @page "/jockeys"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
 
-<h1>騎手検索</h1>
-<div class="toolbar">
-    <label>キーワード: <input @bind="query" placeholder="騎手名 / ID" /></label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
-</div>
+<RaceOpsPageHeader Section="データ" Title="騎手" Description="所属と騎乗履歴を確認します。" />
+
+<FluentCard class="filter-card">
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="騎手名を検索" @bind-Value="query" Placeholder="騎手名を検索" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="所属" @bind-Value="affiliationCode" Placeholder="所属" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
+    </div>
+</FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="騎手を読み込んでいます" /> }
 else if (result is null || result.Items.Count == 0) { <UiState Title="該当する騎手はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="object-list">
+    <RaceOpsObjectList Label="騎手一覧">
         @foreach (var j in result.Items)
         {
-            <article class="object-row">
-                <div class="object-primary"><a href="@($"jockeys/{Uri.EscapeDataString(j.JockeyId)}")">@j.DisplayName</a><span class="hint">@j.JockeyId</span></div>
-                <div><span class="object-label">所属</span>@(j.AffiliationCode ?? "—")</div>
-                <div><span class="object-label">別名</span>@j.AliasCount 件</div>
-            </article>
+            <RaceOpsObjectListItem Href="@JockeyUrl(j.JockeyId)" Title="@j.DisplayName" Description="@JockeyMetadata(j)" />
         }
-    </div>
-    <div class="toolbar">
-        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
-        <span>@(page) / @result.TotalPages</span>
-        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
-    </div>
+    </RaceOpsObjectList>
+    <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
 @code {
     private string? query;
+    private string? affiliationCode;
     private int page = 1;
-    private int pageSize = 50;
+    private const int pageSize = 50;
     private bool loading;
     private PagedResponse<JockeySummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        loading = true;
-        try
-        {
-            result = await Api.SearchJockeysAsync(new SearchJockeysRequest
-            {
-                Query = query,
-                Page = page,
-                PageSize = pageSize
-            });
-        }
-        finally
-        {
-            loading = false;
-        }
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        query = ParseText(q, "query");
+        affiliationCode = ParseText(q, "affiliation");
+        if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
+        await LoadAsync();
     }
 
-    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+    private async Task SearchAsync() { page = 1; await LoadAsync(); }
+    private async Task LoadAsync()
+    {
+        UpdateUrl();
+        loading = true;
+        try { result = await Api.SearchJockeysAsync(new SearchJockeysRequest { Query = query, AffiliationCode = affiliationCode, Page = page, PageSize = pageSize }); }
+        finally { loading = false; }
+    }
+    private async Task GoAsync(int value) { page = value; await LoadAsync(); }
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jockeys", new Dictionary<string, string?> { ["query"] = query, ["affiliation"] = affiliationCode, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
+    private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
+    private void OpenJockey(string id) => Navigation.NavigateTo(JockeyUrl(id));
+    private void OpenJockeyFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJockey(id); }
+    private static string JockeyUrl(string id) => $"/jockeys/{Uri.EscapeDataString(id)}";
+    private static string JockeyMetadata(JockeySummaryResponse jockey) => $"所属 {jockey.AffiliationCode ?? "—"} · 別名 {jockey.AliasCount} 件";
 }

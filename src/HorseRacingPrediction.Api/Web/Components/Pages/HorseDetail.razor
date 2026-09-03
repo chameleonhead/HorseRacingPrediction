@@ -2,54 +2,25 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<h1>馬詳細</h1>
-<p class="hint"><a href="horses">← 馬検索へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/horses" BackLabel="← 馬一覧に戻る" Title="@(horse?.RegisteredName ?? "馬詳細")" Section="データ / 馬">
+    <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/horses/{Uri.EscapeDataString(HorseId)}/edit")">編集</FluentButton></Actions>
+</RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (horse is null) { <p>HorseId「@HorseId」の馬は見つかりませんでした。</p> }
 else
 {
-    <nav class="detail-tabs" aria-label="詳細セクション">
-        <ul class="detail-tab-list">
-            <li><a href="#overview">概要</a></li>
-            <li><a href="#relations">関係</a></li>
-            <li><a href="#history">履歴</a></li>
-            <li><a href="#aliases">別名</a></li>
-            <li><a href="#management">管理</a></li>
-            <li><a href="#memo">メモ</a></li>
-        </ul>
-    </nav>
-
-    <div class="detail-sections">
-    <section id="overview" class="card detail-section">
-        <h2>@horse.RegisteredName</h2>
-        <dl class="meta">
-            <dt>HorseId</dt><dd><code>@horse.HorseId</code></dd>
-            <dt>正規化名</dt><dd>@horse.NormalizedName</dd>
-            <dt>性</dt><dd>@horse.SexCode</dd>
-            <dt>生年月日</dt><dd>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</dd>
-            <dt>馬主</dt><dd>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</dd>
-        </dl>
+    <div class="detail-stack">
+    <section class="profile-facts" aria-label="概要">
+        <div class="profile-fact"><span>性別</span><strong>@Display(horse.SexCode)</strong></div>
+        <div class="profile-fact"><span>生年月日</span><strong>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</strong></div>
+        <div class="profile-fact"><span>馬主</span><strong>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</strong></div>
+        <div class="profile-fact"><span>登録表記</span><strong>@(horse.Aliases.Count + 1) 件</strong></div>
     </section>
 
-    @if (relationships.Count > 0)
-    {
-        <section id="relations" class="entity-section detail-section">
-            <h3>この馬に関係する人</h3>
-            <div class="relationship-grid">
-                @foreach (var relationship in relationships.Take(6))
-                {
-                    <a class="relationship-link" href="@RelationshipUrl(relationship)">
-                        <span class="relationship-kind">@relationship.RelationshipName</span>
-                        <strong>@relationship.DisplayName</strong>
-                        <span class="hint">@relationship.ParticipationCount 戦・最終 @(relationship.LastParticipationDate?.ToString("yyyy/MM/dd") ?? "—")</span>
-                    </a>
-                }
-            </div>
-        </section>
-    }
+    <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="relations-section" Title="この馬に関係する人" Items="@relationships.Take(6)" Url="@RelationshipUrl" /></section>
 
-    <section id="history" class="entity-section detail-section">
+    <section class="detail-group" aria-label="履歴"><section class="entity-section detail-section">
         <h3>出走履歴</h3>
         @if (historyEntries.Count == 0)
         {
@@ -62,7 +33,7 @@ else
                 {
                     <li class="history-item">
                         <div class="history-event">
-                            <a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @Display(entry.RacecourseCode)@(entry.RaceNumber is null ? "" : $" {entry.RaceNumber}R")</a>
+                            <a class="history-race" href="@($"/races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @Display(entry.RacecourseCode)@(entry.RaceNumber is null ? "" : $" {entry.RaceNumber}R")</a>
                             <span class="hint">@(entry.RaceName ?? entry.RaceId)</span>
                         </div>
                         <div class="history-result"><strong>@FormatFinish(entry.FinishPosition)</strong><span class="hint">@(entry.PrizeMoney is null ? "賞金 —" : $"賞金 {entry.PrizeMoney:N0}")</span></div>
@@ -76,16 +47,17 @@ else
             </ol>
             @if (historyHasMore)
             {
-                <div class="toolbar">
-                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の100件を読み込む</button>
+                <div class="action-row">
+                    <FluentButton Appearance="@Appearance.Outline" OnClick="@LoadMoreHistoryAsync" Disabled="@loadingMore">次の100件を読み込む</FluentButton>
                 </div>
             }
         }
     </section>
+    </section>
 
     @if (horse.Aliases.Count > 0)
     {
-        <section id="aliases" class="card detail-section">
+        <section class="detail-group" aria-label="別名"><section class="detail-card detail-section">
             <h3>別名</h3>
             <ul>
                 @foreach (var a in horse.Aliases)
@@ -94,19 +66,22 @@ else
                 }
             </ul>
         </section>
+        </section>
     }
 
-    <section id="management" class="card detail-section">
+    <section class="detail-group" aria-label="管理"><section class="detail-card detail-section">
         <h3>管理情報</h3>
         <p class="hint">プロフィール更新、別名統合、データ補正は専用画面で行います。</p>
-        <div class="toolbar">
-            <a class="btn primary small" href="@($"horses/{Uri.EscapeDataString(HorseId)}/edit")">データを補正する</a>
+        <div class="action-row">
+            <FluentButton Appearance="@Appearance.Accent" Href="@($"/horses/{Uri.EscapeDataString(HorseId)}/edit")">データを補正する</FluentButton>
         </div>
     </section>
+    </section>
 
-    <div id="memo" class="detail-section">
+    <section class="detail-group" aria-label="メモ"><div class="detail-section">
         <MemoPanel SubjectType="Horse" SubjectId="@HorseId" />
     </div>
+    </section>
     </div>
 }
 
@@ -144,6 +119,7 @@ else
     private bool correcting;
     private bool correctArmed;
     private IReadOnlyList<string> correctErrors = Array.Empty<string>();
+    private bool HasPendingOperation => updating || mergingAlias || correcting || correctArmed;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -203,16 +179,16 @@ else
 
     private static string RelationshipUrl(RelationshipSummaryResponse relationship) => relationship.ObjectType switch
     {
-        "Jockey" => $"jockeys/{Uri.EscapeDataString(relationship.ObjectId)}",
-        "Trainer" => $"trainers/{Uri.EscapeDataString(relationship.ObjectId)}",
-        _ => "horses"
+        "Jockey" => $"/jockeys/{Uri.EscapeDataString(relationship.ObjectId)}",
+        "Trainer" => $"/trainers/{Uri.EscapeDataString(relationship.ObjectId)}",
+        _ => "/horses"
     };
 
     private RenderFragment EntityLink(string segment, string? id, string? label) => builder =>
     {
         if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "—"); return; }
         builder.OpenElement(1, "a");
-        builder.AddAttribute(2, "href", $"{segment}/{Uri.EscapeDataString(id)}");
+        builder.AddAttribute(2, "href", $"/{segment.TrimStart('/')}/{Uri.EscapeDataString(id)}");
         builder.AddContent(3, string.IsNullOrWhiteSpace(label) ? id : label);
         builder.CloseElement();
     };

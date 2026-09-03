@@ -2,26 +2,17 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<h1>レース詳細</h1>
-<p class="hint"><a href="races">← レース検索へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/races" BackLabel="← レース一覧に戻る" Title="@(race?.RaceName ?? "レース詳細")" Section="レース・予想 / レース">
+    <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
+</RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
 else
 {
-    <nav class="detail-tabs" aria-label="詳細セクション">
-        <ul class="detail-tab-list">
-            <li><a href="#overview">概要</a></li>
-            <li><a href="#status">取得状況</a></li>
-            <li><a href="#participants">出走</a></li>
-            <li><a href="#report">概況</a></li>
-            <li><a href="#management">管理</a></li>
-            <li><a href="#memo">メモ</a></li>
-        </ul>
-    </nav>
-
-    <div class="detail-sections">
-    <section id="overview" class="card detail-section">
+    <RaceOpsDetailTabs>
+    <FluentTab Label="概要" Id="overview">
+    <section class="detail-card detail-section">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
@@ -35,7 +26,7 @@ else
             <dd>
                 @if (!string.IsNullOrEmpty(race.WinningHorseId))
                 {
-                    <a href="@($"horses/{Uri.EscapeDataString(race.WinningHorseId!)}")">@race.WinningHorseName</a>
+                    <a href="@($"/horses/{Uri.EscapeDataString(race.WinningHorseId!)}")">@race.WinningHorseName</a>
                 }
                 else { @race.WinningHorseName }
             </dd>
@@ -47,46 +38,119 @@ else
         <div><span class="object-label">馬場</span>@if (race.TrackConditionObservations.Count == 0) { <span>未取得</span> } else { var track = race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(track.GoingDescriptionText ?? track.TurfConditionCode ?? track.DirtConditionCode ?? "取得済み")</strong> }</div>
         <div><span class="object-label">払戻</span><strong>@(race.PayoutResult is null ? (race.EntryResults.Count == 0 ? "未取得" : "該当なし・未確定") : "取得済み")</strong></div>
     </section>
+    </FluentTab>
+
+    @if (race.Odds is not null && (race.Odds.WinOdds.Count > 0 || race.Odds.PlaceOdds.Count > 0))
+    {
+        <FluentTab Label="オッズ" Id="odds"><section class="detail-card detail-section" aria-labelledby="odds-heading">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">MARKET DATA</p>
+                    <h3 id="odds-heading">オッズ</h3>
+                </div>
+                <span class="hint">取得済みの券種のみ表示</span>
+            </div>
+            <div class="odds-layout">
+                @if (race.Odds.WinOdds.Count > 0)
+                {
+                    <div class="odds-panel">
+                        <h4>単勝</h4>
+                        <table class="data-table odds-table">
+                            <thead><tr><th scope="col">馬番</th><th scope="col">馬名</th><th scope="col">オッズ</th><th scope="col">人気</th></tr></thead>
+                            <tbody>
+                            @foreach (var odds in race.Odds.WinOdds.OrderBy(x => x.Odds ?? decimal.MaxValue))
+                            {
+                                <tr>
+                                    <th scope="row">@odds.HorseNumber</th>
+                                    <td>@EntityLink("horses", race.Entries.FirstOrDefault(x => x.HorseNumber == odds.HorseNumber)?.HorseId, odds.HorseName)</td>
+                                    <td class="numeric">@(odds.Odds?.ToString("0.0") ?? "—")</td>
+                                    <td class="numeric">@(odds.Popularity?.ToString() ?? "—")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                @if (race.Odds.PlaceOdds.Count > 0)
+                {
+                    <div class="odds-panel">
+                        <h4>複勝</h4>
+                        <table class="data-table odds-table">
+                            <thead><tr><th scope="col">馬番</th><th scope="col">馬名</th><th scope="col">オッズ</th></tr></thead>
+                            <tbody>
+                            @foreach (var odds in race.Odds.PlaceOdds.OrderBy(x => x.HorseNumber))
+                            {
+                                <tr>
+                                    <th scope="row">@odds.HorseNumber</th>
+                                    <td>@EntityLink("horses", race.Entries.FirstOrDefault(x => x.HorseNumber == odds.HorseNumber)?.HorseId, odds.HorseName)</td>
+                                    <td class="numeric">@(FormatOddsRange(odds.OddsMin, odds.OddsMax))</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </section></FluentTab>
+    }
 
     @if (race.Entries.Count > 0)
     {
-        <section id="participants" class="entity-section detail-section">
-            <h3>@(race.EntryResults.Count > 0 ? "出走・結果" : "出走馬")</h3>
+        <FluentTab Label="出走表" Id="participants"><section class="entity-section detail-section">
+            <h3>出走表</h3>
             <ol class="participant-list">
                 @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
                 {
                     var result = race.EntryResults.FirstOrDefault(x => x.HorseId == e.HorseId);
                     <li class="participant-row">
                         <div class="participant-number"><span>@e.GateNumber 枠</span><strong>@e.HorseNumber</strong></div>
-                        <div class="object-primary"><a href="@($"horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a><span class="hint">@e.SexCode@e.Age · @FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</span></div>
-                        <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果 —" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム —")</span></div>
+                        <div class="object-primary"><a href="@($"/horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a><span class="hint">@e.SexCode@e.Age · @FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</span></div>
+                        <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果未確定" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム未確定")</span></div>
                         <div class="participant-relations"><div><span class="object-label">騎手</span>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</div><div><span class="object-label">調教師</span>@EntityLink("trainers", e.TrainerId, e.TrainerName)</div><div><span class="object-label">レース時点の馬主</span>@EntityLink("owners", e.OwnerId, e.OwnerName)</div></div>
                     </li>
                 }
             </ol>
-        </section>
+        </section></FluentTab>
+
+        @if (race.EntryResults.Count > 0)
+        {
+            <FluentTab Label="結果" Id="results"><section class="entity-section detail-section">
+                <h3>確定結果</h3>
+                <ol class="participant-list">
+                    @foreach (var result in race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue))
+                    {
+                        var entry = race.Entries.FirstOrDefault(x => x.HorseId == result.HorseId);
+                        <li class="participant-row">
+                            <div class="participant-number"><strong>@(result.FinishPosition is null ? "—" : $"{result.FinishPosition}着")</strong></div>
+                            <div class="object-primary">@EntityLink("horses", result.HorseId, entry?.HorseName ?? result.HorseId)<span class="hint">@(result.OfficialTime ?? "タイム未登録")</span></div>
+                            <div class="participant-relations"><div><span class="object-label">馬番</span>@(entry?.HorseNumber.ToString() ?? "—")</div><div><span class="object-label">騎手</span>@EntityLink("jockeys", entry?.JockeyId, entry?.JockeyName)</div></div>
+                        </li>
+                    }
+                </ol>
+            </section></FluentTab>
+        }
     }
 
     @if (!string.IsNullOrWhiteSpace(race.StewardReportText))
     {
-        <section id="report" class="card detail-section">
+        <FluentTab Label="概況" Id="report"><section class="detail-card detail-section">
             <h3>レース概況</h3>
             <pre class="payload">@race.StewardReportText</pre>
-        </section>
+        </section></FluentTab>
     }
 
-    <section id="management" class="card detail-section">
+    <FluentTab Label="管理" Id="management"><section class="detail-card detail-section">
         <h3>管理情報</h3>
         <p class="hint">誤登録されたデータの補正は専用画面で行います。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
-        <div class="toolbar">
-            <a class="btn primary small" href="@($"races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</a>
+        <div class="action-row">
+            <FluentButton Appearance="@Appearance.Accent" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</FluentButton>
         </div>
-    </section>
+    </section></FluentTab>
 
-    <div id="memo" class="detail-section">
+    <FluentTab Label="メモ" Id="memo"><div class="detail-section">
         <MemoPanel SubjectType="Race" SubjectId="@RaceId" />
-    </div>
-    </div>
+    </div></FluentTab>
+    </RaceOpsDetailTabs>
 }
 
 @code {
@@ -106,6 +170,7 @@ else
     private bool correctArmed;
     private bool correcting;
     private IReadOnlyList<string> correctErrors = Array.Empty<string>();
+    private bool HasPendingOperation => correcting || correctArmed;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -150,7 +215,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(id)) { builder.AddContent(0, "—"); return; }
         builder.OpenElement(1, "a");
-        builder.AddAttribute(2, "href", $"{segment}/{Uri.EscapeDataString(id)}");
+        builder.AddAttribute(2, "href", $"/{segment}/{Uri.EscapeDataString(id)}");
         builder.AddContent(3, string.IsNullOrWhiteSpace(label) ? id : label);
         builder.CloseElement();
     };
@@ -177,5 +242,12 @@ else
         var surface = string.IsNullOrWhiteSpace(surfaceCode) ? "未設定" : surfaceCode;
         var direction = string.IsNullOrWhiteSpace(directionCode) ? string.Empty : $" {directionCode}";
         return $"{distance} / {surface}{direction}";
+    }
+
+    private static string FormatOddsRange(decimal? min, decimal? max)
+    {
+        if (!min.HasValue && !max.HasValue) return "—";
+        if (min.HasValue && max.HasValue && min.Value != max.Value) return $"{min.Value:0.0}–{max.Value:0.0}";
+        return (min ?? max)!.Value.ToString("0.0");
     }
 }

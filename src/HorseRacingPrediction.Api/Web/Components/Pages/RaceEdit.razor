@@ -3,8 +3,7 @@
 @inject AdminApiClient Api
 @inject NavigationManager Nav
 
-<h1>レースの管理情報</h1>
-<p class="hint"><a href="@($"races/{Uri.EscapeDataString(RaceId)}")">← レース詳細へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="@($"/races/{Uri.EscapeDataString(RaceId)}")" BackLabel="← レース詳細に戻る" Title="@(race?.RaceName ?? "レースの管理情報")" Section="レース・予想 / レース" />
 
 @if (loading)
 {
@@ -16,7 +15,7 @@ else if (race is null)
 }
 else
 {
-    <section class="card">
+    <section class="detail-card">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
@@ -27,28 +26,28 @@ else
         </dl>
     </section>
 
-    <section class="card">
-        <h3>データ補正</h3>
-        <p class="hint">誤登録されたデータの補正用です。理由は任意です。</p>
-        <div class="form-grid">
-            <label>レース名<input @bind="correctRaceName" /></label>
-            <label>競馬場コード<input @bind="correctRacecourseCode" /></label>
-            <label>レース番号<input type="number" @bind="correctRaceNumber" /></label>
-            <label>グレード<input @bind="correctGradeCode" /></label>
-            <label>馬場<input @bind="correctSurfaceCode" /></label>
-            <label>距離(m)<input type="number" @bind="correctDistanceMeters" /></label>
-            <label>回り<input @bind="correctDirectionCode" /></label>
-            <label>補正理由<input @bind="correctReason" /></label>
-        </div>
-        <div class="toolbar">
-            <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">補正を保存する</button>
-            <button class="btn small" @onclick="Back">キャンセル</button>
-        </div>
-        @if (correctErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
-        }
-    </section>
+    <RaceOpsFormSection Title="データ補正" Description="誤登録されたデータの補正用です。理由は任意です。">
+        <ChildContent>
+            <div class="form-grid">
+                <label>レース名<input @bind="correctRaceName" /></label>
+                <label>競馬場コード<input @bind="correctRacecourseCode" /></label>
+                <label>レース番号<input type="number" @bind="correctRaceNumber" /></label>
+                <label>グレード<input @bind="correctGradeCode" /></label>
+                <label>馬場<input @bind="correctSurfaceCode" /></label>
+                <label>距離(m)<input type="number" @bind="correctDistanceMeters" /></label>
+                <label>回り<input @bind="correctDirectionCode" /></label>
+                <label>補正理由<input @bind="correctReason" /></label>
+            </div>
+            @if (correctErrors.Count > 0)
+            {
+                <RaceOpsAlert Title="レースを補正できませんでした" Messages="@correctErrors" />
+            }
+        </ChildContent>
+        <Actions>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@CorrectAsync" Disabled="@correcting">補正を保存する</FluentButton>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton>
+        </Actions>
+    </RaceOpsFormSection>
 }
 
 @code {
@@ -93,7 +92,7 @@ else
         }
     }
 
-    private void Back() => Nav.NavigateTo($"races/{Uri.EscapeDataString(RaceId)}");
+    private void Back() => Nav.NavigateTo($"/races/{Uri.EscapeDataString(RaceId)}");
 
     private async Task CorrectAsync()
     {

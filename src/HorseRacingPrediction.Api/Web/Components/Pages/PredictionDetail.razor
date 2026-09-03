@@ -2,33 +2,38 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<h1>予想票詳細</h1>
-<p class="hint"><a href="predictions">← 予想票検索へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/predictions" BackLabel="← 予想票一覧に戻る" Title="@(prediction is null ? "予想票詳細" : $"{RaceDisplayName(prediction)} 予想票")" Section="レース・予想 / 予想票" />
 
-@if (loading) { <p>読み込み中…</p> }
-else if (prediction is null) { <p>PredictionTicketId「@PredictionTicketId」の予想票は見つかりませんでした。</p> }
+@if (loading) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
+else if (prediction is null) { <UiState Title="予想票が見つかりません" Message="一覧へ戻り、対象を選び直してください。" /> }
 else
 {
-    <section class="card">
-        <h2>@prediction.PredictionTicketId</h2>
-        <dl class="meta">
-            <dt>RaceId</dt><dd><a href="@($"races/{Uri.EscapeDataString(prediction.RaceId ?? string.Empty)}")">@prediction.RaceId</a></dd>
-            <dt>予想者</dt><dd>@prediction.PredictorType / @prediction.PredictorId</dd>
-            <dt>信頼度</dt><dd>@prediction.ConfidenceScore</dd>
-            <dt>コメント</dt><dd>@prediction.SummaryComment</dd>
-            <dt>予想日時</dt><dd>@prediction.PredictedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
-        </dl>
+    <div class="detail-stack">
+    <section class="profile-facts" aria-label="予想票の概要">
+        <div class="profile-fact"><small>状態</small><strong><RaceOpsStatusBadge Label="@TicketStatusLabel(prediction.TicketStatus)" Tone="@TicketStatusTone(prediction.TicketStatus)" /></strong></div>
+        <div class="profile-fact"><small>本命</small><strong>@(PrimaryMark?.HorseName ?? "—")</strong></div>
+        <div class="profile-fact"><small>信頼度</small><strong>@prediction.ConfidenceScore / 100</strong></div>
     </section>
+
+    @if (!string.IsNullOrWhiteSpace(prediction.RaceId))
+    {
+        <section class="entity-section detail-section" aria-labelledby="prediction-related-heading">
+            <h2 id="prediction-related-heading">関連</h2>
+            <RaceOpsObjectList Label="関連するレース">
+                <RaceOpsObjectListItem Href="@RaceUrl(prediction.RaceId)" Title="@RaceDisplayName(prediction)" Description="@(prediction.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定")" Metadata="レース詳細" />
+            </RaceOpsObjectList>
+        </section>
+    }
 
     @if (prediction.Marks.Count > 0)
     {
-        <section class="card">
+        <section class="detail-group" aria-label="印"><section class="detail-card detail-section">
             <h3>印</h3>
             <div class="mark-list">
                 @foreach (var m in prediction.Marks)
                 {
                     <article class="mark-row">
-                        <div class="mark-primary"><span class="pill">@m.MarkCode</span><strong>@m.EntryId</strong></div>
+                        <div class="mark-primary"><span class="pill">@m.MarkCode</span><strong>@if (!string.IsNullOrWhiteSpace(m.HorseId)) { <a href="@HorseUrl(m.HorseId)">@(m.HorseName ?? "馬詳細")</a> } else { <text>@(m.HorseName ?? "出走馬未設定")</text> }</strong></div>
                         <div><span class="object-label">予想着順</span>@m.PredictedRank</div>
                         <div><span class="object-label">スコア</span>@m.Score</div>
                         <div class="mark-comment"><span class="object-label">コメント</span>@(string.IsNullOrWhiteSpace(m.Comment) ? "—" : m.Comment)</div>
@@ -36,57 +41,10 @@ else
                 }
             </div>
         </section>
+        </section>
     }
 
-    <section class="card">
-        <h3>データ訂正</h3>
-        <p class="hint">誤りのあった信頼度・コメントの訂正用です。理由の記録が残ります。予想票の新規作成はPredictorが自動で行うため、ここでは対象外です。</p>
-        <div class="form-grid">
-            <label>信頼度<input type="number" step="0.01" @bind="correctConfidenceScore" /></label>
-            <label>コメント<input @bind="correctSummaryComment" /></label>
-            <label>訂正理由<input @bind="correctReason" /></label>
-        </div>
-        <div class="toolbar">
-            @if (correctArmed)
-            {
-                <span class="hint">入力した内容で訂正しますか？</span>
-                <button class="btn primary small" @onclick="CorrectAsync" disabled="@correcting">訂正を保存する</button>
-                <button class="btn small" @onclick="() => correctArmed = false" disabled="@correcting">キャンセル</button>
-            }
-            else
-            {
-                <button class="btn primary small" @onclick="() => correctArmed = true">訂正内容を確認</button>
-            }
-        </div>
-        @if (correctErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in correctErrors) { <li>@e</li> }</ul>
-        }
-    </section>
-
-    <section class="card">
-        <h3>取り下げ</h3>
-        <p class="hint">この予想票を取り下げます(元に戻せません)。</p>
-        <div class="form-grid">
-            <label>取り下げ理由<input @bind="withdrawReason" /></label>
-        </div>
-        <div class="toolbar">
-            @if (withdrawArmed)
-            {
-                <span class="hint">本当に取り下げますか？</span>
-                <button class="btn small" @onclick="WithdrawAsync" disabled="@withdrawing">取り下げる</button>
-                <button class="btn small" @onclick="() => withdrawArmed = false">キャンセル</button>
-            }
-            else
-            {
-                <button class="btn small" @onclick="() => withdrawArmed = true">取り下げ</button>
-            }
-        </div>
-        @if (withdrawErrors.Count > 0)
-        {
-            <ul class="error-list">@foreach (var e in withdrawErrors) { <li>@e</li> }</ul>
-        }
-    </section>
+    </div>
 }
 
 @code {
@@ -94,18 +52,7 @@ else
 
     private bool loading;
     private PredictionTicketResponse? prediction;
-
-    private decimal? correctConfidenceScore;
-    private string? correctSummaryComment;
-    private string? correctReason;
-    private bool correctArmed;
-    private bool correcting;
-    private IReadOnlyList<string> correctErrors = Array.Empty<string>();
-
-    private string? withdrawReason;
-    private bool withdrawArmed;
-    private bool withdrawing;
-    private IReadOnlyList<string> withdrawErrors = Array.Empty<string>();
+    private PredictionMarkResponse? PrimaryMark => prediction?.Marks.OrderBy(x => x.PredictedRank).FirstOrDefault();
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 
@@ -122,44 +69,14 @@ else
         }
     }
 
-    private async Task CorrectAsync()
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+    private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
+    private static string RaceDisplayName(PredictionTicketResponse value)
     {
-        correcting = true;
-        try
-        {
-            var result = await Api.CorrectPredictionMetadataAsync(PredictionTicketId, new CorrectPredictionMetadataRequest(
-                correctConfidenceScore, correctSummaryComment, correctReason));
-            correctErrors = result.Success ? Array.Empty<string>() : result.Errors;
-            if (result.Success)
-            {
-                correctConfidenceScore = null; correctSummaryComment = null; correctReason = null;
-                await LoadAsync();
-            }
-            correctArmed = false;
-        }
-        finally
-        {
-            correcting = false;
-        }
+        var display = string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(display) ? "対象レース" : display;
     }
+    private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", TicketStatus.LateSubmitted => "締切後", _ => value.ToString() };
+    private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
 
-    private async Task WithdrawAsync()
-    {
-        withdrawing = true;
-        try
-        {
-            var result = await Api.WithdrawPredictionAsync(PredictionTicketId, new WithdrawPredictionTicketRequest(withdrawReason));
-            withdrawErrors = result.Success ? Array.Empty<string>() : result.Errors;
-            withdrawArmed = false;
-            if (result.Success)
-            {
-                withdrawReason = null;
-                await LoadAsync();
-            }
-        }
-        finally
-        {
-            withdrawing = false;
-        }
-    }
 }

@@ -214,6 +214,11 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsDisplayName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("OwnerId")
                         .IsRequired()
                         .HasColumnType("TEXT");

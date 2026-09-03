@@ -18,6 +18,7 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
+using Microsoft.FluentUI.AspNetCore.Components;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +37,9 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddAdminAuthentication();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddFluentUIComponents();
+builder.Services.AddScoped<IDialogService, DialogService>();
+builder.Services.AddScoped<IToastService, ToastService>();
 builder.Services.AddSingleton<AdminApiBaseAddressResolver>();
 builder.Services.AddHttpClient<AdminApiClient>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -176,7 +180,8 @@ app.Use(async (context, next) =>
         && !HttpMethods.IsHead(context.Request.Method)
         && !HttpMethods.IsOptions(context.Request.Method);
     if (maintenance.IsActive && isMutation
-        && !context.Request.Path.StartsWithSegments("/api/collection/reset"))
+        && !context.Request.Path.StartsWithSegments("/api/collection/reset")
+        && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         await context.Response.WriteAsJsonAsync(new { message = "収集データベースのメンテナンス中です。" });
@@ -190,8 +195,8 @@ app.MapApiEndpoints();
 app.MapAdminEndpoints();
 app.MapAgentDashboardEndpoints();
 app.MapCollectionResetEndpoints();
+app.MapJobManagementEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
 
 app.Run();
-

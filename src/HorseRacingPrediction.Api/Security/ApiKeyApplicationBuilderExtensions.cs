@@ -41,7 +41,15 @@ public static class ApiKeyApplicationBuilderExtensions
     // 両者のパスが重ならないため、UI側のルートだけを明示的に認証免除すればよい。
     private static readonly string[] AdminUiRootSegments =
     {
-        "races", "horses", "jockeys", "trainers", "predictions",
+        "races",
+        "horses",
+        "jockeys",
+        "trainers",
+        "owners",
+        "predictions",
+        "jobs",
+        "collection-tasks",
+        "acquisition-statuses",
     };
 
     private static bool IsAnonymousPath(PathString path)
@@ -54,6 +62,7 @@ public static class ApiKeyApplicationBuilderExtensions
             || path.Equals("/app.css", StringComparison.OrdinalIgnoreCase)
             || path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase)
             || path.StartsWithSegments("/_blazor", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/_content", StringComparison.OrdinalIgnoreCase)
             || path.StartsWithSegments("/_framework", StringComparison.OrdinalIgnoreCase))
         {
             return true;

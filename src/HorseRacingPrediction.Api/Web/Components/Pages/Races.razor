@@ -1,44 +1,66 @@
 @page "/races"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
+@using HorseRacingPrediction.Contracts
 
-<h1>レース検索</h1>
-<div class="toolbar">
-    <label>From: <input type="date" @bind="from" /></label>
-    <label>To: <input type="date" @bind="to" /></label>
-    <label>競馬場: <input @bind="racecourse" placeholder="例: 05 東京" /></label>
-    <label>レース番号: <input type="number" @bind="raceNo" min="1" max="12" /></label>
-    <label>レース名: <input @bind="raceName" /></label>
-    <label>勝ち馬: <input @bind="winningHorse" /></label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
-</div>
+<RaceOpsPageHeader Section="レース・予想" Title="レース" Description="期間を問わず同じ行形式で検索・ページングします。" />
+
+<FluentCard class="filter-card">
+    <nav class="view-tabs" aria-label="期間プリセット">
+        <button type="button" class="@(PresetClass("today"))" aria-current="@(IsPresetActive("today") ? "page" : null)" @onclick="@ApplyTodayAsync">今日</button>
+        <button type="button" class="@(PresetClass("week"))" aria-current="@(IsPresetActive("week") ? "page" : null)" @onclick="@ApplyWeekAsync">今週</button>
+        <button type="button" class="@(PresetClass("confirmed"))" aria-current="@(IsPresetActive("confirmed") ? "page" : null)" @onclick="@ApplyConfirmedAsync">結果確定</button>
+        <button type="button" class="@(PresetClass("all"))" aria-current="@(IsPresetActive("all") ? "page" : null)" @onclick="@ApplyAllAsync">すべて</button>
+    </nav>
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース検索" Placeholder="レース名を検索" @bind-Value="raceName" /></div>
+        <div class="filter-field filter-field-compact"><input aria-label="開始日" type="date" @bind="from" /></div>
+        <div class="filter-field filter-field-compact"><input aria-label="終了日" type="date" @bind="to" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="開催場" @bind-Value="racecourse" Placeholder="開催場" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+    </div>
+    <details class="advanced-filters">
+        <summary>詳細条件</summary>
+        <div class="advanced-filter-grid">
+            <input aria-label="レース番号" type="number" @bind="raceNo" min="1" max="12" placeholder="レース番号" />
+            <FluentTextField aria-label="勝ち馬" Placeholder="勝ち馬" @bind-Value="winningHorse" />
+        </div>
+    </details>
+    @if (HasFilters)
+    {
+        <div class="action-row" aria-label="適用中のフィルター">
+            <span class="hint">適用中: @FilterSummary</span>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="@ClearFiltersAsync">条件を解除</FluentButton>
+        </div>
+    }
+</FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="レースを読み込んでいます" /> }
-else if (result is null) { <UiState Title="該当するレースはありません" Message="検索条件を変更してお試しください。" /> }
-else if (result.Items.Count == 0) { <UiState Title="該当するレースはありません" Message="検索条件を変更してお試しください。" /> }
+else if (result is null || result.Items.Count == 0) { <UiState Title="該当するレースはありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="object-list">
+    <RaceOpsObjectList Label="レース一覧">
         @foreach (var r in result.Items)
         {
-            <article class="object-row race-row">
-                <div class="object-primary"><a href="@($"races/{Uri.EscapeDataString(r.RaceId)}")">@(r.RaceName ?? r.RaceId)</a><span class="hint">@r.RaceDate · @r.RacecourseCode @r.RaceNumber R</span></div>
-                <div><span class="object-label">状態</span><span class="pill">@r.Status</span></div>
-                <div><span class="object-label">頭数</span>@(r.EntryCount?.ToString() ?? "—")</div>
-                <div><span class="object-label">勝ち馬</span>@(r.WinningHorseName ?? "—")</div>
+            <article class="object-list-item race-row selectable-row" tabindex="0" role="link" @onclick="() => OpenRace(r.RaceId)" @onkeydown="e => OpenRaceFromKey(e, r.RaceId)">
+                <span class="object-list-main">
+                    <strong>@(r.RaceName ?? r.RaceId)</strong>
+                    <span class="hint">
+                        <a href="@DateFilterUrl(r.RaceDate)" @onclick:stopPropagation>@(r.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録")</a>
+                        · <a href="@RacecourseFilterUrl(r.RacecourseCode)" @onclick:stopPropagation>@(r.RacecourseCode ?? "開催場未登録")</a>
+                        · @($"{r.RaceNumber}R")
+                    </span>
+                </span>
+                <span class="badge @StatusClass(r.Status)">@StatusLabel(r.Status)</span>
+                <span class="object-list-meta">頭数 @(r.EntryCount?.ToString() ?? "—") ・ 勝ち馬 @(r.WinningHorseName ?? "—")</span>
+                <span class="object-list-affordance">詳細</span>
             </article>
         }
-    </div>
-    <div class="toolbar">
-        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoPageAsync(page - 1)">前</button>
-        <span>@(page) / @result.TotalPages</span>
-        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoPageAsync(page + 1)">次</button>
-    </div>
+    </RaceOpsObjectList>
+    <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoPageAsync" />
 }
 
 @code {
@@ -48,15 +70,35 @@ else
     private int? raceNo;
     private string? raceName;
     private string? winningHorse;
+    private RaceStatus? status;
     private int page = 1;
-    private int pageSize = 50;
+    private const int pageSize = 50;
     private bool loading;
     private PagedResponse<RaceSummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        from = ParseDate(query, "from", from);
+        to = ParseDate(query, "to", to);
+        racecourse = ParseText(query, "racecourse");
+        raceName = ParseText(query, "raceName");
+        winningHorse = ParseText(query, "winningHorse");
+        if (Enum.TryParse<RaceStatus>(ParseText(query, "status"), out var requestedStatus)) status = requestedStatus;
+        if (int.TryParse(ParseText(query, "raceNo"), out var raceNumber)) raceNo = raceNumber;
+        if (int.TryParse(ParseText(query, "page"), out var requestedPage) && requestedPage > 0) page = requestedPage;
+        await LoadAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        page = 1;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
+        UpdateUrl();
         loading = true;
         try
         {
@@ -68,21 +110,99 @@ else
                 RaceNumber = raceNo,
                 RaceName = raceName,
                 WinningHorseName = winningHorse,
+                Status = status,
                 Page = page,
                 PageSize = pageSize,
                 SortBy = "raceDate",
                 SortDescending = true
             });
         }
-        finally
-        {
-            loading = false;
-        }
+        finally { loading = false; }
     }
 
-    private async Task GoPageAsync(int p)
+    private async Task GoPageAsync(int value)
     {
-        page = p;
+        page = value;
         await LoadAsync();
     }
+
+    private void UpdateUrl()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["from"] = from?.ToString("yyyy-MM-dd"),
+            ["to"] = to?.ToString("yyyy-MM-dd"),
+            ["racecourse"] = racecourse,
+            ["raceNo"] = raceNo?.ToString(),
+            ["raceName"] = raceName,
+            ["winningHorse"] = winningHorse,
+            ["status"] = status?.ToString(),
+            ["page"] = page.ToString()
+        };
+        NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/races", values.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    }
+
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
+
+    private static DateOnly? ParseDate(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key, DateOnly? fallback) => DateOnly.TryParse(ParseText(q, key), out var value) ? value : fallback;
+    private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
+    private bool HasFilters => from is not null || to is not null || !string.IsNullOrWhiteSpace(racecourse) || raceNo is not null || !string.IsNullOrWhiteSpace(raceName) || !string.IsNullOrWhiteSpace(winningHorse) || status is not null;
+    private string FilterSummary => string.Join(" / ", new[]
+    {
+        from is null && to is null ? null : $"期間 {from?.ToString("yyyy/MM/dd") ?? "開始なし"}〜{to?.ToString("yyyy/MM/dd") ?? "終了なし"}",
+        string.IsNullOrWhiteSpace(racecourse) ? null : $"開催場 {racecourse}",
+        raceNo is null ? null : $"{raceNo}R",
+        string.IsNullOrWhiteSpace(raceName) ? null : $"レース名 {raceName}",
+        string.IsNullOrWhiteSpace(winningHorse) ? null : $"勝ち馬 {winningHorse}",
+        status is null ? null : $"状態 {StatusLabel(status)}"
+    }.Where(value => value is not null)!);
+    private async Task ApplyPeriodAsync(string preset)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        switch (preset)
+        {
+            case "today": from = today; to = today; status = null; break;
+            case "week":
+                from = today.AddDays(-((int)today.DayOfWeek + 6) % 7);
+                to = from.Value.AddDays(6);
+                status = null;
+                break;
+            case "confirmed": from = null; to = null; status = RaceStatus.ResultDeclared; break;
+            default: from = null; to = null; status = null; break;
+        }
+        page = 1;
+        await LoadAsync();
+    }
+    private Task ApplyTodayAsync() => ApplyPeriodAsync("today");
+    private Task ApplyWeekAsync() => ApplyPeriodAsync("week");
+    private Task ApplyConfirmedAsync() => ApplyPeriodAsync("confirmed");
+    private Task ApplyAllAsync() => ApplyPeriodAsync("all");
+    private bool IsPresetActive(string preset) => preset switch
+    {
+        "today" => from == DateOnly.FromDateTime(DateTime.Today) && to == from && status is null,
+        "week" => from == DateOnly.FromDateTime(DateTime.Today.AddDays(-((int)DateTime.Today.DayOfWeek + 6) % 7)) && status is null,
+        "confirmed" => from is null && to is null && status == RaceStatus.ResultDeclared,
+        "all" => from is null && to is null && status is null,
+        _ => false
+    };
+    private string PresetClass(string preset) => IsPresetActive(preset) ? "active" : string.Empty;
+    private async Task ClearFiltersAsync()
+    {
+        from = null; to = null; racecourse = null; raceNo = null; raceName = null; winningHorse = null; status = null; page = 1;
+        await LoadAsync();
+    }
+    private void OpenRace(string id) => Navigation.NavigateTo(RaceUrl(id));
+    private void OpenRaceFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenRace(id); }
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+    private static string DateFilterUrl(DateOnly? date) => date is null ? "/races" : $"/races?from={date:yyyy-MM-dd}&to={date:yyyy-MM-dd}";
+    private static string RacecourseFilterUrl(string? code) => string.IsNullOrWhiteSpace(code) ? "/races" : $"/races?racecourse={Uri.EscapeDataString(code)}";
+    private static string StatusClass(object? status) => status?.ToString() switch { "Finished" or "ResultConfirmed" => "ok", "Canceled" => "bad", "Scheduled" => "info", _ => "warn" };
+    private static string StatusLabel(RaceStatus? value) => value switch
+    {
+        RaceStatus.Draft => "下書き", RaceStatus.CardPublished => "出馬表公開", RaceStatus.PreRaceOpen => "発走前", RaceStatus.InProgress => "レース中", RaceStatus.ResultDeclared => "結果確定", RaceStatus.PayoutDeclared => "払戻確定", RaceStatus.Closed => "締切", _ => "状態未登録"
+    };
 }

@@ -4,7 +4,7 @@
 
 > 2026-08-23: 収集タスクの永続化・照会 API・管理画面は Api 側へ移し、Collector はローカル常駐または `--once` で動く Worker に変更した。Lambda は `Dockerfile.collector-lambda` の同じ `--once` 経路を使用する。
 
-`HorseRacingPrediction.Collector` は、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、Api へ登録する専用プロセスである。バックグラウンドでの収集処理に加え、その収集バッチ処理の状況を確認・操作するための Web UI / API も自身で提供する。
+`HorseRacingPrediction.Collector` は、API が計画したジョブを取得し、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、結果を API へ報告する専用サービスである。Web UI、HTTP API、ジョブ計画、永続的な状態ストアは持たない。
 
 全体構成は [system-architecture.md](system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
 
@@ -57,7 +57,7 @@
 
 ### 収集状況の監視・操作（Api の Web UI / API）
 
-Api が収集バッチ処理の状況を確認・操作する Minimal API をホストする。収集タスク操作は API 限定とし、Api 管理画面には表示しない。Collector は `IProcessingStateStore` の HTTP proxy を通して Api の正本を更新する。ローカルDBは `UseApiStateStore=false` を明示したテスト・開発用途に限る。
+API が収集バッチ処理の状況を確認・操作する Minimal API と管理画面をホストする。Collector は API のジョブ契約を通して正本を更新する。旧来の `UseApiStateStore` 設定および Collector ローカルDB経路は削除済みであり、開発・テストでも API 所有の状態ストアまたは専用のテストダブルを使用する。
 
 #### API エンドポイント（`Scheduling/Agent*EndpointExtensions.cs`）
 
@@ -72,20 +72,13 @@ Api が収集バッチ処理の状況を確認・操作する Minimal API をホ
 | `POST /agent/result-day-statuses/{providerType}/{targetDate}/requeue` | 日単位の収集を Discovery/Collection モードで再投入する |
 | `POST /agent/result-day-jobs/trigger` | 任意の日付・プロバイダで日次収集を新規投入する |
 
-これらは旧ジョブ実行クライアントの `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` を移管したものである。ただし `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。Collector と Predictor は別々の SQLite ジョブストア（`collector-processing-jobs.db` / `predictor-processing-jobs.db`）を使うため、Collector からの予想ジョブ投入は Predictor 側に反映されず意味を持たないためである。
+これらは旧ジョブ実行クライアントの `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` を API 側へ移管したものである。ただし `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。予想ジョブ投入は Predictor 側の責務であり、Collector から操作しない。
 
-#### Blazor Server 画面（`Web/Components/Pages/`）
+#### 管理画面
 
-| パス | 画面 | 内容 |
-|---|---|---|
-| `/jobs` | ジョブ一覧 | JobType/Status フィルタ、再キュー、日次収集の新規投入 |
-| `/jobs/{JobId}` | ジョブ詳細 | ペイロード・エラー内容の確認、再キュー |
-| `/result-days` | 日次収集状況 | Discovery/Collection 単位の再投入 |
-| `/acquisition-statuses` | 取得ステータス | 馬・騎手・調教師・馬主のプロフィール取得結果一覧 |
-| `/jra-tool` | JRA URL 抽出ツール（デバッグ） | 任意 URL のページ種別判定・JSON 抽出結果を確認 |
-| `/snapshot-tool` | PageSnapshot ビューア（デバッグ） | 任意 URL の `PageSnapshot` をセクション構造で確認 |
+Collector は Blazor Server 画面、Web Host、静的資産、通常運用向け HTTP endpoint を持たない。収集ジョブ、日別状況、データ取得状況、停止・再開、リラン、再取得は API 管理画面を正本とする。旧 `/collection-tasks` は API 管理画面側で `/jobs` へリダイレクトする。
 
-JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` など）に実装されており、Collector 自身のスクレイピング・抽出ロジックの動作確認に使う。
+JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内部のスクレイピング補助サービスとして残す。任意 URL をブラウザから操作する管理画面や HTTP endpoint は提供しない。
 
 ### ジョブペイロード種別（実装済み）
 
@@ -122,10 +115,8 @@ JRA デバッグツール群は `JraTesting/`（`JraJsonExtractionService` な�
 
 ## 今後の課題（未着手・要検討）
 
-Lambda 対応と、タスク状態・管理画面を Api 側へ移す具体案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+Lambda 対応の詳細は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
 
 以下は旧ドキュメントで検討していたが、現時点では未着手または方針未確定の項目。着手する場合は本ドキュメントを更新すること。
 
-- ジョブ永続ストアを Collector 専用 SQLite から Api 側集中管理へ移行する（段階的移行案を上記文書で検討済み）
 - 地方競馬など JRA 以外のデータソースを Provider として追加する場合の抽象化
-- Collector が所有する `ProcessingStateStore` / `AgentProcessingOptions` / HTTP クライアント実装を、将来的に専用共有ライブラリへ分離するかどうか

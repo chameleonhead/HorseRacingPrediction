@@ -1,71 +1,79 @@
 @page "/predictions"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
 
-<h1>予想票検索</h1>
-<div class="toolbar">
-    <label>RaceId: <input @bind="raceId" /></label>
-    <label>予想者種別: <input @bind="predictorType" /></label>
-    <button class="btn primary" @onclick="LoadAsync">検索</button>
-</div>
+<RaceOpsPageHeader Section="レース・予想" Title="予想票" Description="レースごとの予想と評価状態を確認します。" />
+
+<FluentCard class="filter-card">
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="レース名・開催日を検索" Placeholder="レース名・開催日を検索" @bind-Value="query" /></div>
+        <div class="filter-field filter-field-compact"><FluentTextField aria-label="予想者種別" Placeholder="予想者種別" @bind-Value="predictorType" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
+    </div>
+</FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
 else if (result is null || result.Items.Count == 0) { <UiState Title="該当する予想票はありません" Message="検索条件を変更してお試しください。" /> }
 else
 {
-    @if (loading)
-    {
-        <p class="hint">検索中… 直前の結果を表示しています。</p>
-    }
+    @if (loading) { <p class="hint">検索中… 直前の結果を表示しています。</p> }
     <p class="hint">@result.TotalCount 件中 @((page - 1) * pageSize + 1) – @Math.Min(page * pageSize, result.TotalCount) 件目</p>
-    <div class="object-list">
+    <RaceOpsObjectList Label="予想票一覧">
         @foreach (var p in result.Items)
         {
-            <article class="object-row prediction-row">
-                <div class="object-primary"><a href="@($"predictions/{Uri.EscapeDataString(p.PredictionTicketId)}")">@p.TicketStatus</a><span class="hint">Race: @p.RaceId</span></div>
-                <div><span class="object-label">予想者</span>@p.PredictorType / @p.PredictorId</div>
-                <div><span class="object-label">評価</span>@p.EvaluationStatus</div>
-                <div><span class="object-label">信頼度</span>@p.ConfidenceScore</div>
-                <div><span class="object-label">予想日時</span>@(p.PredictedAt?.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ?? "—")</div>
-                <div><span class="object-label">印</span>@p.MarkCount 件</div>
+            <article class="object-list-item prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
+                <span class="object-list-main">
+                    <strong>@RaceDisplayName(p)</strong>
+                    <span class="hint">@(p.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定") · 本命 @(p.PrimaryHorseName ?? "—")</span>
+                </span>
+                <RaceOpsStatusBadge Label="@TicketStatusLabel(p.TicketStatus)" Tone="@TicketStatusTone(p.TicketStatus)" />
+                <span class="object-list-meta">@EvaluationStatusLabel(p.EvaluationStatus) ・ 信頼度 @p.ConfidenceScore ・ 印 @p.MarkCount 件</span>
+                <span class="object-list-affordance">詳細</span>
             </article>
         }
-    </div>
-    <div class="toolbar">
-        <button class="btn" disabled="@(page <= 1)" @onclick="() => GoAsync(page - 1)">前</button>
-        <span>@(page) / @result.TotalPages</span>
-        <button class="btn" disabled="@(page >= result.TotalPages)" @onclick="() => GoAsync(page + 1)">次</button>
-    </div>
+    </RaceOpsObjectList>
+    <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
 }
 
 @code {
-    private string? raceId;
+    private string? query;
     private string? predictorType;
     private int page = 1;
-    private int pageSize = 50;
+    private const int pageSize = 50;
     private bool loading;
     private PagedResponse<PredictionTicketSummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
-
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        loading = true;
-        try
-        {
-            result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest
-            {
-                RaceId = raceId,
-                PredictorType = predictorType,
-                Page = page,
-                PageSize = pageSize
-            });
-        }
-        finally
-        {
-            loading = false;
-        }
+        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
+        query = ParseText(q, "query") ?? ParseText(q, "raceId");
+        predictorType = ParseText(q, "predictorType");
+        if (int.TryParse(ParseText(q, "page"), out var p) && p > 0) page = p;
+        await LoadAsync();
     }
 
-    private async Task GoAsync(int p) { page = p; await LoadAsync(); }
+    private async Task SearchAsync() { page = 1; await LoadAsync(); }
+    private async Task LoadAsync()
+    {
+        UpdateUrl();
+        loading = true;
+        try { result = await Api.SearchPredictionsAsync(new SearchPredictionTicketsRequest { Query = query, PredictorType = predictorType, Page = page, PageSize = pageSize }); }
+        finally { loading = false; }
+    }
+    private async Task GoAsync(int value) { page = value; await LoadAsync(); }
+    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/predictions", new Dictionary<string, string?> { ["query"] = query, ["predictorType"] = predictorType, ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
+    private void NavigateIfChanged(string uri)
+    {
+        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
+        Navigation.NavigateTo(uri, replace: true);
+    }
+    private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
+    private void OpenPrediction(string id) => Navigation.NavigateTo(PredictionUrl(id));
+    private void OpenPredictionFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenPrediction(id); }
+    private static string PredictionUrl(string id) => $"/predictions/{Uri.EscapeDataString(id)}";
+    private static string RaceDisplayName(PredictionTicketSummaryResponse value) => string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", _ => value.ToString() };
+    private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
+    private static string EvaluationStatusLabel(EvaluationStatus value) => value switch { EvaluationStatus.Ready => "評価済み", EvaluationStatus.RecalculationRequired => "再評価待ち", EvaluationStatus.Failed => "評価失敗", _ => value.ToString() };
 }

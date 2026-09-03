@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Hosting;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
@@ -99,18 +100,32 @@ public sealed class LocalCollectionTaskWorkerService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var dispatches = await _stateStore.GetPendingCollectionTaskDispatchesAsync(DateTimeOffset.UtcNow, 1, stoppingToken)
-                .ConfigureAwait(false);
-            if (dispatches.Count == 0)
+            try
             {
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
-                continue;
-            }
+                var dispatches = await _stateStore.GetPendingCollectionTaskDispatchesAsync(DateTimeOffset.UtcNow, 1, stoppingToken)
+                    .ConfigureAwait(false);
+                if (dispatches.Count == 0)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+                    continue;
+                }
 
-            var dispatch = dispatches[0];
-            await _stateStore.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, DateTimeOffset.UtcNow, stoppingToken)
-                .ConfigureAwait(false);
-            await _worker.RunAsync(dispatch.Notification, stoppingToken).ConfigureAwait(false);
+                var dispatch = dispatches[0];
+                await _stateStore.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, DateTimeOffset.UtcNow, stoppingToken)
+                    .ConfigureAwait(false);
+                try
+                {
+                    await _worker.RunAsync(dispatch.Notification, stoppingToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await _stateStore.MarkCollectionTaskDispatchFailedAsync(dispatch.OutboxId, DateTimeOffset.Now, ex.Message, stoppingToken);
+                }
+            }
+            catch (Exception)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken).ConfigureAwait(false);
+            }
         }
     }
 }

@@ -1,0 +1,8 @@
+<section class="object-list" aria-label="@Label">
+    @ChildContent
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

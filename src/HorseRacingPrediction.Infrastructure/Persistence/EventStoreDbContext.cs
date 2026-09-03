@@ -47,6 +47,7 @@ public class EventStoreDbContext : DbContext
         {
             entity.HasKey(x => x.NormalizedAlias);
             entity.HasIndex(x => x.OwnerId);
+            entity.Property(x => x.IsDisplayName).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<OwnerMergeAuditReadModel>(entity =>

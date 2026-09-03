@@ -3,17 +3,23 @@
 @implements IDisposable
 @inject NavigationManager Navigation
 
-<div class="page">
-    <button class="mobile-menu-button" type="button" aria-expanded="@navOpen" @onclick="() => navOpen = !navOpen">☰ <span>メニュー</span></button>
-    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="() => navOpen = false"></button> }
+<FluentMenuProvider />
+
+<header class="mobile-bar" @onkeydown="HandleKeyDown">
+    <button @ref="menuButton" class="mobile-menu-button" type="button" aria-expanded="@(navOpen ? "true" : "false")" aria-label="メニュー" @onclick="ToggleNavigation">
+        <span class="hamburger-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+    </button>
+    <strong>RaceOps</strong>
+</header>
+<div class="page" @onkeydown="HandleKeyDown">
+    @if (navOpen) { <button class="nav-backdrop" type="button" aria-label="メニューを閉じる" @onclick="CloseNavigationAsync"></button> }
     <aside class="sidebar @(navOpen ? "open" : null)">
         <div class="brand">
-            <span class="brand-mark">🐎</span>
-            <span class="brand-text">競馬DB管理</span>
+            <span class="brand-text">RaceOps</span>
         </div>
         <NavMenu />
         <form method="post" action="/logout" class="logout-form">
-            <button class="btn small" type="submit">ログアウト</button>
+            <FluentButton Appearance="@Appearance.Outline" Type="@ButtonType.Submit">ログアウト</FluentButton>
         </form>
     </aside>
     <main class="content">
@@ -21,7 +27,7 @@
             <ErrorBoundary>
                 <ChildContent>@Body</ChildContent>
                 <ErrorContent Context="exception">
-                    <section class="ui-state ui-state-error" role="alert"><strong>画面を読み込めませんでした</strong><span>通信状態を確認して、もう一度お試しください。</span><a class="btn" href="">再読み込み</a><details><summary>技術情報</summary><code>@exception.Message</code></details></section>
+                    <RaceOpsAlert Title="画面を読み込めませんでした" Message="通信状態を確認して、もう一度お試しください。"><FluentButton Appearance="@Appearance.Outline" Href="@Navigation.Uri">再読み込み</FluentButton><details><summary>技術情報</summary><code>@exception.Message</code></details></RaceOpsAlert>
                 </ErrorContent>
             </ErrorBoundary>
         </article>
@@ -30,6 +36,7 @@
 
 @code {
     private bool navOpen;
+    private ElementReference menuButton;
 
     protected override void OnInitialized()
         => Navigation.LocationChanged += HandleLocationChanged;
@@ -39,6 +46,22 @@
         if (!navOpen) return;
         navOpen = false;
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleNavigation() => navOpen = !navOpen;
+
+    private async Task CloseNavigationAsync()
+    {
+        navOpen = false;
+        await menuButton.FocusAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (navOpen && args.Key == "Escape")
+        {
+            await CloseNavigationAsync();
+        }
     }
 
     public void Dispose()

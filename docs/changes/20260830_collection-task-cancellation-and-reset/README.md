@@ -211,6 +211,10 @@ SQS クライアントに main queue と DLQ の purge を追加し、Lightsail 
 
 ### 2026-08-30 UI 撤去
 
-実装後の利用者判断により、Api 管理画面の `収集タスク・状態` ナビゲーション、一覧、詳細、取消、再投入、キュー初期化、完全初期化 UI を撤去した。操作機能は `/api/collection/tasks` と `/api/collection/reset` 配下の API 限定で維持する。失敗通知のリンクも削除済み画面ではなく `GET /api/collection/tasks/{jobId}` を指すよう変更した。Collector の開発用画面は別ホストの既存機能であり、本判断の対象外とする。
+実装後の利用者判断により、Api 管理画面の `収集タスク・状態` ナビゲーション、一覧、詳細、取消、再投入、キュー初期化、完全初期化 UI を一度撤去した。操作機能は `/api/collection/tasks` と `/api/collection/reset` 配下の API 限定で維持し、失敗通知のリンクも一時的に `GET /api/collection/tasks/{jobId}` を指すよう変更した。後続変更セット [Fluent UI ベースの管理画面刷新とデザインガイドライン統合](../20260830_fluent-ui-design-system/README.md) により、この判断は更新され、現行の失敗通知と canonical UI は `/jobs/{jobId}` を指す。
+
+### 2026-08-30 UI方針の更新
+
+後続変更セット [Fluent UI ベースの管理画面刷新とデザインガイドライン統合](../20260830_fluent-ui-design-system/README.md) により、上記の「個別取消・キュー初期化UIを持たない」というUI判断を更新する。API管理画面に `/jobs` と `/jobs/{jobId}` を復元し、個別取消ではなくジョブ一覧の `すべてのジョブを一時停止` / `再開` を標準UIとして設ける。停止はRunningを強制終了せず、dispatcher停止とSQS本体・DLQ purgeを行い、Readyを保持して再開時に優先順位順で再投入する。APIエンドポイントと個別取消のバックエンド仕様は本記録の実装履歴として保持し、UIの現行仕様は後続変更セットを参照する。
 
 撤去後に Release build、Api tests 81 件、`dotnet format --verify-no-changes`、`git diff --check` の成功を確認した。

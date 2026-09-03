@@ -1,6 +1,6 @@
 @inject AdminApiClient Api
 
-<section class="card">
+<section class="surface-card">
     <h3>メモ</h3>
 
     @if (loading)
@@ -25,9 +25,9 @@
                                 <label>種別<input @bind="editMemoType" /></label>
                                 <label>内容<textarea @bind="editContent" rows="3"></textarea></label>
                             </div>
-                            <div class="toolbar">
-                                <button class="btn primary small" @onclick="() => SaveEditAsync(memo.MemoId)">保存</button>
-                                <button class="btn small" @onclick="CancelEdit">キャンセル</button>
+                            <div class="action-bar">
+                                <FluentButton Appearance="@Appearance.Accent" OnClick="() => SaveEditAsync(memo.MemoId)">保存</FluentButton>
+                                <FluentButton Appearance="@Appearance.Outline" OnClick="CancelEdit">キャンセル</FluentButton>
                             </div>
                         }
                         else
@@ -44,17 +44,17 @@
                                 }
                             </div>
                             <p class="memo-content">@memo.Content</p>
-                            <div class="toolbar">
-                                <button class="btn small" @onclick="() => StartEdit(memo)">編集</button>
+                            <div class="action-bar">
+                                <FluentButton Appearance="@Appearance.Outline" OnClick="() => StartEdit(memo)">編集</FluentButton>
                                 @if (deleteArmedMemoId == memo.MemoId)
                                 {
                                     <span class="hint">本当に削除しますか？</span>
-                                    <button class="btn small" @onclick="() => DeleteAsync(memo.MemoId)">削除する</button>
-                                    <button class="btn small" @onclick="() => deleteArmedMemoId = null">キャンセル</button>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => DeleteAsync(memo.MemoId)">削除する</FluentButton>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => deleteArmedMemoId = null">キャンセル</FluentButton>
                                 }
                                 else
                                 {
-                                    <button class="btn small" @onclick="() => deleteArmedMemoId = memo.MemoId">削除</button>
+                                    <FluentButton Appearance="@Appearance.Outline" OnClick="() => deleteArmedMemoId = memo.MemoId">削除</FluentButton>
                                 }
                             </div>
                         }
@@ -67,15 +67,13 @@
             <label>種別<input @bind="newMemoType" placeholder="例: 展望, 注意点" /></label>
             <label>内容<textarea @bind="newContent" rows="3"></textarea></label>
         </div>
-        <div class="toolbar">
-            <button class="btn primary small" @onclick="AddAsync" disabled="@saving">メモを追加</button>
+        <div class="action-bar">
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@AddAsync" Disabled="@saving">メモを追加</FluentButton>
         </div>
 
         @if (errors.Count > 0)
         {
-            <ul class="error-list">
-                @foreach (var e in errors) { <li>@e</li> }
-            </ul>
+            <RaceOpsAlert Title="メモを保存できませんでした" Messages="@errors" />
         }
     }
 </section>

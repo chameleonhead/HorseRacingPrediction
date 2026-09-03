@@ -1,0 +1,24 @@
+<section class="raceops-alert raceops-alert-@Tone" role="@Role" aria-live="@AriaLive">
+    <strong>@Title</strong>
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p>@Message</p>
+    }
+    @if (Messages is not null && Messages.Count > 0)
+    {
+        <ul>
+            @foreach (var message in Messages) { <li>@message</li> }
+        </ul>
+    }
+    @ChildContent
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public IReadOnlyList<string>? Messages { get; set; }
+    [Parameter] public string Tone { get; set; } = "error";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private string Role => Tone == "error" ? "alert" : "status";
+    private string AriaLive => Tone == "error" ? "assertive" : "polite";
+}

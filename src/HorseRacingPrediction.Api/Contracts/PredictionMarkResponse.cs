@@ -5,4 +5,6 @@ public sealed record PredictionMarkResponse(
     string MarkCode,
     int PredictedRank,
     decimal Score,
-    string? Comment);
+    string? Comment,
+    string? HorseId = null,
+    string? HorseName = null);

@@ -1,0 +1,19 @@
+<FluentCard class="detail-card form-section">
+    <h2>@Title</h2>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <p class="hint">@Description</p>
+    }
+    @ChildContent
+    @if (Actions is not null)
+    {
+        <div class="action-row">@Actions</div>
+    }
+</FluentCard>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Description { get; set; }
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

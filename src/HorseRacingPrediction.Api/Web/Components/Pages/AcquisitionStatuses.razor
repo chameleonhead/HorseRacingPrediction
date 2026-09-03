@@ -1,0 +1,257 @@
+@page "/acquisition-statuses"
+@page "/acquisition-statuses/{AcquisitionKey}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+
+@if (string.IsNullOrWhiteSpace(AcquisitionKey))
+{
+    <RaceOpsPageHeader Section="運用" Title="データ取得状況" Description="プロフィール補完の取得状況を確認します。" />
+}
+@if (detail is not null)
+{
+    <RaceOpsObjectHeader BackHref="/acquisition-statuses" BackLabel="← データ取得状況一覧に戻る" Title="@detail.SubjectName" Section="運用 / データ取得状況" Description="@($"{SubjectLabel(detail.SubjectType)} ・ {detail.OperationType}")" Status="@StatusLabel(detail.Status)" StatusTone="@StatusTone(detail.Status)">
+        <Actions>
+            @if (originJob?.Status == AgentJobStatus.Succeeded)
+            {
+                <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => showReacquireDialog = true)" Disabled="@reacquiring">再取得</FluentButton>
+            }
+        </Actions>
+    </RaceOpsObjectHeader>
+    <FluentCard class="detail-card detail-section">
+        @if (originJob?.Status != AgentJobStatus.Succeeded && !string.IsNullOrWhiteSpace(detail.OriginJobId)) { <p class="hint">再取得は元ジョブ完了後に実行できます。</p> }
+            <div class="detail-facts">
+            <div><span class="object-label">状態</span><span class="badge @StatusClass(detail.Status)">@StatusLabel(detail.Status)</span></div>
+            <div><span class="object-label">取得種別</span>@OperationLabel(detail.OperationType)</div>
+            <div><span class="object-label">Provider</span>@(detail.ProviderType ?? "—")</div>
+            <div><span class="object-label">対象ID</span>@(detail.SubjectId ?? "—")</div>
+            <div><span class="object-label">元ジョブ</span>@if (!string.IsNullOrWhiteSpace(detail.OriginJobId)) { <a href="/jobs/@Uri.EscapeDataString(detail.OriginJobId)">@detail.OriginJobId</a> } else { <span>—</span> }</div>
+            <div><span class="object-label">作成日時</span>@detail.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>
+            <div><span class="object-label">更新日時</span>@detail.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(reacquireMessage)) { <FluentMessageBar Intent="@MessageIntent.Success" Title="@reacquireMessage" /> }
+        @if (reacquireErrors.Count > 0) { <RaceOpsAlert Title="再取得を開始できませんでした" Messages="@reacquireErrors" /> }
+        @if (!string.IsNullOrWhiteSpace(detail.ErrorReason)) { <RaceOpsAlert Title="取得エラー" Message="@detail.ErrorReason" /> }
+    </FluentCard>
+    <section class="entity-section detail-section">
+            <h3>取得履歴</h3>
+            <div class="data-list compact-list">
+                @foreach (var entry in history)
+                {
+                    <article class="data-list-row">
+                        <div class="object-primary">
+                            <strong>@OperationLabel(detail.OperationType)</strong>
+                            <span class="hint">@entry.OccurredAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") ・ Provider: @(entry.ProviderType ?? detail.ProviderType ?? "—")</span>
+                            @if (!string.IsNullOrWhiteSpace(entry.ErrorReason))
+                            {
+                                <p class="history-error">@entry.ErrorReason</p>
+                            }
+                            @if (entry.ErrorCode.HasValue || !string.IsNullOrWhiteSpace(entry.SourceUrl))
+                            {
+                                <details class="inline-disclosure">
+                                    <summary>技術情報</summary>
+                                    @if (entry.ErrorCode.HasValue) { <p>エラーコード: @entry.ErrorCode</p> }
+                                    @if (!string.IsNullOrWhiteSpace(entry.SourceUrl)) { <p>取得元: @entry.SourceUrl</p> }
+                                </details>
+                            }
+                        </div>
+                        <span class="badge @StatusClass(entry.Status)">@StatusLabel(entry.Status)</span>
+                    </article>
+                }
+            </div>
+    </section>
+    <section class="entity-section detail-section">
+            <h3>関連</h3>
+            <div class="data-list compact-list">
+                @if (!string.IsNullOrWhiteSpace(detail.SubjectId) && SubjectUrl(detail) is { } subjectUrl)
+                {
+                    <article class="data-list-row">
+                        <div class="object-primary"><a href="@subjectUrl">@detail.SubjectName</a><span class="hint">@SubjectLabel(detail.SubjectType)</span></div>
+                        <div><span class="object-label">根拠</span>取得対象ID</div>
+                    </article>
+                }
+                @if (!string.IsNullOrWhiteSpace(detail.RelatedRaceId))
+                {
+                    <article class="data-list-row">
+                        <div class="object-primary"><a href="/races/@Uri.EscapeDataString(detail.RelatedRaceId)">関連レース</a><span class="hint">@detail.RelatedRaceId</span></div>
+                        <div><span class="object-label">根拠</span>取得時の関連レース</div>
+                    </article>
+                }
+                @if (!string.IsNullOrWhiteSpace(detail.OriginJobId))
+                {
+                    <article class="data-list-row">
+                        <div class="object-primary"><a href="/jobs/@Uri.EscapeDataString(detail.OriginJobId)">元ジョブ</a><span class="hint">@detail.OriginJobId</span></div>
+                        <div><span class="object-label">根拠</span>この取得状況を更新した収集ジョブ</div>
+                    </article>
+                }
+            </div>
+    </section>
+}
+<FluentCard class="filter-card">
+    <div class="filter-toolbar acquisition-filter">
+        <div class="filter-field filter-field-primary"><input aria-label="対象名" type="search" @bind="subjectQuery" placeholder="馬・騎手・調教師名を検索" /></div>
+        <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.Unacquired ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.Unacquired))">未取得のみ</FluentButton>
+        <FluentButton Appearance="@(quickFilter == AcquisitionQuickFilter.RetryWaiting ? Appearance.Accent : Appearance.Outline)" OnClick="@(() => ToggleQuickFilter(AcquisitionQuickFilter.RetryWaiting))">再試行待ち</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@LoadAsync">検索</FluentButton>
+    </div>
+    <details class="advanced-filters">
+        <summary>詳細条件</summary>
+        <div class="advanced-filter-grid">
+            <input aria-label="開始日" type="date" @bind="from" />
+            <input aria-label="終了日" type="date" @bind="to" />
+            <select aria-label="対象" @bind="subjectTypeText"><option value="">対象: すべて</option>@foreach (var value in Enum.GetValues<AgentAcquisitionSubjectType>()) { <option value="@value">@SubjectLabel(value)</option> }</select>
+            <select aria-label="状態" @bind="statusText"><option value="">状態: すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select>
+        </div>
+    </details>
+</FluentCard>
+@if (loading) { <UiState Kind="loading" Title="データ取得状況を読み込んでいます" /> }
+else if (VisibleItems.Count == 0) { <UiState Title="該当する取得結果はありません" /> }
+else
+{
+    <RaceOpsObjectList Label="データ取得状況一覧">
+        @foreach (var item in VisibleItems.Skip((page - 1) * pageSize).Take(pageSize))
+        {
+            <RaceOpsObjectListItem Href="@($"/acquisition-statuses/{Uri.EscapeDataString(item.AcquisitionKey)}")" Title="@item.SubjectName" Description="@($"{SubjectLabel(item.SubjectType)} ・ {OperationLabel(item.OperationType)}")" Status="@StatusLabel(item.Status)" StatusTone="@StatusTone(item.Status)" Metadata="@DisplayMetadata(item)" />
+        }
+    </RaceOpsObjectList>
+    <Pagination TotalCount="VisibleItems.Count" Page="page" PageSize="pageSize" PageChanged="GoPage" />
+}
+
+<FluentDialog Hidden="@(!showReacquireDialog || detail is null)" HiddenChanged="@(hidden => showReacquireDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="reacquire-title" Style="width:min(520px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="reacquire-title">このデータを再取得しますか</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>完了済みの元ジョブは残したまま、新しい収集ジョブを投入します。既存の取得履歴と失敗履歴は保持されます。</p>
+        <dl class="meta">
+            <dt>対象</dt><dd>@detail?.SubjectName</dd>
+            <dt>元ジョブ</dt><dd>@(detail?.OriginJobId ?? "—")</dd>
+        </dl>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@(() => showReacquireDialog = false)">キャンセル</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@ReacquireAsync" Disabled="@reacquiring">再取得</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    private DateOnly from = DateOnly.FromDateTime(DateTime.Today.AddDays(-7));
+    private DateOnly to = DateOnly.FromDateTime(DateTime.Today);
+    private string subjectTypeText = string.Empty;
+    private string statusText = string.Empty;
+    private string subjectQuery = string.Empty;
+    private AcquisitionQuickFilter quickFilter;
+    private IReadOnlyList<AgentAcquisitionStatusReadModel> items = [];
+    [Parameter] public string? AcquisitionKey { get; set; }
+    private AgentAcquisitionStatusReadModel? detail;
+    private IReadOnlyList<AgentAcquisitionHistoryReadModel> history = [];
+    private bool loading;
+    private bool reacquiring;
+    private bool showReacquireDialog;
+    private string? reacquireMessage;
+    private IReadOnlyList<string> reacquireErrors = [];
+    private AgentJobDetailReadModel? originJob;
+    private int page = 1;
+    private const int pageSize = 50;
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+        detail = string.IsNullOrWhiteSpace(AcquisitionKey)
+            ? null
+            : await Api.GetAcquisitionStatusAsync(AcquisitionKey);
+        history = detail is null
+            ? []
+            : await Api.GetAcquisitionHistoryAsync(detail.AcquisitionKey) ?? [];
+        if (detail is not null && history.Count == 0)
+        {
+            history = [new AgentAcquisitionHistoryReadModel(0, detail.AcquisitionKey, detail.ProviderType, detail.Status,
+                detail.ErrorCode, detail.ErrorReason, detail.OriginJobId, detail.SourceUrl, detail.UpdatedAt)];
+        }
+        originJob = !string.IsNullOrWhiteSpace(detail?.OriginJobId)
+            ? await Api.GetJobAsync(detail.OriginJobId)
+            : null;
+    }
+    private void Open(string key) => Navigation.NavigateTo($"/acquisition-statuses/{Uri.EscapeDataString(key)}");
+    private async Task ReacquireAsync()
+    {
+        if (detail is null || string.IsNullOrWhiteSpace(detail.OriginJobId)) return;
+        reacquiring = true;
+        reacquireMessage = null;
+        reacquireErrors = [];
+        try
+        {
+            var job = originJob ?? await Api.GetJobAsync(detail.OriginJobId);
+            if (job is null)
+            {
+                reacquireErrors = ["元ジョブが見つかりませんでした。"];
+                return;
+            }
+
+            var result = await Api.ReacquireJobAsync(job.JobId, job.UpdatedAt, "データ取得状況から再取得");
+            reacquireErrors = result.Success ? [] : result.Errors;
+            reacquireMessage = result.Success ? "再取得ジョブを投入しました。" : null;
+            if (result.Success) showReacquireDialog = false;
+        }
+        finally { reacquiring = false; }
+    }
+    private async Task LoadAsync() { loading = true; try { items = await Api.GetAcquisitionStatusesAsync(from, to, Enum.TryParse<AgentAcquisitionSubjectType>(subjectTypeText, out var subject) ? subject : null, Enum.TryParse<RaceDataCollectionState>(statusText, out var state) ? state : null) ?? []; page = 1; } finally { loading = false; } }
+    private IReadOnlyList<AgentAcquisitionStatusReadModel> VisibleItems => items
+        .Where(item => string.IsNullOrWhiteSpace(subjectQuery) || item.SubjectName.Contains(subjectQuery, StringComparison.OrdinalIgnoreCase))
+        .Where(item => quickFilter switch
+        {
+            AcquisitionQuickFilter.Unacquired => item.Status != RaceDataCollectionState.Succeeded,
+            AcquisitionQuickFilter.RetryWaiting => item.Status is RaceDataCollectionState.Failed or RaceDataCollectionState.DeadLetter,
+            _ => true,
+        })
+        .ToList();
+    private void ToggleQuickFilter(AcquisitionQuickFilter filter)
+    {
+        quickFilter = quickFilter == filter ? AcquisitionQuickFilter.None : filter;
+        page = 1;
+    }
+    private Task GoPage(int value) { page = value; return Task.CompletedTask; }
+    private static string StatusClass(RaceDataCollectionState value) => value switch { RaceDataCollectionState.Succeeded => "ok", RaceDataCollectionState.Failed or RaceDataCollectionState.DeadLetter => "bad", RaceDataCollectionState.Running => "info", _ => "warn" };
+    private static string StatusLabel(RaceDataCollectionState value) => value switch
+    {
+        RaceDataCollectionState.Succeeded => "完了",
+        RaceDataCollectionState.Failed => "失敗",
+        RaceDataCollectionState.DeadLetter => "要対応",
+        RaceDataCollectionState.Running => "実行中",
+        _ => "待機中"
+    };
+    private static string StatusTone(RaceDataCollectionState value) => value switch
+    {
+        RaceDataCollectionState.Succeeded => "success",
+        RaceDataCollectionState.Failed or RaceDataCollectionState.DeadLetter => "danger",
+        RaceDataCollectionState.Running => "info",
+        _ => "neutral"
+    };
+    private static string OperationLabel(AgentAcquisitionOperationType value) => value switch
+    {
+        AgentAcquisitionOperationType.ProfileSync => "プロフィール取得",
+        AgentAcquisitionOperationType.EntityUpsert => "データ取得",
+        _ => value.ToString()
+    };
+    private static string DisplayMetadata(AgentAcquisitionStatusReadModel item)
+    {
+        var updated = item.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+        return string.IsNullOrWhiteSpace(item.ErrorReason)
+            ? $"提供元 {item.ProviderType ?? "—"} ・ 更新 {updated}"
+            : $"提供元 {item.ProviderType ?? "—"} ・ 更新 {updated} ・ {item.ErrorReason}";
+    }
+    private static string? SubjectUrl(AgentAcquisitionStatusReadModel item) => item.SubjectType switch
+    {
+        AgentAcquisitionSubjectType.Horse => $"/horses/{Uri.EscapeDataString(item.SubjectId!)}",
+        AgentAcquisitionSubjectType.Jockey => $"/jockeys/{Uri.EscapeDataString(item.SubjectId!)}",
+        AgentAcquisitionSubjectType.Trainer => $"/trainers/{Uri.EscapeDataString(item.SubjectId!)}",
+        AgentAcquisitionSubjectType.Owner => $"/owners/{Uri.EscapeDataString(item.SubjectId!)}",
+        _ => null
+    };
+    private static string SubjectLabel(AgentAcquisitionSubjectType value) => value switch
+    {
+        AgentAcquisitionSubjectType.Horse => "馬",
+        AgentAcquisitionSubjectType.Jockey => "騎手",
+        AgentAcquisitionSubjectType.Trainer => "調教師",
+        AgentAcquisitionSubjectType.Owner => "馬主",
+        _ => value.ToString()
+    };
+    private enum AcquisitionQuickFilter { None, Unacquired, RetryWaiting }
+}

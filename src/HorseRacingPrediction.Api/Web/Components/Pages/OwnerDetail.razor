@@ -1,55 +1,39 @@
 @page "/owners/{OwnerId}"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
-<h1>馬主詳細</h1>
-<p class="hint"><a href="owners">← 馬主一覧へ戻る</a></p>
+<RaceOpsObjectHeader BackHref="/owners" BackLabel="← 馬主一覧に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主詳細")" Section="データ / 馬主">
+    <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/owners/{Uri.EscapeDataString(OwnerId)}/edit")">編集</FluentButton></Actions>
+</RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (owner is null) { <p>指定された馬主は見つかりませんでした。</p> }
 else
 {
-    <nav class="detail-tabs" aria-label="詳細セクション">
-        <ul class="detail-tab-list">
-            <li><a href="#overview">概要</a></li>
-            <li><a href="#relations">関係</a></li>
-            <li><a href="#merge">名寄せ</a></li>
-            <li><a href="#history">履歴</a></li>
-        </ul>
-    </nav>
-
-    <div class="detail-sections">
-    <section id="overview" class="card detail-section">
-        <h2>@owner.Summary.DisplayName</h2>
-        <dl class="meta"><dt>OwnerId</dt><dd><code>@owner.Summary.OwnerId</code></dd><dt>現在の所有馬</dt><dd>@owner.Summary.CurrentHorseCount 頭</dd><dt>出走</dt><dd>@owner.Summary.ParticipationCount 戦</dd></dl>
-        @if (owner.Summary.NameVariants.Count > 1) { <p class="hint">同一候補の表記: @string.Join(" / ", owner.Summary.NameVariants)</p> }
+    <div class="detail-stack">
+    <section class="profile-facts" aria-label="概要">
+        <div class="profile-fact"><span>所有頭数</span><strong>@owner.Summary.CurrentHorseCount 頭</strong></div>
+        <div class="profile-fact"><span>登録表記</span><strong>@owner.Summary.NameVariants.Count 件</strong></div>
+        <div class="profile-fact"><span>出走</span><strong>@owner.Summary.ParticipationCount 戦</strong></div>
     </section>
-    <section id="relations" class="entity-section detail-section">
-        <h3>この馬主に関係する馬・調教師</h3>
-        <div class="relationship-grid">
-            @foreach (var item in owner.CurrentHorses.Concat(owner.RelatedTrainers).Take(8))
-            {
-                <a class="relationship-link" href="@ObjectUrl(item)"><span class="relationship-kind">@(item.ObjectType == "Horse" ? "所有した馬" : "管理した調教師")</span><strong>@item.DisplayName</strong><span class="hint">@item.RelationshipCount 戦</span></a>
-            }
-        </div>
-    </section>
-    <section id="merge" class="card detail-section">
-        <h3>馬主を名寄せする</h3>
-        <p class="hint">別の馬主オブジェクトの表記をこの馬主へ統合します。出走時点の原文は変更せず、対応関係と理由を監査履歴へ残します。</p>
-        <div class="form-grid"><label>統合元 OwnerId<input @bind="sourceOwnerId" /></label><label>理由<input @bind="mergeReason" /></label></div>
-        <div class="toolbar">
-            @if (mergeArmed) { <span class="hint">この馬主へ統合しますか？</span><button class="btn primary small" @onclick="MergeAsync" disabled="@merging">統合する</button><button class="btn small" @onclick="() => mergeArmed = false">キャンセル</button> }
-            else { <button class="btn small" @onclick="() => mergeArmed = true">統合内容を確認</button> }
-        </div>
-        @if (mergeErrors.Count > 0) { <ul class="error-list">@foreach (var item in mergeErrors) { <li>@item</li> }</ul> }
-    </section>
-    <section id="history" class="card detail-section">
+    <section class="detail-group" aria-label="関係"><RaceOpsRelationshipGrid SectionId="owner-top-horses" Title="関連する馬（過去3年の獲得賞金順・上位5頭）" Ranked="true" Items="@(owner.TopHorses ?? [])" Url="@OwnerRelationshipUrl" /></section>
+    <section class="detail-group" aria-label="名寄せ"><section class="detail-card detail-section"><h3>名寄せ</h3><p class="hint">別の馬主表記をこの馬主へ統合します。原文は変更せず、対応関係と理由を履歴に残します。</p><FluentButton id="owner-merge-trigger" Appearance="@Appearance.Outline" OnClick="@OpenMerge">名寄せ候補を検索</FluentButton></section></section>
+    <section class="detail-group" aria-label="名寄せ履歴"><section class="detail-card detail-section">
         <h3>名寄せ履歴</h3>
         @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
         else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@audit.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
-    </section>
-    <section class="entity-section detail-section">
+    </section></section>
+    <section class="detail-group" aria-label="出走履歴"><section class="entity-section detail-section">
         <h3>所有馬の出走履歴</h3>
+        <div class="filter-toolbar history-filter">
+            <div class="filter-field filter-field-primary"><input aria-label="所有馬の出走履歴を検索" @bind="historySearchInput" placeholder="馬名・レース名を検索" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="開始日" type="date" @bind="historyFromInput" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="終了日" type="date" @bind="historyToInput" /></div>
+            <div class="filter-field filter-field-compact"><input aria-label="開催場" @bind="historyRacecourseInput" placeholder="開催場" /></div>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@ApplyHistoryFilters">検索</FluentButton>
+        </div><p class="hint">開催日の新しい順</p>
         @if (historyEntries.Count == 0)
         {
             <p class="hint">出走履歴はありません。</p>
@@ -57,70 +41,171 @@ else
         else
         {
             <ol class="history-list">
-            @foreach (var entry in historyEntries)
+            @foreach (var entry in FilteredHistory)
             {
-                <li class="history-item"><div class="history-event"><a class="history-race" href="@($"races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @entry.RacecourseCode @entry.RaceNumber R</a><span class="hint">@(entry.RaceName ?? entry.RaceId)</span></div><div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong></div><div class="history-relations"><div class="history-field"><span class="relationship-kind">馬</span><a href="@($"horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div><div class="history-field"><span class="relationship-kind">調教師</span>@(entry.TrainerName ?? "—")</div><div class="history-field"><span class="relationship-kind">騎手</span>@(entry.JockeyName ?? "—")</div></div></li>
+                <li class="history-item"><div class="history-event"><a class="history-race" href="@($"/races/{Uri.EscapeDataString(entry.RaceId)}")">@(entry.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録") @entry.RacecourseCode @entry.RaceNumber R</a><span class="hint">@(entry.RaceName ?? entry.RaceId)</span></div><div class="history-result"><strong>@(entry.FinishPosition is null ? "結果 —" : $"{entry.FinishPosition}着")</strong></div><div class="history-relations"><div class="history-field"><span class="relationship-kind">馬</span><a href="@($"/horses/{Uri.EscapeDataString(entry.HorseId)}")">@entry.HorseName</a></div><div class="history-field"><span class="relationship-kind">調教師</span>@(entry.TrainerName ?? "—")</div><div class="history-field"><span class="relationship-kind">騎手</span>@(entry.JockeyName ?? "—")</div></div></li>
             }
             </ol>
-            @if (historyHasMore)
+            @if (FilteredHistoryCount > historyBatchSize)
             {
-                <div class="toolbar">
-                    <button class="btn" @onclick="LoadMoreHistoryAsync" disabled="@loadingMore">次の10件を読み込む</button>
-                </div>
+                <Pagination TotalCount="@FilteredHistoryCount" Page="@historyPage" PageSize="@historyBatchSize" PageChanged="@ChangeHistoryPage" />
             }
         }
-    </section>
+    </section></section>
     </div>
 }
 
+<FluentDialog Hidden="@(!showMergeDialog)" HiddenChanged="@(hidden => showMergeDialog = !hidden)" @onkeydown="HandleMergeDialogKeyDown" Modal="true" TrapFocus="true" AriaLabelledby="merge-title" Style="width:min(760px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="merge-title">馬主の名寄せ</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <div class="merge-dialog-layout">
+            <div>
+                <p class="eyebrow">STEP 1</p>
+                <h3>統合元を選択</h3>
+                <p class="hint">統合元の表記を検索し、候補から1件選択してください。</p>
+            </div>
+            <div class="action-row owner-merge-search">
+                <FluentTextField Label="統合元を検索" @bind-Value="mergeQuery" Placeholder="馬主名で検索" />
+                <FluentButton Appearance="@Appearance.Outline" OnClick="@SearchMergeCandidatesAsync" Disabled="@searchingMergeCandidates">検索</FluentButton>
+            </div>
+            @if (mergeCandidates.Count > 0)
+            {
+                <div class="data-list compact-list">
+                @foreach (var candidate in PagedMergeCandidates)
+                {
+                    <article class="data-list-row selectable-row @(sourceOwnerId == candidate.OwnerId ? "selected-row" : null)" @onclick="@(() => SelectMergeCandidate(candidate))" tabindex="0">
+                        <div class="object-primary">
+                            <strong>@candidate.DisplayName</strong>
+                            <span class="hint">@candidate.OwnerId</span>
+                        </div>
+                        <div><span class="object-label">所有馬</span>@candidate.CurrentHorseCount 頭</div>
+                        <div><span class="object-label">出走</span>@candidate.ParticipationCount 戦</div>
+                    </article>
+                }
+                </div>
+                <Pagination TotalCount="mergeCandidates.Count" Page="mergePage" PageSize="mergePageSize" PageChanged="GoMergePage" />
+            }
+            else if (searchedMergeCandidates)
+            {
+                <UiState Title="候補はありません" Message="検索語を変えて再検索してください。" />
+            }
+            <div class="merge-review" aria-label="統合内容の確認">
+            <p class="eyebrow">STEP 2</p>
+            <h3>統合内容を確認</h3>
+            <div class="merge-selected">
+                <span class="object-label">統合先</span>
+                <strong>@owner?.Summary.DisplayName</strong>
+                <span class="hint">@OwnerId</span>
+            </div>
+            <div class="merge-selected">
+                <span class="object-label">統合元</span>
+                <strong>@(selectedMergeCandidate?.DisplayName ?? "未選択")</strong>
+                @if (!string.IsNullOrWhiteSpace(sourceOwnerId)) { <span class="hint">@sourceOwnerId</span> }
+            </div>
+            @if (selectedMergeCandidate is not null && owner is not null)
+            {
+                <div class="merge-impact">
+                    <div><span class="object-label">所有馬</span><strong>@selectedMergeCandidate.CurrentHorseCount 頭を移動</strong></div>
+                    <div><span class="object-label">統合後</span><strong>@(owner.Summary.CurrentHorseCount + selectedMergeCandidate.CurrentHorseCount) 頭</strong></div>
+                    <div><span class="object-label">登録表記</span><strong>@selectedMergeCandidate.NameVariants.Count 件を追加</strong></div>
+                </div>
+                <p class="hint">レース時点で取得した馬主名の原文は変更しません。</p>
+            }
+            </div>
+            <div>
+                <p class="eyebrow">STEP 3</p>
+                <FluentTextField Label="統合する理由（必須）" @bind-Value="mergeReason" Required="true" />
+                <p class="hint">統合の理由は名寄せ履歴に記録されます。</p>
+            </div>
+            @if (mergeErrors.Count > 0) { <UiState Kind="error" Title="名寄せできませんでした" Message="@string.Join(' ', mergeErrors)" /> }
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@CloseMerge">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@OpenMergeConfirmation" Disabled="@(merging || string.IsNullOrWhiteSpace(sourceOwnerId) || string.IsNullOrWhiteSpace(mergeReason))">内容を確認</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!showMergeConfirmation)" HiddenChanged="@(hidden => showMergeConfirmation = !hidden)" @onkeydown="HandleMergeDialogKeyDown" Modal="true" TrapFocus="true" AriaLabelledby="merge-confirm-title" Style="width:min(520px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="false"><h2 id="merge-confirm-title">馬主を名寄せしますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p><strong>@selectedMergeCandidate?.DisplayName</strong>を<strong>@owner?.Summary.DisplayName</strong>へ統合します。</p>
+        <div class="warning-note" role="alert">この操作は画面から取り消せません。レース時点の馬主名原文は保持されます。</div>
+        <dl class="meta"><dt>移動する所有馬</dt><dd>@selectedMergeCandidate?.CurrentHorseCount 頭</dd><dt>理由</dt><dd>@mergeReason</dd></dl>
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@BackToMerge">戻って確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@MergeAsync" Disabled="@merging">名寄せを実行</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
 @code {
     [Parameter] public string OwnerId { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name = "historySearch")] public string? HistorySearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyPage")] public int? HistoryPageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyFrom")] public DateOnly? HistoryFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyTo")] public DateOnly? HistoryToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "historyRacecourse")] public string? HistoryRacecourseQuery { get; set; }
     private bool loading;
     private OwnerDetailResponse? owner;
     private IReadOnlyList<ParticipationHistoryEntryResponse> historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
-    private bool historyHasMore;
-    private bool loadingMore;
     private const int historyBatchSize = 10;
+    private string historySearch = string.Empty;
+    private string historySearchInput = string.Empty;
+    private DateOnly? historyFrom, historyFromInput, historyTo, historyToInput;
+    private string historyRacecourse = string.Empty, historyRacecourseInput = string.Empty;
+    private int historyPage = 1;
+    private IEnumerable<ParticipationHistoryEntryResponse> MatchingHistory => historyEntries.Where(x => (string.IsNullOrWhiteSpace(historySearch) || $"{x.HorseName} {x.RaceName}".Contains(historySearch, StringComparison.OrdinalIgnoreCase)) && (!historyFrom.HasValue || x.RaceDate >= historyFrom) && (!historyTo.HasValue || x.RaceDate <= historyTo) && (string.IsNullOrWhiteSpace(historyRacecourse) || string.Equals(x.RacecourseCode, historyRacecourse, StringComparison.OrdinalIgnoreCase)));
+    private int FilteredHistoryCount => MatchingHistory.Count();
+    private IEnumerable<ParticipationHistoryEntryResponse> FilteredHistory => MatchingHistory.Skip((historyPage - 1) * historyBatchSize).Take(historyBatchSize);
     private string? sourceOwnerId;
     private string? mergeReason;
-    private bool mergeArmed;
+    private bool showMergeDialog;
+    private bool showMergeConfirmation;
     private bool merging;
+    private string? mergeQuery;
+    private bool searchingMergeCandidates;
+    private bool searchedMergeCandidates;
+    private int mergePage = 1;
+    private const int mergePageSize = 50;
+    private IReadOnlyList<OwnerSummaryResponse> mergeCandidates = [];
+    private OwnerSummaryResponse? selectedMergeCandidate;
+    private IEnumerable<OwnerSummaryResponse> PagedMergeCandidates => mergeCandidates.Skip((mergePage - 1) * mergePageSize).Take(mergePageSize);
     private IReadOnlyList<string> mergeErrors = [];
+    private bool restoreMergeFocus;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!restoreMergeFocus) return;
+        restoreMergeFocus = false;
+        await JS.InvokeVoidAsync("raceOps.focusById", "owner-merge-trigger");
+    }
     protected override async Task OnParametersSetAsync()
     {
+        historySearch = HistorySearchQuery ?? string.Empty;
+        historySearchInput = historySearch; historyFrom = historyFromInput = HistoryFromQuery; historyTo = historyToInput = HistoryToQuery; historyRacecourse = historyRacecourseInput = HistoryRacecourseQuery ?? string.Empty;
+        historyPage = Math.Max(1, HistoryPageQuery ?? 1);
         loading = true;
         try
         {
-            owner = await Api.GetOwnerAsync(OwnerId);
+            owner = await Api.GetOwnerAsync(OwnerId, 10000, 0);
             if (owner is not null)
             {
                 historyEntries = owner.Participations;
-                historyHasMore = owner.HasMoreParticipations;
             }
             else
             {
                 historyEntries = Array.Empty<ParticipationHistoryEntryResponse>();
-                historyHasMore = false;
             }
         }
         finally { loading = false; }
     }
-    private async Task LoadMoreHistoryAsync()
+    private void ApplyHistoryFilters() => NavigateHistory(historySearchInput, historyFromInput, historyToInput, historyRacecourseInput, 1);
+    private Task ChangeHistoryPage(int page) { NavigateHistory(historySearch, historyFrom, historyTo, historyRacecourse, page); return Task.CompletedTask; }
+    private void NavigateHistory(string search, DateOnly? from, DateOnly? to, string racecourse, int page)
     {
-        if (loadingMore || !historyHasMore) return;
-
-        loadingMore = true;
-        try
+        var uri = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
-            var next = await Api.GetOwnerAsync(OwnerId, historyBatchSize, historyEntries.Count);
-            if (next is not null)
-            {
-                owner = next;
-                historyEntries = historyEntries.Concat(next.Participations).ToList();
-                historyHasMore = next.HasMoreParticipations;
-            }
-        }
-        finally { loadingMore = false; }
+            ["historySearch"] = string.IsNullOrWhiteSpace(search) ? null : search,
+            ["historyFrom"] = from,
+            ["historyTo"] = to,
+            ["historyRacecourse"] = string.IsNullOrWhiteSpace(racecourse) ? null : racecourse,
+            ["historyPage"] = page <= 1 ? null : page
+        });
+        Navigation.NavigateTo(uri, replace: true);
     }
     private async Task MergeAsync()
     {
@@ -129,10 +214,42 @@ else
         {
             var result = await Api.MergeOwnerAsync(OwnerId, new MergeOwnerRequest(sourceOwnerId ?? string.Empty, mergeReason ?? string.Empty));
             mergeErrors = result.Success ? [] : result.Errors;
-            mergeArmed = false;
-            if (result.Success) { sourceOwnerId = null; mergeReason = null; await OnParametersSetAsync(); }
+            if (result.Success) { sourceOwnerId = null; selectedMergeCandidate = null; mergeReason = null; showMergeDialog = false; showMergeConfirmation = false; await OnParametersSetAsync(); }
         }
         finally { merging = false; }
     }
-    private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"horses/{Uri.EscapeDataString(item.ObjectId)}" : $"trainers/{Uri.EscapeDataString(item.ObjectId)}";
+    private async Task SearchMergeCandidatesAsync()
+    {
+        searchingMergeCandidates = true;
+        searchedMergeCandidates = true;
+        try
+        {
+            var candidates = await Api.SearchOwnersAsync(mergeQuery);
+            mergeCandidates = candidates.Where(x => !string.Equals(x.OwnerId, OwnerId, StringComparison.Ordinal)).ToList();
+            mergePage = 1;
+        }
+        finally { searchingMergeCandidates = false; }
+    }
+    private void SelectMergeCandidate(OwnerSummaryResponse candidate)
+    {
+        selectedMergeCandidate = candidate;
+        sourceOwnerId = candidate.OwnerId;
+    }
+    private Task GoMergePage(int value) { mergePage = value; return Task.CompletedTask; }
+    private async Task OpenMerge() { mergeErrors = []; mergeQuery = owner?.Summary.DisplayName; showMergeDialog = true; await SearchMergeCandidatesAsync(); }
+    private void OpenMergeConfirmation()
+    {
+        if (selectedMergeCandidate is null || string.IsNullOrWhiteSpace(mergeReason)) { mergeErrors = ["統合元と名寄せ理由は必須です。"]; return; }
+        mergeErrors = [];
+        showMergeDialog = false;
+        showMergeConfirmation = true;
+    }
+    private void BackToMerge() { showMergeConfirmation = false; showMergeDialog = true; }
+    private void CloseMerge() { showMergeDialog = false; showMergeConfirmation = false; restoreMergeFocus = true; }
+    private void HandleMergeDialogKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") CloseMerge();
+    }
+    private static string ObjectUrl(RelatedObjectResponse item) => item.ObjectType == "Horse" ? $"/horses/{Uri.EscapeDataString(item.ObjectId)}" : $"/trainers/{Uri.EscapeDataString(item.ObjectId)}";
+    private static string OwnerRelationshipUrl(RelationshipSummaryResponse item) => $"/horses/{Uri.EscapeDataString(item.ObjectId)}";
 }

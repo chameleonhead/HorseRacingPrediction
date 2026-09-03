@@ -235,7 +235,7 @@ public sealed class ProcessingStateStoreTests
         Assert.HasCount(1, statuses);
         var status = statuses[0];
         Assert.AreEqual("fatal error", status.LastError);
-        Assert.AreEqual(0, status.AttemptCount);
+        Assert.AreEqual(1, status.AttemptCount);
         Assert.IsEmpty(await sut.GetPendingCollectionTaskDispatchesAsync(now.AddHours(1), 10));
     }
 
@@ -418,6 +418,119 @@ public sealed class ProcessingStateStoreTests
         Assert.IsNotNull(child);
         Assert.AreEqual(AgentJobStatus.Succeeded, child.Status);
         Assert.IsEmpty(await sut.AcquireReadyJobsAsync("Child", now.AddMinutes(2), TimeSpan.Zero, 1, TimeSpan.FromMinutes(5)));
+    }
+
+    [TestMethod]
+    public async Task ScheduleJobAsync_AssignsRelationTypeWhenExistingJobGetsParent()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("Parent", "p", "{}", now);
+        await sut.ScheduleJobAsync("Child", "c", "{}", now);
+
+        await sut.ScheduleJobAsync("Child", "c", "{}", now.AddSeconds(1), parentJobId: "Parent:p", parentRelationType: JobRelationType.GeneratedBy);
+
+        var child = await sut.GetJobDetailAsync("Child:c");
+        Assert.AreEqual("Parent:p", child!.ParentJob!.JobId);
+        Assert.AreEqual(JobRelationType.GeneratedBy, child.ParentRelationType);
+    }
+
+    [TestMethod]
+    public async Task RerunJobAsync_RequeuesOnlyFailedAggregateChildrenAndAuditsOperation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("Parent", "p", "{}", now);
+        await sut.ScheduleJobAsync("Child", "ok", "{}", now, parentJobId: "Parent:p");
+        await sut.ScheduleJobAsync("Child", "failed", "{}", now, parentJobId: "Parent:p");
+        await sut.WaitForDependenciesAsync("Parent", "p");
+        await sut.CompleteJobAsync("Child", "ok");
+        await sut.FailJobAsync("Child", "failed", "error");
+        var before = (await sut.GetJobDetailAsync("Parent:p"))!;
+
+        var result = await sut.RerunJobAsync(before.JobId, before.UpdatedAt, "Admin UI", "manual recovery", now.AddMinutes(1));
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, result);
+        var parent = (await sut.GetJobDetailAsync("Parent:p"))!;
+        Assert.AreEqual(AgentJobStatus.Ready, parent.Status);
+        Assert.IsTrue(parent.AuditHistory.Any(x => x.Operation == "RerunAggregate" && x.Reason == "manual recovery"));
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await sut.GetJobDetailAsync("Child:ok"))!.Status);
+        Assert.AreEqual(AgentJobStatus.Ready, (await sut.GetJobDetailAsync("Child:failed"))!.Status);
+    }
+
+    [TestMethod]
+    public async Task RerunJobAsync_RequeuesSingleFailedJob()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "single", "{}", now);
+        await sut.FailJobAsync("RaceCardCollection", "single", "first failure");
+        var before = (await sut.GetJobDetailAsync("RaceCardCollection:single"))!;
+
+        var result = await sut.RerunJobAsync(before.JobId, before.UpdatedAt, "Admin UI", null, now.AddMinutes(1));
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, result);
+        var after = (await sut.GetJobDetailAsync(before.JobId))!;
+        Assert.AreEqual(AgentJobStatus.Ready, after.Status);
+        Assert.AreEqual(1, after.AttemptCount);
+        Assert.HasCount(1, after.Attempts);
+        Assert.IsTrue(after.AuditHistory.Any(x => x.Operation == "RerunJob" && x.ActorId == "Admin UI"));
+    }
+
+    [TestMethod]
+    public async Task RerunJobAsync_RejectsAggregatedChild()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("Parent", "p", "{}", now);
+        await sut.ScheduleJobAsync("Child", "failed", "{}", now, parentJobId: "Parent:p");
+        await sut.FailJobAsync("Child", "failed", "error");
+        var child = (await sut.GetJobDetailAsync("Child:failed"))!;
+
+        var result = await sut.RerunJobAsync(child.JobId, child.UpdatedAt, "Admin UI", null, now.AddMinutes(1));
+
+        Assert.AreEqual(ForceRequeueJobResult.Conflict, result);
+        Assert.AreEqual(AgentJobStatus.Failed, (await sut.GetJobDetailAsync(child.JobId))!.Status);
+    }
+
+    [TestMethod]
+    public async Task ReacquireCompletedJobAsync_CreatesNewJobAndKeepsSourceHistory()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("Collection", "source", "{\"target\":1}", now);
+        await sut.CompleteJobAsync("Collection", "source");
+        var source = (await sut.GetJobDetailAsync("Collection:source"))!;
+
+        var result = await sut.ReacquireCompletedJobAsync(source.JobId, source.UpdatedAt, "Admin UI", "refresh", now.AddMinutes(1));
+
+        Assert.AreEqual(ForceRequeueJobResult.Requeued, result.Result);
+        Assert.AreNotEqual(source.JobId, result.JobId);
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await sut.GetJobDetailAsync(source.JobId))!.Status);
+        Assert.AreEqual(AgentJobStatus.Ready, (await sut.GetJobDetailAsync(result.JobId!))!.Status);
+        Assert.IsTrue((await sut.GetJobDetailAsync(source.JobId))!.AuditHistory.Any(x => x.Operation == "Reacquire"));
+    }
+
+    [TestMethod]
+    public async Task RequeueReadyCollectionDispatchesAsync_RecreatesPurgedDispatchesAndKeepsPriorityOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        await sut.ScheduleJobAsync("RaceCardCollection", "low", "{}", now, priority: 10);
+        await sut.ScheduleJobAsync("RaceCardCollection", "high", "{}", now.AddSeconds(1), priority: 100);
+        await sut.ScheduleJobAsync("RaceCardCollection", "pending", "{}", now.AddSeconds(2), priority: 200);
+        var initial = await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(3), 10);
+        Assert.HasCount(3, initial);
+        foreach (var dispatch in initial)
+            await sut.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now.AddSeconds(4));
+        var pendingLease = await sut.AcquireCollectionTaskAsync("RaceCardCollection", "pending", now.AddSeconds(5), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(pendingLease);
+
+        var requeued = await sut.RequeueReadyCollectionDispatchesAsync(now.AddSeconds(6));
+        var next = await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(7), 10);
+
+        Assert.AreEqual(2, requeued);
+        CollectionAssert.AreEqual(new[] { "high", "low" }, next.Select(x => x.Notification.DeduplicationKey).ToArray());
     }
 
     [TestMethod]

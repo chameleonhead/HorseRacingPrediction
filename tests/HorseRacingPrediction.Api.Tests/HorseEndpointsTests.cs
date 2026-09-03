@@ -239,4 +239,29 @@ public class HorseEndpointsTests
         Assert.AreEqual(2, detail.Summary.NameVariants.Count);
         Assert.IsTrue(detail.MergeHistory.Any(x => x.SourceOwnerId == source.OwnerId && x.Reason.Contains("同一人物", StringComparison.Ordinal)));
     }
+
+    [TestMethod]
+    public async Task UpdateOwner_ChangesDisplayName()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        await _client.PostAsJsonAsync(
+            "/api/horses",
+            new RegisterHorseRequest($"OwnerEditHorse-{key}", $"owner-edit-horse-{key}", "M", null, $"horse-{Guid.NewGuid()}", $"更新前馬主{key}"),
+            JsonOptions);
+        var owners = await _client.GetFromJsonAsync<IReadOnlyList<OwnerSummaryResponse>>($"/api/owners?query={key}", JsonOptions);
+        Assert.IsNotNull(owners);
+        var owner = owners.Single();
+
+        var update = await _client.PutAsJsonAsync(
+            $"/api/owners/{owner.OwnerId}",
+            new UpdateOwnerRequest($"更新後馬主{key}", "公式表記の訂正", [$"登録表記馬主{key}"]),
+            JsonOptions);
+        var detail = await _client.GetFromJsonAsync<OwnerDetailResponse>($"/api/owners/{owner.OwnerId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.NoContent, update.StatusCode);
+        Assert.IsNotNull(detail);
+        Assert.AreEqual($"更新後馬主{key}", detail.Summary.DisplayName);
+        Assert.IsTrue(detail.Summary.NameVariants.Contains($"更新前馬主{key}"));
+        Assert.IsTrue(detail.Summary.NameVariants.Contains($"登録表記馬主{key}"));
+    }
 }

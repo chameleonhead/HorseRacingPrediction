@@ -30,6 +30,7 @@ public sealed class AgentAcquisitionStatusRecorder
             subjectId,
             subjectName,
             relatedRaceId,
+            HttpProcessingStateStoreProxy.CurrentTaskId,
             sourceUrl,
             status,
             errorCode,

@@ -7,11 +7,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <title>競馬DB管理画面</title>
-    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" />
+    <link rel="stylesheet" href="app.css?v=20260904" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <FluentDesignTheme Mode="@DesignThemeModes.Light" CustomColor="#0F6B52" StorageName="raceops-theme">
+        <FluentDialogProvider />
+        <FluentToastProvider />
+        <Routes @rendermode="InteractiveServer" />
+    </FluentDesignTheme>
     <script src="_framework/blazor.web.js"></script>
+    <script src="raceops.js?v=20260902"></script>
 </body>
 </html>

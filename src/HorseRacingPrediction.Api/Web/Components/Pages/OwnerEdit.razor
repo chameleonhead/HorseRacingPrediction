@@ -1,0 +1,47 @@
+@page "/owners/{OwnerId}/edit"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+
+<RaceOpsObjectHeader BackHref="@($"/owners/{Uri.EscapeDataString(OwnerId)}")" BackLabel="← 馬主詳細に戻る" Title="@(owner?.Summary.DisplayName ?? "馬主情報を訂正")" Section="データ / 馬主 / 編集" />
+
+@if (loading) { <UiState Kind="loading" Title="馬主情報を読み込んでいます" /> }
+else if (owner is null) { <UiState Kind="error" Title="馬主が見つかりません" /> }
+else
+{
+    <RaceOpsFormSection Title="表示" Description="同一の馬主に属する表示名と登録表記を訂正します。">
+        <ChildContent>
+            <div class="form-grid">
+                <label>表示名<input @bind="displayName" /></label>
+                <label class="full-width">登録表記<textarea @bind="nameVariantsText" rows="5"></textarea><span class="hint">1行に1つ入力します。別の馬主との統合は名寄せを使用してください。</span></label>
+            </div>
+            <p class="immutable-note">Owner ID、別Ownerとの統合、所有馬参照の移動はこの画面では変更できません。</p>
+            <label>訂正理由（必須）<textarea @bind="reason" rows="3" placeholder="訂正の根拠を入力してください"></textarea></label>
+            @if (errors.Count > 0) { <RaceOpsAlert Title="馬主情報を保存できませんでした" Messages="@errors" /> }
+        </ChildContent>
+        <Actions><FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@SaveAsync" Disabled="@saving">保存</FluentButton></Actions>
+    </RaceOpsFormSection>
+}
+
+@code {
+    [Parameter] public string OwnerId { get; set; } = string.Empty;
+    private OwnerDetailResponse? owner;
+    private bool loading, saving;
+    private string? displayName, nameVariantsText, reason;
+    private IReadOnlyList<string> errors = [];
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        try { owner = await Api.GetOwnerAsync(OwnerId, 1, 0); displayName = owner?.Summary.DisplayName; nameVariantsText = owner is null ? null : string.Join(Environment.NewLine, owner.Summary.NameVariants); }
+        finally { loading = false; }
+    }
+    private async Task SaveAsync()
+    {
+        var variants = (nameVariantsText ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToList();
+        if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(reason) || variants.Count == 0) { errors = ["表示名、登録表記、訂正理由は必須です。"]; return; }
+        saving = true;
+        try { var result = await Api.UpdateOwnerAsync(OwnerId, new UpdateOwnerRequest(displayName.Trim(), reason.Trim(), variants)); errors = result.Success ? [] : result.Errors; if (result.Success) Back(); }
+        finally { saving = false; }
+    }
+    private void Back() => Navigation.NavigateTo($"/owners/{Uri.EscapeDataString(OwnerId)}");
+}

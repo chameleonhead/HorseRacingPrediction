@@ -216,7 +216,7 @@ resource "aws_lambda_function" "collector" {
     aws_iam_role_policy.collector_queue_consumer
   ]
 
-  ephemeral_storage { size = 2048 }
+  ephemeral_storage { size = 4096 }
 
   environment {
     variables = {

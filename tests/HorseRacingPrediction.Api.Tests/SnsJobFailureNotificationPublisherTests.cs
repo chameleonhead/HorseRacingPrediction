@@ -26,7 +26,7 @@ public sealed class SnsJobFailureNotificationPublisherTests
 
         Assert.AreEqual(
             "HRP Failed RaceCardCollection\n" +
-            "https://100-49-86-109.sslip.io/api/collection/tasks/RaceCardCollection%3A2026%2F08%2F28%20%E6%9D%B1%E4%BA%AC",
+            "https://100-49-86-109.sslip.io/jobs/RaceCardCollection%3A2026%2F08%2F28%20%E6%9D%B1%E4%BA%AC",
             message);
         Assert.IsFalse(message.Contains("browser error", StringComparison.Ordinal));
     }

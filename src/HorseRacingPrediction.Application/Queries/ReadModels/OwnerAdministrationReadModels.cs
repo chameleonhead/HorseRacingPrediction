@@ -8,6 +8,7 @@ public sealed class OwnerAliasMappingReadModel
     public string ActorId { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
+    public bool IsDisplayName { get; set; }
 }
 
 public sealed class OwnerMergeAuditReadModel

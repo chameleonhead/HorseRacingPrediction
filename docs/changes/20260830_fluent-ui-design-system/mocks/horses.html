@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RaceOps — 馬</title><link rel="stylesheet" href="assets/raceops-mock.css">
+  <style>
+    .horse-row{cursor:pointer}.horse-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+    .profile-facts{display:flex;flex-wrap:wrap;background:#fff;border:1px solid var(--border);margin-bottom:16px}.profile-fact{min-width:150px;padding:12px 16px;border-right:1px solid var(--border)}.profile-fact small,.profile-fact strong{display:block}.profile-fact small{color:var(--muted);margin-bottom:3px}
+    .relation-grid{display:grid;gap:0;border-top:1px solid var(--border)}.relation-item{display:grid;grid-template-columns:112px minmax(180px,1fr) minmax(220px,1.4fr);gap:16px;align-items:center;width:100%;padding:12px 4px;border-bottom:1px solid var(--border)}.relation-item small{display:block;color:var(--muted)}.relation-item a{color:var(--accent);font-weight:650;text-decoration:none}.relation-item p{color:var(--muted);font-size:13px;margin:0}
+    .history-row{display:grid;grid-template-columns:112px minmax(0,1fr) max-content 56px;gap:12px;align-items:center;padding:13px 4px;border-bottom:1px solid var(--border)}
+    @media(max-width:720px){.profile-fact{width:50%;border-bottom:1px solid var(--border)}.relation-item{grid-template-columns:88px minmax(0,1fr);gap:5px 12px}.relation-item p{grid-column:2}.history-row{grid-template-columns:minmax(0,1fr) max-content}.history-row time{grid-column:1/-1}.history-row .object-primary{grid-column:1}}
+  </style>
+</head>
+<body>
+  <div class="mobile-bar"><button class="mobile-menu" type="button" aria-label="メニュー"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.75254 17.9997H21.2525C21.6668 17.9997 22.0025 18.3355 22.0025 18.7497C22.0025 19.1639 21.6668 19.4997 21.2525 19.4997H2.75254C2.33832 19.4997 2.00254 19.1639 2.00254 18.7497C2.00254 18.3355 2.33832 17.9997 2.75254 17.9997ZM2.75254 11.5027H21.2525C21.6668 11.5027 22.0025 11.8385 22.0025 12.2527C22.0025 12.6669 21.6668 13.0027 21.2525 13.0027H2.75254C2.33832 13.0027 2.00254 12.6669 2.00254 12.2527C2.00254 11.8385 2.33832 11.5027 2.75254 11.5027ZM2.75168 5.00293H21.2517C21.6659 5.00293 22.0017 5.33872 22.0017 5.75293C22.0017 6.16714 21.6659 6.50293 21.2517 6.50293H2.75168C2.33746 6.50293 2.00168 6.16714 2.00168 5.75293C2.00168 5.33872 2.33746 5.00293 2.75168 5.00293Z"/></svg></button><strong>RaceOps</strong></div>
+  <div class="shell">
+    <aside class="rail"><div class="brand">RaceOps</div><div class="nav-group">レース・予想</div><nav class="nav"><a href="races.html">レース</a><a href="predictions.html">予想票</a></nav><div class="nav-group">データ</div><nav class="nav"><a class="active" href="horses.html">馬</a><a href="jockeys.html">騎手</a><a href="trainers.html">調教師</a><a href="owners.html">馬主</a></nav><div class="nav-group">運用</div><nav class="nav"><a href="jobs.html">収集ジョブ</a><a href="acquisition-statuses.html">データ取得状況</a></nav></aside>
+    <main class="main">
+      <section id="list-screen">
+        <header class="header"><div><p class="eyebrow">データ / 馬</p><h1>馬</h1><p>登録馬と出走履歴を確認します。</p></div></header>
+        <div class="toolbar"><input class="field search" placeholder="馬名を検索"><button class="btn">性別</button><button class="btn">年齢</button><button class="btn">絞り込む</button></div>
+        <section class="collection"><div class="collection-head"><h2>登録馬</h2><span class="count">3件</span></div><div class="object-list">
+          <article class="object-row horse-row" tabindex="0" role="link"><div class="object-primary"><strong>アオイステップ</strong><small>牡4・2022年3月12日生</small></div><span class="object-meta">12戦5勝</span><a class="object-link detail-link" href="#detail">詳細</a></article>
+          <article class="object-row horse-row" tabindex="0" role="link"><div class="object-primary"><strong>ミドリノカゼ</strong><small>牝5・2021年5月20日生</small></div><span class="object-meta">18戦4勝</span><a class="object-link detail-link" href="#detail">詳細</a></article>
+          <article class="object-row horse-row" tabindex="0" role="link"><div class="object-primary"><strong>サクラリズム</strong><small>牡3・2023年4月1日生</small></div><span class="object-meta">6戦2勝</span><a class="object-link detail-link" href="#detail">詳細</a></article>
+        </div></section>
+      </section>
+
+      <section id="detail-screen" hidden>
+        <a class="object-link detail-back" href="#list">← 馬一覧</a>
+        <header class="object-detail-header"><p class="eyebrow">データ / 馬</p><h1 id="horse-name">アオイステップ</h1></header><div class="detail-edit-action"><a class="btn object-link" href="#edit">編集</a></div>
+        <div class="profile-facts" aria-label="基本情報"><div class="profile-fact"><small>性齢</small><strong>牡4</strong></div><div class="profile-fact"><small>生年月日</small><strong>2022/03/12</strong></div><div class="profile-fact"><small>所属</small><strong>美浦</strong></div><div class="profile-fact"><small>通算成績</small><strong>12戦5勝</strong></div></div>
+        <section class="detail-panel"><h2>関連</h2><div class="relation-grid"><div class="relation-item"><small>騎手</small><a href="jockeys.html">山田太郎</a><p>前走を含む5戦・1着3回・最終 2026/08/30</p></div><div class="relation-item"><small>騎手</small><a href="jockeys.html">佐藤花子</a><p>前々走を含む3戦・1着1回・最終 2026/07/19</p></div><div class="relation-item"><small>調教師</small><a href="trainers.html">田中一郎</a><p>レース時点の調教師・最終 2026/08/30</p></div><div class="relation-item"><small>馬主</small><a href="owners.html">青井レーシング</a><p>現在の所有者・確認日 2026/08/30</p></div></div></section>
+        <section class="detail-panel"><h2>出走履歴</h2><div class="history-row"><time>2026/08/30</time><div class="object-primary"><strong>新潟11R 新潟記念</strong><small>芝2000m・山田太郎</small></div><span class="status ok">1着</span><a class="object-link" href="races.html">詳細</a></div><div class="history-row"><time>2026/07/19</time><div class="object-primary"><strong>函館10R 駒場特別</strong><small>芝1800m・佐藤花子</small></div><span class="status neutral">4着</span><a class="object-link" href="races.html">詳細</a></div></section>
+      </section>
+      <section id="edit-screen" class="edit-page" hidden><a class="object-link detail-back" href="#detail">← アオイステップの詳細</a><header class="edit-header"><p class="eyebrow">データ / 馬 / 編集</p><h1>馬情報を訂正</h1><p>収集済みのプロフィール情報を訂正します。</p></header><form class="edit-form"><section class="edit-section"><h2>プロフィール</h2><div class="edit-grid"><div class="edit-field"><label>登録名</label><input class="field" value="アオイステップ"></div><div class="edit-field"><label>正規化名</label><input class="field" value="アオイステップ"></div><div class="edit-field"><label>性別</label><select class="field"><option selected>牡</option><option>牝</option><option>せん</option></select></div><div class="edit-field"><label>生年月日</label><input class="field" type="date" value="2022-03-12"></div></div></section><div class="immutable-note">Horse ID、外部別名ID、所有者参照、出走履歴はこの画面では変更できません。</div><section class="edit-section"><div class="edit-field"><label>訂正理由<span class="required">必須</span></label><textarea class="field" data-edit-reason placeholder="訂正の根拠を入力してください"></textarea><small>変更前後、実行日時、実行元 Admin UI とともに監査履歴へ保存されます。</small></div><div class="edit-error" data-edit-error hidden>訂正理由を入力してください。</div></section><div class="form-actions"><a class="btn object-link" href="#detail">キャンセル</a><button class="btn primary" type="button" data-edit-confirm>変更内容を確認</button></div></form></section>
+    </main>
+  </div>
+  <script>
+    const list=document.getElementById('list-screen'),detail=document.getElementById('detail-screen'),name=document.getElementById('horse-name');let scrollPosition=0;
+    const edit=document.getElementById('edit-screen');function render(){const screen=location.hash.slice(1)||'list';list.hidden=screen!=='list';detail.hidden=screen!=='detail';edit.hidden=screen!=='edit';if(screen!=='list')scrollTo(0,0);else requestAnimationFrame(()=>scrollTo(0,scrollPosition))}
+    document.querySelectorAll('.horse-row').forEach(row=>{const open=()=>{scrollPosition=scrollY;name.textContent=row.querySelector('strong').textContent;location.hash='detail'};row.addEventListener('click',event=>{if(event.target.closest('a,button,input'))return;open()});row.addEventListener('keydown',event=>{if(event.key!=='Enter'&&event.key!==' ')return;event.preventDefault();open()});row.querySelector('.detail-link').addEventListener('click',()=>{scrollPosition=scrollY;name.textContent=row.querySelector('strong').textContent})});
+    const menu=document.querySelector('.mobile-menu'),rail=document.querySelector('.rail');menu.addEventListener('click',()=>rail.classList.toggle('mobile-open'));addEventListener('hashchange',render);render();
+  </script>
+  <script src="assets/object-page.js"></script>
+</body>
+</html>

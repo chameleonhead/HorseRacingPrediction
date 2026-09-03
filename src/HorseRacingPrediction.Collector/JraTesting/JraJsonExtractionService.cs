@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Playwright;
+using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
 

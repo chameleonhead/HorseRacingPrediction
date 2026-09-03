@@ -1,0 +1,7 @@
+<FluentTabs Class="raceops-detail-tabs" ShowActiveIndicator="true">
+    @ChildContent
+</FluentTabs>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment? ChildContent { get; set; }
+}

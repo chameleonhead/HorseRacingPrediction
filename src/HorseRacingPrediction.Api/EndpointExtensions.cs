@@ -1172,7 +1172,7 @@ public static class EndpointExtensions
 
         app.MapGet("/api/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
-        async (string predictionTicketId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string predictionTicketId, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 var query = new ReadModelByIdQuery<PredictionTicketReadModel>(predictionTicketId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
@@ -1180,6 +1180,11 @@ public static class EndpointExtensions
                 if (readModel is null || string.IsNullOrEmpty(readModel.PredictionTicketId))
                     return Results.NotFound();
 
+                using var dbContext = dbContextProvider.CreateContext();
+                var race = string.IsNullOrWhiteSpace(readModel.RaceId) ? null : await queryProcessor.ProcessAsync(
+                    new ReadModelByIdQuery<RacePredictionContextReadModel>(readModel.RaceId), cancellationToken).ConfigureAwait(false);
+                var horseNames = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
+                var entries = race?.Entries.ToDictionary(x => x.EntryId, x => x.HorseId, StringComparer.Ordinal) ?? [];
                 var response = new PredictionTicketResponse(
                     readModel.PredictionTicketId,
                     readModel.RaceId,
@@ -1189,8 +1194,13 @@ public static class EndpointExtensions
                     readModel.SummaryComment,
                     readModel.PredictedAt,
                     readModel.Marks
-                        .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment))
-                        .ToList());
+                        .Select(x => new PredictionMarkResponse(x.EntryId, x.MarkCode, x.PredictedRank, x.Score, x.Comment,
+                            entries.GetValueOrDefault(x.EntryId),
+                            entries.TryGetValue(x.EntryId, out var horseId) ? horseNames.GetValueOrDefault(horseId) : null))
+                        .ToList(),
+                    (ApiContracts.TicketStatus)(int)readModel.TicketStatus,
+                    (ApiContracts.EvaluationStatus)(int)readModel.EvaluationStatus,
+                    race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber);
 
                 return Results.Ok(response);
             })
@@ -1217,8 +1227,21 @@ public static class EndpointExtensions
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                var races = await dbContext.RacePredictionContexts.AsNoTracking().ToDictionaryAsync(x => x.RaceId, cancellationToken).ConfigureAwait(false);
+                var horseNames = await dbContext.Horses.AsNoTracking().ToDictionaryAsync(x => x.HorseId, x => x.RegisteredName, cancellationToken).ConfigureAwait(false);
 
                 IEnumerable<PredictionTicketReadModel> filtered = allTickets;
+
+                if (!string.IsNullOrWhiteSpace(request.Query))
+                {
+                    var term = request.Query.Trim();
+                    filtered = filtered.Where(x => ContainsIgnoreCase(x.RaceId, term)
+                        || (x.RaceId is not null && races.TryGetValue(x.RaceId, out var race)
+                            && (ContainsIgnoreCase(race.RaceName, term)
+                                || ContainsIgnoreCase(race.RacecourseCode, term)
+                                || (race.RaceDate?.ToString("yyyy/MM/dd").Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
+                                || (race.RaceDate?.ToString("yyyy-MM-dd").Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))));
+                }
 
                 if (!string.IsNullOrWhiteSpace(request.PredictionTicketId))
                     filtered = filtered.Where(x => string.Equals(x.PredictionTicketId, request.PredictionTicketId, StringComparison.OrdinalIgnoreCase));
@@ -1266,7 +1289,14 @@ public static class EndpointExtensions
                     sorted,
                     page,
                     pageSize,
-                    x => new PredictionTicketSummaryResponse(
+                    x =>
+                    {
+                        races.TryGetValue(x.RaceId ?? string.Empty, out var race);
+                        var primaryMark = x.Marks.OrderBy(m => m.PredictedRank).FirstOrDefault();
+                        var primaryHorseId = primaryMark is not null && race is not null
+                            ? race.Entries.FirstOrDefault(e => e.EntryId == primaryMark.EntryId)?.HorseId
+                            : null;
+                        return new PredictionTicketSummaryResponse(
                         x.PredictionTicketId,
                         x.RaceId,
                         x.PredictorType,
@@ -1276,7 +1306,10 @@ public static class EndpointExtensions
                         x.PredictedAt,
                         (ApiContracts.TicketStatus)(int)x.TicketStatus,
                         (ApiContracts.EvaluationStatus)(int)x.EvaluationStatus,
-                        x.Marks.Count)));
+                        x.Marks.Count,
+                        race?.RaceName, race?.RaceDate, race?.RacecourseCode, race?.RaceNumber,
+                        primaryHorseId is null ? null : horseNames.GetValueOrDefault(primaryHorseId));
+                    }));
             })
             .WithName("SearchPredictionTickets")
             .WithTags("Prediction API")
@@ -1610,9 +1643,10 @@ public static class EndpointExtensions
                 var entries = allEntries.Skip(offset).Take(limit).ToList();
                 var hasMore = offset + entries.Count < allEntries.Count;
 
-                var relationships = allEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                        new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate)))
-                    .Concat(allEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
+                var relationshipEntries = EntriesInLastThreeYears(allEntries);
+                var relationships = relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
+                        new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "管理した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                    .Concat(relationshipEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
                         new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate))))
                     .OrderByDescending(x => x.ParticipationCount).ToList();
 
@@ -1747,12 +1781,56 @@ public static class EndpointExtensions
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
                 var mergeHistory = mergeAudits.OrderByDescending(x => x.CreatedAt).Select(x => new OwnerMergeAuditResponse(
                     x.SourceOwnerId, x.TargetOwnerId, x.SourceNames.Split('\n', StringSplitOptions.RemoveEmptyEntries), x.ActorId, x.Reason, x.CreatedAt)).ToList();
-                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations));
+                var ownerTopHorses = EntriesInLastThreeYears(allEntries)
+                    .GroupBy(x => (x.HorseId, x.HorseName))
+                    .Select(x => new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "所有した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                    .OrderByDescending(x => x.PrizeMoneyTotal).ThenByDescending(x => x.ParticipationCount).Take(5).ToList();
+                return Results.Ok(new OwnerDetailResponse(owner, currentHorses, relatedTrainers, entries, mergeHistory, hasMoreParticipations, ownerTopHorses));
             })
             .WithName("GetOwner")
             .WithTags("Owner API")
             .Produces<OwnerDetailResponse>()
             .Produces(StatusCodes.Status404NotFound);
+
+        writeGroup.MapPut("/owners/{ownerId}",
+            async (string ownerId, UpdateOwnerRequest request, HttpContext httpContext, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.DisplayName) || string.IsNullOrWhiteSpace(request.Reason))
+                    return Results.BadRequest(new[] { "表示名と訂正理由は必須です。" });
+                using var dbContext = dbContextProvider.CreateContext();
+                var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
+                if (owners.All(x => x.OwnerId != ownerId)) return Results.NotFound();
+                var now = DateTimeOffset.UtcNow;
+                var normalized = NormalizeOwnerName(request.DisplayName.Trim());
+                if (normalized.Length == 0) return Results.BadRequest(new[] { "表示名を入力してください。" });
+                var mapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == normalized, cancellationToken).ConfigureAwait(false);
+                if (mapping is null)
+                {
+                    mapping = new OwnerAliasMappingReadModel { NormalizedAlias = normalized };
+                    dbContext.OwnerAliasMappings.Add(mapping);
+                }
+                mapping.AliasName = request.DisplayName.Trim(); mapping.OwnerId = ownerId; mapping.ActorId = "Admin UI"; mapping.Reason = request.Reason.Trim(); mapping.CreatedAt = now; mapping.IsDisplayName = true;
+                foreach (var alias in (request.NameVariants ?? []).Append(request.DisplayName).Select(x => x?.Trim()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal))
+                {
+                    var aliasNormalized = NormalizeOwnerName(alias!);
+                    if (aliasNormalized == normalized) continue;
+                    var aliasMapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == aliasNormalized, cancellationToken).ConfigureAwait(false);
+                    if (aliasMapping is null)
+                    {
+                        dbContext.OwnerAliasMappings.Add(new OwnerAliasMappingReadModel { NormalizedAlias = aliasNormalized, AliasName = alias!, OwnerId = ownerId, ActorId = "Admin UI", Reason = request.Reason.Trim(), CreatedAt = now, IsDisplayName = aliasNormalized == normalized });
+                    }
+                    else
+                    {
+                        aliasMapping.AliasName = alias!; aliasMapping.OwnerId = ownerId; aliasMapping.ActorId = "Admin UI"; aliasMapping.Reason = request.Reason.Trim(); aliasMapping.CreatedAt = now; aliasMapping.IsDisplayName = aliasNormalized == normalized;
+                    }
+                }
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return Results.NoContent();
+            })
+            .WithName("UpdateOwner")
+            .WithTags("Owner API")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem();
 
         writeGroup.MapPost("/owners/{ownerId}/merge",
             async (string ownerId, MergeOwnerRequest request, HttpContext httpContext, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
@@ -1768,7 +1846,7 @@ public static class EndpointExtensions
                 var source = owners.SingleOrDefault(x => x.OwnerId == request.SourceOwnerId);
                 if (target is null || source is null) return Results.NotFound();
 
-                var actor = httpContext.User.Identity?.Name ?? "api-key";
+                var actor = "Admin UI";
                 var now = DateTimeOffset.UtcNow;
                 foreach (var alias in source.NameVariants)
                 {
@@ -2413,17 +2491,26 @@ public static class EndpointExtensions
         var entries = allEntries.Skip(offset).Take(limit).ToList();
         var hasMore = offset + entries.Count < allEntries.Count;
 
+        var relationshipEntries = subjectType == "Horse" ? allEntries : EntriesInLastThreeYears(allEntries);
         IEnumerable<RelationshipSummaryResponse> relationships = subjectType == "Horse"
             ? allEntries.Where(x => x.JockeyId is not null).GroupBy(x => (x.JockeyId, x.JockeyName)).Select(x =>
                     new RelationshipSummaryResponse("Jockey", x.Key.JockeyId!, x.Key.JockeyName!, "騎乗した騎手", x.Count(), x.Max(y => y.RaceDate)))
                 .Concat(allEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
                     new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "レース時点の調教師", x.Count(), x.Max(y => y.RaceDate))))
-            : allEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
-                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate)))
-                .Concat(allEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
+            : relationshipEntries.GroupBy(x => (x.HorseId, x.HorseName)).Select(x =>
+                    new RelationshipSummaryResponse("Horse", x.Key.HorseId, x.Key.HorseName, "騎乗した馬", x.Count(), x.Max(y => y.RaceDate), x.Sum(y => y.PrizeMoney ?? 0m), x.Count(y => y.FinishPosition == 1)))
+                .Concat(relationshipEntries.Where(x => x.TrainerId is not null).GroupBy(x => (x.TrainerId, x.TrainerName)).Select(x =>
                     new RelationshipSummaryResponse("Trainer", x.Key.TrainerId!, x.Key.TrainerName!, "同じ出走の調教師", x.Count(), x.Max(y => y.RaceDate))));
 
         return new ParticipationHistoryResponse(subjectType, subjectId, entries, relationships.OrderByDescending(x => x.ParticipationCount).ToList(), hasMore);
+    }
+
+    private static IReadOnlyList<ParticipationHistoryEntryResponse> EntriesInLastThreeYears(IReadOnlyList<ParticipationHistoryEntryResponse> entries)
+    {
+        var latestDate = entries.Where(x => x.RaceDate.HasValue).Select(x => x.RaceDate!.Value).DefaultIfEmpty().Max();
+        if (latestDate == default) return entries;
+        var from = latestDate.AddYears(-3);
+        return entries.Where(x => !x.RaceDate.HasValue || x.RaceDate.Value >= from).ToList();
     }
 
     private static async Task<List<OwnerSummaryResponse>> BuildOwnersAsync(EventStoreDbContext dbContext, CancellationToken cancellationToken)
@@ -2433,7 +2520,9 @@ public static class EndpointExtensions
         var currentNames = horses.Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).Select(x => x.OwnerName!).ToList();
         var participations = contexts.SelectMany(x => x.Entries.Select(e => (x.RaceDate, e.OwnerName)))
             .Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).ToList();
-        var mappings = await dbContext.OwnerAliasMappings.AsNoTracking().ToDictionaryAsync(x => x.NormalizedAlias, x => x.OwnerId, cancellationToken).ConfigureAwait(false);
+        var mappingRows = await dbContext.OwnerAliasMappings.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var mappings = mappingRows.ToDictionary(x => x.NormalizedAlias, x => x.OwnerId, StringComparer.Ordinal);
+        var displayNames = mappingRows.Where(x => x.IsDisplayName).GroupBy(x => x.OwnerId).ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.CreatedAt).First().AliasName, StringComparer.Ordinal);
         string OwnerGroupKey(string name)
         {
             var normalized = NormalizeOwnerName(name);
@@ -2444,8 +2533,9 @@ public static class EndpointExtensions
             .Where(x => x.Key.Length > 0)
             .Select(group =>
             {
-                var variants = group.Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
-                var displayName = variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
+                var variants = group.Concat(mappingRows.Where(x => x.OwnerId == group.Key).Select(x => x.AliasName))
+                    .Distinct(StringComparer.Ordinal).OrderBy(x => x).ToList();
+                var displayName = displayNames.GetValueOrDefault(group.Key) ?? variants.OrderByDescending(name => currentNames.Count(x => x == name)).ThenByDescending(name => group.Count(x => x == name)).First();
                 var groupParticipations = participations.Where(x => OwnerGroupKey(x.OwnerName!) == group.Key).ToList();
                 return new OwnerSummaryResponse(
                     group.Key, displayName, variants,

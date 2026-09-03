@@ -223,6 +223,7 @@ public sealed class CollectionExecutionService : BackgroundService
                         now,
                         priority: date >= todayJst.AddMonths(-1) ? 150 : 70,
                         parentJobId: job.JobId,
+                        parentRelationType: JobRelationType.GeneratedBy,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
 
@@ -327,6 +328,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     now,
                     priority: 140,
                     parentJobId: job.JobId,
+                    parentRelationType: JobRelationType.GeneratedBy,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 await _stateStore.UpsertResultDayCollectionStatusAsync(
