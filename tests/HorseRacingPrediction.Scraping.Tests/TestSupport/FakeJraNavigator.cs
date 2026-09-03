@@ -13,10 +13,22 @@ internal sealed class FakeJraNavigator : IJraNavigator
     private readonly IJraPage? _calendarResult;
     private readonly IJraPage? _raceListResult;
     private readonly Dictionary<RaceId, IJraPage> _raceCardResultsByRaceId = new();
+    private readonly Dictionary<RaceId, IJraPage> _raceResultResultsByRaceId = new();
 
     public FakeJraNavigator(IJraPage calendarResult)
     {
         _calendarResult = calendarResult;
+    }
+
+    /// <summary>
+    /// レース結果取得をテストするためのコンストラクタ。
+    /// <paramref name="raceResultResultsByRaceId"/> にないレース ID で
+    /// <see cref="ToRaceResultAsync"/> が呼ばれた場合は失敗する。
+    /// </summary>
+    public FakeJraNavigator(
+        IReadOnlyDictionary<RaceId, IJraPage> raceResultResultsByRaceId)
+    {
+        _raceResultResultsByRaceId = new Dictionary<RaceId, IJraPage>(raceResultResultsByRaceId);
     }
 
     /// <summary>
@@ -72,8 +84,19 @@ internal sealed class FakeJraNavigator : IJraNavigator
         return Task.FromResult(page);
     }
 
+    public List<RaceId> RequestedRaceResults { get; } = [];
+
     public Task<IJraPage> ToRaceResultAsync(RaceId race, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        RequestedRaceResults.Add(race);
+
+        if (!_raceResultResultsByRaceId.TryGetValue(race, out var page))
+        {
+            throw new NotSupportedException($"未設定のRaceIdです: {race}");
+        }
+
+        return Task.FromResult(page);
+    }
 
     public Task<IJraPage> ToHistoricalRaceSearchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();

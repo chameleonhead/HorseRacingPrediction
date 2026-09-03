@@ -25,7 +25,18 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
 
     public List<UpsertRaceCall> UpsertRaceCalls { get; } = [];
 
+    public sealed record DeclareRaceEntryResultCall(
+        string RaceId,
+        int HorseNumber,
+        int? FinishPosition,
+        string? OfficialTime);
+
     public List<UpsertRaceEntryCall> UpsertRaceEntryCalls { get; } = [];
+
+    public List<DeclareRaceEntryResultCall> DeclareRaceEntryResultCalls { get; } = [];
+
+    /// <summary>設定した馬番で <see cref="DeclareRaceEntryResultAsync"/> が呼ばれた場合に例外を投げる（部分失敗のテスト用）。</summary>
+    public int? FailForHorseNumber { get; set; }
 
     public Task<string> UpsertRaceAsync(
         string raceDate,
@@ -102,7 +113,16 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string? abnormalResultCode,
         decimal? prizeMoney,
         CancellationToken cancellationToken = default)
-        => Task.FromResult("declared");
+    {
+        if (FailForHorseNumber == horseNumber)
+        {
+            throw new InvalidOperationException($"テスト用の失敗: HorseNumber={horseNumber}");
+        }
+
+        DeclareRaceEntryResultCalls.Add(new DeclareRaceEntryResultCall(
+            raceId, horseNumber, finishPosition, officialTime));
+        return Task.FromResult("declared");
+    }
 
     public Task<string> DeclareRacePayoutsAsync(
         string raceId,
