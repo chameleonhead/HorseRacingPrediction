@@ -15,8 +15,6 @@ internal sealed class JraRaceCardUrlDiscoverer
 {
     private const string KeibaMenuUrl = "https://www.jra.go.jp/keiba/";
     private const string ThisWeekUrl = "https://www.jra.go.jp/keiba/thisweek/";
-    // TODO: なぜ15秒だったのか確認する
-    private static readonly TimeSpan DiscoveryStepTimeout = TimeSpan.FromSeconds(120);
 
     private static readonly Regex MeetingLinkDateRegex = new(@"20\d{6}", RegexOptions.Compiled);
     private static readonly Regex RaceNumberRegex = new(@"(?<number>\d{1,2})R", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -168,13 +166,10 @@ internal sealed class JraRaceCardUrlDiscoverer
 
             try
             {
-                using var stepCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                stepCts.CancelAfter(DiscoveryStepTimeout);
+                await OpenHoldingsPageAsync(cancellationToken).ConfigureAwait(false);
 
-                await OpenHoldingsPageAsync(stepCts.Token).ConfigureAwait(false);
-
-                await _browser.ClickAsync(holdingLabel, stepCts.Token).ConfigureAwait(false);
-                var raceListSnapshot = await GetMergedSnapshotAsync(stepCts.Token).ConfigureAwait(false);
+                await _browser.ClickAsync(holdingLabel, cancellationToken).ConfigureAwait(false);
+                var raceListSnapshot = await GetMergedSnapshotAsync(cancellationToken).ConfigureAwait(false);
                 if (!ContainsExactRequestedDate(raceListSnapshot, requestedDate))
                 {
                     continue;
@@ -189,7 +184,7 @@ internal sealed class JraRaceCardUrlDiscoverer
                         holdingLabel,
                         raceListUrl,
                         raceListSnapshot,
-                        stepCts.Token).ConfigureAwait(false);
+                        cancellationToken).ConfigureAwait(false);
                 }
 
                 foreach (var cardUrl in directUrls)
