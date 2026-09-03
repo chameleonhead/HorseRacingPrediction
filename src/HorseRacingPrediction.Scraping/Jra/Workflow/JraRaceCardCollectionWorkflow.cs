@@ -45,6 +45,7 @@ public sealed class JraRaceCardCollectionWorkflow
 
         var raceIds = new List<string>();
         var errors = new List<string>();
+        var outcomes = new List<RaceCardRaceOutcome>();
         var racecourseName = RaceCourseNames.GetJraName(course);
 
         foreach (var race in raceList.Races)
@@ -53,19 +54,22 @@ public sealed class JraRaceCardCollectionWorkflow
 
             try
             {
-                var raceId = await CollectAndSaveRaceAsync(race, date, racecourseName, cancellationToken);
+                var (raceId, raceName, sourceUrl) = await CollectAndSaveRaceAsync(race, date, racecourseName, cancellationToken);
                 raceIds.Add(raceId);
+                outcomes.Add(new RaceCardRaceOutcome(race.Number, raceId, raceName, sourceUrl, null));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                errors.Add($"レース収集エラー: RaceNumber={race.Number} — {ex.Message}");
+                var message = $"レース収集エラー: RaceNumber={race.Number} — {ex.Message}";
+                errors.Add(message);
+                outcomes.Add(new RaceCardRaceOutcome(race.Number, null, race.Name, null, message));
             }
         }
 
-        return new RaceCardCollectionResult(date, course, raceIds, errors);
+        return new RaceCardCollectionResult(date, course, raceIds, errors, outcomes);
     }
 
-    private async Task<string> CollectAndSaveRaceAsync(
+    private async Task<(string RaceId, string RaceName, string SourceUrl)> CollectAndSaveRaceAsync(
         RaceSummary race,
         DateOnly date,
         string racecourseName,
@@ -112,6 +116,6 @@ public sealed class JraRaceCardCollectionWorkflow
                 cancellationToken: cancellationToken);
         }
 
-        return raceId;
+        return (raceId, raceName, card.Url);
     }
 }

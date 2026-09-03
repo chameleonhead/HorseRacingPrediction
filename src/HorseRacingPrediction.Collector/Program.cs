@@ -1,9 +1,8 @@
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
-// JRAサイト再設計（docs/jra-scraping.md）により、旧 JraNavigation/Scrapers.Jra 層は削除された。
-// 新しい Jra/ 層に対する再実装までの間、ビルドを通すために以下の JRA 専用登録を一時的に無効化する。
-// using HorseRacingPrediction.Scraping.Workflow;
+using HorseRacingPrediction.Scraping.Jra;
+using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +22,11 @@ builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 
 builder.Services.AddSingleton<IWebBrowserSessionFactory, PlaywrightWebBrowserSessionFactory>();
-// builder.Services.AddJraRaceScheduleCollectionWorkflow();
+builder.Services.AddSingleton<IJraPageParser, CalendarPageParser>();
+builder.Services.AddSingleton<IJraPageParser, RaceListPageParser>();
+builder.Services.AddSingleton<IJraPageParser, RaceCardPageParser>();
+builder.Services.AddSingleton<IJraPageParser, RaceResultPageParser>();
+builder.Services.AddSingleton<IJraSessionFactory, JraSessionFactory>();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
 builder.Services.AddHttpClient("ProcessingState", (services, client) =>
@@ -46,8 +49,8 @@ builder.Services.AddSingleton<IProcessingStateStore>(services =>
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 
-// builder.Services.AddSingleton<ScrapingRegistrationService>();
-// builder.Services.AddSingleton<CollectionExecutionService>();
+builder.Services.AddHostedService<ScrapingRegistrationService>();
+builder.Services.AddHostedService<CollectionExecutionService>();
 // builder.Services.AddSingleton<HistoricalDataRequestExecutionService>();
 // builder.Services.AddSingleton<CollectionRunCoordinator>();
 // builder.Services.AddSingleton<CollectionTaskWorker>();

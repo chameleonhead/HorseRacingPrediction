@@ -1,12 +1,7 @@
-// JRAサイト再設計（docs/jra-scraping.md）により、旧 JraNavigation/Scrapers.Jra 層は削除された。
-// 新しい Jra/ 層に対する再実装までの間、ビルドを通すために一時的に無効化する。
-#if false
-using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Scraping.Scrapers.Jra;
-using HorseRacingPrediction.Scraping.Workflow;
-using HorseRacingPrediction.Scraping.JraNavigation;
+using HorseRacingPrediction.Scraping.Jra;
+using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,14 +11,18 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 public sealed class CollectionExecutionService : BackgroundService
 {
     private static readonly string JraProviderType = "JRA";
+
+    // NOTE(Task23): 月次/日次成績探索・バックフィル計画(ResultMonthDiscoveryRequest/
+    // ResultDayDiscoveryRequest/ResultDayCollectionRequest/ResultBackfillPlanningRequest)は、
+    // 旧URL列挙方式(削除済みの JraRaceResultUrl / Scraping.Workflow 層)に強く依存しており、
+    // 新 Jra/ 層への移行は本タスクの対象外（指示書Task23の範囲は RaceCard/RaceResult 収集のみ）。
+    // 現状は無効のまま据え置く。将来的にはスケジュール収集(IJraScheduleCollectionWorkflow)と
+    // レース一覧(IJraNavigator.ToRaceListAsync)を使い、URL列挙なしで同等の日次探索を組み立て直す
+    // 必要がある。
     private static readonly string[] RecoverableJobTypes =
     [
         AgentJobType.RaceCardCollection,
-        AgentJobType.ResultMonthDiscoveryRequest,
-        AgentJobType.ResultDayDiscoveryRequest,
-        AgentJobType.ResultDayCollectionRequest,
-        AgentJobType.RaceResultCollection,
-        AgentJobType.ResultBackfillPlanningRequest
+        AgentJobType.RaceResultCollection
     ];
 
     private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
@@ -31,36 +30,27 @@ public sealed class CollectionExecutionService : BackgroundService
 
     private readonly AgentProcessingOptions _options;
     private readonly IProcessingStateStore _stateStore;
-    private readonly IWebBrowserSessionFactory _browserSessionFactory;
-    private readonly DataCollectionWriteTools _writeTools;
-    private readonly IRaceQueryService _raceQueryService;
-    private readonly IJraResultDateDiscoveryService _resultDateDiscoveryService;
+    private readonly IJraSessionFactory _sessionFactory;
+    private readonly IDataCollectionWriteService _writeService;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
     private readonly CollectionExecutionTrigger _executionTrigger;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
 
     public CollectionExecutionService(
         IOptions<AgentProcessingOptions> options,
         IProcessingStateStore stateStore,
-        IWebBrowserSessionFactory browserSessionFactory,
-        DataCollectionWriteTools writeTools,
-        IRaceQueryService raceQueryService,
-        IJraResultDateDiscoveryService resultDateDiscoveryService,
+        IJraSessionFactory sessionFactory,
+        IDataCollectionWriteService writeService,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
         CollectionExecutionTrigger executionTrigger,
-        ILoggerFactory loggerFactory,
         ILogger<CollectionExecutionService> logger)
     {
         _options = options.Value;
         _stateStore = stateStore;
-        _browserSessionFactory = browserSessionFactory;
-        _writeTools = writeTools;
-        _raceQueryService = raceQueryService;
-        _resultDateDiscoveryService = resultDateDiscoveryService;
+        _sessionFactory = sessionFactory;
+        _writeService = writeService;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
         _executionTrigger = executionTrigger;
-        _loggerFactory = loggerFactory;
         _logger = logger;
     }
 
@@ -120,344 +110,7 @@ public sealed class CollectionExecutionService : BackgroundService
         var now = DateTimeOffset.UtcNow;
 
         await ExecuteRaceCardJobsAsync(now, cancellationToken).ConfigureAwait(false);
-        await ExecuteResultMonthDiscoveryJobsAsync(now, cancellationToken).ConfigureAwait(false);
-        await ExecuteResultDayDiscoveryJobsAsync(now, cancellationToken).ConfigureAwait(false);
-        await ExecuteResultDayCollectionJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceResultJobsAsync(now, cancellationToken).ConfigureAwait(false);
-        await ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task ExecuteResultBackfillPlanningJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var jobs = await _stateStore
-            .AcquireReadyJobsAsync(
-                AgentJobType.ResultBackfillPlanningRequest,
-                now,
-                TimeSpan.Zero,
-                _options.CollectionBatchSize,
-                TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var job in jobs)
-        {
-            try
-            {
-                var payload = AgentJobPayloadSerializer.Deserialize<ResultBackfillPlanningRequestPayload>(job.Payload);
-                var currentMonth = new DateOnly(DateTimeOffset.UtcNow.Year, DateTimeOffset.UtcNow.Month, 1);
-                var oldestMonth = currentMonth.AddYears(-Math.Max(1, payload.InitialBackfillYears));
-                var lastHistoricalMonth = currentMonth.AddMonths(-2);
-
-                for (var month = new DateOnly(oldestMonth.Year, oldestMonth.Month, 1);
-                     month <= lastHistoricalMonth;
-                     month = month.AddMonths(1))
-                {
-                    var monthPayload = new ResultMonthDiscoveryRequestPayload(
-                        payload.ProviderType,
-                        month.Year,
-                        month.Month,
-                        RevisitIncompleteDays: false);
-                    await _stateStore.EnqueueJobAsync(
-                        AgentJobType.ResultMonthDiscoveryRequest,
-                        AgentJobKeyFactory.BuildResultMonthDiscoveryRequestKey(payload.ProviderType, month.Year, month.Month),
-                        AgentJobPayloadSerializer.Serialize(monthPayload),
-                        now,
-                        priority: 60,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-
-                await _stateStore.CompleteJobAsync(AgentJobType.ResultBackfillPlanningRequest, job.DeduplicationKey, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[収集実行] バックフィル計画ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.FailJobAsync(
-                    AgentJobType.ResultBackfillPlanningRequest,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private async Task ExecuteResultMonthDiscoveryJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var jobs = await _stateStore
-            .AcquireReadyJobsAsync(
-                AgentJobType.ResultMonthDiscoveryRequest,
-                now,
-                TimeSpan.Zero,
-                _options.CollectionBatchSize,
-                TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var job in jobs)
-        {
-            try
-            {
-                var payload = AgentJobPayloadSerializer.Deserialize<ResultMonthDiscoveryRequestPayload>(job.Payload);
-                var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
-                var monthDates = await _resultDateDiscoveryService
-                    .DiscoverMonthDatesAsync(payload.Year, payload.Month, cancellationToken)
-                    .ConfigureAwait(false);
-
-                foreach (var date in monthDates.Where(x => x <= todayJst))
-                {
-                    var currentStatus = await _stateStore
-                        .GetResultDayCollectionStatusAsync(payload.ProviderType, date, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (currentStatus?.Status == ResultDayCollectionState.Complete)
-                    {
-                        continue;
-                    }
-
-                    if (currentStatus?.RetryAfter is { } retryAfter && retryAfter > now)
-                    {
-                        continue;
-                    }
-
-                    var dayPayload = new ResultDayDiscoveryRequestPayload(date, payload.ProviderType);
-                    await _stateStore.ScheduleJobAsync(
-                        AgentJobType.ResultDayDiscoveryRequest,
-                        AgentJobKeyFactory.BuildResultDayDiscoveryRequestKey(payload.ProviderType, date),
-                        AgentJobPayloadSerializer.Serialize(dayPayload),
-                        now,
-                        priority: date >= todayJst.AddMonths(-1) ? 150 : 70,
-                        parentJobId: job.JobId,
-                        parentRelationType: JobRelationType.GeneratedBy,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-
-                await _stateStore.CompleteJobAsync(AgentJobType.ResultMonthDiscoveryRequest, job.DeduplicationKey, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[収集実行] 月次成績探索ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
-                await _stateStore.FailJobAsync(
-                    AgentJobType.ResultMonthDiscoveryRequest,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private async Task ExecuteResultDayDiscoveryJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var jobs = await _stateStore
-            .AcquireReadyJobsAsync(
-                AgentJobType.ResultDayDiscoveryRequest,
-                now,
-                TimeSpan.Zero,
-                _options.CollectionBatchSize,
-                TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var job in jobs)
-        {
-            var payload = AgentJobPayloadSerializer.Deserialize<ResultDayDiscoveryRequestPayload>(job.Payload);
-
-            try
-            {
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    ResultDayCollectionState.Discovering,
-                    expectedRaceCount: null,
-                    completedRaceCount: null,
-                    incompleteReason: null,
-                    lastCompletedAt: null,
-                    retryAfter: null,
-                    lastError: null,
-                    now,
-                    cancellationToken).ConfigureAwait(false);
-
-                var discoveredUrls = await DiscoverResultUrlsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
-                if (discoveredUrls.Count == 0)
-                {
-                    var shouldRetry = ShouldRetryIncompleteDay(payload.RaceDate, now);
-                    await _stateStore.UpsertResultDayCollectionStatusAsync(
-                        payload.ProviderType,
-                        payload.RaceDate,
-                        shouldRetry ? ResultDayCollectionState.RetryScheduled : ResultDayCollectionState.Complete,
-                        expectedRaceCount: 0,
-                        completedRaceCount: 0,
-                        incompleteReason: shouldRetry ? "Result URL discovery returned no URLs." : null,
-                        lastCompletedAt: shouldRetry ? null : now,
-                        retryAfter: shouldRetry ? now.AddHours(3) : null,
-                        lastError: shouldRetry ? "Result URL discovery returned no URLs." : null,
-                        now,
-                        cancellationToken).ConfigureAwait(false);
-
-                    await _stateStore.CompleteJobAsync(AgentJobType.ResultDayDiscoveryRequest, job.DeduplicationKey, cancellationToken)
-                        .ConfigureAwait(false);
-                    continue;
-                }
-
-                var urls = await FilterUnregisteredResultUrlsAsync(discoveredUrls, payload.RaceDate, cancellationToken).ConfigureAwait(false);
-                if (urls.Count == 0)
-                {
-                    await _stateStore.UpsertResultDayCollectionStatusAsync(
-                        payload.ProviderType,
-                        payload.RaceDate,
-                        ResultDayCollectionState.Complete,
-                        expectedRaceCount: discoveredUrls.Count,
-                        completedRaceCount: discoveredUrls.Count,
-                        incompleteReason: null,
-                        lastCompletedAt: now,
-                        retryAfter: null,
-                        lastError: null,
-                        now,
-                        cancellationToken).ConfigureAwait(false);
-
-                    await _stateStore.CompleteJobAsync(AgentJobType.ResultDayDiscoveryRequest, job.DeduplicationKey, cancellationToken)
-                        .ConfigureAwait(false);
-                    continue;
-                }
-
-                var dayCollectionPayload = new ResultDayCollectionRequestPayload(
-                    payload.RaceDate,
-                    payload.ProviderType,
-                    urls,
-                    urls.Count);
-                await _stateStore.ScheduleJobAsync(
-                    AgentJobType.ResultDayCollectionRequest,
-                    AgentJobKeyFactory.BuildResultDayCollectionRequestKey(payload.ProviderType, payload.RaceDate),
-                    AgentJobPayloadSerializer.Serialize(dayCollectionPayload),
-                    now,
-                    priority: 130,
-                    parentJobId: job.JobId,
-                    parentRelationType: JobRelationType.GeneratedBy,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    ResultDayCollectionState.Ready,
-                    expectedRaceCount: urls.Count,
-                    completedRaceCount: 0,
-                    incompleteReason: null,
-                    lastCompletedAt: null,
-                    retryAfter: null,
-                    lastError: null,
-                    now,
-                    cancellationToken).ConfigureAwait(false);
-
-                await _stateStore.CompleteJobAsync(AgentJobType.ResultDayDiscoveryRequest, job.DeduplicationKey, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[収集実行] 日次成績探索ジョブ失敗。Date={Date}", payload.RaceDate);
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    ResultDayCollectionState.DeadLetter,
-                    expectedRaceCount: null,
-                    completedRaceCount: null,
-                    incompleteReason: ex.Message,
-                    lastCompletedAt: null,
-                    retryAfter: null,
-                    lastError: ex.Message,
-                    now,
-                    cancellationToken).ConfigureAwait(false);
-                await _stateStore.FailJobAsync(
-                    AgentJobType.ResultDayDiscoveryRequest,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private async Task ExecuteResultDayCollectionJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var jobs = await _stateStore
-            .AcquireReadyJobsAsync(
-                AgentJobType.ResultDayCollectionRequest,
-                now,
-                TimeSpan.Zero,
-                _options.CollectionBatchSize,
-                TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        foreach (var job in jobs)
-        {
-            var payload = AgentJobPayloadSerializer.Deserialize<ResultDayCollectionRequestPayload>(job.Payload);
-
-            try
-            {
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    ResultDayCollectionState.Running,
-                    expectedRaceCount: payload.ExpectedRaceCount,
-                    completedRaceCount: 0,
-                    incompleteReason: null,
-                    lastCompletedAt: null,
-                    retryAfter: null,
-                    lastError: null,
-                    now,
-                    cancellationToken).ConfigureAwait(false);
-
-                foreach (var child in ResultDayChildTaskFactory.Create(payload))
-                {
-                    await _stateStore.ScheduleJobAsync(
-                        AgentJobType.HistoricalRaceResultCollectionRequest,
-                        child.DeduplicationKey,
-                        child.Payload,
-                        now,
-                        priority: 120,
-                        parentJobId: job.JobId,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-
-                await _stateStore.WaitForDependenciesAsync(
-                    AgentJobType.ResultDayCollectionRequest,
-                    job.DeduplicationKey,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
-            {
-                const string error = "ExecutionDeadlineExceeded: 日次収集の実行期限に到達しました。";
-                _logger.LogWarning(ex, "[収集実行] 日次成績収集ジョブが期限超過。Date={Date}", payload.RaceDate);
-                using var failureUpdateCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType, payload.RaceDate, ResultDayCollectionState.Incomplete,
-                    payload.ExpectedRaceCount, null, error, null, null, error, now,
-                    failureUpdateCts.Token).ConfigureAwait(false);
-                await _stateStore.FailJobAsync(
-                    AgentJobType.ResultDayCollectionRequest, job.DeduplicationKey, error,
-                    failureUpdateCts.Token).ConfigureAwait(false);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[収集実行] 日次成績収集ジョブ失敗。Date={Date}", payload.RaceDate);
-                await _stateStore.UpsertResultDayCollectionStatusAsync(
-                    payload.ProviderType,
-                    payload.RaceDate,
-                    ResultDayCollectionState.DeadLetter,
-                    expectedRaceCount: payload.ExpectedRaceCount,
-                    completedRaceCount: null,
-                    incompleteReason: ex.Message,
-                    lastCompletedAt: null,
-                    retryAfter: null,
-                    lastError: ex.Message,
-                    now,
-                    cancellationToken).ConfigureAwait(false);
-                await _stateStore.FailJobAsync(
-                    AgentJobType.ResultDayCollectionRequest,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 
     private async Task ExecuteRaceCardJobsAsync(DateTimeOffset now, CancellationToken cancellationToken)
@@ -482,9 +135,9 @@ public sealed class CollectionExecutionService : BackgroundService
                     throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
                 }
 
-                var result = await CollectRaceCardsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                var (results, savedRaceIds) = await CollectRaceCardsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
 
-                if (ShouldRetryRaceCardCollection(payload.RaceDate, result, now))
+                if (ShouldRetryRaceCardCollection(payload.RaceDate, results, now))
                 {
                     _logger.LogInformation(
                         "[収集実行] 出馬表未公開のため再試行します: Date={Date}",
@@ -501,20 +154,27 @@ public sealed class CollectionExecutionService : BackgroundService
                     continue;
                 }
 
-                await RecordRaceCardStatusesAsync(result, now, cancellationToken).ConfigureAwait(false);
+                await RecordRaceCardStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
 
+                var errorCount = results.Sum(x => x.Errors.Count);
                 _logger.LogInformation(
                     "[収集実行] 出馬表収集完了: Date={Date} Saved={Saved} Errors={Errors}",
                     payload.RaceDate,
-                    result.SavedRaceIds.Count,
-                    result.Errors.Count);
+                    savedRaceIds.Count,
+                    errorCount);
 
-                foreach (var error in result.Errors)
+                foreach (var result in results)
                 {
-                    _logger.LogWarning("[収集実行] {Error}", error);
+                    foreach (var error in result.Errors)
+                    {
+                        _logger.LogWarning("[収集実行] Course={Course} {Error}", result.Course, error);
+                    }
                 }
 
-                var distinctRaceIds = ScrapingRegistrationService.BuildPredictionCandidateRaceIds(result.SavedRaceIds);
+                var distinctRaceIds = savedRaceIds
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
                 if (distinctRaceIds.Count > 0)
                 {
                     foreach (var raceId in distinctRaceIds)
@@ -584,18 +244,22 @@ public sealed class CollectionExecutionService : BackgroundService
                     throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
                 }
 
-                var result = await CollectRaceResultsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
-                await RecordScheduledRaceResultStatusesAsync(result, now, cancellationToken).ConfigureAwait(false);
+                var (results, savedRaceIds) = await CollectRaceResultsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                await RecordRaceResultStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
 
+                var errorCount = results.Sum(x => x.Errors.Count);
                 _logger.LogInformation(
                     "[収集実行] 成績収集完了: Date={Date} Saved={Saved} Errors={Errors}",
                     payload.RaceDate,
-                    result.SavedRaceIds.Count,
-                    result.Errors.Count);
+                    savedRaceIds.Count,
+                    errorCount);
 
-                foreach (var error in result.Errors)
+                foreach (var result in results)
                 {
-                    _logger.LogWarning("[収集実行] {Error}", error);
+                    foreach (var error in result.Errors)
+                    {
+                        _logger.LogWarning("[収集実行] RaceId={RaceId} {Error}", result.RaceId, error);
+                    }
                 }
 
                 await _stateStore.CompleteJobAsync(AgentJobType.RaceResultCollection, job.DeduplicationKey, cancellationToken)
@@ -613,55 +277,94 @@ public sealed class CollectionExecutionService : BackgroundService
         }
     }
 
-    private async Task<JraRaceCardCollectionResult> CollectRaceCardsAsync(
+    /// <summary>
+    /// 指定日に開催される全競馬場の出馬表を収集する。
+    /// 開催競馬場の特定は <see cref="IJraScheduleCollectionWorkflow"/>、各競馬場の出馬表収集は
+    /// <see cref="IJraRaceCardCollectionWorkflow"/> に委譲する（オーケストレーションのみ）。
+    /// </summary>
+    private async Task<(IReadOnlyList<RaceCardCollectionResult> Results, IReadOnlyList<string> SavedRaceIds)> CollectRaceCardsAsync(
         DateOnly raceDate,
         CancellationToken cancellationToken)
     {
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-        var workflow = new JraRaceCardCollectionWorkflow(
-            browser,
-            new JraRaceCardScraper(browser),
-            _writeTools);
+        var scheduleWorkflow = new JraScheduleCollectionWorkflow(session);
+        var courses = await scheduleWorkflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
 
-        return await workflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
+        var cardWorkflow = new JraRaceCardCollectionWorkflow(session, _writeService);
+        var results = new List<RaceCardCollectionResult>();
+        var savedRaceIds = new List<string>();
+
+        foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
+        {
+            var result = await cardWorkflow.CollectAsync(raceDate, course, cancellationToken).ConfigureAwait(false);
+            results.Add(result);
+            savedRaceIds.AddRange(result.RaceIds);
+        }
+
+        return (results, savedRaceIds);
     }
 
-    private async Task<JraRaceResultCollectionResult> CollectRaceResultsAsync(
+    /// <summary>
+    /// 指定日に開催される全競馬場の確定成績を収集する。
+    /// 開催競馬場・レース一覧の特定は <see cref="IJraScheduleCollectionWorkflow"/> と
+    /// <see cref="JraSession.Navigate"/>（レース一覧ページ）、各レースの成績収集は
+    /// <see cref="IJraRaceResultCollectionWorkflow"/> に委譲する（オーケストレーションのみ）。
+    /// レース一覧ページ自体は出馬表収集と同じもの（<see cref="Scraping.Jra.Pages.JraRaceListPage"/>）を
+    /// 利用するため、旧実装にあった専用のURL探索（削除済みの JraRaceResultUrl）は不要になった。
+    /// </summary>
+    private async Task<(IReadOnlyList<RaceResultCollectionResult> Results, IReadOnlyList<string> SavedRaceIds)> CollectRaceResultsAsync(
         DateOnly raceDate,
         CancellationToken cancellationToken)
     {
-        var urls = await DiscoverUnregisteredResultUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
-        return await CollectRaceResultsAsync(raceDate, urls, cancellationToken).ConfigureAwait(false);
-    }
+        await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
 
-    private async Task<JraRaceResultCollectionResult> CollectRaceResultsAsync(
-        DateOnly raceDate,
-        IReadOnlyList<JraRaceResultUrl> urls,
-        CancellationToken cancellationToken)
-    {
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
+        var scheduleWorkflow = new JraScheduleCollectionWorkflow(session);
+        var courses = await scheduleWorkflow.CollectAsync(raceDate, cancellationToken).ConfigureAwait(false);
 
-        var workflow = CreateRaceResultWorkflow(browser);
-        var scraped = await workflow.ScrapeAllAsync(urls, cancellationToken).ConfigureAwait(false);
-        var (savedRaceIds, errors) = await workflow.SaveAllAsync(scraped, cancellationToken).ConfigureAwait(false);
+        var resultWorkflow = new JraRaceResultCollectionWorkflow(session, _writeService);
+        var results = new List<RaceResultCollectionResult>();
+        var savedRaceIds = new List<string>();
 
-        return new JraRaceResultCollectionResult(
-            RaceDate: raceDate,
-            DiscoveredUrls: urls,
-            ScrapedResults: scraped.Select(x => x.Data).ToList(),
-            SavedRaceIds: savedRaceIds,
-            Errors: errors);
-    }
+        foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
+        {
+            var listPage = await session.Navigate.ToRaceListAsync(raceDate, course, cancellationToken).ConfigureAwait(false);
+            if (listPage is not Scraping.Jra.Pages.JraRaceListPage raceList)
+            {
+                _logger.LogWarning(
+                    "[収集実行] レース一覧ページを取得できませんでした（成績収集をスキップ）。Date={Date} Course={Course} Kind={Kind}",
+                    raceDate, course, listPage.Kind);
+                continue;
+            }
 
-    private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverResultUrlsAsync(
-        DateOnly raceDate,
-        CancellationToken cancellationToken)
-    {
-        await using var browser = await _browserSessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
-        var workflow = CreateRaceResultWorkflow(browser);
-        var urls = await workflow.DiscoverUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
-        return urls.Select(JraRacecourseResolver.Normalize).ToList();
+            foreach (var race in raceList.Races)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                RaceResultCollectionResult result;
+                try
+                {
+                    result = await resultWorkflow
+                        .CollectAsync(new RaceId(raceDate, course, race.Number), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (JraCollectionException ex)
+                {
+                    // 成績未確定（レースがまだ終わっていない等）でページが取得できない場合はスキップする。
+                    // Workflow自体はリトライを行わないため、リトライは既存のジョブ再実行サイクルに委ねる。
+                    _logger.LogInformation(
+                        ex,
+                        "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
+                        raceDate, course, race.Number);
+                    continue;
+                }
+
+                results.Add(result);
+                savedRaceIds.AddRange(result.SavedHorseNumbers.Count > 0 ? new[] { result.DataCollectionRaceId } : Array.Empty<string>());
+            }
+        }
+
+        return (results, savedRaceIds.Distinct(StringComparer.Ordinal).ToList());
     }
 
     public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
@@ -670,45 +373,17 @@ public sealed class CollectionExecutionService : BackgroundService
         return jobType switch
         {
             AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
-            AgentJobType.ResultMonthDiscoveryRequest => ExecuteResultMonthDiscoveryJobsAsync(now, cancellationToken),
-            AgentJobType.ResultDayDiscoveryRequest => ExecuteResultDayDiscoveryJobsAsync(now, cancellationToken),
-            AgentJobType.ResultDayCollectionRequest => ExecuteResultDayCollectionJobsAsync(now, cancellationToken),
             AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
-            AgentJobType.ResultBackfillPlanningRequest => ExecuteResultBackfillPlanningJobsAsync(now, cancellationToken),
             _ => throw new InvalidOperationException($"Unsupported collection job type: {jobType}")
         };
     }
 
-    private async Task<IReadOnlyList<JraRaceResultUrl>> DiscoverUnregisteredResultUrlsAsync(
-        DateOnly raceDate,
-        CancellationToken cancellationToken)
-    {
-        var discoveredUrls = await DiscoverResultUrlsAsync(raceDate, cancellationToken).ConfigureAwait(false);
-        return await FilterUnregisteredResultUrlsAsync(discoveredUrls, raceDate, cancellationToken).ConfigureAwait(false);
-    }
-
-    private JraRaceResultCollectionWorkflow CreateRaceResultWorkflow(IWebBrowser browser)
-        => new(
-            browser,
-            new JraRaceResultScraper(browser),
-            _writeTools,
-            _raceQueryService,
-            _loggerFactory.CreateLogger<JraRaceResultCollectionWorkflow>(),
-            _loggerFactory);
-
-    private static bool ShouldRetryIncompleteDay(DateOnly raceDate, DateTimeOffset now)
-    {
-        var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
-        var retryThreshold = new DateOnly(todayJst.Year, todayJst.Month, 1).AddMonths(-1);
-        return raceDate >= retryThreshold;
-    }
-
     private static bool ShouldRetryRaceCardCollection(
         DateOnly raceDate,
-        JraRaceCardCollectionResult result,
+        IReadOnlyList<RaceCardCollectionResult> results,
         DateTimeOffset now)
     {
-        if (result.DiscoveredUrls.Count > 0 || result.Errors.Count > 0)
+        if (results.Count > 0 && results.Any(x => x.RaceIds.Count > 0 || x.Errors.Count > 0))
         {
             return false;
         }
@@ -717,236 +392,86 @@ public sealed class CollectionExecutionService : BackgroundService
         return raceDate >= todayJst;
     }
 
-    private async Task<IReadOnlyList<JraRaceResultUrl>> FilterUnregisteredResultUrlsAsync(
-        IReadOnlyList<JraRaceResultUrl> urls,
-        DateOnly raceDate,
-        CancellationToken cancellationToken)
-    {
-        if (urls.Count == 0)
-        {
-            return urls;
-        }
-
-        var registeredRaces = await _raceQueryService
-            .SearchRegisteredRacesAsync(raceDate, cancellationToken)
-            .ConfigureAwait(false);
-
-        var registeredRaceIdsByKey = registeredRaces
-            .Select(x => new { Key = BuildResultRaceKey(x), x.RaceId })
-            .Where(x => x.Key is not null && !string.IsNullOrWhiteSpace(x.RaceId))
-            .ToDictionary(x => x.Key!, x => x.RaceId, StringComparer.Ordinal);
-        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
-        var filtered = new List<JraRaceResultUrl>(urls.Count);
-
-        foreach (var url in urls)
-        {
-            var key = BuildResultRaceKey(url);
-            if (key is not null)
-            {
-                if (!seenKeys.Add(key))
-                {
-                    continue;
-                }
-
-                if (registeredRaceIdsByKey.TryGetValue(key, out var raceId))
-                {
-                    var context = await _raceQueryService
-                        .GetRacePredictionContextAsync(raceId, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (HasRequiredResultMetadata(context))
-                    {
-                        continue;
-                    }
-                }
-            }
-
-            filtered.Add(url);
-        }
-
-        return filtered;
-    }
-
-    private static string? BuildResultRaceKey(RaceSearchSummary summary)
-    {
-        if (summary.RaceDate is null || summary.RaceNumber is null || string.IsNullOrWhiteSpace(summary.RacecourseCode))
-        {
-            return null;
-        }
-
-        var racecourseKey = NormalizeRacecourseKey(summary.RacecourseCode);
-        return racecourseKey is null
-            ? null
-            : $"{summary.RaceDate:yyyy-MM-dd}|{racecourseKey}|{summary.RaceNumber.Value:D2}";
-    }
-
-    private static string? BuildResultRaceKey(JraRaceResultUrl url)
-    {
-        if (url.RaceDate is null || url.RaceNumber is null)
-        {
-            return null;
-        }
-
-        var racecourse = !string.IsNullOrWhiteSpace(url.Racecourse)
-            ? url.Racecourse
-            : url.RacecourseCode;
-
-        if (string.IsNullOrWhiteSpace(racecourse))
-        {
-            return null;
-        }
-
-        var racecourseKey = NormalizeRacecourseKey(racecourse);
-        return racecourseKey is null
-            ? null
-            : $"{url.RaceDate:yyyy-MM-dd}|{racecourseKey}|{url.RaceNumber.Value:D2}";
-    }
-
-    private static string? NormalizeRacecourseKey(string? racecourse)
-    {
-        var displayName = JraRacecourseResolver.ResolveDisplayName(racecourse);
-        return string.IsNullOrWhiteSpace(displayName)
-            ? null
-            : DeterministicIdGenerator.NormalizeKey(displayName);
-    }
-
     private async Task RecordRaceCardStatusesAsync(
-        JraRaceCardCollectionResult result,
+        DateOnly raceDate,
+        IReadOnlyList<RaceCardCollectionResult> results,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var errorsByUrl = BuildErrorLookup(result.Errors);
-        var scrapedByKey = result.ScrapedCards
-            .Where(x => x.RaceDate is not null && x.RaceNumber is not null && !string.IsNullOrWhiteSpace(x.Racecourse))
-            .ToDictionary(
-                x => RaceDataCollectionKeyFactory.Build(x.RaceDate!.Value, x.Racecourse!, x.RaceNumber!.Value),
-                x => x,
-                StringComparer.Ordinal);
-        var savedIds = result.SavedRaceIds.ToHashSet(StringComparer.Ordinal);
-
-        foreach (var source in result.DiscoveredUrls)
+        foreach (var result in results)
         {
-            if (!TryResolveRaceIdentity(source.RaceDate, source.Racecourse ?? source.RacecourseCode, source.RaceNumber, out var raceDate, out var racecourse, out var raceNumber))
-            {
-                continue;
-            }
+            var racecourse = RaceCourseNames.GetJraName(result.Course);
 
-            var raceKey = RaceDataCollectionKeyFactory.Build(raceDate, racecourse, raceNumber);
-            scrapedByKey.TryGetValue(raceKey, out var scraped);
-            var raceId = DeterministicIdGenerator.BuildRaceId(raceDate, racecourse, raceNumber);
-            var explicitError = errorsByUrl.TryGetValue(source.Url, out var error) ? error : null;
+            foreach (var race in result.Races)
+            {
+                RaceDataCollectionState status;
+                RaceDataCollectionErrorCode? errorCode = null;
+                string? errorReason = null;
 
-            RaceDataCollectionState status;
-            RaceDataCollectionErrorCode? errorCode = null;
-            string? errorReason = null;
+                if (race.RaceId is not null)
+                {
+                    status = RaceDataCollectionState.Succeeded;
+                }
+                else
+                {
+                    status = RaceDataCollectionState.Failed;
+                    var classified = RaceDataCollectionErrorClassifier.Classify(
+                        race.Error ?? "No card data was extracted for the discovered race.");
+                    errorCode = classified.Code;
+                    errorReason = classified.Reason;
+                }
 
-            if (savedIds.Contains(raceId))
-            {
-                status = RaceDataCollectionState.Succeeded;
+                await _stateStore.UpsertRaceCardCollectionStatusAsync(
+                    raceDate,
+                    racecourse,
+                    race.RaceNumber,
+                    race.RaceId,
+                    race.RaceName,
+                    race.SourceUrl,
+                    status,
+                    errorCode,
+                    errorReason,
+                    now,
+                    cancellationToken).ConfigureAwait(false);
             }
-            else if (explicitError is not null)
-            {
-                status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify(explicitError);
-                errorCode = classified.Code;
-                errorReason = explicitError;
-            }
-            else if (scraped is null)
-            {
-                status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify("No card data was extracted for the discovered URL.");
-                errorCode = classified.Code;
-                errorReason = classified.Reason;
-            }
-            else
-            {
-                status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify("Card data was scraped but could not be saved.");
-                errorCode = classified.Code;
-                errorReason = classified.Reason;
-            }
-
-            await _stateStore.UpsertRaceCardCollectionStatusAsync(
-                raceDate,
-                racecourse,
-                raceNumber,
-                savedIds.Contains(raceId) ? raceId : null,
-                scraped?.RaceName,
-                source.Url,
-                status,
-                errorCode,
-                errorReason,
-                now,
-                cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task RecordScheduledRaceResultStatusesAsync(
-        JraRaceResultCollectionResult result,
+    private async Task RecordRaceResultStatusesAsync(
+        DateOnly raceDate,
+        IReadOnlyList<RaceResultCollectionResult> results,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var errorsByUrl = BuildErrorLookup(result.Errors);
-        var scrapedByKey = result.ScrapedResults
-            .Where(x => x.RaceDate is not null && x.RaceNumber is not null && !string.IsNullOrWhiteSpace(x.Racecourse))
-            .GroupBy(
-                x => RaceDataCollectionKeyFactory.Build(x.RaceDate!.Value, x.Racecourse!, x.RaceNumber!.Value),
-                StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                group => group.First(),
-                StringComparer.Ordinal);
-        var savedIds = result.SavedRaceIds.ToHashSet(StringComparer.Ordinal);
-
-        foreach (var source in result.DiscoveredUrls)
+        foreach (var result in results)
         {
-            var racecourseValue = source.Racecourse ?? source.RacecourseCode;
-            if (!TryResolveRaceIdentity(source.RaceDate, racecourseValue, source.RaceNumber, out var raceDate, out var racecourse, out var raceNumber))
-            {
-                continue;
-            }
-
-            var raceKey = RaceDataCollectionKeyFactory.Build(raceDate, racecourse, raceNumber);
-            scrapedByKey.TryGetValue(raceKey, out var scraped);
-            var raceId = DeterministicIdGenerator.BuildRaceId(raceDate, racecourse, raceNumber);
-            var explicitError = errorsByUrl.TryGetValue(source.Url, out var error) ? error : null;
+            var racecourse = RaceCourseNames.GetJraName(result.RaceId.Course);
 
             RaceDataCollectionState status;
             RaceDataCollectionErrorCode? errorCode = null;
             string? errorReason = null;
 
-            if (savedIds.Contains(raceId))
+            if (result.SavedHorseNumbers.Count > 0)
             {
                 status = RaceDataCollectionState.Succeeded;
-            }
-            else if (explicitError is not null)
-            {
-                status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify(explicitError);
-                errorCode = classified.Code;
-                errorReason = explicitError;
-            }
-            else if (scraped is null)
-            {
-                status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify("No result data was extracted for the discovered URL.");
-                errorCode = classified.Code;
-                errorReason = classified.Reason;
             }
             else
             {
                 status = RaceDataCollectionState.Failed;
-                var classified = RaceDataCollectionErrorClassifier.Classify("Race result data was scraped but could not be saved.");
+                var explicitError = result.Errors.FirstOrDefault();
+                var classified = RaceDataCollectionErrorClassifier.Classify(
+                    explicitError ?? "No result data was extracted for the discovered race.");
                 errorCode = classified.Code;
-                errorReason = classified.Reason;
+                errorReason = explicitError ?? classified.Reason;
             }
 
             await _stateStore.UpsertRaceResultCollectionStatusAsync(
                 raceDate,
                 racecourse,
-                raceNumber,
-                savedIds.Contains(raceId) ? raceId : null,
-                scraped?.RaceName,
-                source.Url,
+                result.RaceId.Number,
+                status == RaceDataCollectionState.Succeeded ? result.DataCollectionRaceId : null,
+                raceName: null,
+                sourceUrl: null,
                 status,
                 RaceResultAcquisitionOrigin.Scheduled,
                 requestedByRaceId: null,
@@ -956,67 +481,4 @@ public sealed class CollectionExecutionService : BackgroundService
                 cancellationToken).ConfigureAwait(false);
         }
     }
-
-    private static Dictionary<string, string> BuildErrorLookup(IReadOnlyList<string> errors)
-    {
-        var lookup = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        foreach (var error in errors)
-        {
-            var separatorIndex = error.IndexOf(" — ", StringComparison.Ordinal);
-            if (separatorIndex <= 0)
-            {
-                continue;
-            }
-
-            var prefix = error[..separatorIndex];
-            var urlSeparatorIndex = prefix.IndexOf(':', StringComparison.Ordinal);
-            if (urlSeparatorIndex < 0 || urlSeparatorIndex + 1 >= prefix.Length)
-            {
-                continue;
-            }
-
-            var url = prefix[(urlSeparatorIndex + 1)..].Trim();
-            if (!string.IsNullOrWhiteSpace(url))
-            {
-                lookup[url] = error;
-            }
-        }
-
-        return lookup;
-    }
-
-    private static bool TryResolveRaceIdentity(
-        DateOnly? raceDate,
-        string? racecourse,
-        int? raceNumber,
-        out DateOnly resolvedRaceDate,
-        out string resolvedRacecourse,
-        out int resolvedRaceNumber)
-    {
-        resolvedRaceDate = default;
-        resolvedRacecourse = string.Empty;
-        resolvedRaceNumber = default;
-
-        var racecourseDisplayName = JraRacecourseResolver.ResolveDisplayName(racecourse);
-        if (raceDate is null || string.IsNullOrWhiteSpace(racecourseDisplayName) || raceNumber is null)
-        {
-            return false;
-        }
-
-        resolvedRaceDate = raceDate.Value;
-        resolvedRacecourse = racecourseDisplayName;
-        resolvedRaceNumber = raceNumber.Value;
-        return true;
-    }
-
-    private static bool HasRequiredResultMetadata(RacePredictionContextReadModel? context)
-    {
-        return context is not null
-            && !string.IsNullOrWhiteSpace(context.SurfaceCode)
-            && context.DistanceMeters is > 0
-            && !string.IsNullOrWhiteSpace(context.GradeCode)
-            && context.Status >= RaceStatus.ResultDeclared;
-    }
 }
-#endif

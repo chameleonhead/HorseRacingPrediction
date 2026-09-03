@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 /// 「日番号 [地方] [競馬場名 [レース名(グレード)]]...」の形式になる
 /// （<see cref="Browser.PlaywrightWebBrowser"/> がセル内の改行を空白へ正規化するため）。
 /// </summary>
-internal sealed class CalendarPageParser
+public sealed class CalendarPageParser
     : IJraPageParser
 {
     private static readonly Regex YearMonthRegex =

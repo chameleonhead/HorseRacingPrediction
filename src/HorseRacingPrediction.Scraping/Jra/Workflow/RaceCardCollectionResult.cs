@@ -12,8 +12,29 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// 個別レースの取得・保存に失敗した際のエラーメッセージ一覧。
 /// 1レースの失敗で全体を止めず、残りのレースの処理を続行する（部分成功を許容する）。
 /// </param>
+/// <param name="Races">
+/// 開催日・競馬場内で発見した各レースの収集結果（レース番号順）。
+/// Collector側のProcessingState更新（レース単位のステータス記録）に必要な粒度を提供するために
+/// <see cref="RaceIds"/>/<see cref="Errors"/> に加えて追加したフィールド（Task23での拡張）。
+/// </param>
 public sealed record RaceCardCollectionResult(
     DateOnly Date,
     RaceCourse Course,
     IReadOnlyList<string> RaceIds,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<RaceCardRaceOutcome> Races);
+
+/// <summary>
+/// <see cref="RaceCardCollectionResult"/> 内の1レース分の収集結果。
+/// </summary>
+/// <param name="RaceNumber">レース番号</param>
+/// <param name="RaceId">保存に成功した場合の書き込みサービス側レースID。失敗時はnull。</param>
+/// <param name="RaceName">レース名（取得できた場合）</param>
+/// <param name="SourceUrl">出馬表ページのURL（取得できた場合）</param>
+/// <param name="Error">失敗時のエラーメッセージ。成功時はnull。</param>
+public sealed record RaceCardRaceOutcome(
+    int RaceNumber,
+    string? RaceId,
+    string? RaceName,
+    string? SourceUrl,
+    string? Error);

@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 /// 実ページの具体的なURL構造は未調査のため、テーブルの見出し（ヘッダー）から
 /// 列を特定する方式にして、ページ構造変更への耐性を優先している。
 /// </summary>
-internal sealed class RaceListPageParser
+public sealed class RaceListPageParser
     : IJraPageParser
 {
     private static readonly Regex DateRegex =

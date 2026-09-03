@@ -3,7 +3,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Models;
 /// <summary>
 /// レース場の日本語表記からの変換。JRA表記変更時の影響範囲をここへ限定する。
 /// </summary>
-internal static class RaceCourseNames
+public static class RaceCourseNames
 {
     // 検索順は判定優先度と一致させる。
     private static readonly (string Text, RaceCourse Course)[] Entries =
