@@ -10,10 +10,22 @@ internal sealed class FakeWebBrowser : IWebBrowser
 {
     private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new();
     private readonly Dictionary<string, List<PageLinkSnapshot>> _linksByUrl = new();
+    private readonly Dictionary<string, List<PageFormSnapshot>> _formsByUrl = new();
+
+    /// <summary>
+    /// SubmitFormAsyncが呼ばれた際に遷移する先のURL。テストで事前に設定する。
+    /// </summary>
+    private string? _submitDestinationUrl;
 
     public string? CurrentUrl { get; private set; }
 
     public List<string> NavigatedUrls { get; } = [];
+
+    public List<string> SetFieldCalls { get; } = [];
+
+    public List<(string FieldLabelOrName, string OptionText)> SelectOptionCalls { get; } = [];
+
+    public int SubmitFormCallCount { get; private set; }
 
     /// <summary>
     /// テストの初期状態を設定する。NavigatedUrlsには記録しない。
@@ -26,6 +38,15 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
     public void SetLinks(string url, IEnumerable<PageLinkSnapshot> links)
         => _linksByUrl[url] = links.ToList();
+
+    public void SetForms(string url, IEnumerable<PageFormSnapshot> forms)
+        => _formsByUrl[url] = forms.ToList();
+
+    /// <summary>
+    /// SubmitFormAsync呼び出し後に遷移する先のURLを設定する。
+    /// </summary>
+    public void SetSubmitDestination(string url)
+        => _submitDestinationUrl = url;
 
     public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
     {
@@ -69,7 +90,47 @@ internal sealed class FakeWebBrowser : IWebBrowser
         string fieldText,
         string optionText,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        SelectOptionCalls.Add((fieldText, optionText));
+        return Task.FromResult(string.Empty);
+    }
+
+    public Task<IReadOnlyList<PageFormSnapshot>> GetFormsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var url = CurrentUrl ?? string.Empty;
+
+        if (_formsByUrl.TryGetValue(url, out var forms))
+        {
+            return Task.FromResult<IReadOnlyList<PageFormSnapshot>>(forms);
+        }
+
+        return Task.FromResult<IReadOnlyList<PageFormSnapshot>>([]);
+    }
+
+    public Task<string> SetFieldValueAsync(
+        string fieldLabelOrName,
+        string value,
+        CancellationToken cancellationToken = default)
+    {
+        SetFieldCalls.Add(fieldLabelOrName);
+        return Task.FromResult(string.Empty);
+    }
+
+    public Task<string> SubmitFormAsync(
+        string? formLabel = null,
+        CancellationToken cancellationToken = default)
+    {
+        SubmitFormCallCount++;
+
+        if (_submitDestinationUrl is not null)
+        {
+            CurrentUrl = _submitDestinationUrl;
+            NavigatedUrls.Add(_submitDestinationUrl);
+        }
+
+        return Task.FromResult(string.Empty);
+    }
 
     public Task<string> ClickActionInSectionAsync(
         string sectionText,
