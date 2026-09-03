@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraJsonExtractionService は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.JraTesting;
 using HorseRacingPrediction.Scraping.Browser;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -252,3 +254,4 @@ public class JraJsonExtractionServiceTests
             => Task.FromResult(_snapshot.MainText);
     }
 }
+#endif

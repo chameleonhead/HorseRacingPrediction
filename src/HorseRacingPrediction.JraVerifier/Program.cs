@@ -1,3 +1,7 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、旧 JraNavigation/Scrapers.Jra 層は削除された。
+// 新しい Jra/ 層に対する再実装までの間、このツールは一時的に無効化する。
+Console.WriteLine("JraVerifier is temporarily disabled during the Jra scraping redesign (see docs/jra-scraping.md).");
+#if false
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
@@ -546,3 +550,4 @@ static bool IsConflictOrAlreadyProcessed(string message)
         || message.Contains("既に記録済み", StringComparison.Ordinal)
         || message.Contains("already", StringComparison.OrdinalIgnoreCase);
 }
+#endif

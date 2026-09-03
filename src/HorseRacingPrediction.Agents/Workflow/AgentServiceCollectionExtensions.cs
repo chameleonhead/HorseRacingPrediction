@@ -1,7 +1,9 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-using HorseRacingPrediction.Scraping.Scrapers.Jra;
+// JRAサイト再設計（docs/jra-scraping.md）により、旧 Scrapers.Jra 層は削除された。
+// 新しい Jra/ 層に対する再実装までの間、以下の using を一時的に無効化する。
+// using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -69,12 +71,13 @@ public static class AgentServiceCollectionExtensions
             var webFetchTools = sp.GetRequiredService<WebFetchTools>();
             return new HorseRacingTools(webFetchTools);
         });
-        services.AddSingleton<JraPageExtractionTools>();
-        services.AddTransient<JraRaceCardScraper>(sp =>
-        {
-            var browser = sp.GetRequiredService<IWebBrowser>();
-            return new JraRaceCardScraper(browser);
-        });
+        // JRAサイト再設計により JraPageExtractionTools/JraRaceCardScraper は一時的に無効化中。
+        // services.AddSingleton<JraPageExtractionTools>();
+        // services.AddTransient<JraRaceCardScraper>(sp =>
+        // {
+        //     var browser = sp.GetRequiredService<IWebBrowser>();
+        //     return new JraRaceCardScraper(browser);
+        // });
         return services;
     }
 
@@ -134,15 +137,16 @@ public static class AgentServiceCollectionExtensions
             tools: playwrightTools.GetAITools());
     }
 
-    public static ChatClientAgent CreateJraNavigationChatAgent(this IServiceProvider services, string? name = null)
-    {
-        var chatClient = services.GetRequiredService<IChatClient>();
-        return new ChatClientAgent(
-            chatClient,
-            name: name ?? JraNavigationAgent.AgentName,
-            instructions: JraNavigationAgent.SystemPrompt,
-            tools: services.GetRequiredService<JraPageExtractionTools>().GetAITools());
-    }
+    // JRAサイト再設計により JraPageExtractionTools が一時的に無効化されているため、このメソッドも一時的に無効化する。
+    // public static ChatClientAgent CreateJraNavigationChatAgent(this IServiceProvider services, string? name = null)
+    // {
+    //     var chatClient = services.GetRequiredService<IChatClient>();
+    //     return new ChatClientAgent(
+    //         chatClient,
+    //         name: name ?? JraNavigationAgent.AgentName,
+    //         instructions: JraNavigationAgent.SystemPrompt,
+    //         tools: services.GetRequiredService<JraPageExtractionTools>().GetAITools());
+    // }
 
     public static ChatClientAgent CreateRaceContextChatAgent(this IServiceProvider services, string? name = null)
     {
@@ -203,7 +207,8 @@ public static class AgentServiceCollectionExtensions
     {
         var tools = new List<AITool>(services.GetRequiredService<RaceQueryTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<WebFetchTools>().GetAITools());
-        tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
+        // JRAサイト再設計により JraPageExtractionTools は一時的に無効化中。
+        // tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
         return tools;
     }
 
@@ -212,7 +217,8 @@ public static class AgentServiceCollectionExtensions
         var tools = new List<AITool>(services.GetRequiredService<RaceQueryTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<PredictionWriteTools>().GetAITools());
         tools.AddRange(services.GetRequiredService<WebFetchTools>().GetAITools());
-        tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
+        // JRAサイト再設計により JraPageExtractionTools は一時的に無効化中。
+        // tools.AddRange(services.GetRequiredService<JraPageExtractionTools>().GetAITools());
         return tools;
     }
 }

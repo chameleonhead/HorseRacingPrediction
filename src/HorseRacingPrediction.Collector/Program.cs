@@ -1,7 +1,9 @@
 using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
-using HorseRacingPrediction.Scraping.Workflow;
+// JRAサイト再設計（docs/jra-scraping.md）により、旧 JraNavigation/Scrapers.Jra 層は削除された。
+// 新しい Jra/ 層に対する再実装までの間、ビルドを通すために以下の JRA 専用登録を一時的に無効化する。
+// using HorseRacingPrediction.Scraping.Workflow;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,7 +23,7 @@ builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 
 builder.Services.AddSingleton<IWebBrowserSessionFactory, PlaywrightWebBrowserSessionFactory>();
-builder.Services.AddJraRaceScheduleCollectionWorkflow();
+// builder.Services.AddJraRaceScheduleCollectionWorkflow();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
 builder.Services.AddHttpClient("ProcessingState", (services, client) =>
@@ -33,39 +35,34 @@ builder.Services.AddHttpClient("ProcessingState", (services, client) =>
 builder.Services.AddSingleton<IProcessingStateStore>(services =>
         HttpProcessingStateStoreProxy.Create(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));
-builder.Services.AddSingleton<JraResultDateParser>();
-builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
-builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, JraHistoricalRaceReferenceCollector>();
-builder.Services.AddSingleton<IJraRaceResultLookup, JraSiteDataCollectorRaceResultLookup>();
-builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
-builder.Services.AddSingleton<IJraProfileLookup, JraSiteDataCollectorProfileLookup>();
-builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
+// JRAサイト再設計（docs/jra-scraping.md）により、旧 JraNavigation/Scrapers.Jra 層に依存する以下の登録は一時的に無効化する。
+// builder.Services.AddSingleton<JraResultDateParser>();
+// builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
+// builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, JraHistoricalRaceReferenceCollector>();
+// builder.Services.AddSingleton<IJraRaceResultLookup, JraSiteDataCollectorRaceResultLookup>();
+// builder.Services.AddSingleton<IHistoricalRaceResultCollector, JraHistoricalRaceResultCollector>();
+// builder.Services.AddSingleton<IJraProfileLookup, JraSiteDataCollectorProfileLookup>();
+// builder.Services.AddSingleton<IHistoricalDataRequestHandler, JraHistoricalDataRequestHandler>();
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 
-builder.Services.AddSingleton<ScrapingRegistrationService>();
-builder.Services.AddSingleton<CollectionExecutionService>();
-builder.Services.AddSingleton<HistoricalDataRequestExecutionService>();
-builder.Services.AddSingleton<CollectionRunCoordinator>();
-builder.Services.AddSingleton<CollectionTaskWorker>();
-if (!runOnce)
-{
-    builder.Services.AddHostedService<LocalCollectionTaskWorkerService>();
-}
+// builder.Services.AddSingleton<ScrapingRegistrationService>();
+// builder.Services.AddSingleton<CollectionExecutionService>();
+// builder.Services.AddSingleton<HistoricalDataRequestExecutionService>();
+// builder.Services.AddSingleton<CollectionRunCoordinator>();
+// builder.Services.AddSingleton<CollectionTaskWorker>();
+// if (!runOnce)
+// {
+//     builder.Services.AddHostedService<LocalCollectionTaskWorkerService>();
+// }
 
 var app = builder.Build();
 
+// JRAサイト再設計により CollectionTaskWorker 一式が一時的に無効化されているため、
+// --once/常駐いずれの実行経路も一時的に無効化する。
 if (runOnce)
 {
-    var notification = CollectionTaskWorker.ReadLambdaNotification(
-        Environment.GetEnvironmentVariable("COLLECTOR_EVENT_PATH"));
-    if (notification is null)
-        throw new InvalidOperationException("A collection task notification is required for --once execution.");
-
-    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(9));
-    var succeeded = await app.Services.GetRequiredService<CollectionTaskWorker>().RunAsync(notification, deadline.Token);
-    if (!succeeded)
-        throw new InvalidOperationException($"Collection task failed: {notification.JobType}:{notification.DeduplicationKey}");
+    throw new InvalidOperationException("Collector の --once 実行は Jra 再設計に伴い一時的に無効化されています（docs/jra-scraping.md 参照）。");
 }
 else
 {

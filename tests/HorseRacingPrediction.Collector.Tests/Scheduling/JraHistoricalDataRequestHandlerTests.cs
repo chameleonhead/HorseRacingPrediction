@@ -1,10 +1,12 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraHistoricalDataRequestHandler は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.JraNavigation;
-using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using HorseRacingPrediction.ApiClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.Scraping.Jra;
 
 namespace HorseRacingPrediction.Collector.Tests.Scheduling;
 
@@ -441,3 +443,4 @@ public sealed class JraHistoricalDataRequestHandlerTests
             => throw new NotSupportedException();
     }
 }
+#endif

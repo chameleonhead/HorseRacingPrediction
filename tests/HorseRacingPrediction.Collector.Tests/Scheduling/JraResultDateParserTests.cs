@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraResultDateParser は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Browser;
 
@@ -61,3 +63,4 @@ public sealed class JraResultDateParserTests
         Assert.AreEqual(new DateOnly(2026, 4, 20), result[2]);
     }
 }
+#endif

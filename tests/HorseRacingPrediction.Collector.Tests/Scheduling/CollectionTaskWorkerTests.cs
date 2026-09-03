@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の CollectionTaskWorker は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 
 namespace HorseRacingPrediction.Collector.Tests.Scheduling;
@@ -29,3 +31,4 @@ public sealed class CollectionTaskWorkerTests
         }
     }
 }
+#endif

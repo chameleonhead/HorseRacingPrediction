@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraRaceCardUrl は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -18,3 +20,4 @@ public sealed class JraRaceCardUrlTests
         Assert.AreEqual("京都", parsed.Racecourse);
     }
 }
+#endif

@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraSexAgeParser は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.JraNavigation;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -27,3 +29,4 @@ public sealed class JraSexAgeParserTests
         }
     }
 }
+#endif

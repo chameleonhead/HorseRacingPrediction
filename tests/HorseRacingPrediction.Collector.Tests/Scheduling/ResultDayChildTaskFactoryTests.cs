@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の ResultDayChildTaskFactory は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
@@ -26,3 +28,4 @@ public sealed class ResultDayChildTaskFactoryTests
         CollectionAssert.AreEquivalent(urls.Select(x => x.Url).ToList(), payloads.Select(x => x.SourceUrl).ToList());
     }
 }
+#endif

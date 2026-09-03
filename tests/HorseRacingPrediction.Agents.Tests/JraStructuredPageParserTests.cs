@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraStructuredPageParser は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.JraNavigation;
 
@@ -256,3 +258,4 @@ public class JraStructuredPageParserTests
         Assert.AreEqual("NHKマイルカップ", result.Data.RaceName);
     }
 }
+#endif

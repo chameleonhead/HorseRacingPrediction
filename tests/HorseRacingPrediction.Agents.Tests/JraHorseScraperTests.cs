@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraHorseScraper は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
@@ -246,3 +248,4 @@ public class JraHorseScraperTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
+#endif

@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraRacecourseResolver は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
 
@@ -32,3 +34,4 @@ public sealed class JraRacecourseResolverTests
         Assert.AreEqual("03", result.RacecourseCode);
     }
 }
+#endif

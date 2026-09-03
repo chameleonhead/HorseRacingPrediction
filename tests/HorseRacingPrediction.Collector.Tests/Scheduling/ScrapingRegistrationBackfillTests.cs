@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の ScrapingRegistrationService は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.Workflow;
 
@@ -49,3 +51,4 @@ public sealed class ScrapingRegistrationBackfillTests
             result.ToArray());
     }
 }
+#endif

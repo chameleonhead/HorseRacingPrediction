@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraHistoricalRaceResultCollector は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Scraping.JraNavigation;
 using HorseRacingPrediction.ApiClient;
@@ -230,3 +232,4 @@ public sealed class JraHistoricalRaceResultCollectorTests
             => throw new NotSupportedException();
     }
 }
+#endif

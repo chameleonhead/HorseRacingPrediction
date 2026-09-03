@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraRaceResultExtractor は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.JraNavigation;
 
@@ -134,3 +136,4 @@ public sealed class JraRaceResultExtractorTests
             => Task.FromResult(string.Empty);
     }
 }
+#endif

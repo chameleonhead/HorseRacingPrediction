@@ -1,3 +1,5 @@
+// JRAサイト再設計（docs/jra-scraping.md）により、対象の JraRaceCardCollectionWorkflow は一時的に無効化されている。
+#if false
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Scrapers.Jra;
@@ -228,3 +230,4 @@ public sealed class JraRaceCardCollectionWorkflowTests
         private bool IsDiscoveryPage => string.IsNullOrWhiteSpace(CurrentUrl) || CurrentUrl.Contains("thisweek", StringComparison.OrdinalIgnoreCase);
     }
 }
+#endif
