@@ -93,6 +93,12 @@ internal sealed class RaceCardPageParser
                 continue;
             }
 
+            // 着順列を持つ場合はレース結果テーブルであり、出馬表ではない。
+            if (table.Headers.Any(h => h.Contains("着順", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
             return table;
         }
 

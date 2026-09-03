@@ -21,6 +21,15 @@ internal static class JraNavigationLinks
         "レース結果"
     ];
 
+    /// <summary>
+    /// 直近の過去開催結果一覧への導線。実ページのリンク文言は未調査であり、
+    /// 確認後に固定する（暫定）。
+    /// </summary>
+    public static readonly string[] RecentRaceResults =
+    [
+        "過去のレース結果"
+    ];
+
     public static readonly string[] HistoricalRaceSearch =
     [
         "過去レース結果検索"

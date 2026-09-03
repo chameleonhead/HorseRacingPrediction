@@ -17,15 +17,29 @@ public sealed class JraNavigator
     private readonly IWebBrowser _browser;
     private readonly JraPageReader _pageReader;
     private readonly ILogger<JraNavigator> _logger;
+    private readonly Func<DateOnly> _today;
 
     public JraNavigator(
         IWebBrowser browser,
         JraPageReader pageReader,
         ILogger<JraNavigator>? logger = null)
+        : this(browser, pageReader, logger, today: null)
+    {
+    }
+
+    /// <summary>
+    /// テスト用に「今日の日付」を差し替え可能にするコンストラクタ。
+    /// </summary>
+    internal JraNavigator(
+        IWebBrowser browser,
+        JraPageReader pageReader,
+        ILogger<JraNavigator>? logger,
+        Func<DateOnly>? today)
     {
         _browser = browser;
         _pageReader = pageReader;
         _logger = logger ?? NullLogger<JraNavigator>.Instance;
+        _today = today ?? (() => DateOnly.FromDateTime(DateTime.Today));
     }
 
     public async Task<IJraPage> ToKeibaTopAsync(
@@ -194,16 +208,199 @@ public sealed class JraNavigator
         return page;
     }
 
-    public Task<IJraPage> ToRaceResultAsync(
+    public async Task<IJraPage> ToRaceResultAsync(
         RaceId race,
         CancellationToken cancellationToken = default)
-        => throw new NotImplementedException(
-            "ToRaceResultAsync はTask 10-14で実装予定。");
+    {
+        _logger.LogInformation(
+            "JRA navigation start. Destination=RaceResult Race={Race} CurrentUrl={CurrentUrl}",
+            race,
+            _browser.CurrentUrl);
 
-    public Task<IJraPage> ToHistoricalRaceSearchAsync(
+        IJraPage page;
+        string route;
+
+        if (IsCurrentRacePeriod(race.Date))
+        {
+            route = "Current";
+            page = await ToCurrentRaceResultAsync(race, cancellationToken);
+        }
+        else if (IsRecentRacePeriod(race.Date))
+        {
+            route = "Recent";
+            page = await ToRecentRaceResultAsync(race, cancellationToken);
+        }
+        else
+        {
+            route = "Historical";
+            page = await ToHistoricalRaceResultAsync(race, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "JRA navigation done. Destination=RaceResult Route={Route} ResolvedKind={Kind} Url={Url}",
+            route,
+            page.Kind,
+            page.Url);
+
+        return page;
+    }
+
+    public async Task<IJraPage> ToHistoricalRaceSearchAsync(
         CancellationToken cancellationToken = default)
-        => throw new NotImplementedException(
-            "ToHistoricalRaceSearchAsync はTask 13で実装予定。");
+    {
+        _logger.LogInformation(
+            "JRA navigation start. Destination=HistoricalRaceSearch CurrentUrl={CurrentUrl}",
+            _browser.CurrentUrl);
+
+        if (!await TryNavigateByLinkAsync(
+                JraNavigationLinks.HistoricalRaceSearch,
+                cancellationToken))
+        {
+            await _browser.NavigateAsync(
+                JraUrls.KeibaTop,
+                cancellationToken);
+
+            if (!await TryNavigateByLinkAsync(
+                    JraNavigationLinks.HistoricalRaceSearch,
+                    cancellationToken))
+            {
+                throw new JraNavigationException(
+                    "過去レース結果検索ページへ遷移できませんでした。");
+            }
+        }
+
+        var page =
+            await _pageReader.ReadAsync(
+                cancellationToken);
+
+        _logger.LogInformation(
+            "JRA navigation done. Destination=HistoricalRaceSearch ResolvedKind={Kind} Url={Url}",
+            page.Kind,
+            page.Url);
+
+        return page;
+    }
+
+    /// <summary>
+    /// 「現在開催週」とみなす期間。実サイト確認前の暫定値であり、レース日が
+    /// 今日から前後3日以内であれば現在開催中とみなす。実ページ確認後に固定する。
+    /// </summary>
+    private bool IsCurrentRacePeriod(DateOnly raceDate)
+        => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 3;
+
+    /// <summary>
+    /// 「最近の過去開催」とみなす期間。実サイト確認前の暫定値であり、
+    /// 今日からおよそ3ヶ月（92日）以内であれば「最近」とみなす。実ページ確認後に固定する。
+    /// </summary>
+    private bool IsRecentRacePeriod(DateOnly raceDate)
+        => Math.Abs(raceDate.DayNumber - _today().DayNumber) <= 92;
+
+    private async Task<IJraPage> ToCurrentRaceResultAsync(
+        RaceId race,
+        CancellationToken cancellationToken)
+    {
+        // 競馬トップ → レース結果 → 対象日・競馬場 → 対象R
+        await NavigateToRaceResultTopAsync(cancellationToken);
+
+        await NavigateToRaceDateCourseAsync(
+            race.Date,
+            race.Course,
+            cancellationToken);
+
+        await NavigateRaceNumberLinkAsync(
+            race.Number,
+            JraNavigationLinks.RaceResult,
+            cancellationToken);
+
+        return await _pageReader.ReadAsync(cancellationToken);
+    }
+
+    private async Task<IJraPage> ToRecentRaceResultAsync(
+        RaceId race,
+        CancellationToken cancellationToken)
+    {
+        // 競馬トップ → レース結果 → 過去のレース結果 → 対象日・競馬場 → 対象R
+        await NavigateToRaceResultTopAsync(cancellationToken);
+
+        if (!await TryNavigateByLinkAsync(
+                JraNavigationLinks.RecentRaceResults,
+                cancellationToken))
+        {
+            throw new JraNavigationException(
+                "過去のレース結果ページへ遷移できませんでした。");
+        }
+
+        await NavigateToRaceDateCourseAsync(
+            race.Date,
+            race.Course,
+            cancellationToken);
+
+        await NavigateRaceNumberLinkAsync(
+            race.Number,
+            JraNavigationLinks.RaceResult,
+            cancellationToken);
+
+        return await _pageReader.ReadAsync(cancellationToken);
+    }
+
+    private async Task<IJraPage> ToHistoricalRaceResultAsync(
+        RaceId race,
+        CancellationToken cancellationToken)
+    {
+        // 競馬トップ → レース結果 → 過去レース結果検索 → 検索フォーム → 検索結果 → 対象レース
+        await ToHistoricalRaceSearchAsync(cancellationToken);
+
+        await _browser.SetFieldValueAsync(
+            "開催年",
+            race.Date.Year.ToString(),
+            cancellationToken);
+
+        await _browser.SetFieldValueAsync(
+            "開催月",
+            race.Date.Month.ToString(),
+            cancellationToken);
+
+        await _browser.SetFieldValueAsync(
+            "開催日",
+            race.Date.Day.ToString(),
+            cancellationToken);
+
+        await _browser.SelectOptionAsync(
+            "競馬場",
+            RaceCourseName(race.Course),
+            cancellationToken);
+
+        await _browser.SubmitFormAsync(
+            cancellationToken: cancellationToken);
+
+        await NavigateRaceNumberLinkAsync(
+            race.Number,
+            JraNavigationLinks.RaceResult,
+            cancellationToken);
+
+        return await _pageReader.ReadAsync(cancellationToken);
+    }
+
+    private async Task NavigateToRaceResultTopAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!await TryNavigateByLinkAsync(
+                JraNavigationLinks.RaceResult,
+                cancellationToken))
+        {
+            await _browser.NavigateAsync(
+                JraUrls.KeibaTop,
+                cancellationToken);
+
+            if (!await TryNavigateByLinkAsync(
+                    JraNavigationLinks.RaceResult,
+                    cancellationToken))
+            {
+                throw new JraNavigationException(
+                    "レース結果ページへ遷移できませんでした。");
+            }
+        }
+    }
 
     private async Task<bool> TryNavigateByLinkAsync(
         IReadOnlyList<string> candidateTexts,
