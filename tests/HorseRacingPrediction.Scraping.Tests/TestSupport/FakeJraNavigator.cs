@@ -10,29 +10,67 @@ namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 /// </summary>
 internal sealed class FakeJraNavigator : IJraNavigator
 {
-    private readonly IJraPage _calendarResult;
+    private readonly IJraPage? _calendarResult;
+    private readonly IJraPage? _raceListResult;
+    private readonly Dictionary<RaceId, IJraPage> _raceCardResultsByRaceId = new();
 
     public FakeJraNavigator(IJraPage calendarResult)
     {
         _calendarResult = calendarResult;
     }
 
+    /// <summary>
+    /// レース一覧・出馬表取得をテストするためのコンストラクタ。
+    /// <paramref name="raceCardResultsByRaceId"/> にないレース ID で
+    /// <see cref="ToRaceCardAsync"/> が呼ばれた場合は失敗する。
+    /// </summary>
+    public FakeJraNavigator(
+        IJraPage raceListResult,
+        IReadOnlyDictionary<RaceId, IJraPage> raceCardResultsByRaceId)
+    {
+        _raceListResult = raceListResult;
+        _raceCardResultsByRaceId = new Dictionary<RaceId, IJraPage>(raceCardResultsByRaceId);
+    }
+
     public List<YearMonth> RequestedMonths { get; } = [];
+
+    public List<RaceId> RequestedRaceCards { get; } = [];
 
     public Task<IJraPage> ToKeibaTopAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
     public Task<IJraPage> ToCalendarAsync(YearMonth month, CancellationToken cancellationToken = default)
     {
+        if (_calendarResult is null)
+        {
+            throw new NotSupportedException();
+        }
+
         RequestedMonths.Add(month);
         return Task.FromResult(_calendarResult);
     }
 
     public Task<IJraPage> ToRaceListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        if (_raceListResult is null)
+        {
+            throw new NotSupportedException();
+        }
+
+        return Task.FromResult(_raceListResult);
+    }
 
     public Task<IJraPage> ToRaceCardAsync(RaceId race, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        RequestedRaceCards.Add(race);
+
+        if (!_raceCardResultsByRaceId.TryGetValue(race, out var page))
+        {
+            throw new NotSupportedException($"未設定のRaceIdです: {race}");
+        }
+
+        return Task.FromResult(page);
+    }
 
     public Task<IJraPage> ToRaceResultAsync(RaceId race, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
