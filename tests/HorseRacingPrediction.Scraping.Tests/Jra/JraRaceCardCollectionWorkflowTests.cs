@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
@@ -160,6 +161,54 @@ public sealed class JraRaceCardCollectionWorkflowTests
 
         await Assert.ThrowsExactlyAsync<ArgumentException>(
             () => workflow.CollectAsync(Date, RaceCourse.Unknown));
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_出馬表未公開_エラーなしの空結果を返す()
+    {
+        var browser = new FakeWebBrowser();
+        var navigator = new FakeJraNavigator(new Dictionary<RaceId, IJraPage>());
+        navigator.SetRaceListException(
+            new JraNavigationException(
+                "未公開です。",
+                JraNavigationFailureReason.NotYetPublished));
+        var pageReader = new JraPageReader(browser, []);
+        var session = new JraSession(browser, navigator, pageReader);
+        var writeService = new FakeDataCollectionWriteService();
+
+        await using var _ = session;
+        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(Date, Course);
+
+        // 出馬表未公開は業務的に正常な状態であり、呼び出し元（Collectorジョブ）が
+        // 「再試行すべきか」を判断できるよう、エラーとしてではなく空の結果として返す。
+        Assert.IsEmpty(result.RaceIds);
+        Assert.IsEmpty(result.Errors);
+        Assert.IsEmpty(result.Races);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_レース一覧取得が範囲外エラー_この競馬場分のみエラーとして記録される()
+    {
+        var browser = new FakeWebBrowser();
+        var navigator = new FakeJraNavigator(new Dictionary<RaceId, IJraPage>());
+        navigator.SetRaceListException(
+            new JraNavigationException(
+                "範囲外です。",
+                JraNavigationFailureReason.OutOfDisplayedRange));
+        var pageReader = new JraPageReader(browser, []);
+        var session = new JraSession(browser, navigator, pageReader);
+        var writeService = new FakeDataCollectionWriteService();
+
+        await using var _ = session;
+        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(Date, Course);
+
+        Assert.IsEmpty(result.RaceIds);
+        Assert.HasCount(1, result.Errors);
+        Assert.Contains("範囲外です。", result.Errors[0]);
     }
 
     [TestMethod]

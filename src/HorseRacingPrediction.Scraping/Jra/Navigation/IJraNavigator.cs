@@ -29,6 +29,16 @@ public interface IJraNavigator
         RaceId race,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// 対象日・競馬場の「レース結果 レース選択」ページ（またはそれに相当するページ）を
+    /// 取得する。<see cref="ToRaceListAsync"/>（出馬表専用、掲載期間が短い）とは異なり、
+    /// Current/Recent/Historicalのルート分岐を経て過去日にも対応する。
+    /// </summary>
+    Task<IJraPage> ToRaceResultListAsync(
+        DateOnly date,
+        RaceCourse course,
+        CancellationToken cancellationToken = default);
+
     Task<IJraPage> ToHistoricalRaceSearchAsync(
         CancellationToken cancellationToken = default);
 }

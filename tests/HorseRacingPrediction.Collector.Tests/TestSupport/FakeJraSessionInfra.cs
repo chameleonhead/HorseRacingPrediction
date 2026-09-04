@@ -59,6 +59,12 @@ internal sealed class FakeJraNavigator : IJraNavigator
 {
     public IJraPage? RaceListResult { get; set; }
 
+    /// <summary>
+    /// <see cref="ToRaceResultListAsync"/> の戻り値/例外を(日付, 競馬場)ごとに差し替えたい
+    /// テスト向けのフック。未設定の場合は <see cref="RaceListResult"/> にフォールバックする。
+    /// </summary>
+    public Func<DateOnly, RaceCourse, IJraPage>? RaceResultListFactory { get; set; }
+
     public Task<IJraPage> ToKeibaTopAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
@@ -69,6 +75,18 @@ internal sealed class FakeJraNavigator : IJraNavigator
         => RaceListResult is not null
             ? Task.FromResult(RaceListResult)
             : throw new NotSupportedException();
+
+    public Task<IJraPage> ToRaceResultListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
+    {
+        if (RaceResultListFactory is not null)
+        {
+            return Task.FromResult(RaceResultListFactory(date, course));
+        }
+
+        return RaceListResult is not null
+            ? Task.FromResult(RaceListResult)
+            : throw new NotSupportedException();
+    }
 
     public Task<IJraPage> ToRaceCardAsync(RaceId race, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();

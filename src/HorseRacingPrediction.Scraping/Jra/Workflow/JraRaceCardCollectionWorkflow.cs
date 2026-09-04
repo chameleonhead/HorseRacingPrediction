@@ -1,5 +1,6 @@
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
 namespace HorseRacingPrediction.Scraping.Jra.Workflow;
@@ -35,12 +36,39 @@ public sealed class JraRaceCardCollectionWorkflow
                 nameof(course));
         }
 
-        var listPage = await _session.Navigate.ToRaceListAsync(date, course, cancellationToken);
-
-        if (listPage is not JraRaceListPage raceList)
+        JraRaceListPage raceList;
+        try
         {
-            throw new JraCollectionException(
-                $"レース一覧ページを取得できませんでした。 Kind={listPage.Kind}, Url={listPage.Url}");
+            var listPage = await _session.Navigate.ToRaceListAsync(date, course, cancellationToken);
+
+            if (listPage is not JraRaceListPage typedRaceList)
+            {
+                throw new JraCollectionException(
+                    $"レース一覧ページを取得できませんでした。 Kind={listPage.Kind}, Url={listPage.Url}");
+            }
+
+            raceList = typedRaceList;
+        }
+        catch (JraNavigationException ex)
+            when (ex.Reason == JraNavigationFailureReason.NotYetPublished)
+        {
+            // 開催予定はあるが出馬表がまだ公開されていない（＝正常な業務状態）。
+            // ここでエラーとして記録すると呼び出し元のジョブが失敗扱いになり
+            // 再試行の仕組みが働かないため、レースなし・エラーなしの結果を返し、
+            // Collector側の「出馬表未公開のため再試行する」判定に委ねる。
+            return new RaceCardCollectionResult(date, course, [], [], []);
+        }
+        catch (JraNavigationException ex)
+        {
+            // 例：過去月をまたいで開催選択ページの表示範囲外になったケース
+            // （OutOfDisplayedRange）。出馬表は公開期間を過ぎると通常ページ自体が
+            // 消えるため、これは恒久的な失敗として扱い、この競馬場・日付分の失敗として
+            // 記録するに留め、呼び出し元（他の競馬場・他の日付のジョブ）の処理を止めない。
+            // なお、レース一覧ページの種別不一致など「ナビゲーション以外」の失敗
+            // （<see cref="JraCollectionException"/>）はここでは捕捉せず、そのまま
+            // 呼び出し元へ伝播させる（実装上の不整合として扱うべきため）。
+            var message = $"レース一覧取得エラー: Date={date:yyyy-MM-dd} Course={course} — {ex.Message}";
+            return new RaceCardCollectionResult(date, course, [], [message], []);
         }
 
         var raceIds = new List<string>();

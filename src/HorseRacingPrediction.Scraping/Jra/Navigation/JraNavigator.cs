@@ -259,8 +259,27 @@ public sealed class JraNavigator
         }
         else if (IsRecentRacePeriod(race.Date))
         {
-            route = "Recent";
-            page = await ToRecentRaceResultAsync(race, cancellationToken);
+            try
+            {
+                route = "Recent";
+                page = await ToRecentRaceResultAsync(race, cancellationToken);
+            }
+            catch (JraNavigationException ex)
+                when (ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+            {
+                // 「最近の過去開催」しきい値（92日、暫定値）は実際のページ掲載範囲
+                // （今週～直近数週間程度）より広い可能性があり、しきい値内でも
+                // 開催選択ページに対象日が載っていないことがある（Task16調査で
+                // 判明した未検証事項）。その場合は「過去レース結果検索」フォーム
+                // 経由の導線へフォールバックする。
+                _logger.LogInformation(
+                    ex,
+                    "JRA navigation fallback. Recent route out of displayed range for Race={Race}. Falling back to Historical route.",
+                    race);
+
+                route = "HistoricalFallback";
+                page = await ToHistoricalRaceResultAsync(race, cancellationToken);
+            }
         }
         else
         {
@@ -270,6 +289,73 @@ public sealed class JraNavigator
 
         _logger.LogInformation(
             "JRA navigation done. Destination=RaceResult Route={Route} ResolvedKind={Kind} Url={Url}",
+            route,
+            page.Kind,
+            page.Url);
+
+        return page;
+    }
+
+    /// <summary>
+    /// 対象日・競馬場の「レース結果 レース選択」（またはそれに相当する）ページを取得する。
+    /// <see cref="ToRaceResultAsync"/> は対象Rの成績ページまで遷移するのに対し、こちらは
+    /// 対象日・競馬場のレース一覧の特定のみを目的とする（成績収集ジョブが「その日の
+    /// 全レース番号を知る」ために使う）。
+    ///
+    /// 出馬表側の <see cref="ToRaceListAsync"/> は「出馬表 開催選択」ページ
+    /// （/JRADB/accessD.html、今週～直近数週間程度しか掲載されない）にしか対応しておらず、
+    /// 過去月をまたぐ日付を渡すと <see cref="JraNavigationException"/> になる
+    /// （出馬表は公開期間を過ぎると通常ページ自体が消えるため、これは仕様として妥当）。
+    /// レース結果の収集では同じ制約を負う必要がないため、<see cref="ToRaceResultAsync"/>
+    /// と同じ Current/Recent/Historical のルート分岐を持つ本メソッドを別途用意した。
+    /// </summary>
+    public async Task<IJraPage> ToRaceResultListAsync(
+        DateOnly date,
+        RaceCourse course,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "JRA navigation start. Destination=RaceResultList Date={Date} Course={Course} CurrentUrl={CurrentUrl}",
+            date,
+            course,
+            _browser.CurrentUrl);
+
+        IJraPage page;
+        string route;
+
+        if (IsCurrentRacePeriod(date))
+        {
+            route = "Current";
+            page = await ToRaceResultMeetingListAsync(date, course, cancellationToken);
+        }
+        else if (IsRecentRacePeriod(date))
+        {
+            try
+            {
+                route = "Recent";
+                page = await ToRaceResultMeetingListAsync(date, course, cancellationToken);
+            }
+            catch (JraNavigationException ex)
+                when (ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+            {
+                _logger.LogInformation(
+                    ex,
+                    "JRA navigation fallback. Recent route out of displayed range for Date={Date} Course={Course}. Falling back to Historical route.",
+                    date,
+                    course);
+
+                route = "HistoricalFallback";
+                page = await ToHistoricalRaceResultListAsync(date, course, cancellationToken);
+            }
+        }
+        else
+        {
+            route = "Historical";
+            page = await ToHistoricalRaceResultListAsync(date, course, cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "JRA navigation done. Destination=RaceResultList Route={Route} ResolvedKind={Kind} Url={Url}",
             route,
             page.Kind,
             page.Url);
@@ -371,36 +457,86 @@ public sealed class JraNavigator
         RaceId race,
         CancellationToken cancellationToken)
     {
+        await ToRaceResultMeetingListAsync(
+            race.Date,
+            race.Course,
+            cancellationToken);
+
+        await NavigateRaceNumberLinkAsync(
+            race.Number,
+            JraNavigationLinks.RaceResult,
+            cancellationToken);
+
+        return await _pageReader.ReadAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 「レース結果 開催選択」ページ経由で対象日・競馬場の「レース選択」ページへ
+    /// 遷移する（対象R番号の特定は行わない）。同一開催に対して連続で呼ばれる場合は、
+    /// 直前に到達した「レース選択」ページへブラウザの「戻る」で復帰できないか試みる
+    /// （詳細は<see cref="TryGoBackToMeetingListAsync"/>）。
+    /// 対象日が開催選択ページの表示範囲外であれば <see cref="JraNavigationException"/>
+    /// （<see cref="JraNavigationFailureReason.OutOfDisplayedRange"/> または
+    /// <see cref="JraNavigationFailureReason.NotYetPublished"/>）を送出する。
+    /// </summary>
+    private async Task<IJraPage> ToRaceResultMeetingListAsync(
+        DateOnly date,
+        RaceCourse course,
+        CancellationToken cancellationToken)
+    {
         var shortcutList =
             await TryGoBackToMeetingListAsync(
-                race.Date,
-                race.Course,
+                date,
+                course,
                 ResultRoute,
                 cancellationToken);
 
-        if (shortcutList is null)
+        if (shortcutList is not null)
         {
-            // 競馬トップ → レース結果 → 対象日・競馬場（開催選択ボタン）
-            await NavigateToRaceResultTopAsync(cancellationToken);
+            return shortcutList;
+        }
 
-            await ClickMeetingButtonAsync(
+        // 競馬トップ → レース結果 → 対象日・競馬場（開催選択ボタン）
+        await NavigateToRaceResultTopAsync(cancellationToken);
+
+        await ClickMeetingButtonAsync(
+            date,
+            course,
+            cancellationToken);
+
+        var listPage =
+            await _pageReader.ReadAsync(cancellationToken);
+
+        if (listPage is JraRaceListPage raceList &&
+            raceList.Date == date &&
+            raceList.Course == course)
+        {
+            _lastVisitedMeetingList = (date, course, ResultRoute);
+        }
+        else
+        {
+            _lastVisitedMeetingList = null;
+        }
+
+        return listPage;
+    }
+
+    private async Task<IJraPage> ToHistoricalRaceResultAsync(
+        RaceId race,
+        CancellationToken cancellationToken)
+    {
+        var afterMeeting =
+            await ToHistoricalRaceResultListAsync(
                 race.Date,
                 race.Course,
                 cancellationToken);
 
-            var listPage =
-                await _pageReader.ReadAsync(cancellationToken);
-
-            if (listPage is JraRaceListPage raceList &&
-                raceList.Date == race.Date &&
-                raceList.Course == race.Course)
-            {
-                _lastVisitedMeetingList = (race.Date, race.Course, ResultRoute);
-            }
-            else
-            {
-                _lastVisitedMeetingList = null;
-            }
+        // 重賞レースは開催選択ボタンから直接「レース結果」ページへリンクされている
+        // ため、そのページが既に「レース結果」であればそのまま返す。そうでなければ
+        // 「レース結果 レース選択」ページとみなし、対象R番号のリンクを辿る。
+        if (afterMeeting.Kind == JraPageKind.RaceResult)
+        {
+            return afterMeeting;
         }
 
         await NavigateRaceNumberLinkAsync(
@@ -411,13 +547,18 @@ public sealed class JraNavigator
         return await _pageReader.ReadAsync(cancellationToken);
     }
 
-    private async Task<IJraPage> ToHistoricalRaceResultAsync(
-        RaceId race,
+    /// <summary>
+    /// 「過去レース結果検索」フォーム経由で対象日・競馬場の開催選択を行い、
+    /// その結果ページ（「レース結果 レース選択」ページ、または重賞レースの場合は
+    /// 直接「レース結果」ページ）を返す。
+    /// </summary>
+    private async Task<IJraPage> ToHistoricalRaceResultListAsync(
+        DateOnly date,
+        RaceCourse course,
         CancellationToken cancellationToken)
     {
         // 競馬トップ → レース結果 → 過去レース結果検索 → 年月選択 → 検索実行
-        // → 開催選択（当該日・競馬場のボタン、または重賞レースなら直リンク）
-        // → （非重賞のみ）レース選択 → 対象R。
+        // → 開催選択（当該日・競馬場のボタン、または重賞レースなら直リンク）。
         //
         // Task 13 実サイト調査で判明した「過去レース結果検索」ページの実構造:
         // 開催年(id=kaisaiY_list)・開催月(id=kaisaiM_list)は<form>タグの外にある
@@ -439,12 +580,12 @@ public sealed class JraNavigator
 
         await _browser.SelectOptionAsync(
             "年",
-            race.Date.Year.ToString(),
+            date.Year.ToString(),
             cancellationToken);
 
         await _browser.SelectOptionAsync(
             "月",
-            race.Date.Month.ToString(),
+            date.Month.ToString(),
             cancellationToken);
 
         await _browser.ClickActionInSectionAsync(
@@ -452,26 +593,9 @@ public sealed class JraNavigator
             "検索",
             cancellationToken);
 
-        // 検索結果（開催選択）ページ。重賞レースはここから直接「レース結果」ページへ
-        // リンクされているため、対象日・競馬場の開催ボタンをクリックした後の
-        // ページが既に「レース結果」であればそのまま返す。そうでなければ
-        // 「レース結果 レース選択」ページとみなし、対象R番号のリンクを辿る。
         await ClickMeetingButtonAsync(
-            race.Date,
-            race.Course,
-            cancellationToken);
-
-        var afterMeeting =
-            await _pageReader.ReadAsync(cancellationToken);
-
-        if (afterMeeting.Kind == JraPageKind.RaceResult)
-        {
-            return afterMeeting;
-        }
-
-        await NavigateRaceNumberLinkAsync(
-            race.Number,
-            JraNavigationLinks.RaceResult,
+            date,
+            course,
             cancellationToken);
 
         return await _pageReader.ReadAsync(cancellationToken);
@@ -690,8 +814,24 @@ public sealed class JraNavigator
 
         if (buttonText is null)
         {
+            // 対象日が今日より未来であれば「まだ公開されていない」、今日以前であれば
+            // 「開催選択ページの表示範囲（今週～直近数週間程度）を外れた過去日」と推定する。
+            // どちらも同じ「ボタンが見つからない」現象として観測されるが、呼び出し元での
+            // 扱い（未公開ならリトライ、範囲外なら別導線へフォールバック/エラー記録）が
+            // 異なるため、理由を区別して例外に含める。
+            var reason =
+                date > _today()
+                    ? JraNavigationFailureReason.NotYetPublished
+                    : JraNavigationFailureReason.OutOfDisplayedRange;
+
+            var reasonText =
+                reason == JraNavigationFailureReason.NotYetPublished
+                    ? "対象日が未来のため、まだ開催情報が公開されていない可能性があります。"
+                    : "対象日が開催選択ページの表示範囲（直近数週間程度）を外れている可能性があります。";
+
             throw new JraNavigationException(
-                $"{date:yyyy-MM-dd} {course} の開催選択ボタンが見つかりませんでした。");
+                $"{date:yyyy-MM-dd} {course} の開催選択ボタンが見つかりませんでした。{reasonText}",
+                reason);
         }
 
         await _browser.ClickAsync(

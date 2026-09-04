@@ -14,6 +14,15 @@ internal sealed class FakeJraNavigator : IJraNavigator
     private readonly IJraPage? _raceListResult;
     private readonly Dictionary<RaceId, IJraPage> _raceCardResultsByRaceId = new();
     private readonly Dictionary<RaceId, IJraPage> _raceResultResultsByRaceId = new();
+    private readonly Dictionary<(DateOnly Date, RaceCourse Course), IJraPage> _raceResultListResultsByDateCourse = new();
+    private Exception? _raceListException;
+
+    /// <summary>
+    /// <see cref="ToRaceListAsync"/> が呼ばれた際に投げる例外を設定する
+    /// （出馬表未公開・過去月範囲外などのシナリオをテストするためのフック）。
+    /// </summary>
+    public void SetRaceListException(Exception exception)
+        => _raceListException = exception;
 
     public FakeJraNavigator(IJraPage calendarResult)
     {
@@ -64,6 +73,11 @@ internal sealed class FakeJraNavigator : IJraNavigator
 
     public Task<IJraPage> ToRaceListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
     {
+        if (_raceListException is not null)
+        {
+            throw _raceListException;
+        }
+
         if (_raceListResult is null)
         {
             throw new NotSupportedException();
@@ -100,4 +114,29 @@ internal sealed class FakeJraNavigator : IJraNavigator
 
     public Task<IJraPage> ToHistoricalRaceSearchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    public List<(DateOnly Date, RaceCourse Course)> RequestedRaceResultLists { get; } = [];
+
+    /// <summary>
+    /// <see cref="ToRaceResultListAsync"/> の戻り値を(日付, 競馬場)単位で設定する。
+    /// </summary>
+    public void SetRaceResultListResult(DateOnly date, RaceCourse course, IJraPage page)
+        => _raceResultListResultsByDateCourse[(date, course)] = page;
+
+    public Task<IJraPage> ToRaceResultListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
+    {
+        RequestedRaceResultLists.Add((date, course));
+
+        if (_raceResultListResultsByDateCourse.TryGetValue((date, course), out var page))
+        {
+            return Task.FromResult(page);
+        }
+
+        if (_raceListResult is not null)
+        {
+            return Task.FromResult(_raceListResult);
+        }
+
+        throw new NotSupportedException($"未設定の(Date, Course)です: ({date}, {course})");
+    }
 }

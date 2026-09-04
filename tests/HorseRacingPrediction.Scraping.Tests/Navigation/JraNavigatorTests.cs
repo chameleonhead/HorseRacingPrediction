@@ -537,4 +537,125 @@ public sealed class JraNavigatorTests
         Assert.AreEqual(2, browser.ClickedTexts.Count(x => x == "出馬表"));
         Assert.AreEqual(0, browser.GoBackCallCount);
     }
+
+    [TestMethod]
+    public async Task ToRaceListAsync_MeetingButtonNotFound_FutureDate_ReasonIsNotYetPublished()
+    {
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        // 開催選択ページに対象日(9/5)の見出しがまだ載っていない状態を模す。
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, string.Empty));
+
+        // 対象日は「今日」より未来。
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 1));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToRaceListAsync(
+                new DateOnly(2026, 9, 5),
+                RaceCourse.Nakayama));
+
+        Assert.AreEqual(JraNavigationFailureReason.NotYetPublished, exception.Reason);
+    }
+
+    [TestMethod]
+    public async Task ToRaceListAsync_MeetingButtonNotFound_PastDate_ReasonIsOutOfDisplayedRange()
+    {
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, string.Empty));
+
+        // 対象日は「今日」以前（過去月をまたいだ結果、開催選択ページの表示範囲外）。
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 12, 1));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToRaceListAsync(
+                new DateOnly(2026, 9, 5),
+                RaceCourse.Nakayama));
+
+        Assert.AreEqual(JraNavigationFailureReason.OutOfDisplayedRange, exception.Reason);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultListAsync_CurrentPeriod_ReturnsRaceListPageWithoutSelectingRace()
+    {
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", "https://www.jra.go.jp/keiba/sample/result/list/");
+        browser.SetSnapshot(
+            "https://www.jra.go.jp/keiba/sample/result/list/",
+            BuildRaceListSnapshot("https://www.jra.go.jp/keiba/sample/result/list/"));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var page = await navigator.ToRaceResultListAsync(
+            new DateOnly(2026, 9, 5),
+            RaceCourse.Nakayama);
+
+        Assert.AreEqual(JraPageKind.RaceList, page.Kind);
+        Assert.IsFalse(browser.ClickedTexts.Any(x => x.Contains("レース", StringComparison.Ordinal) && x != "レース結果"));
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultAsync_RecentPeriod_OutOfDisplayedRange_FallsBackToHistoricalRoute()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/";
+        const string searchResultUrl = "https://www.jra.go.jp/keiba/sample/search/result/";
+        const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/search/result/11/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        // 「レース結果 開催選択」ページには対象日(9/5)がまだ／もう載っていない
+        // （実サイトの実際の掲載範囲がIsRecentRacePeriodの92日しきい値より狭いケースを模す）。
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "10月20日 4回中山1日"));
+
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceResultUrl);
+        browser.SetLinks(searchResultUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
+        browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
+
+        // 現在から57日前 (IsRecentRacePeriod=trueの範囲内だが、実際のページ掲載範囲は
+        // それより狭いという状況を模している)。
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 11, 1));
+
+        var raceId = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
+
+        var page = await navigator.ToRaceResultAsync(raceId);
+
+        Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
+        Assert.IsTrue(browser.SelectOptionCalls.Count > 0, "Historicalルートへフォールバックし、年月選択が行われるはず。");
+    }
 }

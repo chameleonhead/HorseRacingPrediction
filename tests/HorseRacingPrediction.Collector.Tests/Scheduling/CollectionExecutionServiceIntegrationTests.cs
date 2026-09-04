@@ -1,6 +1,8 @@
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Navigation;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -113,13 +115,88 @@ public sealed class CollectionExecutionServiceIntegrationTests
         Assert.AreEqual(AgentJobStatus.Failed, statuses[0].Status);
     }
 
+    [TestMethod]
+    public async Task RaceResultJob_WhenOneCourseListFails_OtherCourseIsStillCollectedAndJobCompletes()
+    {
+        // 依頼1の回帰テスト: 過去月をまたいだ日付でレース一覧取得(ToRaceResultListAsync)が
+        // 1競馬場だけ失敗しても、他の競馬場の成績収集は継続し、ジョブ全体は失敗しない
+        // （以前は ToRaceListAsync の JraNavigationException がジョブ全体を未捕捉のまま
+        // 失敗させていた）。
+        var now = new DateTimeOffset(2026, 5, 16, 3, 0, 0, TimeSpan.Zero);
+        var raceDate = new DateOnly(2026, 5, 16);
+        var stateStore = CreateStore();
+
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = _ => new[] { RaceCourse.Tokyo, RaceCourse.Nakayama }
+        };
+
+        var nakayamaRaceId = new RaceId(raceDate, RaceCourse.Nakayama, 1);
+        var nakayamaRaceList = new JraRaceListPage(
+            "https://example.jra.go.jp/result-list/nakayama",
+            raceDate,
+            RaceCourse.Nakayama,
+            new[] { new RaceSummary(nakayamaRaceId, "テストレース", new TimeOnly(15, 40), null, null) });
+
+        var sessionFactory = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceResultListFactory = (date, course) => course switch
+                {
+                    RaceCourse.Tokyo => throw new JraNavigationException(
+                        "開催選択ボタンが見つかりませんでした。",
+                        JraNavigationFailureReason.OutOfDisplayedRange),
+                    RaceCourse.Nakayama => nakayamaRaceList,
+                    _ => throw new NotSupportedException(),
+                },
+            },
+        };
+
+        var resultWorkflow = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = raceId => new RaceResultCollectionResult(
+                raceId,
+                $"race-{raceId.Date:yyyyMMdd}-{raceId.Course}-{raceId.Number}",
+                new[] { 1 },
+                Array.Empty<string>()),
+        };
+
+        var service = CreateService(
+            stateStore,
+            scheduleWorkflow,
+            new FakeJraRaceCardCollectionWorkflow(),
+            resultWorkflow,
+            sessionFactory);
+
+        var payload = new RaceResultCollectionJobPayload(raceDate, "JRA", AgentWorkMode.Idle);
+        var key = AgentJobKeyFactory.BuildRaceResultCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(
+            AgentJobType.RaceResultCollection,
+            key,
+            AgentJobPayloadSerializer.Serialize(payload),
+            now);
+
+        await service.RunTaskAsync(AgentJobType.RaceResultCollection, CancellationToken.None);
+
+        // 中山(成功)のみ成績収集が行われ、東京(一覧取得失敗)はスキップされている。
+        Assert.AreEqual(1, resultWorkflow.Requests.Count);
+        Assert.AreEqual(nakayamaRaceId, resultWorkflow.Requests[0]);
+
+        // ジョブ全体は失敗せず完了している。
+        var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceResultCollection, null, 10, CancellationToken.None);
+        Assert.AreEqual(1, statuses.Count);
+        Assert.AreEqual(AgentJobStatus.Succeeded, statuses[0].Status);
+    }
+
     private static CollectionExecutionService CreateService(
         ProcessingStateStore stateStore,
         IJraScheduleCollectionWorkflow scheduleWorkflow,
         IJraRaceCardCollectionWorkflow cardWorkflow,
-        IJraRaceResultCollectionWorkflow resultWorkflow)
+        IJraRaceResultCollectionWorkflow resultWorkflow,
+        FakeJraSessionFactory? sessionFactory = null)
     {
-        var sessionFactory = new FakeJraSessionFactory();
+        sessionFactory ??= new FakeJraSessionFactory();
         var options = Options.Create(new AgentProcessingOptions
         {
             CollectionBatchSize = 10,

@@ -348,7 +348,60 @@ public sealed class CollectionExecutionService : BackgroundService
 
         foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
         {
-            var listPage = await session.Navigate.ToRaceListAsync(raceDate, course, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Scraping.Jra.Pages.IJraPage listPage;
+            try
+            {
+                // NOTE(過去月遷移バグ修正): 以前はここで出馬表専用の ToRaceListAsync を
+                // 使っており、その開催選択ページ（/JRADB/accessD.html）は今週～直近数週間
+                // 程度しか掲載されないため、月をまたぐ過去日を渡すと JraNavigationException
+                // で失敗していた。成績収集では Current/Recent/Historical のルート分岐に
+                // 対応した ToRaceResultListAsync を使う。
+                listPage = await session.Navigate.ToRaceResultListAsync(raceDate, course, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // 1競馬場のレース一覧取得失敗で日付全体の処理を止めない。他の競馬場の
+                // 処理は継続する（この日付・競馬場分の成績はジョブレベルではエラーとして
+                // ログのみ記録し、次回サイクルでの再試行に委ねる）。
+                _logger.LogWarning(
+                    ex,
+                    "[収集実行] レース一覧の取得に失敗しました（この競馬場の成績収集をスキップし、他の競馬場の処理を継続します）。Date={Date} Course={Course}",
+                    raceDate, course);
+                continue;
+            }
+
+            if (listPage is Scraping.Jra.Pages.JraRaceResultPage singleResult)
+            {
+                // 過去レース結果検索経由で、重賞レースなど開催選択ボタンが直接
+                // 「レース結果」ページへリンクされているケース（詳細はJraNavigatorの
+                // ToHistoricalRaceResultListAsync参照）。この日・競馬場に他のレースが
+                // あっても番号を列挙できないため、判明している1レースのみ処理する。
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    var singleRaceResult = await resultWorkflow
+                        .CollectAsync(singleResult.RaceId, cancellationToken)
+                        .ConfigureAwait(false);
+                    results.Add(singleRaceResult);
+                    if (singleRaceResult.SavedHorseNumbers.Count > 0)
+                    {
+                        savedRaceIds.Add(singleRaceResult.DataCollectionRaceId);
+                    }
+                }
+                catch (JraCollectionException ex)
+                {
+                    _logger.LogInformation(
+                        ex,
+                        "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
+                        raceDate, course, singleResult.RaceId.Number);
+                }
+
+                continue;
+            }
+
             if (listPage is not Scraping.Jra.Pages.JraRaceListPage raceList)
             {
                 _logger.LogWarning(

@@ -224,6 +224,42 @@ public sealed class JraSiteE2ETests
         Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
     }
 
+    // Task「過去月遷移バグ」修正の実サイト確認: 「最近の過去開催」しきい値
+    // (92日)の範囲内だが、実際の「レース結果 開催選択」ページの掲載範囲(今週～直近数週間)
+    // を超えている可能性が高い日付（今日からおよそ2ヶ月前）に対して ToRaceResultAsync を
+    // 呼び、Recentルートで開催選択ボタンが見つからない場合にHistoricalルートへ
+    // フォールバックして成功することを実サイトに対して確認する（このテストがなければ
+    // 再現しない、月をまたいだ過去日特有の回帰）。
+    [TestMethod]
+    public async Task 過去2ヶ月の開催のRaceResult取得_Recentルート範囲外ならHistoricalへフォールバックする()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var targetMonth = today.AddMonths(-2);
+        var calendarPage = await _session.Navigate.ToCalendarAsync(
+            new YearMonth(targetMonth.Year, targetMonth.Month),
+            cts.Token);
+
+        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
+        var calendar = (JraCalendarPage)calendarPage;
+
+        Assert.IsTrue(calendar.RaceDates.Count > 0, $"{targetMonth:yyyy-MM} に開催日が見つかりませんでした。");
+        var target = calendar.RaceDates.OrderByDescending(x => x.Date).First();
+        var course = target.Courses[0];
+
+        var raceId = new RaceId(target.Date, course, 1);
+
+        var resultPage = await _session.Navigate.ToRaceResultAsync(
+            raceId,
+            cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceResultPage>(resultPage);
+        var result = (JraRaceResultPage)resultPage;
+        Assert.AreEqual(raceId, result.RaceId);
+        Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
+    }
+
     private async Task<(DateOnly Date, RaceCourse Course)> FindPastRaceDateAsync(
         DateOnly today,
         CancellationToken cancellationToken)
