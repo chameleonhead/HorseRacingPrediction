@@ -96,8 +96,13 @@ public sealed class RaceListPageParser
             var normalized =
                 RemoveWhitespace(header);
 
+            // 「レース結果 レース選択」ページ（Task X 実サイト確認で判明。過去レース結果
+            // 検索→開催選択を経由した際の一覧ページ）は、出馬表側の一覧ページと異なり
+            // 「R」「レース番号」列を持たず、代わりに「レース結果」列に「1レース」
+            // 「2レース」のようなセル値でレース番号が入る。この列も番号列として扱う。
             if (header is "R" ||
-                normalized.Contains("レース番号", StringComparison.Ordinal))
+                normalized.Contains("レース番号", StringComparison.Ordinal) ||
+                normalized is "レース結果")
             {
                 return i;
             }
