@@ -2482,4 +2482,38 @@ Playwright操作変更
 
 と影響範囲を限定できる。
 
+# 41. Task1-16(初期実装)からTask17-29(Collector統合)を経た項目対応表
+
+Task1-16 で構築した JRA スクレイピング基盤(Calendar/RaceList/RaceCard/RaceResult の
+Navigation・Parser)を、Task17-29 で旧 Scraping/Workflow 層から新しい
+Collector(`IDataCollectionWriteService` 経由の Web API 書き込み)へ接続した。
+この過程で、旧実装(削除済みの旧Scraping/Workflow層)が持っていた項目のうち
+どこまでを引き継ぎ、どこを意図的に割愛したままにしたかを以下に整理する。
+
+いずれも、上記「37. 初期実装で意図的に割愛するもの」に記載した
+`全RaceCard項目` / `全RaceResult項目` の方針の範囲内であり、新たに割愛を
+追加したものではない。
+
+## 41.1 今回の調査で対応した項目
+
+| 項目 | 内容 | 対応 |
+| --- | --- | --- |
+| レース確定宣言(`DeclareRaceResultAsync`)の未呼び出し | `JraRaceResultCollectionWorkflow` が `DeclareRaceEntryResultAsync` のみを呼び、`DeclareRaceResultAsync` を呼んでいなかったため、`RaceAggregate` が `ResultDeclared` 状態に遷移せず、着順登録がドメイン層のガード例外→API 409→「既に記録済み」という成功扱いメッセージに丸め込まれ、**着順データが保存されないままサイレントに欠落する**重大な不具合だった。 | `JraRaceResultCollectionWorkflow.CollectAsync` で、着順登録ループの前に1着馬(`FinishPosition == 1`)の馬名で `DeclareRaceResultAsync` を呼ぶよう修正。回帰テストを `JraRaceResultCollectionWorkflowTests` に追加。 |
+
+## 41.2 対応不要と判断した項目とその理由
+
+| 項目 | 理由 |
+| --- | --- |
+| 開催回・開催日番号(例:「4回中山1日」の `4`/`1`) | Domain層(`RaceAggregate.Create`/`RaceCreated`/`RaceState`/`RaceDetails`)は既に `meetingNumber`/`dayNumber` を受け取れる状態になっているが、`IDataCollectionWriteService.UpsertRaceAsync`(ApiClient層)にこれらを渡す引数が無く、配線が未接続。しかし現在アクティブなコードでこれらの値を実際に参照・使用しているロジック(レースID生成 `DeterministicIdGenerator.BuildRaceId`、予測ロジックなど)は存在せず、対応しなくても機能上の欠落・不整合は生じない。`JraNavigator.FindMeetingButtonText` が取得済みの文字列から正規表現(`(\d+)回{competitionName}(\d+)日`)で抽出するだけで実装できるため、表示用メタデータとして必要になった時点で追加すれば良い。 |
+| 出馬表(RaceCard)関連の割愛項目(発走時刻・条件サマリ/年齢条件/クラス/出走資格/馬体重条件・馬場種別/回り/距離/グレード・賞金テーブル・性齢・馬体重(増減含む)・調教師名・馬主名・生産者名) | 「37. 初期実装で意図的に割愛するもの」の `全RaceCard項目` に含まれる範囲であり、Task17-29 のCollector統合はあくまで既存の縦一本(Calendar→RaceList→RaceCard→RaceResult)の書き込み先をApi Client経由に置き換える作業であって、収集項目自体の拡張は別スコープ。今回の調査でも新たな不整合は見つかっていない。 |
+| 成績(RaceResult)関連の割愛項目(レース名・馬場種別/距離/回り/グレード・払戻金(全券種)・枠番・斤量・性齢・着差・上がり3F・馬体重(増減含む)・調教師名・異常区分) | 同上、`全RaceResult項目` の割愛範囲。払戻金(`DeclareRacePayoutsAsync`)は別タスクで対応する旨を `JraRaceResultCollectionWorkflow` のクラスコメントに明記済み。 |
+| カレンダー関連の割愛項目(生テキスト・パース時の警告/issue情報・参照日・ソースURL) | 同上、初期実装で意図的に割愛した範囲であり、Collector統合によっても状況は変わっていない。 |
+
+## 41.3 今後の課題として残す項目
+
+- 開催回・開催日番号の配線(`FindMeetingButtonText` の正規表現拡張 → `IDataCollectionWriteService.UpsertRaceAsync` / `HttpDataCollectionWriteService` への引数追加 → 呼び出し側での値受け渡し)。表示用メタデータとして必要になった時点で対応する。
+- 払戻(`DeclareRacePayoutsAsync`)を呼ぶ処理の実装。
+- `HttpDataCollectionWriteService.DeclareRaceEntryResultAsync` が HTTP 409 を「既に記録済み」の成功として一律にマッピングしている点は、「本当の重複」と「ドメイン層の状態ガード違反」を区別できていない。今回は呼び出し順序(`DeclareRaceResultAsync` を先に呼ぶ)を保証することで実害を防いだが、レスポンス内容で区別できるようにする、またはエラーコードを分けるといった見直しは別途検討の余地がある。
+- 上記37節の `全RaceCard項目` / `全RaceResult項目` の割愛項目(調教師名・馬主名・生産者名・上がり3F・馬体重増減など)は、予測モデルで必要になった時点で個別に追加する。
+
 この境界を実装中に崩さないこと。
