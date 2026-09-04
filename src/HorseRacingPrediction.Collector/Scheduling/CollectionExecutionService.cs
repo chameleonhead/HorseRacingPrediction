@@ -8,6 +8,20 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
+// NOTE(ジョブ粒度の検討): RaceCardCollection/RaceResultCollection はいずれも
+// 「1開催日=1ジョブ」（CollectRaceCardsAsync/CollectRaceResultsAsync が当日開催の
+// 全競馬場・全レースをジョブ内でループする）であり、レース単位のジョブ分割は行っていない。
+// docs/lambda-collector-architecture.md にある「9分以内に終わらない場合はページ/レース単位に
+// 分割する」という記述は将来の対処方針であり、現在有効な制約ではない
+// （Program.cs の通り、Lambda呼び出し用の --once 実行経路自体が現在無効化されており、
+// 常駐Hostモードのみが動いているため15分のLambdaタイムアウトを受けていない）。
+// JraNavigator最短経路化後の実測は5レースで5分41秒（約68秒/レース）。JRAは1開催日あたり
+// 最大30レース超（複数場開催時）になり得るため、単純外挿では約34分となり、将来Lambdaでの
+// --once運用を復活させる場合は9分のLambda内部deadlineに収まらない可能性が高い。
+// その場合はレース単位まで分割する必要はなく、既にワークフロー呼び出しが競馬場単位で
+// 独立している（CollectRaceCardsAsync/CollectRaceResultsAsync 内の course ループ）ため、
+// 競馬場単位でジョブを分割するのが最小変更で済む対処となる。現時点ではLambda運用自体が
+// 無効化されており必要性がないため、本タスクでは分割の実装は行わない。
 public sealed class CollectionExecutionService : BackgroundService
 {
     private static readonly string JraProviderType = "JRA";
