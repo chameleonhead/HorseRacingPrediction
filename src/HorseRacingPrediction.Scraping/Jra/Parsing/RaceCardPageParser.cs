@@ -244,6 +244,17 @@ public sealed class RaceCardPageParser
         return int.Parse(match.Groups["num"].Value);
     }
 
+    // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており
+    // （<h1><a><img alt="JRA 日本中央競馬会"></a></h1>）、テキスト抽出時にimg alt文言への
+    // フォールバックが発生してこの文字列が見出し一覧の先頭付近に混入する。
+    // レース名ではないことが既知のため、走査対象から明示的に除外する。
+    private static readonly string[] KnownNonRaceNameHeadings =
+    [
+        "JRA 日本中央競馬会",
+        "JRA",
+        "日本中央競馬会",
+    ];
+
     private static string? ParseRaceName(
         PageSnapshot snapshot)
     {
@@ -254,13 +265,27 @@ public sealed class RaceCardPageParser
 
             if (!string.IsNullOrWhiteSpace(withoutNumber) &&
                 RaceCourseNames.Parse(withoutNumber) == RaceCourse.Unknown &&
-                !DateRegex.IsMatch(withoutNumber))
+                !DateRegex.IsMatch(withoutNumber) &&
+                !IsKnownNonRaceNameHeading(withoutNumber))
             {
                 return withoutNumber;
             }
         }
 
         return null;
+    }
+
+    private static bool IsKnownNonRaceNameHeading(string heading)
+    {
+        foreach (var known in KnownNonRaceNameHeadings)
+        {
+            if (string.Equals(heading, known, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static TimeOnly? ParseStartTime(

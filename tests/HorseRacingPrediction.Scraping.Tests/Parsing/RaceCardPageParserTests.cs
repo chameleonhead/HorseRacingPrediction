@@ -85,5 +85,45 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual(3, page.Entries[2].HorseNumber);
         Assert.AreEqual("テストホースC", page.Entries[2].HorseName);
         Assert.AreEqual(2, page.Entries[2].FrameNumber);
+
+        Assert.AreEqual("テストステークス(GⅢ)", page.RaceName);
+    }
+
+    // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、
+    // Playwright側のテキスト抽出がimg alt「JRA 日本中央競馬会」にフォールバックするため、
+    // ページ内の見出し一覧（Headings）の先頭付近にこの文字列が本文の見出しより先に混入する。
+    // ParseRaceNameがこれをレース名として誤採用しないことを固定Fixtureで検証する。
+    private static PageSnapshot BuildSnapshotWithHeaderLogoHeading()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["枠番", "馬番", "馬名", "騎手", "斤量"],
+            Rows:
+            [
+                ["1", "1", "テストホースA", "騎手A", "57"],
+                ["1", "2", "テストホースB", "騎手B", "55.5"],
+                ["2", "3", "テストホースC", "騎手C", "56"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "出馬表",
+            mainText: "発走 15:40",
+            links: [],
+            actions: [],
+            tables: [table],
+            // サイト共通ヘッダーの<h1>（ロゴのimg alt由来）がDOM順で本文見出しより先に来る。
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
+
+        return new PageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 出馬表", [section]);
+    }
+
+    [TestMethod]
+    public void Parse_HeaderLogoHeadingPresent_DoesNotUseLogoTextAsRaceName()
+    {
+        var parser = new RaceCardPageParser();
+
+        var page = (JraRaceCardPage)parser.Parse(BuildSnapshotWithHeaderLogoHeading());
+
+        Assert.AreEqual("テストステークス(GⅢ)", page.RaceName);
+        Assert.AreNotEqual("JRA 日本中央競馬会", page.RaceName);
     }
 }
