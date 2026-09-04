@@ -59,6 +59,10 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.IsEmpty(result.Errors);
         CollectionAssert.AreEqual(new[] { 3, 7, 1 }, result.SavedHorseNumbers.ToArray());
 
+        Assert.HasCount(1, writeService.DeclareRaceResultCalls);
+        Assert.AreEqual(expectedRaceId, writeService.DeclareRaceResultCalls[0].RaceId);
+        Assert.AreEqual("テストホースA", writeService.DeclareRaceResultCalls[0].WinningHorseName);
+
         Assert.HasCount(3, writeService.DeclareRaceEntryResultCalls);
 
         var call1 = writeService.DeclareRaceEntryResultCalls[0];
@@ -105,6 +109,58 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.AreEqual(7, result.SavedHorseNumbers[0]);
         Assert.HasCount(1, result.Errors);
         Assert.Contains("HorseNumber=3", result.Errors[0]);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_DeclareRaceResultAsyncが着順登録より先に呼ばれる()
+    {
+        var entries = new[]
+        {
+            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
+        };
+        var resultPage = CreateResultPage(TestRaceId, entries);
+
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
+
+        await using var _ = session;
+        var workflow = new JraRaceResultCollectionWorkflow(session, writeService);
+
+        await workflow.CollectAsync(TestRaceId);
+
+        // レース確定宣言（DeclareRaceResultAsync）を経ないまま
+        // DeclareRaceEntryResultAsync だけを呼ぶと、実サービスでは
+        // ドメイン層のガード違反により 409 が返り、それが
+        // 「既に記録済み」という偽の成功として扱われてしまう
+        // （着順が保存されないままサイレントに欠落する）。
+        // これを防ぐため、必ず1着馬でのレース確定宣言が先に行われることを確認する。
+        Assert.HasCount(1, writeService.DeclareRaceResultCalls);
+        Assert.AreEqual("テストホースA", writeService.DeclareRaceResultCalls[0].WinningHorseName);
+        Assert.HasCount(2, writeService.DeclareRaceEntryResultCalls);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_DeclareRaceResultAsyncが失敗してもDeclareRaceEntryResultAsyncは実行される()
+    {
+        var entries = new[]
+        {
+            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+        };
+        var resultPage = CreateResultPage(TestRaceId, entries);
+
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
+        writeService.FailDeclareRaceResult = true;
+
+        await using var _ = session;
+        var workflow = new JraRaceResultCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(TestRaceId);
+
+        Assert.HasCount(1, result.Errors);
+        Assert.Contains("レース確定宣言エラー", result.Errors[0]);
+        Assert.HasCount(1, writeService.DeclareRaceEntryResultCalls);
     }
 
     [TestMethod]

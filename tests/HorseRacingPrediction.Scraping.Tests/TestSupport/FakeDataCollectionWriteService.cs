@@ -31,12 +31,21 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         int? FinishPosition,
         string? OfficialTime);
 
+    public sealed record DeclareRaceResultCall(
+        string RaceId,
+        string WinningHorseName);
+
     public List<UpsertRaceEntryCall> UpsertRaceEntryCalls { get; } = [];
 
     public List<DeclareRaceEntryResultCall> DeclareRaceEntryResultCalls { get; } = [];
 
+    public List<DeclareRaceResultCall> DeclareRaceResultCalls { get; } = [];
+
     /// <summary>設定した馬番で <see cref="DeclareRaceEntryResultAsync"/> が呼ばれた場合に例外を投げる（部分失敗のテスト用）。</summary>
     public int? FailForHorseNumber { get; set; }
+
+    /// <summary><see cref="DeclareRaceResultAsync"/> が呼ばれた場合に例外を投げる（失敗系テスト用）。</summary>
+    public bool FailDeclareRaceResult { get; set; }
 
     public Task<string> UpsertRaceAsync(
         string raceDate,
@@ -101,7 +110,15 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string? declaredAt,
         string? winningHorseId,
         CancellationToken cancellationToken = default)
-        => Task.FromResult("declared");
+    {
+        if (FailDeclareRaceResult)
+        {
+            throw new InvalidOperationException("テスト用の失敗: DeclareRaceResultAsync");
+        }
+
+        DeclareRaceResultCalls.Add(new DeclareRaceResultCall(raceId, winningHorseName));
+        return Task.FromResult("declared");
+    }
 
     public Task<string> DeclareRaceEntryResultAsync(
         string raceId,

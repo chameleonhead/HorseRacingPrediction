@@ -1,3 +1,4 @@
+using System.Linq;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -9,10 +10,17 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// オーケストレーションのみを行い、HTML解析やページ遷移の詳細は
 /// <see cref="JraSession.Navigate"/>（Navigator/Parser層）に委譲する。
 ///
-/// 払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）および
-/// レース全体の確定宣言（<see cref="IDataCollectionWriteService.DeclareRaceResultAsync"/>）は
-/// 本フェーズでは実装しない。新基盤（Collector統合）移行と着順登録を同時に行うと
-/// 問題の切り分けが難しくなるため、別タスクで対応する。
+/// <see cref="IDataCollectionWriteService.DeclareRaceEntryResultAsync"/> は
+/// <see cref="RaceAggregate"/> が <c>ResultDeclared</c> 状態に遷移していないと
+/// ドメイン層のガードで例外を送出し、API はそれを 409 (Conflict) として返す。
+/// <see cref="HttpDataCollectionWriteService"/> はこの 409 を「既に記録済み」という
+/// 成功扱いメッセージにマッピングしているため、<see cref="DeclareRaceResultAsync"/> を
+/// 呼ばずに着順登録だけを行うと、実際にはデータが保存されないまま見かけ上成功する
+/// （サイレントなデータ欠落）。そのため、着順登録の前に必ず1着馬の情報で
+/// レース全体の確定宣言を行う。
+///
+/// 払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）は
+/// 本フェーズでは実装しない（別タスクで対応する）。
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
     : IJraRaceResultCollectionWorkflow
@@ -53,6 +61,28 @@ public sealed class JraRaceResultCollectionWorkflow
 
         var savedHorseNumbers = new List<int>();
         var errors = new List<string>();
+
+        var winningEntry = resultPage.Results.FirstOrDefault(e => e.FinishPosition == 1);
+        if (winningEntry is not null)
+        {
+            try
+            {
+                await _writeService.DeclareRaceResultAsync(
+                    raceId: dataCollectionRaceId,
+                    winningHorseName: winningEntry.HorseName,
+                    declaredAt: null,
+                    winningHorseId: null,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                errors.Add($"レース確定宣言エラー: {ex.Message}");
+            }
+        }
+        else
+        {
+            errors.Add("レース確定宣言エラー: 1着馬が結果に見つかりませんでした。");
+        }
 
         foreach (var entry in resultPage.Results)
         {
