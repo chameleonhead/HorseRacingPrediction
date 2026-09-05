@@ -21,7 +21,7 @@
 - URL の推測・生成・手組みは行わない
 - ページ遷移は必ずブラウザー操作（クリック・フォーム入力・戻る/進む）で行う
 - href 解析からの遷移再構築は行わない
-- 実装詳細は [jra-site-data-collector.md](jra-site-data-collector.md)（`JraSiteDataCollector` によるセッション保持型ナビゲーション）と [jra-page-map-blueprint.md](jra-page-map-blueprint.md)（ページ判定・構造化抽出の責務分割）を参照
+- 実装詳細は [jra-scraping.md](jra-scraping.md)（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage` によるページ遷移・判定・構造化抽出の設計）を参照
 
 ## コンポーネント構成（実装済み）
 

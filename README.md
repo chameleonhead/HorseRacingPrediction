@@ -28,9 +28,7 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 - [docs/collector-design.md](docs/collector-design.md): Collector（JRA機械的収集）の設計
 - [docs/lambda-collector-architecture.md](docs/lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
 - [docs/predictor-design.md](docs/predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
-- [docs/jra-site-data-collector.md](docs/jra-site-data-collector.md): JraSiteDataCollector（Collectorが使うJRAナビゲーション）の設計仕様
-- [docs/jra-page-map-blueprint.md](docs/jra-page-map-blueprint.md): JRAページ判定・構造化抽出の責務分割
-- [docs/jra-scraping.md](docs/jra-scraping.md): JRAスクレイピング層の再設計指示書（現在進行中の作業）
+- [docs/jra-scraping.md](docs/jra-scraping.md): JRAスクレイピング層（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage`）の設計指示書（現在進行中の作業）
 - [docs/jra-html-change-diagnostics.md](docs/jra-html-change-diagnostics.md): JRA HTML 構造変更の診断手順
 - [docs/admin-ui-design.md](docs/admin-ui-design.md): 管理サイト UI / UX とジョブ運用画面の設計
 - [docs/design-guidelines.md](docs/design-guidelines.md): 管理画面のデザインガイドライン
