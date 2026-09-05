@@ -1,4 +1,13 @@
 /* Layout and domain information placement only. Fluent UI owns control appearance. */
+/* Fluent UI components render as custom elements (<fluent-button> etc.) that stay
+   unstyled/plain until their JS module registers them. Hiding undefined custom
+   elements (layout space is preserved via visibility:hidden) avoids the flash of
+   unstyled content on reload, which is worse on slow networks where that JS
+   takes longer to arrive. */
+:not(:defined) {
+    visibility: hidden;
+}
+
 :root {
     color-scheme: light;
     --neutral-layer-1: #ffffff;
@@ -227,6 +236,9 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
 .job-map-summary { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 10px; font-size: var(--type-ramp-minus-1-font-size); }
 .job-map-summary strong { font-variant-numeric: tabular-nums; }
 .payload, pre.error { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.error-detail { margin-top: 4px; }
+.error-detail summary { cursor: pointer; color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
+.error-detail pre { margin: 6px 0 0; max-width: 100%; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--type-ramp-minus-1-font-size); }
 table.data, .odds-table { width: 100%; border-collapse: collapse; }
 table.data th, table.data td, .odds-table th, .odds-table td { padding: 8px; border-bottom: 1px solid var(--neutral-stroke-rest); text-align: left; }
 

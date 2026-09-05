@@ -1,0 +1,22 @@
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <p class="error-summary">@summary</p>
+    @if (!string.IsNullOrWhiteSpace(supplementary))
+    {
+        <details class="error-detail">
+            <summary>補足情報を表示</summary>
+            <pre>@supplementary</pre>
+        </details>
+    }
+}
+
+@code {
+    [Parameter] public string? Error { get; set; }
+    private string summary = string.Empty;
+    private string? supplementary;
+
+    protected override void OnParametersSet()
+    {
+        (summary, supplementary) = ErrorMessageSplitter.Split(Error);
+    }
+}
