@@ -70,17 +70,41 @@ else
     private bool loading;
     private PagedResponse<RaceSummaryResponse>? result;
 
-    protected override async Task OnInitializedAsync()
+    private string? lastSyncedQuery;
+    private bool isFirstQuerySync = true;
+
+    // Blazor はルートの再解決だけでは OnInitializedAsync を再実行しない（同一コンポーネント
+    // インスタンスが再利用されるため）。開催場リンクなど、同じ /races 内でクエリ文字列だけが
+    // 変わるナビゲーションでも検索条件を反映できるよう、毎回のパラメーター設定時に呼ばれる
+    // OnParametersSetAsync で URL を読み直す。自分自身の UpdateUrl による NavigateTo で
+    // 二重にロードしないよう、直前に同期済みの URL と比較してから処理する。
+    protected override async Task OnParametersSetAsync()
     {
+        var currentQuery = Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery;
+        if (currentQuery == lastSyncedQuery)
+        {
+            return;
+        }
+
+        lastSyncedQuery = currentQuery;
+
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-        from = ParseDate(query, "from", from);
-        to = ParseDate(query, "to", to);
+
+        // クエリ文字列が全く無い初回アクセス（/races 単体でのナビゲーション）に限り、
+        // フィールド宣言時の既定値（直近30日など）を維持する。以降のナビゲーションでは
+        // 未指定のパラメーターは明示的なクリアとして扱う（日付/開催場リンクは他の条件を
+        // 引き継がず単一条件で絞り込む設計のため）。
+        var useDeclaredDefaults = isFirstQuerySync && query.Count == 0;
+        isFirstQuerySync = false;
+
+        from = ParseDate(query, "from", useDeclaredDefaults ? from : null);
+        to = ParseDate(query, "to", useDeclaredDefaults ? to : null);
         racecourse = ParseText(query, "racecourse");
         raceName = ParseText(query, "raceName");
         winningHorse = ParseText(query, "winningHorse");
-        if (Enum.TryParse<RaceStatus>(ParseText(query, "status"), out var requestedStatus)) status = requestedStatus;
-        if (int.TryParse(ParseText(query, "raceNo"), out var raceNumber)) raceNo = raceNumber;
-        if (int.TryParse(ParseText(query, "page"), out var requestedPage) && requestedPage > 0) page = requestedPage;
+        status = Enum.TryParse<RaceStatus>(ParseText(query, "status"), out var requestedStatus) ? requestedStatus : null;
+        raceNo = int.TryParse(ParseText(query, "raceNo"), out var raceNumber) ? raceNumber : null;
+        page = int.TryParse(ParseText(query, "page"), out var requestedPage) && requestedPage > 0 ? requestedPage : 1;
         await LoadAsync();
     }
 

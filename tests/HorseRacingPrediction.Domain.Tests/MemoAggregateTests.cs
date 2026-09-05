@@ -38,7 +38,7 @@ public class MemoAggregateTests
         var sut = new MemoAggregate(MemoId.New);
         sut.CreateMemo(null, "Note", "初回", DateTimeOffset.UtcNow, new[] { HorseSubject });
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CreateMemo(null, "Note", "2回目", DateTimeOffset.UtcNow, new[] { HorseSubject }));
     }
 
@@ -47,7 +47,7 @@ public class MemoAggregateTests
     {
         var sut = new MemoAggregate(MemoId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CreateMemo(null, "Note", "内容", DateTimeOffset.UtcNow, Array.Empty<MemoSubject>()));
     }
 
@@ -65,7 +65,7 @@ public class MemoAggregateTests
     {
         var sut = new MemoAggregate(MemoId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.UpdateMemo(content: "更新"));
     }
 
@@ -76,7 +76,7 @@ public class MemoAggregateTests
         sut.CreateMemo(null, "Note", "内容", DateTimeOffset.UtcNow, new[] { HorseSubject });
         sut.DeleteMemo();
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.UpdateMemo(content: "削除済みなので例外"));
     }
 
@@ -88,7 +88,7 @@ public class MemoAggregateTests
 
         sut.DeleteMemo();
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.DeleteMemo());
+        Assert.Throws<InvalidOperationException>(() => sut.DeleteMemo());
     }
 
     [TestMethod]
@@ -96,7 +96,7 @@ public class MemoAggregateTests
     {
         var sut = new MemoAggregate(MemoId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.DeleteMemo());
+        Assert.Throws<InvalidOperationException>(() => sut.DeleteMemo());
     }
 
     [TestMethod]
@@ -118,7 +118,7 @@ public class MemoAggregateTests
         var sut = new MemoAggregate(MemoId.New);
         sut.CreateMemo(null, "Note", "内容", DateTimeOffset.UtcNow, new[] { HorseSubject });
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.ChangeSubjects(Array.Empty<MemoSubject>()));
     }
 

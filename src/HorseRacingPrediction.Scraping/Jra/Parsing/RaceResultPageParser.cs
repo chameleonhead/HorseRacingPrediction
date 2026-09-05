@@ -27,6 +27,14 @@ public sealed class RaceResultPageParser
     private static readonly Regex TimeSpanRegex =
         new(@"(?:(?<min>\d{1,2}):)?(?<sec>\d{1,2})\.(?<frac>\d{1})", RegexOptions.Compiled);
 
+    // 天候/馬場は実ページのHTML構造が未調査のため、見出し・本文中のテキストパターンから
+    // 緩やかに抽出する方式にしている（見つからない場合は null を返し、既存の着順取得は妨げない）。
+    private static readonly Regex WeatherRegex =
+        new(@"天候\s*[:：]?\s*(?<value>晴|曇|雨|小雨|雪|小雪)", RegexOptions.Compiled);
+
+    private static readonly Regex TrackConditionRegex =
+        new(@"(?<surface>芝|ダート)?\s*馬場(?:状態)?\s*[:：]?\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
+
     public JraPageKind Kind =>
         JraPageKind.RaceResult;
 
@@ -63,11 +71,191 @@ public sealed class RaceResultPageParser
         var results =
             ParseResults(table);
 
+        var weatherText =
+            ParseWeatherText(snapshot);
+
+        var trackConditionText =
+            ParseTrackConditionText(snapshot);
+
+        var payouts =
+            ParsePayouts(snapshot, table);
+
         return new JraRaceResultPage(
             snapshot.Url,
             new RaceId(date, course, number),
             raceName,
-            results);
+            results,
+            weatherText,
+            trackConditionText,
+            payouts is not null && !payouts.IsEmpty ? payouts : null);
+    }
+
+    private static string? ParseWeatherText(
+        PageSnapshot snapshot)
+    {
+        var searchText =
+            $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
+
+        var match =
+            WeatherRegex.Match(searchText);
+
+        return match.Success ? match.Groups["value"].Value : null;
+    }
+
+    private static string? ParseTrackConditionText(
+        PageSnapshot snapshot)
+    {
+        var searchText =
+            $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
+
+        var match =
+            TrackConditionRegex.Match(searchText);
+
+        return match.Success ? match.Groups["value"].Value : null;
+    }
+
+    private static RacePayouts? ParsePayouts(
+        PageSnapshot snapshot,
+        PageTableSnapshot resultTable)
+    {
+        var winPayouts = new List<PayoutLine>();
+        var placePayouts = new List<PayoutLine>();
+        var quinellaPayouts = new List<PayoutLine>();
+        var exactaPayouts = new List<PayoutLine>();
+        var trifectaPayouts = new List<PayoutLine>();
+
+        foreach (var table in snapshot.Tables)
+        {
+            if (ReferenceEquals(table, resultTable))
+            {
+                continue;
+            }
+
+            var typeColumnIndex = FindPayoutTypeColumnIndex(table.Headers);
+            var combinationColumnIndex = FindPayoutCombinationColumnIndex(table.Headers);
+            var amountColumnIndex = FindPayoutAmountColumnIndex(table.Headers);
+
+            if (combinationColumnIndex < 0 || amountColumnIndex < 0)
+            {
+                continue;
+            }
+
+            string? currentTypeName = null;
+
+            foreach (var row in table.Rows)
+            {
+                if (typeColumnIndex >= 0 && typeColumnIndex < row.Count &&
+                    !string.IsNullOrWhiteSpace(row[typeColumnIndex]))
+                {
+                    currentTypeName = row[typeColumnIndex].Trim();
+                }
+
+                if (currentTypeName is null ||
+                    combinationColumnIndex >= row.Count ||
+                    amountColumnIndex >= row.Count)
+                {
+                    continue;
+                }
+
+                var bucket = currentTypeName switch
+                {
+                    "単勝" => winPayouts,
+                    "複勝" => placePayouts,
+                    "馬連" => quinellaPayouts,
+                    "馬単" => exactaPayouts,
+                    "三連単" => trifectaPayouts,
+                    _ => null,
+                };
+
+                if (bucket is null)
+                {
+                    continue;
+                }
+
+                AppendPayoutLines(bucket, row[combinationColumnIndex], row[amountColumnIndex]);
+            }
+        }
+
+        return new RacePayouts(winPayouts, placePayouts, quinellaPayouts, exactaPayouts, trifectaPayouts);
+    }
+
+    private static void AppendPayoutLines(
+        List<PayoutLine> bucket,
+        string combinationCell,
+        string amountCell)
+    {
+        var combinations = SplitPayoutCellLines(combinationCell);
+        var amounts = SplitPayoutCellLines(amountCell);
+
+        for (var i = 0; i < combinations.Count; i++)
+        {
+            var amountText = i < amounts.Count ? amounts[i] : amounts.LastOrDefault();
+
+            if (string.IsNullOrWhiteSpace(amountText))
+            {
+                continue;
+            }
+
+            var digitsOnly = new string(amountText.Where(char.IsDigit).ToArray());
+
+            if (digitsOnly.Length == 0)
+            {
+                continue;
+            }
+
+            bucket.Add(new PayoutLine(combinations[i], decimal.Parse(digitsOnly)));
+        }
+    }
+
+    private static List<string> SplitPayoutCellLines(string cell)
+        => cell
+            .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.Length > 0)
+            .ToList();
+
+    private static int FindPayoutTypeColumnIndex(
+        IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("式別", StringComparison.Ordinal) ||
+                headers[i].Contains("券種", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindPayoutCombinationColumnIndex(
+        IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("組合せ", StringComparison.Ordinal) ||
+                RemoveWhitespace(headers[i]).Contains("馬番", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindPayoutAmountColumnIndex(
+        IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("払戻", StringComparison.Ordinal) ||
+                headers[i].Contains("金額", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static PageTableSnapshot? FindResultTable(

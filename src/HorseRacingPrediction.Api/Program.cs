@@ -1,12 +1,11 @@
-using EventFlow;
+using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 using EventFlow.EntityFramework.Extensions;
 using EventFlow.Extensions;
 using HorseRacingPrediction.Api;
-using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.CollectionController;
-using Amazon.SQS;
-using Amazon.SimpleNotificationService;
 using HorseRacingPrediction.Api.Notifications;
+using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
@@ -17,8 +16,8 @@ using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.OpenApi.Models;
 using Microsoft.FluentUI.AspNetCore.Components;
+using Microsoft.OpenApi;
 using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,7 +59,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
             && IPAddress.TryParse(parts[0], out var networkAddress)
             && int.TryParse(parts[1], out var prefixLength))
         {
-            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(networkAddress, prefixLength));
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(networkAddress, prefixLength));
         }
     }
 });
@@ -75,18 +74,11 @@ builder.Services.AddSwaggerGen(options =>
         Name = "X-Api-Key",
         Description = "API キーをヘッダーに指定してください"
     });
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "ApiKey"
-                }
-            },
-            Array.Empty<string>()
+            new OpenApiSecuritySchemeReference("ApiKey"),
+            new List<string>()
         }
     });
 });
@@ -139,6 +131,9 @@ if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOp
     builder.Services.AddHostedService<JobFailureNotificationDispatcher>();
 }
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
+builder.Services.Configure<CollectionJobWatchdogOptions>(
+    builder.Configuration.GetSection(CollectionJobWatchdogOptions.SectionName));
+builder.Services.AddHostedService<CollectionJobWatchdogService>();
 
 builder.Services.AddEventFlow(options =>
 {

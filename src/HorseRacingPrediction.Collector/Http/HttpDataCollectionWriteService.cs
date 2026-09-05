@@ -658,6 +658,76 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return $"レース {raceId} の払い戻しを記録しました。";
     }
 
+    public async Task<string> RecordWeatherObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? weatherCode,
+        string? weatherText,
+        decimal? temperatureCelsius,
+        decimal? humidityPercent,
+        string? windDirectionCode,
+        decimal? windSpeedMeterPerSecond,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequiredText(raceId, nameof(raceId));
+
+        var request = new
+        {
+            ObservationTime = observationTime,
+            WeatherCode = weatherCode,
+            WeatherText = weatherText,
+            TemperatureCelsius = temperatureCelsius,
+            HumidityPercent = humidityPercent,
+            WindDirectionCode = windDirectionCode,
+            WindSpeedMeterPerSecond = windSpeedMeterPerSecond
+        };
+
+        var response = await _httpClient
+            .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/weather", request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の天候は既に記録済みです。";
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        return $"レース {raceId} の天候を記録しました。";
+    }
+
+    public async Task<string> RecordTrackConditionObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? turfConditionCode,
+        string? dirtConditionCode,
+        string? goingDescriptionText,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequiredText(raceId, nameof(raceId));
+
+        var request = new
+        {
+            ObservationTime = observationTime,
+            TurfConditionCode = turfConditionCode,
+            DirtConditionCode = dirtConditionCode,
+            GoingDescriptionText = goingDescriptionText
+        };
+
+        var response = await _httpClient
+            .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/track-condition", request, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return $"レース {raceId} の馬場状態は既に記録済みです。";
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        return $"レース {raceId} の馬場状態を記録しました。";
+    }
+
     // ------------------------------------------------------------------ //
     // private helpers — HTTP
     // ------------------------------------------------------------------ //

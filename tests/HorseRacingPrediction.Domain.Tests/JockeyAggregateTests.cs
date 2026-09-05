@@ -24,7 +24,7 @@ public class JockeyAggregateTests
         var sut = new JockeyAggregate(JockeyId.New);
         sut.RegisterJockey("武豊", "たけゆたか");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.RegisterJockey("ルメール", "るめーる"));
     }
 
@@ -45,7 +45,7 @@ public class JockeyAggregateTests
     {
         var sut = new JockeyAggregate(JockeyId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.UpdateProfile(displayName: "テスト"));
     }
 
@@ -70,7 +70,7 @@ public class JockeyAggregateTests
     {
         var sut = new JockeyAggregate(JockeyId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.MergeAlias("JRA_CODE", "00001", "JRA", true));
     }
 
@@ -90,7 +90,7 @@ public class JockeyAggregateTests
     {
         var sut = new JockeyAggregate(JockeyId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CorrectData(displayName: "テスト"));
     }
 

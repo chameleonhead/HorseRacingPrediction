@@ -60,7 +60,9 @@ public class RaceSummaryReadModel : IReadModel,
         IDomainEvent<RaceAggregate, RaceId, EntryRegistered> domainEvent,
         CancellationToken cancellationToken)
     {
-        EntryCount = (EntryCount ?? 0) + 1;
+        // EntryCount は RaceCardPublished で確定した頭数を正としており、ここでの加算は不要
+        // （加算すると RaceCardPublished の頭数と登録済み出走馬数が二重にカウントされ、
+        // 例えば実際は16頭のレースが32頭と表示される不具合になる）。
         return Task.CompletedTask;
     }
 

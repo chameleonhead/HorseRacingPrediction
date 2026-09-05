@@ -116,4 +116,25 @@ public interface IDataCollectionWriteService
         string? exactaPayoutsJson,
         string? trifectaPayoutsJson,
         CancellationToken cancellationToken = default);
+
+    /// <summary>天候観測を記録し、確認メッセージを返す。</summary>
+    Task<string> RecordWeatherObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? weatherCode,
+        string? weatherText,
+        decimal? temperatureCelsius,
+        decimal? humidityPercent,
+        string? windDirectionCode,
+        decimal? windSpeedMeterPerSecond,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>馬場状態観測を記録し、確認メッセージを返す。</summary>
+    Task<string> RecordTrackConditionObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? turfConditionCode,
+        string? dirtConditionCode,
+        string? goingDescriptionText,
+        CancellationToken cancellationToken = default);
 }

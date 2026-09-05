@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.Json;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -19,8 +20,9 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// （サイレントなデータ欠落）。そのため、着順登録の前に必ず1着馬の情報で
 /// レース全体の確定宣言を行う。
 ///
-/// 払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）は
-/// 本フェーズでは実装しない（別タスクで対応する）。
+/// 天候・馬場状態・払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）は
+/// 結果ページパーサーがページから抽出できた場合のみ記録する。実ページのHTML構造は
+/// 未調査のため、抽出できなかった項目は記録をスキップし、着順登録自体は失敗させない。
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
     : IJraRaceResultCollectionWorkflow
@@ -109,8 +111,71 @@ public sealed class JraRaceResultCollectionWorkflow
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(resultPage.WeatherText))
+        {
+            try
+            {
+                await _writeService.RecordWeatherObservationAsync(
+                    raceId: dataCollectionRaceId,
+                    observationTime: DateTimeOffset.UtcNow,
+                    weatherCode: null,
+                    weatherText: resultPage.WeatherText,
+                    temperatureCelsius: null,
+                    humidityPercent: null,
+                    windDirectionCode: null,
+                    windSpeedMeterPerSecond: null,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                errors.Add($"天候記録エラー: {ex.Message}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(resultPage.TrackConditionText))
+        {
+            try
+            {
+                await _writeService.RecordTrackConditionObservationAsync(
+                    raceId: dataCollectionRaceId,
+                    observationTime: DateTimeOffset.UtcNow,
+                    turfConditionCode: null,
+                    dirtConditionCode: null,
+                    goingDescriptionText: resultPage.TrackConditionText,
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                errors.Add($"馬場状態記録エラー: {ex.Message}");
+            }
+        }
+
+        if (resultPage.Payouts is not null && winningEntry is not null)
+        {
+            try
+            {
+                await _writeService.DeclareRacePayoutsAsync(
+                    raceId: dataCollectionRaceId,
+                    winPayoutsJson: ToPayoutJson(resultPage.Payouts.WinPayouts),
+                    placePayoutsJson: ToPayoutJson(resultPage.Payouts.PlacePayouts),
+                    quinellaPayoutsJson: ToPayoutJson(resultPage.Payouts.QuinellaPayouts),
+                    exactaPayoutsJson: ToPayoutJson(resultPage.Payouts.ExactaPayouts),
+                    trifectaPayoutsJson: ToPayoutJson(resultPage.Payouts.TrifectaPayouts),
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                errors.Add($"払戻記録エラー: {ex.Message}");
+            }
+        }
+
         return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors);
     }
+
+    private static string? ToPayoutJson(IReadOnlyList<PayoutLine> payouts)
+        => payouts.Count == 0
+            ? null
+            : JsonSerializer.Serialize(payouts.Select(p => new { combination = p.Combination, amount = p.Amount }));
 
     private static string? FormatTime(TimeSpan? time) =>
         time is null

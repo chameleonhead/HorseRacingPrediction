@@ -96,16 +96,41 @@ else
     private bool showPauseDialog;
     private IReadOnlyList<string> operationErrors = [];
 
-    protected override Task OnInitializedAsync()
+    private string? lastSyncedQuery;
+    private bool isFirstQuerySync = true;
+
+    // Blazor はルートの再解決だけでは OnInitializedAsync を再実行しない（同一コンポーネント
+    // インスタンスが再利用されるため）。日別サマリーのリンクなど、同じ /jobs 内でクエリ
+    // 文字列だけが変わるナビゲーションでも絞り込み条件を反映できるよう、毎回のパラメーター
+    // 設定時に呼ばれる OnParametersSetAsync で URL を読み直す。自分自身の UpdateUrl による
+    // NavigateTo で二重にロードしないよう、直前に同期済みの URL と比較してから処理する。
+    protected override async Task OnParametersSetAsync()
     {
+        var currentQuery = Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery;
+        if (currentQuery == lastSyncedQuery)
+        {
+            return;
+        }
+
+        lastSyncedQuery = currentQuery;
+
         var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-        if (q.TryGetValue("view", out var v) && !string.IsNullOrWhiteSpace(v)) view = v!;
-        if (q.TryGetValue("page", out var p) && int.TryParse(p, out var n) && n > 0) page = n;
-        if (q.TryGetValue("jobType", out var t)) jobType = t;
-        if (q.TryGetValue("query", out var query)) keyword = query;
-        if (q.TryGetValue("targetDate", out var d)) targetDateText = d;
-        if (q.TryGetValue("status", out var s)) statusText = s!;
-        return LoadAsync();
+
+        // クエリ文字列が全く無い初回アクセスに限り、フィールド宣言時の既定値（view=action）
+        // を維持する。以降のナビゲーションで view が未指定の場合は「すべて」を表示する
+        // （対象日リンクなどは他の条件を引き継がず、その日の全ジョブを見せる想定のため）。
+        var useDeclaredDefaults = isFirstQuerySync && q.Count == 0;
+        isFirstQuerySync = false;
+
+        view = q.TryGetValue("view", out var v) && !string.IsNullOrWhiteSpace(v)
+            ? v!
+            : (useDeclaredDefaults ? view : "all");
+        page = q.TryGetValue("page", out var p) && int.TryParse(p, out var n) && n > 0 ? n : 1;
+        jobType = q.TryGetValue("jobType", out var t) ? t.ToString() : null;
+        keyword = q.TryGetValue("query", out var query) ? query.ToString() : null;
+        targetDateText = q.TryGetValue("targetDate", out var d) ? d.ToString() : null;
+        statusText = q.TryGetValue("status", out var s) ? s.ToString() : string.Empty;
+        await LoadAsync();
     }
     private async Task SearchAsync()
     {

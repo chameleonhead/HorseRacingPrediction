@@ -105,35 +105,71 @@ else
     {
         <FluentTab Label="出走表" Id="participants"><section class="entity-section detail-section">
             <h3>出走表</h3>
-            <ol class="participant-list">
+            <table class="data-table participant-table">
+                <thead>
+                    <tr>
+                        <th scope="col">枠</th>
+                        <th scope="col">馬番</th>
+                        <th scope="col">馬名</th>
+                        <th scope="col">性齢</th>
+                        <th scope="col">馬体重</th>
+                        <th scope="col">騎手</th>
+                        <th scope="col">調教師</th>
+                        <th scope="col">馬主</th>
+                        <th scope="col">結果</th>
+                    </tr>
+                </thead>
+                <tbody>
                 @foreach (var e in race.Entries.OrderBy(x => x.HorseNumber))
                 {
                     var result = race.EntryResults.FirstOrDefault(x => x.HorseId == e.HorseId);
-                    <li class="participant-row">
-                        <div class="participant-number"><span>@e.GateNumber 枠</span><strong>@e.HorseNumber</strong></div>
-                        <div class="object-primary"><a href="@($"/horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a><span class="hint">@e.SexCode@e.Age · @FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</span></div>
-                        <div class="participant-result"><strong>@(result?.FinishPosition is null ? "結果未確定" : $"{result.FinishPosition}着")</strong><span class="hint">@(result?.OfficialTime ?? "タイム未確定")</span></div>
-                        <div class="participant-relations"><div><span class="object-label">騎手</span>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</div><div><span class="object-label">調教師</span>@EntityLink("trainers", e.TrainerId, e.TrainerName)</div><div><span class="object-label">レース時点の馬主</span>@EntityLink("owners", e.OwnerId, e.OwnerName)</div></div>
-                    </li>
+                    <tr>
+                        <td class="numeric">@e.GateNumber</td>
+                        <th scope="row">@e.HorseNumber</th>
+                        <td><a href="@($"/horses/{Uri.EscapeDataString(e.HorseId)}")">@(e.HorseName ?? e.HorseId)</a></td>
+                        <td>@e.SexCode@e.Age</td>
+                        <td class="numeric">@FormatBodyWeight(e.DeclaredWeight, e.DeclaredWeightDiff)</td>
+                        <td>@EntityLink("jockeys", e.JockeyId, e.JockeyName)</td>
+                        <td>@EntityLink("trainers", e.TrainerId, e.TrainerName)</td>
+                        <td>@EntityLink("owners", e.OwnerId, e.OwnerName)</td>
+                        <td>
+                            <strong>@(result?.FinishPosition is null ? "結果未確定" : $"{result.FinishPosition}着")</strong>
+                            <span class="hint">@(result?.OfficialTime ?? "タイム未確定")</span>
+                        </td>
+                    </tr>
                 }
-            </ol>
+                </tbody>
+            </table>
         </section></FluentTab>
 
         @if (race.EntryResults.Count > 0)
         {
             <FluentTab Label="結果" Id="results"><section class="entity-section detail-section">
                 <h3>確定結果</h3>
-                <ol class="participant-list">
+                <table class="data-table participant-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">着順</th>
+                            <th scope="col">馬番</th>
+                            <th scope="col">馬名</th>
+                            <th scope="col">タイム</th>
+                            <th scope="col">騎手</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                     @foreach (var result in race.EntryResults.OrderBy(x => x.FinishPosition ?? int.MaxValue))
                     {
                         var entry = race.Entries.FirstOrDefault(x => x.HorseId == result.HorseId);
-                        <li class="participant-row">
-                            <div class="participant-number"><strong>@(result.FinishPosition is null ? "—" : $"{result.FinishPosition}着")</strong></div>
-                            <div class="object-primary">@EntityLink("horses", result.HorseId, entry?.HorseName ?? result.HorseId)<span class="hint">@(result.OfficialTime ?? "タイム未登録")</span></div>
-                            <div class="participant-relations"><div><span class="object-label">馬番</span>@(entry?.HorseNumber.ToString() ?? "—")</div><div><span class="object-label">騎手</span>@EntityLink("jockeys", entry?.JockeyId, entry?.JockeyName)</div></div>
-                        </li>
+                        <tr>
+                            <th scope="row">@(result.FinishPosition is null ? "—" : $"{result.FinishPosition}着")</th>
+                            <td class="numeric">@(entry?.HorseNumber.ToString() ?? "—")</td>
+                            <td>@EntityLink("horses", result.HorseId, entry?.HorseName ?? result.HorseId)</td>
+                            <td>@(result.OfficialTime ?? "タイム未登録")</td>
+                            <td>@EntityLink("jockeys", entry?.JockeyId, entry?.JockeyName)</td>
+                        </tr>
                     }
-                </ol>
+                    </tbody>
+                </table>
             </section></FluentTab>
         }
     }

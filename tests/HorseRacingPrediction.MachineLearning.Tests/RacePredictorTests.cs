@@ -109,7 +109,7 @@ public class RacePredictorTests
         var raceResults = MakeRaceResults(count: 1, entriesPerRace: 2); // 2 サンプル（<10）
         var contexts = raceResults.ToDictionary(r => r.RaceId, r => MakeRaceContext(r.RaceId, 2));
 
-        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _sut.TrainAsync(
                 raceResults,
                 (raceId, _) => Task.FromResult(contexts.TryGetValue(raceId, out var ctx) ? ctx : null),
@@ -154,7 +154,7 @@ public class RacePredictorTests
     public async Task SaveModelAsync_WithoutTraining_ThrowsInvalidOperation()
     {
         using var ms = new MemoryStream();
-        await Assert.ThrowsExceptionAsync<InvalidOperationException>(() => _sut.SaveModelAsync(ms));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.SaveModelAsync(ms));
     }
 
     // ------------------------------------------------------------------ //

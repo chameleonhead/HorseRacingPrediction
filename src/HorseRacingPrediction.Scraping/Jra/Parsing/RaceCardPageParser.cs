@@ -30,6 +30,13 @@ public sealed class RaceCardPageParser
     private static readonly Regex WeightRegex =
         new(@"(?<weight>\d{1,3}(\.\d)?)", RegexOptions.Compiled);
 
+    // Task16実サイト確認で判明: 馬名セルは「馬名 調教師名(所属) 父：… 母：…」の結合形式。
+    // 調教師名は馬名に続く先頭の空白区切りブロックのうち、所属を表す括弧・血統情報
+    // （父/母）の直前までとする。実ページのHTML構造は未調査のため、既知の1サンプルの
+    // 形式から緩やかに推測している。
+    private static readonly Regex TrainerNameRegex =
+        new(@"^(?<name>[^\(（]+)", RegexOptions.Compiled);
+
     public JraPageKind Kind =>
         JraPageKind.RaceCard;
 
@@ -339,13 +346,21 @@ public sealed class RaceCardPageParser
             // 「馬名 調教師名(所属) 父：… 母：…」が1セルに結合されている
             // （馬名 調教師名 血統 という結合ヘッダーの通り）。カタカナの馬名には
             // 空白を含まないため、先頭の空白より前を馬名として切り出す。
+            var horseNameCellParts =
+                row[horseNameIndex].Split(' ', 2);
+
             var horseName =
-                row[horseNameIndex].Split(' ', 2)[0].Trim();
+                horseNameCellParts[0].Trim();
 
             if (string.IsNullOrWhiteSpace(horseName))
             {
                 continue;
             }
+
+            var trainerName =
+                horseNameCellParts.Length > 1
+                    ? ExtractTrainerName(horseNameCellParts[1])
+                    : null;
 
             // Task16実サイト確認で判明: 枠・馬番のセルは色付きアイコン画像で
             // 描画されており、テキスト抽出結果が空になる（レース結果ページの
@@ -402,7 +417,8 @@ public sealed class RaceCardPageParser
                 horseName,
                 frameNumber,
                 jockeyName,
-                assignedWeight));
+                assignedWeight,
+                trainerName));
         }
 
         return entries;
@@ -437,5 +453,22 @@ public sealed class RaceCardPageParser
         rest = rest.Trim().TrimStart('△', '▲', '☆', '★', '◇', '▽').Trim();
 
         return string.IsNullOrWhiteSpace(rest) ? null : rest;
+    }
+
+    /// <summary>
+    /// 馬名セルの馬名部分を除いた残り（「調教師名(所属) 父：… 母：…」）から
+    /// 調教師名だけを取り出す。括弧（所属表記）より前の部分を調教師名とみなす。
+    /// </summary>
+    private static string? ExtractTrainerName(string cell)
+    {
+        if (string.IsNullOrWhiteSpace(cell))
+        {
+            return null;
+        }
+
+        var match = TrainerNameRegex.Match(cell.Trim());
+        var name = match.Success ? match.Groups["name"].Value.Trim() : null;
+
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 }

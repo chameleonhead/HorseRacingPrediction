@@ -120,5 +120,15 @@ public class DataCollectionWriteToolsTests
             string? quinellaPayoutsJson, string? exactaPayoutsJson, string? trifectaPayoutsJson,
             CancellationToken cancellationToken = default)
             => Task.FromResult($"レース {raceId} の払い戻しを記録しました。");
+
+        public Task<string> RecordWeatherObservationAsync(string raceId, DateTimeOffset observationTime,
+            string? weatherCode, string? weatherText, decimal? temperatureCelsius, decimal? humidityPercent,
+            string? windDirectionCode, decimal? windSpeedMeterPerSecond, CancellationToken cancellationToken = default)
+            => Task.FromResult($"レース {raceId} の天候を記録しました。");
+
+        public Task<string> RecordTrackConditionObservationAsync(string raceId, DateTimeOffset observationTime,
+            string? turfConditionCode, string? dirtConditionCode, string? goingDescriptionText,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult($"レース {raceId} の馬場状態を記録しました。");
     }
 }

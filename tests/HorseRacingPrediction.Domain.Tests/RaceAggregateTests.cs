@@ -44,7 +44,7 @@ public class RaceAggregateTests
         var sut = new RaceAggregate(RaceId.New);
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.Create(new DateOnly(2025, 7, 1), "NAKAYAMA", 1, "有馬記念"));
     }
 
@@ -66,7 +66,7 @@ public class RaceAggregateTests
     {
         var sut = new RaceAggregate(RaceId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.PublishCard(18));
+        Assert.Throws<InvalidOperationException>(() => sut.PublishCard(18));
     }
 
     [TestMethod]
@@ -76,7 +76,7 @@ public class RaceAggregateTests
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
         sut.PublishCard(18);
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.PublishCard(16));
+        Assert.Throws<InvalidOperationException>(() => sut.PublishCard(16));
     }
 
     [TestMethod]
@@ -107,7 +107,7 @@ public class RaceAggregateTests
         var sut = new RaceAggregate(RaceId.New);
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.RegisterEntry("entry-1", "horse-1", 1));
     }
 
@@ -159,7 +159,7 @@ public class RaceAggregateTests
         var sut = new RaceAggregate(RaceId.New);
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.OpenPreRace());
+        Assert.Throws<InvalidOperationException>(() => sut.OpenPreRace());
     }
 
     [TestMethod]
@@ -182,7 +182,7 @@ public class RaceAggregateTests
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
         sut.PublishCard(18);
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.StartRace());
+        Assert.Throws<InvalidOperationException>(() => sut.StartRace());
     }
 
     [TestMethod]
@@ -224,7 +224,7 @@ public class RaceAggregateTests
     {
         var sut = new RaceAggregate(RaceId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow));
     }
 
@@ -234,7 +234,7 @@ public class RaceAggregateTests
         var sut = new RaceAggregate(RaceId.New);
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow));
     }
 
@@ -247,7 +247,7 @@ public class RaceAggregateTests
         sut.PublishCard(18);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.DeclareResult("キタサンブラック", DateTimeOffset.UtcNow));
     }
 
@@ -277,7 +277,7 @@ public class RaceAggregateTests
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
         sut.PublishCard(18);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.DeclareEntryResult("entry-1", finishPosition: 1));
     }
 
@@ -308,7 +308,7 @@ public class RaceAggregateTests
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
         sut.PublishCard(18);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.DeclarePayoutResult(DateTimeOffset.UtcNow));
     }
 
@@ -347,7 +347,7 @@ public class RaceAggregateTests
         var sut = new RaceAggregate(RaceId.New);
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞");
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.CloseRaceLifecycle());
+        Assert.Throws<InvalidOperationException>(() => sut.CloseRaceLifecycle());
     }
 
     [TestMethod]

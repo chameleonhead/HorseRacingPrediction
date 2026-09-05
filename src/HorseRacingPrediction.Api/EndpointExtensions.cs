@@ -37,8 +37,7 @@ public static class EndpointExtensions
         app.MapGet("/health", () => Results.Ok(new { Status = "ok" }))
             .WithName("Health")
             .WithTags("Health")
-            .WithSummary("Health check")
-            .WithOpenApi();
+            .WithSummary("Health check");
 
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<ApiKeyEndpointFilter>();
@@ -72,8 +71,7 @@ public static class EndpointExtensions
             .WithTags("Horse API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPut("/horses/{horseId}",
             [SwaggerOperation(Summary = "Update horse profile", Description = "Updates profile information of an existing horse")]
@@ -96,8 +94,7 @@ public static class EndpointExtensions
             .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/horses/{horseId}/aliases",
             [SwaggerOperation(Summary = "Merge horse alias", Description = "Adds or updates an alias for a horse from an external data source")]
@@ -119,8 +116,7 @@ public static class EndpointExtensions
             .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPatch("/horses/{horseId}",
             [SwaggerOperation(Summary = "Correct horse data", Description = "Corrects horse master data with an optional audit reason")]
@@ -143,8 +139,7 @@ public static class EndpointExtensions
             .WithTags("Horse API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/jockeys",
             [SwaggerOperation(Summary = "Register jockey", Description = "Registers a new jockey")]
@@ -173,8 +168,7 @@ public static class EndpointExtensions
             .WithTags("Jockey API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPut("/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Update jockey profile", Description = "Updates profile information of an existing jockey")]
@@ -195,8 +189,7 @@ public static class EndpointExtensions
             .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/jockeys/{jockeyId}/aliases",
             [SwaggerOperation(Summary = "Merge jockey alias", Description = "Adds or updates an alias for a jockey from an external data source")]
@@ -218,8 +211,7 @@ public static class EndpointExtensions
             .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPatch("/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Correct jockey data", Description = "Corrects jockey master data with an optional audit reason")]
@@ -241,8 +233,7 @@ public static class EndpointExtensions
             .WithTags("Jockey API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/trainers",
             [SwaggerOperation(Summary = "Register trainer", Description = "Registers a new trainer")]
@@ -271,8 +262,7 @@ public static class EndpointExtensions
             .WithTags("Trainer API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPut("/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Update trainer profile", Description = "Updates profile information of an existing trainer")]
@@ -293,8 +283,7 @@ public static class EndpointExtensions
             .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/trainers/{trainerId}/aliases",
             [SwaggerOperation(Summary = "Merge trainer alias", Description = "Adds or updates an alias for a trainer from an external data source")]
@@ -316,8 +305,7 @@ public static class EndpointExtensions
             .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPatch("/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Correct trainer data", Description = "Corrects trainer master data with an optional audit reason")]
@@ -339,8 +327,7 @@ public static class EndpointExtensions
             .WithTags("Trainer API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races",
             [SwaggerOperation(Summary = "Create race", Description = "Creates a race aggregate in Draft state")]
@@ -375,8 +362,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         app.MapGet("/api/races",
             [SwaggerOperation(Summary = "Search races", Description = "Returns paged race summaries filtered by date, course, status, race name and result information")]
@@ -480,8 +466,7 @@ public static class EndpointExtensions
             .WithName("SearchRaces")
             .WithTags("Race API")
             .Produces<PagedResponse<RaceSummaryResponse>>(StatusCodes.Status200OK)
-            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
 
         writeGroup.MapPost("/races/{raceId}/card/publish",
             [SwaggerOperation(Summary = "Publish race card", Description = "Moves lifecycle from Draft to CardPublished")]
@@ -505,8 +490,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/result",
             [SwaggerOperation(Summary = "Declare race result", Description = "Declares result and moves lifecycle to ResultDeclared")]
@@ -534,8 +518,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/entries",
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
@@ -569,8 +552,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/weather",
             [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
@@ -595,8 +577,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/track-condition",
             [SwaggerOperation(Summary = "Record track condition", Description = "Records a track condition observation for a race")]
@@ -618,8 +599,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/open-pre-race",
             [SwaggerOperation(Summary = "Open pre-race", Description = "Moves race lifecycle from CardPublished to PreRaceOpen")]
@@ -635,8 +615,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/start",
             [SwaggerOperation(Summary = "Start race", Description = "Moves race lifecycle from PreRaceOpen to InProgress")]
@@ -652,8 +631,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/entries/{entryId}/result",
             [SwaggerOperation(Summary = "Declare entry result", Description = "Declares finish result for a specific entry after race result is declared")]
@@ -687,8 +665,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/payout",
             [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
@@ -723,8 +700,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/races/{raceId}/close",
             [SwaggerOperation(Summary = "Close race lifecycle", Description = "Closes the race lifecycle from ResultDeclared or PayoutDeclared state")]
@@ -740,8 +716,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPatch("/races/{raceId}",
             [SwaggerOperation(Summary = "Correct race data", Description = "Corrects race metadata such as name, racecourse, grade, surface or distance")]
@@ -767,8 +742,7 @@ public static class EndpointExtensions
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions",
             [SwaggerOperation(Summary = "Create prediction ticket", Description = "Creates one prediction ticket for a race")]
@@ -793,8 +767,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/marks",
             [SwaggerOperation(Summary = "Add prediction mark", Description = "Appends a mark record to prediction ticket")]
@@ -817,8 +790,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/betting-suggestions",
             [SwaggerOperation(Summary = "Add betting suggestion", Description = "Appends a betting suggestion to prediction ticket")]
@@ -840,8 +812,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/rationales",
             [SwaggerOperation(Summary = "Add prediction rationale", Description = "Appends a rationale entry to prediction ticket")]
@@ -864,8 +835,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/finalize",
             [SwaggerOperation(Summary = "Finalize prediction ticket", Description = "Moves prediction ticket from Draft to Finalized")]
@@ -881,8 +851,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/withdraw",
             [SwaggerOperation(Summary = "Withdraw prediction ticket", Description = "Withdraws a prediction ticket with an optional reason")]
@@ -901,8 +870,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPatch("/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Correct prediction metadata", Description = "Corrects confidence score or summary comment of a prediction ticket")]
@@ -923,8 +891,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/evaluate",
             [SwaggerOperation(Summary = "Evaluate prediction ticket", Description = "Records evaluation result by comparing prediction against actual race result")]
@@ -949,8 +916,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPost("/predictions/{predictionTicketId}/recalculate-evaluation",
             [SwaggerOperation(Summary = "Recalculate prediction evaluation", Description = "Recalculates evaluation of a prediction ticket with updated data")]
@@ -975,8 +941,7 @@ public static class EndpointExtensions
             .WithTags("Prediction API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         app.MapGet("/api/races/{raceId}",
             [SwaggerOperation(Summary = "Get race", Description = "Returns race read model with current status and result information")]
@@ -1131,8 +1096,7 @@ public static class EndpointExtensions
             .WithName("GetRace")
             .WithTags("Race API")
             .Produces<RaceResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/races/{raceId}/context",
             [SwaggerOperation(Summary = "Get race prediction context", Description = "Returns prediction context read model including entries, weather and track conditions")]
@@ -1149,8 +1113,7 @@ public static class EndpointExtensions
             .WithName("GetRacePredictionContext")
             .WithTags("Race API")
             .Produces<ApiContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/races/{raceId}/comparison",
             [SwaggerOperation(Summary = "Get prediction comparison view", Description = "Returns prediction vs result comparison for a race")]
@@ -1167,8 +1130,7 @@ public static class EndpointExtensions
             .WithName("GetPredictionComparison")
             .WithTags("Race API")
             .Produces<PredictionComparisonViewReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/predictions/{predictionTicketId}",
             [SwaggerOperation(Summary = "Get prediction ticket", Description = "Returns prediction ticket read model")]
@@ -1207,8 +1169,7 @@ public static class EndpointExtensions
             .WithName("GetPredictionTicket")
             .WithTags("Prediction API")
             .Produces<PredictionTicketResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/predictions",
             [SwaggerOperation(Summary = "Search prediction tickets", Description = "Returns paged prediction ticket summaries filtered by race, predictor, ticket status, evaluation status and confidence score")]
@@ -1314,8 +1275,7 @@ public static class EndpointExtensions
             .WithName("SearchPredictionTickets")
             .WithTags("Prediction API")
             .Produces<PagedResponse<PredictionTicketSummaryResponse>>(StatusCodes.Status200OK)
-            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
 
         app.MapGet("/api/horses/{horseId}",
             [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
@@ -1332,8 +1292,7 @@ public static class EndpointExtensions
             .WithName("GetHorseProfile")
             .WithTags("Horse API")
             .Produces<ApiContracts.HorseReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/horses",
             [SwaggerOperation(Summary = "Search horses", Description = "Returns paged horse summaries filtered by identifiers, names, sex, birth date and aliases")]
@@ -1407,8 +1366,7 @@ public static class EndpointExtensions
             .WithName("SearchHorses")
             .WithTags("Horse API")
             .Produces<PagedResponse<HorseSummaryResponse>>(StatusCodes.Status200OK)
-            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
 
         app.MapGet("/api/horses/{horseId}/race-history",
             [SwaggerOperation(Summary = "Get horse race history", Description = "Returns race history read model for a horse")]
@@ -1425,8 +1383,7 @@ public static class EndpointExtensions
             .WithName("GetHorseRaceHistory")
             .WithTags("Horse API")
             .Produces<ApiContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/horses/{horseId}/weight-history",
             [SwaggerOperation(Summary = "Get horse weight history", Description = "Returns horse body weight history across races")]
@@ -1450,8 +1407,7 @@ public static class EndpointExtensions
             .WithName("GetHorseWeightHistory")
             .WithTags("Horse API")
             .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/horses/{horseId}/participations",
             async (string horseId, int? take, int? skip, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
@@ -1480,8 +1436,7 @@ public static class EndpointExtensions
             .WithName("GetJockeyRaceHistory")
             .WithTags("Jockey API")
             .Produces<ApiContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/jockeys/{jockeyId}",
             [SwaggerOperation(Summary = "Get jockey profile", Description = "Returns jockey profile read model")]
@@ -1498,8 +1453,7 @@ public static class EndpointExtensions
             .WithName("GetJockeyProfile")
             .WithTags("Jockey API")
             .Produces<ApiContracts.JockeyReadModel>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/jockeys/{jockeyId}/participations",
             async (string jockeyId, int? take, int? skip, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
@@ -1578,8 +1532,7 @@ public static class EndpointExtensions
             .WithName("SearchJockeys")
             .WithTags("Jockey API")
             .Produces<PagedResponse<JockeySummaryResponse>>(StatusCodes.Status200OK)
-            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
 
         app.MapGet("/api/trainers/{trainerId}",
             [SwaggerOperation(Summary = "Get trainer profile", Description = "Returns trainer profile read model")]
@@ -1605,8 +1558,7 @@ public static class EndpointExtensions
             .WithName("GetTrainerProfile")
             .WithTags("Trainer API")
             .Produces<TrainerProfileResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/trainers/{trainerId}/participations",
             [SwaggerOperation(Summary = "Get trainer participation history", Description = "Returns races and related horses, jockeys and owners for a trainer")]
@@ -1655,8 +1607,7 @@ public static class EndpointExtensions
             .WithName("GetTrainerParticipations")
             .WithTags("Trainer API")
             .Produces<ParticipationHistoryResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapGet("/api/trainers",
             [SwaggerOperation(Summary = "Search trainers", Description = "Returns paged trainer summaries filtered by identifiers, names, affiliation and aliases")]
@@ -1723,8 +1674,7 @@ public static class EndpointExtensions
             .WithName("SearchTrainers")
             .WithTags("Trainer API")
             .Produces<PagedResponse<TrainerSummaryResponse>>(StatusCodes.Status200OK)
-            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest);
 
         app.MapGet("/api/owners",
             async (string? query, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
@@ -1924,8 +1874,7 @@ public static class EndpointExtensions
             .Produces(StatusCodes.Status201Created)
             .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPut("/memos/{memoId}",
             [SwaggerOperation(Summary = "Update memo", Description = "Updates content or links of an existing memo")]
@@ -1945,8 +1894,7 @@ public static class EndpointExtensions
             .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapDelete("/memos/{memoId}",
             [SwaggerOperation(Summary = "Delete memo", Description = "Deletes a memo")]
@@ -1962,8 +1910,7 @@ public static class EndpointExtensions
             .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         writeGroup.MapPut("/memos/{memoId}/subjects",
             [SwaggerOperation(Summary = "Change memo subjects", Description = "Replaces the full list of subjects for a memo")]
@@ -1986,8 +1933,7 @@ public static class EndpointExtensions
             .WithTags("Memo API")
             .Produces(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status401Unauthorized);
 
         app.MapGet("/api/memos/by-subject/{subjectType}/{subjectId}",
             [SwaggerOperation(Summary = "Get memos by subject", Description = "Returns all memos for a given subject (e.g. Horse, Trainer, Jockey, Race). Use subjectType=Horse and subjectId=<horseId>.")]
@@ -2014,8 +1960,7 @@ public static class EndpointExtensions
             .WithName("GetMemosBySubject")
             .WithTags("Memo API")
             .Produces<IReadOnlyList<MemoResponse>>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         // ------------------------------------------------------------------ //
         // ML予測 API
@@ -2049,8 +1994,7 @@ public static class EndpointExtensions
             .WithName("GetMlPrediction")
             .WithTags("Race API")
             .Produces<ApiContracts.MlPredictionResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status404NotFound);
 
         app.MapPost("/api/ml/train",
             [SwaggerOperation(Summary = "ML再訓練", Description = "過去レース結果を使ってML.NETモデルを再訓練します。")]
@@ -2082,8 +2026,7 @@ public static class EndpointExtensions
             .WithName("TrainMlModel")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status400BadRequest)
-            .WithOpenApi();
+            .Produces(StatusCodes.Status400BadRequest);
 
         return app;
     }

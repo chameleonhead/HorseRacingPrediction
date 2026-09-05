@@ -134,7 +134,7 @@ public sealed class JraRaceCardCollectionWorkflow
                 horseNumber: entry.HorseNumber,
                 horseName: entry.HorseName,
                 jockeyName: entry.JockeyName,
-                trainerName: null,
+                trainerName: entry.TrainerName,
                 gateNumber: entry.FrameNumber,
                 assignedWeight: entry.AssignedWeight,
                 sexCode: null,

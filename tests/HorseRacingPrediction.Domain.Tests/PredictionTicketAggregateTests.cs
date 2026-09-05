@@ -27,7 +27,7 @@ public class PredictionTicketAggregateTests
         var sut = new PredictionTicketAggregate(PredictionTicketId.New);
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.Create("race-def", "Human", "user-1", 0.5m, null));
     }
 
@@ -62,7 +62,7 @@ public class PredictionTicketAggregateTests
     {
         var sut = new PredictionTicketAggregate(PredictionTicketId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddMark("entry-1", "◎", 1, 90.5m, null));
     }
 
@@ -104,7 +104,7 @@ public class PredictionTicketAggregateTests
     {
         var sut = new PredictionTicketAggregate(PredictionTicketId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddBettingSuggestion("WIN", "1"));
     }
 
@@ -115,7 +115,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.FinalizeTicket();
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddBettingSuggestion("WIN", "1"));
     }
 
@@ -144,7 +144,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.Withdraw("取消");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddRationale("Horse", "horse-1", "SpeedFigure"));
     }
 
@@ -166,7 +166,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.FinalizeTicket();
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.FinalizeTicket());
+        Assert.Throws<InvalidOperationException>(() => sut.FinalizeTicket());
     }
 
     [TestMethod]
@@ -187,7 +187,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.Withdraw();
 
-        Assert.ThrowsException<InvalidOperationException>(() => sut.Withdraw());
+        Assert.Throws<InvalidOperationException>(() => sut.Withdraw());
     }
 
     [TestMethod]
@@ -197,7 +197,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.FinalizeTicket();
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddMark("entry-1", "◎", 1, 90.5m, null));
     }
 
@@ -208,7 +208,7 @@ public class PredictionTicketAggregateTests
         sut.Create("race-abc", "AI", "model-v1", 0.85m, null);
         sut.Withdraw();
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.AddMark("entry-1", "◎", 1, 90.5m, null));
     }
 
@@ -267,7 +267,7 @@ public class PredictionTicketAggregateTests
     {
         var sut = new PredictionTicketAggregate(PredictionTicketId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CorrectMetadata(confidenceScore: 0.5m));
     }
 

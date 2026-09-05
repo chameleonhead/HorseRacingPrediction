@@ -141,6 +141,24 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         return Task.FromResult("declared");
     }
 
+    public sealed record DeclareRacePayoutsCall(
+        string RaceId,
+        string? WinPayoutsJson,
+        string? PlacePayoutsJson,
+        string? QuinellaPayoutsJson,
+        string? ExactaPayoutsJson,
+        string? TrifectaPayoutsJson);
+
+    public sealed record RecordWeatherObservationCall(string RaceId, string? WeatherText);
+
+    public sealed record RecordTrackConditionObservationCall(string RaceId, string? GoingDescriptionText);
+
+    public List<DeclareRacePayoutsCall> DeclareRacePayoutsCalls { get; } = [];
+
+    public List<RecordWeatherObservationCall> RecordWeatherObservationCalls { get; } = [];
+
+    public List<RecordTrackConditionObservationCall> RecordTrackConditionObservationCalls { get; } = [];
+
     public Task<string> DeclareRacePayoutsAsync(
         string raceId,
         string? winPayoutsJson,
@@ -149,5 +167,36 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string? exactaPayoutsJson,
         string? trifectaPayoutsJson,
         CancellationToken cancellationToken = default)
-        => Task.FromResult("declared");
+    {
+        DeclareRacePayoutsCalls.Add(new DeclareRacePayoutsCall(
+            raceId, winPayoutsJson, placePayoutsJson, quinellaPayoutsJson, exactaPayoutsJson, trifectaPayoutsJson));
+        return Task.FromResult("declared");
+    }
+
+    public Task<string> RecordWeatherObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? weatherCode,
+        string? weatherText,
+        decimal? temperatureCelsius,
+        decimal? humidityPercent,
+        string? windDirectionCode,
+        decimal? windSpeedMeterPerSecond,
+        CancellationToken cancellationToken = default)
+    {
+        RecordWeatherObservationCalls.Add(new RecordWeatherObservationCall(raceId, weatherText));
+        return Task.FromResult("recorded");
+    }
+
+    public Task<string> RecordTrackConditionObservationAsync(
+        string raceId,
+        DateTimeOffset observationTime,
+        string? turfConditionCode,
+        string? dirtConditionCode,
+        string? goingDescriptionText,
+        CancellationToken cancellationToken = default)
+    {
+        RecordTrackConditionObservationCalls.Add(new RecordTrackConditionObservationCall(raceId, goingDescriptionText));
+        return Task.FromResult("recorded");
+    }
 }

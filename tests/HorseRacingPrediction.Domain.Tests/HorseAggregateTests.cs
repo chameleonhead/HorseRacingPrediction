@@ -25,7 +25,7 @@ public class HorseAggregateTests
         var sut = new HorseAggregate(HorseId.New);
         sut.RegisterHorse("ディープインパクト", "ディープインパクト");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.RegisterHorse("キタサンブラック", "キタサンブラック"));
     }
 
@@ -46,7 +46,7 @@ public class HorseAggregateTests
     {
         var sut = new HorseAggregate(HorseId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.UpdateProfile(registeredName: "テスト"));
     }
 
@@ -72,7 +72,7 @@ public class HorseAggregateTests
     {
         var sut = new HorseAggregate(HorseId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.MergeAlias("JRA_CODE", "123", "JRA", true));
     }
 
@@ -92,7 +92,7 @@ public class HorseAggregateTests
     {
         var sut = new HorseAggregate(HorseId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CorrectData(registeredName: "テスト"));
     }
 

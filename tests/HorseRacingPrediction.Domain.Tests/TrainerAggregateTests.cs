@@ -24,7 +24,7 @@ public class TrainerAggregateTests
         var sut = new TrainerAggregate(TrainerId.New);
         sut.RegisterTrainer("池江泰寿", "いけえやすとし");
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.RegisterTrainer("藤原英昭", "ふじわらひであき"));
     }
 
@@ -45,7 +45,7 @@ public class TrainerAggregateTests
     {
         var sut = new TrainerAggregate(TrainerId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.UpdateProfile(displayName: "テスト"));
     }
 
@@ -70,7 +70,7 @@ public class TrainerAggregateTests
     {
         var sut = new TrainerAggregate(TrainerId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.MergeAlias("JRA_CODE", "T0001", "JRA", true));
     }
 
@@ -90,7 +90,7 @@ public class TrainerAggregateTests
     {
         var sut = new TrainerAggregate(TrainerId.New);
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.Throws<InvalidOperationException>(() =>
             sut.CorrectData(displayName: "テスト"));
     }
 
