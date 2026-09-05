@@ -18,10 +18,7 @@
 
 ## JRA スクレイピング制約（必須）
 
-- URL の推測・生成・手組みは行わない
-- ページ遷移は必ずブラウザー操作（クリック・フォーム入力・戻る/進む）で行う
-- href 解析からの遷移再構築は行わない
-- 実装詳細は [jra-scraping-redesign.md](jra-scraping-redesign.md)（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage` によるページ遷移・判定・構造化抽出の設計）を参照
+対策ありサイトへの遷移ルール（URL 推測禁止、ブラウザー操作必須など）は `.github/skills/scraper-development/SKILL.md` を正とする。実装詳細は [jra-scraping-redesign.md](jra-scraping-redesign.md)（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage` によるページ遷移・判定・構造化抽出の設計）を参照。
 
 ## コンポーネント構成（実装済み）
 
