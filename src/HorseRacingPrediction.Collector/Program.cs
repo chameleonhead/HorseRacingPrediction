@@ -42,8 +42,13 @@ builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, NoOpHistoricalR
 builder.Services.AddTransient<HistoricalDataRequestPlanner>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 
-builder.Services.AddHostedService<ScrapingRegistrationService>();
-builder.Services.AddHostedService<CollectionExecutionService>();
+// --once（Lambda）実行時は常駐BackgroundServiceとしてではなく、下記のrunOnce分岐から
+// RunOneCycleAsyncを直接1回だけ呼び出す。AddHostedServiceだけではインターフェース越しにしか
+// 解決できないため、具象型としても登録しておく。
+builder.Services.AddSingleton<ScrapingRegistrationService>();
+builder.Services.AddHostedService<ScrapingRegistrationService>(sp => sp.GetRequiredService<ScrapingRegistrationService>());
+builder.Services.AddSingleton<CollectionExecutionService>();
+builder.Services.AddHostedService<CollectionExecutionService>(sp => sp.GetRequiredService<CollectionExecutionService>());
 // builder.Services.AddSingleton<HistoricalDataRequestExecutionService>();
 // builder.Services.AddSingleton<CollectionRunCoordinator>();
 // builder.Services.AddSingleton<CollectionTaskWorker>();
@@ -54,11 +59,20 @@ builder.Services.AddHostedService<CollectionExecutionService>();
 
 var app = builder.Build();
 
-// JRAサイト再設計により CollectionTaskWorker 一式が一時的に無効化されているため、
-// --once/常駐いずれの実行経路も一時的に無効化する。
 if (runOnce)
 {
-    throw new InvalidOperationException("Collector の --once 実行は Jra 再設計に伴い一時的に無効化されています（docs/23-jra-scraping-redesign.md 参照）。");
+    // Lambda（SQS event source mapping）から1回呼ばれる経路。常駐BackgroundServiceの
+    // ExecuteAsyncループは開始せず、ジョブ登録（新規開催日の発見）とジョブ実行
+    // （Ready状態のRaceCard/RaceResult収集ジョブの処理）を1サイクルずつ直接呼び出して終了する。
+    // Lambdaのタイムアウトは15分（infra/collector-lambda/main.tf）だが、結果報告・
+    // ブラウザー終了の猶予を残すため9分で打ち切る（docs/01-lambda-collector-architecture.md）。
+    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(9));
+
+    var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
+    await registrationService.RunOneCycleAsync(cts.Token);
+
+    var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
+    await executionService.RunOneCycleAsync(cts.Token);
 }
 else
 {
