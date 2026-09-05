@@ -132,7 +132,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
                     {
                         var payload = new RaceCardCollectionJobPayload(date, JraProviderType);
                         var key = AgentJobKeyFactory.BuildRaceCardCollectionKey(JraProviderType, date);
-                        var priority = date == today ? 200 : 180;
+                        var priority = CalculateRaceCardPriority(date, today);
                         await _stateStore.ScheduleJobAsync(
                             AgentJobType.RaceCardCollection,
                             key,
@@ -161,7 +161,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 var date = today.AddDays(offset);
                 var payload = new RaceResultCollectionJobPayload(date, JraProviderType, AgentWorkMode.Idle);
                 var key = AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, date);
-                var priority = date == today ? 190 : 170;
+                var priority = CalculateRaceResultPriority(date, today);
                 await _stateStore.ScheduleJobAsync(
                     AgentJobType.RaceResultCollection,
                     key,
@@ -178,5 +178,29 @@ public sealed class ScrapingRegistrationService : BackgroundService
         {
             _executionTrigger.Signal();
         }
+    }
+
+    // JRAのレースはほぼ土曜・日曜に集中するため、直近の週末（今日から7日以内の
+    // 土曜/日曜）は当日と同等の優先度で収集する。それ以外の未来日は従来通りの
+    // 低優先度のまま据え置く。
+    internal static int CalculateRaceCardPriority(DateOnly date, DateOnly today)
+        => date == today || IsUpcomingWeekend(date, today) ? 200 : 180;
+
+    internal static int CalculateRaceResultPriority(DateOnly date, DateOnly today)
+        => date == today || IsUpcomingWeekend(date, today) ? 190 : 170;
+
+    internal static bool IsUpcomingWeekend(DateOnly date, DateOnly today)
+    {
+        if (date < today)
+        {
+            return false;
+        }
+
+        if (date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+        {
+            return false;
+        }
+
+        return date.DayNumber - today.DayNumber <= 7;
     }
 }

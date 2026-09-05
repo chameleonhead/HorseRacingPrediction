@@ -205,7 +205,9 @@ public sealed class HistoricalDataRequestPlanner
                     raceId,
                     JraProviderType)),
                 now,
-                priority: 155,
+                // RaceResultCollection（通常時=170）と同等の優先度にする。個別レースの
+                // 過去結果補完も本体の成績収集と同じ重要度で扱うべきとの判断による。
+                priority: 170,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             requestedRaceResultCount++;
