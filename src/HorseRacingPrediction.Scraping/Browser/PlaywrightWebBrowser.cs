@@ -115,7 +115,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
     internal static BrowserTypeLaunchOptions CreateDefaultLaunchOptions()
         => new()
         {
-            Headless = false,
+            Headless = true,
             ChromiumSandbox = false,
             Args = [
                 "--disable-gpu",
@@ -123,7 +123,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
                 "--no-zygote",
-                // "--single-process",
+                "--single-process",
                 "--disable-web-security",
                 "--ignore-certificate-errors",
             ]
