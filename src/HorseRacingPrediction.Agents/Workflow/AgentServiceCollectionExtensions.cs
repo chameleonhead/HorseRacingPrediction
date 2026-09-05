@@ -1,7 +1,7 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
-// JRAサイト再設計（docs/jra-scraping-redesign.md）により、旧 Scrapers.Jra 層は削除された。
+// JRAサイト再設計（docs/23-jra-scraping-redesign.md）により、旧 Scrapers.Jra 層は削除された。
 // 新しい Jra/ 層に対する再実装までの間、以下の using を一時的に無効化する。
 // using HorseRacingPrediction.Scraping.Scrapers.Jra;
 using Microsoft.Agents.AI;

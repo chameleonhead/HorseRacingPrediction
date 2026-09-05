@@ -33,7 +33,7 @@ tests/
 - **Api層**: エンドポイント定義は `EndpointExtensions.cs` に集約。`Program.cs` は DI 設定と `app.MapApiEndpoints()` のみ。
 - **EventFlow 登録**: `AddDefaults` は Domain アセンブリと Application アセンブリの両方をスキャンする。
 
-設計ドキュメント: [docs/domain-design.md](../docs/domain-design.md), [docs/automation-design.md](../docs/automation-design.md), [docs/system-architecture.md](../docs/system-architecture.md), [docs/collector-design.md](../docs/collector-design.md), [docs/predictor-design.md](../docs/predictor-design.md)
+設計ドキュメント: [docs/10-domain-design.md](../docs/10-domain-design.md), [docs/11-automation-design.md](../docs/11-automation-design.md), [docs/00-system-architecture.md](../docs/00-system-architecture.md), [docs/22-collector-design.md](../docs/22-collector-design.md), [docs/25-predictor-design.md](../docs/25-predictor-design.md)
 
 ## Build and Test
 
@@ -59,7 +59,7 @@ dotnet test tests/HorseRacingPrediction.Api.Tests
 
 ## AWS Deployment Policy
 
-- AWS リソース、Terraform resource、または GitHub Actions の AWS API 操作を追加・変更・削除する場合は、同じ変更内で `docs/lightsail-deployment.md` の GitHub Actions IAM ポリシーを見直す
+- AWS リソース、Terraform resource、または GitHub Actions の AWS API 操作を追加・変更・削除する場合は、同じ変更内で `docs/31-lightsail-deployment.md` の GitHub Actions IAM ポリシーを見直す
 - IAM ポリシーには実際の workflow と Terraform が必要とする操作だけを含め、リソースレベル制限が可能な操作は本システムの ARN に限定する
 - IAM ポリシーを変更した場合は、初回作成手順だけでなく既存ポリシーの更新手順でも適用できることを確認する
 

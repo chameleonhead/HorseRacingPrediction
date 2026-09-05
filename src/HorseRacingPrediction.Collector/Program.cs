@@ -31,7 +31,7 @@ builder.Services.AddHttpClient("ProcessingState", (services, client) =>
 builder.Services.AddSingleton<IProcessingStateStore>(services =>
         HttpProcessingStateStoreProxy.Create(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));
-// JRAサイト再設計（docs/jra-scraping-redesign.md）により、旧 JraNavigation/Scrapers.Jra 層に依存する以下の登録は一時的に無効化する。
+// JRAサイト再設計（docs/23-jra-scraping-redesign.md）により、旧 JraNavigation/Scrapers.Jra 層に依存する以下の登録は一時的に無効化する。
 // builder.Services.AddSingleton<JraResultDateParser>();
 // builder.Services.AddSingleton<IJraResultDateDiscoveryService, JraResultMonthDateDiscoveryService>();
 builder.Services.AddSingleton<IHistoricalRaceReferenceCollector, NoOpHistoricalRaceReferenceCollector>();
@@ -58,7 +58,7 @@ var app = builder.Build();
 // --once/常駐いずれの実行経路も一時的に無効化する。
 if (runOnce)
 {
-    throw new InvalidOperationException("Collector の --once 実行は Jra 再設計に伴い一時的に無効化されています（docs/jra-scraping-redesign.md 参照）。");
+    throw new InvalidOperationException("Collector の --once 実行は Jra 再設計に伴い一時的に無効化されています（docs/23-jra-scraping-redesign.md 参照）。");
 }
 else
 {

@@ -2,7 +2,7 @@
 
 監査日: 2026-08-29
 
-`admin-ui-design.md` の受け入れ基準を、API 管理画面、Collector 管理画面、公開 API、ReadModel、永続化処理と再照合した結果を記録する。
+`20-admin-ui-design.md` の受け入れ基準を、API 管理画面、Collector 管理画面、公開 API、ReadModel、永続化処理と再照合した結果を記録する。
 
 ## 実装済み
 

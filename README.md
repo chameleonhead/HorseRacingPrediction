@@ -15,25 +15,52 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 
 - **Api**（`src/HorseRacingPrediction.Api`）: レース・馬・騎手・調教師・予想票などを EventFlow による CQRS+ES で管理する ASP.NET Core アプリ。`/api` 配下の JSON API（`X-Api-Key` 認証）に加えて、ルート直下（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions`, `/owners`, `/jobs` など）に Blazor Server 製の管理画面（Cookie 認証、Fluent UI Blazor）を自ホストする。
 - **Collector**（`src/HorseRacingPrediction.Collector`）: JRA 公式サイトを Playwright で機械的に巡回し、Api へ収集データを登録する。LLM は使わない。常駐モードでは `CollectionExecutionService` が出馬表・成績収集ジョブを実行する。
-  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/jra-scraping-redesign.md](docs/jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行（有限実行）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードでの出馬表・成績収集は再設計後の新実装（`JraSession`/`JraNavigator` など）で稼働している。一方、過去成績の月次・日次バックフィル探索など旧 URL 列挙方式に依存していた機能は未移行のまま無効化されている。
+  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/23-jra-scraping-redesign.md](docs/23-jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行（有限実行）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードでの出馬表・成績収集は再設計後の新実装（`JraSession`/`JraNavigator` など）で稼働している。一方、過去成績の月次・日次バックフィル探索など旧 URL 列挙方式に依存していた機能は未移行のまま無効化されている。
 - **Predictor**（`src/HorseRacingPrediction.Predictor`）: Api から取得したデータと ML.NET モデルのみで予想票を作成・確定し（LLM 不使用）、確定後の SNS 投稿文をマルチエージェント LLM ワークフローで生成する（投稿自体はスコープ外、手動運用）。
 
-詳細なサービス責務・依存関係は [docs/system-architecture.md](docs/system-architecture.md) を参照してください。
+詳細なサービス責務・依存関係は [docs/00-system-architecture.md](docs/00-system-architecture.md) を参照してください。
 
 ## 設計ドキュメント
 
-- [docs/system-architecture.md](docs/system-architecture.md): Api / Collector / Predictor の3サービス構成と LLM 利用方針
-- [docs/domain-design.md](docs/domain-design.md): CQRS+ES 前提の競馬予想ドメイン設計
-- [docs/automation-design.md](docs/automation-design.md): 自動処理の責務設計
-- [docs/collector-design.md](docs/collector-design.md): Collector（JRA機械的収集）の設計
-- [docs/lambda-collector-architecture.md](docs/lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
-- [docs/predictor-design.md](docs/predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
-- [docs/jra-scraping-redesign.md](docs/jra-scraping-redesign.md): JRAスクレイピング層（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage`）の設計指示書（現在進行中の作業）
-- [docs/jra-html-change-diagnostics.md](docs/jra-html-change-diagnostics.md): JRA HTML 構造変更の診断手順
-- [docs/admin-ui-design.md](docs/admin-ui-design.md): 管理サイト UI / UX とジョブ運用画面の設計
-- [docs/admin-ui-design-guidelines.md](docs/admin-ui-design-guidelines.md): 管理画面のデザインガイドライン
-- [docs/lightsail-deployment.md](docs/lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
-- [docs/changes/](docs/changes/): 個別機能の変更提案・実装記録
+`docs/` 配下は、上位の前提（実行環境・技術選定）から下位の個別機能設計へと読めるよう、番号で層別に並べています。数字が小さいほど「前提」、大きいほど「個別の実装詳細」です。
+
+### 00番台: 全体構成・技術選定
+
+サービス構成、実行環境、採用技術、LLM 利用方針など、他のすべての設計の前提となる内容。
+
+- [docs/00-system-architecture.md](docs/00-system-architecture.md): Api / Collector / Predictor の3サービス構成と LLM 利用方針
+
+### 10番台: ドメイン設計
+
+サービス構成に依存しない、業務ドメインそのものの設計。
+
+- [docs/10-domain-design.md](docs/10-domain-design.md): CQRS+ES 前提の競馬予想ドメイン設計
+- [docs/11-automation-design.md](docs/11-automation-design.md): 自動処理の責務設計
+
+### 20番台: サービス別設計（Api / Collector / Predictor）
+
+各サービスの内部設計。00番台の全体構成、10番台のドメイン設計を前提にする。
+
+- [docs/20-admin-ui-design.md](docs/20-admin-ui-design.md): Api の管理サイト UI / UX とジョブ運用画面の設計
+- [docs/21-admin-ui-design-guidelines.md](docs/21-admin-ui-design-guidelines.md): Api 管理画面のデザインガイドライン
+- [docs/22-collector-design.md](docs/22-collector-design.md): Collector（JRA機械的収集）の設計
+- [docs/23-jra-scraping-redesign.md](docs/23-jra-scraping-redesign.md): Collector が使う JRA スクレイピング層（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage`）の設計指示書（現在進行中の作業）
+- [docs/24-jra-html-change-diagnostics.md](docs/24-jra-html-change-diagnostics.md): Collector 向け JRA HTML 構造変更の診断手順
+- [docs/25-predictor-design.md](docs/25-predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
+
+### 30番台: インフラ・デプロイ
+
+サービスをどこでどう動かすかという実行基盤の設計。
+
+- [docs/30-lambda-collector-architecture.md](docs/30-lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
+- [docs/31-lightsail-deployment.md](docs/31-lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
+
+### 40番台: 監査・変更記録
+
+過去の実装状況の点検記録、および個別変更の提案・実装記録。
+
+- [docs/40-admin-ui-implementation-audit.md](docs/40-admin-ui-implementation-audit.md): 管理 UI 実装監査（2026-08-29時点のスナップショット）
+- [docs/changes/](docs/changes/): 個別機能の変更提案・実装記録（`yyyyMMdd_<変更名>` ディレクトリ単位）
 
 ## 現時点の方針
 

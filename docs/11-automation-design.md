@@ -2,7 +2,7 @@
 
 このドキュメントは、ドメイン設計から分離した自動処理の責務を定義する。
 
-具体的な実行主体（Collector / Predictor）とLLM利用方針は [system-architecture.md](system-architecture.md) を参照。
+具体的な実行主体（Collector / Predictor）とLLM利用方針は [00-system-architecture.md](00-system-architecture.md) を参照。
 
 ## 目的
 
@@ -63,9 +63,9 @@
 
 | 自動処理の責務 | 現在の実行主体 |
 |---|---|
-| Data Collection | Collector（[collector-design.md](collector-design.md)） |
-| Normalization / Entity Resolution | Api（書き込みコマンド内、[domain-design.md](domain-design.md)） |
+| Data Collection | Collector（[22-collector-design.md](22-collector-design.md)） |
+| Normalization / Entity Resolution | Api（書き込みコマンド内、[10-domain-design.md](10-domain-design.md)） |
 | Result Import | Collector → Api |
 | Projection Maintenance | Api |
-| 予想生成 | Predictor（ML/APIベース、[predictor-design.md](predictor-design.md)） |
-| SNS投稿文生成 | Predictor（マルチエージェントLLM、[predictor-design.md](predictor-design.md)） |
+| 予想生成 | Predictor（ML/APIベース、[25-predictor-design.md](25-predictor-design.md)） |
+| SNS投稿文生成 | Predictor（マルチエージェントLLM、[25-predictor-design.md](25-predictor-design.md)） |

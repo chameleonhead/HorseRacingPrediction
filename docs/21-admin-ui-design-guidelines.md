@@ -1,6 +1,6 @@
 # RaceOps UI デザインガイドライン
 
-この文書は HorseRacingPrediction の API 管理画面に適用する視覚・操作設計の唯一の正本です。Collector は画面を持たない実行サービスであり、本ガイドラインのUI適用対象ではありません。画面・URL・API の情報設計、および OOUI の object model は [管理サイト UI / UX 再設計](admin-ui-design.md) を正本とします。
+この文書は HorseRacingPrediction の API 管理画面に適用する視覚・操作設計の唯一の正本です。Collector は画面を持たない実行サービスであり、本ガイドラインのUI適用対象ではありません。画面・URL・API の情報設計、および OOUI の object model は [管理サイト UI / UX 再設計](20-admin-ui-design.md) を正本とします。
 
 実装は [Fluent UI ベースの管理画面刷新とデザインガイドライン統合](changes/20260830_fluent-ui-design-system/README.md) の承認後に開始します。
 

@@ -5,15 +5,15 @@
 このドキュメントは、旧 `docs/agent-scenario.md` と `docs/agent-client-implementation-plan.md`（いずれも削除済み）を置き換える。
 両ドキュメントは「AI エージェントが収集・予想を主導する」構成を前提に書かれていたが、実装が進む中で **LLM 呼び出しコストの問題** が明確になったため、現在は以下の3サービス構成・責務分担に再設計している。
 
-Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor 側の詳細は [predictor-design.md](predictor-design.md) を参照。API・ドメインモデルは [domain-design.md](domain-design.md) を参照。
+Collector 側の詳細は [22-collector-design.md](22-collector-design.md)、Predictor 側の詳細は [25-predictor-design.md](25-predictor-design.md) を参照。API・ドメインモデルは [10-domain-design.md](10-domain-design.md) を参照。
 
-Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [30-lambda-collector-architecture.md](30-lambda-collector-architecture.md) を参照。
 
 ## 方針転換の背景
 
 | # | 当初の前提 | 現在の前提 | 理由 |
 |---|---|---|---|
-| 1 | AI エージェントが JRA サイトを自律探索して収集する | 機械的スクレイピングに統一する | 再現性・監査性・再試行制御を優先するため（[collector-design.md](collector-design.md)） |
+| 1 | AI エージェントが JRA サイトを自律探索して収集する | 機械的スクレイピングに統一する | 再現性・監査性・再試行制御を優先するため（[22-collector-design.md](22-collector-design.md)） |
 | 2 | 予想生成も LLM 主導のマルチエージェント（RaceContextAgent → HorseAnalysisAgent → PredictionAgent）で行う | 予想生成は ML.NET + API データのみで行い、LLM は使わない | 予想は高頻度（レース毎・出走馬毎）に実行されるため、LLM 呼び出しコストが運用上のボトルネックになる |
 | 3 | 投稿文整形は「補助的にAIを使える」程度の位置づけ | 予想確定後の SNS 投稿文生成に、マルチエージェント LLM を明確に採用する | 投稿文生成は 1 予想票あたり数回程度の低頻度処理であり、LLM の「自然な文章表現」という強みが活きる領域 |
 | 4 | 旧ジョブ実行クライアントが収集・予想・投稿を一体で担う | Collector（収集）と Predictor（予想・投稿文生成）に分離する | 責務単位でプロセスを分離し、スケジュールや障害影響範囲を独立させる（直近コミットで実施済み） |
@@ -38,7 +38,7 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
   - 管理画面は Cookie 認証で保護する。ログイン画面（`/login`）はユーザー名固定「user」、パスワードは `ApiKey:Key`（JSON API と同じ値）で認証する
   - 管理画面はコマンド/クエリを直接実行するのではなく、既存の JSON API を自己ループバック HTTP で呼び出す（`Web/ApiBrowsing/AdminApiClient`）。ここでも自プロセス自身の `X-Api-Key` を自動付与する
   - メンテナンスは既存 API コマンドの範囲内に限定し、レース・予想票の新規作成やライフサイクル進行（出走登録・結果確定など）は対象外（Collector / Predictor の自動処理が担う）
-- 詳細: [domain-design.md](domain-design.md), [automation-design.md](automation-design.md)
+- 詳細: [10-domain-design.md](10-domain-design.md), [11-automation-design.md](11-automation-design.md)
 
 ### Collector
 
@@ -46,14 +46,14 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
 - ページ遷移・抽出処理に LLM は使わず、AI エージェントや `Microsoft.Extensions.AI` 依存も持たない
 - 収集タスクの正本と管理画面は Api が所有し、Collector は HTTP 経由でタスクを取得・更新する
 - ローカル常駐モードと `--once` の有限実行モードを持ち、Lambda コンテナも後者を使用する
-- ⚠️ 現在、JRA サイト構造の再設計（[jra-scraping-redesign.md](jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードは `CollectionExecutionService` が新しい `JraSession`/`JraNavigator` 層を使って出馬表・成績収集ジョブを実行しており稼働している。旧 `JraNavigation` / `Scrapers.Jra` 層に依存していた過去成績の月次・日次バックフィル探索は未移行のまま登録がコメントアウトされている
-- 詳細: [collector-design.md](collector-design.md)
+- ⚠️ 現在、JRA サイト構造の再設計（[23-jra-scraping-redesign.md](23-jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードは `CollectionExecutionService` が新しい `JraSession`/`JraNavigator` 層を使って出馬表・成績収集ジョブを実行しており稼働している。旧 `JraNavigation` / `Scrapers.Jra` 層に依存していた過去成績の月次・日次バックフィル探索は未移行のまま登録がコメントアウトされている
+- 詳細: [22-collector-design.md](22-collector-design.md)
 
 ### Predictor
 
 - Api から取得した `RacePredictionContext` / ML 予測のみを入力に予想票を作成・確定する（LLM は使わない）
 - 確定した予想票をもとに、SNS 投稿文をマルチエージェント LLM ワークフローで生成する
-- 詳細: [predictor-design.md](predictor-design.md)
+- 詳細: [25-predictor-design.md](25-predictor-design.md)
 
 ### 旧ジョブ実行クライアント
 
