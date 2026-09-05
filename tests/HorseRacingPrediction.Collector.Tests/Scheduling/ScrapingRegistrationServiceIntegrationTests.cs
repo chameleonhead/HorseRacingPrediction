@@ -61,7 +61,7 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
             CancellationToken.None);
 
         // 開催の有無はCourseごとではなく日単位で判定されるため、開催日1日につきジョブは1件登録される。
-        Assert.AreEqual(1, jobs.Count);
+        Assert.HasCount(1, jobs);
         var payload = AgentJobPayloadSerializer.Deserialize<RaceCardCollectionJobPayload>(jobs[0].Payload);
         Assert.AreEqual(today, payload.RaceDate);
     }
@@ -87,7 +87,7 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
             TimeSpan.FromMinutes(30),
             CancellationToken.None);
 
-        Assert.AreEqual(0, jobs.Count);
+        Assert.IsEmpty(jobs);
     }
 
     private static ScrapingRegistrationService CreateService(

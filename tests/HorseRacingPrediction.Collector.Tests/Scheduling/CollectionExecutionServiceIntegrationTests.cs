@@ -70,15 +70,15 @@ public sealed class CollectionExecutionServiceIntegrationTests
         await service.RunTaskAsync(AgentJobType.RaceCardCollection, CancellationToken.None);
 
         // 一度だけWorkflowが呼ばれ、ジョブが完了(再取得不可)していることを確認する。
-        Assert.AreEqual(1, cardWorkflow.Requests.Count);
+        Assert.HasCount(1, cardWorkflow.Requests);
         Assert.AreEqual((raceDate, RaceCourse.Tokyo), cardWorkflow.Requests[0]);
 
         var remaining = await stateStore.AcquireReadyJobsAsync(
             AgentJobType.RaceCardCollection, now.AddMinutes(1), TimeSpan.Zero, 10, TimeSpan.FromMinutes(30), CancellationToken.None);
-        Assert.AreEqual(0, remaining.Count);
+        Assert.IsEmpty(remaining);
 
         var statuses = await stateStore.GetRaceDataCollectionStatusesAsync(raceDate, raceDate, CancellationToken.None);
-        Assert.AreEqual(1, statuses.Count);
+        Assert.HasCount(1, statuses);
         Assert.AreEqual(RaceDataCollectionState.Succeeded, statuses[0].RaceCardStatus);
     }
 
@@ -111,7 +111,7 @@ public sealed class CollectionExecutionServiceIntegrationTests
 
         // 既存の失敗処理(FailJobAsync)が動作し、後から再取得できる状態になっていることを確認する。
         var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceCardCollection, null, 10, CancellationToken.None);
-        Assert.AreEqual(1, statuses.Count);
+        Assert.HasCount(1, statuses);
         Assert.AreEqual(AgentJobStatus.Failed, statuses[0].Status);
     }
 
@@ -180,12 +180,12 @@ public sealed class CollectionExecutionServiceIntegrationTests
         await service.RunTaskAsync(AgentJobType.RaceResultCollection, CancellationToken.None);
 
         // 中山(成功)のみ成績収集が行われ、東京(一覧取得失敗)はスキップされている。
-        Assert.AreEqual(1, resultWorkflow.Requests.Count);
+        Assert.HasCount(1, resultWorkflow.Requests);
         Assert.AreEqual(nakayamaRaceId, resultWorkflow.Requests[0]);
 
         // ジョブ全体は失敗せず完了している。
         var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceResultCollection, null, 10, CancellationToken.None);
-        Assert.AreEqual(1, statuses.Count);
+        Assert.HasCount(1, statuses);
         Assert.AreEqual(AgentJobStatus.Succeeded, statuses[0].Status);
     }
 
