@@ -6,22 +6,19 @@
 
 `HorseRacingPrediction.Collector` は、API が計画したジョブを取得し、JRA 公式サイトから開催・出馬表・結果・払戻・馬・騎手・調教師情報を機械的スクレイピングで収集し、結果を API へ報告する専用サービスである。Web UI、HTTP API、ジョブ計画、永続的な状態ストアは持たない。
 
-全体構成は [system-architecture.md](system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
+全体構成は [00-system-architecture.md](00-system-architecture.md) を参照。本ドキュメントは旧 `docs/agent-client-implementation-plan.md` のジョブモデル・状態管理の検討内容のうち、Collector の責務として現在実装済み・採用しているものを整理したものである。
 
 > 旧ジョブ実行クライアントの HTTP クライアント、ジョブ状態管理、収集バッチ、関連テストは Collector へ移管済みである（2026-07-08）。AI エージェント、LLM 呼び出し、任意テキスト収集、予想実行は Collector の責務から外している。
 
 ## 責務境界
 
 - **やること**: JRA サイトの巡回、構造化データの抽出、Api への冪等登録、失敗時の再試行
-- **やらないこと**: 予想生成、SNS 投稿文生成（いずれも Predictor の責務、[predictor-design.md](predictor-design.md)）
-- **LLM 利用**: 使わない。AI エージェント、`HorseRacingPrediction.Agents` 参照、`Microsoft.Extensions.AI` 依存は持たず、ページ遷移・抽出は機械的ロジックのみで行う（理由: [system-architecture.md](system-architecture.md) の LLM 利用方針）
+- **やらないこと**: 予想生成、SNS 投稿文生成（いずれも Predictor の責務、[25-predictor-design.md](25-predictor-design.md)）
+- **LLM 利用**: 使わない。AI エージェント、`HorseRacingPrediction.Agents` 参照、`Microsoft.Extensions.AI` 依存は持たず、ページ遷移・抽出は機械的ロジックのみで行う（理由: [00-system-architecture.md](00-system-architecture.md) の LLM 利用方針）
 
 ## JRA スクレイピング制約（必須）
 
-- URL の推測・生成・手組みは行わない
-- ページ遷移は必ずブラウザー操作（クリック・フォーム入力・戻る/進む）で行う
-- href 解析からの遷移再構築は行わない
-- 実装詳細は [jra-site-data-collector.md](jra-site-data-collector.md)（`JraSiteDataCollector` によるセッション保持型ナビゲーション）と [jra-page-map-blueprint.md](jra-page-map-blueprint.md)（ページ判定・構造化抽出の責務分割）を参照
+対策ありサイトへの遷移ルール（URL 推測禁止、ブラウザー操作必須など）は `.github/skills/scraper-development/SKILL.md` を正とする。実装詳細は [23-jra-scraping-redesign.md](23-jra-scraping-redesign.md)（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage` によるページ遷移・判定・構造化抽出の設計）を参照。
 
 ## コンポーネント構成（実装済み）
 
@@ -115,7 +112,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 
 ## 今後の課題（未着手・要検討）
 
-Lambda 対応の詳細は [lambda-collector-architecture.md](lambda-collector-architecture.md) を参照。
+Lambda 対応の詳細は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
 
 以下は旧ドキュメントで検討していたが、現時点では未着手または方針未確定の項目。着手する場合は本ドキュメントを更新すること。
 

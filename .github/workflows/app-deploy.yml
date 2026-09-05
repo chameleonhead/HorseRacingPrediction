@@ -54,7 +54,7 @@ jobs:
         run: dotnet ef database update --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release --connection "Data Source=${{ runner.temp }}/eventstore-ci.db"
 
       - name: Test
-        run: dotnet test HorseRacingPrediction.sln --no-build --configuration Release
+        run: dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"
 
       - name: Check vulnerable dependencies
         run: dotnet list HorseRacingPrediction.sln package --vulnerable --include-transitive

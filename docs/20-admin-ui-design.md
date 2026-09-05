@@ -678,7 +678,7 @@ flowchart TD
 
 ## 10. デザインガイドライン
 
-視覚設計、Fluent UI Blazor の利用規則、共通コンポーネント、状態表示、レスポンシブ、アクセシビリティの正本は [RaceOps UI デザインガイドライン](design-guidelines.md) とする。本書には OOUI モデルと画面・URL・API の情報設計だけを保持し、デザイン規則を重複して記載しない。
+視覚設計、Fluent UI Blazor の利用規則、共通コンポーネント、状態表示、レスポンシブ、アクセシビリティの正本は [RaceOps UI デザインガイドライン](21-admin-ui-design-guidelines.md) とする。本書には OOUI モデルと画面・URL・API の情報設計だけを保持し、デザイン規則を重複して記載しない。
 
 この分離は [Fluent UI ベースの管理画面刷新とデザインガイドライン統合](changes/20260830_fluent-ui-design-system/README.md) で導入した。
 

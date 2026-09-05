@@ -4,7 +4,7 @@
 
 `HorseRacingPrediction.Predictor` は、Api から取得したデータのみを入力に予想を生成し、その予想結果をもとに SNS 投稿用メッセージをマルチエージェントで生成するプロセスである。
 
-全体構成・LLM 利用方針は [system-architecture.md](system-architecture.md) を参照。
+全体構成・LLM 利用方針は [00-system-architecture.md](00-system-architecture.md) を参照。
 
 Predictor の責務は 2 フェーズに分かれる。
 
@@ -17,7 +17,7 @@ Predictor の責務は 2 フェーズに分かれる。
 
 予想生成は Api の ReadModel（`RacePredictionContext`）と ML 予測（`GetMlPredictionAsync`）のみを入力とし、LLM は使わない。
 
-理由: 予想生成はレース・出走馬ごとに高頻度で実行されるため、LLM チェーンを挟むと呼び出しコストが運用上の制約になる（[system-architecture.md](system-architecture.md) 参照）。
+理由: 予想生成はレース・出走馬ごとに高頻度で実行されるため、LLM チェーンを挟むと呼び出しコストが運用上の制約になる（[00-system-architecture.md](00-system-architecture.md) 参照）。
 
 ### 実装: `ApiOnlyPredictionWorkflow`
 

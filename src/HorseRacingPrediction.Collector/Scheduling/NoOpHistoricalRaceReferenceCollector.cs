@@ -1,7 +1,7 @@
 namespace HorseRacingPrediction.Collector.Scheduling;
 
 /// <summary>
-/// JRAサイト再設計（docs/jra-scraping.md）に伴い、旧URL列挙方式に依存していた
+/// JRAサイト再設計（docs/23-jra-scraping-redesign.md）に伴い、旧URL列挙方式に依存していた
 /// <see cref="JraHistoricalRaceReferenceCollector"/>（過去レース結果の探索）は削除済みで、
 /// 新Jra層での再実装は別タスクの範囲となる。
 /// 一方 <see cref="HistoricalDataRequestPlanner"/> は本コレクターを必須依存として要求するため、
