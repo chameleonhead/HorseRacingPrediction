@@ -7,7 +7,7 @@
 
 Collector 側の詳細は [22-collector-design.md](22-collector-design.md)、Predictor 側の詳細は [25-predictor-design.md](25-predictor-design.md) を参照。API・ドメインモデルは [10-domain-design.md](10-domain-design.md) を参照。
 
-Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [30-lambda-collector-architecture.md](30-lambda-collector-architecture.md) を参照。
+Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
 
 ## 方針転換の背景
 
@@ -105,3 +105,11 @@ HorseRacingPrediction.Predictor ─────┴──────────
 - `HorseRacingPrediction.Agents.Agents.PredictionAgent`
 
 今後の予想生成は `HorseRacingPrediction.Predictor` の `ApiOnlyPredictionWorkflow` に一本化する。
+
+## インフラ・デプロイ（概要）
+
+- Api は AWS Lightsail 単一インスタンス上で稼働する。Docker 化した Api を GHCR イメージとして GitHub Actions から配備し、Caddy でリバースプロキシする。SQLite はインスタンス上に永続化する（単一ノード前提、複数台構成・自動スケールは想定しない）
+  - Terraform: `infra/lightsail`、アプリ実行環境: `deploy`（Docker Compose・Caddy 設定）
+  - GitHub Actions: `.github/workflows/infra-deploy.yml`（インフラ）、`.github/workflows/app-deploy.yml`（アプリ）
+- Collector はローカル常駐、または AWS Lambda コンテナとして実行できる。Lambda 対応の詳細設計は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照
+  - Terraform: `infra/collector-lambda`

@@ -59,7 +59,7 @@ dotnet test tests/HorseRacingPrediction.Api.Tests
 
 ## AWS Deployment Policy
 
-- AWS リソース、Terraform resource、または GitHub Actions の AWS API 操作を追加・変更・削除する場合は、同じ変更内で `docs/31-lightsail-deployment.md` の GitHub Actions IAM ポリシーを見直す
+- AWS リソース、Terraform resource、または GitHub Actions の AWS API 操作を追加・変更・削除する場合は、同じ変更内で `infra/lightsail`・`infra/collector-lambda` の GitHub Actions IAM ポリシーを見直す（概要は `docs/00-system-architecture.md` の「インフラ・デプロイ」を参照）
 - IAM ポリシーには実際の workflow と Terraform が必要とする操作だけを含め、リソースレベル制限が可能な操作は本システムの ARN に限定する
 - IAM ポリシーを変更した場合は、初回作成手順だけでなく既存ポリシーの更新手順でも適用できることを確認する
 

@@ -24,11 +24,12 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 
 `docs/` 配下は、上位の前提（実行環境・技術選定）から下位の個別機能設計へと読めるよう、番号で層別に並べています。数字が小さいほど「前提」、大きいほど「個別の実装詳細」です。
 
-### 00番台: 全体構成・技術選定
+### 00番台: 全体構成・技術選定・インフラ
 
-サービス構成、実行環境、採用技術、LLM 利用方針など、他のすべての設計の前提となる内容。
+サービス構成、実行環境、採用技術、LLM 利用方針、インフラ・デプロイなど、他のすべての設計の前提となる内容。
 
-- [docs/00-system-architecture.md](docs/00-system-architecture.md): Api / Collector / Predictor の3サービス構成と LLM 利用方針
+- [docs/00-system-architecture.md](docs/00-system-architecture.md): Api / Collector / Predictor の3サービス構成、LLM 利用方針、インフラ・デプロイ概要
+- [docs/01-lambda-collector-architecture.md](docs/01-lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
 
 ### 10番台: ドメイン設計
 
@@ -48,18 +49,10 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 - [docs/24-jra-html-change-diagnostics.md](docs/24-jra-html-change-diagnostics.md): Collector 向け JRA HTML 構造変更の診断手順
 - [docs/25-predictor-design.md](docs/25-predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
 
-### 30番台: インフラ・デプロイ
+### 変更記録
 
-サービスをどこでどう動かすかという実行基盤の設計。
+個別機能の変更提案・実装記録。番号による層には含めず、`docs/changes/` 配下に日付ベースで蓄積する。
 
-- [docs/30-lambda-collector-architecture.md](docs/30-lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
-- [docs/31-lightsail-deployment.md](docs/31-lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
-
-### 40番台: 監査・変更記録
-
-過去の実装状況の点検記録、および個別変更の提案・実装記録。
-
-- [docs/40-admin-ui-implementation-audit.md](docs/40-admin-ui-implementation-audit.md): 管理 UI 実装監査（2026-08-29時点のスナップショット）
 - [docs/changes/](docs/changes/): 個別機能の変更提案・実装記録（`yyyyMMdd_<変更名>` ディレクトリ単位）
 
 ## 現時点の方針

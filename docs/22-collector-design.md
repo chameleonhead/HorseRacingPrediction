@@ -112,7 +112,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 
 ## 今後の課題（未着手・要検討）
 
-Lambda 対応の詳細は [30-lambda-collector-architecture.md](30-lambda-collector-architecture.md) を参照。
+Lambda 対応の詳細は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
 
 以下は旧ドキュメントで検討していたが、現時点では未着手または方針未確定の項目。着手する場合は本ドキュメントを更新すること。
 

@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 // NOTE(ジョブ粒度の検討): RaceCardCollection/RaceResultCollection はいずれも
 // 「1開催日=1ジョブ」（CollectRaceCardsAsync/CollectRaceResultsAsync が当日開催の
 // 全競馬場・全レースをジョブ内でループする）であり、レース単位のジョブ分割は行っていない。
-// docs/30-lambda-collector-architecture.md にある「9分以内に終わらない場合はページ/レース単位に
+// docs/01-lambda-collector-architecture.md にある「9分以内に終わらない場合はページ/レース単位に
 // 分割する」という記述は将来の対処方針であり、現在有効な制約ではない
 // （Program.cs の通り、Lambda呼び出し用の --once 実行経路自体が現在無効化されており、
 // 常駐Hostモードのみが動いているため15分のLambdaタイムアウトを受けていない）。
