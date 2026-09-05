@@ -1,13 +1,4 @@
 /* Layout and domain information placement only. Fluent UI owns control appearance. */
-/* Fluent UI components render as custom elements (<fluent-button> etc.) that stay
-   unstyled/plain until their JS module registers them. Hiding undefined custom
-   elements (layout space is preserved via visibility:hidden) avoids the flash of
-   unstyled content on reload, which is worse on slow networks where that JS
-   takes longer to arrive. */
-:not(:defined) {
-    visibility: hidden;
-}
-
 :root {
     color-scheme: light;
     --neutral-layer-1: #ffffff;

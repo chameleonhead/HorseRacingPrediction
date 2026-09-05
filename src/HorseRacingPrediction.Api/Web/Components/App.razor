@@ -1,4 +1,5 @@
 @namespace HorseRacingPrediction.Api.Web.Components
+@inject IWebHostEnvironment Env
 
 <!DOCTYPE html>
 <html lang="ja">
@@ -7,9 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <title>競馬DB管理画面</title>
-    <link rel="stylesheet" href="_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" />
-    <link rel="stylesheet" href="HorseRacingPrediction.Api.styles.css" />
-    <link rel="stylesheet" href="app.css?v=20260906b" />
+    <style>@((MarkupString)CriticalCss)</style>
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 <body>
@@ -22,3 +21,36 @@
     <script src="raceops.js?v=20260902"></script>
 </body>
 </html>
+
+@code {
+    // 外部<link>だと、レスポンシブな回線の遅さやF5リロードのたびに追加の往復が発生し、
+    // その間だけ基本的なCSS（見出しのフォントサイズなど）すら効いていない状態が見えてしまう。
+    // 同じHTMLレスポンスに含めることで、初回描画から確実にスタイルが効くようにする。
+    private static string? cachedCriticalCss;
+
+    private string CriticalCss => cachedCriticalCss ??= LoadCriticalCss();
+
+    private string LoadCriticalCss()
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var path in new[]
+        {
+            "_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css",
+            "HorseRacingPrediction.Api.styles.css",
+            "app.css",
+        })
+        {
+            var file = Env.WebRootFileProvider.GetFileInfo(path);
+            if (!file.Exists)
+            {
+                continue;
+            }
+
+            using var stream = file.CreateReadStream();
+            using var reader = new System.IO.StreamReader(stream);
+            builder.AppendLine(reader.ReadToEnd());
+        }
+
+        return builder.ToString();
+    }
+}
