@@ -376,6 +376,15 @@ public sealed class CollectionExecutionService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            // ハング調査用: 1競馬場ぶんの一覧取得にかかった時間をログに残す。
+            // 手動E2Eで観測された「CPU使用率0%のまま無進行」がどの競馬場・
+            // どの経路（Current/Recent/Historical）で発生しているかを
+            // 切り分けるための診断ログであり、恒久的な最適化を意図したものではない。
+            var courseStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogInformation(
+                "[Diag] 成績収集: 競馬場ぶん一覧取得を開始します。Date={Date} Course={Course}",
+                raceDate, course);
+
             Scraping.Jra.Pages.IJraPage listPage;
             try
             {
@@ -385,9 +394,15 @@ public sealed class CollectionExecutionService : BackgroundService
                 // で失敗していた。成績収集では Current/Recent/Historical のルート分岐に
                 // 対応した ToRaceResultListAsync を使う。
                 listPage = await session.Navigate.ToRaceResultListAsync(raceDate, course, cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "[Diag] 成績収集: 競馬場ぶん一覧取得が完了しました。Date={Date} Course={Course} ElapsedMs={ElapsedMs} Kind={Kind}",
+                    raceDate, course, courseStopwatch.ElapsedMilliseconds, listPage.Kind);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                _logger.LogWarning(
+                    "[Diag] 成績収集: 競馬場ぶん一覧取得が例外で終了しました。Date={Date} Course={Course} ElapsedMs={ElapsedMs} ExceptionType={ExceptionType}",
+                    raceDate, course, courseStopwatch.ElapsedMilliseconds, ex.GetType().Name);
                 // 1競馬場のレース一覧取得失敗で日付全体の処理を止めない。他の競馬場の
                 // 処理は継続する（この日付・競馬場分の成績はジョブレベルではエラーとして
                 // ログのみ記録し、次回サイクルでの再試行に委ねる）。
@@ -440,12 +455,16 @@ public sealed class CollectionExecutionService : BackgroundService
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                var raceStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 RaceResultCollectionResult result;
                 try
                 {
                     result = await resultWorkflow
                         .CollectAsync(new RaceId(raceDate, course, race.Number), cancellationToken)
                         .ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "[Diag] 成績収集: 1レースぶんの取得が完了しました。Date={Date} Course={Course} RaceNumber={RaceNumber} ElapsedMs={ElapsedMs}",
+                        raceDate, course, race.Number, raceStopwatch.ElapsedMilliseconds);
                 }
                 catch (JraCollectionException ex)
                 {

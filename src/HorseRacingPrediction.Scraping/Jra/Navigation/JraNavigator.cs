@@ -576,29 +576,56 @@ public sealed class JraNavigator
         // ヘッダー側の要素を選んでしまうことがある（実サイトE2E再検証で判明）。
         // 見出し「開催年月」を含むブロック(div.layout_grid)内の「検索」を
         // クリックする ClickActionInSectionAsync で一意に特定する。
+        // ハング調査用の段階別タイミングログ（手動E2Eで観測されたCPU使用率0%の
+        // 無進行事象の原因特定のため、各ブラウザ操作の所要時間を計測して残す。
+        // 恒久的な最適化のためのものではなく、原因が絞り込めた段階で削除・簡略化してよい。
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         await ToHistoricalRaceSearchAsync(cancellationToken);
+        LogDiagStep("ToHistoricalRaceSearchAsync", date, course, stopwatch);
 
         await _browser.SelectOptionAsync(
             "年",
             date.Year.ToString(),
             cancellationToken);
+        LogDiagStep("SelectOptionAsync(年)", date, course, stopwatch);
 
         await _browser.SelectOptionAsync(
             "月",
             date.Month.ToString(),
             cancellationToken);
+        LogDiagStep("SelectOptionAsync(月)", date, course, stopwatch);
 
         await _browser.ClickActionInSectionAsync(
             "開催年月",
             "検索",
             cancellationToken);
+        LogDiagStep("ClickActionInSectionAsync(検索)", date, course, stopwatch);
 
         await ClickMeetingButtonAsync(
             date,
             course,
             cancellationToken);
+        LogDiagStep("ClickMeetingButtonAsync", date, course, stopwatch);
 
-        return await _pageReader.ReadAsync(cancellationToken);
+        var page = await _pageReader.ReadAsync(cancellationToken);
+        LogDiagStep("PageReader.ReadAsync", date, course, stopwatch);
+
+        return page;
+    }
+
+    private void LogDiagStep(
+        string step,
+        DateOnly date,
+        RaceCourse course,
+        System.Diagnostics.Stopwatch stopwatch)
+    {
+        _logger.LogInformation(
+            "[Diag] HistoricalRaceResultList step done. Step={Step} Date={Date} Course={Course} ElapsedMs={ElapsedMs}",
+            step,
+            date,
+            course,
+            stopwatch.ElapsedMilliseconds);
     }
 
     private async Task NavigateToRaceResultTopAsync(
@@ -805,9 +832,22 @@ public sealed class JraNavigator
         var courseName =
             RaceCourseName(course);
 
+        // ハング調査用: GetPageSnapshotAsync自体がブラウザ側の要素走査を伴う重い
+        // 処理であるため、開催選択ページの候補件数が多い場合にここで時間がかかって
+        // いないかを切り分けられるよう、所要時間を計測してログに残す。
+        var snapshotStopwatch =
+            System.Diagnostics.Stopwatch.StartNew();
+
         var snapshot =
             await _browser.GetPageSnapshotAsync(
                 cancellationToken: cancellationToken);
+
+        _logger.LogInformation(
+            "[Diag] GetPageSnapshotAsync done. Date={Date} Course={Course} ElapsedMs={ElapsedMs} SectionCount={SectionCount}",
+            date,
+            course,
+            snapshotStopwatch.ElapsedMilliseconds,
+            snapshot.Sections.Count);
 
         var buttonText =
             FindMeetingButtonText(snapshot.MainText, date, courseName);
