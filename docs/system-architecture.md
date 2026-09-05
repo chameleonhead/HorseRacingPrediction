@@ -46,7 +46,7 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
 - ページ遷移・抽出処理に LLM は使わず、AI エージェントや `Microsoft.Extensions.AI` 依存も持たない
 - 収集タスクの正本と管理画面は Api が所有し、Collector は HTTP 経由でタスクを取得・更新する
 - ローカル常駐モードと `--once` の有限実行モードを持ち、Lambda コンテナも後者を使用する
-- ⚠️ 現在、JRA サイト構造の再設計（[jra-scraping.md](jra-scraping.md)）に伴い、Lambda 用の `--once` 実行は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードは `CollectionExecutionService` が新しい `JraSession`/`JraNavigator` 層を使って出馬表・成績収集ジョブを実行しており稼働している。旧 `JraNavigation` / `Scrapers.Jra` 層に依存していた過去成績の月次・日次バックフィル探索は未移行のまま登録がコメントアウトされている
+- ⚠️ 現在、JRA サイト構造の再設計（[jra-scraping-redesign.md](jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードは `CollectionExecutionService` が新しい `JraSession`/`JraNavigator` 層を使って出馬表・成績収集ジョブを実行しており稼働している。旧 `JraNavigation` / `Scrapers.Jra` 層に依存していた過去成績の月次・日次バックフィル探索は未移行のまま登録がコメントアウトされている
 - 詳細: [collector-design.md](collector-design.md)
 
 ### Predictor

@@ -15,7 +15,7 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 
 - **Api**（`src/HorseRacingPrediction.Api`）: レース・馬・騎手・調教師・予想票などを EventFlow による CQRS+ES で管理する ASP.NET Core アプリ。`/api` 配下の JSON API（`X-Api-Key` 認証）に加えて、ルート直下（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions`, `/owners`, `/jobs` など）に Blazor Server 製の管理画面（Cookie 認証、Fluent UI Blazor）を自ホストする。
 - **Collector**（`src/HorseRacingPrediction.Collector`）: JRA 公式サイトを Playwright で機械的に巡回し、Api へ収集データを登録する。LLM は使わない。常駐モードでは `CollectionExecutionService` が出馬表・成績収集ジョブを実行する。
-  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/jra-scraping.md](docs/jra-scraping.md)）に伴い、Lambda 用の `--once` 実行（有限実行）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードでの出馬表・成績収集は再設計後の新実装（`JraSession`/`JraNavigator` など）で稼働している。一方、過去成績の月次・日次バックフィル探索など旧 URL 列挙方式に依存していた機能は未移行のまま無効化されている。
+  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/jra-scraping-redesign.md](docs/jra-scraping-redesign.md)）に伴い、Lambda 用の `--once` 実行（有限実行）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードでの出馬表・成績収集は再設計後の新実装（`JraSession`/`JraNavigator` など）で稼働している。一方、過去成績の月次・日次バックフィル探索など旧 URL 列挙方式に依存していた機能は未移行のまま無効化されている。
 - **Predictor**（`src/HorseRacingPrediction.Predictor`）: Api から取得したデータと ML.NET モデルのみで予想票を作成・確定し（LLM 不使用）、確定後の SNS 投稿文をマルチエージェント LLM ワークフローで生成する（投稿自体はスコープ外、手動運用）。
 
 詳細なサービス責務・依存関係は [docs/system-architecture.md](docs/system-architecture.md) を参照してください。
@@ -28,10 +28,10 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 - [docs/collector-design.md](docs/collector-design.md): Collector（JRA機械的収集）の設計
 - [docs/lambda-collector-architecture.md](docs/lambda-collector-architecture.md): Collector のローカル/Lambda共通実行と管理画面の Api 集約案
 - [docs/predictor-design.md](docs/predictor-design.md): Predictor（ML予想 + SNS投稿文マルチエージェント生成）の設計
-- [docs/jra-scraping.md](docs/jra-scraping.md): JRAスクレイピング層（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage`）の設計指示書（現在進行中の作業）
+- [docs/jra-scraping-redesign.md](docs/jra-scraping-redesign.md): JRAスクレイピング層（`JraSession`/`JraNavigator`/`JraPageReader`/`IJraPage`）の設計指示書（現在進行中の作業）
 - [docs/jra-html-change-diagnostics.md](docs/jra-html-change-diagnostics.md): JRA HTML 構造変更の診断手順
 - [docs/admin-ui-design.md](docs/admin-ui-design.md): 管理サイト UI / UX とジョブ運用画面の設計
-- [docs/design-guidelines.md](docs/design-guidelines.md): 管理画面のデザインガイドライン
+- [docs/admin-ui-design-guidelines.md](docs/admin-ui-design-guidelines.md): 管理画面のデザインガイドライン
 - [docs/lightsail-deployment.md](docs/lightsail-deployment.md): 最安構成を優先した Lightsail デプロイ雛形
 - [docs/changes/](docs/changes/): 個別機能の変更提案・実装記録
 
