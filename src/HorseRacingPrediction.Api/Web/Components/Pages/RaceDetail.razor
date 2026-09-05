@@ -10,6 +10,13 @@
 else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
 else
 {
+    <section class="profile-facts" aria-label="レース基本情報">
+        <div class="profile-fact"><span>コース</span><strong>@FormatDistanceSurface(race.DistanceMeters, race.SurfaceCode, race.DirectionCode)</strong></div>
+        <div class="profile-fact"><span>天候・馬場</span><strong>@FormatWeatherAndTrack(race)</strong></div>
+        <div class="profile-fact"><span>グレード</span><strong>@(string.IsNullOrWhiteSpace(race.GradeCode) ? "未設定" : race.GradeCode)</strong></div>
+        <div class="profile-fact"><span>状態</span><strong><span class="badge @Races.StatusClass(race.Status)">@Races.StatusLabel(race.Status)</span></strong></div>
+    </section>
+
     <RaceOpsDetailTabs>
     <FluentTab Label="概要" Id="overview">
     <section class="detail-card detail-section">
@@ -18,9 +25,6 @@ else
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
             <dt>日付</dt><dd>@race.RaceDate</dd>
             <dt>競馬場 / R</dt><dd>@race.RacecourseCode / @race.RaceNumber</dd>
-            <dt>状態</dt><dd>@race.Status</dd>
-            <dt>距離 / 馬場</dt><dd>@FormatDistanceSurface(race.DistanceMeters, race.SurfaceCode, race.DirectionCode)</dd>
-            <dt>Grade</dt><dd>@(string.IsNullOrWhiteSpace(race.GradeCode) ? "未設定" : race.GradeCode)</dd>
             <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
             <dt>勝ち馬</dt>
             <dd>
@@ -33,10 +37,13 @@ else
         </dl>
     </section>
 
-    <section id="status" class="race-facts detail-section" aria-label="取得状況">
-        <div><span class="object-label">天候</span>@if (race.WeatherObservations.Count == 0) { <span>未取得</span> } else { var weather = race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(weather.WeatherText ?? weather.WeatherCode ?? "取得済み")</strong> }</div>
-        <div><span class="object-label">馬場</span>@if (race.TrackConditionObservations.Count == 0) { <span>未取得</span> } else { var track = race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First(); <strong>@(track.GoingDescriptionText ?? track.TurfConditionCode ?? track.DirtConditionCode ?? "取得済み")</strong> }</div>
-        <div><span class="object-label">払戻</span><strong>@(race.PayoutResult is null ? (race.EntryResults.Count == 0 ? "未取得" : "該当なし・未確定") : "取得済み")</strong></div>
+    <section id="status" class="detail-card detail-section" aria-label="取得状況">
+        <h3>取得状況</h3>
+        <dl class="meta">
+            <dt>天候</dt><dd>@(race.WeatherObservations.Count == 0 ? "未取得" : (race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First().WeatherText ?? race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First().WeatherCode ?? "取得済み"))</dd>
+            <dt>馬場</dt><dd>@(race.TrackConditionObservations.Count == 0 ? "未取得" : FormatTrackCondition(race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First()))</dd>
+            <dt>払戻</dt><dd>@(race.PayoutResult is null ? (race.EntryResults.Count == 0 ? "未取得" : "該当なし・未確定") : "取得済み")</dd>
+        </dl>
     </section>
     </FluentTab>
 
@@ -240,9 +247,25 @@ else
     {
         var distance = distanceMeters.HasValue ? $"{distanceMeters.Value}m" : "未設定";
         var surface = string.IsNullOrWhiteSpace(surfaceCode) ? "未設定" : surfaceCode;
-        var direction = string.IsNullOrWhiteSpace(directionCode) ? string.Empty : $" {directionCode}";
-        return $"{distance} / {surface}{direction}";
+        var direction = string.IsNullOrWhiteSpace(directionCode) ? string.Empty : $"・{directionCode}";
+        return $"{surface}{direction} {distance}";
     }
+
+    private static string FormatWeatherAndTrack(RaceResponse race)
+    {
+        var weather = race.WeatherObservations.Count == 0
+            ? "未取得"
+            : (race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First().WeatherText
+               ?? race.WeatherObservations.OrderByDescending(x => x.ObservationTime).First().WeatherCode
+               ?? "取得済み");
+        var track = race.TrackConditionObservations.Count == 0
+            ? "未取得"
+            : FormatTrackCondition(race.TrackConditionObservations.OrderByDescending(x => x.ObservationTime).First());
+        return $"{weather}・{track}";
+    }
+
+    private static string FormatTrackCondition(RaceTrackConditionResponse observation) =>
+        observation.GoingDescriptionText ?? observation.TurfConditionCode ?? observation.DirtConditionCode ?? "取得済み";
 
     private static string FormatOddsRange(decimal? min, decimal? max)
     {

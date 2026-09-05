@@ -1,0 +1,21 @@
+@if (Chips.Count > 0)
+{
+    <div class="filter-summary" aria-label="適用中の条件">
+        <span class="filter-summary-label">適用中:</span>
+        @foreach (var chip in Chips)
+        {
+            <button type="button" class="filter-chip" @onclick="() => OnRemove(chip)">
+                <span>@chip.Label</span>
+                <span aria-hidden="true">×</span>
+            </button>
+        }
+        <button type="button" class="filter-clear-all" @onclick="OnClearAll">条件をクリア</button>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<RaceOpsFilterChip> Chips { get; set; } = Array.Empty<RaceOpsFilterChip>();
+    [Parameter, EditorRequired] public EventCallback OnClearAll { get; set; }
+
+    private async Task OnRemove(RaceOpsFilterChip chip) => await chip.Remove();
+}

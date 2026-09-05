@@ -3,7 +3,6 @@
 @inject AdminApiClient Api
 @using System.Text.Json
 
-<nav class="breadcrumb" aria-label="パンくず"><a href="/jobs">収集ジョブ</a><span aria-hidden="true">/</span><span>詳細</span></nav>
 @if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
 else if (job is null) { <UiState Kind="error" Title="収集ジョブが見つかりません" Message="@NotFoundMessage" /> }
 else
@@ -31,46 +30,60 @@ else
             <div class="relationship-row"><span>診断</span><FluentButton Appearance="@Appearance.Stealth" OnClick="@ShowTechnicalDetails">技術情報を確認</FluentButton><span class="hint">Job ID、payload、error</span></div>
         </div>
     </section>
-    <FluentCard class="detail-card detail-section"><h2>ジョブ関連図</h2>
-        <div class="job-graph-summary">
-            <div><span class="object-label">生成したジョブ</span><strong>@GeneratedChildren.Count</strong><span class="hint">生成元は完了を待ちません</span></div>
-            <div><span class="object-label">集約対象</span><strong>@AggregatedChildren.Count</strong><span class="hint">@AggregatedChildren.Count(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter) 件が要対応</span></div>
-        </div>
+    <FluentCard class="detail-card detail-section"><h2>ジョブの関係</h2>
         <div class="job-map" aria-label="ジョブの関連">
-            <section class="job-graph-section">
-                <h3>生成経路</h3>
-                @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.GeneratedBy)
-                {
-                    <div class="relationship-row"><span>生成元</span><a href="@JobUrl(job.ParentJob.JobId)">@DisplayJobType(job.ParentJob.JobType)</a><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></div>
-                }
-                else { <p class="hint">生成元ジョブはありません。</p> }
-                @foreach (var child in GeneratedChildren)
-                {
-                    <div class="relationship-row"><span>生成したジョブ</span><a href="@JobUrl(child.JobId)">@DisplayJobType(child.JobType)</a><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></div>
-                }
-            </section>
-            <section class="job-graph-section current-job-node">
-                <h3>現在のジョブ</h3>
+            @{ var hasGeneratedRelation = (job.ParentJob is not null && job.ParentRelationType == JobRelationType.GeneratedBy) || GeneratedChildren.Count > 0; }
+            @if (hasGeneratedRelation)
+            {
+                <section class="job-map-group">
+                    <h3>生成経路</h3>
+                    <p>生成元はこのジョブを作成しますが、完了は待ちません。</p>
+                    @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.GeneratedBy)
+                    {
+                        <a class="job-map-link" href="@JobUrl(job.ParentJob.JobId)"><span><strong>@DisplayJobType(job.ParentJob.JobType)</strong><small>生成元</small></span><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></a>
+                    }
+                    @foreach (var child in GeneratedChildren)
+                    {
+                        <a class="job-map-link" href="@JobUrl(child.JobId)"><span><strong>@DisplayJobType(child.JobType)</strong><small>生成したジョブ・生成元の完了条件ではありません</small></span><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></a>
+                    }
+                </section>
+                <div class="job-map-connector generated"><span>生成</span></div>
+            }
+            <section class="job-map-current">
+                <p class="eyebrow">現在のジョブ@(job.ParentRelationType == JobRelationType.AggregatedBy || AggregatedChildren.Count > 0 ? "・集約親" : hasGeneratedRelation ? "・生成元" : string.Empty)</p>
                 <strong>@DisplayJobType(job.JobType)</strong>
-                <span class="hint">@job.DeduplicationKey</span>
+                <small>@job.DeduplicationKey</small>
                 <span class="badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span>
             </section>
-            <section class="job-graph-section">
-                <h3>集約依存関係</h3>
-                @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.AggregatedBy)
-                {
-                    <div class="relationship-row"><span>集約元</span><a href="@JobUrl(job.ParentJob.JobId)">@DisplayJobType(job.ParentJob.JobType)</a><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></div>
-                }
-                @if (AggregatedChildren.Count == 0)
-                {
-                    <p class="hint">完了を待つ子ジョブはありません。</p>
-                }
-                @foreach (var child in AggregatedChildren)
-                {
-                    <div class="relationship-row"><span>集約対象</span><a href="@JobUrl(child.JobId)">@DisplayJobType(child.JobType)</a><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></div>
-                }
-                <p class="hint">集約対象がある親ジョブだけをリラン対象にします。子ジョブ単独のリランは表示しません。</p>
-            </section>
+            @{ var hasAggregateRelation = (job.ParentJob is not null && job.ParentRelationType == JobRelationType.AggregatedBy) || AggregatedChildren.Count > 0; }
+            @if (hasAggregateRelation)
+            {
+                <div class="job-map-connector aggregate"><span>完了待ち</span></div>
+                <section class="job-map-group">
+                    <h3>集約依存関係</h3>
+                    <p>すべての対象が終端状態になるまで、現在のジョブは完了しません。</p>
+                    @if (job.ParentJob is not null && job.ParentRelationType == JobRelationType.AggregatedBy)
+                    {
+                        <a class="job-map-link" href="@JobUrl(job.ParentJob.JobId)"><span><strong>@DisplayJobType(job.ParentJob.JobType)</strong><small>集約元</small></span><span class="badge @StatusClass(job.ParentJob.Status)">@StatusLabel(job.ParentJob.Status)</span></a>
+                    }
+                    @if (AggregatedChildren.Count > 0)
+                    {
+                        <div class="job-map-summary">
+                            <span>全@AggregatedChildren.Count件</span>
+                            <span><strong>@AggregatedChildren.Count(x => x.Status == AgentJobStatus.Succeeded)件</strong> 完了</span>
+                            <span><strong>@AggregatedChildren.Count(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter)件</strong> 要対応</span>
+                        </div>
+                        <div class="job-map-children">
+                            @foreach (var child in AggregatedChildren)
+                            {
+                                <a class="job-map-link" href="@JobUrl(child.JobId)"><span><strong>@DisplayJobType(child.JobType)</strong><small>集約対象</small></span><span class="badge @StatusClass(child.Status)">@StatusLabel(child.Status)</span></a>
+                            }
+                        </div>
+                    }
+                    else { <p class="hint">完了を待つ子ジョブはありません。</p> }
+                    <p class="hint">集約対象がある親ジョブだけをリラン対象にします。子ジョブ単独のリランは表示しません。</p>
+                </section>
+            }
         </div>
     </FluentCard>
     <section class="entity-section detail-section"><h2>最新の試行</h2>

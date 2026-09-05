@@ -13,6 +13,7 @@
         <div class="filter-field filter-field-compact"><input aria-label="年齢（以下）" type="number" @bind="maxAge" min="0" max="40" placeholder="年齢（以下）" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="馬を読み込んでいます" /> }
@@ -73,4 +74,27 @@ else
     private void OpenHorseFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenHorse(id); }
     private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
     private static string HorseMetadata(HorseSummaryResponse horse) => $"性 {horse.SexCode ?? "—"} · 生年月日 {(horse.BirthDate?.ToString("yyyy/MM/dd") ?? "—")} · 別名 {horse.AliasCount} 件";
+    private static string SexLabel(string code) => code switch { "M" => "牡", "F" => "牝", "G" => "セン", _ => code };
+    private async Task ClearFiltersAsync() { query = null; sexCode = null; minAge = null; maxAge = null; page = 1; await LoadAsync(); }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            chips.Add(new($"馬名 {query}", async () => { query = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(sexCode))
+        {
+            chips.Add(new($"性別 {SexLabel(sexCode)}", async () => { sexCode = null; page = 1; await LoadAsync(); }));
+        }
+        if (minAge is not null)
+        {
+            chips.Add(new($"年齢 {minAge}以上", async () => { minAge = null; page = 1; await LoadAsync(); }));
+        }
+        if (maxAge is not null)
+        {
+            chips.Add(new($"年齢 {maxAge}以下", async () => { maxAge = null; page = 1; await LoadAsync(); }));
+        }
+        return chips;
+    }
 }

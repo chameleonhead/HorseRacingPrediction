@@ -1,0 +1,14 @@
+@inject NavigationManager Navigation
+
+<article class="object-list-item @Class selectable-row" tabindex="0" role="link" @onclick="Open" @onkeydown="OnKeyDown">
+    @ChildContent
+</article>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private void Open() => Navigation.NavigateTo(Href);
+    private void OnKeyDown(KeyboardEventArgs e) { if (e.Key is "Enter" or " ") Open(); }
+}

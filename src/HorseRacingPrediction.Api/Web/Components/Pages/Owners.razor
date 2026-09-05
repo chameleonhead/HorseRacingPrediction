@@ -10,6 +10,7 @@
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="馬主名を検索" Placeholder="馬主名を検索" @bind-Value="query" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </FluentCard>
 
 @if (loading && items.Count == 0) { <UiState Kind="loading" Title="馬主を読み込んでいます" /> }
@@ -47,6 +48,16 @@ else
     }
 
     private Task SearchAsync() => LoadAsync(resetPage: true);
+    private Task ClearFiltersAsync() { query = null; return LoadAsync(resetPage: true); }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            chips.Add(new($"馬主名 {query}", () => { query = null; return LoadAsync(resetPage: true); }));
+        }
+        return chips;
+    }
 
     private async Task LoadAsync(bool resetPage)
     {

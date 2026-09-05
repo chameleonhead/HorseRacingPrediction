@@ -30,6 +30,7 @@
         <div class="filter-field filter-field-compact"><FluentSelect TOption="FilterOption" aria-label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </section>
 
 @if (DaySummaries.Count > 0)
@@ -165,4 +166,26 @@ else
     }
     private static string DayStatus(AgentJobDaySummary value) => value.AttentionCount > 0 ? "要対応" : value.WaitingCount > 0 ? "一部待機" : "完了";
     private static string DayStatusTone(AgentJobDaySummary value) => value.AttentionCount > 0 ? "danger" : value.WaitingCount > 0 ? "warning" : "success";
+    private async Task ClearFiltersAsync() { keyword = null; jobType = null; targetDateText = null; statusText = string.Empty; page = 1; await LoadAsync(); }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            chips.Add(new($"検索 {keyword}", async () => { keyword = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(jobType))
+        {
+            chips.Add(new($"処理種別 {jobType}", async () => { jobType = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(targetDateText))
+        {
+            chips.Add(new($"対象日 {targetDateText}", async () => { targetDateText = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(statusText))
+        {
+            chips.Add(new($"状態 {StatusLabel((AgentJobStatus)Enum.Parse(typeof(AgentJobStatus), statusText))}", async () => { statusText = string.Empty; page = 1; await LoadAsync(); }));
+        }
+        return chips;
+    }
 }

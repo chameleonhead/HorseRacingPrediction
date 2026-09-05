@@ -11,6 +11,7 @@
         <div class="filter-field filter-field-compact"><FluentTextField aria-label="予想者種別" Placeholder="予想者種別" @bind-Value="predictorType" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">検索</FluentButton>
     </div>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="予想票を読み込んでいます" /> }
@@ -22,15 +23,12 @@ else
     <RaceOpsObjectList Label="予想票一覧">
         @foreach (var p in result.Items)
         {
-            <article class="object-list-item prediction-row selectable-row" tabindex="0" role="link" @onclick="() => OpenPrediction(p.PredictionTicketId)" @onkeydown="e => OpenPredictionFromKey(e, p.PredictionTicketId)">
-                <span class="object-list-main">
-                    <strong>@RaceDisplayName(p)</strong>
-                    <span class="hint">@(p.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定") · 本命 @(p.PrimaryHorseName ?? "—")</span>
-                </span>
-                <RaceOpsStatusBadge Label="@TicketStatusLabel(p.TicketStatus)" Tone="@TicketStatusTone(p.TicketStatus)" />
-                <span class="object-list-meta">@EvaluationStatusLabel(p.EvaluationStatus) ・ 信頼度 @p.ConfidenceScore ・ 印 @p.MarkCount 件</span>
-                <span class="object-list-affordance">詳細</span>
-            </article>
+            <RaceOpsObjectListItem Href="@PredictionUrl(p.PredictionTicketId)"
+                                    Title="@RaceDisplayName(p)"
+                                    Description="@($"{(p.RaceDate?.ToString("yyyy/MM/dd") ?? "開催日未設定")} · 本命 {p.PrimaryHorseName ?? "—"}")"
+                                    Status="@TicketStatusLabel(p.TicketStatus)"
+                                    StatusTone="@TicketStatusTone(p.TicketStatus)"
+                                    Metadata="@($"{EvaluationStatusLabel(p.EvaluationStatus)} ・ 信頼度 {p.ConfidenceScore} ・ 印 {p.MarkCount} 件")" />
         }
     </RaceOpsObjectList>
     <Pagination TotalCount="result.TotalCount" Page="page" PageSize="pageSize" PageChanged="GoAsync" />
@@ -69,11 +67,23 @@ else
         Navigation.NavigateTo(uri, replace: true);
     }
     private static string? ParseText(IDictionary<string, Microsoft.Extensions.Primitives.StringValues> q, string key) => q.TryGetValue(key, out var value) ? value.ToString() : null;
-    private void OpenPrediction(string id) => Navigation.NavigateTo(PredictionUrl(id));
-    private void OpenPredictionFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenPrediction(id); }
     private static string PredictionUrl(string id) => $"/predictions/{Uri.EscapeDataString(id)}";
     private static string RaceDisplayName(PredictionTicketSummaryResponse value) => string.Join(" ", new[] { value.RacecourseCode, value.RaceNumber is null ? null : $"{value.RaceNumber}R", value.RaceName }.Where(x => !string.IsNullOrWhiteSpace(x)));
     private static string TicketStatusLabel(TicketStatus value) => value switch { TicketStatus.Draft => "作成中", TicketStatus.Finalized => "確定", TicketStatus.Withdrawn => "取下げ", _ => value.ToString() };
     private static string TicketStatusTone(TicketStatus value) => value == TicketStatus.Finalized ? "success" : value == TicketStatus.Withdrawn ? "neutral" : "info";
     private static string EvaluationStatusLabel(EvaluationStatus value) => value switch { EvaluationStatus.Ready => "評価済み", EvaluationStatus.RecalculationRequired => "再評価待ち", EvaluationStatus.Failed => "評価失敗", _ => value.ToString() };
+    private async Task ClearFiltersAsync() { query = null; predictorType = null; page = 1; await LoadAsync(); }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            chips.Add(new($"レース名・開催日 {query}", async () => { query = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(predictorType))
+        {
+            chips.Add(new($"予想者種別 {predictorType}", async () => { predictorType = null; page = 1; await LoadAsync(); }));
+        }
+        return chips;
+    }
 }

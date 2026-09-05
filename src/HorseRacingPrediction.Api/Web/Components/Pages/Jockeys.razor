@@ -11,6 +11,7 @@
         <div class="filter-field filter-field-compact"><FluentTextField aria-label="所属" @bind-Value="affiliationCode" Placeholder="所属" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
     </div>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </FluentCard>
 
 @if (loading && result is null) { <UiState Kind="loading" Title="騎手を読み込んでいます" /> }
@@ -65,4 +66,18 @@ else
     private void OpenJockeyFromKey(KeyboardEventArgs e, string id) { if (e.Key is "Enter" or " ") OpenJockey(id); }
     private static string JockeyUrl(string id) => $"/jockeys/{Uri.EscapeDataString(id)}";
     private static string JockeyMetadata(JockeySummaryResponse jockey) => $"所属 {jockey.AffiliationCode ?? "—"} · 別名 {jockey.AliasCount} 件";
+    private async Task ClearFiltersAsync() { query = null; affiliationCode = null; page = 1; await LoadAsync(); }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            chips.Add(new($"騎手名 {query}", async () => { query = null; page = 1; await LoadAsync(); }));
+        }
+        if (!string.IsNullOrWhiteSpace(affiliationCode))
+        {
+            chips.Add(new($"所属 {affiliationCode}", async () => { affiliationCode = null; page = 1; await LoadAsync(); }));
+        }
+        return chips;
+    }
 }

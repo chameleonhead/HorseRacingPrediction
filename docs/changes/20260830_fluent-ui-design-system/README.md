@@ -1259,3 +1259,145 @@ API 管理画面の実ブラウザー確認で、API key middleware が一部の
 
 - 一覧検索、詳細履歴、編集フォーム、メモ、ログインに残っていたネイティブ`input`/`select`/`textarea`の既定枠を共通Fluentトークンへ統一した。高さ、余白、枠線、角丸、背景色、文字色、focus ring、textareaのリサイズを同じ規則で定義した。
 - `FluentTextField`、`FluentSelect`、`FluentNumberField`も同じ`control` partへ枠線とfocus状態を適用し、枠あり／枠なしの混在を解消した。チェックボックスとラジオは用途に応じたネイティブ表示を維持する。
+
+## Mock visual conformance follow-up - 2026-09-05
+
+利用者からモックとの見た目差（コントロールの外観など）を指摘され、モック優先で近づける追加是正を行う。Fluent UI の設計と矛盾する既存実装（トークンを経由しないhardcode色/余白、`app.css`側でのcontrol再定義など）は、モック追従と同時にFluent UI的な正しい実装へ是正する。
+
+### Context
+
+- 直前の再監査で `docs/changes/20260830_fluent-ui-design-system/README.md` の受け入れ基準はすべて完了扱いだが、静的コード監査でモックとの構造・視覚差が複数残っていることを確認した（下記タスク参照）。
+- Fluent UI Blazor のベストプラクティス調査（公式ドキュメント・GitHub discussion）により、`FluentDesignTheme` / `DesignToken<T>` によるトークン運用が正本であり、`app.css` に色・余白をhardcodeし続けることはアンチパターンであることを確認した。CSS分離（`.razor.css`）がページ/コンポーネント固有スタイルの標準であることも確認した。
+- 作業時点でリポジトリ内では JRA スクレイピング関連の E2E テストが別途進行中（`dotnet.exe` プロセス多数、`src/HorseRacingPrediction.Scraping/Browser/PlaywrightWebBrowser.cs` が作業中で未コミット）。本change recordの検証では、通常出力先を専有する進行中プロセスを止めず、既存の隔離出力先ビルド規約（`-o %TEMP%\HorseRacingPrediction-verify-*`）を踏襲し、Scraping/Collector側のテストは対象外として `HorseRacingPrediction.Api` 関連のプロジェクトのみをビルド・テストする。
+
+### Task list
+
+1. **JobDetail.razor の重複breadcrumb削除**: `Web/Components/Pages/JobDetail.razor` の未使用`.breadcrumb`（CSS未定義・`RaceOpsObjectHeader`と重複）を削除する。
+2. **RaceDetail.razor のrace-facts配置修正**: モック(`mocks/races.html`)の詳細ヘッダー直下`race-facts`帯（発走時刻・コース・天候/馬場・グレード・状態）と同じ配置・情報粒度へ変更する。発走時刻がread modelに存在しない場合はデータ欠落として記録する。
+3. **一覧行クリック実装の統一**: `Races.razor`/`Predictions.razor`の独自`role="link"`実装と、他一覧の共通`RaceOpsObjectListItem`を、行内リンク（日付・開催場等）を許容する共通コンポーネントへ統一する。
+4. **ジョブ関係グラフの視覚統一**: `JobDetail.razor`の生成経路・現在・集約区画を、モックの`job-map-link`/`job-map-current`/`job-map-connector`（連結線・強調枠）へ近づける。
+5. **共通`RaceOpsFilterBar`の抽出**: `Jobs`/`Races`/`Horses`/`Jockeys`/`Trainers`/`Owners`/`AcquisitionStatuses`各画面で重複しているfilter toolbar手書きを共通コンポーネントへ集約する。
+6. **コントロール外観のFluentトークン移行**: `app.css`にhardcodeされた色・余白・controlの見た目定義を監査し、Fluentの`Appearance`/`Style`/`Class`パラメーターおよび`FluentDesignTheme`/`DesignToken<T>`経由の運用へ置き換える。ページ/コンポーネント固有の残存レイアウトは`.razor.css`（CSS分離）へ段階的に切り出す。共通デザイントークンや状態表現の契約は変えない。
+7. **ブレークポイント再確認**: 320/720/1280 CSS pxでの静的確認に加え、実ブラウザでの目視確認を行い、崩れがあれば補正する。
+8. **モックとの意図的な差異の記録整理**: 日別サマリー(`day-item`)など実装側にのみ存在する要素は、バグ修正ではなく意図的拡張として本記録・モックへ反映する。
+
+各タスク完了後、本セクションへ実装内容と検証結果を追記する。build/testはE2E作業を妨げない範囲（隔離出力先、Api関連プロジェクトのみ）で実施する。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 本追加是正の計画、実装内容、検証結果を追記する。
+- `docs/design-guidelines.md`: 既存の「共通componentがcontrolの見た目を所有する」規則の範囲内であり、規則自体の変更は想定しない。差異が見つかった場合のみ同じ変更セットで更新する。
+
+### Progress - 2026-09-05
+
+タスク1〜3を実装した。
+
+- タスク1: `JobDetail.razor`の未使用`.breadcrumb`（CSS未定義・`RaceOpsObjectHeader`と重複）を削除した。
+- タスク2: `RaceDetail.razor`にモックと同じヘッダー直下の基本情報帯を追加した。実装は独自の`.race-facts`グリッドを新設せず、既存の`profile-facts`/`profile-fact`（馬・騎手・調教師・馬主詳細で使用中の共通パターン）を再利用し、コース、天候・馬場、グレード、状態（バッジ）の4項目を表示する。モックの「発走」時刻は現行read model（`RaceResponse`）・ドメイン・永続化のいずれにも存在せず、スクレイピング側(`RaceSummary`等)止まりであるため、UI是正の対象外としてタイルを設けず、データ配線の追加は別途の変更セットで扱うことを記録する。取得状況（天候・馬場・払戻）は概要タブ内の別セクションへ整理した。
+  - 付随して、レース一覧のステータスバッジ色付け(`Races.razor`の`StatusClass`)が実際の`RaceStatus`列挙値（`ResultDeclared`等）と一致しない旧文字列（`"Finished"`/`"ResultConfirmed"`等）と比較しており、常に既定の`warn`色になっていた不具合を修正した。レース詳細の状態バッジと一貫させるため`internal`化して両画面で共有する。
+- タスク3: `Predictions.razor`の行内リンクを持たない一覧行を、共通`RaceOpsObjectListItem`（`<a>`によるカバー全体リンク）へ統一した。`Races.razor`は日付・開催場への行内個別リンクを保持する必要があり（`<a>`の入れ子は無効なHTMLのため`RaceOpsObjectListItem`をそのまま使えない）、共通の選択可能行の実装（`tabindex`、`role=link`、クリック/Enter/Spaceキー処理）を新規の`RaceOpsSelectableRow`コンポーネントへ切り出し、`Races.razor`側の重複したキーボードハンドラー実装を除去した。
+
+### Verification - 2026-09-05
+
+E2E作業（JRAスクレイピング関連、`HorseRacingPrediction.Scraping`配下で進行中）と競合しないよう、通常出力先を専有するローカル起動プロセスには触れず、隔離出力先ビルドとApi関連プロジェクトのみの検証に限定した。
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905 -v:minimal`: 成功、警告0、エラー0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905-tests -v:minimal`: 成功、103件（既存の通常出力先が起動中プロセスにロックされていたため隔離出力先へ切り替えて実行した）。
+- ブラウザでの視覚確認は、進行中のE2E作業とdevサーバーの競合を避けるため本パスでは実施していない。残タスク（4〜8）着手時にまとめて実施する。
+
+残作業: タスク4（ジョブ関係グラフの視覚統一）、タスク5（`RaceOpsFilterBar`抽出）、タスク6（`app.css`のFluentトークン移行・CSS分離）、タスク7（ブレークポイント目視確認）、タスク8（モック差異の記録整理）。
+
+### Progress (continued) - 2026-09-05
+
+- タスク4: `JobDetail.razor`のジョブ関係表示を、モックの`job-map-group`/`job-map-link`/`job-map-current`/`job-map-connector`と同じ視覚文法へ作り替えた。生成経路→（生成の点線connector）→現在のジョブ（accent二重枠のカード）→（完了待ちのconnector）→集約依存関係、の順で縦に並べ、各関連ジョブは背景色付きのカード(`job-map-link`)としてリンク化し、状態バッジを右側に揃えた。集約対象には全件・完了・要対応の件数サマリー(`job-map-summary`)も追加した。旧`.job-graph-section`/`.job-graph-summary`/`.current-job-node`は使用箇所がなくなったためCSSから削除した。関連判定・件数集計・状態ラベルなど既存の`@code`ヘルパーは変更していない。
+- タスク6（部分対応）: `app.css`のうち、Fluentの状態トークンと重複してhardcode hexを持っていた`.raceops-alert-error`/`-warning`/`-success`を、既存の`--status-danger-*`/`-warning-*`/`-success-*`トークン参照へ置き換えた（badgeの色付けと同じトークンを共有する）。サイドバー・モバイルバーの`#24332f`系ダークカラーは、Fluentのneutralパレットにない本システム固有のブランドchromeとして意図的に残した（モック自体も同様の独自ダーク配色を採用している）。`app.css`全体のCSS分離（`.razor.css`化）は着手しておらず、次回以降の作業として残す。
+- タスク5・7・8は今回のパスでは未着手。タスク5（`RaceOpsFilterBar`抽出）は視覚差ではなくコード重複の解消であり優先度を下げた。タスク7（実ブラウザでの320/720/1280px確認）は、通常のビルド出力先を専有する起動中プロセス（E2E関連）を止めずに行う手段がなかったため見送った。E2E作業が一段落し通常出力先が解放され次第、devサーバーを起動して実施する。タスク8（`day-item`等の意図的拡張のモック側反映）も未着手。
+
+### Verification (continued) - 2026-09-05
+
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905 -v:minimal`: 成功、警告0、エラー0。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905-tests -v:minimal`: 成功、103件。
+- 実ブラウザでの視覚確認・320/720/1280px確認は上記の理由により未実施。
+
+残作業: タスク5（`RaceOpsFilterBar`抽出）、タスク6残り（`app.css`全体のFluentトークン監査とCSS分離）、タスク7（実ブラウザでのブレークポイント確認、E2E作業完了後）、タスク8（モック側への意図的拡張の反映）。
+
+## Search form review and fix - 2026-09-05
+
+利用者から検索フォームの「がたつき」（レイアウトの不揃い・ずれ）を指摘され、レース・馬・騎手・調教師・馬主・予想票・収集ジョブ・データ取得状況の全8画面の検索フォームを、使いやすさ・Fluent UIの原則・モバイル対応の観点で確認した。E2E作業が完了し通常のビルド出力先が解放されていたため、今回は通常出力先でビルドしdevサーバー（`http://127.0.0.1:5177`）を実際に起動して確認した。
+
+### 評価観点
+
+1. **レイアウトの安定性**: コンテナ幅が変化したとき、各フィールドが予測可能な位置に留まるか。個々のフィールドが勝手に前後の行へ移動し、行ごとに列幅がバラつく（＝「がたつき」）ことがないか。
+2. **Fluent UIの原則**: `FluentTextField`/`FluentSelect`と、素の`<input>`/`<select>`が同一行に混在する場合でも、高さ・境界線・フォーカス表現が統一されているか。
+3. **モバイル対応**: 320/720 CSS pxで主要操作に横スクロールなしで到達できるか、タップ領域44×44px、主操作（検索ボタン）が見つけやすいか。
+4. **その他**: フォーム内の余白・グループ化が情報の重要度と一致しているか。
+
+### 発見事項と原因
+
+- 実機確認の結果、コントロール自体の高さ・境界線・フォーカスリングは`FluentTextField`/`FluentSelect`/ネイティブ`input`/`select`/`FluentButton`のいずれも40pxに統一されており揃っていた（この点はFluent UIの原則に沿っていた）。
+- 一方で`.filter-toolbar`が`display:flex; flex-wrap:wrap`＋フィールドごとに異なる`flex-basis`（primary 280px、compact 144pxなど）で構成されており、コンテナ幅がおおよそ720〜960px（レース一覧なら約5フィールド分の合計幅）付近になると、行ごとに収まるフィールド数と各行の余り幅が不規則に変わり、列の开始位置が行によってずれる「がたつき」が発生していた。ブラウザでの実機確認（`http://127.0.0.1:5177/races`、幅800px相当）で、1行目に「レース名を検索」+開始日、2行目に終了日+開催場+検索ボタン、という左右不揃いの2行に割れる現象を確認した。
+- flexは「各アイテムが自分の`flex-basis`に応じて個別に折り返すか判断する」ため、コンテナ幅がフィールド合計とちょうど合わない中間的な幅で、行ごとに異なる列取りが起きる。これはウィンドウリサイズ時に各フィールドがバラバラのタイミングで前後の行へジャンプする体感（まさに「がたつき」）にもつながる。
+
+### 修正内容
+
+- `app.css`の`.filter-toolbar`を`display:flex`から`display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr))`へ変更した。CSS Gridは同じ行の列幅を強制的に揃え、収まらないフィールドは行全体の単位で次の行へ送られるため、行ごとに列がずれる現象がなくなる。`.filter-field-primary`/`.filter-field-wide`は`grid-column: span 2`で他の2倍幅を維持する。
+- 検索ボタン（`FluentButton`）はデスクトップでは内容幅（`width: fit-content`）のまま行末に留まるよう`justify-self: start`を指定し、720px以下では`grid-column: 1 / -1; width: 100%; min-height: 44px`として、モバイルの主操作として見つけやすい全幅ボタンにした（既存のデザインガイドラインのタップ領域規則に合わせる）。
+- 720px/420pxのモバイル向け上書きルールを、新しいgrid前提の記述へ簡略化した（従来はflexとgridの上書きが混在し、意図が読みにくかった）。
+- 対象8画面（レース・予想票・馬・騎手・調教師・馬主・収集ジョブ・データ取得状況）はすべて同じ`.filter-toolbar`/`.filter-field`共通クラスを使っているため、CSSの共通修正のみで全画面へ反映される。Razorファイルの変更は不要だった。
+
+### 検証
+
+- ローカルdevサーバー（`http://127.0.0.1:5177`）へログインし、レース・収集ジョブ・馬・データ取得状況・予想票の各検索フォームを、デスクトップ（800px相当・1280px）、タブレット（720px）、モバイル（375px・320px）で確認した。
+  - 800〜1280pxではいずれのフォームも1行に整列し、フィールド間の列ずれがなくなった（修正前はレース一覧で2行に不揃いに折り返していた）。
+  - 720pxでは主要検索欄が全幅の単独行、残りは2列グリッドで整列し、検索ボタンは全幅・視認しやすい配置になった。
+  - 320pxでは全フィールドが1列に整列し、横スクロールは発生しなかった（`document.documentElement.scrollWidth === window.innerWidth === 320`をJSで確認）。
+  - データ取得状況画面の「未取得のみ」「再試行待ち」トグルボタンを含む変則的なフィールド構成でも、同じ共通クラスにより高さ・整列が崩れないことを確認した。
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -v:minimal`: 成功、警告0、エラー0（この時点でE2E関連プロセスは終了しており、通常出力先で実施）。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -v:minimal`: 成功、103件。
+
+### Documentation updates
+
+- `docs/changes/20260830_fluent-ui-design-system/README.md`: 検索フォームのレビュー観点、発見した原因、修正内容、検証結果を追記した。
+- `docs/design-guidelines.md`: 既存の「フィルターtoolbarのレスポンシブ規則」の実装詳細（flex→grid）に関する変更であり、正本の規則自体（40pxの視覚密度、44pxのタップ領域、720/420pxのブレークポイント）に変更はないため、正本の更新は不要。
+
+## Control alignment, removable filter chips, dialog CSS fix - 2026-09-05
+
+利用者から追加で3件の指摘を受け、対応した。(1) レース検索の日付とレース名検索コンポーネントがまだ僅かにずれている、(2) 適用中の検索条件をモックのように条件ごとに個別クリアできるようにしてほしい（他画面にも横展開）、(3) ダイアログのデザインが崩れている箇所が散見される。
+
+### (1) コントロールの縦ずれの根本原因と修正
+
+`FluentTextField`/`FluentSelect`/`FluentNumberField`のshadow DOM内部`::part(control)`が`box-sizing: content-box`でレンダリングされていたため、`app.css`で指定していた`min-height: 40px`が境界線の外側に加算され、実際の高さが41.6pxになり、ネイティブ`<input>`（`box-sizing: border-box`で正確に40px）との間に約2pxの縦ずれが生じていた。
+
+- `app.css`の`fluent-text-field::part(control)`等のルールへ`box-sizing: border-box`を追加し、`min-height`を`height: 40px`（確定値）に変更した。ホスト要素自体にも同じ`box-sizing: border-box; height: 40px`を追加した。
+- ブラウザの実機検証（`getBoundingClientRect`によるshadow DOM内部要素の直接計測）で、修正前は`control`の高さが41.6px・ネイティブ`input`との天面差0.8px・底面差2.4pxだったのに対し、修正後は両者とも40px、位置差は誤差程度（1px未満）まで縮小したことを確認した。
+- 修正はグローバルな要素セレクター（`fluent-text-field`等）に対するものであるため、これを使用する全画面（レース、馬、騎手、調教師、馬主、予想票、収集ジョブ、データ取得状況、編集フォーム、ログイン）へ自動的に反映される。個別ページの修正は不要だった。
+
+### (2) 適用中の検索条件を条件ごとに個別クリア可能にする
+
+モック（`mocks/races.html`の`.filter-chip`、`×`付きの個別クリアリンク）に合わせ、共通コンポーネント`RaceOpsFilterSummary`（`Web/Components/Shared/DesignSystem/RaceOpsFilterSummary.razor`、`RaceOpsFilterChip.cs`）を新設した。
+
+- `RaceOpsFilterChip(string Label, Func<Task> Remove)`型のチップ一覧と全解除コールバックを受け取り、`適用中: [チップ1 ×] [チップ2 ×] 条件をクリア`という単一行を描画する。チップは個別に押すとその条件だけを解除して再検索する。
+- 従来はレース一覧にのみ「適用中: (文字列) ／ 条件を解除」ボタンがあり、他の7一覧画面（馬・騎手・調教師・馬主・予想票・収集ジョブ・データ取得状況）には適用中条件の表示が一切なかった。今回、全8一覧画面に本コンポーネントを追加し、各画面の実際の検索状態（キーワード、性別・年齢、所属、処理種別・対象日・状態、対象・状態、未取得のみ／再試行待ちトグルなど）に応じたチップを生成するようにした。
+- `app.css`へ`.filter-summary`/`.filter-chip`/`.filter-clear-all`をモックのpill形状（角丸999px、境界線、hover背景）に準じてFluentトークンで追加した。
+- レース一覧の既存`FilterSummary`（文字列結合の説明表示）と`HasFilters`は、個別チップ生成メソッド`BuildFilterChips()`へ置き換えて削除した。
+
+### (3) ダイアログ（および他のFluent UIコンポーネント全般）のCSS崩れの根本原因と修正
+
+`FluentDialog`の「すべてのジョブを一時停止しますか」ダイアログを実機で開いたところ、閉じるボタン（×）がヘッダー右上ではなくタイトル直下に単独行で表示され、レイアウトが崩れていた。DOM調査の結果、ヘッダー`<div class="stack-horizontal fluent-dialog-header">`の`display`が`block`のままで、インラインstyleの`justify-content`/`gap`等が機能していないことが判明した。
+
+原因は、`Microsoft.FluentUI.AspNetCore.Components`パッケージが提供する全コンポーネント共通のスコープ済みCSSバンドル（`_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.{hash}.bundle.scp.css`、`.stack-horizontal`のflexレイアウトやdialogのgrid-area等、ライブラリの大半の見た目を担うスタイル）が、**一度もページへ読み込まれていなかった**ことだった。ASP.NET CoreのCSS分離機構は通常、アプリ自身の束ねられたスタイルシート（本プロジェクトでは`HorseRacingPrediction.Api.styles.css`。ビルド時に自動生成され、`@import`で参照ライブラリの上記バンドルを読み込む）を`App.razor`の`<head>`でリンクすることを前提とするが、そのリンクタグ自体が存在しなかった。`reboot.css`と`app.css`だけが読み込まれ、コンポーネントの構造的CSS（flex/grid配置など）が一切適用されない状態だったため、ダイアログに限らずFluent UIコンポーネント全般が本来のレイアウトで描画されていなかった。
+
+- `App.razor`の`<head>`へ`<link rel="stylesheet" href="HorseRacingPrediction.Api.styles.css" />`を、`reboot.css`の後・`app.css`の前に追加した（cascade順は「Fluentリセット→Fluentコンポーネント構造CSS→アプリ固有トークン」を維持）。`app.css`のキャッシュバスターを`v=20260905`へ更新した。
+- ブラウザの実機検証で、修正前は`.fluent-dialog-header`の`computed display`が`block`（`.stack-horizontal[scope]{display:flex}`というライブラリのCSSルールが一切適用されていなかった）だったのに対し、修正後は`display:flex`となり、閉じるボタンがタイトル行の右端へ正しく配置されることを確認した。ジョブ一時停止ダイアログのスクリーンショットで、タイトル・閉じるボタン・本文・フッターの配置が意図通りになったことを確認した。他のダイアログ（収集ジョブ詳細のリラン、データ取得状況の再取得、馬主名寄せの2ダイアログ）も同じ`FluentDialog`/`FluentDialogHeader`コンポーネントを使用しているため、同じ修正で改善される。
+- この修正はダイアログに限らず、`FluentTab`、`FluentAccordion`等、ライブラリの構造的CSSに依存する全コンポーネントに影響する可能性が高い。今回はダイアログを中心に実機確認したが、他コンポーネントの見た目改善（意図せず変化する箇所がないか）は次回の全画面回帰確認で確認する。
+
+### 検証
+
+- ローカルで隔離ビルドしたインスタンス（`http://127.0.0.1:5180`など、既存の隔離出力先ビルド規約を使用）へログインし、以下を確認した。
+  - レース一覧の「レース名を検索」（`FluentTextField`）と日付欄（ネイティブ`input[type=date]`）の高さ・天面位置が一致すること（`getBoundingClientRect`で数値確認）。
+  - レース・馬・騎手・調教師・馬主・予想票・収集ジョブ・データ取得状況の各一覧で、検索後に「適用中」のチップ表示が現れ、チップ単体クリックでその条件だけが解除されて再検索されること。
+  - 収集ジョブ一覧の「すべてのジョブを一時停止」ダイアログで、閉じるボタンがタイトル行右端に正しく配置されること（修正前後のDOM computed styleを比較）。
+- `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905d -v:minimal`: 成功、警告0、エラー0（この時点で通常出力先はVisual Studioにロックされていたため隔離出力先を使用）。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore -o %TEMP%\HorseRacingPrediction-verify-20260905d-tests -v:minimal`: 成功、103件。
+
+残作業: ダイアログ以外のFluent UIコンポーネント（Tab、Accordion等）が今回のCSSバンドル追加でどう見た目が変わったかの全画面確認、`RaceOpsFilterBar`抽出（タスク5）、`app.css`のFluentトークン移行・CSS分離（タスク6残り）、実ブラウザでのブレークポイント総点検（タスク7）、モック側への意図的拡張の反映（タスク8）。

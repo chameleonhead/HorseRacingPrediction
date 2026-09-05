@@ -103,6 +103,7 @@
             <select aria-label="状態" @bind="statusText"><option value="">状態: すべて</option>@foreach (var value in Enum.GetValues<RaceDataCollectionState>()) { <option value="@value">@StatusLabel(value)</option> }</select>
         </div>
     </details>
+    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
 </FluentCard>
 @if (loading) { <UiState Kind="loading" Title="データ取得状況を読み込んでいます" /> }
 else if (VisibleItems.Count == 0) { <UiState Title="該当する取得結果はありません" /> }
@@ -254,4 +255,34 @@ else
         _ => value.ToString()
     };
     private enum AcquisitionQuickFilter { None, Unacquired, RetryWaiting }
+    private Task ClearFiltersAsync()
+    {
+        subjectQuery = string.Empty;
+        subjectTypeText = string.Empty;
+        statusText = string.Empty;
+        quickFilter = AcquisitionQuickFilter.None;
+        page = 1;
+        return LoadAsync();
+    }
+    private List<RaceOpsFilterChip> BuildFilterChips()
+    {
+        var chips = new List<RaceOpsFilterChip>();
+        if (!string.IsNullOrWhiteSpace(subjectQuery))
+        {
+            chips.Add(new($"対象名 {subjectQuery}", () => { subjectQuery = string.Empty; page = 1; return Task.CompletedTask; }));
+        }
+        if (Enum.TryParse<AgentAcquisitionSubjectType>(subjectTypeText, out var subjectType))
+        {
+            chips.Add(new($"対象 {SubjectLabel(subjectType)}", () => { subjectTypeText = string.Empty; return LoadAsync(); }));
+        }
+        if (Enum.TryParse<RaceDataCollectionState>(statusText, out var state))
+        {
+            chips.Add(new($"状態 {StatusLabel(state)}", () => { statusText = string.Empty; return LoadAsync(); }));
+        }
+        if (quickFilter != AcquisitionQuickFilter.None)
+        {
+            chips.Add(new(quickFilter == AcquisitionQuickFilter.Unacquired ? "未取得のみ" : "再試行待ち", () => { quickFilter = AcquisitionQuickFilter.None; page = 1; return Task.CompletedTask; }));
+        }
+        return chips;
+    }
 }
