@@ -1,4 +1,15 @@
 /* Layout and domain information placement only. Fluent UI owns control appearance. */
+/* fluent-tabs/fluent-tab render all panels' content at once (with the Label text
+   duplicated next to each panel's own heading) until their JS module upgrades
+   them into an actual tab strip. That's not just unstyled but actively confusing,
+   so hide them (space collapses since a tab strip has no useful pre-upgrade
+   layout) until upgraded. Kept narrow to these tags only: broader elements like
+   fluent-card render their content fine unstyled and should stay visible. */
+fluent-tabs:not(:defined),
+fluent-tab:not(:defined) {
+    display: none;
+}
+
 :root {
     color-scheme: light;
     --neutral-layer-1: #ffffff;
