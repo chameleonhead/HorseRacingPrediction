@@ -2,7 +2,7 @@
 
 ## 位置づけ
 
-このドキュメントは、旧 `docs/agent-scenario.md` と `docs/agent-client-implementation-plan.md` を置き換える。
+このドキュメントは、旧 `docs/agent-scenario.md` と `docs/agent-client-implementation-plan.md`（いずれも削除済み）を置き換える。
 両ドキュメントは「AI エージェントが収集・予想を主導する」構成を前提に書かれていたが、実装が進む中で **LLM 呼び出しコストの問題** が明確になったため、現在は以下の3サービス構成・責務分担に再設計している。
 
 Collector 側の詳細は [collector-design.md](collector-design.md)、Predictor 側の詳細は [predictor-design.md](predictor-design.md) を参照。API・ドメインモデルは [domain-design.md](domain-design.md) を参照。
@@ -46,6 +46,7 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
 - ページ遷移・抽出処理に LLM は使わず、AI エージェントや `Microsoft.Extensions.AI` 依存も持たない
 - 収集タスクの正本と管理画面は Api が所有し、Collector は HTTP 経由でタスクを取得・更新する
 - ローカル常駐モードと `--once` の有限実行モードを持ち、Lambda コンテナも後者を使用する
+- ⚠️ 現在、JRA サイト構造の再設計（[jra-scraping.md](jra-scraping.md)）に伴い、`--once` / 常駐ワーカーいずれの実行経路も一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。旧 `JraNavigation` / `Scrapers.Jra` 層に依存する登録も同様にコメントアウトされている
 - 詳細: [collector-design.md](collector-design.md)
 
 ### Predictor
@@ -96,7 +97,7 @@ HorseRacingPrediction.Predictor ─────┴──────────
 
 ## 廃止・非推奨とする既存コンポーネント
 
-以下は、予想生成を ML/API ベースに一本化する方針により非推奨とする。コード自体の削除は本ドキュメント更新の範囲外の別タスクとして扱う。
+以下は、予想生成を ML/API ベースに一本化する方針により非推奨とする。2026-09時点でもコード自体はリポジトリに残っており（`src/HorseRacingPrediction.Agents/Workflow/PredictionWorkflow.cs`, `src/HorseRacingPrediction.Agents/Agents/*.cs`）、Predictor の DI 登録からは既に外れているため実行はされない。コード削除は本ドキュメント更新の範囲外の別タスクとして扱う。
 
 - `HorseRacingPrediction.Agents.Workflow.PredictionWorkflow`（LLM 主導の3ステップ予想ワークフロー）
 - `HorseRacingPrediction.Agents.Agents.RaceContextAgent`

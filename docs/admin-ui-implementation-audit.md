@@ -33,7 +33,8 @@
 ## 意図的に残すもの
 
 - PageSnapshot の任意列テーブルは、列とセルの対応を保つ必要があるためカード化しない。ページ全体ではなく、ラベル付きの表領域だけを横スクロール可能にしている。
-- .NET 10 LTS 移行、QuickGrid / Fluent UI Blazor の採否は UI 修正とは独立した基盤更新であり、本改修へ混在させない。
+- .NET 10 LTS 移行、QuickGrid の採否は UI 修正とは独立した基盤更新であり、本改修へ混在させない。
+- Fluent UI Blazor（`Microsoft.FluentUI.AspNetCore.Components`）は本監査後に採用済み。詳細は [changes/20260830_fluent-ui-design-system/](changes/20260830_fluent-ui-design-system/) を参照。
 - 1280 px の list-detail 同時表示、収集対象日専用詳細、運用サマリーは将来の情報量増加時に導入する拡張であり、現在の一覧→詳細ユースケースを阻害しない。
 
 ## 検証
