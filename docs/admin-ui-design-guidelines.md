@@ -4,10 +4,11 @@
 
 実装は [Fluent UI ベースの管理画面刷新とデザインガイドライン統合](changes/20260830_fluent-ui-design-system/README.md) の承認後に開始します。
 
+Fluent UI コンポーネントの選定方針、独自 CSS で外観を上書きしないという原則、Loading/Empty/Error/Disabled/Success の状態設計、キーボード操作可能性などのアクセシビリティ基本原則は `.codex/skills/blazor-fluent-ui-design/SKILL.md` を正とします。本書は、それを RaceOps 固有のデザイントークンと OOUI パターンへ適用するための規則だけを記載します。
+
 ## Principles
 
-- Fluent UI Blazor を visual foundation と interaction primitive に使う。独自の Button、Field、palette を重ねて第二のデザインシステムを作らない。
-- アプリ起動時に `FluentDesignTheme` を配置し、ライトテーマと RaceOps の accent を一箇所で設定する。共通の loading、empty、error、ページ移動、確認操作も Fluent component を使う。独自 CSS は Fluent component の見た目を再現せず、OOUI の行・関係・ドメイン情報の配置だけを担う。
+- アプリ起動時に `FluentDesignTheme` を配置し、ライトテーマと RaceOps の accent を一箇所で設定する。
 - OOUI を composition model とし、画面を object、relationship、attribute、object-scoped action から組み立てる。
 - 同じ object はどの画面でも同じ主ラベル、状態、詳細 URL を持つ。絵文字は使用せず、必要な場合だけ Fluent システムアイコンを補助的に使う。
 - 詳細画面は「戻るリンク → 種別・状態の補助見出し → オブジェクト名の主見出し → 基本情報 → 関連 → 履歴・管理情報」の順を基本とし、戻るリンクをカード内や見出し横へ移動しない。主見出しに「馬」「騎手」などの種別名だけを表示しない。利用者向けの関係セクション見出しには「関連」を使う。
@@ -23,7 +24,6 @@
 ### Color and theme
 
 - ライトテーマを初期対象とする。Accent は `#0F6B52` を基準に Fluent design token から生成する。
-- neutral、text、border、surface、state color は Fluent token を使う。ページ固有 CSS に色の hex 値を追加しない。
 - 状態は色だけに依存せず、日本語ラベルを必ず併記する。アイコンは任意の補助情報であり、絵文字は使用しない。
 
 ### RaceOps design tokens
