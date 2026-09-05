@@ -14,8 +14,8 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 ```
 
 - **Api**（`src/HorseRacingPrediction.Api`）: レース・馬・騎手・調教師・予想票などを EventFlow による CQRS+ES で管理する ASP.NET Core アプリ。`/api` 配下の JSON API（`X-Api-Key` 認証）に加えて、ルート直下（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions`, `/owners`, `/jobs` など）に Blazor Server 製の管理画面（Cookie 認証、Fluent UI Blazor）を自ホストする。
-- **Collector**（`src/HorseRacingPrediction.Collector`）: JRA 公式サイトを Playwright で機械的に巡回し、Api へ収集データを登録する。LLM は使わない。
-  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/jra-scraping.md](docs/jra-scraping.md)）に伴い、実際の収集実行経路（`--once` / 常駐ワーカー）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。プロセス自体は起動できるが、収集タスクは実行されない。
+- **Collector**（`src/HorseRacingPrediction.Collector`）: JRA 公式サイトを Playwright で機械的に巡回し、Api へ収集データを登録する。LLM は使わない。常駐モードでは `CollectionExecutionService` が出馬表・成績収集ジョブを実行する。
+  - ⚠️ **現状**: JRA サイト構造の再設計（[docs/jra-scraping.md](docs/jra-scraping.md)）に伴い、Lambda 用の `--once` 実行（有限実行）は一時的に無効化されている（`src/HorseRacingPrediction.Collector/Program.cs`）。ローカル常駐モードでの出馬表・成績収集は再設計後の新実装（`JraSession`/`JraNavigator` など）で稼働している。一方、過去成績の月次・日次バックフィル探索など旧 URL 列挙方式に依存していた機能は未移行のまま無効化されている。
 - **Predictor**（`src/HorseRacingPrediction.Predictor`）: Api から取得したデータと ML.NET モデルのみで予想票を作成・確定し（LLM 不使用）、確定後の SNS 投稿文をマルチエージェント LLM ワークフローで生成する（投稿自体はスコープ外、手動運用）。
 
 詳細なサービス責務・依存関係は [docs/system-architecture.md](docs/system-architecture.md) を参照してください。
@@ -86,7 +86,7 @@ dotnet run --project src/HorseRacingPrediction.Collector/HorseRacingPrediction.C
 dotnet run --project src/HorseRacingPrediction.Predictor/HorseRacingPrediction.Predictor.csproj
 ```
 
-Collector は現在、実際の収集実行経路が一時的に無効化されています（上記「サービス構成」参照）。
+Collector は現在、Lambda 用の `--once` 実行と過去成績バックフィル探索のみ一時的に無効化されています（上記「サービス構成」参照）。ローカル常駐モードでの出馬表・成績収集は稼働します。
 
 5. テストを実行
 
