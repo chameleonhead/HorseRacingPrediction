@@ -15,7 +15,7 @@ public sealed class ComponentRenderingTests
     {
         using var context = CreateContext();
 
-        var cut = context.RenderComponent<RaceOpsAlert>(parameters => parameters
+        var cut = context.Render<RaceOpsAlert>(parameters => parameters
             .Add(x => x.Title, "保存できませんでした")
             .Add(x => x.Messages, ["理由を入力してください。"]));
 
@@ -30,7 +30,7 @@ public sealed class ComponentRenderingTests
     {
         using var context = CreateContext();
 
-        var cut = context.RenderComponent<UiState>(parameters => parameters
+        var cut = context.Render<UiState>(parameters => parameters
             .Add(x => x.Kind, "error")
             .Add(x => x.Title, "読み込めませんでした")
             .Add(x => x.Message, "再度お試しください。"));
@@ -47,7 +47,7 @@ public sealed class ComponentRenderingTests
             new RelationshipSummaryResponse("horse", "horse-1", "テストホース", "騎乗馬", 12, new DateOnly(2026, 8, 30), 12_345_678m, 4)
         };
 
-        var cut = context.RenderComponent<RaceOpsRelationshipGrid>(parameters => parameters
+        var cut = context.Render<RaceOpsRelationshipGrid>(parameters => parameters
             .Add(x => x.SectionId, "ranking")
             .Add(x => x.Title, "上位馬")
             .Add(x => x.Ranked, true)
@@ -60,9 +60,9 @@ public sealed class ComponentRenderingTests
         Assert.AreEqual("/horses/horse-1", cut.Find("a").GetAttribute("href"));
     }
 
-    private static Bunit.TestContext CreateContext()
+    private static Bunit.BunitContext CreateContext()
     {
-        var context = new Bunit.TestContext();
+        var context = new Bunit.BunitContext();
         context.Services.AddFluentUIComponents();
         return context;
     }
