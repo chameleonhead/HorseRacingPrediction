@@ -119,6 +119,58 @@ public sealed class JraRaceCardCollectionWorkflowTests
     }
 
     [TestMethod]
+    public async Task CollectAsync_出馬表に含まれる馬主名がそのまま登録される()
+    {
+        var race1 = CreateRaceSummary(1);
+        var raceList = CreateRaceList(race1);
+
+        var card1 = CreateRaceCard(
+            race1.Id,
+            "1R テストレース",
+            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A"));
+
+        var (session, _, writeService) = CreateContext(
+            raceList,
+            new Dictionary<RaceId, IJraPage> { [race1.Id] = card1 });
+
+        await using var _ = session;
+        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(Date, Course);
+
+        Assert.IsEmpty(result.Errors);
+        Assert.HasCount(1, writeService.UpsertHorseWithOwnerCalls);
+        Assert.AreEqual("テストホースA", writeService.UpsertHorseWithOwnerCalls[0].RegisteredName);
+        Assert.AreEqual("テスト馬主A", writeService.UpsertHorseWithOwnerCalls[0].OwnerName);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_馬主名が無くても出走登録は継続する()
+    {
+        var race1 = CreateRaceSummary(1);
+        var raceList = CreateRaceList(race1);
+
+        var card1 = CreateRaceCard(
+            race1.Id,
+            "1R テストレース",
+            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m));
+
+        var (session, _, writeService) = CreateContext(
+            raceList,
+            new Dictionary<RaceId, IJraPage> { [race1.Id] = card1 });
+
+        await using var _ = session;
+        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(Date, Course);
+
+        Assert.IsEmpty(result.Errors);
+        Assert.HasCount(1, result.RaceIds);
+        Assert.HasCount(1, writeService.UpsertRaceEntryCalls);
+        Assert.IsEmpty(writeService.UpsertHorseWithOwnerCalls);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_1レース失敗しても他のレースは保存される()
     {
         var race1 = CreateRaceSummary(1);

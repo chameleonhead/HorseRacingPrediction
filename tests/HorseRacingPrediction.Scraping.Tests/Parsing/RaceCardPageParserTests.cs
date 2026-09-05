@@ -16,9 +16,9 @@ public sealed class RaceCardPageParserTests
             Headers: ["枠番", "馬番", "馬名", "騎手", "斤量"],
             Rows:
             [
-                ["1", "1", "テストホースA", "騎手A", "57"],
-                ["1", "2", "テストホースB", "騎手B", "55.5"],
-                ["2", "3", "テストホースC", "騎手C", "56"],
+                ["1", "1", "テストホースA", "騎手A", "57kg"],
+                ["1", "2", "テストホースB", "騎手B", "55.5kg"],
+                ["2", "3", "テストホースC", "騎手C", "56kg"],
             ]);
 
         var section = new PageSectionSnapshot(
@@ -87,6 +87,58 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual(2, page.Entries[2].FrameNumber);
 
         Assert.AreEqual("テストステークス(GⅢ)", page.RaceName);
+    }
+
+    // 2026-09-06 実サイト確認（JRA出馬表ページ、4回中山1日1レース）で判明した実際のセル形式。
+    // 馬名セルはブロック要素ごとの改行を保持した複数行テキストとして取得される
+    // （馬名／オッズ(人気)／馬体重(増減)／馬主名／生産者名／調教師名(所属)／血統の順）。
+    // 騎手列も同様に「性齢/毛色」「負担重量」「騎手名」が改行区切りで結合されている。
+    private static PageSnapshot BuildRealSiteSnapshot()
+    {
+        var table = new PageTableSnapshot(
+            Headers: [
+                "枠",
+                "馬番",
+                "馬名 / 単勝オッズ(人気)\n馬体重\n馬主名 / 生産者名 / 調教師名 / 血統",
+                "性齢/毛色\n負担重量\n騎手名",
+            ],
+            Rows:
+            [
+                [
+                    "",
+                    "1",
+                    "バニーラビット\n10.7(4番人気)\n488kg(-2)\n藤田 晋\nノーザンファーム\n武 幸四郎(栗東)\n父：アドマイヤマーズ\n母：トレジャリング(母の父：Havana Gold)",
+                    "牡4/栗\n60.0kg\n小牧 加矢太",
+                ],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "出馬表",
+            mainText: "発走 10:05",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["2026年9月5日 中山 1レース", "障害3歳以上オープン"]);
+
+        return new PageSnapshot(Url, "出馬表", [section]);
+    }
+
+    [TestMethod]
+    public void Parse_実サイト形式の馬名セル_馬主と調教師を正しく分離する()
+    {
+        var parser = new RaceCardPageParser();
+
+        var page = (JraRaceCardPage)parser.Parse(BuildRealSiteSnapshot());
+
+        Assert.HasCount(1, page.Entries);
+
+        var entry = page.Entries[0];
+        Assert.AreEqual(1, entry.HorseNumber);
+        Assert.AreEqual("バニーラビット", entry.HorseName);
+        Assert.AreEqual("藤田 晋", entry.OwnerName);
+        Assert.AreEqual("武 幸四郎", entry.TrainerName);
+        Assert.AreEqual("小牧 加矢太", entry.JockeyName);
+        Assert.AreEqual(60.0m, entry.AssignedWeight);
     }
 
     // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、

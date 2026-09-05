@@ -115,7 +115,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
     internal static BrowserTypeLaunchOptions CreateDefaultLaunchOptions()
         => new()
         {
-            Headless = true,
+            Headless = false,
             ChromiumSandbox = false,
             Args = [
                 "--disable-gpu",
@@ -123,7 +123,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
                 "--no-zygote",
-                "--single-process",
+                // "--single-process",
                 "--disable-web-security",
                 "--ignore-certificate-errors",
             ]
@@ -2006,7 +2006,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             var cells = new List<string>();
             for (var cellIndex = 0; cellIndex < cellCount; cellIndex++)
             {
-                var text = await GetLocatorTextAsync(cellLocator.Nth(cellIndex));
+                var text = await GetCellTextAsync(cellLocator.Nth(cellIndex));
                 cells.Add(text);
             }
 
@@ -2350,6 +2350,42 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         }
 
         return WhitespaceRegex.Replace(text, " ").Trim().ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// テーブルデータセル用のテキスト取得。<see cref="GetLocatorTextAsync"/>と異なり、
+    /// ブロック要素（&lt;p&gt;等）間の改行を保持したまま返す。実サイト確認で判明した通り、
+    /// JRAの出馬表テーブルは1セル内に「馬名」「馬主名」「調教師名」等の複数項目を
+    /// ブロック要素で区切って詰め込んでおり（例:&lt;p class="owner"&gt;藤田 晋&lt;/p&gt;）、
+    /// 改行を単純に空白へ潰す（<see cref="NormalizeText"/>）と項目の境界が失われ、
+    /// 誤ったフィールド抽出につながる。行単位では引き続き余分な空白を1個へ正規化しつつ、
+    /// 空行は除去して項目区切りとしての改行だけを残す。
+    /// </summary>
+    private async Task<string> GetCellTextAsync(ILocator locator)
+    {
+        string? text = null;
+
+        try
+        {
+            text = await locator.InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3000 });
+        }
+        catch (Exception)
+        {
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            // innerTextが空（画像アイコンのみのセル等）の場合は、img altフォールバック等を
+            // 含む既存のGetLocatorTextAsyncに委譲する（この場合そもそも複数行になり得ない）。
+            return await GetLocatorTextAsync(locator);
+        }
+
+        var lines = text
+            .Split('\n')
+            .Select(line => WhitespaceRegex.Replace(line, " ").Trim())
+            .Where(line => line.Length > 0);
+
+        return string.Join("\n", lines);
     }
 
     private async Task<string> GetLocatorTextAsync(ILocator locator)

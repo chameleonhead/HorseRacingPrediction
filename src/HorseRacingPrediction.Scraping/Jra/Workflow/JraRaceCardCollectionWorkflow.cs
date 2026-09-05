@@ -129,6 +129,27 @@ public sealed class JraRaceCardCollectionWorkflow
 
         foreach (var entry in card.Entries)
         {
+            // 実サイト確認（2026-09-06）で判明: 馬主名は別ページへの遷移なしに出馬表の
+            // 馬名セルから直接取得できる（RaceCardPageParser参照）。取得できた場合のみ
+            // 馬主付きで馬を登録する（失敗しても出走登録自体は継続する）。
+            if (!string.IsNullOrWhiteSpace(entry.OwnerName))
+            {
+                try
+                {
+                    await _writeService.UpsertHorseWithOwnerAsync(
+                        registeredName: entry.HorseName,
+                        normalizedName: null,
+                        sexCode: null,
+                        birthDate: null,
+                        ownerName: entry.OwnerName,
+                        cancellationToken: cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // 馬主登録の失敗で出走登録自体は失敗させない。
+                }
+            }
+
             await _writeService.UpsertRaceEntryAsync(
                 raceId: raceId,
                 horseNumber: entry.HorseNumber,

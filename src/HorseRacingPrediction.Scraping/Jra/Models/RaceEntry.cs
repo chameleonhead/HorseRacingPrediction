@@ -9,4 +9,5 @@ public sealed record RaceEntry(
     int? FrameNumber,
     string? JockeyName,
     decimal? AssignedWeight,
-    string? TrainerName = null);
+    string? TrainerName = null,
+    string? OwnerName = null);

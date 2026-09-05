@@ -71,6 +71,22 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         CancellationToken cancellationToken = default)
         => Task.FromResult($"horse-{registeredName}");
 
+    public sealed record UpsertHorseWithOwnerCall(string RegisteredName, string? OwnerName);
+
+    public List<UpsertHorseWithOwnerCall> UpsertHorseWithOwnerCalls { get; } = [];
+
+    public Task<string> UpsertHorseWithOwnerAsync(
+        string registeredName,
+        string? normalizedName,
+        string? sexCode,
+        string? birthDate,
+        string? ownerName,
+        CancellationToken cancellationToken = default)
+    {
+        UpsertHorseWithOwnerCalls.Add(new UpsertHorseWithOwnerCall(registeredName, ownerName));
+        return Task.FromResult($"horse-{registeredName}");
+    }
+
     public Task<string> UpsertJockeyAsync(
         string displayName,
         string? normalizedName,

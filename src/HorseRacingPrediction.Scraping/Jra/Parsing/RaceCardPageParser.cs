@@ -27,13 +27,21 @@ public sealed class RaceCardPageParser
     private static readonly Regex LeadingNumberRegex =
         new(@"(?<num>\d{1,2})", RegexOptions.Compiled);
 
-    private static readonly Regex WeightRegex =
-        new(@"(?<weight>\d{1,3}(\.\d)?)", RegexOptions.Compiled);
+    // 実サイト確認（2026-09-06）で判明: 負担重量は馬名セルとは別列（性齢/毛色 負担重量 騎手名の
+    // 結合列）にあり、セル本文は「牡4/栗\n60.0kg\n小牧 加矢太」のように年齢の数字を含む。
+    // 単純な先頭数字マッチだと年齢（例:"4"）を誤って斤量として拾うため、"kg"直前の数値に限定する。
+    private static readonly Regex AssignedWeightRegex =
+        new(@"(?<weight>\d{1,3}(\.\d)?)\s*kg", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    // Task16実サイト確認で判明: 馬名セルは「馬名 調教師名(所属) 父：… 母：…」の結合形式。
-    // 調教師名は馬名に続く先頭の空白区切りブロックのうち、所属を表す括弧・血統情報
-    // （父/母）の直前までとする。実ページのHTML構造は未調査のため、既知の1サンプルの
-    // 形式から緩やかに推測している。
+    // 実サイト確認（2026-09-06）で判明: 馬名セルは「馬名／単勝オッズ(人気)／馬体重(増減)／
+    // 馬主名／生産者名／調教師名(所属)／血統(父：…母：…)」がブロック要素（<p>等）ごとに
+    // 分かれており、ブラウザ抽出層（GetCellTextAsync）が改行区切りで返す。オッズ・体重行
+    // （kg・番人気を含む）と血統行（父：/母：で始まる）を除いた残り3行が
+    // 馬主名／生産者名／調教師名の順で並ぶ。調教師名だけは末尾に所属（例:"(栗東)"）が
+    // 付くため、それを手掛かりに他の2行と区別する。
+    private static readonly Regex TrainerAffiliationSuffixRegex =
+        new(@"[\(（][^\(（]*[\)）]$", RegexOptions.Compiled);
+
     private static readonly Regex TrainerNameRegex =
         new(@"^(?<name>[^\(（]+)", RegexOptions.Compiled);
 
@@ -342,25 +350,13 @@ public sealed class RaceCardPageParser
                 continue;
             }
 
-            // Task16実サイト確認で判明: 実ページの馬名セルは
-            // 「馬名 調教師名(所属) 父：… 母：…」が1セルに結合されている
-            // （馬名 調教師名 血統 という結合ヘッダーの通り）。カタカナの馬名には
-            // 空白を含まないため、先頭の空白より前を馬名として切り出す。
-            var horseNameCellParts =
-                row[horseNameIndex].Split(' ', 2);
-
-            var horseName =
-                horseNameCellParts[0].Trim();
+            var (horseName, trainerName, ownerName) =
+                ParseHorseNameCell(row[horseNameIndex]);
 
             if (string.IsNullOrWhiteSpace(horseName))
             {
                 continue;
             }
-
-            var trainerName =
-                horseNameCellParts.Length > 1
-                    ? ExtractTrainerName(horseNameCellParts[1])
-                    : null;
 
             // Task16実サイト確認で判明: 枠・馬番のセルは色付きアイコン画像で
             // 描画されており、テキスト抽出結果が空になる（レース結果ページの
@@ -404,7 +400,7 @@ public sealed class RaceCardPageParser
             if (assignedWeightIndex >= 0 && assignedWeightIndex < row.Count)
             {
                 var weightMatch =
-                    WeightRegex.Match(row[assignedWeightIndex]);
+                    AssignedWeightRegex.Match(row[assignedWeightIndex]);
 
                 if (weightMatch.Success)
                 {
@@ -418,7 +414,8 @@ public sealed class RaceCardPageParser
                 frameNumber,
                 jockeyName,
                 assignedWeight,
-                trainerName));
+                trainerName,
+                ownerName));
         }
 
         return entries;
@@ -456,8 +453,8 @@ public sealed class RaceCardPageParser
     }
 
     /// <summary>
-    /// 馬名セルの馬名部分を除いた残り（「調教師名(所属) 父：… 母：…」）から
-    /// 調教師名だけを取り出す。括弧（所属表記）より前の部分を調教師名とみなす。
+    /// 馬名セルの1行から調教師名だけを取り出す。括弧（所属表記）より前の部分を
+    /// 調教師名とみなす。
     /// </summary>
     private static string? ExtractTrainerName(string cell)
     {
@@ -471,4 +468,54 @@ public sealed class RaceCardPageParser
 
         return string.IsNullOrWhiteSpace(name) ? null : name;
     }
+
+    /// <summary>
+    /// 馬名セル全体（<see cref="Browser.PlaywrightWebBrowser.GetCellTextAsync"/>により
+    /// ブロック要素ごとの改行が保持された複数行テキスト）から、馬名・調教師名・馬主名を
+    /// 取り出す。1行目が馬名、以降はオッズ・馬体重の行と血統（父：/母：）の行を除いた
+    /// 残りが「馬主名／生産者名／調教師名」の順で並ぶ（実サイト確認で判明したヘッダー
+    /// 「馬名 / 単勝オッズ(人気) 馬体重 馬主名 / 生産者名 / 調教師名 / 血統」の順序による）。
+    /// 調教師名の行だけは末尾に所属（例:"(栗東)"）が付くため、それを手掛かりに区別する。
+    /// </summary>
+    private static (string HorseName, string? TrainerName, string? OwnerName) ParseHorseNameCell(
+        string cell)
+    {
+        var lines = cell
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0)
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            return (string.Empty, null, null);
+        }
+
+        var horseName = lines[0];
+
+        var candidateLines = lines
+            .Skip(1)
+            .Where(l => !IsStatLine(l) && !IsFamilyLine(l))
+            .ToList();
+
+        var trainerLine =
+            candidateLines.FirstOrDefault(l => TrainerAffiliationSuffixRegex.IsMatch(l))
+            ?? candidateLines.LastOrDefault();
+
+        var trainerName =
+            trainerLine is not null ? ExtractTrainerName(trainerLine) : null;
+
+        var ownerName =
+            candidateLines.FirstOrDefault(l => l != trainerLine);
+
+        return (horseName, trainerName, ownerName);
+    }
+
+    private static bool IsStatLine(string line)
+        => line.Contains("kg", StringComparison.OrdinalIgnoreCase) ||
+           line.Contains("番人気", StringComparison.Ordinal);
+
+    private static bool IsFamilyLine(string line)
+        => line.StartsWith("父", StringComparison.Ordinal) ||
+           line.StartsWith("母", StringComparison.Ordinal);
 }
