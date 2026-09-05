@@ -31,6 +31,15 @@ public sealed class AgentProcessingOptions
     /// <summary>収集ジョブ実行中リースの有効期限（分）。</summary>
     public int CollectionLeaseMinutes { get; set; } = 30;
 
+    /// <summary>
+    /// 収集ジョブ（出馬表/成績、1日付単位）1件あたりの処理タイムアウト（分）。
+    /// ブラウザ操作がPlaywrightの通常のタイムアウトでは検知できない形で無応答になった
+    /// 場合（awaitが解決しないハング）でも、この時間で強制的に打ち切って失敗扱いにし、
+    /// 次回サイクルでの再試行に委ねる安全策。<see cref="CollectionLeaseMinutes"/>
+    /// より短くし、リース期限切れによる孤立ジョブ扱いより先にこちらで検知させる。
+    /// </summary>
+    public int CollectionJobTimeoutMinutes { get; set; } = 20;
+
     /// <summary>予想実行サービスを有効化するかどうか。</summary>
     public bool EnablePredictionExecution { get; set; } = false;
 

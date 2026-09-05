@@ -147,6 +147,8 @@ public sealed class CollectionExecutionService : BackgroundService
 
         foreach (var job in jobs)
         {
+            using var jobTimeoutCts = CreateJobTimeoutCts(cancellationToken);
+
             try
             {
                 var payload = AgentJobPayloadSerializer.Deserialize<RaceCardCollectionJobPayload>(job.Payload);
@@ -155,7 +157,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
                 }
 
-                var (results, savedRaceIds) = await CollectRaceCardsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                var (results, savedRaceIds) = await CollectRaceCardsAsync(payload.RaceDate, jobTimeoutCts.Token).ConfigureAwait(false);
 
                 if (ShouldRetryRaceCardCollection(payload.RaceDate, results, now))
                 {
@@ -232,7 +234,18 @@ public sealed class CollectionExecutionService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[収集実行] 出馬表収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
+                if (IsJobTimeout(ex, jobTimeoutCts, cancellationToken))
+                {
+                    _logger.LogWarning(
+                        "[収集実行] 出馬表収集ジョブがタイムアウトしました（{TimeoutMinutes}分、ハング検知の安全策）。JobKey={JobKey}",
+                        _options.CollectionJobTimeoutMinutes,
+                        job.DeduplicationKey);
+                }
+                else
+                {
+                    _logger.LogWarning(ex, "[収集実行] 出馬表収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
+                }
+
                 await _stateStore.FailJobAsync(
                     AgentJobType.RaceCardCollection,
                     job.DeduplicationKey,
@@ -256,6 +269,8 @@ public sealed class CollectionExecutionService : BackgroundService
 
         foreach (var job in jobs)
         {
+            using var jobTimeoutCts = CreateJobTimeoutCts(cancellationToken);
+
             try
             {
                 var payload = AgentJobPayloadSerializer.Deserialize<RaceResultCollectionJobPayload>(job.Payload);
@@ -264,7 +279,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
                 }
 
-                var (results, savedRaceIds) = await CollectRaceResultsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+                var (results, savedRaceIds) = await CollectRaceResultsAsync(payload.RaceDate, jobTimeoutCts.Token).ConfigureAwait(false);
                 await RecordRaceResultStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
 
                 var errorCount = results.Sum(x => x.Errors.Count);
@@ -287,7 +302,18 @@ public sealed class CollectionExecutionService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[収集実行] 成績収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
+                if (IsJobTimeout(ex, jobTimeoutCts, cancellationToken))
+                {
+                    _logger.LogWarning(
+                        "[収集実行] 成績収集ジョブがタイムアウトしました（{TimeoutMinutes}分、ハング検知の安全策）。JobKey={JobKey}",
+                        _options.CollectionJobTimeoutMinutes,
+                        job.DeduplicationKey);
+                }
+                else
+                {
+                    _logger.LogWarning(ex, "[収集実行] 成績収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
+                }
+
                 await _stateStore.FailJobAsync(
                     AgentJobType.RaceResultCollection,
                     job.DeduplicationKey,
@@ -439,6 +465,41 @@ public sealed class CollectionExecutionService : BackgroundService
 
         return (results, savedRaceIds.Distinct(StringComparer.Ordinal).ToList());
     }
+
+    /// <summary>
+    /// 収集ジョブ1件分の処理に対する安全策タイムアウトを持つ、外側の
+    /// <paramref name="cancellationToken"/> にリンクした <see cref="CancellationTokenSource"/> を作成する。
+    ///
+    /// 背景（手動E2E検証で判明したハング事象）: JraNavigator経由のブラウザ操作は、
+    /// PlaywrightのAPI呼び出し単位では既定タイムアウト（既定30秒）で保護されているが、
+    /// ページ内の要素走査がPlaywright側の1操作としては完了しつつ全体としては極めて
+    /// 大量の逐次round-trip（例: 開催選択ページの候補要素を1件ずつawaitする実装）になる
+    /// ケースでは、CPU使用率0%のままジョブ全体が長時間（観測値で9分以上）無進行に見える
+    /// ことがある。呼び出し元（本サービス）にはジョブ単位のタイムアウトが存在しなかった
+    /// ため、これが発生すると収集サイクル全体が実質的に無限に停止し得た。
+    /// この安全策は根本原因（走査の遅さ自体）を解消するものではなく、既定のリース期限
+    /// （<see cref="AgentProcessingOptions.CollectionLeaseMinutes"/>）より短い時間で
+    /// ジョブを打ち切り、失敗として次回サイクルでの再試行に委ねることで、
+    /// サービス全体の停止を防ぐことを目的とする。
+    /// </summary>
+    private CancellationTokenSource CreateJobTimeoutCts(CancellationToken cancellationToken)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromMinutes(Math.Max(1, _options.CollectionJobTimeoutMinutes)));
+        return cts;
+    }
+
+    /// <summary>
+    /// 捕捉した例外が、外側のキャンセル（サービス停止等）ではなく
+    /// <see cref="CreateJobTimeoutCts"/> によるジョブ単位タイムアウトによるものかどうかを判定する。
+    /// </summary>
+    private static bool IsJobTimeout(
+        Exception ex,
+        CancellationTokenSource jobTimeoutCts,
+        CancellationToken outerCancellationToken)
+        => ex is OperationCanceledException
+            && jobTimeoutCts.IsCancellationRequested
+            && !outerCancellationToken.IsCancellationRequested;
 
     public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
     {
