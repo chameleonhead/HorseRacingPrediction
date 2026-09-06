@@ -1630,6 +1630,15 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return headings;
     }
 
+    /// <summary>
+    /// アンカー1件ごとに <c>href</c>/<c>aria-label</c>/<c>title</c>取得・可視判定・
+    /// header/footer判定でPlaywrightへ何度も往復すると（1件あたり8〜9往復）、
+    /// リンク数の多いページ（JRAの開催選択ページ等）で1ブロックの抽出に数十秒
+    /// かかることが本番ログで確認された（リンク数にほぼ比例、約500〜570ms/リンク）。
+    /// <see cref="ILocator.EvaluateAllAsync{T}"/> で全アンカーの情報を1回のJS評価に
+    /// まとめて取得し、フィルタリング・重複排除はC#側で行うことで往復回数を
+    /// アンカー数に依らず一定（1回）にする。
+    /// </summary>
     private async Task<List<PageLinkSnapshot>> ExtractLinksFromRootAsync(
         ILocator root,
         int limit,
@@ -1638,29 +1647,72 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var links = new List<PageLinkSnapshot>();
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var anchors = root.Locator("a[href]");
-        var anchorCount = await anchors.CountAsync();
+        var rawAnchors = await anchors.EvaluateAllAsync<AnchorRawData[]>(AnchorRawDataScript).ConfigureAwait(false);
 
-        for (var index = 0; index < anchorCount && links.Count < limit; index++)
+        foreach (var raw in rawAnchors ?? [])
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (links.Count >= limit)
+            {
+                break;
+            }
 
-            var anchor = anchors.Nth(index);
-            if (!await IsElementRenderedAsync(anchor))
+            if (!raw.Visible || string.IsNullOrWhiteSpace(raw.Href))
             {
                 continue;
             }
 
-            var link = await CreateLinkAsync(anchor);
-            if (link is null || !seenUrls.Add(link.Url))
+            var text = NormalizeText(raw.Text);
+            var ariaLabel = NormalizeText(raw.AriaLabel);
+            var titleAttribute = NormalizeText(raw.Title);
+            if (IsDomainSearchPseudoActionAnchor(text, ariaLabel, titleAttribute, raw.Href))
             {
                 continue;
             }
 
-            links.Add(link);
+            if (!seenUrls.Add(raw.Href))
+            {
+                continue;
+            }
+
+            links.Add(new PageLinkSnapshot(
+                raw.Href,
+                string.IsNullOrWhiteSpace(text) ? raw.Href : text,
+                raw.Region));
         }
 
-        return links.Take(limit).ToList();
+        return links;
     }
+
+    private sealed class AnchorRawData
+    {
+        public string Href { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string AriaLabel { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public bool Visible { get; set; }
+        public string Region { get; set; } = "content";
+    }
+
+    private const string AnchorRawDataScript = """
+        (elements) => elements.map(el => {
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            const visible = rect.width > 0 && rect.height > 0
+                && style.visibility !== 'hidden' && style.display !== 'none';
+            let region = 'content';
+            if (el.closest('header, [role="banner"]')) region = 'header';
+            else if (el.closest('footer, [role="contentinfo"]')) region = 'footer';
+            return {
+                href: el.getAttribute('href') || '',
+                text: (el.innerText || el.textContent || '').trim(),
+                ariaLabel: el.getAttribute('aria-label') || '',
+                title: el.getAttribute('title') || '',
+                visible,
+                region
+            };
+        })
+        """;
 
     private async Task<List<PageActionSnapshot>> ExtractActionsFromRootAsync(
         ILocator root,

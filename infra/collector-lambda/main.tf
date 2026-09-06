@@ -150,16 +150,25 @@ resource "aws_iam_role_policy" "collector_queue_consumer" {
   role = aws_iam_role.collector.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "sqs:ReceiveMessage",
-        "sqs:DeleteMessage",
-        "sqs:ChangeMessageVisibility",
-        "sqs:GetQueueAttributes"
-      ]
-      Resource = aws_sqs_queue.collector.arn
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = aws_sqs_queue.collector.arn
+      },
+      {
+        # aws_lambda_function_event_invoke_config の on_failure 送信先（DLQ）へ
+        # Lambdaランタイム自身がメッセージを送出するために必要。
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.collector_dlq.arn
+      }
+    ]
   })
 }
 
@@ -243,4 +252,21 @@ resource "aws_lambda_event_source_mapping" "collector_queue" {
   batch_size                         = 1
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
+}
+
+# SQS event source mapping（同期呼び出し）では本来この非同期呼び出し設定は参照されないが、
+# コンソール上の既定値（再試行2回・送信先未設定）のままだと運用者が混乱するため、実際の
+# 挙動（SQS側のredrive_policyで1回失敗即DLQ、main.tf内 aws_sqs_queue.collector 参照）と
+# 一致するよう明示的に再試行0回・失敗時の送信先をDLQへ設定しておく。
+resource "aws_lambda_function_event_invoke_config" "collector" {
+  count                        = local.function_enabled ? 1 : 0
+  function_name                = aws_lambda_function.collector[0].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 21600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.collector_dlq.arn
+    }
+  }
 }

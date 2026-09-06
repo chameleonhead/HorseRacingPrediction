@@ -417,7 +417,7 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
-    public async Task ToRaceCardAsync_SameMeeting_SecondCallUsesGoBackShortcut()
+    public async Task ToRaceCardAsync_SameMeeting_SecondCallReusesCachedRaceListUrl()
     {
         const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
         const string raceCardUrl11 = "https://www.jra.go.jp/keiba/sample/racecard/11/";
@@ -454,7 +454,8 @@ public sealed class JraNavigatorTests
         Assert.AreEqual(raceCardUrl12, page2.Url);
 
         // 2レース目は競馬トップ再訪問・「出馬表」メニュークリック・開催選択ボタン
-        // クリックを行わず、GoBackで直接レース一覧ページへ戻っているはず。
+        // クリックを行わず、キャッシュ済みのレース一覧URLへ直接ナビゲートしているはず
+        // （ブラウザの「戻る」は実サイトで信頼できないため使用しない）。
         Assert.AreEqual(
             1,
             browser.ClickedTexts.Count(x => x == "出馬表"),
@@ -463,7 +464,11 @@ public sealed class JraNavigatorTests
             1,
             browser.ClickedTexts.Count(x => x == "4回中山1日"),
             "開催選択ボタンのクリックは初回の1回だけであるべき。");
-        Assert.AreEqual(1, browser.GoBackCallCount);
+        Assert.AreEqual(0, browser.GoBackCallCount, "GoBackは使用しない。");
+        Assert.AreEqual(
+            2,
+            browser.NavigatedUrls.Count(x => x == raceListUrl),
+            "レース一覧URLへは初回のフルナビゲーションと、2レース目のキャッシュ再訪問の合計2回ナビゲートしているはず。");
     }
 
     [TestMethod]

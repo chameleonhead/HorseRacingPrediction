@@ -24,12 +24,14 @@ builder.Services.Configure<AgentProcessingOptions>(
 builder.Services.AddJraScraping();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
+// TransientBadGatewayRetryHandler は AddHttpAgentServices() 内で既に登録済み。
 builder.Services.AddHttpClient("ProcessingState", (services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-    });
+    })
+    .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IProcessingStateStore>(services =>
         HttpProcessingStateStoreProxy.Create(
     services.GetRequiredService<IHttpClientFactory>().CreateClient("ProcessingState")));

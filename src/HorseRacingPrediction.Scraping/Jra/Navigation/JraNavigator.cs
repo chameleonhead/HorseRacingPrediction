@@ -21,27 +21,19 @@ public sealed class JraNavigator
     private readonly Func<DateOnly> _today;
 
     /// <summary>
-    /// 直前に完全遷移で到達した「レース選択」ページ（出馬表またはレース結果の
-    /// 開催選択後に表示される、R番号リンクが並ぶページ）の(日付, 競馬場, 経路種別)。
-    /// 同じ開催に対して続けて ToRaceCardAsync / ToRaceResultAsync が呼ばれる場合、
-    /// このページから1つ先（対象Rの出馬表 or レース結果）へ遷移済みのはずなので、
-    /// ブラウザの「戻る」で復帰できる可能性が高い。
-    ///
-    /// 実サイト調査（本タスク事前調査）では、JRAの開催選択ページ配下の遷移は
-    /// JS要素のクリックであっても最終的には通常のフルページ遷移であり、
-    /// Playwrightのブラウザ履歴に積まれる設計になっていると推測される。ただし
-    /// 実サイト上でのGoBack往復（開催選択→出馬表→GoBack→開催選択）は、
-    /// メニューがビューポート外にあり信頼されたクリックイベントを安定して
-    /// 発生させられなかったため実機検証を完了できなかった。
-    /// そのため「戻る」を無条件に信頼するのではなく、戻った先のページを
-    /// 実際に読み直して期待する開催（日付・競馬場・レース選択ページであること）と
-    /// 一致するかを毎回検証し、一致しない場合やGoBack自体が失敗した場合は
-    /// 必ず既存のフルパス（カレンダー確認/競馬トップ→メニュー→開催選択ボタン）に
-    /// フォールバックする防御的な実装にしている。
-    /// 経路種別（出馬表 or レース結果）もキーに含め、同一開催でも出馬表側と
-    /// レース結果側の「レース選択」ページを取り違えないようにしている。
+    /// 直前に取得した「レース選択」ページ（<see cref="JraRaceListPage"/>）そのもののキャッシュ。
+    /// 同一開催（同一日付・競馬場・経路）に対して <see cref="ToRaceListAsync"/> /
+    /// <see cref="ToRaceResultMeetingListAsync"/> がレースごとに繰り返し呼ばれる際、
+    /// 従来はブラウザの「戻る」で復帰を
+    /// 試みていたが、実サイトでは「戻る」後のページが期待するレース選択ページとして
+    /// 認識できないケース（Kind=Unknownで開催選択ページに戻ってしまう等）が常態化しており、
+    /// 毎回ブラウザの「戻る」試行（失敗）＋フルパス再遷移（1回あたり10秒以上）が発生し、
+    /// 1開催日のレース数だけこのコストが積み重なって実行時間の大半を占めていた
+    /// （本番ログで確認済み）。レース選択ページの内容は同一開催内では変わらないため、
+    /// ブラウザを一切操作せずこのキャッシュを直接返せば十分であり、GoBackの試行自体が
+    /// 不要になる。
     /// </summary>
-    private (DateOnly Date, RaceCourse Course, string Route)? _lastVisitedMeetingList;
+    private (DateOnly Date, RaceCourse Course, string Route, JraRaceListPage Page)? _lastRaceListPage;
 
     /// <summary>
     /// 直前に取得したカレンダーページのキャッシュ（月, ページ）。
@@ -151,10 +143,23 @@ public sealed class JraNavigator
             course,
             _browser.CurrentUrl);
 
-        if (await TryGoBackToMeetingListAsync(date, course, "Card", cancellationToken)
-            is JraRaceListPage shortcutPage)
+        if (_lastRaceListPage is { } cached
+            && cached.Date == date && cached.Course == course && cached.Route == "Card")
         {
-            return shortcutPage;
+            // GoBack（ブラウザ履歴の「戻る」）は実サイトで信頼できず、開催選択ページに
+            // 着地してしまう事象が常態化していた。既知のURLへ直接ナビゲートする方が
+            // 確実で、かつカレンダー再確認・トップ再訪問・メニュー/開催選択ボタンの
+            // クリックといった重い手順を省略できる。レース番号リンクのクリック
+            // （NavigateRaceNumberLinkAsync）にはブラウザが実際にこのページ上にいる
+            // 必要があるため、データだけ返すのではなく実際にナビゲートしてから返す。
+            await _browser.NavigateAsync(cached.Page.Url, cancellationToken);
+            var revisitedPage = await _pageReader.ReadAsync(cancellationToken);
+            _logger.LogInformation(
+                "JRA navigation done. Destination=RaceList Route=CachedUrl Date={Date} Course={Course} Url={Url}",
+                date,
+                course,
+                revisitedPage.Url);
+            return revisitedPage;
         }
 
         var calendarPage =
@@ -193,7 +198,10 @@ public sealed class JraNavigator
             await _pageReader.ReadAsync(
                 cancellationToken);
 
-        _lastVisitedMeetingList = (date, course, "Card");
+        if (page is JraRaceListPage cardRaceList && cardRaceList.Date == date && cardRaceList.Course == course)
+        {
+            _lastRaceListPage = (date, course, "Card", cardRaceList);
+        }
 
         _logger.LogInformation(
             "JRA navigation done. Destination=RaceList Route=Full ResolvedKind={Kind} Url={Url}",
@@ -473,10 +481,9 @@ public sealed class JraNavigator
 
     /// <summary>
     /// 「レース結果 開催選択」ページ経由で対象Rへ遷移する。同一開催に対して
-    /// 連続で呼ばれる場合は、直前に到達した「レース選択」ページへブラウザの
-    /// 「戻る」で復帰できないか試み、成功すれば競馬トップ再訪問・「レース結果」
-    /// メニュークリック・開催選択ボタンクリックを省略する（省略できなければ
-    /// 既存のフルパスにフォールバックする。詳細は<see cref="TryGoBackToMeetingListAsync"/>）。
+    /// 連続で呼ばれる場合は、直前に取得した「レース選択」ページのキャッシュ
+    /// （<see cref="_lastRaceListPage"/>）を再利用し、競馬トップ再訪問・「レース結果」
+    /// メニュークリック・開催選択ボタンクリックを省略する。
     /// </summary>
     private async Task<IJraPage> ToRaceResultViaMeetingSelectionAsync(
         RaceId race,
@@ -498,8 +505,8 @@ public sealed class JraNavigator
     /// <summary>
     /// 「レース結果 開催選択」ページ経由で対象日・競馬場の「レース選択」ページへ
     /// 遷移する（対象R番号の特定は行わない）。同一開催に対して連続で呼ばれる場合は、
-    /// 直前に到達した「レース選択」ページへブラウザの「戻る」で復帰できないか試みる
-    /// （詳細は<see cref="TryGoBackToMeetingListAsync"/>）。
+    /// 直前に取得した「レース選択」ページのキャッシュ（<see cref="_lastRaceListPage"/>）を
+    /// 再利用する。
     /// 対象日が開催選択ページの表示範囲外であれば <see cref="JraNavigationException"/>
     /// （<see cref="JraNavigationFailureReason.OutOfDisplayedRange"/> または
     /// <see cref="JraNavigationFailureReason.NotYetPublished"/>）を送出する。
@@ -509,16 +516,18 @@ public sealed class JraNavigator
         RaceCourse course,
         CancellationToken cancellationToken)
     {
-        var shortcutList =
-            await TryGoBackToMeetingListAsync(
+        if (_lastRaceListPage is { } cached
+            && cached.Date == date && cached.Course == course && cached.Route == ResultRoute)
+        {
+            // 出馬表側と同じ理由（GoBackの信頼性の問題）で、既知のURLへ直接ナビゲートする。
+            await _browser.NavigateAsync(cached.Page.Url, cancellationToken);
+            var revisitedPage = await _pageReader.ReadAsync(cancellationToken);
+            _logger.LogInformation(
+                "JRA navigation done. Destination=RaceResultList Route=CachedUrl Date={Date} Course={Course} Url={Url}",
                 date,
                 course,
-                ResultRoute,
-                cancellationToken);
-
-        if (shortcutList is not null)
-        {
-            return shortcutList;
+                revisitedPage.Url);
+            return revisitedPage;
         }
 
         // 競馬トップ → レース結果 → 対象日・競馬場（開催選択ボタン）
@@ -536,11 +545,7 @@ public sealed class JraNavigator
             raceList.Date == date &&
             raceList.Course == course)
         {
-            _lastVisitedMeetingList = (date, course, ResultRoute);
-        }
-        else
-        {
-            _lastVisitedMeetingList = null;
+            _lastRaceListPage = (date, course, ResultRoute, raceList);
         }
 
         return listPage;
@@ -705,67 +710,6 @@ public sealed class JraNavigator
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// 同一開催（同一日付・競馬場・経路）への再訪問時に、ブラウザの「戻る」で
-    /// 「レース選択」ページへの復帰を試みる。復帰後のページが期待する
-    /// <see cref="JraRaceListPage"/>（日付・競馬場一致）であれば採用し、
-    /// そうでなければ（GoBack自体の失敗も含め）nullを返してフルパスへの
-    /// フォールバックを促す。呼び出し元でのフルパス実行は行わない。
-    /// </summary>
-    private async Task<JraRaceListPage?> TryGoBackToMeetingListAsync(
-        DateOnly date,
-        RaceCourse course,
-        string route,
-        CancellationToken cancellationToken)
-    {
-        if (_lastVisitedMeetingList is not { } last ||
-            last.Date != date ||
-            last.Course != course ||
-            last.Route != route)
-        {
-            return null;
-        }
-
-        try
-        {
-            await _browser.GoBackAsync(cancellationToken);
-
-            var page =
-                await _pageReader.ReadAsync(cancellationToken);
-
-            if (page is JraRaceListPage raceList &&
-                raceList.Date == date &&
-                raceList.Course == course)
-            {
-                _logger.LogInformation(
-                    "JRA navigation done. Destination=RaceList Route=GoBackShortcut Date={Date} Course={Course} Url={Url}",
-                    date,
-                    course,
-                    page.Url);
-
-                return raceList;
-            }
-
-            _logger.LogInformation(
-                "JRA navigation fallback. GoBack shortcut landed on unexpected page. " +
-                "Expected Date={Date} Course={Course} but got Kind={Kind} Url={Url}. Falling back to full navigation.",
-                date,
-                course,
-                page.Kind,
-                page.Url);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogInformation(
-                ex,
-                "JRA navigation fallback. GoBack shortcut failed for Date={Date} Course={Course}. Falling back to full navigation.",
-                date,
-                course);
-        }
-
-        return null;
     }
 
     private async Task SelectCalendarMonthAsync(

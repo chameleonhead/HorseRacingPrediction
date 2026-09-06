@@ -15,5 +15,5 @@ public sealed class CollectionDeadLetterQueueReconcilerOptions
     /// （メンテナンスモードに入りSQSキューをパージ、収集停止アラートをSNSへ送信）。
     /// /resume が呼ばれるまでカウントはリセットされない。
     /// </summary>
-    public int ConsecutiveFailureThreshold { get; set; } = 3;
+    public int ConsecutiveFailureThreshold { get; set; } = 1;
 }
