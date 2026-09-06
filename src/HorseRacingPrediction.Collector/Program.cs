@@ -68,11 +68,37 @@ if (runOnce)
     // ブラウザー終了の猶予として1分だけ残し、14分で打ち切る。
     using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(14));
 
-    var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
-    await registrationService.RunOneCycleAsync(cts.Token);
+    try
+    {
+        var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
+        await registrationService.RunOneCycleAsync(cts.Token);
 
-    var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
-    await executionService.RunOneCycleAsync(cts.Token);
+        var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
+        await executionService.RunOneCycleAsync(cts.Token);
+    }
+    catch (OperationCanceledException) when (cts.IsCancellationRequested)
+    {
+        // ここに到達するのは、個々のジョブ単位のtry/catch（CollectionExecutionServiceの
+        // ジョブループ等）で捕捉されない箇所（例: ScrapingRegistrationServiceのジョブ登録処理
+        // 自体や、ジョブ取得のためのHTTP呼び出し）で14分の内部デッドラインに達した場合。
+        // ここで捕捉せず素通りさせると、未処理例外としてプロセスがクラッシュ（Aborted (core
+        // dumped)）し、bootstrap側は原因不明の固定文言("Collector execution failed")しか
+        // Lambdaランタイムへ報告できず、CloudWatch Logs上でタイムアウトか他の異常かの
+        // 判別ができなくなる。ここで捕捉し、原因が分かる形でログ出力した上でファイルに書き出し、
+        // bootstrapがLambdaランタイムAPIへのエラー応答にその内容を使えるようにする。
+        const string reason = "Collector execution timed out (14-minute internal deadline reached).";
+        Console.Error.WriteLine(reason);
+        try
+        {
+            await File.WriteAllTextAsync("/tmp/collector-failure-reason.txt", reason);
+        }
+        catch
+        {
+            // 失敗理由の書き出し自体の失敗は無視する（bootstrap側は既定の文言にフォールバックする）。
+        }
+
+        Environment.Exit(1);
+    }
 }
 else
 {

@@ -20,13 +20,24 @@ while true; do
     "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/next"
   request_id="$(sed -n 's/^[Ll]ambda-[Rr]untime-[Aa]ws-[Rr]equest-[Ii]d:[[:space:]]*\(.*\)\r$/\1/p' "$headers_file")"
 
+  failure_reason_file="/tmp/collector-failure-reason.txt"
+  rm -f "$failure_reason_file"
+
   if COLLECTOR_EVENT_PATH="$event_file" /var/task/HorseRacingPrediction.Collector --once; then
     curl -sS -X POST \
       "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/${request_id}/response" \
       -H 'Content-Type: application/json' -d '{"batchItemFailures":[]}' >/dev/null
   else
+    # Collectorが原因を特定できた場合（例: 内部デッドラインのタイムアウト）は
+    # /tmp/collector-failure-reason.txt に理由を書き出しているので、それを
+    # CloudWatch Logsで判別できるようエラーメッセージに反映する。
+    error_message="Collector execution failed"
+    if [ -s "$failure_reason_file" ]; then
+      error_message="$(cat "$failure_reason_file")"
+    fi
+    error_message_json=$(printf '%s' "$error_message" | sed 's/\\/\\\\/g; s/"/\\"/g')
     curl -sS -X POST \
       "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/${request_id}/error" \
-      -H 'Content-Type: application/json' -d '{"errorMessage":"Collector execution failed"}' >/dev/null
+      -H 'Content-Type: application/json' -d "{\"errorMessage\":\"${error_message_json}\"}" >/dev/null
   fi
 done
