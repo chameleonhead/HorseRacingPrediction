@@ -43,6 +43,18 @@ public sealed class JraNavigator
     /// </summary>
     private (DateOnly Date, RaceCourse Course, string Route)? _lastVisitedMeetingList;
 
+    /// <summary>
+    /// 直前に取得したカレンダーページのキャッシュ（月, ページ）。
+    /// <see cref="ToCalendarAsync"/> は日単位のジョブ登録処理（例:
+    /// ScrapingRegistrationService のルックアヘッド日数分のループ）から同じ月に対して
+    /// 何度も呼ばれ得るが、カレンダーページは月単位の内容であり日ごとに再取得する必要がない。
+    /// 再取得はページ遷移・スナップショット抽出だけで1回あたり1分近くかかることがあり、
+    /// ルックアヘッド日数が多い場合にLambdaの内部デッドライン（9分）を使い切って
+    /// サイクル全体が未処理のままキャンセルされる原因になっていたため、同一セッション内で
+    /// 同じ月への呼び出しはキャッシュを再利用する。
+    /// </summary>
+    private (YearMonth Month, JraCalendarPage Page)? _lastCalendarPage;
+
     public JraNavigator(
         IWebBrowser browser,
         JraPageReader pageReader,
@@ -85,6 +97,14 @@ public sealed class JraNavigator
         YearMonth month,
         CancellationToken cancellationToken = default)
     {
+        if (_lastCalendarPage is { } cached && cached.Month == month)
+        {
+            _logger.LogInformation(
+                "JRA navigation skipped (cache hit). Destination=Calendar Month={Month}",
+                month);
+            return cached.Page;
+        }
+
         _logger.LogInformation(
             "JRA navigation start. Destination=Calendar Month={Month} CurrentUrl={CurrentUrl}",
             month,
@@ -111,6 +131,11 @@ public sealed class JraNavigator
             "JRA navigation done. Destination=Calendar ResolvedKind={Kind} Url={Url}",
             page.Kind,
             page.Url);
+
+        if (page is JraCalendarPage calendarPage)
+        {
+            _lastCalendarPage = (month, calendarPage);
+        }
 
         return page;
     }
