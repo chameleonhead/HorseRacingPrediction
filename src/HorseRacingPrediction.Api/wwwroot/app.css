@@ -102,11 +102,8 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
 .filter-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: 8px 12px; }
 .filter-toolbar > .filter-field { display: grid; min-width: 0; gap: 4px; }
 .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide { grid-column: span 2; }
-.filter-toolbar > .filter-field > fluent-text-field,
-.filter-toolbar > .filter-field > fluent-select,
-.filter-toolbar > .filter-field > input,
-.filter-toolbar > .filter-field > select { box-sizing: border-box; width: 100%; }
-.filter-toolbar > .filter-field > fluent-text-field, .filter-toolbar > .filter-field > fluent-select, .filter-toolbar > fluent-button { min-height: 40px; }
+.filter-toolbar > .filter-field > * { box-sizing: border-box; width: 100%; }
+.filter-toolbar > .filter-field fluent-text-field, .filter-toolbar > .filter-field fluent-select, .filter-toolbar > fluent-button { min-height: 40px; }
 .filter-toolbar > .filter-field > label { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
 .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { justify-self: start; align-self: end; width: fit-content; }
 .filter-toolbar > .filter-action fluent-button { width: auto; }
