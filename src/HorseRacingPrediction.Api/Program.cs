@@ -199,41 +199,50 @@ app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
 // 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）
 // まで新規ジョブが投入されない空白が生じ得る。ここで初期化完了を待った上でSQSキューの
 // 滞留状況を調査し、ディスパッチ・監視サイクルを明示的に1回実行することでその空白を埋める。
-_ = Task.Run(async () =>
+// CollectionTaskOutboxDispatcher / CollectionJobWatchdogService は CollectionQueue.Enabled
+// が true の場合のみDIへ登録される（SQS未使用のローカル開発環境等では登録されない）。
+// 以前はこのガードがなく、Enabled=false（既定値）のローカル実行で
+// 「No service for type 'CollectionTaskOutboxDispatcher' has been registered.」という
+// InvalidOperationExceptionがログに出続けていた（キャッチはされるためプロセスは落ちないが、
+// 起動のたびに無意味なエラーログが発生していた）。
+if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
 {
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    var maintenance = app.Services.GetRequiredService<CollectionMaintenanceState>();
-    var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
-    while (maintenance.IsActive && DateTimeOffset.UtcNow < deadline)
+    _ = Task.Run(async () =>
     {
-        await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-    }
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        var maintenance = app.Services.GetRequiredService<CollectionMaintenanceState>();
+        var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
+        while (maintenance.IsActive && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
 
-    if (maintenance.IsActive)
-    {
-        logger.LogWarning("起動直後のジョブ実行確認: メンテナンスが完了しないため見送りました。");
-        return;
-    }
+        if (maintenance.IsActive)
+        {
+            logger.LogWarning("起動直後のジョブ実行確認: メンテナンスが完了しないため見送りました。");
+            return;
+        }
 
-    try
-    {
-        var queue = app.Services.GetRequiredService<ICollectionTaskQueue>();
-        var depth = await queue.GetQueueDepthAsync(CancellationToken.None).ConfigureAwait(false);
-        logger.LogInformation(
-            "起動直後のSQSキュー調査: 可視メッセージ={Visible} 処理中メッセージ={NotVisible}",
-            depth.VisibleCount,
-            depth.NotVisibleCount);
+        try
+        {
+            var queue = app.Services.GetRequiredService<ICollectionTaskQueue>();
+            var depth = await queue.GetQueueDepthAsync(CancellationToken.None).ConfigureAwait(false);
+            logger.LogInformation(
+                "起動直後のSQSキュー調査: 可視メッセージ={Visible} 処理中メッセージ={NotVisible}",
+                depth.VisibleCount,
+                depth.NotVisibleCount);
 
-        await app.Services.GetRequiredService<CollectionTaskOutboxDispatcher>()
-            .DispatchOnceAsync(CancellationToken.None).ConfigureAwait(false);
-        await app.Services.GetRequiredService<CollectionJobWatchdogService>()
-            .RunOnceAsync(CancellationToken.None).ConfigureAwait(false);
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "起動直後のジョブ実行確認でエラーが発生しました。");
-    }
-});
+            await app.Services.GetRequiredService<CollectionTaskOutboxDispatcher>()
+                .DispatchOnceAsync(CancellationToken.None).ConfigureAwait(false);
+            await app.Services.GetRequiredService<CollectionJobWatchdogService>()
+                .RunOnceAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "起動直後のジョブ実行確認でエラーが発生しました。");
+        }
+    });
+}
 
 app.UseForwardedHeaders();
 app.UseSwagger();
