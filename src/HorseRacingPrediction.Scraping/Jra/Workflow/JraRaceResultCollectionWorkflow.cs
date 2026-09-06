@@ -1,5 +1,5 @@
 using System.Linq;
-using System.Text.Json;
+using System.Text.RegularExpressions;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -11,18 +11,20 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// オーケストレーションのみを行い、HTML解析やページ遷移の詳細は
 /// <see cref="JraSession.Navigate"/>（Navigator/Parser層）に委譲する。
 ///
-/// <see cref="IDataCollectionWriteService.DeclareRaceEntryResultAsync"/> は
-/// <see cref="RaceAggregate"/> が <c>ResultDeclared</c> 状態に遷移していないと
-/// ドメイン層のガードで例外を送出し、API はそれを 409 (Conflict) として返す。
-/// <see cref="HttpDataCollectionWriteService"/> はこの 409 を「既に記録済み」という
-/// 成功扱いメッセージにマッピングしているため、<see cref="DeclareRaceResultAsync"/> を
-/// 呼ばずに着順登録だけを行うと、実際にはデータが保存されないまま見かけ上成功する
-/// （サイレントなデータ欠落）。そのため、着順登録の前に必ず1着馬の情報で
-/// レース全体の確定宣言を行う。
+/// <para>
+/// レース1件分の登録（レース作成/更新・結果宣言・全馬の着順・天候・馬場状態・払戻）は、
+/// 従来は<see cref="IDataCollectionWriteService"/>の個別メソッドを6種類以上・
+/// 馬の頭数だけ呼び分けており、レース1件あたり10〜20回超のHTTPラウンドトリップが
+/// 発生していた。<see cref="IDataCollectionWriteService.DeclareRaceResultBulkAsync"/>
+/// により、これらを1回のAPI呼び出しにまとめる。
+/// </para>
 ///
-/// 天候・馬場状態・払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）は
-/// 結果ページパーサーがページから抽出できた場合のみ記録する。実ページのHTML構造は
-/// 未調査のため、抽出できなかった項目は記録をスキップし、着順登録自体は失敗させない。
+/// <see cref="RaceAggregate"/> は<c>ResultDeclared</c>状態に遷移していないと
+/// 各馬の着順登録をドメイン層のガードで拒否するため、一括登録リクエストの中でも
+/// 必ず1着馬の情報でレース全体の確定宣言（結果宣言）を先に行ってから各馬の着順を
+/// 登録する（API側の一括登録エンドポイント実装で保証）。
+///
+/// 天候・馬場状態・払戻は結果ページパーサーがページから抽出できた場合のみ記録する。
 ///
 /// <para>
 /// 成績収集（本ワークフロー）は出馬表収集（<see cref="JraRaceCardCollectionWorkflow"/>）とは
@@ -31,16 +33,16 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// <see cref="RaceAggregate"/> がCreateすらされていない（さらに開催選択カードが
 /// Publishされていない）レースの成績・天候・馬場状態を先に収集しようとするケースが
 /// 実運用で確認された（"Race is not created." による500エラー）。そのため、
-/// 結果ページから判明する範囲のメタデータ（レース名・出走頭数）で
-/// <see cref="IDataCollectionWriteService.UpsertRaceAsync"/>（作成 or 更新、
-/// 出走頭数指定時はカード公開まで行う冪等な操作）を必ず先に呼び、レースが
-/// 存在すること・結果宣言可能な状態であることを保証してから、結果・天候・馬場状態・
-/// 払戻をまとめて登録する。
+/// 結果ページから判明する範囲のメタデータ（レース名・出走頭数）でのレース作成/更新
+/// （出走頭数指定時はカード公開まで行う冪等な操作）を、一括登録リクエストの中で
+/// 必ず最初に行う。
 /// </para>
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
     : IJraRaceResultCollectionWorkflow
 {
+    private static readonly Regex FailedHorseNumberPattern = new(@"HorseNumber=(\d+)", RegexOptions.Compiled);
+
     private readonly JraSession _session;
     private readonly IDataCollectionWriteService _writeService;
 
@@ -75,144 +77,104 @@ public sealed class JraRaceResultCollectionWorkflow
         var dataCollectionRaceId = DeterministicIdGenerator.BuildRaceId(
             raceId.Date, racecourseName, raceId.Number);
 
-        var savedHorseNumbers = new List<int>();
         var errors = new List<string>();
 
-        try
-        {
-            await _writeService.UpsertRaceAsync(
-                raceDate: raceId.Date.ToString("yyyy-MM-dd"),
-                racecourseCode: racecourseName,
-                raceNumber: raceId.Number,
-                raceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
-                entryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
-                gradeCode: null,
-                surfaceCode: null,
-                distanceMeters: null,
-                directionCode: null,
-                cancellationToken: cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-        {
-            // レース自体が作成・カード公開できていなければ、この後の結果・天候等の登録は
-            // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、
-            // ここで打ち切って分かりやすい1件のエラーにまとめる。
-            errors.Add($"レース登録エラー: {ex.Message}");
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors);
-        }
-
         var winningEntry = resultPage.Results.FirstOrDefault(e => e.FinishPosition == 1);
-        if (winningEntry is not null)
-        {
-            try
-            {
-                await _writeService.DeclareRaceResultAsync(
-                    raceId: dataCollectionRaceId,
-                    winningHorseName: winningEntry.HorseName,
-                    declaredAt: null,
-                    winningHorseId: null,
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-            {
-                errors.Add($"レース確定宣言エラー: {ex.Message}");
-            }
-        }
-        else
+        if (winningEntry is null)
         {
             errors.Add("レース確定宣言エラー: 1着馬が結果に見つかりませんでした。");
         }
 
-        foreach (var entry in resultPage.Results)
+        var entries = resultPage.Results
+            .Select(entry => new RaceResultBulkEntry(
+                entry.HorseNumber,
+                entry.FinishPosition,
+                FormatTime(entry.Time),
+                MarginText: null,
+                LastThreeFurlongTime: null,
+                AbnormalResultCode: null,
+                PrizeMoney: null))
+            .ToList();
+
+        var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
+            ? null
+            : new RaceResultBulkWeather(
+                DateTimeOffset.UtcNow, WeatherCode: null, resultPage.WeatherText,
+                TemperatureCelsius: null, HumidityPercent: null, WindDirectionCode: null, WindSpeedMeterPerSecond: null);
+
+        var trackCondition = string.IsNullOrWhiteSpace(resultPage.TrackConditionText)
+            ? null
+            : new RaceResultBulkTrackCondition(
+                DateTimeOffset.UtcNow, TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
+
+        var payouts = resultPage.Payouts is null || winningEntry is null
+            ? null
+            : new RaceResultBulkPayouts(
+                DateTimeOffset.UtcNow,
+                ToPayoutEntries(resultPage.Payouts.WinPayouts),
+                ToPayoutEntries(resultPage.Payouts.PlacePayouts),
+                ToPayoutEntries(resultPage.Payouts.QuinellaPayouts),
+                ToPayoutEntries(resultPage.Payouts.ExactaPayouts),
+                ToPayoutEntries(resultPage.Payouts.TrifectaPayouts));
+
+        var request = new RaceResultBulkRequest(
+            RaceDate: raceId.Date.ToString("yyyy-MM-dd"),
+            RacecourseCode: racecourseName,
+            RaceNumber: raceId.Number,
+            RaceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
+            EntryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
+            GradeCode: null,
+            SurfaceCode: null,
+            DistanceMeters: null,
+            DirectionCode: null,
+            WinningHorseName: winningEntry?.HorseName,
+            DeclaredAt: null,
+            Entries: entries,
+            Weather: weather,
+            TrackCondition: trackCondition,
+            Payouts: payouts);
+
+        RaceResultBulkOutcome outcome;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
-            {
-                await _writeService.DeclareRaceEntryResultAsync(
-                    raceId: dataCollectionRaceId,
-                    horseNumber: entry.HorseNumber,
-                    finishPosition: entry.FinishPosition,
-                    officialTime: FormatTime(entry.Time),
-                    marginText: null,
-                    lastThreeFurlongTime: null,
-                    abnormalResultCode: null,
-                    prizeMoney: null,
-                    cancellationToken: cancellationToken);
-
-                savedHorseNumbers.Add(entry.HorseNumber);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-            {
-                errors.Add($"着順記録エラー: HorseNumber={entry.HorseNumber} — {ex.Message}");
-            }
+            outcome = await _writeService.DeclareRaceResultBulkAsync(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
+        {
+            // レース自体が作成・カード公開できていなければ、結果・天候等の登録は
+            // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、
+            // ここで打ち切って分かりやすい1件のエラーにまとめる。
+            errors.Add($"レース登録エラー: {ex.Message}");
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
         }
 
-        if (!string.IsNullOrWhiteSpace(resultPage.WeatherText))
+        errors.AddRange(outcome.Errors);
+
+        // レース自体の作成/更新がAPI側で失敗した場合、それ以降の項目はAPI側でも
+        // 処理されていないため、保存済み馬番は空のまま返す。
+        if (outcome.Errors.Any(e => e.StartsWith("レース登録エラー", StringComparison.Ordinal)))
         {
-            try
-            {
-                await _writeService.RecordWeatherObservationAsync(
-                    raceId: dataCollectionRaceId,
-                    observationTime: DateTimeOffset.UtcNow,
-                    weatherCode: null,
-                    weatherText: resultPage.WeatherText,
-                    temperatureCelsius: null,
-                    humidityPercent: null,
-                    windDirectionCode: null,
-                    windSpeedMeterPerSecond: null,
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-            {
-                errors.Add($"天候記録エラー: {ex.Message}");
-            }
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
         }
 
-        if (!string.IsNullOrWhiteSpace(resultPage.TrackConditionText))
-        {
-            try
-            {
-                await _writeService.RecordTrackConditionObservationAsync(
-                    raceId: dataCollectionRaceId,
-                    observationTime: DateTimeOffset.UtcNow,
-                    turfConditionCode: null,
-                    dirtConditionCode: null,
-                    goingDescriptionText: resultPage.TrackConditionText,
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-            {
-                errors.Add($"馬場状態記録エラー: {ex.Message}");
-            }
-        }
+        var failedHorseNumbers = outcome.Errors
+            .Select(e => FailedHorseNumberPattern.Match(e))
+            .Where(m => m.Success)
+            .Select(m => int.Parse(m.Groups[1].Value))
+            .ToHashSet();
 
-        if (resultPage.Payouts is not null && winningEntry is not null)
-        {
-            try
-            {
-                await _writeService.DeclareRacePayoutsAsync(
-                    raceId: dataCollectionRaceId,
-                    winPayoutsJson: ToPayoutJson(resultPage.Payouts.WinPayouts),
-                    placePayoutsJson: ToPayoutJson(resultPage.Payouts.PlacePayouts),
-                    quinellaPayoutsJson: ToPayoutJson(resultPage.Payouts.QuinellaPayouts),
-                    exactaPayoutsJson: ToPayoutJson(resultPage.Payouts.ExactaPayouts),
-                    trifectaPayoutsJson: ToPayoutJson(resultPage.Payouts.TrifectaPayouts),
-                    cancellationToken: cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
-            {
-                errors.Add($"払戻記録エラー: {ex.Message}");
-            }
-        }
+        var savedHorseNumbers = entries
+            .Where(e => e.HorseNumber > 0 && !failedHorseNumbers.Contains(e.HorseNumber))
+            .Select(e => e.HorseNumber)
+            .ToList();
 
         return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors);
     }
 
-    private static string? ToPayoutJson(IReadOnlyList<PayoutLine> payouts)
+    private static IReadOnlyList<RaceResultBulkPayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)
         => payouts.Count == 0
             ? null
-            : JsonSerializer.Serialize(payouts.Select(p => new { combination = p.Combination, amount = p.Amount }));
+            : payouts.Select(p => new RaceResultBulkPayoutEntry(p.Combination, p.Amount)).ToList();
 
     private static string? FormatTime(TimeSpan? time) =>
         time is null

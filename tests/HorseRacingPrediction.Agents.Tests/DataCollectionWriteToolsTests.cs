@@ -130,5 +130,9 @@ public class DataCollectionWriteToolsTests
             string? turfConditionCode, string? dirtConditionCode, string? goingDescriptionText,
             CancellationToken cancellationToken = default)
             => Task.FromResult($"レース {raceId} の馬場状態を記録しました。");
+
+        public Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(RaceResultBulkRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new RaceResultBulkOutcome($"race-fake-{request.RaceDate}", []));
     }
 }

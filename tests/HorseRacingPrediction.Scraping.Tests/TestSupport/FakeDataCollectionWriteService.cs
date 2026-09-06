@@ -215,4 +215,82 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         RecordTrackConditionObservationCalls.Add(new RecordTrackConditionObservationCall(raceId, goingDescriptionText));
         return Task.FromResult("recorded");
     }
+
+    public List<RaceResultBulkRequest> DeclareRaceResultBulkCalls { get; } = [];
+
+    /// <summary>
+    /// 実際の /api/races/result-bulk エンドポイントと同様、レース確定宣言・各馬の成績・
+    /// 天候・馬場状態・払戻は1件失敗しても他の項目の登録を継続し、失敗内容は
+    /// <see cref="RaceResultBulkOutcome.Errors"/> に集約する挙動をインメモリで再現する。
+    /// <see cref="FailForHorseNumber"/>・<see cref="FailDeclareRaceResult"/> による
+    /// 部分失敗テストは、既存の個別Call記録（<see cref="DeclareRaceEntryResultCalls"/>等）
+    /// を引き続き利用できるよう、この一括呼び出しの中でも同じリストに記録する。
+    /// </summary>
+    public Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
+        RaceResultBulkRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        DeclareRaceResultBulkCalls.Add(request);
+
+        var raceId = DeterministicIdGenerator.BuildRaceId(
+            DateOnly.Parse(request.RaceDate), request.RacecourseCode, request.RaceNumber);
+        UpsertRaceCalls.Add(new UpsertRaceCall(request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName, request.EntryCount));
+
+        var errors = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
+        {
+            if (FailDeclareRaceResult)
+            {
+                errors.Add("レース確定宣言エラー: テスト用の失敗: DeclareRaceResultAsync");
+            }
+            else
+            {
+                DeclareRaceResultCalls.Add(new DeclareRaceResultCall(raceId, request.WinningHorseName));
+            }
+        }
+
+        if (request.Entries is not null)
+        {
+            foreach (var entry in request.Entries)
+            {
+                if (FailForHorseNumber == entry.HorseNumber)
+                {
+                    errors.Add($"着順記録エラー: HorseNumber={entry.HorseNumber} — テスト用の失敗: HorseNumber={entry.HorseNumber}");
+                    continue;
+                }
+
+                DeclareRaceEntryResultCalls.Add(new DeclareRaceEntryResultCall(
+                    raceId, entry.HorseNumber, entry.FinishPosition, entry.OfficialTime));
+            }
+        }
+
+        if (request.Weather is not null)
+        {
+            RecordWeatherObservationCalls.Add(new RecordWeatherObservationCall(raceId, request.Weather.WeatherText));
+        }
+
+        if (request.TrackCondition is not null)
+        {
+            RecordTrackConditionObservationCalls.Add(new RecordTrackConditionObservationCall(raceId, request.TrackCondition.GoingDescriptionText));
+        }
+
+        if (request.Payouts is not null)
+        {
+            DeclareRacePayoutsCalls.Add(new DeclareRacePayoutsCall(
+                raceId,
+                SerializePayouts(request.Payouts.WinPayouts),
+                SerializePayouts(request.Payouts.PlacePayouts),
+                SerializePayouts(request.Payouts.QuinellaPayouts),
+                SerializePayouts(request.Payouts.ExactaPayouts),
+                SerializePayouts(request.Payouts.TrifectaPayouts)));
+        }
+
+        return Task.FromResult(new RaceResultBulkOutcome(raceId, errors));
+    }
+
+    private static string? SerializePayouts(IReadOnlyList<RaceResultBulkPayoutEntry>? payouts) =>
+        payouts is null || payouts.Count == 0
+            ? null
+            : System.Text.Json.JsonSerializer.Serialize(payouts.Select(p => new { combination = p.Combination, amount = p.Amount }));
 }

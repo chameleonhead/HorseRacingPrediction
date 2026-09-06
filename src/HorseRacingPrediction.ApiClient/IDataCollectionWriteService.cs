@@ -137,4 +137,21 @@ public interface IDataCollectionWriteService
         string? dirtConditionCode,
         string? goingDescriptionText,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// レース1件分の作成/更新・確定結果・全馬の着順・天候・馬場状態・払戻を
+    /// 1回のAPI呼び出しでまとめて登録する。
+    /// <para>
+    /// <see cref="UpsertRaceAsync"/>・<see cref="DeclareRaceResultAsync"/>・
+    /// <see cref="DeclareRaceEntryResultAsync"/>（馬の数だけ）・
+    /// <see cref="RecordWeatherObservationAsync"/>・<see cref="RecordTrackConditionObservationAsync"/>・
+    /// <see cref="DeclareRacePayoutsAsync"/>を個別に呼び出すと、レース1件あたり
+    /// 10〜20回超のHTTPラウンドトリップが発生していたため、これらをまとめる。
+    /// 個々の項目が失敗しても他の項目の登録は継続し、失敗内容は戻り値の
+    /// <see cref="RaceResultBulkOutcome.Errors"/> に集約される。
+    /// </para>
+    /// </summary>
+    Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
+        RaceResultBulkRequest request,
+        CancellationToken cancellationToken = default);
 }

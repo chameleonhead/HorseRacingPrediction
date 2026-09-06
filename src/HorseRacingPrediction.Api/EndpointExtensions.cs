@@ -741,6 +741,180 @@ public static class EndpointExtensions
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        writeGroup.MapPost("/races/result-bulk",
+            [SwaggerOperation(Summary = "Declare race result in bulk", Description = "Creates/updates the race and declares result, entry results, weather, track condition and payouts in a single call")]
+        async (DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+            {
+                // NOTE: データ収集エージェント（Collector）は従来、1レース分の登録に
+                // UpsertRace/DeclareRaceResult/DeclareEntryResult(N件)/RecordWeather/
+                // RecordTrackCondition/DeclarePayoutという6種類以上のAPI呼び出しに
+                // 分けていたが、レース1件あたり10〜20回超のHTTPラウンドトリップが発生し、
+                // 非効率かつ部分失敗の切り分けを難しくしていた。このエンドポイントは
+                // それらをまとめて1回のHTTP呼び出しで登録できるようにする。
+                // 個々の項目（結果宣言・各馬の成績・天候・馬場状態・払戻）は、従来の
+                // Collector側の挙動と同様に1件失敗しても他の項目の登録を継続し、
+                // 失敗内容はレスポンスのErrorsに集約する。ただしレース自体の作成/更新が
+                // 失敗した場合は、以降の登録がすべて同じ原因で失敗するだけのため、
+                // そこで打ち切って1件のエラーにまとめる。
+                var raceIdValue = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(
+                    request.RaceDate, request.RacecourseCode, request.RaceNumber);
+                var raceId = new RaceId(raceIdValue);
+                var errors = new List<string>();
+
+                var existing = await queryProcessor.ProcessAsync(
+                    new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceIdValue), cancellationToken).ConfigureAwait(false);
+                if (existing is not null && string.IsNullOrEmpty(existing.RaceId))
+                {
+                    existing = null;
+                }
+
+                CorrectRaceDataCommand BuildCorrectCommand() => new(
+                    raceId, request.RaceName, request.RacecourseCode, request.RaceNumber,
+                    request.GradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
+                    reason: "Collected by data collection agent (bulk)");
+
+                try
+                {
+                    if (existing is null)
+                    {
+                        try
+                        {
+                            var createCommand = new CreateRaceCommand(
+                                raceId, request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
+                                gradeCode: request.GradeCode, surfaceCode: request.SurfaceCode,
+                                distanceMeters: request.DistanceMeters, directionCode: request.DirectionCode);
+                            await commandBus.PublishAsync(createCommand, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (InvalidOperationException ex) when (string.Equals(ex.Message, "Race is already created.", StringComparison.Ordinal))
+                        {
+                            await commandBus.PublishAsync(BuildCorrectCommand(), cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        await commandBus.PublishAsync(BuildCorrectCommand(), cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    errors.Add($"レース登録エラー: {ex.Message}");
+                    return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors));
+                }
+
+                var currentStatus = existing?.Status ?? HorseRacingPrediction.Domain.Races.RaceStatus.Draft;
+
+                if (request.EntryCount is > 0 && currentStatus == HorseRacingPrediction.Domain.Races.RaceStatus.Draft)
+                {
+                    try
+                    {
+                        var publishCommand = new PublishRaceCardCommand(raceId, request.EntryCount.Value);
+                        await commandBus.PublishAsync(publishCommand, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // 既に公開済み等。無視して続行する。
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
+                {
+                    try
+                    {
+                        var resultCommand = new DeclareRaceResultCommand(
+                            raceId, request.WinningHorseName, request.DeclaredAt ?? DateTimeOffset.UtcNow);
+                        await commandBus.PublishAsync(resultCommand, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        errors.Add($"レース確定宣言エラー: {ex.Message}");
+                    }
+                }
+
+                if (request.Entries is not null)
+                {
+                    foreach (var entry in request.Entries)
+                    {
+                        if (entry.HorseNumber <= 0)
+                        {
+                            continue;
+                        }
+
+                        try
+                        {
+                            var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, entry.HorseNumber);
+                            var entryCommand = new DeclareEntryResultCommand(
+                                raceId, entryId, entry.FinishPosition, entry.OfficialTime, entry.MarginText,
+                                entry.LastThreeFurlongTime, entry.AbnormalResultCode, entry.PrizeMoney);
+                            await commandBus.PublishAsync(entryCommand, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            errors.Add($"着順記録エラー: HorseNumber={entry.HorseNumber} — {ex.Message}");
+                        }
+                    }
+                }
+
+                if (request.Weather is not null)
+                {
+                    try
+                    {
+                        var weatherCommand = new RecordWeatherObservationCommand(
+                            raceId, request.Weather.ObservationTime, request.Weather.WeatherCode, request.Weather.WeatherText,
+                            request.Weather.TemperatureCelsius, request.Weather.HumidityPercent,
+                            request.Weather.WindDirectionCode, request.Weather.WindSpeedMeterPerSecond);
+                        await commandBus.PublishAsync(weatherCommand, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        errors.Add($"天候記録エラー: {ex.Message}");
+                    }
+                }
+
+                if (request.TrackCondition is not null)
+                {
+                    try
+                    {
+                        var trackCommand = new RecordTrackConditionObservationCommand(
+                            raceId, request.TrackCondition.ObservationTime, request.TrackCondition.TurfConditionCode,
+                            request.TrackCondition.DirtConditionCode, request.TrackCondition.GoingDescriptionText);
+                        await commandBus.PublishAsync(trackCommand, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        errors.Add($"馬場状態記録エラー: {ex.Message}");
+                    }
+                }
+
+                if (request.Payouts is not null)
+                {
+                    try
+                    {
+                        static IReadOnlyList<HorseRacingPrediction.Domain.Races.PayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? dtos) =>
+                            dtos?.Select(d => new HorseRacingPrediction.Domain.Races.PayoutEntry(d.Combination, d.Amount)).ToList();
+
+                        var payoutCommand = new DeclarePayoutResultCommand(
+                            raceId, request.Payouts.DeclaredAt,
+                            ToPayoutEntries(request.Payouts.WinPayouts),
+                            ToPayoutEntries(request.Payouts.PlacePayouts),
+                            ToPayoutEntries(request.Payouts.QuinellaPayouts),
+                            ToPayoutEntries(request.Payouts.ExactaPayouts),
+                            ToPayoutEntries(request.Payouts.TrifectaPayouts));
+                        await commandBus.PublishAsync(payoutCommand, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        errors.Add($"払戻記録エラー: {ex.Message}");
+                    }
+                }
+
+                return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors));
+            })
+            .WithName("DeclareRaceResultBulk")
+            .WithTags("Race API")
+            .Produces<DeclareRaceResultBulkResponse>(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         writeGroup.MapPatch("/races/{raceId}",
             [SwaggerOperation(Summary = "Correct race data", Description = "Corrects race metadata such as name, racecourse, grade, surface or distance")]
         async (string raceId, CorrectRaceDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>

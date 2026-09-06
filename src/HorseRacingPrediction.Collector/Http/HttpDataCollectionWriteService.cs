@@ -728,6 +728,22 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return $"レース {raceId} の馬場状態を記録しました。";
     }
 
+    public async Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
+        RaceResultBulkRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient
+            .PostAsJsonAsync("/api/races/result-bulk", request, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        var outcome = await response.Content
+            .ReadFromJsonAsync<RaceResultBulkOutcome>(JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+
+        return outcome ?? new RaceResultBulkOutcome(string.Empty, []);
+    }
+
     // ------------------------------------------------------------------ //
     // private helpers — HTTP
     // ------------------------------------------------------------------ //
