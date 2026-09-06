@@ -144,6 +144,34 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         }
     }
 
+    public async Task UnmarkMarkerAsync(
+        string markerType,
+        string markerKey,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var dbContext = CreateDbContext();
+            var entity = await dbContext.Markers
+                .SingleOrDefaultAsync(
+                    x => x.MarkerType == markerType && x.MarkerKey == markerKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (entity is null)
+            {
+                return;
+            }
+
+            dbContext.Markers.Remove(entity);
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task EnqueueJobAsync(
         string jobType,
         string deduplicationKey,

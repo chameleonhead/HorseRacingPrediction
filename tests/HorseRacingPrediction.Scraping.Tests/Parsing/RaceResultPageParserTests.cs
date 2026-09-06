@@ -34,11 +34,13 @@ public sealed class RaceResultPageParserTests
 
         var section = new PageSectionSnapshot(
             title: "レース結果",
-            mainText: "天候:晴 馬場:良",
+            // 実サイト確認（2026-09-07）で判明した実際の表記に合わせる:
+            // 「馬場」「馬場状態」という語を伴わず、「芝」「ダート」の直後に状態値が続く。
+            mainText: "天候 晴 芝 良",
             links: [],
             actions: [],
             tables: [table, payoutTable],
-            headings: ["2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
 
         return new PageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 結果", [section]);
     }
@@ -96,8 +98,9 @@ public sealed class RaceResultPageParserTests
         Assert.AreEqual(2, page.Results[2].HorseNumber);
         Assert.AreEqual("テストホースB", page.Results[2].HorseName);
 
+        Assert.AreEqual("テストステークス(GⅢ)", page.RaceName);
         Assert.AreEqual("晴", page.WeatherText);
-        Assert.AreEqual("良", page.TrackConditionText);
+        Assert.AreEqual("芝:良", page.TrackConditionText);
 
         Assert.IsNotNull(page.Payouts);
         Assert.AreEqual(1, page.Payouts!.WinPayouts.Count);
@@ -120,5 +123,54 @@ public sealed class RaceResultPageParserTests
         Assert.AreEqual(1, page.Payouts.TrifectaPayouts.Count);
         Assert.AreEqual("3-1-2", page.Payouts.TrifectaPayouts[0].Combination);
         Assert.AreEqual(3120m, page.Payouts.TrifectaPayouts[0].Amount);
+    }
+
+    [TestMethod]
+    public void Parse_障害レースで芝とダートの両方の馬場状態を取得できる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows: [["1", "1", "テストホースA", "騎手A", "3:19.8"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 雨 芝 稍重 ダート 重",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R", "障害3歳以上未勝利"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var parser = new RaceResultPageParser();
+        var page = (JraRaceResultPage)parser.Parse(snapshot);
+
+        Assert.AreEqual("障害3歳以上未勝利", page.RaceName);
+        Assert.AreEqual("芝:稍重 ダート:重", page.TrackConditionText);
+    }
+
+    [TestMethod]
+    public void Parse_マストヘッド見出しのみでレース名を特定できない場合は例外を投げる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            // 日付・競馬場・レース番号は取得できるが、その直後にレース名として扱える
+            // 見出しが続かないケース（想定外のページ構造）。
+            headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var parser = new RaceResultPageParser();
+
+        var ex = Assert.ThrowsExactly<JraPageParseException>(() => parser.Parse(snapshot));
+        StringAssert.Contains(ex.Message, "レース名");
     }
 }

@@ -32,8 +32,14 @@ public sealed class RaceResultPageParser
     private static readonly Regex WeatherRegex =
         new(@"天候\s*[:：]?\s*(?<value>晴|曇|雨|小雨|雪|小雪)", RegexOptions.Compiled);
 
-    private static readonly Regex TrackConditionRegex =
-        new(@"(?<surface>芝|ダート)?\s*馬場(?:状態)?\s*[:：]?\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
+    // 実サイト確認（2026-09-07）で判明: 実ページの馬場状態表記は「天候 雨 芝 稍重 ダート 重」
+    // のように「馬場」「馬場状態」という語を伴わず、「芝」「ダート」の直後に状態値が
+    // 続くのみ。旧正規表現は「馬場」の語を必須としていたため常にマッチしなかった。
+    private static readonly Regex TurfConditionRegex =
+        new(@"芝\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
+
+    private static readonly Regex DirtConditionRegex =
+        new(@"ダート\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
 
     public JraPageKind Kind =>
         JraPageKind.RaceResult;
@@ -108,10 +114,26 @@ public sealed class RaceResultPageParser
         var searchText =
             $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
-        var match =
-            TrackConditionRegex.Match(searchText);
+        var turfMatch = TurfConditionRegex.Match(searchText);
+        var dirtMatch = DirtConditionRegex.Match(searchText);
 
-        return match.Success ? match.Groups["value"].Value : null;
+        if (!turfMatch.Success && !dirtMatch.Success)
+        {
+            return null;
+        }
+
+        var parts = new List<string>();
+        if (turfMatch.Success)
+        {
+            parts.Add($"芝:{turfMatch.Groups["value"].Value}");
+        }
+
+        if (dirtMatch.Success)
+        {
+            parts.Add($"ダート:{dirtMatch.Groups["value"].Value}");
+        }
+
+        return string.Join(" ", parts);
     }
 
     private static RacePayouts? ParsePayouts(
@@ -422,23 +444,64 @@ public sealed class RaceResultPageParser
         return int.Parse(match.Groups["num"].Value);
     }
 
-    private static string? ParseRaceName(
+    // レース結果ページのタイトル見出し（サイト全体のマストヘッド「JRA 日本中央競馬会」等）を
+    // 誤ってレース名として拾わないための除外リスト。
+    private static readonly string[] NonRaceNameHeadings =
+    [
+        "JRA 日本中央競馬会",
+        "払戻金",
+        "勝馬の紹介",
+        "JRAからのお知らせ",
+        "Footer",
+    ];
+
+    /// <summary>
+    /// 実サイト確認（2026-09-07）で判明: 見出し一覧の先頭は常にサイト全体の
+    /// マストヘッド見出し「JRA 日本中央競馬会」であり、旧実装（「競馬場名でも日付でも
+    /// ない最初の見出し」という緩い判定）はこれを誤ってレース名として採用していた
+    /// （実運用で全レースのRaceNameが"JRA 日本中央競馬会"になる事象として確認）。
+    /// 実際のレース名（例：「障害3歳以上未勝利」）は、日付・競馬場・レース番号が
+    /// すべて含まれる見出し（例：「レース結果 2026年9月6日（日曜）4回中山2日 1レース」）の
+    /// 直後に続くことを確認したため、その見出しを起点にレース名を探す。
+    /// 成績ページでは毎回レース名が確定しているはずの情報のため、特定できない場合は
+    /// 他の識別情報（日付・競馬場・レース番号）と同様に例外として扱う。
+    /// </summary>
+    private static string ParseRaceName(
         PageSnapshot snapshot)
     {
-        foreach (var heading in snapshot.Headings)
+        var headings = snapshot.Headings;
+        var metaIndex = -1;
+        for (var i = 0; i < headings.Count; i++)
         {
-            var withoutNumber =
-                RaceNumberRegex.Replace(heading, string.Empty).Trim();
-
-            if (!string.IsNullOrWhiteSpace(withoutNumber) &&
-                RaceCourseNames.Parse(withoutNumber) == RaceCourse.Unknown &&
-                !DateRegex.IsMatch(withoutNumber))
+            if (DateRegex.IsMatch(headings[i]) && RaceNumberRegex.IsMatch(headings[i]))
             {
-                return withoutNumber;
+                metaIndex = i;
+                break;
             }
         }
 
-        return null;
+        if (metaIndex >= 0)
+        {
+            for (var i = metaIndex + 1; i < headings.Count; i++)
+            {
+                var candidate = headings[i].Trim();
+
+                if (string.IsNullOrWhiteSpace(candidate) ||
+                    RaceCourseNames.Parse(candidate) != RaceCourse.Unknown ||
+                    DateRegex.IsMatch(candidate) ||
+                    NonRaceNameHeadings.Contains(candidate, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                return candidate;
+            }
+        }
+
+        throw new JraPageParseException(
+            JraPageKind.RaceResult,
+            snapshot.Url,
+            "レース名を取得できませんでした。ページ構造が想定と異なる可能性があります。");
     }
 
     private static IReadOnlyList<RaceResultEntry> ParseResults(

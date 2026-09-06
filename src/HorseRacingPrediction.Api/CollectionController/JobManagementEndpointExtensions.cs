@@ -4,6 +4,13 @@ namespace HorseRacingPrediction.Api.CollectionController;
 
 public static class JobManagementEndpointExtensions
 {
+    /// <summary>
+    /// /pause で一時停止した状態をDBのマーカーとして永続化する際のキー。
+    /// Program.cs起動時の状態復元でも同じキーを参照する。
+    /// </summary>
+    public const string MaintenanceMarkerType = "CollectionMaintenance";
+    public const string MaintenanceMarkerKey = "Paused";
+
     public static IEndpointRouteBuilder MapJobManagementEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/admin/jobs").WithTags("Job Management API");
@@ -30,10 +37,17 @@ public static class JobManagementEndpointExtensions
                 _ => Results.Conflict()
             };
         });
-        group.MapPost("/pause", async (ICollectionTaskQueue queue, CollectionMaintenanceState maintenance, CancellationToken token) =>
+        group.MapPost("/pause", async (ICollectionTaskQueue queue, CollectionMaintenanceState maintenance, ProcessingStateStore store, CancellationToken token) =>
         {
             if (!maintenance.TryBegin()) return Results.Conflict();
-            try { await queue.PurgeAsync(token); }
+            try
+            {
+                await queue.PurgeAsync(token);
+                // 一時停止状態をDBに永続化する。CollectionMaintenanceStateはプロセス内
+                // メモリのみの状態のため、これがないとデプロイ/再起動のたびに
+                // 一時停止が解除されてしまう（実運用で確認された事象）。
+                await store.MarkMarkerAsync(MaintenanceMarkerType, MaintenanceMarkerKey, token);
+            }
             catch { maintenance.End(); throw; }
             return Results.Accepted();
         });
@@ -41,6 +55,7 @@ public static class JobManagementEndpointExtensions
         {
             var result = await store.RequeueReadyCollectionDispatchesAsync(DateTimeOffset.UtcNow, cancellationToken: token);
             maintenance.End();
+            await store.UnmarkMarkerAsync(MaintenanceMarkerType, MaintenanceMarkerKey, token);
             return Results.Ok(new { status = "Running", requeued = result.DispatchedCount, deadLettered = result.DeadLetteredCount });
         });
         return endpoints;

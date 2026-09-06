@@ -178,6 +178,22 @@ var app = builder.Build();
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
 
+// CollectionMaintenanceStateはプロセス内メモリのみの状態のため、デプロイ/再起動の
+// たびに一時停止（/pause）が解除されてしまっていた（実運用で確認された事象）。
+// /pauseでDBに永続化したマーカーを起動時に確認し、一時停止中であれば復元する。
+{
+    var maintenanceState = app.Services.GetRequiredService<CollectionMaintenanceState>();
+    var stateStore = app.Services.GetRequiredService<ProcessingStateStore>();
+    if (await stateStore.HasMarkerAsync(
+            JobManagementEndpointExtensions.MaintenanceMarkerType,
+            JobManagementEndpointExtensions.MaintenanceMarkerKey))
+    {
+        maintenanceState.TryBegin();
+        app.Services.GetRequiredService<ILogger<Program>>()
+            .LogWarning("再起動時に永続化された収集パイプラインの一時停止状態を復元しました。原因調査後、/api/admin/jobs/resume で再開してください。");
+    }
+}
+
 // 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、
 // 直前にクラッシュ復旧中の初期化（ResumeIfNeeded）がメンテナンス中の場合は、その完了を
 // 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）

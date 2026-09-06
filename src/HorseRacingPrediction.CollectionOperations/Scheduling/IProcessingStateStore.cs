@@ -8,6 +8,7 @@ public interface IProcessingStateStore
     Task RequeuePredictionCandidateAsync(string raceId, DateTimeOffset now, string error, CancellationToken cancellationToken = default);
     Task<bool> HasMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task MarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
+    Task UnmarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task EnqueueJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, CancellationToken cancellationToken = default);
     Task ScheduleJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, string? parentJobId = null, JobRelationType parentRelationType = JobRelationType.AggregatedBy, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(string jobType, DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default);

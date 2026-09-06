@@ -81,7 +81,9 @@ public sealed class JraNavigatorTests
             links: [],
             actions: [],
             tables: [table],
-            headings: [$"2026年9月5日 中山 {headingSuffix}"]);
+            // 実サイトでは日付+レース番号を含む見出しの直後にレース名見出しが続く
+            // (RaceResultPageParser.ParseRaceName参照)。
+            headings: [$"2026年9月5日 中山 {headingSuffix}", "テストレース"]);
 
         return new PageSnapshot(url, $"2026年9月5日 中山 {headingSuffix} レース結果", [section]);
     }
