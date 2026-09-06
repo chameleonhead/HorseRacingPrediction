@@ -190,6 +190,81 @@ public sealed class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task RaceResultJob_WhenOneRaceParserThrows_OtherRacesAreStillCollectedAndJobCompletes()
+    {
+        // Phase 7 A2の回帰テスト: JraPageParseException系（Parser異常）は
+        // JraCollectionExceptionと継承関係が異なるため、以前はレース単位のtry/catchで
+        // 捕捉されず、同日・同競馬場の他の正常なレースの成績収集まで巻き添えで
+        // 停止していた。1レースの解析異常が他レースの収集を止めないことを確認する。
+        var now = new DateTimeOffset(2026, 5, 16, 3, 0, 0, TimeSpan.Zero);
+        var raceDate = new DateOnly(2026, 5, 16);
+        var stateStore = CreateStore();
+
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = _ => new[] { RaceCourse.Nakayama }
+        };
+
+        var brokenRaceId = new RaceId(raceDate, RaceCourse.Nakayama, 1);
+        var okRaceId = new RaceId(raceDate, RaceCourse.Nakayama, 2);
+        var raceList = new JraRaceListPage(
+            "https://example.jra.go.jp/result-list/nakayama",
+            raceDate,
+            RaceCourse.Nakayama,
+            new[]
+            {
+                new RaceSummary(brokenRaceId, "テストレース1", new TimeOnly(15, 40), null, null),
+                new RaceSummary(okRaceId, "テストレース2", new TimeOnly(16, 10), null, null),
+            });
+
+        var sessionFactory = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceResultListFactory = (_, _) => raceList,
+            },
+        };
+
+        var resultWorkflow = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = raceId => raceId.Number == 1
+                ? throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    "https://example.jra.go.jp/race-result/1",
+                    "HorseName",
+                    "   ")
+                : new RaceResultCollectionResult(
+                    raceId,
+                    $"race-{raceId.Date:yyyyMMdd}-{raceId.Course}-{raceId.Number}",
+                    new[] { 1 },
+                    Array.Empty<string>()),
+        };
+
+        var service = CreateService(
+            stateStore, scheduleWorkflow, new FakeJraRaceCardCollectionWorkflow(), resultWorkflow, sessionFactory);
+
+        var payload = new RaceResultCollectionJobPayload(raceDate, "JRA", AgentWorkMode.Idle);
+        var key = AgentJobKeyFactory.BuildRaceResultCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(
+            AgentJobType.RaceResultCollection,
+            key,
+            AgentJobPayloadSerializer.Serialize(payload),
+            now);
+
+        await service.RunTaskAsync(AgentJobType.RaceResultCollection, CancellationToken.None);
+
+        // 両レースとも収集が試みられ(=ループが継続し)、正常な2Rの成績は収集されている。
+        Assert.HasCount(2, resultWorkflow.Requests);
+        Assert.Contains(brokenRaceId, resultWorkflow.Requests);
+        Assert.Contains(okRaceId, resultWorkflow.Requests);
+
+        // 1Rの解析異常でジョブ全体は失敗しない。
+        var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceResultCollection, null, 10, CancellationToken.None);
+        Assert.HasCount(1, statuses);
+        Assert.AreEqual(AgentJobStatus.Succeeded, statuses[0].Status);
+    }
+
+    [TestMethod]
     public async Task RaceResultJob_WhenAllRacesSucceed_MarksDayAsComplete()
     {
         // 成績収集が1件もエラーなく完了した日は ResultDayCollectionState.Complete として

@@ -485,6 +485,16 @@ public sealed class CollectionExecutionService : BackgroundService
                         "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
                         raceDate, course, singleResult.RaceId.Number);
                 }
+                catch (Scraping.Jra.Pages.JraPageParseException ex)
+                {
+                    // Phase 7 A2: RaceResult Parserの解析異常（JraCollectionExceptionとは
+                    // 継承関係が異なる）を無関係な他レース・他競馬場まで巻き添えにしない。
+                    // 当該レースのみをエラーとして記録し、ループ自体は継続する。
+                    _logger.LogWarning(
+                        ex,
+                        "[収集実行] 成績ページの解析に失敗したため、このレースのみスキップします。RaceId={RaceId} Date={Date} Course={Course} RaceNumber={RaceNumber} FieldName={FieldName} RawValue={RawValue}",
+                        singleResult.RaceId, raceDate, course, singleResult.RaceId.Number, ex.FieldName, ex.RawValue);
+                }
 
                 continue;
             }
@@ -520,6 +530,19 @@ public sealed class CollectionExecutionService : BackgroundService
                         ex,
                         "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
                         raceDate, course, race.Number);
+                    continue;
+                }
+                catch (Scraping.Jra.Pages.JraPageParseException ex)
+                {
+                    // Phase 7 A2: 従来は JraCollectionException のみを捕捉していたため、
+                    // 継承関係が異なる JraPageParseException 系（Parser異常）がこのレース単位
+                    // ループを突き抜け、同日・同競馬場の他の正常なレースの収集まで巻き添えで
+                    // 停止していた。当該レースのみをエラーとして記録し、ループを継続する。
+                    var raceId = new RaceId(raceDate, course, race.Number);
+                    _logger.LogWarning(
+                        ex,
+                        "[収集実行] 成績ページの解析に失敗したため、このレースのみスキップします。RaceId={RaceId} Date={Date} Course={Course} RaceNumber={RaceNumber} FieldName={FieldName} RawValue={RawValue}",
+                        raceId, raceDate, course, race.Number, ex.FieldName, ex.RawValue);
                     continue;
                 }
 

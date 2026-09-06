@@ -1,6 +1,6 @@
 # JRAスクレイピング層 Navigation / RaceResult取得仕様 変更
 
-- Status: In progress (Phase 1-5 実装済み。Phase 5で依頼書29節の残Validation4項目を実装。残るDeviationsは末尾参照)
+- Status: In progress (Phase 1-7 実装済み。Phase 7で監査により発見されたバグA1/A2を修正。残るDeviationsは末尾参照)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-06
 - Updated: 2026-09-06
@@ -114,7 +114,7 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 - **HorseNumber解析不能行のError化**: `ParseResults`内で馬番セルから数字を抽出できない行を`continue`でスキップしていた実装を、`JraValueParseException`（FieldName=`HorseNumber`、RawValue=セルの生文字列）を送出する実装へ変更した。この分岐へ到達する行は、それ以前の「見出し行の重複」「着順欄が完全に空白の行（罫線用等、そもそも結果行として扱うべきでない行）」フィルタを通過済み、かつ着順欄からResultStatusが確定できている（＝正真正銘の結果行と判定済み）行のみであることをコードを読んで確認した上で変更した。誤って見出し行・空行をエラー化する副作用はない。
 - **Finished時のFinishPosition/Time欠落のError化**: 従来はFinishedでタイム列に値があるのに解析できない場合のみ`JraValueParseException`（FieldName=`Time`）としていたが、タイム列自体が存在しない・空欄の場合（＝値が完全に欠落している場合）も`JraResultConsistencyException`（FieldName=`Time`）を送出するよう変更した。あわせて、ResultStatus=Finished判定分岐では構造上`FinishPosition`が必ず設定されるため実際には到達しない防御的チェックとして、`FinishPosition`がnullの場合も同様に`JraResultConsistencyException`（FieldName=`FinishPosition`）を送出するコードを追加した（依頼書29節の文言に明示的に対応するため）。Cancelled/Excluded/DidNotFinish/Disqualified等ResultStatus≠Finishedのエントリーには一切影響しない（既存のFixtureで確認済み）。
 
-`JraRaceResultCollectionWorkflow.cs`側の後方互換ガード（`entry.HorseNumber <= 0 || string.IsNullOrWhiteSpace(entry.HorseName)`を検知して送信対象から除外する処理）は、Parser側が今回のValidationで同種の不正値を例外化するようになったため実質的に到達不能なコードになったが、既存のWorkflowテスト（Parserを経由せず`JraRaceResultPage`を直接構築するテストを含む）との整合を壊さずに安全に削除できるかは本フェーズのスコープ外の詳細な影響調査が必要と判断し、防御的な安全策として維持した（削除は行っていない）。
+`JraRaceResultCollectionWorkflow.cs`側の後方互換ガード（`entry.HorseNumber <= 0 || string.IsNullOrWhiteSpace(entry.HorseName)`を検知して送信対象から除外する処理）について、Phase 5時点では「Parser側が今回のValidationで同種の不正値を例外化するようになったため実質的に到達不能になった」と記載していたが、これは不正確だった（Phase 7の監査で判明。詳細はPhase 7节A1参照）。Phase 5時点では`HorseNumber`解析不能行のみをエラー化しており、`HorseName`が空/空白の行は`ParseResults`内で依然として`continue`により静かにスキップされていた（Parser側がResultsへ含めていなかった）ため、そもそも`JraRaceResultCollectionWorkflow`側のこのガードへ「`HorseName`が空の結果行」が到達すること自体がなかった。つまりPhase 5時点の「実質的に到達不能」という説明は、Parser側のサイレントスキップが理由であり、Parser側の例外化が理由ではなかった。Phase 7でParser側の`HorseName`空欄をも例外化したことにより、初めて「Parserが例外化するため、この後方互換ガードには到達しない」という記述が正確になった。このガード自体はPhase 7でも防御的な安全策として維持し、削除していない（削除可否の判断は引き続きスコープ外）。
 
 対応するテストを`RaceResultPageParserTests.cs`に追加・修正した。
 
@@ -142,15 +142,15 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 | 5 | 過去RaceResultからRaceEntry相当情報を復元できる | **一部満たす（Phase 2でHorseName/JockeyName/Sex/Ageの送信経路を追加。FrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeightはParser側の列検出が未実装・実サイト未確認のためフォローアップ）** |
 | 6 | RaceResult Navigationが結果系導線だけで完結する | 満たす（既存実装で確認済み） |
 | 7 | RaceResultがRaceIdを自己検証する | **満たす（Phase 1で実装）** |
-| 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **満たす（Phase 1で実装、Course構造等は未対応）** |
+| 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **一部満たす（Phase 1で天候・馬場・結果状態を実装。ただし依頼書9節が必須とする`StartTime`/`MeetingNumber`/`MeetingDay`/`RaceConditions`は`JraRaceResultPage`に一切存在せず未実装。Phase 7の監査で発見、実サイト未確認のためフォローアップとして記録。Deviations参照）** |
 | 9 | 取消・除外・中止・失格・同着・降着を正常に扱える | **満たす**（Phase 3で同着=`IsDeadHeat`、降着=`FinishPosition`/`OriginalFinishPosition`分離を実装。複数特殊状態混在のテストも追加） |
 | 10 | 平地・障害のページ差異を扱える | **一部満たす**（Phase 3で`EstimatedLast3F`/`Average1F`分離、Course構造でのRaceType判定を実装。ハロンタイム自体の分割タイム抽出は実サイト未確認のため未着手） |
-| 11 | 正常な欠損とParser異常を区別できる | **満たす**（天候/馬場/性齢/結果状態に加え、Phase 3で馬体重・人気・斤量・枠番・調教師・着差・払戻券種/金額でも「列/値なし＝null」と「値ありで解析不能＝エラー」を区別） |
+| 11 | 正常な欠損とParser異常を区別できる | **満たす**（天候/馬場/性齢/結果状態に加え、Phase 3で馬体重・人気・斤量・枠番・調教師・着差・払戻券種/金額でも「列/値なし＝null」と「値ありで解析不能＝エラー」を区別。**Phase 7で判明: Phase 5〜6時点ではHorseNameが空/空白の結果行が`ParseResults`内で`continue`により静かにスキップされており、「値が存在しているのに解析できない」ケースが正しくエラー化されず、実際にはこの基準が未達だった〈A1〉。Phase 7で`JraValueParseException`（FieldName=`HorseName`）を送出するよう修正し、回帰テストを追加。現時点で満たす**） |
 | 12 | 払戻をRaceResultとして取得できる | **満たす**（既存の5券種抽出に加え、Phase 3で未知券種・金額解析不能の検知を追加） |
 | 13 | 古いレースの券種差を正常に扱える | 一部満たす（券種section自体が存在しない場合は既存実装で正常扱い。古い年代の実際の券種差はFixtureで確認できておらず未検証。Phase 4で対応） |
 | 14 | RaceResult全体のValidation完了前に部分保存しない | 満たす（既存実装で確認済み） |
 | 15 | RaceResult宣言後にEntryResultを保存する既存順序を維持する | 満たす（既存実装で確認済み） |
-| 16 | 特殊ケース・異常ケースを自動テストでカバーする | **一部満たす**（Phase 4〜5で依頼書32節のギャップを実装・テストで埋めた。結果行0件・HorseNumber重複・HorseNumber解析不能・Finished時のFinishPosition/Time完全欠落はPhase 5で実装・テスト済み。賞金情報・古い年代の券種差の追加バケット等は依然未対応。詳細はDeviations参照） |
+| 16 | 特殊ケース・異常ケースを自動テストでカバーする | **一部満たす**（Phase 4〜5で依頼書32節のギャップを実装・テストで埋めた。結果行0件・HorseNumber重複・HorseNumber解析不能・Finished時のFinishPosition/Time完全欠落はPhase 5で実装・テスト済み。Phase 7でHorseName空欄〈A1〉・1レース解析例外による他レース巻き添え〈A2〉を実装・テストで解消。賞金情報・古い年代の券種差の追加バケット・StartTime等の未実装項目は依然未対応。詳細はDeviations参照） |
 
 ## Delivery plan
 
@@ -159,6 +159,8 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 3. **Phase 3（完了）**: `RaceCourseSpec`、Margin/OriginalFinishPosition/IsDeadHeat/コーナー通過順位/EstimatedLast3F・Average1F、馬体重・人気・斤量・枠番・調教師・払戻の厳格Parse（依頼書4節フォローアップのFrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeight列解析を含む）。賞金section・ハロンタイム分割タイムは実サイト未確認のため未着手（Deviations参照）。
 4. **Phase 4（完了）**: 依頼書32節のFixtureテスト網羅（不足していた9ケースを追加）。既存実装が対応するチェック自体を持たない項目（結果行0件・HorseNumber重複等）は実装拡張をスコープ外としテストも見送り、Deviationsに記録した。
 5. **Phase 5（完了）**: Phase 4で見送った依頼書29節の必須Validation4項目（結果行0件・HorseNumber重複・HorseNumber解析不能・Finished時のFinishPosition/Time欠落）を`RaceResultPageParser.cs`に実装。Phase 4で追加した2テスト（現状のサイレント挙動を確認するテスト）を、エラーになることを検証するテストへ書き換え、新規テストを追加。
+6. **Phase 6（完了）**: ユーザーの実サイトE2E検証により発見された`Course.Direction`の未知表記（`芝・右 外`）へ対応。
+7. **Phase 7（完了）**: Phase 1〜6全体のコードベース監査で発見された実バグ2件を修正。A1: `RaceResultPageParser`が馬名空欄の結果行を静かにスキップしていた問題を`JraValueParseException`化。A2: `CollectionExecutionService`のレース単位try/catchが`JraCollectionException`のみを捕捉し`JraPageParseException`系を捕捉していなかった問題を修正し、RaceIdをログに明示。あわせて依頼書9節（StartTime等）・25節（人気と頭数整合性）の未実装を正式にDeviationsへ記録し、Phase 5の因果関係の記述誤りを訂正した。
 
 各フェーズは独立してビルド・テスト可能な単位でコミットする。
 
@@ -194,6 +196,13 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 - `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、129件（Phase 4の127件のうち2件を書き換え、新規2件を追加。実サイトE2Eテストは除外）
 - `RaceResultPageParser.cs`のみ変更。`JraRaceResultCollectionWorkflow.cs`は変更なし（後方互換ガードは安全のため維持。上記Technical impact参照）。
 
+### Phase 7 検証（本コミット）
+
+- `dotnet build`（ソリューション全体）: 成功、0 Warning / 0 Error
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、131件（Phase 6までの130件 + Phase 7で追加した`Parse_馬名が空欄の結果行はJraValueParseExceptionを投げる`1件。実サイトE2Eテストは除外）
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj`: 成功、91件（既存90件 + Phase 7で追加した`RaceResultJob_WhenOneRaceParserThrows_OtherRacesAreStillCollectedAndJobCompletes`1件）
+- 変更ファイル: `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceResultPageParser.cs`（A1）、`src/HorseRacingPrediction.Collector/Scheduling/CollectionExecutionService.cs`（A2）、対応するテストファイル2件、本ドキュメント。
+
 ## Deviations and follow-up
 
 - Phase 3〜4は本ドキュメント作成時点で未着手。着手時は本ドキュメントの「Technical impact」「Acceptance criteria」表を更新すること。
@@ -214,6 +223,10 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
   - **賞金情報なし（依頼書27節）**: Phase 3の時点で記載の通り、賞金section自体をParserがまだ解析していない（`PrizeMoney`を送る経路もない）ため、「賞金sectionなし＝正常」は全既存テストで結果的に満たされているが、これを検証する専用テストを追加する意味が薄い（何もしないことで自動的に満たされるため）と判断し、専用のテストケースは追加しなかった。賞金section自体の実装後、Phase 4相当のテスト（sectionなし＝正常、sectionあり+Parse不能＝Error）を追加する必要がある。
   - **RaceNumber不正（RaceId不一致経由で確認）/ 要求RaceIdとページRaceId不一致**: これらはPhase 1時点で`JraRaceResultCollectionWorkflowTests.CollectAsync_ページから解析したRaceIdが要求と異なる場合はJraRaceIdentityMismatchExceptionを投げる()`として既にカバー済み（`JraRaceIdentityMismatchException`、FieldName相当は`RaceId`）。`RaceResultPageParser`自体は要求RaceIdを受け取らず自己整合性の検証はWorkflow側の責務であるため、`RaceResultPageParserTests`側への重複追加は行わなかった。
 
+- **Phase 7の監査で新たに発見・正式に記録した未実装項目（深刻度B）**:
+  - **依頼書9節（レース基本情報Validation）: `StartTime`・`MeetingNumber`・`MeetingDay`・`RaceConditions`**: これら4項目は依頼書9節で「必須」と明記されているが、`JraRaceResultPage`モデルに一切対応するプロパティが存在せず、Phase 1〜6のいずれのフェーズでもモデル拡張・Parser実装を行っていなかった。原因は、実サイトの結果ページ上でこれらの項目が実際にどのラベル文字列・DOM位置（例:開催回・開催日目が「○回中山○日目」のような表記のどこに現れるか、レース条件欄がRaceNameと同一DOM要素なのか別要素なのか）で出現するかを本セッションでは確認できなかったため（プロキシ制約により実サイトへのアクセス自体が不可能）。依頼書33節の「実装時に未考慮パターンを発見した場合は想像で補完しない」方針に基づき、今回は実装を見送った。実サイトの表記を確認できた時点で、モデル拡張（`JraRaceResultPage`への項目追加）・Parser実装・回帰テストをセットで追加するフォローアップとする。
+  - **依頼書25節（人気とレース内出走頭数との整合性確認）**: 「可能であればレース内出走頭数との整合性も確認する」という付随的Validationは未着手。`Popularity >= 1`の基本要求はPhase 3で実装済みだが、`Popularity`が同一レースの出走頭数（`results.Count`）を超えていないかの整合性チェックは行っていない。依頼書自体も「可能であれば」という努力目標のトーンであり、優先度が低いと判断し今回は見送った。将来対応する場合は、同着による頭数カウントの扱い（同着馬も1頭としてカウントするか等）を明確にした上で実装する必要がある。
+
 ### Phase 6（実サイトE2E検証によるCourse.Direction修正・本コミット）
 
 ユーザー自身が実サイト（プロキシ制約のないネットワーク）で `dotnet test --filter TestCategory=External` を実行し、以下が判明した（依頼書33節の「未知パターン発見→JRA上の正式な表現か確認→モデル・Parser・テストを拡張」フローの実例）。
@@ -222,6 +235,23 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 - **RaceResultの`Course.Direction`に未知値エラー（`古いRaceResult取得`）**: `RawValue=芝・右 外`（中山、過去レース）でPhase 3実装時に想定していなかった実表記が見つかった。Phase 3では「芝・左」のように「・」区切りの後ろは方向（左/右）の1トークンのみを想定していたが、実際のJRA表記には「芝・右 外」のように方向の後ろへ半角スペース区切りで外回り等のレイアウト注記が続く形式が存在する。`RaceResultPageParser.ParseCourseSpec`を修正し、「・」区切り後の文字列をさらに空白で分割して先頭を方向、残りをレイアウトとして扱うようにした（例: `芝・右 外` → `Direction=Right`, `Layout="外"`）。回帰テスト `Parse_コース表記_芝右外は方向とレイアウトの両方を分解できる` を追加。
 
 これにより「古いレース（過去レース結果検索経由）」のRaceResult取得は、少なくともこのコース表記に関しては解消済み。ユーザーからは「まずは過去のレースが取得できれば良い」という優先順位の共有があった。他のE2E失敗（ユーザーの報告に「他にも発生しています」とあるが未共有）は追って調査する。
+
+### Phase 7（コードベース監査による発見バグの修正・本コミット）
+
+Phase 1〜6の内容についてコードを直接確認する形の監査を行い、以下の実バグ2件（深刻度A）を修正した。
+
+- **A1: 馬名が空欄の結果行のサイレントスキップ**（`RaceResultPageParser.ParseResults`）: 馬番は正常にParseできた行でも、馬名セルが空/空白の場合は`continue`で読み飛ばしていた。これは依頼書14節（HorseName必須、trim後非空）・29節（各RaceEntryについてHorseNameが存在する）に違反する。修正として、この`continue`を`JraValueParseException`（FieldName=`HorseName`、RawValue=セルの生文字列）を送出する実装へ変更した。この分岐へ到達する行は、既存の「見出し行の重複フィルタ」「着順欄が完全に空白の行のフィルタ」を通過済み、かつ馬番セルからHorseNumberを確定できている（＝正真正銘の結果行と判定済み）行のみであることをコードを読んで確認した上で変更しており、見出し行・空行を誤ってエラー化する副作用はない。回帰テスト`Parse_馬名が空欄の結果行はJraValueParseExceptionを投げる`を`RaceResultPageParserTests.cs`に追加した。
+  - Phase 5では「Workflow側の後方互換ガードは実質到達不能」と記載していたが、これはParser側がこの時点でも`HorseName`空欄を静かにスキップしていた（＝そもそも空のHorseNameを持つ結果行がWorkflowへ渡らなかった）ことが理由であり、「Parserが例外化するため到達不能」という当時の説明は不正確だった。A1の修正により、この説明が事後的に正確になった（訂正内容はPhase 5節に追記済み）。
+- **A2: RaceResult解析例外1件が同日全レース・全競馬場の収集を巻き添えにする**（`CollectionExecutionService.CollectRaceResultsAsync`）: レース単位のtry/catchが`JraCollectionException`のみを捕捉しており、`JraPageParseException`系（`JraUnexpectedValueException`/`JraValueParseException`/`JraPageStructureException`/`JraRaceIdentityMismatchException`/`JraResultConsistencyException`。いずれも`JraCollectionException`とは継承関係が異なる）は捕捉されず、1レースのParser異常がその競馬場の全レースループ、さらには呼び出し元の外側catchまで突き抜けて、無関係な正常レースの収集まで巻き添えで停止していた。
+  - 修正: レース単位（2箇所。過去レース結果検索経由の単発ケースとレース一覧ループの両方）のtry/catchに`catch (JraPageParseException ex)`を追加し、当該レースのみをエラーとして`LogWarning`に記録してループを継続するようにした。`JraRaceCardCollectionWorkflow`の既存の`catch (JraNavigationException ex)`パターンと同様の考え方（レース単位の失敗を握りつぶし全体を止めない）を踏襲した。
+  - RaceIdのログ出力: `JraPageParseException`クラス自体への`RaceId`プロパティ追加は、Parser自体がNavigationの要求`RaceId`を保持しない設計（`RaceResultPageParserTests`のコメント通り、Race Identity検証はWorkflow側の責務）と整合しないため見送り、代わりにキャッチ箇所で`RaceId`（`singleResult.RaceId`または`new RaceId(raceDate, course, race.Number)`）を構造化ログのプロパティとして明示的に付加した（あわせて`FieldName`/`RawValue`も出力。依頼書31節が求めるログ内容に対応）。`JraPageParseException`クラス自体は変更していないため、既存の呼び出し元・テストへの影響はない。
+  - 回帰テスト`RaceResultJob_WhenOneRaceParserThrows_OtherRacesAreStillCollectedAndJobCompletes`を`CollectionExecutionServiceIntegrationTests.cs`に追加した。既存の`FakeJraRaceResultCollectionWorkflow.ResultFactory`が例外を送出できる（`Func`内で`throw`する形で表現できる）ことを利用し、既存のテストダブルを拡張せずに最小限の追加で「1レースの解析例外が他レースの収集を止めない」ことを検証した。
+
+深刻度B（依頼書要求の未実装、把握済み）として、以下を正式に記録する（実装拡張は本フェーズのスコープ外）。
+
+- **依頼書9節（レース基本情報Validation）**: `StartTime`・`MeetingNumber`・`MeetingDay`・`RaceConditions`が`JraRaceResultPage`に一切存在しない。依頼書9節はこれらを必須項目として要求しているが、Phase 1〜6のいずれでもモデル拡張・Parser実装を行っていなかった（監査で発見。Acceptance criteria表・Deviationsに記載漏れがあった）。実サイト上でこれらの項目が実際にどのラベル文字列・DOM位置で出現するかを本セッションでは確認できないため（プロキシ制約で実サイトへアクセス不可）、依頼書33節の方針に基づき今回は実装を見送り、フォローアップ課題として記録する。
+- **依頼書25節（人気とレース内出走頭数との整合性確認）**: 「可能であればレース内出走頭数との整合性も確認する」という付随的Validationは未着手のまま。Popularity自体の`>= 1`要求はPhase 3で実装済みだが、頭数との整合確認（例:Popularityが出走頭数を超えていないか）は行っていない。今回は見送り、フォローアップとする。
+- 27節（賞金）・22節（ハロンタイム独立テーブル）・13/28節（古い年代の券種差）は、Phase 3〜5の時点で既に本ドキュメントに既知の見送りとして記載済みのため、重複して記載しない（詳細はDeviations参照）。
 
 ---
 
