@@ -87,13 +87,14 @@ public sealed class ScrapingRegistrationService : BackgroundService
         // 新Jra層(IJraScheduleCollectionWorkflow + JraRaceListPage)のみで実現できるため、
         // 出馬表収集ジョブ登録と同じ枠組みでここに登録する（下記参照）。
 
-        if (_options.EnableScheduleCollection)
+        if (_options.EnableScheduleCollection || _options.EnableRaceResultCollection)
         {
             _logger.LogInformation("[収集登録] 予定収集開始: ReferenceDate={Date} LookaheadDays={LookaheadDays}",
                 today,
                 _options.ScheduleLookaheadDays);
 
             var upcomingDates = new List<DateOnly>();
+            var resultCandidateDates = new List<DateOnly>();
             string? scheduleError = null;
 
             try
@@ -101,13 +102,42 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 await using var session = await _sessionFactory.CreateAsync(cancellationToken).ConfigureAwait(false);
                 var scheduleWorkflow = _scheduleWorkflowFactory(session);
 
-                for (var offset = 0; offset <= Math.Max(0, _options.ScheduleLookaheadDays); offset++)
+                if (_options.EnableScheduleCollection)
                 {
-                    var date = today.AddDays(offset);
-                    var courses = await scheduleWorkflow.CollectAsync(date, cancellationToken).ConfigureAwait(false);
-                    if (courses.Any(x => x != RaceCourse.Unknown))
+                    for (var offset = 0; offset <= Math.Max(0, _options.ScheduleLookaheadDays); offset++)
                     {
-                        upcomingDates.Add(date);
+                        var date = today.AddDays(offset);
+                        var courses = await scheduleWorkflow.CollectAsync(date, cancellationToken).ConfigureAwait(false);
+                        if (courses.Any(x => x != RaceCourse.Unknown))
+                        {
+                            upcomingDates.Add(date);
+                        }
+                    }
+                }
+
+                // 成績収集（AgentJobType.RaceResultCollection）は「開催日を過ぎたレース」の
+                // 確定成績を取りに行くジョブで、出馬表収集とは対象日付レンジが異なる
+                // （ResultLookbackDays分だけ過去に遡る）。以前はJRAカレンダーで開催有無を
+                // 確認せず、範囲内の全暦日について機械的にジョブを登録していたため、
+                // 開催のない平日（例: 金曜日）にも無駄なジョブ・SQS送出・Lambda起動が
+                // 発生していた。出馬表収集と同様にカレンダーで開催有無を確認し、
+                // 開催がある日付のみ登録する。
+                if (_options.EnableRaceResultCollection)
+                {
+                    for (var offset = -Math.Max(0, _options.ResultLookbackDays); offset <= Math.Max(0, _options.ResultLookaheadDays); offset++)
+                    {
+                        var date = today.AddDays(offset);
+                        var courses = await scheduleWorkflow.CollectAsync(date, cancellationToken).ConfigureAwait(false);
+                        if (courses.Any(x => x != RaceCourse.Unknown))
+                        {
+                            resultCandidateDates.Add(date);
+                        }
+                        else
+                        {
+                            _logger.LogInformation(
+                                "[収集登録] 開催のない日付のため成績収集ジョブをスキップします。Date={Date}",
+                                date);
+                        }
                     }
                 }
             }
@@ -144,33 +174,22 @@ public sealed class ScrapingRegistrationService : BackgroundService
                         _logger.LogInformation("[収集登録] 出馬表収集ジョブを登録しました。Date={Date}", date);
                     }
                 }
-            }
-        }
 
-        // 成績収集（AgentJobType.RaceResultCollection）は「開催日を過ぎたレース」の確定成績を
-        // 取りに行くジョブで、出馬表収集とは対象日付レンジが異なる（予定収集の成否には依存しない）。
-        // ExecuteRaceResultJobsAsync 側で日付ごとに IJraScheduleCollectionWorkflow を呼び直して
-        // 開催競馬場・レース一覧を再取得するため、ここでは対象日付を列挙して
-        // ジョブを登録するだけでよい（出馬表収集と同じ「1開催日=1ジョブ」の粒度を踏襲する）。
-        // 重複登録は ScheduleJobAsync が日付ベースのキー（BuildRaceResultCollectionKey）で
-        // 冪等に処理する前提のため、サイクルのたびに同じ日付を登録し直しても安全。
-        if (_options.EnableRaceResultCollection)
-        {
-            for (var offset = -Math.Max(0, _options.ResultLookbackDays); offset <= Math.Max(0, _options.ResultLookaheadDays); offset++)
-            {
-                var date = today.AddDays(offset);
-                var payload = new RaceResultCollectionJobPayload(date, JraProviderType, AgentWorkMode.Idle);
-                var key = AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, date);
-                var priority = CalculateRaceResultPriority(date, today);
-                await _stateStore.ScheduleJobAsync(
-                    AgentJobType.RaceResultCollection,
-                    key,
-                    AgentJobPayloadSerializer.Serialize(payload),
-                    now,
-                    priority,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-                queuedJobs = true;
-                _logger.LogInformation("[収集登録] 成績収集ジョブを登録しました。Date={Date}", date);
+                foreach (var date in resultCandidateDates.Distinct().OrderBy(x => x))
+                {
+                    var payload = new RaceResultCollectionJobPayload(date, JraProviderType, AgentWorkMode.Idle);
+                    var key = AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, date);
+                    var priority = CalculateRaceResultPriority(date, today);
+                    await _stateStore.ScheduleJobAsync(
+                        AgentJobType.RaceResultCollection,
+                        key,
+                        AgentJobPayloadSerializer.Serialize(payload),
+                        now,
+                        priority,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                    queuedJobs = true;
+                    _logger.LogInformation("[収集登録] 成績収集ジョブを登録しました。Date={Date}", date);
+                }
             }
         }
 

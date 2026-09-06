@@ -161,6 +161,31 @@ public sealed class CollectionExecutionService : BackgroundService
 
                 if (ShouldRetryRaceCardCollection(payload.RaceDate, results, now))
                 {
+                    var publicationDate = EstimateRaceCardPublicationDate(payload.RaceDate);
+                    var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
+
+                    if (todayJst < publicationDate)
+                    {
+                        // 出馬表発表予定日より前は、まだJRA側に公開される見込みがないため
+                        // 30分おきの再試行はせず、発表予定日まで待ってから再試行する。
+                        var nextCheckAt = ToJstMidnightUtc(publicationDate);
+
+                        _logger.LogInformation(
+                            "[収集実行] 出馬表発表予定日（{PublicationDate}）より前のためスキップします: Date={Date}",
+                            publicationDate,
+                            payload.RaceDate);
+
+                        await _stateStore.RequeueJobAsync(
+                            AgentJobType.RaceCardCollection,
+                            job.DeduplicationKey,
+                            now,
+                            $"Race card is not expected to be published until {publicationDate:yyyy-MM-dd}. Retry scheduled.",
+                            cancellationToken,
+                            availableAt: nextCheckAt).ConfigureAwait(false);
+
+                        continue;
+                    }
+
                     _logger.LogInformation(
                         "[収集実行] 出馬表未公開のため再試行します: Date={Date}",
                         payload.RaceDate);
@@ -246,11 +271,19 @@ public sealed class CollectionExecutionService : BackgroundService
                     _logger.LogWarning(ex, "[収集実行] 出馬表収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
                 }
 
-                await _stateStore.FailJobAsync(
-                    AgentJobType.RaceCardCollection,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
+                // NOTE: cancellationToken は9分の内部デッドライン等で既にキャンセル済みの
+                // 可能性がある。ここでキャンセル済みトークンをそのまま使うと、失敗報告の
+                // HTTP呼び出し自体が即座にキャンセルされて例外を送出し、この catch ブロックの
+                // 外へ伝播してプロセスが未処理例外でクラッシュしてしまう（実際に発生した事象）。
+                // 失敗報告は次サイクルでの再試行判断に必要なため、外側のキャンセルに関わらず
+                // 完了させる必要があり、意図的に CancellationToken.None を使う。
+                await ReportJobFailureAsync(
+                    () => _stateStore.FailJobAsync(
+                        AgentJobType.RaceCardCollection,
+                        job.DeduplicationKey,
+                        ex.Message,
+                        CancellationToken.None),
+                    job.DeduplicationKey).ConfigureAwait(false);
             }
         }
     }
@@ -314,11 +347,14 @@ public sealed class CollectionExecutionService : BackgroundService
                     _logger.LogWarning(ex, "[収集実行] 成績収集ジョブ失敗。JobKey={JobKey}", job.DeduplicationKey);
                 }
 
-                await _stateStore.FailJobAsync(
-                    AgentJobType.RaceResultCollection,
-                    job.DeduplicationKey,
-                    ex.Message,
-                    cancellationToken).ConfigureAwait(false);
+                // NOTE: 出馬表収集側と同じ理由で、失敗報告は CancellationToken.None で行う。
+                await ReportJobFailureAsync(
+                    () => _stateStore.FailJobAsync(
+                        AgentJobType.RaceResultCollection,
+                        job.DeduplicationKey,
+                        ex.Message,
+                        CancellationToken.None),
+                    job.DeduplicationKey).ConfigureAwait(false);
             }
         }
     }
@@ -520,6 +556,29 @@ public sealed class CollectionExecutionService : BackgroundService
             && jobTimeoutCts.IsCancellationRequested
             && !outerCancellationToken.IsCancellationRequested;
 
+    /// <summary>
+    /// ジョブ失敗報告のHTTP呼び出しを行う。この呼び出し自体が失敗しても
+    /// （API側の一時的な不調や、既にプロセス終了間際でHTTPクライアントが破棄
+    /// されかけている等）、呼び出し元の収集サイクル全体を巻き込んでプロセスを
+    /// クラッシュさせないよう、ここで確実に例外を握りつぶしてログのみ残す。
+    /// 報告が失敗した場合、ジョブは Running のまま残るが、リース期限切れとして
+    /// <see cref="CollectionJobWatchdogService"/> が後から Ready へ戻す安全策がある。
+    /// </summary>
+    private async Task ReportJobFailureAsync(Func<Task> reportAsync, string jobKey)
+    {
+        try
+        {
+            await reportAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "[収集実行] ジョブ失敗報告自体が失敗しました。リース期限切れによる回収に委ねます。JobKey={JobKey}",
+                jobKey);
+        }
+    }
+
     public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -543,6 +602,31 @@ public sealed class CollectionExecutionService : BackgroundService
 
         var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
         return raceDate >= todayJst;
+    }
+
+    /// <summary>
+    /// JRAの出馬表発表予定日を見積もる。JRAは通常、土曜開催・日曜開催とも
+    /// 同じ週の木曜日に出馬表をまとめて発表するため、開催日が土曜・日曜の場合は
+    /// その週の木曜日を返す。それ以外の曜日（重賞の平日開催等、稀なケース）は
+    /// 情報がないため安全側に倒し、開催の2日前を返す。
+    /// あくまで見積もりであり、実際にその日を過ぎても未発表であれば
+    /// <see cref="ShouldRetryRaceCardCollection"/> による通常の30分おき再試行に委ねる。
+    /// </summary>
+    internal static DateOnly EstimateRaceCardPublicationDate(DateOnly raceDate)
+    {
+        var daysBeforeRaceDate = raceDate.DayOfWeek switch
+        {
+            DayOfWeek.Saturday => 2,
+            DayOfWeek.Sunday => 3,
+            _ => 2
+        };
+        return raceDate.AddDays(-daysBeforeRaceDate);
+    }
+
+    private static DateTimeOffset ToJstMidnightUtc(DateOnly date)
+    {
+        var localMidnight = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(localMidnight, Jst);
     }
 
     private async Task RecordRaceCardStatusesAsync(

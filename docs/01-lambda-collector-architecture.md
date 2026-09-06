@@ -148,12 +148,12 @@ public interface ICollectionWorker
 - Lambda は Playwright/Chromium を含む **コンテナイメージ**として ECR へ配置する
 - SQS event source mapping が通知1件につき Worker Lambda を起動する
 - reserved concurrency は当初 `1` とし、JRA への負荷と現行 `MaxConcurrentJobs = 1` を維持する
-- Lambda timeout は15分、Workerの内部deadlineは9分、タスクリースは10分にする
+- Lambda timeout は15分、Workerの内部deadlineは14分、タスクリースは10分にする
 - `/tmp` はブラウザーの一時ファイル専用とし、状態の正本にはしない
 - API キーなどは Secrets Manager または SSM Parameter Store から注入し、イメージや設定ファイルへ含めない
 - CloudWatch Logs に `taskId`, `jobType`, `deduplicationKey`, `attempt`, `workerId` を構造化出力する
 
-Lambda は1回最大15分で、実行環境のローカル状態を呼び出し間の永続化に使えない。Workerは9分で実処理をキャンセルし、10分リースの失効前に状態を確定する。1タスクが安定して9分以内に終わらない場合、そのタスクをページ/レース単位に分割する。分割不能なら当該ワーカーだけ ECS Fargate に残す。
+Lambda は1回最大15分で、実行環境のローカル状態を呼び出し間の永続化に使えない。Workerは14分で実処理をキャンセルし、10分リースの失効前に状態を確定する。1タスクが安定して14分以内に終わらない場合、そのタスクをページ/レース単位に分割する。分割不能なら当該ワーカーだけ ECS Fargate に残す。
 
 ### SQSを配送通知として採用する理由
 

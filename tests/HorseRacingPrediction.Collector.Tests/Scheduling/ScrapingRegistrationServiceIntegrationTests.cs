@@ -90,10 +90,52 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
         Assert.IsEmpty(jobs);
     }
 
+    [TestMethod]
+    public async Task RunOneCycleAsync_WhenResultLookbackDateHasNoRaceDay_RegistersNoRaceResultJob()
+    {
+        var stateStore = CreateStore();
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).Date);
+        var twoDaysAgo = today.AddDays(-2);
+        // 「今日」は開催日、2日前（例: 金曜日）は開催日でないケースを再現する。
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = date => date == today
+                ? new[] { RaceCourse.Tokyo }
+                : Array.Empty<RaceCourse>()
+        };
+
+        var service = CreateService(
+            stateStore,
+            scheduleWorkflow,
+            scheduleLookaheadDays: 0,
+            enableRaceResultCollection: true,
+            resultLookbackDays: 2);
+
+        await service.RunOneCycleAsync(CancellationToken.None);
+
+        var jobs = await stateStore.AcquireReadyJobsAsync(
+            AgentJobType.RaceResultCollection,
+            DateTimeOffset.UtcNow.AddDays(1),
+            TimeSpan.Zero,
+            10,
+            TimeSpan.FromMinutes(30),
+            CancellationToken.None);
+
+        // 開催日である「今日」の分のみ登録され、開催のない2日前の分は登録されない。
+        Assert.HasCount(1, jobs);
+        var payload = AgentJobPayloadSerializer.Deserialize<RaceResultCollectionJobPayload>(jobs[0].Payload);
+        Assert.AreEqual(today, payload.RaceDate);
+        Assert.AreNotEqual(twoDaysAgo, payload.RaceDate);
+    }
+
     private static ScrapingRegistrationService CreateService(
         ProcessingStateStore stateStore,
         FakeJraScheduleCollectionWorkflow scheduleWorkflow,
-        int scheduleLookaheadDays)
+        int scheduleLookaheadDays,
+        bool enableRaceResultCollection = false,
+        int resultLookbackDays = 0)
     {
         var sessionFactory = new FakeJraSessionFactory();
         var options = Options.Create(new AgentProcessingOptions
@@ -101,6 +143,8 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
             EnableScheduleCollection = true,
             EnableRaceCardCollection = true,
             ScheduleLookaheadDays = scheduleLookaheadDays,
+            EnableRaceResultCollection = enableRaceResultCollection,
+            ResultLookbackDays = resultLookbackDays,
         });
 
         return new ScrapingRegistrationService(

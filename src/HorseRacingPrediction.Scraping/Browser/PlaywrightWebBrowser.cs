@@ -1075,20 +1075,35 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var blockCount = await blocks.CountAsync();
         var structuralIndex = 0;
 
+        // [Diag] このループはブロック単位でPlaywright（ブラウザ）へのラウンドトリップを
+        // 複数回発生させるため、ブロック数が多いページでは合計時間が想定外に長くなることが
+        // ある（実運用でJRAの「開催選択」ページのような小規模ページで20秒超かかる事象を観測）。
+        // どのブロックに時間がかかっているかを切り分けられるよう、ブロック数と全体の
+        // 所要時間、および1ブロックあたり異常に時間がかかったケースをログに残す。
+        var overallStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var consideredBlockCount = 0;
+        _logger.LogInformation(
+            "[Diag] AddSectionsFromStructuralBlocksAsync start. Page={Page} BlockCount={BlockCount}",
+            pageTitle,
+            blockCount);
+
         for (var index = 0; index < blockCount; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (sections.Count >= MaxSnapshotSectionCount)
             {
-                return;
+                break;
             }
 
+            var blockStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var block = blocks.Nth(index);
             if (!await IsElementRenderedAsync(block)
                 || await IsLayoutHeaderOrFooterAsync(block))
             {
                 continue;
             }
+
+            consideredBlockCount++;
 
             var mainText = await TryReadLimitedInnerTextAsync(block, MaxSectionTextLength);
             if (IsTextCoveredByExistingSections(mainText, sections))
@@ -1110,6 +1125,18 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             var tables = (await tablesTask).ToList();
             var forms = (await formsTask).ToList();
             var images = (await imagesTask).ToList();
+
+            if (blockStopwatch.ElapsedMilliseconds > 2000)
+            {
+                _logger.LogWarning(
+                    "[Diag] AddSectionsFromStructuralBlocksAsync block slow. Page={Page} BlockIndex={BlockIndex} ElapsedMs={ElapsedMs} Links={Links} Actions={Actions} Tables={Tables}",
+                    pageTitle,
+                    index,
+                    blockStopwatch.ElapsedMilliseconds,
+                    links.Count,
+                    actions.Count,
+                    tables.Count);
+            }
 
             if (string.IsNullOrWhiteSpace(mainText)
                 && headings.Count == 0
@@ -1141,6 +1168,14 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
             structuralIndex++;
         }
+
+        _logger.LogInformation(
+            "[Diag] AddSectionsFromStructuralBlocksAsync done. Page={Page} BlockCount={BlockCount} ConsideredBlocks={ConsideredBlocks} SectionsAdded={SectionsAdded} ElapsedMs={ElapsedMs}",
+            pageTitle,
+            blockCount,
+            consideredBlockCount,
+            sections.Count,
+            overallStopwatch.ElapsedMilliseconds);
     }
 
     internal static bool IsTextCoveredByExistingSections(
@@ -1641,7 +1676,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             ("[role='tab']", "tab"),
             ("summary", "summary"),
             ("input[type='button'], input[type='submit']", "input"),
-            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索']", "link-action")
+            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索'], a[href^='/?q='][href*='site:']", "link-action")
         };
 
         foreach (var (selector, kind) in actionSelectors)
@@ -1675,32 +1710,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                     return actions;
                 }
             }
-        }
-
-        var anchorLocator = root.Locator("a[href]");
-        var anchorCount = await anchorLocator.CountAsync();
-        for (var index = 0; index < anchorCount && actions.Count < maxActions; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var anchor = anchorLocator.Nth(index);
-            if (!await IsElementRenderedAsync(anchor))
-            {
-                continue;
-            }
-
-            var pseudoAction = await TryCreatePseudoActionFromAnchorAsync(anchor);
-            if (pseudoAction is null)
-            {
-                continue;
-            }
-
-            var key = $"{pseudoAction.Kind}:{pseudoAction.Text}";
-            if (!seen.Add(key))
-            {
-                continue;
-            }
-
-            actions.Add(pseudoAction);
         }
 
         return actions;
@@ -1870,7 +1879,7 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             ("[role='tab']", "tab"),
             ("summary", "summary"),
             ("input[type='button'], input[type='submit']", "input"),
-            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索']", "link-action")
+            ("a[title*='ドメインで検索'], a[aria-label*='ドメインで検索'], a[href^='/?q='][href*='site:']", "link-action")
         };
 
         foreach (var (selector, kind) in actionSelectors)
@@ -1904,32 +1913,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                     return actions;
                 }
             }
-        }
-
-        var anchorLocator = _page.Locator("a[href]");
-        var anchorCount = await anchorLocator.CountAsync();
-        for (var index = 0; index < anchorCount && actions.Count < 50; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var anchor = anchorLocator.Nth(index);
-            if (!await IsElementRenderedAsync(anchor))
-            {
-                continue;
-            }
-
-            var pseudoAction = await TryCreatePseudoActionFromAnchorAsync(anchor);
-            if (pseudoAction is null)
-            {
-                continue;
-            }
-
-            var key = $"{pseudoAction.Kind}:{pseudoAction.Text}";
-            if (!seen.Add(key))
-            {
-                continue;
-            }
-
-            actions.Add(pseudoAction);
         }
 
         return actions;
@@ -2313,33 +2296,6 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         var normalizedHref = href.Trim();
         return normalizedHref.StartsWith("/?q=", StringComparison.OrdinalIgnoreCase)
             && normalizedHref.Contains("site:", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task<PageActionSnapshot?> TryCreatePseudoActionFromAnchorAsync(ILocator anchor)
-    {
-        var href = await anchor.GetAttributeAsync("href") ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(href))
-        {
-            return null;
-        }
-
-        var text = await GetLocatorTextAsync(anchor);
-        var ariaLabel = NormalizeText(await anchor.GetAttributeAsync("aria-label"));
-        var titleAttribute = NormalizeText(await anchor.GetAttributeAsync("title"));
-        if (!IsDomainSearchPseudoActionAnchor(text, ariaLabel, titleAttribute, href))
-        {
-            return null;
-        }
-
-        var resolvedText = !string.IsNullOrWhiteSpace(text)
-            ? text
-            : !string.IsNullOrWhiteSpace(ariaLabel)
-                ? ariaLabel
-                : !string.IsNullOrWhiteSpace(titleAttribute)
-                    ? titleAttribute
-                    : href;
-
-        return new PageActionSnapshot(resolvedText, "link-action");
     }
 
     private static string NormalizeForMatch(string? text)

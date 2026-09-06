@@ -64,9 +64,9 @@ if (runOnce)
     // Lambda（SQS event source mapping）から1回呼ばれる経路。常駐BackgroundServiceの
     // ExecuteAsyncループは開始せず、ジョブ登録（新規開催日の発見）とジョブ実行
     // （Ready状態のRaceCard/RaceResult収集ジョブの処理）を1サイクルずつ直接呼び出して終了する。
-    // Lambdaのタイムアウトは15分（infra/collector-lambda/main.tf）だが、結果報告・
-    // ブラウザー終了の猶予を残すため9分で打ち切る（docs/01-lambda-collector-architecture.md）。
-    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(9));
+    // Lambdaのタイムアウトは15分（infra/collector-lambda/main.tf）。結果報告・
+    // ブラウザー終了の猶予として1分だけ残し、14分で打ち切る。
+    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(14));
 
     var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
     await registrationService.RunOneCycleAsync(cts.Token);
