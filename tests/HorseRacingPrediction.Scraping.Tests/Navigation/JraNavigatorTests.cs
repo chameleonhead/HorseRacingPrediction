@@ -417,7 +417,7 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
-    public async Task ToRaceCardAsync_SameMeeting_SecondCallReusesCachedRaceListUrl()
+    public async Task ToRaceCardAsync_SameMeeting_SecondCallRepeatsFullNavigation()
     {
         const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
         const string raceCardUrl11 = "https://www.jra.go.jp/keiba/sample/racecard/11/";
@@ -453,22 +453,20 @@ public sealed class JraNavigatorTests
         Assert.AreEqual(JraPageKind.RaceCard, page2.Kind);
         Assert.AreEqual(raceCardUrl12, page2.Url);
 
-        // 2レース目は競馬トップ再訪問・「出馬表」メニュークリック・開催選択ボタン
-        // クリックを行わず、キャッシュ済みのレース一覧URLへ直接ナビゲートしているはず
-        // （ブラウザの「戻る」は実サイトで信頼できないため使用しない）。
-        Assert.AreEqual(
-            1,
-            browser.ClickedTexts.Count(x => x == "出馬表"),
-            "「出馬表」メニューへのクリックは初回の1回だけであるべき。");
-        Assert.AreEqual(
-            1,
-            browser.ClickedTexts.Count(x => x == "4回中山1日"),
-            "開催選択ボタンのクリックは初回の1回だけであるべき。");
-        Assert.AreEqual(0, browser.GoBackCallCount, "GoBackは使用しない。");
+        // JRAの開催選択・レース選択URL（CNAMEクエリパラメータ付き）は一度きりの
+        // クリック遷移でのみ有効なセッション依存トークンであり、同じURLへ改めて
+        // ナビゲート（再GET）するとエラーページに着地することが本番環境で判明した。
+        // そのためGoBackやURLキャッシュには頼らず、2レース目もフルパス
+        // （トップ→出馬表メニュー→開催選択ボタン）で毎回遷移する。
         Assert.AreEqual(
             2,
-            browser.NavigatedUrls.Count(x => x == raceListUrl),
-            "レース一覧URLへは初回のフルナビゲーションと、2レース目のキャッシュ再訪問の合計2回ナビゲートしているはず。");
+            browser.ClickedTexts.Count(x => x == "出馬表"),
+            "「出馬表」メニューへのクリックは毎回行われるはず。");
+        Assert.AreEqual(
+            2,
+            browser.ClickedTexts.Count(x => x == "4回中山1日"),
+            "開催選択ボタンのクリックは毎回行われるはず。");
+        Assert.AreEqual(0, browser.GoBackCallCount, "GoBackは使用しない。");
     }
 
     [TestMethod]

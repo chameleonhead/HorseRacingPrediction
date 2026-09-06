@@ -72,6 +72,16 @@ if (runOnce)
     // ブラウザー終了の猶予として1分だけ残し、14分で打ち切る。
     using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(14));
 
+    // CloudWatch Logsで該当する呼び出しをすぐに検索できるよう、失敗メッセージに
+    // Lambda RequestIdを含める。bootstrapがLambdaランタイムAPIから取得したRequestIdを
+    // 環境変数で渡す。ローカル実行等でこの環境変数が無い場合は、混同を避けつつも
+    // 目視で「ローカル実行由来」と分かる仮のIDを生成する。
+    var requestId = Environment.GetEnvironmentVariable("AWS_LAMBDA_REQUEST_ID");
+    if (string.IsNullOrWhiteSpace(requestId))
+    {
+        requestId = $"local-{Guid.NewGuid():N}";
+    }
+
     try
     {
         var notification = TryReadTriggeringNotification();
@@ -90,12 +100,12 @@ if (runOnce)
             // CollectionPlanningジョブは「新規開催日の登録」処理そのものを表すジョブ。
             // 1ジョブ=1Lambda実行の原則に合わせ、このジョブ自体をリースしてから
             // 登録サイクルを1回だけ実行する。
-            await RunCollectionPlanningTaskAsync(app.Services, notification, cts.Token);
+            await RunCollectionPlanningTaskAsync(app.Services, notification, requestId, cts.Token);
         }
         else
         {
             var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
-            await executionService.RunSingleTaskAsync(notification, cts.Token);
+            await executionService.RunSingleTaskAsync(notification, requestId, cts.Token);
         }
     }
     catch (OperationCanceledException) when (cts.IsCancellationRequested)
@@ -108,7 +118,7 @@ if (runOnce)
         // Lambdaランタイムへ報告できず、CloudWatch Logs上でタイムアウトか他の異常かの
         // 判別ができなくなる。ここで捕捉し、原因が分かる形でログ出力した上でファイルに書き出し、
         // bootstrapがLambdaランタイムAPIへのエラー応答にその内容を使えるようにする。
-        const string reason = "Collector execution timed out (14-minute internal deadline reached).";
+        var reason = $"Collector execution timed out (14-minute internal deadline reached). RequestId={requestId}";
         Console.Error.WriteLine(reason);
         try
         {
@@ -135,6 +145,7 @@ else
 static async Task RunCollectionPlanningTaskAsync(
     IServiceProvider services,
     CollectionTaskNotification notification,
+    string requestId,
     CancellationToken cancellationToken)
 {
     var stateStore = services.GetRequiredService<IProcessingStateStore>();
@@ -170,14 +181,18 @@ static async Task RunCollectionPlanningTaskAsync(
             notification.DeduplicationKey,
             task.LeaseToken,
             now,
-            "Collector execution timed out (14-minute internal deadline reached). Retry scheduled.",
+            $"Collector execution timed out (14-minute internal deadline reached). Retry scheduled. (RequestId={requestId})",
             CancellationToken.None).ConfigureAwait(false);
         throw;
     }
     catch (Exception ex)
     {
         await stateStore.FailCollectionTaskAsync(
-            notification.JobType, notification.DeduplicationKey, task.LeaseToken, ex.Message, CancellationToken.None)
+            notification.JobType,
+            notification.DeduplicationKey,
+            task.LeaseToken,
+            $"{ex.Message} (RequestId={requestId})",
+            CancellationToken.None)
             .ConfigureAwait(false);
         throw;
     }

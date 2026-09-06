@@ -557,6 +557,14 @@ public sealed class CollectionExecutionService : BackgroundService
             && !outerCancellationToken.IsCancellationRequested;
 
     /// <summary>
+    /// CloudWatch Logsで該当するLambda呼び出しのログをすぐに検索できるよう、
+    /// エラーメッセージ末尾にRequestIdを付与する。requestIdが無い場合（未指定/
+    /// 常駐Worker経路等）はそのまま返す。
+    /// </summary>
+    private static string AppendRequestId(string message, string? requestId)
+        => string.IsNullOrWhiteSpace(requestId) ? message : $"{message} (RequestId={requestId})";
+
+    /// <summary>
     /// ジョブ失敗報告のHTTP呼び出しを行う。この呼び出し自体が失敗しても
     /// （API側の一時的な不調や、既にプロセス終了間際でHTTPクライアントが破棄
     /// されかけている等）、呼び出し元の収集サイクル全体を巻き込んでプロセスを
@@ -602,7 +610,20 @@ public sealed class CollectionExecutionService : BackgroundService
     /// 既に処理済み・実行中・送出世代が古い等でリースを確保できなかった場合はfalse
     /// （呼び出し元は何もせず終了してよい）。
     /// </returns>
-    public async Task<bool> RunSingleTaskAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
+    public Task<bool> RunSingleTaskAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
+        => RunSingleTaskAsync(notification, requestId: null, cancellationToken);
+
+    /// <summary>
+    /// <paramref name="requestId"/>には、このLambda呼び出しのRequestId（bootstrapが
+    /// 環境変数経由で渡すもの。ローカル実行時はProgram.csが仮のIDを生成する）を渡す。
+    /// 失敗報告のメッセージに含めることで、CloudWatch Logsから該当する呼び出しの
+    /// ログを直接検索できるようにする（RequestIdが分からないと、失敗理由だけでは
+    /// どの呼び出しのログか特定しづらいという課題への対応）。
+    /// </summary>
+    public async Task<bool> RunSingleTaskAsync(
+        CollectionTaskNotification notification,
+        string? requestId,
+        CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var leaseDuration = TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes));
@@ -655,7 +676,9 @@ public sealed class CollectionExecutionService : BackgroundService
                     notification.DeduplicationKey,
                     task.LeaseToken,
                     now,
-                    "Collector execution timed out (14-minute internal deadline reached). Retry scheduled.",
+                    AppendRequestId(
+                        "Collector execution timed out (14-minute internal deadline reached). Retry scheduled.",
+                        requestId),
                     CancellationToken.None),
                 notification.DeduplicationKey).ConfigureAwait(false);
             return true;
@@ -684,7 +707,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     notification.JobType,
                     notification.DeduplicationKey,
                     task.LeaseToken,
-                    ex.Message,
+                    AppendRequestId(ex.Message, requestId),
                     CancellationToken.None),
                 notification.DeduplicationKey).ConfigureAwait(false);
         }

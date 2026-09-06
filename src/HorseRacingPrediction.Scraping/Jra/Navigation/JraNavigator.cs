@@ -20,20 +20,15 @@ public sealed class JraNavigator
     private readonly ILogger<JraNavigator> _logger;
     private readonly Func<DateOnly> _today;
 
-    /// <summary>
-    /// 直前に取得した「レース選択」ページ（<see cref="JraRaceListPage"/>）そのもののキャッシュ。
-    /// 同一開催（同一日付・競馬場・経路）に対して <see cref="ToRaceListAsync"/> /
-    /// <see cref="ToRaceResultMeetingListAsync"/> がレースごとに繰り返し呼ばれる際、
-    /// 従来はブラウザの「戻る」で復帰を
-    /// 試みていたが、実サイトでは「戻る」後のページが期待するレース選択ページとして
-    /// 認識できないケース（Kind=Unknownで開催選択ページに戻ってしまう等）が常態化しており、
-    /// 毎回ブラウザの「戻る」試行（失敗）＋フルパス再遷移（1回あたり10秒以上）が発生し、
-    /// 1開催日のレース数だけこのコストが積み重なって実行時間の大半を占めていた
-    /// （本番ログで確認済み）。レース選択ページの内容は同一開催内では変わらないため、
-    /// ブラウザを一切操作せずこのキャッシュを直接返せば十分であり、GoBackの試行自体が
-    /// 不要になる。
-    /// </summary>
-    private (DateOnly Date, RaceCourse Course, string Route, JraRaceListPage Page)? _lastRaceListPage;
+    // NOTE(レース一覧URLキャッシュを撤回): 一度、ブラウザの「戻る」（GoBack）の不安定さ対策として
+    // 直前に到達したレース一覧ページのURLをキャッシュし、そのURLへ直接ナビゲート（再GET）する
+    // 実装を試みたが、本番環境で「JRA navigation done. ... Url=https://www.jra.go.jp/error/error013.html」
+    // という形で失敗することが判明した。JRAの開催選択・レース選択URL（CNAMEクエリパラメータ付き）は
+    // 一度きりのクリック遷移でのみ有効なセッション依存トークンらしく、同じURLへ改めてGETし直すと
+    // エラーページに着地する。そのため本キャッシュ機構は撤回し、レース一覧の取得は都度クリックを
+    // 経由するフルパス（<see cref="NavigateToRaceDateCourseAsync"/> 等）で行う。フルパス自体の
+    // 遅さ（開催選択ページのリンク抽出）は別途 PlaywrightWebBrowser 側でEvaluateAllAsyncによる
+    // 一括取得に変更済みのため、以前ほどのコストにはならない。
 
     /// <summary>
     /// 直前に取得したカレンダーページのキャッシュ（月, ページ）。
@@ -143,25 +138,6 @@ public sealed class JraNavigator
             course,
             _browser.CurrentUrl);
 
-        if (_lastRaceListPage is { } cached
-            && cached.Date == date && cached.Course == course && cached.Route == "Card")
-        {
-            // GoBack（ブラウザ履歴の「戻る」）は実サイトで信頼できず、開催選択ページに
-            // 着地してしまう事象が常態化していた。既知のURLへ直接ナビゲートする方が
-            // 確実で、かつカレンダー再確認・トップ再訪問・メニュー/開催選択ボタンの
-            // クリックといった重い手順を省略できる。レース番号リンクのクリック
-            // （NavigateRaceNumberLinkAsync）にはブラウザが実際にこのページ上にいる
-            // 必要があるため、データだけ返すのではなく実際にナビゲートしてから返す。
-            await _browser.NavigateAsync(cached.Page.Url, cancellationToken);
-            var revisitedPage = await _pageReader.ReadAsync(cancellationToken);
-            _logger.LogInformation(
-                "JRA navigation done. Destination=RaceList Route=CachedUrl Date={Date} Course={Course} Url={Url}",
-                date,
-                course,
-                revisitedPage.Url);
-            return revisitedPage;
-        }
-
         var calendarPage =
             await ToCalendarAsync(
                 new YearMonth(date.Year, date.Month),
@@ -197,11 +173,6 @@ public sealed class JraNavigator
         var page =
             await _pageReader.ReadAsync(
                 cancellationToken);
-
-        if (page is JraRaceListPage cardRaceList && cardRaceList.Date == date && cardRaceList.Course == course)
-        {
-            _lastRaceListPage = (date, course, "Card", cardRaceList);
-        }
 
         _logger.LogInformation(
             "JRA navigation done. Destination=RaceList Route=Full ResolvedKind={Kind} Url={Url}",
@@ -480,10 +451,7 @@ public sealed class JraNavigator
         => ToRaceResultViaMeetingSelectionAsync(race, cancellationToken);
 
     /// <summary>
-    /// 「レース結果 開催選択」ページ経由で対象Rへ遷移する。同一開催に対して
-    /// 連続で呼ばれる場合は、直前に取得した「レース選択」ページのキャッシュ
-    /// （<see cref="_lastRaceListPage"/>）を再利用し、競馬トップ再訪問・「レース結果」
-    /// メニュークリック・開催選択ボタンクリックを省略する。
+    /// 「レース結果 開催選択」ページ経由で対象Rへ遷移する。
     /// </summary>
     private async Task<IJraPage> ToRaceResultViaMeetingSelectionAsync(
         RaceId race,
@@ -504,9 +472,7 @@ public sealed class JraNavigator
 
     /// <summary>
     /// 「レース結果 開催選択」ページ経由で対象日・競馬場の「レース選択」ページへ
-    /// 遷移する（対象R番号の特定は行わない）。同一開催に対して連続で呼ばれる場合は、
-    /// 直前に取得した「レース選択」ページのキャッシュ（<see cref="_lastRaceListPage"/>）を
-    /// 再利用する。
+    /// 遷移する（対象R番号の特定は行わない）。
     /// 対象日が開催選択ページの表示範囲外であれば <see cref="JraNavigationException"/>
     /// （<see cref="JraNavigationFailureReason.OutOfDisplayedRange"/> または
     /// <see cref="JraNavigationFailureReason.NotYetPublished"/>）を送出する。
@@ -516,20 +482,6 @@ public sealed class JraNavigator
         RaceCourse course,
         CancellationToken cancellationToken)
     {
-        if (_lastRaceListPage is { } cached
-            && cached.Date == date && cached.Course == course && cached.Route == ResultRoute)
-        {
-            // 出馬表側と同じ理由（GoBackの信頼性の問題）で、既知のURLへ直接ナビゲートする。
-            await _browser.NavigateAsync(cached.Page.Url, cancellationToken);
-            var revisitedPage = await _pageReader.ReadAsync(cancellationToken);
-            _logger.LogInformation(
-                "JRA navigation done. Destination=RaceResultList Route=CachedUrl Date={Date} Course={Course} Url={Url}",
-                date,
-                course,
-                revisitedPage.Url);
-            return revisitedPage;
-        }
-
         // 競馬トップ → レース結果 → 対象日・競馬場（開催選択ボタン）
         await NavigateToRaceResultTopAsync(cancellationToken);
 
@@ -540,13 +492,6 @@ public sealed class JraNavigator
 
         var listPage =
             await _pageReader.ReadAsync(cancellationToken);
-
-        if (listPage is JraRaceListPage raceList &&
-            raceList.Date == date &&
-            raceList.Course == course)
-        {
-            _lastRaceListPage = (date, course, ResultRoute, raceList);
-        }
 
         return listPage;
     }

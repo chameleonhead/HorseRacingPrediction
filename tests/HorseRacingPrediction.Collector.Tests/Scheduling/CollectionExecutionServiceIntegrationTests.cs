@@ -231,6 +231,34 @@ public sealed class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task RunSingleTaskAsync_WhenWorkflowThrows_AppendsRequestIdToErrorMessage()
+    {
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var raceDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var stateStore = CreateStore();
+
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            ThrowOnCollect = new InvalidOperationException("boom")
+        };
+        var service = CreateService(
+            stateStore, scheduleWorkflow, new FakeJraRaceCardCollectionWorkflow(), new FakeJraRaceResultCollectionWorkflow());
+
+        var payload = new RaceCardCollectionJobPayload(raceDate, "JRA");
+        var key = AgentJobKeyFactory.BuildRaceCardCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(AgentJobType.RaceCardCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
+
+        var notification = new CollectionTaskNotification(key, AgentJobType.RaceCardCollection, key, DispatchGeneration: 1);
+        await service.RunSingleTaskAsync(notification, "test-request-id-123", CancellationToken.None);
+
+        var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceCardCollection, null, 10, CancellationToken.None);
+        Assert.HasCount(1, statuses);
+        Assert.AreEqual(AgentJobStatus.Failed, statuses[0].Status);
+        var detail = await stateStore.GetJobDetailAsync(statuses[0].JobId, CancellationToken.None);
+        StringAssert.Contains(detail!.LastError, "test-request-id-123");
+    }
+
+    [TestMethod]
     public async Task RunSingleTaskAsync_WhenJobAlreadyRunning_ReturnsFalseWithoutExecuting()
     {
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
