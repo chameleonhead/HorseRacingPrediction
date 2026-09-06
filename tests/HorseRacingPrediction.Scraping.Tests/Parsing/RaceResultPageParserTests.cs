@@ -376,6 +376,23 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_コース表記_芝右外は方向とレイアウトの両方を分解できる()
+    {
+        // 実サイトE2E（過去レース結果、中山）で判明した表記。「芝・右」（方向）の後ろへ
+        // 半角スペース区切りで「外」（外回り）が続く。従来は「・」区切りの後続部分を
+        // 「左」「右」との完全一致でしか判定していなかったため、この表記で
+        // Course.Directionが未知値としてエラーになっていた。
+        var page = ParseWithMainText("天候 晴 芝 良 1,600メートル（芝・右 外）");
+
+        Assert.IsNotNull(page.CourseSpec);
+        Assert.AreEqual(1600, page.CourseSpec!.DistanceMeters);
+        CollectionAssert.AreEqual(new[] { CourseSurface.Turf }, page.CourseSpec.Surfaces.ToArray());
+        Assert.AreEqual(CourseDirection.Right, page.CourseSpec.Direction);
+        Assert.AreEqual("外", page.CourseSpec.Layout);
+        Assert.AreEqual("芝・右 外", page.CourseSpec.RawLayout);
+    }
+
+    [TestMethod]
     public void Parse_コース表記_芝外内はDirectionなしLayoutへ格納する()
     {
         var page = ParseWithMainText("天候 晴 芝 良 2,890メートル（芝 外内）");

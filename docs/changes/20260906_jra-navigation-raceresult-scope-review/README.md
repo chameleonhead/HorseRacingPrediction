@@ -164,6 +164,7 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 
 ## Verification record
 
+- Phase 6: ユーザーが実サイト（`TestCategory=External`）に対して`dotnet test`を実行し、`Course.Direction`未知値エラー（`芝・右 外`）を発見。修正後、`dotnet build`（ソリューション全体）成功・`dotnet test tests/HorseRacingPrediction.Scraping.Tests --filter "FullyQualifiedName!~E2ETests"`成功（130件）を本セッションで確認。実サイトに対する`古いRaceResult取得`の再実行はユーザー側で未実施（要フォローアップ）。
 - `dotnet --version`: `10.0.100`（本セッションでインストール。`/home/user/.dotnet` に配置、`dotnet-install.sh --version 10.0.100`）
 - `dotnet build tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj`: 成功、0 Warning / 0 Error
 - `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、95件（実サイトE2Eテストは除外）
@@ -212,6 +213,15 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
   - **FinishedなのにFinishPositionなし / FinishedなのにTimeなし**: Phase 5で、タイム列自体が存在しない・空欄の場合も`JraResultConsistencyException`（FieldName=`Time`）を送出するよう変更した。`FinishPosition`欠落についても、構造上到達しない防御的チェックとして同種の例外を追加した。テストを追加済み。
   - **賞金情報なし（依頼書27節）**: Phase 3の時点で記載の通り、賞金section自体をParserがまだ解析していない（`PrizeMoney`を送る経路もない）ため、「賞金sectionなし＝正常」は全既存テストで結果的に満たされているが、これを検証する専用テストを追加する意味が薄い（何もしないことで自動的に満たされるため）と判断し、専用のテストケースは追加しなかった。賞金section自体の実装後、Phase 4相当のテスト（sectionなし＝正常、sectionあり+Parse不能＝Error）を追加する必要がある。
   - **RaceNumber不正（RaceId不一致経由で確認）/ 要求RaceIdとページRaceId不一致**: これらはPhase 1時点で`JraRaceResultCollectionWorkflowTests.CollectAsync_ページから解析したRaceIdが要求と異なる場合はJraRaceIdentityMismatchExceptionを投げる()`として既にカバー済み（`JraRaceIdentityMismatchException`、FieldName相当は`RaceId`）。`RaceResultPageParser`自体は要求RaceIdを受け取らず自己整合性の検証はWorkflow側の責務であるため、`RaceResultPageParserTests`側への重複追加は行わなかった。
+
+### Phase 6（実サイトE2E検証によるCourse.Direction修正・本コミット）
+
+ユーザー自身が実サイト（プロキシ制約のないネットワーク）で `dotnet test --filter TestCategory=External` を実行し、以下が判明した（依頼書33節の「未知パターン発見→JRA上の正式な表現か確認→モデル・Parser・テストを拡張」フローの実例）。
+
+- **出馬表（RaceCard）の「開催選択ボタンが見つかりません」（`現在週RaceList取得`/`現在週RaceCard取得`）**: `2026-09-12 Nakayama` の開催選択ボタンが見つからず`NotYetPublished`理由で失敗。ユーザーへ確認の結果、「出馬表は木曜日頃まで未公開であり、それまでエラーになるのは仕方ない」という想定内の挙動であることを確認した。テストが `today` 以降で最も近いカレンダー上の開催日を選ぶため、出馬表がまだ公開されていない週前半に実行すると再現する。**コード上の対応は不要**（既存の`NotYetPublished`/`OutOfDisplayedRange`という理由区別自体がこのケースを想定した設計であり、正しく機能している）。
+- **RaceResultの`Course.Direction`に未知値エラー（`古いRaceResult取得`）**: `RawValue=芝・右 外`（中山、過去レース）でPhase 3実装時に想定していなかった実表記が見つかった。Phase 3では「芝・左」のように「・」区切りの後ろは方向（左/右）の1トークンのみを想定していたが、実際のJRA表記には「芝・右 外」のように方向の後ろへ半角スペース区切りで外回り等のレイアウト注記が続く形式が存在する。`RaceResultPageParser.ParseCourseSpec`を修正し、「・」区切り後の文字列をさらに空白で分割して先頭を方向、残りをレイアウトとして扱うようにした（例: `芝・右 外` → `Direction=Right`, `Layout="外"`）。回帰テスト `Parse_コース表記_芝右外は方向とレイアウトの両方を分解できる` を追加。
+
+これにより「古いレース（過去レース結果検索経由）」のRaceResult取得は、少なくともこのコース表記に関しては解消済み。ユーザーからは「まずは過去のレースが取得できれば良い」という優先順位の共有があった。他のE2E失敗（ユーザーの報告に「他にも発生しています」とあるが未共有）は追って調査する。
 
 ---
 

@@ -239,23 +239,43 @@ public sealed class RaceResultPageParser
 
             if (suffix is not null)
             {
-                if (suffix == "左")
-                {
-                    direction = CourseDirection.Left;
-                }
-                else if (suffix == "右")
-                {
-                    direction = CourseDirection.Right;
-                }
-                else if (directionDelimiterIndex >= 0)
+                if (directionDelimiterIndex >= 0)
                 {
                     // 「・」区切りは方向表記であることが既知（依頼書例示の「芝・左」）。
+                    // ただし実サイトには「芝・右 外」のように、方向の後ろへ半角スペース区切りで
+                    // 外回り／内回り等のレイアウト注記が続く表記が存在する（Task: 実サイトE2E
+                    // で判明、RawValue="芝・右 外"）。方向トークン（先頭の空白区切り要素）を
+                    // 「左」「右」として解釈し、続きがあればレイアウト注記として保持する。
                     // 左右いずれでもない場合は未知の方向表記としてエラー。
-                    throw new JraUnexpectedValueException(
-                        JraPageKind.RaceResult,
-                        snapshot.Url,
-                        "Course.Direction",
-                        rawLayout);
+                    var directionSpaceIndex = suffix.IndexOf(' ');
+
+                    var directionToken =
+                        directionSpaceIndex >= 0 ? suffix[..directionSpaceIndex] : suffix;
+
+                    var layoutSuffix =
+                        directionSpaceIndex >= 0 ? suffix[(directionSpaceIndex + 1)..].Trim() : null;
+
+                    if (directionToken == "左")
+                    {
+                        direction = CourseDirection.Left;
+                    }
+                    else if (directionToken == "右")
+                    {
+                        direction = CourseDirection.Right;
+                    }
+                    else
+                    {
+                        throw new JraUnexpectedValueException(
+                            JraPageKind.RaceResult,
+                            snapshot.Url,
+                            "Course.Direction",
+                            rawLayout);
+                    }
+
+                    if (!string.IsNullOrEmpty(layoutSuffix))
+                    {
+                        layout = layout is null ? layoutSuffix : $"{layout} {layoutSuffix}";
+                    }
                 }
                 else
                 {
