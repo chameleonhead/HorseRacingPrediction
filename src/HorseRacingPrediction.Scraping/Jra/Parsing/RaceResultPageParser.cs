@@ -420,6 +420,7 @@ public sealed class RaceResultPageParser
         PageSnapshot snapshot,
         PageTableSnapshot resultTable)
     {
+        // TODO: 通常の表形式ではなく、払戻金のテーブルを確認する必要がある
         var winPayouts = new List<PayoutLine>();
         var placePayouts = new List<PayoutLine>();
         var quinellaPayouts = new List<PayoutLine>();
@@ -709,7 +710,7 @@ public sealed class RaceResultPageParser
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (RemoveWhitespace(headers[i]).Contains("枠番", StringComparison.Ordinal))
+            if (RemoveWhitespace(headers[i]).Contains("枠", StringComparison.Ordinal) || RemoveWhitespace(headers[i]).Contains("枠番", StringComparison.Ordinal))
             {
                 return i;
             }
@@ -722,7 +723,7 @@ public sealed class RaceResultPageParser
     {
         for (var i = 0; i < headers.Count; i++)
         {
-            if (headers[i].Contains("斤量", StringComparison.Ordinal))
+            if (RemoveWhitespace(headers[i]).Contains("負担重量", StringComparison.Ordinal) || headers[i].Contains("斤量", StringComparison.Ordinal))
             {
                 return i;
             }
@@ -946,18 +947,19 @@ public sealed class RaceResultPageParser
     {
         var finishIndex = FindFinishPositionColumnIndex(table.Headers);
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
+        var frameNumberIndex = FindFrameNumberColumnIndex(table.Headers);
         var horseNameIndex = FindHorseNameColumnIndex(table.Headers);
+        var sexAgeIndex = FindSexAgeColumnIndex(table.Headers);
+        var assignedWeightIndex = FindAssignedWeightColumnIndex(table.Headers);
         var jockeyIndex = FindJockeyColumnIndex(table.Headers);
         var timeIndex = FindTimeColumnIndex(table.Headers);
-        var sexAgeIndex = FindSexAgeColumnIndex(table.Headers);
-        var frameNumberIndex = FindFrameNumberColumnIndex(table.Headers);
-        var assignedWeightIndex = FindAssignedWeightColumnIndex(table.Headers);
-        var trainerIndex = FindTrainerColumnIndex(table.Headers);
-        var popularityIndex = FindPopularityColumnIndex(table.Headers);
-        var bodyWeightIndex = FindBodyWeightColumnIndex(table.Headers);
         var marginIndex = FindMarginColumnIndex(table.Headers);
+        // TODO: コーナー通過順位を取得する、3Fタイムは本テーブルではなく、本テーブルの下方にあるタイムを見るように変更
         var estimatedLast3FIndex = FindEstimatedLast3FColumnIndex(table.Headers);
         var average1FIndex = FindAverage1FColumnIndex(table.Headers);
+        var bodyWeightIndex = FindBodyWeightColumnIndex(table.Headers);
+        var trainerIndex = FindTrainerColumnIndex(table.Headers);
+        var popularityIndex = FindPopularityColumnIndex(table.Headers);
 
         var results = new List<RaceResultEntry>();
 
