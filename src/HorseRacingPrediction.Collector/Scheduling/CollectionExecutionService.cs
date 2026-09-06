@@ -590,6 +590,238 @@ public sealed class CollectionExecutionService : BackgroundService
         };
     }
 
+    /// <summary>
+    /// Lambda（--once）が1メッセージにつき1回だけ呼び出す、単一ジョブ実行のエントリーポイント。
+    /// <see cref="RunTaskAsync"/>（常駐Worker/テスト向けの「その時点のReadyジョブをまとめて処理する」
+    /// バッチ方式）とは異なり、このメソッドは通知が指すジョブ1件だけをリース（
+    /// <see cref="IProcessingStateStore.AcquireCollectionTaskAsync(string,string,long,DateTimeOffset,TimeSpan,CancellationToken)"/>）
+    /// で確保し、その1件だけを処理する（1ジョブ=1Lambda実行）。
+    /// </summary>
+    /// <returns>
+    /// リースを確保できた（＝このLambda呼び出しで何らかの処理を行った）場合はtrue。
+    /// 既に処理済み・実行中・送出世代が古い等でリースを確保できなかった場合はfalse
+    /// （呼び出し元は何もせず終了してよい）。
+    /// </returns>
+    public async Task<bool> RunSingleTaskAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var leaseDuration = TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes));
+        var task = await _stateStore.AcquireCollectionTaskAsync(
+            notification.JobType,
+            notification.DeduplicationKey,
+            notification.DispatchGeneration,
+            now,
+            leaseDuration,
+            cancellationToken).ConfigureAwait(false);
+
+        if (task is null)
+        {
+            _logger.LogInformation(
+                "[収集実行] リースを取得できなかったため終了します（既に処理済み/実行中/失効した送出世代の可能性）。JobType={JobType} JobKey={JobKey}",
+                notification.JobType,
+                notification.DeduplicationKey);
+            return false;
+        }
+
+        using var jobTimeoutCts = CreateJobTimeoutCts(cancellationToken);
+
+        try
+        {
+            switch (notification.JobType)
+            {
+                case AgentJobType.RaceCardCollection:
+                    await ExecuteSingleRaceCardTaskAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);
+                    break;
+                case AgentJobType.RaceResultCollection:
+                    await ExecuteSingleRaceResultTaskAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported collection job type: {notification.JobType}");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 14分の内部デッドライン等、ジョブ単位のタイムアウトより外側のキャンセルによる中断。
+            // 個々のレース・競馬場単位のデータは既に保存済みの可能性があり、収集自体を
+            // 諦める理由にはならないため、恒久的な失敗（Failed）ではなくReadyへ戻し、
+            // 次回の送出（watchdogまたは次サイクルの登録）で自動的に再試行させる。
+            _logger.LogWarning(
+                "[収集実行] 内部デッドラインにより処理を中断しました。次回に再試行させます。JobType={JobType} JobKey={JobKey}",
+                notification.JobType,
+                notification.DeduplicationKey);
+            await ReportJobFailureAsync(
+                () => _stateStore.RequeueCollectionTaskAsync(
+                    notification.JobType,
+                    notification.DeduplicationKey,
+                    task.LeaseToken,
+                    now,
+                    "Collector execution timed out (14-minute internal deadline reached). Retry scheduled.",
+                    CancellationToken.None),
+                notification.DeduplicationKey).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (IsJobTimeout(ex, jobTimeoutCts, cancellationToken))
+            {
+                _logger.LogWarning(
+                    "[収集実行] ジョブがタイムアウトしました（{TimeoutMinutes}分、ハング検知の安全策）。JobType={JobType} JobKey={JobKey}",
+                    _options.CollectionJobTimeoutMinutes,
+                    notification.JobType,
+                    notification.DeduplicationKey);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    ex,
+                    "[収集実行] ジョブが失敗しました。JobType={JobType} JobKey={JobKey}",
+                    notification.JobType,
+                    notification.DeduplicationKey);
+            }
+
+            await ReportJobFailureAsync(
+                () => _stateStore.FailCollectionTaskAsync(
+                    notification.JobType,
+                    notification.DeduplicationKey,
+                    task.LeaseToken,
+                    ex.Message,
+                    CancellationToken.None),
+                notification.DeduplicationKey).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    private async Task ExecuteSingleRaceCardTaskAsync(LeasedCollectionTask task, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var payload = AgentJobPayloadSerializer.Deserialize<RaceCardCollectionJobPayload>(task.Payload);
+        if (!string.Equals(payload.ProviderType, JraProviderType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
+        }
+
+        var (results, savedRaceIds) = await CollectRaceCardsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+
+        if (ShouldRetryRaceCardCollection(payload.RaceDate, results, now))
+        {
+            var publicationDate = EstimateRaceCardPublicationDate(payload.RaceDate);
+            var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Jst).Date);
+
+            if (todayJst < publicationDate)
+            {
+                var nextCheckAt = ToJstMidnightUtc(publicationDate);
+                _logger.LogInformation(
+                    "[収集実行] 出馬表発表予定日（{PublicationDate}）より前のためスキップします: Date={Date}",
+                    publicationDate,
+                    payload.RaceDate);
+                await _stateStore.RequeueCollectionTaskAsync(
+                    AgentJobType.RaceCardCollection,
+                    task.DeduplicationKey,
+                    task.LeaseToken,
+                    nextCheckAt,
+                    $"Race card is not expected to be published until {publicationDate:yyyy-MM-dd}. Retry scheduled.",
+                    CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+
+            _logger.LogInformation("[収集実行] 出馬表未公開のため再試行します: Date={Date}", payload.RaceDate);
+            await _stateStore.RequeueCollectionTaskAsync(
+                AgentJobType.RaceCardCollection,
+                task.DeduplicationKey,
+                task.LeaseToken,
+                now.AddMinutes(30),
+                "Race card publication is not available yet. Retry scheduled.",
+                CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
+
+        await RecordRaceCardStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
+
+        var errorCount = results.Sum(x => x.Errors.Count);
+        _logger.LogInformation(
+            "[収集実行] 出馬表収集完了: Date={Date} Saved={Saved} Errors={Errors}",
+            payload.RaceDate,
+            savedRaceIds.Count,
+            errorCount);
+
+        foreach (var result in results)
+        {
+            foreach (var error in result.Errors)
+            {
+                _logger.LogWarning("[収集実行] Course={Course} {Error}", result.Course, error);
+            }
+        }
+
+        var distinctRaceIds = savedRaceIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (distinctRaceIds.Count > 0)
+        {
+            foreach (var raceId in distinctRaceIds)
+            {
+                var plan = await _historicalDataRequestPlanner
+                    .EnsureRequestsForRaceAsync(raceId, now, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (plan.RequestedHorseHistoryCount > 0
+                    || plan.RequestedJockeyHistoryCount > 0
+                    || plan.RequestedTrainerProfileCount > 0)
+                {
+                    _logger.LogInformation(
+                        "[収集実行] 馬・騎手・調教師情報取得要求を登録しました。RaceId={RaceId} HorseRequests={HorseRequests} JockeyRequests={JockeyRequests} TrainerRequests={TrainerRequests}",
+                        raceId,
+                        plan.RequestedHorseHistoryCount,
+                        plan.RequestedJockeyHistoryCount,
+                        plan.RequestedTrainerProfileCount);
+                }
+
+                if (plan.RequestedRaceResultCount > 0)
+                {
+                    _logger.LogInformation(
+                        "[収集実行] 過去レース結果取得要求を登録しました。RaceId={RaceId} RaceResultRequests={RaceResultRequests}",
+                        raceId,
+                        plan.RequestedRaceResultCount);
+                }
+            }
+
+            await _stateStore.EnqueuePredictionCandidatesAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        await _stateStore.CompleteCollectionTaskAsync(
+            AgentJobType.RaceCardCollection, task.DeduplicationKey, task.LeaseToken, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ExecuteSingleRaceResultTaskAsync(LeasedCollectionTask task, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var payload = AgentJobPayloadSerializer.Deserialize<RaceResultCollectionJobPayload>(task.Payload);
+        if (!string.Equals(payload.ProviderType, JraProviderType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"未対応の ProviderType です: {payload.ProviderType}");
+        }
+
+        var (results, savedRaceIds) = await CollectRaceResultsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
+        await RecordRaceResultStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
+
+        var errorCount = results.Sum(x => x.Errors.Count);
+        _logger.LogInformation(
+            "[収集実行] 成績収集完了: Date={Date} Saved={Saved} Errors={Errors}",
+            payload.RaceDate,
+            savedRaceIds.Count,
+            errorCount);
+
+        foreach (var result in results)
+        {
+            foreach (var error in result.Errors)
+            {
+                _logger.LogWarning("[収集実行] RaceId={RaceId} {Error}", result.RaceId, error);
+            }
+        }
+
+        await _stateStore.CompleteCollectionTaskAsync(
+            AgentJobType.RaceResultCollection, task.DeduplicationKey, task.LeaseToken, cancellationToken).ConfigureAwait(false);
+    }
+
     private static bool ShouldRetryRaceCardCollection(
         DateOnly raceDate,
         IReadOnlyList<RaceCardCollectionResult> results,

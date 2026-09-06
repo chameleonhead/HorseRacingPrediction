@@ -189,6 +189,109 @@ public sealed class CollectionExecutionServiceIntegrationTests
         Assert.AreEqual(AgentJobStatus.Succeeded, statuses[0].Status);
     }
 
+    [TestMethod]
+    public async Task RunSingleTaskAsync_WhenLeaseAcquired_ExecutesAndCompletesJob()
+    {
+        // AcquireCollectionTaskAsync は実際の DateTimeOffset.UtcNow で AvailableAt を判定するため、
+        // 未来日を使うとリースを取得できない。実行時の現在日時を基準にする。
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var raceDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var stateStore = CreateStore();
+
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = _ => new[] { RaceCourse.Tokyo }
+        };
+        var cardWorkflow = new FakeJraRaceCardCollectionWorkflow
+        {
+            ResultFactory = (date, course) => new RaceCardCollectionResult(
+                date,
+                course,
+                new[] { "race-1" },
+                Array.Empty<string>(),
+                new[] { new RaceCardRaceOutcome(1, "race-1", "テストレース", "https://example.test/1", null) })
+        };
+        var service = CreateService(stateStore, scheduleWorkflow, cardWorkflow, new FakeJraRaceResultCollectionWorkflow());
+
+        var payload = new RaceCardCollectionJobPayload(raceDate, "JRA");
+        var key = AgentJobKeyFactory.BuildRaceCardCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(AgentJobType.RaceCardCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
+
+        // EnqueueJobAsync は内部でQueueDispatchを呼ぶため、新規ジョブのDispatchGenerationは
+        // 初期値0ではなく1になる（実際にSQSへ送出される通知もこの値を持つ）。
+        var notification = new CollectionTaskNotification(key, AgentJobType.RaceCardCollection, key, DispatchGeneration: 1);
+        var handled = await service.RunSingleTaskAsync(notification, CancellationToken.None);
+
+        Assert.IsTrue(handled);
+        Assert.HasCount(1, cardWorkflow.Requests);
+
+        var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceCardCollection, null, 10, CancellationToken.None);
+        Assert.HasCount(1, statuses);
+        Assert.AreEqual(AgentJobStatus.Succeeded, statuses[0].Status);
+    }
+
+    [TestMethod]
+    public async Task RunSingleTaskAsync_WhenJobAlreadyRunning_ReturnsFalseWithoutExecuting()
+    {
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var raceDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var stateStore = CreateStore();
+
+        var cardWorkflow = new FakeJraRaceCardCollectionWorkflow();
+        var service = CreateService(
+            stateStore, new FakeJraScheduleCollectionWorkflow(), cardWorkflow, new FakeJraRaceResultCollectionWorkflow());
+
+        var payload = new RaceCardCollectionJobPayload(raceDate, "JRA");
+        var key = AgentJobKeyFactory.BuildRaceCardCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(AgentJobType.RaceCardCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
+        // 別プロセスが既にリースを取得済み（Running）の状態を再現する。
+        await stateStore.AcquireReadyJobsAsync(
+            AgentJobType.RaceCardCollection, now.AddMinutes(1), TimeSpan.Zero, 10, TimeSpan.FromMinutes(30), CancellationToken.None);
+
+        var notification = new CollectionTaskNotification(key, AgentJobType.RaceCardCollection, key, DispatchGeneration: 1);
+        var handled = await service.RunSingleTaskAsync(notification, CancellationToken.None);
+
+        // リースが取得できないため、何も実行せず即終了する。
+        Assert.IsFalse(handled);
+        Assert.IsEmpty(cardWorkflow.Requests);
+    }
+
+    [TestMethod]
+    public async Task RunSingleTaskAsync_WhenCancelledByInternalDeadline_RequeuesInsteadOfFailing()
+    {
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var raceDate = DateOnly.FromDateTime(now.UtcDateTime);
+        var stateStore = CreateStore();
+
+        using var cts = new CancellationTokenSource();
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            // Workflow呼び出し時点で外側のキャンセルが既に発生している状況を再現する
+            // （14分の内部デッドラインが処理途中で到達したケースに相当）。
+            CoursesByDate = _ =>
+            {
+                cts.Cancel();
+                cts.Token.ThrowIfCancellationRequested();
+                return Array.Empty<RaceCourse>();
+            }
+        };
+        var service = CreateService(
+            stateStore, scheduleWorkflow, new FakeJraRaceCardCollectionWorkflow(), new FakeJraRaceResultCollectionWorkflow());
+
+        var payload = new RaceCardCollectionJobPayload(raceDate, "JRA");
+        var key = AgentJobKeyFactory.BuildRaceCardCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(AgentJobType.RaceCardCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
+
+        var notification = new CollectionTaskNotification(key, AgentJobType.RaceCardCollection, key, DispatchGeneration: 1);
+        var handled = await service.RunSingleTaskAsync(notification, cts.Token);
+
+        // 恒久的な失敗（Failed）ではなく、Readyへ戻され再試行可能になっている。
+        Assert.IsTrue(handled);
+        var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceCardCollection, null, 10, CancellationToken.None);
+        Assert.HasCount(1, statuses);
+        Assert.AreEqual(AgentJobStatus.Ready, statuses[0].Status);
+    }
+
     private static CollectionExecutionService CreateService(
         ProcessingStateStore stateStore,
         IJraScheduleCollectionWorkflow scheduleWorkflow,
