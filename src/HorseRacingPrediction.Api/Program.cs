@@ -124,7 +124,8 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
         });
     });
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
-    builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+    builder.Services.AddSingleton<CollectionTaskOutboxDispatcher>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<CollectionTaskOutboxDispatcher>());
     builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
         builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
     builder.Services.AddHostedService<CollectionDeadLetterQueueReconciler>();
@@ -149,7 +150,8 @@ if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOp
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
 builder.Services.Configure<CollectionJobWatchdogOptions>(
     builder.Configuration.GetSection(CollectionJobWatchdogOptions.SectionName));
-builder.Services.AddHostedService<CollectionJobWatchdogService>();
+builder.Services.AddSingleton<CollectionJobWatchdogService>();
+builder.Services.AddHostedService(services => services.GetRequiredService<CollectionJobWatchdogService>());
 
 builder.Services.AddEventFlow(options =>
 {
@@ -175,6 +177,47 @@ var app = builder.Build();
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
+
+// 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、
+// 直前にクラッシュ復旧中の初期化（ResumeIfNeeded）がメンテナンス中の場合は、その完了を
+// 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）
+// まで新規ジョブが投入されない空白が生じ得る。ここで初期化完了を待った上でSQSキューの
+// 滞留状況を調査し、ディスパッチ・監視サイクルを明示的に1回実行することでその空白を埋める。
+_ = Task.Run(async () =>
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    var maintenance = app.Services.GetRequiredService<CollectionMaintenanceState>();
+    var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
+    while (maintenance.IsActive && DateTimeOffset.UtcNow < deadline)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+    }
+
+    if (maintenance.IsActive)
+    {
+        logger.LogWarning("起動直後のジョブ実行確認: メンテナンスが完了しないため見送りました。");
+        return;
+    }
+
+    try
+    {
+        var queue = app.Services.GetRequiredService<ICollectionTaskQueue>();
+        var depth = await queue.GetQueueDepthAsync(CancellationToken.None).ConfigureAwait(false);
+        logger.LogInformation(
+            "起動直後のSQSキュー調査: 可視メッセージ={Visible} 処理中メッセージ={NotVisible}",
+            depth.VisibleCount,
+            depth.NotVisibleCount);
+
+        await app.Services.GetRequiredService<CollectionTaskOutboxDispatcher>()
+            .DispatchOnceAsync(CancellationToken.None).ConfigureAwait(false);
+        await app.Services.GetRequiredService<CollectionJobWatchdogService>()
+            .RunOnceAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "起動直後のジョブ実行確認でエラーが発生しました。");
+    }
+});
 
 app.UseForwardedHeaders();
 app.UseSwagger();
