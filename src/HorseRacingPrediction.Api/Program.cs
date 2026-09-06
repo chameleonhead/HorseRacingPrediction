@@ -117,6 +117,9 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     });
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
     builder.Services.AddHostedService<CollectionTaskOutboxDispatcher>();
+    builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
+        builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
+    builder.Services.AddHostedService<CollectionDeadLetterQueueReconciler>();
 }
 else
 {
@@ -125,9 +128,13 @@ else
 builder.Services.AddSingleton<CollectionResetCoordinator>();
 var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
 builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotificationSection);
+// SNSクライアント自体とCollectionPipelineAlertPublisher（収集ジョブ全体停止アラート）は、
+// JobFailureNotifications:Enabled のON/OFFに関わらず常に登録する。SNSサブスクリプションは
+// 運用側で作成済みの前提で、アプリ側の設定トグルで送信有無を左右させないため。
+builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
+builder.Services.AddSingleton<ICollectionPipelineAlertPublisher, SnsCollectionPipelineAlertPublisher>();
 if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOptions.Enabled)))
 {
-    builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
     builder.Services.AddSingleton<IJobFailureNotificationPublisher, SnsJobFailureNotificationPublisher>();
     builder.Services.AddHostedService<JobFailureNotificationDispatcher>();
 }

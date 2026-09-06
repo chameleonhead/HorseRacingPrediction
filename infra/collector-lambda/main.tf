@@ -81,7 +81,10 @@ resource "aws_sqs_queue" "collector" {
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.collector_dlq.arn
-    maxReceiveCount     = 3
+    # Lambda側のSQS再試行(可視性タイムアウトによる再配信)は行わない。1回の実行失敗で
+    # 即座にDLQへ送る。リトライ判断はAPI(ジョブコントローラー)側の責務とし、
+    # CollectionDeadLetterQueueReconcilerがDLQを回収してジョブをFailedにマークする。
+    maxReceiveCount = 1
   })
 }
 
@@ -171,8 +174,11 @@ resource "aws_iam_policy" "api_queue_sender" {
         Resource = aws_sqs_queue.collector.arn
       },
       {
-        Effect   = "Allow"
-        Action   = ["sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
+        Effect = "Allow"
+        Action = [
+          "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue",
+          "sqs:ReceiveMessage", "sqs:DeleteMessage"
+        ]
         Resource = aws_sqs_queue.collector_dlq.arn
       },
       {

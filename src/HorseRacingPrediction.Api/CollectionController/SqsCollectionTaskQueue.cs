@@ -49,6 +49,33 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
         return attributes.ApproximateNumberOfMessages;
     }
 
+    public async Task<IReadOnlyList<DeadLetterQueueMessage>> ReceiveDeadLetterMessagesAsync(int maxMessages, CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled) return [];
+
+        var deadLetterQueueUrl = await ResolveQueueUrlAsync(
+            _options.DeadLetterQueueUrl, _options.DeadLetterQueueName, cancellationToken).ConfigureAwait(false);
+        var response = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
+        {
+            QueueUrl = deadLetterQueueUrl,
+            MaxNumberOfMessages = Math.Clamp(maxMessages, 1, 10),
+            WaitTimeSeconds = 0
+        }, cancellationToken).ConfigureAwait(false);
+
+        return response.Messages
+            .Select(x => new DeadLetterQueueMessage(x.ReceiptHandle, x.Body))
+            .ToList();
+    }
+
+    public async Task DeleteDeadLetterMessageAsync(string receiptHandle, CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled) return;
+
+        var deadLetterQueueUrl = await ResolveQueueUrlAsync(
+            _options.DeadLetterQueueUrl, _options.DeadLetterQueueName, cancellationToken).ConfigureAwait(false);
+        await _sqs.DeleteMessageAsync(deadLetterQueueUrl, receiptHandle, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task PurgeAsync(CancellationToken cancellationToken)
     {
         if (!_options.Enabled) return;
