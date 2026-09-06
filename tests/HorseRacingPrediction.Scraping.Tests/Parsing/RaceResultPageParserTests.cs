@@ -1049,6 +1049,38 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_馬名が空欄の結果行はJraValueParseExceptionを投げる()
+    {
+        // 依頼書14・29節「HorseName: 必須、trim後非空」。馬番は正常にParseできて
+        // いるのに馬名列だけが空/空白の結果行を静かに読み飛ばさず、Parser異常
+        // として検知する（Phase 7 A1）。見出し行フィルタ・着順欄空白行フィルタは
+        // この行より前に確定しているため、誤って正常な非結果行を巻き込まない。
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows:
+            [
+                ["1", "1", "   ", "騎手A", "1:33.4"],
+                ["2", "2", "テストホースB", "騎手B", "1:33.6"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraValueParseException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("HorseName", ex.FieldName);
+        Assert.AreEqual("   ", ex.RawValue);
+    }
+
+    [TestMethod]
     public void Parse_FinishedなのにTimeが完全に欠落している場合はJraResultConsistencyExceptionを投げる()
     {
         // 依頼書19・29節「Finished: Timeあり」。タイム列自体が存在しない

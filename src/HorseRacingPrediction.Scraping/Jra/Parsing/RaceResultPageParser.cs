@@ -1058,7 +1058,16 @@ public sealed class RaceResultPageParser
 
             if (string.IsNullOrWhiteSpace(horseName))
             {
-                continue;
+                // この時点でfinishText・馬番のいずれからも「正真正銘の結果行」
+                // であることが確定済み（見出し行・空行等のフィルタは通過済み）。
+                // 馬名列が存在するのに値が空/空白の場合は、依頼書14・29節が
+                // 必須とするHorseNameの欠落であり、正常な欠損として黙って
+                // 読み飛ばしてはならない（依頼書7節: 必須要素が存在しない→Error）。
+                throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "HorseName",
+                    horseName);
             }
 
             var jockeyName =
