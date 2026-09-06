@@ -222,7 +222,7 @@ resource "aws_lambda_function" "collector" {
   package_type                   = "Image"
   image_uri                      = var.image_uri
   timeout                        = 900
-  memory_size                    = 4096
+  memory_size                    = 2048
   reserved_concurrent_executions = 1
 
   depends_on = [
