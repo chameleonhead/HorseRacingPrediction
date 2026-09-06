@@ -9,7 +9,9 @@ public sealed record JraRaceResultPage(
     IReadOnlyList<RaceResultEntry> Results,
     string? WeatherText = null,
     string? TrackConditionText = null,
-    RacePayouts? Payouts = null)
+    RacePayouts? Payouts = null,
+    RaceCourseSpec? CourseSpec = null,
+    IReadOnlyList<CornerPassage>? CornerPassages = null)
     : IJraPage
 {
     public JraPageKind Kind =>

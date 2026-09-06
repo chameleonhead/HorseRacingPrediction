@@ -48,7 +48,9 @@ public sealed record RaceResultBulkEntry(
     int? Age = null,
     int? Popularity = null,
     int? BodyWeight = null,
-    int? BodyWeightChange = null);
+    int? BodyWeightChange = null,
+    int? OriginalFinishPosition = null,
+    bool IsDeadHeat = false);
 
 public sealed record RaceResultBulkWeather(
     DateTimeOffset ObservationTime,

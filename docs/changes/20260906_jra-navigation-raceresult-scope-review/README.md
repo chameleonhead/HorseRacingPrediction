@@ -1,6 +1,6 @@
 # JRAスクレイピング層 Navigation / RaceResult取得仕様 変更
 
-- Status: In progress (Phase 1-2 実装済み、Phase 3-4 未着手)
+- Status: In progress (Phase 1-3 実装済み、Phase 4 未着手)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-06
 - Updated: 2026-09-06
@@ -66,12 +66,26 @@
   - `HorseSex` に `HorseSexText.ToSexCode` を追加し、`JraRaceResultCollectionWorkflow` で `RaceResultEntry` の解析済み属性（現状Parserが実際に埋めるのは HorseName/JockeyName/Sex/Age のみ）を `RaceResultBulkEntry` へ渡すよう変更した。
   - **既知の残課題（意図的に未実装、推測で実装しなかった箇所）**: `FrameNumber`（枠番）・`AssignedWeight`（斤量）・`TrainerName`（調教師名）・`Popularity`（人気）・`BodyWeight`（馬体重）は、`RaceResultPageParser`側でまだ列検出・値解析を実装していない（`RaceResultEntry` のコンストラクタ引数としては受け皿があるが常にnullのまま）。依頼書33節の「実装時に未考慮パターンを発見した場合は想像で補完しない」方針に基づき、これらの列がレース結果ページ上でどのヘッダー文字列・セル書式（例:「馬体重」列が実際に何と表記されるか、増減の括弧表記の有無）で出現するかを実サイトで確認できていない本セッションでは、推測でのregex追加を避けた。RaceCard（出馬表）が別途取得できるケースでは、これらの属性は既存の `UpsertRaceEntryAsync`（`JraRaceCardCollectionWorkflow`）経由で登録されるため実運用上の欠落は限定的（出馬表を経由しない明確な過去レースでのみ欠落）。実サイトの列構造を確認できた時点でParser側の列検出・テストを追加するフォローアップとする。
 
-### Phase 3（未着手・モデル拡張）
+### Phase 3（実装済み・本コミット）
 
-- **依頼書12節（Course構造）**: `RaceCourseSpec`（DistanceMeters / RaceType / Surfaces / Direction・Layout / RawLayout）への分解。現状は距離・馬場種別が簡略な形でしか保持されていない。
-- **依頼書20・21・22・23節（Margin / 推定上り・平均1F / ハロンタイム / コーナー通過順位）**: `MarginRaw` / `IsDeadHeat` / `OriginalFinishPosition`、`EstimatedLast3F` と `Average1F` の分離、レース種別（平地/障害）に応じたハロンタイム有無の扱い、可変長のコーナー通過順位リスト。
-- **依頼書24・25・26節（馬体重・人気・斤量）**: 「値なし＝null（正常）」と「値ありだが解析不能＝エラー」の区別を、現状の実装より明示的に扱う。
-- **依頼書27・28節（賞金・払戻）**: 賞金section・券種別payoutについて、「sectionなし＝正常」「sectionあり+既知形式＝正常」「sectionあり+未知/解析不能＝エラー」の三分岐をParserレベルで明示する。特に未知券種の出現をエラーとして検知できるようにする。
+- **依頼書12節（Course構造）**: `RaceCourseSpec`（`DistanceMeters` / `RaceType` / `Surfaces`（`IReadOnlyList<CourseSurface>`）/ `Direction` / `Layout` / `RawLayout`）を新設。単純なTurf/Dirt/Jump enumへ押し込む実装をやめた。`RaceResultPageParser` は、依頼書に例示された4つの実表記
+  - `1,600メートル（芝・左）` → `Surfaces=[Turf]`, `Direction=Left`
+  - `1,400メートル（ダート・左）` → `Surfaces=[Dirt]`, `Direction=Left`
+  - `2,890メートル（芝 外内）` → `Surfaces=[Turf]`, `Direction=null`, `Layout="外内"`
+  - `3,000メートル（芝→ダート）` → `Surfaces=[Turf, Dirt]`（障害。RaceTypeはRaceNameに「障害」を含むかどうかで判定）
+  のみをサポートする。ページ上に「数字＋メートル（…）」の形式自体が見つからない場合は「コース構造欄なし」の正常系（`CourseSpec=null`）として扱うが、見つかったのに芝/ダート以外の馬場種別や左/右以外の方向表記が出現した場合は`JraUnexpectedValueException`（FieldName=`Course.Surface`/`Course.Direction`）とし、黙って無視しない。`RawLayout`は括弧内の生文字列としてデバッグ用に保持する。
+- **依頼書18・20節（降着・Margin・同着）**: 着順欄に「10(1位降着)」のように確定順位と元の入線順位が併記される表記を検出し、`FinishPosition`=確定後着順・`OriginalFinishPosition`=元の入線順位として分離する（`RaceResultEntry.OriginalFinishPosition`は既存フィールドを利用）。降着表現（「降着」を含む着順テキスト）を検出したのに元順位を解析できない場合は`JraResultConsistencyException`（FieldName=`OriginalFinishPosition`）とする。着差列（見出し「着差」）を新設し、`MarginRaw`に生文字列のまま保持（ハナ/アタマ/大差/同着等を数値正規化しない）。着差欄の値が「同着」の場合は新設した`RaceResultEntry.IsDeadHeat`をtrueにする。1着・取消・除外・中止・失格では着差なしを正常とするが、着差列自体は存在するのに通常完走の2着以下で値が空の場合は`JraResultConsistencyException`（FieldName=`MarginRaw`）とする（着差列自体がページ構造として検出できない場合は、この不整合チェックの対象外とし、正常系として扱う＝列検出の未対応と値の欠損を区別するため）。
+- **依頼書21・22節（推定上り・平均1F・ハロンタイム）**: 列見出し「推定上り」「平均1F」をそれぞれ`RaceResultEntry.EstimatedLast3F`/`Average1F`として分離。障害レースに`EstimatedLast3F`を要求しない（列が存在しなければ単にnull）。ハロンタイム（分割タイム）自体のテーブル構造は実サイトで確認できていないため、本フェーズでは着手していない（Deviations参照）。
+- **依頼書23節（コーナー通過順位）**: `CornerPassage`（`CornerNumber`/`OrderRaw`）を新設し、見出しに「コーナー」を含み「N コーナー」のようにコーナー番号を含む列をレース単位の可変長リスト（`JraRaceResultPage.CornerPassages`）として抽出する。コーナー数は固定せず、「必ず1〜4コーナーが存在する」といったValidationは行わない。列自体が見つからない場合はnull（正常系）。
+- **依頼書24・25・26節（馬体重・人気・斤量・枠番・調教師）**: 列見出し「馬体重」「人気」「斤量」「枠番」「調教師」を新設し、`RaceResultPageParser`が実際に値を解析するようにした（Phase 2時点では受け皿はあったが常にnullだった）。
+  - 馬体重: `482(0)`/`494(+2)`/`400`の3パターンを許容。値ありで正規表現に一致しない場合は`JraValueParseException`（FieldName=`BodyWeight`）。
+  - 人気: 値がある場合`>= 1`を要求。0や非数値は`JraValueParseException`（FieldName=`Popularity`）。
+  - 斤量: decimalとしてParse、正数を要求。値ありで解析不能なら`JraValueParseException`（FieldName=`AssignedWeight`）。
+  - 枠番: 先頭の数字を抽出。値ありで解析不能なら`JraValueParseException`（FieldName=`FrameNumber`）。
+  - いずれも列自体が存在しない場合はnull（正常な欠損）。
+- **依頼書27・28節（賞金・払戻）**: 既存の賞金section解析（該当なし。Course spec同様、実サイトの賞金セクション構造は未確認のため本フェーズでは着手していない。Deviations参照）。払戻については、式別セルに値があるのに`WinPayouts`/`PlacePayouts`/`QuinellaPayouts`/`ExactaPayouts`/`TrifectaPayouts`のいずれにも属さない場合（未知券種）を`JraUnexpectedValueException`（FieldName=`PayoutType`）として検知するようにした（従来は黙ってスキップしていた）。また、払戻金額セルに値があるのに数値として解析できない場合も`JraValueParseException`（FieldName=`Payout.Amount`）とした（従来は黙ってスキップしていた）。
+- **API送信経路（`RaceResultBulkEntry`/`JraRaceResultCollectionWorkflow`）**: 上記で新たに解析できるようになった`OriginalFinishPosition`/`IsDeadHeat`を`RaceResultBulkEntry`に追加して送信するようにした。また、`RaceCourseSpec`が取得できた場合は`RaceResultBulkRequest.SurfaceCode`/`DistanceMeters`/`DirectionCode`にも反映するようにした（Phase 2時点ではこれらは常にnullだった）。
+- 上記に対応する単体テストを`RaceResultPageParserTests`に追加（コース表記4パターン＋未知表記エラー、平地/障害でのEstimatedLast3F/Average1F分離、同着、降着（正常系・元順位解析不能のエラー系）、着差欠損の異常系、馬体重・人気・斤量・枠番・調教師の解析、未知券種・払戻値解析不能のエラー系、同着・降着・取消・除外・中止・失格が同一レースに混在するケース）。
 
 ### Phase 4（未着手・テスト網羅）
 
@@ -97,11 +111,11 @@
 | 6 | RaceResult Navigationが結果系導線だけで完結する | 満たす（既存実装で確認済み） |
 | 7 | RaceResultがRaceIdを自己検証する | **満たす（Phase 1で実装）** |
 | 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **満たす（Phase 1で実装、Course構造等は未対応）** |
-| 9 | 取消・除外・中止・失格・同着・降着を正常に扱える | 取消/除外/中止/失格は**満たす**。同着・降着はモデル未対応（Phase 3） |
-| 10 | 平地・障害のページ差異を扱える | 未着手（Phase 3） |
-| 11 | 正常な欠損とParser異常を区別できる | 天候/馬場/性齢/結果状態で**満たす**。馬体重・人気・賞金等は未着手（Phase 3） |
-| 12 | 払戻をRaceResultとして取得できる | 既存の簡易実装のまま（券種別厳格化はPhase 3） |
-| 13 | 古いレースの券種差を正常に扱える | 未着手（Phase 3） |
+| 9 | 取消・除外・中止・失格・同着・降着を正常に扱える | **満たす**（Phase 3で同着=`IsDeadHeat`、降着=`FinishPosition`/`OriginalFinishPosition`分離を実装。複数特殊状態混在のテストも追加） |
+| 10 | 平地・障害のページ差異を扱える | **一部満たす**（Phase 3で`EstimatedLast3F`/`Average1F`分離、Course構造でのRaceType判定を実装。ハロンタイム自体の分割タイム抽出は実サイト未確認のため未着手） |
+| 11 | 正常な欠損とParser異常を区別できる | **満たす**（天候/馬場/性齢/結果状態に加え、Phase 3で馬体重・人気・斤量・枠番・調教師・着差・払戻券種/金額でも「列/値なし＝null」と「値ありで解析不能＝エラー」を区別） |
+| 12 | 払戻をRaceResultとして取得できる | **満たす**（既存の5券種抽出に加え、Phase 3で未知券種・金額解析不能の検知を追加） |
+| 13 | 古いレースの券種差を正常に扱える | 一部満たす（券種section自体が存在しない場合は既存実装で正常扱い。古い年代の実際の券種差はFixtureで確認できておらず未検証。Phase 4で対応） |
 | 14 | RaceResult全体のValidation完了前に部分保存しない | 満たす（既存実装で確認済み） |
 | 15 | RaceResult宣言後にEntryResultを保存する既存順序を維持する | 満たす（既存実装で確認済み） |
 | 16 | 特殊ケース・異常ケースを自動テストでカバーする | Phase 1範囲のみ。Phase 4で拡充 |
@@ -110,7 +124,7 @@
 
 1. **Phase 1（完了）**: ResultStatus/HorseSex enum、天候・馬場状態・性齢の未知値エラー化、RaceId自己検証、例外分類、対応テスト。
 2. **Phase 2（完了）**: `RaceCardLookupPeriod` の導入とNavigation層のドキュメント・命名整理、過去レースでのRaceEntry相当情報復元（HorseName/JockeyName/Sex/Ageの送信経路。FrameNumber等の列解析は実サイト未確認のためフォローアップ）。
-3. **Phase 3**: `RaceCourseSpec`、Margin/OriginalFinishPosition/コーナー通過順位/EstimatedLast3F・Average1F、馬体重・人気・斤量・賞金・払戻の厳格Parse（依頼書4節フォローアップのFrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeight列解析を含む）。
+3. **Phase 3（完了）**: `RaceCourseSpec`、Margin/OriginalFinishPosition/IsDeadHeat/コーナー通過順位/EstimatedLast3F・Average1F、馬体重・人気・斤量・枠番・調教師・払戻の厳格Parse（依頼書4節フォローアップのFrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeight列解析を含む）。賞金section・ハロンタイム分割タイムは実サイト未確認のため未着手（Deviations参照）。
 4. **Phase 4**: 依頼書32節のFixtureテスト網羅と例外種別・Fieldの検証強化。
 
 各フェーズは独立してビルド・テスト可能な単位でコミットする。
@@ -128,12 +142,23 @@
 - `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、100件（Phase 1の95件 + Phase 2で追加した`RaceCardLookupPeriod`関連テスト5件。実サイトE2Eテストは除外）
 - `HorseRacingPrediction.Collector.Tests` 側の `FakeJraNavigator`（`IJraNavigator`実装）にも `IsWithinRaceCardLookupPeriod` を追加したため、`HorseRacingPrediction.Collector.Tests` を含むソリューション全体のビルドが通ることを確認済み（`dotnet build`）。
 
+### Phase 3 検証（本コミット）
+
+- `dotnet build`（ソリューション全体）: 成功、0 Warning / 0 Error
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、118件（Phase 2の100件 + Phase 3で追加したCourse構造・同着・降着・着差・馬体重/人気/斤量/枠番/調教師・未知券種/払戻金額解析不能・複数特殊状態混在の18件。実サイトE2Eテストは除外）
+- `RaceResultBulkEntry`/`RaceResultBulkRequest`（`HorseRacingPrediction.ApiClient`）へのフィールド追加（`OriginalFinishPosition`/`IsDeadHeat`、`SurfaceCode`/`DistanceMeters`/`DirectionCode`の実値反映）を含むため、ソリューション全体のビルドで依存プロジェクト（`HorseRacingPrediction.Collector` / `HorseRacingPrediction.Collector.Tests`等）に影響がないことを確認済み。
+
 ## Deviations and follow-up
 
 - Phase 3〜4は本ドキュメント作成時点で未着手。着手時は本ドキュメントの「Technical impact」「Acceptance criteria」表を更新すること。
 - 依頼書33節が求める「実装中に未考慮パターンを発見した場合は想像で補完しない」方針に基づき、Phase 3以降でFixtureにない表記（新しい天候表記、新しい券種等）を発見した場合は、本ドキュメントに調査結果を追記してからモデル・Parser・テストを拡張する。
 - この環境（開発コンテナ）に `dotnet` SDKが未インストールだったため、`dotnet-install.sh` で `/home/user/.dotnet` へローカルインストールした。CI環境のSDKインストール手順とは独立しており、本コンテナ固有の対応。
-- **Phase 2で確認した既知の残課題**: `RaceResultPageParser` は `FrameNumber`（枠番）・`AssignedWeight`（斤量）・`TrainerName`（調教師名）・`Popularity`（人気）・`BodyWeight`/`BodyWeightChange`（馬体重）の列を解析していない（実サイトのレース結果ページにおけるこれらの列見出し・セル書式が本セッションでは未確認のため、依頼書33節の方針に基づき推測でのregex追加を避けた）。API契約（`RaceResultBulkEntry`）とワークフロー側の送信経路は既に用意済みのため、実サイト確認後はParserの列検出・値解析・対応テストを追加するだけで復元範囲を拡張できる。Phase 3で対応する。
+- **Phase 2で確認した既知の残課題（Phase 3で対応済み）**: `RaceResultPageParser` は `FrameNumber`（枠番）・`AssignedWeight`（斤量）・`TrainerName`（調教師名）・`Popularity`（人気）・`BodyWeight`/`BodyWeightChange`（馬体重）の列を解析していなかった。Phase 3で、依頼書14・24・25・26節に文字通り現れるJRA既知用語（枠番/斤量/調教師/人気/馬体重）を列見出しとして検出する実装を追加した。「着差」（20節の概念）「推定上り」「平均1F」（21節に文字通り記載）も同様に、依頼書本文に明記された用語を列見出しとして採用した。これらは実サイトの生HTMLを直接確認したものではなく、依頼書（ユーザー自身が提示した仕様書）に記載された用語を確定した仕様として扱った点に留意されたい。
+- **Phase 3で実サイト確認できず見送った箇所**:
+  - **賞金section（依頼書27節）**: レース結果ページにおける本賞金セクションの実際のテーブル構造・見出し文字列が既存Fixture・依頼書本文のいずれにも具体的に記載されておらず、本セッションでは実サイトへのアクセスも不可能（環境固有のプロキシ制約）なため、実装を見送った。`RaceResultBulkRequest`側には`PrizeMoney`を送る経路がまだない。「賞金sectionなし＝正常」は現状何もしないことで自動的に満たされているが、「sectionあり＋Parse不能＝Error」の検知は未実装。
+  - **ハロンタイム（依頼書22節）の分割タイムテーブル自体**: レース種別（平地/障害）に応じた「推定上り」「平均1F」という着順テーブル内の1列としての分離は実装したが、通常JRAページに別途存在する「ハロンタイム」区間分割タイムの独立したテーブル構造は、実際のヘッダー・行構成が確認できないため未実装。ただし本フェーズでは元々このテーブルを一切解析していなかったため、「障害でハロンタイムなしを正常とする」（依頼書22節の主旨）は「そもそも解析しようとしない」ことで結果的に満たされている。
+  - **コーナー通過順位の列見出し文字列**: 「コーナー」という語を含み「Nコーナー」という数字を含む見出しを対象にする実装としたが、実際のJRA結果ページでこの列がどのような見出し文字列・セル書式（同着時の表記等）で出現するかは確認できていない。該当列が見つからない場合は正常（null）扱いになるため、実データで別の見出し表記だった場合は静かに何も取得できない状態になる（エラーにはならない）。実サイト確認後、見出し検出条件とセル書式のテストを追加するフォローアップとする。
+  - **古い年代の券種差（依頼書13・28節）**: 「ワイド」「三連複」等、現行5券種に含まれないが実在するJRA正式券種を新たに`RacePayouts`のバケットとして追加することはしなかった（Fixtureに具体的な出現例がなく、追加すると同時に「今回追加した券種以外は全部エラーになる」設計にすると却って壊れやすくなるため）。代わりに、未知券種が出現した場合に確実に`JraUnexpectedValueException`として検知できるようにした（黙って無視しない）。将来「ワイド」「三連複」等の実データ出現を確認した時点で、既知バケットとして追加する対応が必要。
 
 ---
 

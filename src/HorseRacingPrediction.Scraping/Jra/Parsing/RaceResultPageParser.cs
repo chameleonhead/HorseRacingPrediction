@@ -47,6 +47,14 @@ public sealed class RaceResultPageParser
 
     private static readonly string[] KnownTrackConditionValues = ["良", "稍重", "重", "不良"];
 
+    // コース表記（依頼書12節）。依頼書に例示された実際のJRA表記
+    // 「1,600メートル（芝・左）」「1,400メートル（ダート・左）」「2,890メートル（芝 外内）」
+    // 「3,000メートル（芝→ダート）」のみを確実にサポートする。ページ上にこの形式の
+    // 文字列自体が見つからない場合は「コース構造欄なし」の正常系（null）として扱うが、
+    // 見つかったのに既知の表記へ分解できない場合はエラーとする。
+    private static readonly Regex CourseSpecRegex =
+        new(@"(?<distance>[\d,]+)\s*メートル\s*[（(](?<layout>[^）)]+)[）)]", RegexOptions.Compiled);
+
     public JraPageKind Kind =>
         JraPageKind.RaceResult;
 
@@ -92,6 +100,12 @@ public sealed class RaceResultPageParser
         var payouts =
             ParsePayouts(snapshot, table);
 
+        var courseSpec =
+            ParseCourseSpec(snapshot, raceName);
+
+        var cornerPassages =
+            ParseCornerPassages(snapshot);
+
         return new JraRaceResultPage(
             snapshot.Url,
             new RaceId(date, course, number),
@@ -99,7 +113,179 @@ public sealed class RaceResultPageParser
             results,
             weatherText,
             trackConditionText,
-            payouts is not null && !payouts.IsEmpty ? payouts : null);
+            payouts is not null && !payouts.IsEmpty ? payouts : null,
+            courseSpec,
+            cornerPassages is { Count: > 0 } ? cornerPassages : null);
+    }
+
+    private static RaceCourseSpec? ParseCourseSpec(
+        PageSnapshot snapshot,
+        string raceName)
+    {
+        var searchText =
+            $"{snapshot.Title} {string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
+
+        var match = CourseSpecRegex.Match(searchText);
+
+        if (!match.Success)
+        {
+            // 「メートル（…）」形式のコース表記自体が見つからない＝
+            // 仕様上optionalな要素が存在しない正常系。
+            return null;
+        }
+
+        var distanceDigits = match.Groups["distance"].Value.Replace(",", string.Empty);
+
+        if (!int.TryParse(distanceDigits, out var distance) || distance <= 0)
+        {
+            throw new JraValueParseException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "Course.DistanceMeters",
+                match.Groups["distance"].Value);
+        }
+
+        var rawLayout = match.Groups["layout"].Value.Trim();
+        var raceType = raceName.Contains("障害", StringComparison.Ordinal) ? RaceType.Jump : RaceType.Flat;
+
+        var surfaceTokens = rawLayout.Split('→', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        if (surfaceTokens.Length == 0)
+        {
+            throw new JraUnexpectedValueException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "Course.Layout",
+                rawLayout);
+        }
+
+        CourseDirection? direction = null;
+        string? layout = null;
+        var surfaces = new List<CourseSurface>();
+
+        for (var i = 0; i < surfaceTokens.Length; i++)
+        {
+            var token = surfaceTokens[i];
+
+            // 最後のトークンのみ「芝・左」「芝 外内」のように方向・レイアウト注記を
+            // 伴い得る（依頼書に例示された表記はいずれも末尾トークンにのみ注記を持つ）。
+            string surfaceText;
+            string? suffix = null;
+
+            var directionDelimiterIndex = token.IndexOf('・');
+            var spaceDelimiterIndex = token.IndexOf(' ');
+
+            if (directionDelimiterIndex >= 0)
+            {
+                surfaceText = token[..directionDelimiterIndex];
+                suffix = token[(directionDelimiterIndex + 1)..];
+            }
+            else if (spaceDelimiterIndex >= 0)
+            {
+                surfaceText = token[..spaceDelimiterIndex];
+                suffix = token[(spaceDelimiterIndex + 1)..];
+            }
+            else
+            {
+                surfaceText = token;
+            }
+
+            var surface = surfaceText switch
+            {
+                "芝" => CourseSurface.Turf,
+                "ダート" => CourseSurface.Dirt,
+                _ => (CourseSurface?)null,
+            };
+
+            if (surface is null)
+            {
+                throw new JraUnexpectedValueException(
+                    JraPageKind.RaceResult,
+                    snapshot.Url,
+                    "Course.Surface",
+                    rawLayout);
+            }
+
+            surfaces.Add(surface.Value);
+
+            if (suffix is not null)
+            {
+                if (suffix == "左")
+                {
+                    direction = CourseDirection.Left;
+                }
+                else if (suffix == "右")
+                {
+                    direction = CourseDirection.Right;
+                }
+                else if (directionDelimiterIndex >= 0)
+                {
+                    // 「・」区切りは方向表記であることが既知（依頼書例示の「芝・左」）。
+                    // 左右いずれでもない場合は未知の方向表記としてエラー。
+                    throw new JraUnexpectedValueException(
+                        JraPageKind.RaceResult,
+                        snapshot.Url,
+                        "Course.Direction",
+                        rawLayout);
+                }
+                else
+                {
+                    layout = suffix;
+                }
+            }
+        }
+
+        return new RaceCourseSpec(distance, raceType, surfaces, direction, layout, rawLayout);
+    }
+
+    // コーナー通過順位（依頼書23節）。コーナー数を固定せず可変長として扱う。
+    // 実ページのヘッダー文字列は本セッションでは確認できていないが、「コーナー」を
+    // 含む見出しは既知のJRA用語であるため、その列見出しから通過順位を抽出する。
+    // 見つからない場合はコーナー通過順位欄自体が存在しない正常系として扱う。
+    private static readonly Regex CornerNumberRegex =
+        new(@"(?<num>\d+)\s*コーナー", RegexOptions.Compiled);
+
+    private static IReadOnlyList<CornerPassage> ParseCornerPassages(
+        PageSnapshot snapshot)
+    {
+        var result = new List<CornerPassage>();
+
+        foreach (var table in snapshot.Tables)
+        {
+            for (var i = 0; i < table.Headers.Count; i++)
+            {
+                var header = table.Headers[i];
+
+                if (!header.Contains("コーナー", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var cornerNumberMatch = CornerNumberRegex.Match(header);
+
+                if (!cornerNumberMatch.Success)
+                {
+                    // コーナー番号自体を特定できない見出しは、通過順位欄ではない
+                    // 別の用途の可能性があるため読み飛ばす（構造は既知集合外だが
+                    // 必須要素ではないため無視して継続する）。
+                    continue;
+                }
+
+                var cornerNumber = int.Parse(cornerNumberMatch.Groups["num"].Value);
+
+                foreach (var row in table.Rows)
+                {
+                    if (i >= row.Count || string.IsNullOrWhiteSpace(row[i]))
+                    {
+                        continue;
+                    }
+
+                    result.Add(new CornerPassage(cornerNumber, row[i].Trim()));
+                }
+            }
+        }
+
+        return result;
     }
 
     private static string? ParseWeatherText(
@@ -236,10 +422,24 @@ public sealed class RaceResultPageParser
 
                 if (bucket is null)
                 {
+                    // 券種らしきデータ（式別セルの値）があるのに既知の券種集合に
+                    // 含まれない場合は黙って無視せずエラーとする（依頼書28節）。
+                    // ただし式別セルが単なる空行・区切り行の可能性もあるため、
+                    // 組合せ・金額のいずれかに実データがある場合のみエラー扱いにする。
+                    if (!string.IsNullOrWhiteSpace(row[combinationColumnIndex]) ||
+                        !string.IsNullOrWhiteSpace(row[amountColumnIndex]))
+                    {
+                        throw new JraUnexpectedValueException(
+                            JraPageKind.RaceResult,
+                            snapshot.Url,
+                            "PayoutType",
+                            currentTypeName);
+                    }
+
                     continue;
                 }
 
-                AppendPayoutLines(bucket, row[combinationColumnIndex], row[amountColumnIndex]);
+                AppendPayoutLines(bucket, row[combinationColumnIndex], row[amountColumnIndex], snapshot.Url);
             }
         }
 
@@ -249,7 +449,8 @@ public sealed class RaceResultPageParser
     private static void AppendPayoutLines(
         List<PayoutLine> bucket,
         string combinationCell,
-        string amountCell)
+        string amountCell,
+        string url)
     {
         var combinations = SplitPayoutCellLines(combinationCell);
         var amounts = SplitPayoutCellLines(amountCell);
@@ -267,7 +468,12 @@ public sealed class RaceResultPageParser
 
             if (digitsOnly.Length == 0)
             {
-                continue;
+                // 払戻値らしきセルが存在するのに数値として解析できない（依頼書28節）。
+                throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "Payout.Amount",
+                    amountText);
             }
 
             bucket.Add(new PayoutLine(combinations[i], decimal.Parse(digitsOnly)));
@@ -446,6 +652,122 @@ public sealed class RaceResultPageParser
     private static readonly Regex SexAgeRegex =
         new(@"^(?<sex>牡|牝|せん)(?<age>\d{1,2})$", RegexOptions.Compiled);
 
+    // 以下、依頼書14・20・21・24・25・26節に対応する列。依頼書の記述に文字通り
+    // 現れるJRA既知用語（枠番/斤量/調教師/人気/馬体重/着差/推定上り/平均1F）を
+    // 見出しとして検出する。見出し自体が存在しない場合はその項目全体を欠損として
+    // null扱いにする（正常系）。値が存在するのに解析できない場合のみエラーにする。
+    private static int FindFrameNumberColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("枠番", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindAssignedWeightColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("斤量", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindTrainerColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("調教師", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindPopularityColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("人気", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindBodyWeightColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("馬体重", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindMarginColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (headers[i].Contains("着差", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindEstimatedLast3FColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("推定上り", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindAverage1FColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("平均1F", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static readonly Regex BodyWeightRegex =
+        new(@"^(?<weight>\d{2,4})(?:\((?<change>[+-]?\d+)\))?$", RegexOptions.Compiled);
+
+    // 降着（依頼書18節）。着順欄に確定順位と元の入線順位が
+    // 「10(1位降着)」のように併記されるケースを検出する。
+    private static readonly Regex DemotionRegex =
+        new(@"^(?<pos>\d+)\s*[（(](?<original>\d+)\s*位?\s*降着[）)]$", RegexOptions.Compiled);
+
     private static DateOnly ParseDate(
         PageSnapshot snapshot)
     {
@@ -579,6 +901,14 @@ public sealed class RaceResultPageParser
         var jockeyIndex = FindJockeyColumnIndex(table.Headers);
         var timeIndex = FindTimeColumnIndex(table.Headers);
         var sexAgeIndex = FindSexAgeColumnIndex(table.Headers);
+        var frameNumberIndex = FindFrameNumberColumnIndex(table.Headers);
+        var assignedWeightIndex = FindAssignedWeightColumnIndex(table.Headers);
+        var trainerIndex = FindTrainerColumnIndex(table.Headers);
+        var popularityIndex = FindPopularityColumnIndex(table.Headers);
+        var bodyWeightIndex = FindBodyWeightColumnIndex(table.Headers);
+        var marginIndex = FindMarginColumnIndex(table.Headers);
+        var estimatedLast3FIndex = FindEstimatedLast3FColumnIndex(table.Headers);
+        var average1FIndex = FindAverage1FColumnIndex(table.Headers);
 
         var results = new List<RaceResultEntry>();
 
@@ -607,10 +937,30 @@ public sealed class RaceResultPageParser
             // 行を読み飛ばしていたため、これらの馬が結果からサイレントに欠落していた。
             ResultStatus status;
             int? finishPosition;
+            int? originalFinishPosition = null;
 
-            var finishMatch = LeadingNumberRegex.Match(finishText);
+            // 降着（依頼書18節）。「10(1位降着)」のように確定順位と元の入線順位が
+            // 併記される表記を最初に検出する。
+            var demotionMatch = DemotionRegex.Match(finishText);
 
-            if (finishMatch.Success)
+            if (demotionMatch.Success)
+            {
+                status = ResultStatus.Finished;
+                finishPosition = int.Parse(demotionMatch.Groups["pos"].Value);
+                originalFinishPosition = int.Parse(demotionMatch.Groups["original"].Value);
+            }
+            else if (finishText.Contains("降着", StringComparison.Ordinal))
+            {
+                // 降着表現を検出したのに元の入線順位を解析できない場合はエラー
+                // （依頼書18節）。
+                throw new JraResultConsistencyException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "降着を検出しましたが、元の入線順位を解析できませんでした。",
+                    "OriginalFinishPosition",
+                    finishText);
+            }
+            else if (LeadingNumberRegex.Match(finishText) is { Success: true } finishMatch)
             {
                 status = ResultStatus.Finished;
                 finishPosition = int.Parse(finishMatch.Groups["num"].Value);
@@ -722,6 +1072,150 @@ public sealed class RaceResultPageParser
                 age = int.Parse(sexAgeMatch.Groups["age"].Value);
             }
 
+            int? frameNumber = null;
+
+            if (frameNumberIndex >= 0 && frameNumberIndex < row.Count && !string.IsNullOrWhiteSpace(row[frameNumberIndex]))
+            {
+                var frameNumberText = row[frameNumberIndex].Trim();
+                var frameNumberMatch = LeadingNumberRegex.Match(frameNumberText);
+
+                if (!frameNumberMatch.Success)
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "FrameNumber",
+                        frameNumberText);
+                }
+
+                frameNumber = int.Parse(frameNumberMatch.Groups["num"].Value);
+            }
+
+            decimal? assignedWeight = null;
+
+            if (assignedWeightIndex >= 0 && assignedWeightIndex < row.Count && !string.IsNullOrWhiteSpace(row[assignedWeightIndex]))
+            {
+                var assignedWeightText = row[assignedWeightIndex].Trim();
+
+                if (!decimal.TryParse(assignedWeightText, out var parsedWeight) || parsedWeight <= 0)
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "AssignedWeight",
+                        assignedWeightText);
+                }
+
+                assignedWeight = parsedWeight;
+            }
+
+            var trainerName =
+                trainerIndex >= 0 && trainerIndex < row.Count && !string.IsNullOrWhiteSpace(row[trainerIndex])
+                    ? row[trainerIndex].Trim()
+                    : null;
+
+            int? popularity = null;
+
+            if (popularityIndex >= 0 && popularityIndex < row.Count && !string.IsNullOrWhiteSpace(row[popularityIndex]))
+            {
+                var popularityText = row[popularityIndex].Trim();
+
+                if (!int.TryParse(popularityText, out var parsedPopularity) || parsedPopularity < 1)
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "Popularity",
+                        popularityText);
+                }
+
+                popularity = parsedPopularity;
+            }
+
+            int? bodyWeight = null;
+            int? bodyWeightChange = null;
+
+            if (bodyWeightIndex >= 0 && bodyWeightIndex < row.Count && !string.IsNullOrWhiteSpace(row[bodyWeightIndex]))
+            {
+                var bodyWeightText = row[bodyWeightIndex].Trim();
+                var bodyWeightMatch = BodyWeightRegex.Match(bodyWeightText);
+
+                if (!bodyWeightMatch.Success)
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "BodyWeight",
+                        bodyWeightText);
+                }
+
+                bodyWeight = int.Parse(bodyWeightMatch.Groups["weight"].Value);
+
+                if (bodyWeightMatch.Groups["change"].Success)
+                {
+                    bodyWeightChange = int.Parse(bodyWeightMatch.Groups["change"].Value);
+                }
+            }
+
+            string? marginRaw = null;
+            var isDeadHeat = false;
+
+            if (marginIndex >= 0 && marginIndex < row.Count)
+            {
+                if (!string.IsNullOrWhiteSpace(row[marginIndex]))
+                {
+                    marginRaw = row[marginIndex].Trim();
+                    isDeadHeat = marginRaw == "同着";
+                }
+                else if (status == ResultStatus.Finished && finishPosition is > 1)
+                {
+                    // 着差欄自体は存在する（列は検出済み）のに、通常完走の2着以下で
+                    // 値が完全に空という、Parser異常の可能性が高いケース（依頼書20節）。
+                    throw new JraResultConsistencyException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "通常完走の2着以下で着差を取得できませんでした。",
+                        "MarginRaw",
+                        row[marginIndex]);
+                }
+            }
+
+            decimal? estimatedLast3F = null;
+
+            if (estimatedLast3FIndex >= 0 && estimatedLast3FIndex < row.Count && !string.IsNullOrWhiteSpace(row[estimatedLast3FIndex]))
+            {
+                var text = row[estimatedLast3FIndex].Trim();
+
+                if (!decimal.TryParse(text, out var parsed))
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "EstimatedLast3F",
+                        text);
+                }
+
+                estimatedLast3F = parsed;
+            }
+
+            decimal? average1F = null;
+
+            if (average1FIndex >= 0 && average1FIndex < row.Count && !string.IsNullOrWhiteSpace(row[average1FIndex]))
+            {
+                var text = row[average1FIndex].Trim();
+
+                if (!decimal.TryParse(text, out var parsed))
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "Average1F",
+                        text);
+                }
+
+                average1F = parsed;
+            }
+
             results.Add(new RaceResultEntry(
                 status,
                 finishPosition,
@@ -729,8 +1223,19 @@ public sealed class RaceResultPageParser
                 horseName,
                 jockeyName,
                 time,
+                OriginalFinishPosition: originalFinishPosition,
                 Sex: sex,
-                Age: age));
+                Age: age,
+                FrameNumber: frameNumber,
+                AssignedWeight: assignedWeight,
+                TrainerName: trainerName,
+                Popularity: popularity,
+                BodyWeight: bodyWeight,
+                BodyWeightChange: bodyWeightChange,
+                MarginRaw: marginRaw,
+                IsDeadHeat: isDeadHeat,
+                EstimatedLast3F: estimatedLast3F,
+                Average1F: average1F));
         }
 
         return results;

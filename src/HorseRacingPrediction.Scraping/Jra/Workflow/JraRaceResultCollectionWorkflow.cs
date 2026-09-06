@@ -155,7 +155,9 @@ public sealed class JraRaceResultCollectionWorkflow
                 Age: entry.Age,
                 Popularity: entry.Popularity,
                 BodyWeight: entry.BodyWeight,
-                BodyWeightChange: entry.BodyWeightChange))
+                BodyWeightChange: entry.BodyWeightChange,
+                OriginalFinishPosition: entry.OriginalFinishPosition,
+                IsDeadHeat: entry.IsDeadHeat))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
@@ -186,9 +188,16 @@ public sealed class JraRaceResultCollectionWorkflow
             RaceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
             EntryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
             GradeCode: null,
-            SurfaceCode: null,
-            DistanceMeters: null,
-            DirectionCode: null,
+            SurfaceCode: resultPage.CourseSpec is { } courseSpec
+                ? string.Join("→", courseSpec.Surfaces.Select(ToSurfaceCode))
+                : null,
+            DistanceMeters: resultPage.CourseSpec?.DistanceMeters,
+            DirectionCode: resultPage.CourseSpec?.Direction switch
+            {
+                CourseDirection.Left => "左",
+                CourseDirection.Right => "右",
+                _ => null,
+            },
             WinningHorseName: winningEntry?.HorseName,
             DeclaredAt: null,
             Entries: entries,
@@ -237,6 +246,14 @@ public sealed class JraRaceResultCollectionWorkflow
         => payouts.Count == 0
             ? null
             : payouts.Select(p => new RaceResultBulkPayoutEntry(p.Combination, p.Amount)).ToList();
+
+    private static string ToSurfaceCode(CourseSurface surface) =>
+        surface switch
+        {
+            CourseSurface.Turf => "芝",
+            CourseSurface.Dirt => "ダート",
+            _ => throw new ArgumentOutOfRangeException(nameof(surface), surface, null),
+        };
 
     private static string? ToAbnormalResultCode(ResultStatus status) =>
         status switch
