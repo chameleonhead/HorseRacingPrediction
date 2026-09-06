@@ -137,7 +137,7 @@ public sealed class JobManagementEndpointTests
         var now = DateTimeOffset.UtcNow;
         await store.ScheduleJobAsync("RaceCardCollection", "resume-source", "{}", now);
         var dispatch = (await store.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(1), 10)).Single();
-        await store.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now.AddSeconds(2));
+        await store.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now.AddSeconds(-2));
 
         var pause = await requestClient.PostAsync("/api/admin/jobs/pause", null);
         var resume = await requestClient.PostAsync("/api/admin/jobs/resume", null);

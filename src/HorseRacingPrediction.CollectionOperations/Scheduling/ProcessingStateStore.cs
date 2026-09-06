@@ -513,6 +513,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     public async Task<RequeueReadyCollectionDispatchesResult> RequeueReadyCollectionDispatchesAsync(
         DateTimeOffset now,
         int maxAttemptCount = int.MaxValue,
+        int dispatchGraceMinutes = 0,
         CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -528,11 +529,18 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 .ThenBy(x => x.CreatedAt)
                 .ThenBy(x => x.JobId)
                 .ToList();
+            // 「未ディスパッチ（＝outboxからまだSQSへ送出できていない）」だけでなく、
+            // 直近でディスパッチ済みだがWorker（Lambda）がまだリースを取得していないだけの
+            // ジョブも再送出の対象から除外する。ジョブのリース自体はWorkerが実際に処理を
+            // 開始するまでDB上に存在しない（Statusが Ready のまま）ため、ここで「直近の
+            // ディスパッチからの猶予期間」を疑似的なリースとして扱い、二重送出を防ぐ。
+            var dispatchGraceCutoff = now.AddMinutes(-Math.Max(0, dispatchGraceMinutes));
             var pendingJobIds = (await dbContext.DispatchOutbox
-                    .Where(x => x.DispatchedAt == null)
-                    .Select(x => x.TaskId)
+                    .Select(x => new { x.TaskId, x.DispatchedAt })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false))
+                .Where(x => x.DispatchedAt is null || x.DispatchedAt >= dispatchGraceCutoff)
+                .Select(x => x.TaskId)
                 .ToHashSet(StringComparer.Ordinal);
 
             var dispatchedCount = 0;

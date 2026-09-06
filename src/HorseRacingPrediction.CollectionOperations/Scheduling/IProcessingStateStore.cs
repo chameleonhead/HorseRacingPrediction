@@ -19,7 +19,7 @@ public interface IProcessingStateStore
     Task<IReadOnlyList<PendingCollectionTaskDispatch>> GetPendingCollectionTaskDispatchesAsync(DateTimeOffset now, int maxCount, CancellationToken cancellationToken = default);
     Task MarkCollectionTaskDispatchedAsync(string outboxId, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task MarkCollectionTaskDispatchFailedAsync(string outboxId, DateTimeOffset now, string error, CancellationToken cancellationToken = default);
-    Task<RequeueReadyCollectionDispatchesResult> RequeueReadyCollectionDispatchesAsync(DateTimeOffset now, int maxAttemptCount = int.MaxValue, CancellationToken cancellationToken = default);
+    Task<RequeueReadyCollectionDispatchesResult> RequeueReadyCollectionDispatchesAsync(DateTimeOffset now, int maxAttemptCount = int.MaxValue, int dispatchGraceMinutes = 0, CancellationToken cancellationToken = default);
     Task CompleteJobAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);
     Task WaitForDependenciesAsync(string jobType, string deduplicationKey, CancellationToken cancellationToken = default);
     Task FailJobAsync(string jobType, string deduplicationKey, string? error, CancellationToken cancellationToken = default);

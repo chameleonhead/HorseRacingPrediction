@@ -155,7 +155,7 @@ public sealed class CollectionJobWatchdogService : BackgroundService
         // ジョブが Ready のまま長時間進行しないケースを拾う。再送しても実行のたびに
         // 失敗を繰り返しているジョブ（MaxJobDispatchAttempts超過）はDeadLetterへ落とす。
         var result = await _store
-            .RequeueReadyCollectionDispatchesAsync(now, _options.MaxJobDispatchAttempts, cancellationToken)
+            .RequeueReadyCollectionDispatchesAsync(now, _options.MaxJobDispatchAttempts, _options.DispatchGraceMinutes, cancellationToken)
             .ConfigureAwait(false);
 
         if (result.DispatchedCount > 0)
