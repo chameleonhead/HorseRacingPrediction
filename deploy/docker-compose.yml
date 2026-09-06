@@ -6,6 +6,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__EventStore: Data Source=/data/eventstore.db
+      DataProtection__KeysDirectory: /data/dataprotection-keys
       HORSE_RACING_API_KEY: ${HORSE_RACING_API_KEY}
       ForwardedHeaders__KnownNetworks__0: 172.16.0.0/12
       DatabaseMigration__BackupDirectory: /data/backups

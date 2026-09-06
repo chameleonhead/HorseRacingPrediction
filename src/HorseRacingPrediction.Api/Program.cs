@@ -15,6 +15,7 @@ using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.OpenApi;
@@ -30,6 +31,13 @@ builder.Services.Configure<ApiKeyOptions>(options =>
         ? Environment.GetEnvironmentVariable("HORSE_RACING_API_KEY")
         : configuredKey;
 });
+
+var dataProtectionKeysDirectory = builder.Configuration["DataProtection:KeysDirectory"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysDirectory))
+{
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysDirectory));
+}
 
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddEndpointsApiExplorer();
