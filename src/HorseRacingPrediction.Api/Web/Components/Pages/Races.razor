@@ -43,8 +43,8 @@ else
                 <span class="object-list-main">
                     <strong>@(r.RaceName ?? r.RaceId)</strong>
                     <span class="hint">
-                        <a href="@DateFilterUrl(r.RaceDate)" @onclick:stopPropagation>@(r.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録")</a>
-                        · <a href="@RacecourseFilterUrl(r.RacecourseCode)" @onclick:stopPropagation>@(r.RacecourseCode ?? "開催場未登録")</a>
+                        <a href="@DateFilterUrl(r.RaceDate)" @onclick="() => FilterByDateAsync(r.RaceDate)" @onclick:preventDefault @onclick:stopPropagation>@(r.RaceDate?.ToString("yyyy/MM/dd") ?? "日付未登録")</a>
+                        · <a href="@RacecourseFilterUrl(r.RacecourseCode)" @onclick="() => FilterByRacecourseAsync(r.RacecourseCode)" @onclick:preventDefault @onclick:stopPropagation>@(r.RacecourseCode ?? "開催場未登録")</a>
                         · @($"{r.RaceNumber}R")
                     </span>
                 </span>
@@ -141,6 +141,29 @@ else
     private async Task GoPageAsync(int value)
     {
         page = value;
+        UpdateUrl();
+        await LoadAsync();
+    }
+
+    // 一覧行内の日付・開催場リンクは href も持たせて別タブ表示に対応しているが、通常
+    // クリックは href の再ナビゲーション（OnParametersSetAsync 経由の再パース）だけに
+    // 頼らず、ここで直接フィルター条件を設定してから読み込む。UpdateUrl による置換
+    // ナビゲーションと href ナビゲーションが競合し、絞り込み表示が更新されないことが
+    // あるため（Jobs.razor の日別サマリーリンクと同種の不具合）。
+    private async Task FilterByDateAsync(DateOnly? date)
+    {
+        if (date is null) { return; }
+        from = date; to = date; racecourse = null; raceNo = null; raceName = null; winningHorse = null; status = null;
+        page = 1;
+        UpdateUrl();
+        await LoadAsync();
+    }
+
+    private async Task FilterByRacecourseAsync(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) { return; }
+        racecourse = code; from = null; to = null; raceNo = null; raceName = null; winningHorse = null; status = null;
+        page = 1;
         UpdateUrl();
         await LoadAsync();
     }

@@ -40,7 +40,7 @@
         <div class="day-summary">
             @foreach (var summary in DaySummaries)
             {
-                <a class="day-item" href="@JobsByDateUrl(summary.Date)">
+                <a class="day-item" href="@JobsByDateUrl(summary.Date)" @onclick="() => SelectDayAsync(summary.Date)" @onclick:preventDefault>
                     <strong>@DisplayDate(summary.Date)</strong>
                     <small>@summary.Count 件の収集ジョブ</small>
                     <span class="day-progress"><span>@DayProgress(summary)</span><RaceOpsStatusBadge Label="@DayStatus(summary)" Tone="@DayStatusTone(summary)" /></span>
@@ -134,6 +134,22 @@ else
     }
     private async Task SearchAsync()
     {
+        page = 1;
+        await LoadAsync();
+    }
+
+    // 日別サマリーのリンクは href も持たせているため中クリック等での別タブ表示は
+    // 通常のナビゲーションで機能するが、通常クリックはここで直接フィルター状態を
+    // 更新してから読み込む。href 経由の再ナビゲーションだけに頼ると、同一コンポー
+    // ネントインスタンスの再利用や自身の UpdateUrl による置換ナビゲーションと絡み、
+    // 対象日フィルターの表示が即座に切り替わらないことがあるため。
+    private async Task SelectDayAsync(string date)
+    {
+        keyword = null;
+        jobType = null;
+        statusText = string.Empty;
+        view = "all";
+        targetDateText = date;
         page = 1;
         await LoadAsync();
     }
