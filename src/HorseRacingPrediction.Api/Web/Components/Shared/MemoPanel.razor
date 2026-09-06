@@ -44,6 +44,24 @@
                                 }
                             </div>
                             <p class="memo-content">@memo.Content</p>
+                            @if (memo.Links.Count > 0)
+                            {
+                                <ul class="memo-links">
+                                    @foreach (var link in memo.Links)
+                                    {
+                                        <li>
+                                            @if (string.Equals(link.LinkType, "Url", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(link.Url))
+                                            {
+                                                <a href="@link.Url" target="_blank" rel="noopener noreferrer">@link.Title</a>
+                                            }
+                                            else
+                                            {
+                                                @link.Title
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            }
                             <div class="action-bar">
                                 <FluentButton Appearance="@Appearance.Outline" OnClick="() => StartEdit(memo)">編集</FluentButton>
                                 @if (deleteArmedMemoId == memo.MemoId)

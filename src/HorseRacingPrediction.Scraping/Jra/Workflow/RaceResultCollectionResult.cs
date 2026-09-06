@@ -14,8 +14,10 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// 個別エントリーの記録に失敗した際のエラーメッセージ一覧。
 /// 1エントリーの失敗で全体を止めず、残りのエントリーの処理を続行する（部分成功を許容する）。
 /// </param>
+/// <param name="SourceUrl">取得元のJRAレース結果ページURL（取得できた場合）。引用元として記録に残す。</param>
 public sealed record RaceResultCollectionResult(
     RaceId RaceId,
     string DataCollectionRaceId,
     IReadOnlyList<int> SavedHorseNumbers,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    string? SourceUrl = null);

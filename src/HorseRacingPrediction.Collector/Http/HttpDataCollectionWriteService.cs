@@ -744,6 +744,54 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return outcome ?? new RaceResultBulkOutcome(string.Empty, []);
     }
 
+    public async Task RecordSourceCitationAsync(
+        IReadOnlyList<CitationSubject> subjects,
+        string sourceUrl,
+        string? title = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (subjects.Count == 0 || string.IsNullOrWhiteSpace(sourceUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var request = new
+            {
+                AuthorId = (string?)"Collector",
+                MemoType = "SourceCitation",
+                Content = title ?? "JRAサイトからの自動取得",
+                CreatedAt = DateTimeOffset.UtcNow,
+                Subjects = subjects.Select(s => new { s.SubjectType, s.SubjectId }).ToList(),
+                Links = new[]
+                {
+                    new
+                    {
+                        LinkId = Guid.NewGuid().ToString(),
+                        LinkType = "Url",
+                        Title = title ?? "JRAサイト",
+                        Url = sourceUrl,
+                        StorageKey = (string?)null
+                    }
+                }
+            };
+
+            var response = await _httpClient
+                .PostAsJsonAsync("/api/memos", request, cancellationToken)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 引用元の記録は補助的な情報であり、失敗してもレース等の本体データ登録
+            // 自体を失敗させる理由にはならないため、ここで握りつぶしログのみ残す。
+            // （ここでの失敗をジョブ失敗として扱うと、原因不明5xx検知によるパイプライン
+            // 全体停止の対象にもなってしまい、本来の収集処理とは無関係な理由で
+            // ジョブ全体を巻き込むことになる。）
+        }
+    }
+
     // ------------------------------------------------------------------ //
     // private helpers — HTTP
     // ------------------------------------------------------------------ //

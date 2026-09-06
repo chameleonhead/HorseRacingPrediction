@@ -77,6 +77,16 @@ public sealed class JraRaceResultCollectionWorkflow
         var dataCollectionRaceId = DeterministicIdGenerator.BuildRaceId(
             raceId.Date, racecourseName, raceId.Number);
 
+        // 引用元（取得元URL）は、後段の登録が部分的に失敗した場合でも「このURLから
+        // 取得を試みた」という事実自体に調査上の価値があるため、結果ページの取得に
+        // 成功した時点で記録する（登録の成否とは独立）。同一レースを複数回取得しても
+        // メモとして複数件蓄積されるだけで、既存の引用元を上書きしない。
+        await _writeService.RecordSourceCitationAsync(
+            [new CitationSubject("Race", dataCollectionRaceId)],
+            resultPage.Url,
+            "JRAレース結果",
+            cancellationToken);
+
         var errors = new List<string>();
 
         // 実運用で、結果ページのパース失敗時に馬番=0・馬名=空のプレースホルダー値の
@@ -101,7 +111,7 @@ public sealed class JraRaceResultCollectionWorkflow
         {
             // 全エントリーが不正（ページ全体のパース失敗）の場合、送信しても
             // 意味のあるデータは何も登録できないため、API呼び出し自体を行わない。
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
         }
 
         var winningEntry = validResults.FirstOrDefault(e => e.FinishPosition == 1);
@@ -170,7 +180,7 @@ public sealed class JraRaceResultCollectionWorkflow
             // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、
             // ここで打ち切って分かりやすい1件のエラーにまとめる。
             errors.Add($"レース登録エラー: {ex.Message}");
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
         }
 
         errors.AddRange(outcome.Errors);
@@ -179,7 +189,7 @@ public sealed class JraRaceResultCollectionWorkflow
         // 処理されていないため、保存済み馬番は空のまま返す。
         if (outcome.Errors.Any(e => e.StartsWith("レース登録エラー", StringComparison.Ordinal)))
         {
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
         }
 
         var failedHorseNumbers = outcome.Errors
@@ -193,7 +203,7 @@ public sealed class JraRaceResultCollectionWorkflow
             .Select(e => e.HorseNumber)
             .ToList();
 
-        return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors);
+        return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors, resultPage.Url);
     }
 
     private static IReadOnlyList<RaceResultBulkPayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)

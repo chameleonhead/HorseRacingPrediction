@@ -127,6 +127,12 @@ public sealed class JraRaceCardCollectionWorkflow
             directionCode: null,
             cancellationToken: cancellationToken);
 
+        await _writeService.RecordSourceCitationAsync(
+            [new CitationSubject("Race", raceId)],
+            card.Url,
+            "JRA出馬表",
+            cancellationToken);
+
         foreach (var entry in card.Entries)
         {
             // 実サイト確認（2026-09-06）で判明: 馬主名は別ページへの遷移なしに出馬表の

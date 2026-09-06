@@ -154,4 +154,17 @@ public interface IDataCollectionWriteService
     Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
         RaceResultBulkRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// データの取得元となったJRAページのURLを、引用元（メモ機能のURLリンク）として
+    /// 1件以上の対象（レース・馬・騎手・調教師）に紐付けて記録する。
+    /// 同一レースについて複数回取得した場合、複数件を蓄積して残せる（上書きしない）。
+    /// 記録自体の失敗は本体の収集処理を失敗させない（実装側で握りつぶす）。
+    /// </summary>
+    Task RecordSourceCitationAsync(
+        IReadOnlyList<CitationSubject> subjects,
+        string sourceUrl,
+        string? title = null,
+        CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }

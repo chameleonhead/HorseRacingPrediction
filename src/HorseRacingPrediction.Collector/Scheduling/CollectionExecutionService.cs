@@ -1073,7 +1073,7 @@ public sealed class CollectionExecutionService : BackgroundService
                 result.RaceId.Number,
                 status == RaceDataCollectionState.Succeeded ? result.DataCollectionRaceId : null,
                 raceName: null,
-                sourceUrl: null,
+                sourceUrl: result.SourceUrl,
                 status,
                 RaceResultAcquisitionOrigin.Scheduled,
                 requestedByRaceId: null,
