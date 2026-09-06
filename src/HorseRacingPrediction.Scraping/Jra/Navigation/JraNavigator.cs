@@ -20,6 +20,26 @@ public sealed class JraNavigator
     private readonly ILogger<JraNavigator> _logger;
     private readonly Func<DateOnly> _today;
 
+    /// <summary>
+    /// RaceCard（出馬表）探索対象期間の日数（依頼書3.1節の<c>RaceCardLookupPeriod</c>）。
+    /// 「対象日 &gt;= 今日 - RaceCardLookupPeriodDays」の場合のみ出馬表探索を試みる。
+    ///
+    /// これは「今週開催」判定ではなく、古いレースについて無意味に出馬表を探索しない
+    /// ための最適化に過ぎない（依頼書3.1節）。<c>CurrentRacePeriod</c>のような意味の
+    /// 強い名称を避け、変更しやすい名称・形にする（依頼書3.1節の明示的要求）ため、
+    /// private constではなくコンストラクタ引数で差し替え可能なフィールドとした。
+    ///
+    /// 注意: <see cref="IsCurrentRacePeriod"/> / <see cref="IsRecentRacePeriod"/>
+    /// はRaceResult Navigationの経路分岐専用の別の判定であり、本フィールドの値
+    /// （5日）をそちらの分岐条件として流用してはならない（依頼書5節）。
+    /// </summary>
+    private readonly int _raceCardLookupPeriodDays;
+
+    /// <summary>
+    /// <see cref="_raceCardLookupPeriodDays"/> の既定値。
+    /// </summary>
+    internal const int DefaultRaceCardLookupPeriodDays = 5;
+
     // NOTE(レース一覧URLキャッシュを撤回): 一度、ブラウザの「戻る」（GoBack）の不安定さ対策として
     // 直前に到達したレース一覧ページのURLをキャッシュし、そのURLへ直接ナビゲート（再GET）する
     // 実装を試みたが、本番環境で「JRA navigation done. ... Url=https://www.jra.go.jp/error/error013.html」
@@ -46,7 +66,7 @@ public sealed class JraNavigator
         IWebBrowser browser,
         JraPageReader pageReader,
         ILogger<JraNavigator>? logger = null)
-        : this(browser, pageReader, logger, today: null)
+        : this(browser, pageReader, logger, today: null, raceCardLookupPeriodDays: null)
     {
     }
 
@@ -58,11 +78,26 @@ public sealed class JraNavigator
         JraPageReader pageReader,
         ILogger<JraNavigator>? logger,
         Func<DateOnly>? today)
+        : this(browser, pageReader, logger, today, raceCardLookupPeriodDays: null)
+    {
+    }
+
+    /// <summary>
+    /// テスト用・設定変更用に「今日の日付」と<c>RaceCardLookupPeriod</c>の両方を
+    /// 差し替え可能にするコンストラクタ（依頼書3.1節: 期間は後から容易に変更できること）。
+    /// </summary>
+    internal JraNavigator(
+        IWebBrowser browser,
+        JraPageReader pageReader,
+        ILogger<JraNavigator>? logger,
+        Func<DateOnly>? today,
+        int? raceCardLookupPeriodDays)
     {
         _browser = browser;
         _pageReader = pageReader;
         _logger = logger ?? NullLogger<JraNavigator>.Instance;
         _today = today ?? (() => DateOnly.FromDateTime(DateTime.Today));
+        _raceCardLookupPeriodDays = raceCardLookupPeriodDays ?? DefaultRaceCardLookupPeriodDays;
     }
 
     public async Task<IJraPage> ToKeibaTopAsync(
@@ -182,6 +217,11 @@ public sealed class JraNavigator
         return page;
     }
 
+    /// <inheritdoc />
+    public bool IsWithinRaceCardLookupPeriod(
+        DateOnly date)
+        => date.DayNumber >= _today().DayNumber - _raceCardLookupPeriodDays;
+
     public async Task<IJraPage> ToRaceCardAsync(
         RaceId race,
         CancellationToken cancellationToken = default)
@@ -190,6 +230,19 @@ public sealed class JraNavigator
             "JRA navigation start. Destination=RaceCard Race={Race} CurrentUrl={CurrentUrl}",
             race,
             _browser.CurrentUrl);
+
+        // 依頼書3.1節: RaceCardLookupPeriod（既定5日）より古い対象日については、
+        // 出馬表探索自体を試みず早期にスキップする（古いレースについて無意味に
+        // 出馬表を探索しないための最適化。「今週開催」判定ではない）。
+        // スキップも通常のRaceCard取得失敗と同じ「RaceCardなし」として扱われ、
+        // 依頼書3.3節の許容方針（RaceCard取得失敗だけでCollectorを失敗させない）と
+        // 矛盾しないよう、既存のJraNavigationExceptionの一種として送出する。
+        if (!IsWithinRaceCardLookupPeriod(race.Date))
+        {
+            throw new JraNavigationException(
+                $"{race.Date:yyyy-MM-dd} はRaceCardLookupPeriod（今日-{_raceCardLookupPeriodDays}日）より古いため、出馬表探索をスキップしました。",
+                JraNavigationFailureReason.OutOfDisplayedRange);
+        }
 
         var listPage =
             await ToRaceListAsync(

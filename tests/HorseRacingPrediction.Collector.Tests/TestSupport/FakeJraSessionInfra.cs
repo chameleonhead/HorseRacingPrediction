@@ -96,6 +96,11 @@ internal sealed class FakeJraNavigator : IJraNavigator
 
     public Task<IJraPage> ToHistoricalRaceSearchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
+
+    public bool RaceCardLookupPeriodResult { get; set; } = true;
+
+    public bool IsWithinRaceCardLookupPeriod(DateOnly date)
+        => RaceCardLookupPeriodResult;
 }
 
 /// <summary>

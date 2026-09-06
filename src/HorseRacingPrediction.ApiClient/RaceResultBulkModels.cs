@@ -22,6 +22,15 @@ public sealed record RaceResultBulkRequest(
     RaceResultBulkTrackCondition? TrackCondition,
     RaceResultBulkPayouts? Payouts);
 
+/// <summary>
+/// 出走馬1頭分の成績情報。
+/// <paramref name="HorseName"/> 以下の出走馬属性（依頼書4節・14節）は、
+/// RaceCard（出馬表）を経由せずレース結果のみから収集した過去レースでも
+/// RaceEntry相当の情報（馬名・性齢・斤量・騎手・調教師等）を復元できるように、
+/// <see cref="UpsertRaceEntryAsync"/> と同じ命名・null許容パターンで追加した項目。
+/// RaceCardが別途取得済みの場合はそちらの情報を優先してよく、本項目は
+/// 「結果ページからのみ取得できた場合のフォールバック」として送信する。
+/// </summary>
 public sealed record RaceResultBulkEntry(
     int HorseNumber,
     int? FinishPosition,
@@ -29,7 +38,17 @@ public sealed record RaceResultBulkEntry(
     string? MarginText,
     string? LastThreeFurlongTime,
     string? AbnormalResultCode,
-    decimal? PrizeMoney);
+    decimal? PrizeMoney,
+    string? HorseName = null,
+    string? JockeyName = null,
+    string? TrainerName = null,
+    int? GateNumber = null,
+    decimal? AssignedWeight = null,
+    string? SexCode = null,
+    int? Age = null,
+    int? Popularity = null,
+    int? BodyWeight = null,
+    int? BodyWeightChange = null);
 
 public sealed record RaceResultBulkWeather(
     DateTimeOffset ObservationTime,

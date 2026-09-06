@@ -1,6 +1,6 @@
 # JRAスクレイピング層 Navigation / RaceResult取得仕様 変更
 
-- Status: In progress (Phase 1 実装済み、Phase 2-4 未着手)
+- Status: In progress (Phase 1-2 実装済み、Phase 3-4 未着手)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-06
 - Updated: 2026-09-06
@@ -54,10 +54,17 @@
 - 依頼書30節「部分保存を避ける」「宣言→エントリー登録の順序維持」は、既存の `DeclareRaceResultBulkAsync`（1回のAPI呼び出しでレース宣言→各馬着順登録をAPI側がアトミックに順序保証）で既に満たされている。
 - 依頼書3.3節「RaceCard取得失敗の許容」は、既存の `JraRaceCardCollectionWorkflow` がレース単位の try/catch でRaceCard失敗を握りつぶし、Collector全体を落とさない設計に既になっている。
 
-### Phase 2（未着手・優先度高）
+### Phase 2（実装済み・本コミット）
 
-- **依頼書2・3・5節（Navigation独立化）**: `JraNavigator` の `IsCurrentRacePeriod`（±3日）/ `IsRecentRacePeriod`（±92日）は現状RaceResult Navigationの経路分岐（Current/Recent/Historical）にのみ使われており、RaceCard探索とは別の期間判定である点は確認済み。ただし依頼書が要求する「RaceCard探索対象期間」を表す名前付きの `RaceCardLookupPeriod`（`対象日 >= 今日 - 5日`、設定変更可能）がまだ存在しない。また「出馬表の有無を最終判定とする」（3.2節）の実装として、RaceCard探索がRaceCardLookupPeriod内でも出馬表に対象レースが存在しなければ即座にRaceResult側へフォールバックする経路を明示化する必要がある。
-- **依頼書4節（過去レースでのRaceEntry相当情報復元）**: `RaceResultPageParser` は出走馬の基本情報（馬番・枠番・馬名・性齢・斤量・騎手・調教師等）を解析できる状態にあるが、過去レース収集ワークフロー側でこれを使い `RaceEntry` を作成・更新する導線（RaceCardが存在しない場合のフォールバック）が未実装。
+- **依頼書3.1・3.2・5節（RaceCardLookupPeriod）**:
+  - `IJraNavigator` に `IsWithinRaceCardLookupPeriod(DateOnly date)` を追加し、`JraNavigator` 側で `対象日 >= 今日 - RaceCardLookupPeriodDays`（既定5日）を判定する実装 `IsWithinRaceCardLookupPeriod` を追加した。値は `private const` ではなく、内部コンストラクタ引数 `raceCardLookupPeriodDays`（既定値は `internal const int DefaultRaceCardLookupPeriodDays = 5`）として持たせ、テスト・将来の設定変更で差し替え可能にした（依頼書3.1節の「`CurrentRacePeriod`のような意味の強い名称を避け、期間は後から容易に変更できるようにする」という明示的要求に対応）。
+  - `JraNavigator.ToRaceCardAsync` と `JraRaceCardCollectionWorkflow.CollectAsync` の両方でこの判定を使い、対象日がRaceCardLookupPeriodより古い場合は出馬表探索（レース一覧取得含む）自体を早期にスキップする。スキップは既存の「RaceCard取得失敗の許容」（依頼書3.3節、`NotYetPublished`と同様の空結果 `RaceCardCollectionResult(date, course, [], [], [])`）と同じ扱いにし、Collector全体を失敗させない。
+  - 「出馬表の有無を最終判定とする」（依頼書3.2節）は元々 `ToRaceListAsync` が返すレース一覧に対象レースが存在するかどうかで最終判定しており（`JraNavigator.ToRaceCardAsync` 内の `raceList.Races.SingleOrDefault(x => x.Id == race)`）、曜日・開催カレンダーからの別判定は追加していない。今回追加したRaceCardLookupPeriodはあくまで「探索を試みるかどうか」の事前フィルタであり、最終判定を代替するものではないことをコード上のコメントで明示した。
+  - 依頼書5節の「RaceCard探索の5日をRaceResult Navigationの分岐条件として流用しない」制約は、`IsCurrentRacePeriod`（±3日）/ `IsRecentRacePeriod`（±92日）と `IsWithinRaceCardLookupPeriod`（既定5日）が完全に別のフィールド・別のメソッドであることに加え、`IJraNavigator` インターフェースのXMLコメントおよび `JraNavigator` 内の各フィールド定義コメントで明示的に相互不流用を注記した。
+- **依頼書4節（過去レースでのRaceEntry相当情報復元）**: 調査の結果、`RaceResultPageParser` は既にHorseNumber/HorseName/JockeyName/Time/ResultStatus/FinishPosition/Sex/Age（依頼書14・15節の一部）を解析できていたが、`RaceResultEntry` モデル自体が持つ `FrameNumber`/`AssignedWeight`/`TrainerName`/`Popularity`/`BodyWeight`/`BodyWeightChange` は**Parserが実際には値を設定しておらず常にnull**、かつ `JraRaceResultCollectionWorkflow` から `IDataCollectionWriteService` への送信経路（`RaceResultBulkEntry`）自体にHorseName/JockeyName/性齢/斤量等を渡すフィールドが存在しなかった（`HorseNumber`と着順・タイム・着差・異常区分・賞金のみ）。このため、RaceCardを経由しない過去レースでは出走馬の氏名・所属といった識別情報がAPI側へ渡らず、依頼書4節が求める「RaceEntry相当情報の復元」は**未達**と判断した。対応として:
+  - `RaceResultBulkEntry`（`HorseRacingPrediction.ApiClient`）に、既存の `UpsertRaceEntryAsync` と同じ命名・null許容パターンで `HorseName`/`JockeyName`/`TrainerName`/`GateNumber`/`AssignedWeight`/`SexCode`/`Age`/`Popularity`/`BodyWeight`/`BodyWeightChange` を追加（すべて末尾の省略可能パラメータとして追加したため、既存呼び出し側の互換性は維持）。新しい非一括APIは設計せず、既存の一括登録エンドポイントの入力を拡張する方向とした（Non-goalsの制約に整合）。
+  - `HorseSex` に `HorseSexText.ToSexCode` を追加し、`JraRaceResultCollectionWorkflow` で `RaceResultEntry` の解析済み属性（現状Parserが実際に埋めるのは HorseName/JockeyName/Sex/Age のみ）を `RaceResultBulkEntry` へ渡すよう変更した。
+  - **既知の残課題（意図的に未実装、推測で実装しなかった箇所）**: `FrameNumber`（枠番）・`AssignedWeight`（斤量）・`TrainerName`（調教師名）・`Popularity`（人気）・`BodyWeight`（馬体重）は、`RaceResultPageParser`側でまだ列検出・値解析を実装していない（`RaceResultEntry` のコンストラクタ引数としては受け皿があるが常にnullのまま）。依頼書33節の「実装時に未考慮パターンを発見した場合は想像で補完しない」方針に基づき、これらの列がレース結果ページ上でどのヘッダー文字列・セル書式（例:「馬体重」列が実際に何と表記されるか、増減の括弧表記の有無）で出現するかを実サイトで確認できていない本セッションでは、推測でのregex追加を避けた。RaceCard（出馬表）が別途取得できるケースでは、これらの属性は既存の `UpsertRaceEntryAsync`（`JraRaceCardCollectionWorkflow`）経由で登録されるため実運用上の欠落は限定的（出馬表を経由しない明確な過去レースでのみ欠落）。実サイトの列構造を確認できた時点でParser側の列検出・テストを追加するフォローアップとする。
 
 ### Phase 3（未着手・モデル拡張）
 
@@ -82,11 +89,11 @@
 
 | # | 基準 | 状態 |
 |---|---|---|
-| 1 | RaceCardとRaceResultのNavigationが独立している | 既存実装で概ね満たすが `RaceCardLookupPeriod` 未導入（Phase 2） |
-| 2 | 直近レースでは出馬表を優先的に探索できる | 既存実装のまま（Phase 2で名称・境界を明確化） |
+| 1 | RaceCardとRaceResultのNavigationが独立している | **満たす（Phase 2で`RaceCardLookupPeriod`導入、RaceResult側の期間しきい値と分離をコメントで明示）** |
+| 2 | 直近レースでは出馬表を優先的に探索できる | **満たす（Phase 2で`RaceCardLookupPeriod`により名称・境界を明確化。最終判定は出馬表への実在有無のまま）** |
 | 3 | RaceCardが存在しなくても正常にRaceResultへ進める | 満たす（既存実装で確認済み） |
-| 4 | 古いレースでは出馬表を探索しない | 既存実装のまま |
-| 5 | 過去RaceResultからRaceEntry相当情報を復元できる | 未着手（Phase 2） |
+| 4 | 古いレースでは出馬表を探索しない | **満たす（Phase 2で`RaceCardLookupPeriod`より古い場合は探索自体を早期スキップ）** |
+| 5 | 過去RaceResultからRaceEntry相当情報を復元できる | **一部満たす（Phase 2でHorseName/JockeyName/Sex/Ageの送信経路を追加。FrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeightはParser側の列検出が未実装・実サイト未確認のためフォローアップ）** |
 | 6 | RaceResult Navigationが結果系導線だけで完結する | 満たす（既存実装で確認済み） |
 | 7 | RaceResultがRaceIdを自己検証する | **満たす（Phase 1で実装）** |
 | 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **満たす（Phase 1で実装、Course構造等は未対応）** |
@@ -102,8 +109,8 @@
 ## Delivery plan
 
 1. **Phase 1（完了）**: ResultStatus/HorseSex enum、天候・馬場状態・性齢の未知値エラー化、RaceId自己検証、例外分類、対応テスト。
-2. **Phase 2**: `RaceCardLookupPeriod` の導入とNavigation層のドキュメント・命名整理、過去レースでのRaceEntry相当情報復元。
-3. **Phase 3**: `RaceCourseSpec`、Margin/OriginalFinishPosition/コーナー通過順位/EstimatedLast3F・Average1F、馬体重・人気・斤量・賞金・払戻の厳格Parse。
+2. **Phase 2（完了）**: `RaceCardLookupPeriod` の導入とNavigation層のドキュメント・命名整理、過去レースでのRaceEntry相当情報復元（HorseName/JockeyName/Sex/Ageの送信経路。FrameNumber等の列解析は実サイト未確認のためフォローアップ）。
+3. **Phase 3**: `RaceCourseSpec`、Margin/OriginalFinishPosition/コーナー通過順位/EstimatedLast3F・Average1F、馬体重・人気・斤量・賞金・払戻の厳格Parse（依頼書4節フォローアップのFrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeight列解析を含む）。
 4. **Phase 4**: 依頼書32節のFixtureテスト網羅と例外種別・Fieldの検証強化。
 
 各フェーズは独立してビルド・テスト可能な単位でコミットする。
@@ -115,11 +122,18 @@
 - `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、95件（実サイトE2Eテストは除外）
 - `dotnet build`（ソリューション全体）: 成功、0 Warning / 0 Error
 
+### Phase 2 検証（本コミット）
+
+- `dotnet build`（ソリューション全体）: 成功、0 Warning / 0 Error
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、100件（Phase 1の95件 + Phase 2で追加した`RaceCardLookupPeriod`関連テスト5件。実サイトE2Eテストは除外）
+- `HorseRacingPrediction.Collector.Tests` 側の `FakeJraNavigator`（`IJraNavigator`実装）にも `IsWithinRaceCardLookupPeriod` を追加したため、`HorseRacingPrediction.Collector.Tests` を含むソリューション全体のビルドが通ることを確認済み（`dotnet build`）。
+
 ## Deviations and follow-up
 
-- Phase 2〜4は本ドキュメント作成時点で未着手。着手時は本ドキュメントの「Technical impact」「Acceptance criteria」表を更新すること。
+- Phase 3〜4は本ドキュメント作成時点で未着手。着手時は本ドキュメントの「Technical impact」「Acceptance criteria」表を更新すること。
 - 依頼書33節が求める「実装中に未考慮パターンを発見した場合は想像で補完しない」方針に基づき、Phase 3以降でFixtureにない表記（新しい天候表記、新しい券種等）を発見した場合は、本ドキュメントに調査結果を追記してからモデル・Parser・テストを拡張する。
 - この環境（開発コンテナ）に `dotnet` SDKが未インストールだったため、`dotnet-install.sh` で `/home/user/.dotnet` へローカルインストールした。CI環境のSDKインストール手順とは独立しており、本コンテナ固有の対応。
+- **Phase 2で確認した既知の残課題**: `RaceResultPageParser` は `FrameNumber`（枠番）・`AssignedWeight`（斤量）・`TrainerName`（調教師名）・`Popularity`（人気）・`BodyWeight`/`BodyWeightChange`（馬体重）の列を解析していない（実サイトのレース結果ページにおけるこれらの列見出し・セル書式が本セッションでは未確認のため、依頼書33節の方針に基づき推測でのregex追加を避けた）。API契約（`RaceResultBulkEntry`）とワークフロー側の送信経路は既に用意済みのため、実サイト確認後はParserの列検出・値解析・対応テストを追加するだけで復元範囲を拡張できる。Phase 3で対応する。
 
 ---
 

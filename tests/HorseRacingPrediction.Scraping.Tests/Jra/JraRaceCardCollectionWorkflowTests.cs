@@ -264,6 +264,32 @@ public sealed class JraRaceCardCollectionWorkflowTests
     }
 
     [TestMethod]
+    public async Task CollectAsync_RaceCardLookupPeriod外_レース一覧取得を試みず空結果を返す()
+    {
+        // 依頼書3.1節: RaceCardLookupPeriod（既定5日）より古い対象日は、出馬表探索
+        // 自体（レース一覧取得を含む）を試みず早期にスキップする。
+        var browser = new FakeWebBrowser();
+        var navigator = new FakeJraNavigator(new Dictionary<RaceId, IJraPage>())
+        {
+            RaceCardLookupPeriodResult = false,
+        };
+        var pageReader = new JraPageReader(browser, []);
+        var session = new JraSession(browser, navigator, pageReader);
+        var writeService = new FakeDataCollectionWriteService();
+
+        await using var _ = session;
+        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(Date, Course);
+
+        // スキップも依頼書3.3節の「RaceCard取得失敗の許容」と同じ「RaceCardなし」
+        // として扱い、エラーにはしない。
+        Assert.IsEmpty(result.RaceIds);
+        Assert.IsEmpty(result.Errors);
+        Assert.IsEmpty(result.Races);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_想定外ページ_JraCollectionExceptionを投げる()
     {
         var browser = new FakeWebBrowser();

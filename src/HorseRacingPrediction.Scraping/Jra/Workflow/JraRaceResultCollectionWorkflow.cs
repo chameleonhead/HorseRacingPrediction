@@ -132,6 +132,11 @@ public sealed class JraRaceResultCollectionWorkflow
             errors.Add("レース確定宣言エラー: 1着馬が結果に見つかりませんでした。");
         }
 
+        // 依頼書4節: 明確な過去レースでは出馬表を探しに行かず、レース結果ページから
+        // 出走馬相当情報（馬名・性齢・斤量・騎手・調教師等）も復元する。RaceCardが
+        // 別途取得できていた場合はそちら（UpsertRaceEntryAsync経由）の情報が優先されるが、
+        // RaceCardなしでもRaceEntry相当の状態を保存できるよう、ここで解析済みの
+        // 出走馬属性をRaceResultBulkEntryにも含めて送信する。
         var entries = validResults
             .Select(entry => new RaceResultBulkEntry(
                 entry.HorseNumber,
@@ -140,7 +145,17 @@ public sealed class JraRaceResultCollectionWorkflow
                 MarginText: entry.MarginRaw,
                 LastThreeFurlongTime: null,
                 AbnormalResultCode: ToAbnormalResultCode(entry.ResultStatus),
-                PrizeMoney: null))
+                PrizeMoney: null,
+                HorseName: entry.HorseName,
+                JockeyName: entry.JockeyName,
+                TrainerName: entry.TrainerName,
+                GateNumber: entry.FrameNumber,
+                AssignedWeight: entry.AssignedWeight,
+                SexCode: entry.Sex is { } sex ? HorseSexText.ToSexCode(sex) : null,
+                Age: entry.Age,
+                Popularity: entry.Popularity,
+                BodyWeight: entry.BodyWeight,
+                BodyWeightChange: entry.BodyWeightChange))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)

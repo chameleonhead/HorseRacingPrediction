@@ -115,6 +115,15 @@ internal sealed class FakeJraNavigator : IJraNavigator
     public Task<IJraPage> ToHistoricalRaceSearchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
+    /// <summary>
+    /// <see cref="IsWithinRaceCardLookupPeriod"/> の戻り値。既定はtrue（常に探索対象期間内）。
+    /// RaceCardLookupPeriodによる早期スキップをテストする場合はfalseに設定する。
+    /// </summary>
+    public bool RaceCardLookupPeriodResult { get; set; } = true;
+
+    public bool IsWithinRaceCardLookupPeriod(DateOnly date)
+        => RaceCardLookupPeriodResult;
+
     public List<(DateOnly Date, RaceCourse Course)> RequestedRaceResultLists { get; } = [];
 
     /// <summary>

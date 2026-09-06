@@ -295,6 +295,81 @@ public sealed class JraNavigatorTests
             () => navigator.ToRaceCardAsync(raceId));
     }
 
+    // 依頼書3.1節: RaceCardLookupPeriod（既定5日）に関するテスト。
+    // 「今週開催」判定ではなく、古いレースについて出馬表探索自体を試みないための
+    // 早期スキップであることを確認する。
+
+    [TestMethod]
+    public void IsWithinRaceCardLookupPeriod_WithinDefaultPeriod_ReturnsTrue()
+    {
+        var browser = new FakeWebBrowser();
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 10));
+
+        // 今日-5日ちょうど（境界）はまだ探索対象期間内。
+        Assert.IsTrue(navigator.IsWithinRaceCardLookupPeriod(new DateOnly(2026, 9, 5)));
+        // 未来日も当然対象期間内。
+        Assert.IsTrue(navigator.IsWithinRaceCardLookupPeriod(new DateOnly(2026, 9, 20)));
+    }
+
+    [TestMethod]
+    public void IsWithinRaceCardLookupPeriod_OlderThanDefaultPeriod_ReturnsFalse()
+    {
+        var browser = new FakeWebBrowser();
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 10));
+
+        // 今日-6日は探索対象期間外。
+        Assert.IsFalse(navigator.IsWithinRaceCardLookupPeriod(new DateOnly(2026, 9, 4)));
+    }
+
+    [TestMethod]
+    public void IsWithinRaceCardLookupPeriod_CustomPeriod_UsesConfiguredValue()
+    {
+        var browser = new FakeWebBrowser();
+
+        // 期間は後から容易に変更できる（依頼書3.1節）ことを、コンストラクタ引数で
+        // 差し替え可能な internal コンストラクタで確認する。
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 10),
+            raceCardLookupPeriodDays: 1);
+
+        Assert.IsTrue(navigator.IsWithinRaceCardLookupPeriod(new DateOnly(2026, 9, 9)));
+        Assert.IsFalse(navigator.IsWithinRaceCardLookupPeriod(new DateOnly(2026, 9, 8)));
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_DateOlderThanRaceCardLookupPeriod_SkipsWithoutNavigating()
+    {
+        var browser = new FakeWebBrowser();
+        // カレンダー等、一切のスナップショットを設定しない。呼ばれた場合は
+        // FakeWebBrowser側の未設定エラーで検出できる（早期スキップの確認）。
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 10));
+
+        // 今日(9/10)から6日前(9/4)はRaceCardLookupPeriod（既定5日）の対象外。
+        var raceId = new RaceId(new DateOnly(2026, 9, 4), RaceCourse.Nakayama, 11);
+
+        var ex = await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToRaceCardAsync(raceId));
+
+        Assert.AreEqual(JraNavigationFailureReason.OutOfDisplayedRange, ex.Reason);
+        Assert.AreEqual(0, browser.NavigatedUrls.Count);
+    }
+
     private const string ResultSelectionUrl = "https://www.jra.go.jp/JRADB/accessS.html";
 
     [TestMethod]
