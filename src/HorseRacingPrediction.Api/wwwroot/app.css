@@ -105,7 +105,11 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
 .filter-toolbar > .filter-field > * { box-sizing: border-box; width: 100%; }
 .filter-toolbar > .filter-field fluent-text-field, .filter-toolbar > .filter-field fluent-select, .filter-toolbar > fluent-button { min-height: 40px; }
 .filter-toolbar > .filter-field > label { color: var(--neutral-foreground-hint); font-size: var(--type-ramp-minus-1-font-size); }
-.filter-toolbar > fluent-button, .filter-toolbar > .filter-action { justify-self: start; align-self: end; width: fit-content; }
+/* ボタンは常に自分専用の行いっぱいを占有させる（grid-column: 1 / -1）。auto-fit は
+   トラック数が画面幅で変わるため、ボタンをフィールドと同じ行に共存させると、その回の
+   トラック幅がボタンの実際の幅より狭くなった場合に隣接するフィールドへはみ出して重なって
+   見えることがある。専用行にすることでどの幅でも絶対に重ならない。 */
+.filter-toolbar > fluent-button, .filter-toolbar > .filter-action { grid-column: 1 / -1; justify-self: end; align-self: center; width: fit-content; margin-top: 4px; }
 .filter-toolbar > .filter-action fluent-button { width: auto; }
 .filter-card > .view-tabs { margin-bottom: 12px; }
 .filter-card > .action-row { margin-bottom: 12px; }
