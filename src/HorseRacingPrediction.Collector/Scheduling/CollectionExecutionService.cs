@@ -50,6 +50,7 @@ public sealed class CollectionExecutionService : BackgroundService
     private readonly JraRaceResultCollectionWorkflowFactory _raceResultWorkflowFactory;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
     private readonly CollectionExecutionTrigger _executionTrigger;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
 
     public CollectionExecutionService(
@@ -61,6 +62,7 @@ public sealed class CollectionExecutionService : BackgroundService
         JraRaceResultCollectionWorkflowFactory raceResultWorkflowFactory,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
         CollectionExecutionTrigger executionTrigger,
+        IHttpClientFactory httpClientFactory,
         ILogger<CollectionExecutionService> logger)
     {
         _options = options.Value;
@@ -71,6 +73,7 @@ public sealed class CollectionExecutionService : BackgroundService
         _raceResultWorkflowFactory = raceResultWorkflowFactory;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
         _executionTrigger = executionTrigger;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -284,6 +287,8 @@ public sealed class CollectionExecutionService : BackgroundService
                         ex.Message,
                         CancellationToken.None),
                     job.DeduplicationKey).ConfigureAwait(false);
+
+                await PausePipelineIfFatalErrorAsync(ex, job.DeduplicationKey).ConfigureAwait(false);
             }
         }
     }
@@ -330,6 +335,9 @@ public sealed class CollectionExecutionService : BackgroundService
                     }
                 }
 
+                await UpdateResultDayCollectionStatusAsync(payload.ProviderType, payload.RaceDate, results, now, cancellationToken)
+                    .ConfigureAwait(false);
+
                 await _stateStore.CompleteJobAsync(AgentJobType.RaceResultCollection, job.DeduplicationKey, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -355,6 +363,8 @@ public sealed class CollectionExecutionService : BackgroundService
                         ex.Message,
                         CancellationToken.None),
                     job.DeduplicationKey).ConfigureAwait(false);
+
+                await PausePipelineIfFatalErrorAsync(ex, job.DeduplicationKey).ConfigureAwait(false);
             }
         }
     }
@@ -434,7 +444,7 @@ public sealed class CollectionExecutionService : BackgroundService
                     "[Diag] 成績収集: 競馬場ぶん一覧取得が完了しました。Date={Date} Course={Course} ElapsedMs={ElapsedMs} Kind={Kind}",
                     raceDate, course, courseStopwatch.ElapsedMilliseconds, listPage.Kind);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 _logger.LogWarning(
                     "[Diag] 成績収集: 競馬場ぶん一覧取得が例外で終了しました。Date={Date} Course={Course} ElapsedMs={ElapsedMs} ExceptionType={ExceptionType}",
@@ -587,6 +597,51 @@ public sealed class CollectionExecutionService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// 原因不明の5xx（502以外）を検知した場合、この1件のジョブを失敗させるだけでなく、
+    /// 収集パイプライン全体を一時停止する。他のジョブ・他の日付・他の競馬場の処理を
+    /// 続けても同じAPI側の異常で失敗し続けるだけであり、無意味かつ調査を困難にする
+    /// （原因特定前に大量のジョブが同じエラーで失敗し続けるログで埋もれる）ため、
+    /// 既存の一時停止機構（<see cref="HorseRacingPrediction.Api.CollectionController.CollectionMaintenanceState"/>、
+    /// SQSキューのパージ + 以降のLeaseリクエストを503で拒否）を、この呼び出し元（Collector）から
+    /// 既存の /api/admin/jobs/pause を呼び出すことでトリガーする。
+    /// パウズ要求自体の失敗（既に一時停止済み＝409 Conflict等）はログのみで握りつぶし、
+    /// このジョブの失敗処理自体には影響させない。
+    /// </summary>
+    private async Task PausePipelineIfFatalErrorAsync(Exception ex, string jobKey)
+    {
+        if (!ApiFailureClassifier.IsFatalServerError(ex))
+        {
+            return;
+        }
+
+        _logger.LogCritical(
+            ex,
+            "[収集実行] 原因不明の5xxエラーを検知したため、収集パイプライン全体を一時停止します。原因調査後、/api/admin/jobs/resume で再開してください。JobKey={JobKey}",
+            jobKey);
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ProcessingState");
+            using var response = await client.PostAsync("/api/admin/jobs/pause", content: null, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _logger.LogInformation("[収集実行] 収集パイプラインは既に一時停止済みです。");
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+                _logger.LogWarning("[収集実行] 収集パイプラインを一時停止しました（SQSキューをパージし、以降のLeaseリクエストは503を返します）。");
+            }
+        }
+        catch (Exception pauseEx)
+        {
+            _logger.LogError(pauseEx, "[収集実行] 収集パイプラインの一時停止要求自体が失敗しました。");
+        }
+    }
+
     public Task RunTaskAsync(string jobType, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -710,6 +765,8 @@ public sealed class CollectionExecutionService : BackgroundService
                     AppendRequestId(ex.Message, requestId),
                     CancellationToken.None),
                 notification.DeduplicationKey).ConfigureAwait(false);
+
+            await PausePipelineIfFatalErrorAsync(ex, notification.DeduplicationKey).ConfigureAwait(false);
         }
 
         return true;
@@ -841,8 +898,61 @@ public sealed class CollectionExecutionService : BackgroundService
             }
         }
 
+        await UpdateResultDayCollectionStatusAsync(payload.ProviderType, payload.RaceDate, results, now, cancellationToken)
+            .ConfigureAwait(false);
+
         await _stateStore.CompleteCollectionTaskAsync(
             AgentJobType.RaceResultCollection, task.DeduplicationKey, task.LeaseToken, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// その日のレース結果収集がすべてエラーなく完了していれば
+    /// <see cref="ResultDayCollectionState.Complete"/> として記録し、
+    /// <see cref="ScrapingRegistrationService"/> が次回以降この日付の再登録
+    /// （＝全レース・全馬の結果を再宣言し、既に記録済みの分に大量の409を
+    /// 発生させ続ける無駄な再処理）をスキップできるようにする。
+    /// 1件でも開催があったのにエラーが残っている場合は<see cref="ResultDayCollectionState.Incomplete"/>
+    /// として記録し、次回の登録サイクルで再試行させる。
+    /// </summary>
+    private async Task UpdateResultDayCollectionStatusAsync(
+        string providerType,
+        DateOnly raceDate,
+        IReadOnlyList<RaceResultCollectionResult> results,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (results.Count == 0)
+        {
+            // この日は開催なし。完了/未完了どちらの判定も不要（そもそも次回以降も
+            // カレンダー確認で開催なしと分かればジョブ自体が登録されなくなる）。
+            return;
+        }
+
+        var errorCount = results.Sum(x => x.Errors.Count);
+        var status = errorCount == 0 ? ResultDayCollectionState.Complete : ResultDayCollectionState.Incomplete;
+
+        try
+        {
+            await _stateStore.UpsertResultDayCollectionStatusAsync(
+                providerType,
+                raceDate,
+                status,
+                expectedRaceCount: results.Count,
+                completedRaceCount: results.Count(x => x.Errors.Count == 0),
+                incompleteReason: errorCount > 0 ? $"{errorCount}件のエラーが残っています。" : null,
+                lastCompletedAt: status == ResultDayCollectionState.Complete ? now : null,
+                retryAfter: null,
+                lastError: null,
+                now: now,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // 完了状態の記録に失敗しても、成績収集自体は既に完了しているため
+            // ジョブそのものを失敗させる必要はない（次回の登録サイクルで
+            // 再登録されるだけで、致命的ではない）。
+            _logger.LogWarning(ex, "[収集実行] 成績収集の日次完了状態の記録に失敗しました。Date={Date}", raceDate);
+        }
     }
 
     private static bool ShouldRetryRaceCardCollection(

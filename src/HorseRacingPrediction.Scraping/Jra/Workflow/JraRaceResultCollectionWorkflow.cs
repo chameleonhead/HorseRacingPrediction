@@ -23,6 +23,20 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// 天候・馬場状態・払戻（<see cref="IDataCollectionWriteService.DeclareRacePayoutsAsync"/>）は
 /// 結果ページパーサーがページから抽出できた場合のみ記録する。実ページのHTML構造は
 /// 未調査のため、抽出できなかった項目は記録をスキップし、着順登録自体は失敗させない。
+///
+/// <para>
+/// 成績収集（本ワークフロー）は出馬表収集（<see cref="JraRaceCardCollectionWorkflow"/>）とは
+/// 独立して過去日を遡って動作しうる（<c>ResultLookbackDays</c>）。一方、出馬表収集は
+/// 前方参照のみ（<c>ScheduleLookaheadDays</c>）であるため、出馬表収集が一度も行われず
+/// <see cref="RaceAggregate"/> がCreateすらされていない（さらに開催選択カードが
+/// Publishされていない）レースの成績・天候・馬場状態を先に収集しようとするケースが
+/// 実運用で確認された（"Race is not created." による500エラー）。そのため、
+/// 結果ページから判明する範囲のメタデータ（レース名・出走頭数）で
+/// <see cref="IDataCollectionWriteService.UpsertRaceAsync"/>（作成 or 更新、
+/// 出走頭数指定時はカード公開まで行う冪等な操作）を必ず先に呼び、レースが
+/// 存在すること・結果宣言可能な状態であることを保証してから、結果・天候・馬場状態・
+/// 払戻をまとめて登録する。
+/// </para>
 /// </summary>
 public sealed class JraRaceResultCollectionWorkflow
     : IJraRaceResultCollectionWorkflow
@@ -64,6 +78,29 @@ public sealed class JraRaceResultCollectionWorkflow
         var savedHorseNumbers = new List<int>();
         var errors = new List<string>();
 
+        try
+        {
+            await _writeService.UpsertRaceAsync(
+                raceDate: raceId.Date.ToString("yyyy-MM-dd"),
+                racecourseCode: racecourseName,
+                raceNumber: raceId.Number,
+                raceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
+                entryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
+                gradeCode: null,
+                surfaceCode: null,
+                distanceMeters: null,
+                directionCode: null,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
+        {
+            // レース自体が作成・カード公開できていなければ、この後の結果・天候等の登録は
+            // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、
+            // ここで打ち切って分かりやすい1件のエラーにまとめる。
+            errors.Add($"レース登録エラー: {ex.Message}");
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors);
+        }
+
         var winningEntry = resultPage.Results.FirstOrDefault(e => e.FinishPosition == 1);
         if (winningEntry is not null)
         {
@@ -76,7 +113,7 @@ public sealed class JraRaceResultCollectionWorkflow
                     winningHorseId: null,
                     cancellationToken: cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 errors.Add($"レース確定宣言エラー: {ex.Message}");
             }
@@ -105,7 +142,7 @@ public sealed class JraRaceResultCollectionWorkflow
 
                 savedHorseNumbers.Add(entry.HorseNumber);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 errors.Add($"着順記録エラー: HorseNumber={entry.HorseNumber} — {ex.Message}");
             }
@@ -126,7 +163,7 @@ public sealed class JraRaceResultCollectionWorkflow
                     windSpeedMeterPerSecond: null,
                     cancellationToken: cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 errors.Add($"天候記録エラー: {ex.Message}");
             }
@@ -144,7 +181,7 @@ public sealed class JraRaceResultCollectionWorkflow
                     goingDescriptionText: resultPage.TrackConditionText,
                     cancellationToken: cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 errors.Add($"馬場状態記録エラー: {ex.Message}");
             }
@@ -163,7 +200,7 @@ public sealed class JraRaceResultCollectionWorkflow
                     trifectaPayoutsJson: ToPayoutJson(resultPage.Payouts.TrifectaPayouts),
                     cancellationToken: cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 errors.Add($"払戻記録エラー: {ex.Message}");
             }

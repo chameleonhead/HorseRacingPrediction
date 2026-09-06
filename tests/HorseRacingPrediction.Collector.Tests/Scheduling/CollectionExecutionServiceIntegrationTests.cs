@@ -190,6 +190,59 @@ public sealed class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task RaceResultJob_WhenAllRacesSucceed_MarksDayAsComplete()
+    {
+        // 成績収集が1件もエラーなく完了した日は ResultDayCollectionState.Complete として
+        // 記録され、ScrapingRegistrationService が次回以降この日付を再登録せずスキップできる
+        // ようにする（既に記録済みの結果を再宣言し続けて409を量産する無駄を避けるため）。
+        var now = new DateTimeOffset(2026, 5, 16, 3, 0, 0, TimeSpan.Zero);
+        var raceDate = new DateOnly(2026, 5, 16);
+        var stateStore = CreateStore();
+
+        var scheduleWorkflow = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = _ => new[] { RaceCourse.Nakayama }
+        };
+
+        var raceId = new RaceId(raceDate, RaceCourse.Nakayama, 1);
+        var raceList = new JraRaceListPage(
+            "https://example.jra.go.jp/result-list/nakayama",
+            raceDate,
+            RaceCourse.Nakayama,
+            new[] { new RaceSummary(raceId, "テストレース", new TimeOnly(15, 40), null, null) });
+
+        var sessionFactory = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceResultListFactory = (_, _) => raceList,
+            },
+        };
+
+        var resultWorkflow = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(
+                id,
+                $"race-{id.Date:yyyyMMdd}-{id.Course}-{id.Number}",
+                new[] { 1 },
+                Array.Empty<string>()),
+        };
+
+        var service = CreateService(
+            stateStore, scheduleWorkflow, new FakeJraRaceCardCollectionWorkflow(), resultWorkflow, sessionFactory);
+
+        var payload = new RaceResultCollectionJobPayload(raceDate, "JRA", AgentWorkMode.Idle);
+        var key = AgentJobKeyFactory.BuildRaceResultCollectionKey("JRA", raceDate);
+        await stateStore.EnqueueJobAsync(AgentJobType.RaceResultCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
+
+        await service.RunTaskAsync(AgentJobType.RaceResultCollection, CancellationToken.None);
+
+        var dayStatus = await stateStore.GetResultDayCollectionStatusAsync("JRA", raceDate, CancellationToken.None);
+        Assert.IsNotNull(dayStatus);
+        Assert.AreEqual(ResultDayCollectionState.Complete, dayStatus!.Status);
+    }
+
+    [TestMethod]
     public async Task RunSingleTaskAsync_WhenLeaseAcquired_ExecutesAndCompletesJob()
     {
         // AcquireCollectionTaskAsync は実際の DateTimeOffset.UtcNow で AvailableAt を判定するため、
@@ -349,7 +402,18 @@ public sealed class CollectionExecutionServiceIntegrationTests
             _ => resultWorkflow,
             planner,
             new CollectionExecutionTrigger(),
+            new NoOpHttpClientFactory(),
             NullLogger<CollectionExecutionService>.Instance);
+    }
+
+    /// <summary>
+    /// テストでは実際にAPIへ一時停止要求を送る必要はない
+    /// （<see cref="CollectionExecutionService"/> の致命的5xx検知パスは別途フェイクの
+    /// 例外で検証する想定）ため、到達不能なアドレスを指す最小限のダミーを返す。
+    /// </summary>
+    private sealed class NoOpHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new() { BaseAddress = new Uri("http://localhost:0") };
     }
 
     private ProcessingStateStore CreateStore()

@@ -177,6 +177,23 @@ public sealed class ScrapingRegistrationService : BackgroundService
 
                 foreach (var date in resultCandidateDates.Distinct().OrderBy(x => x))
                 {
+                    // 同じ日付を毎登録サイクルでReadyへ戻す（ScheduleJobAsync）と、その日の
+                    // 全レース・全馬の結果を毎回宣言し直すことになり、既に確定済みのデータに
+                    // 対して大量の409（"既に記録済み"）を発生させ続ける無駄なコストになる
+                    // （実運用ログで確認済み）。既にその日の成績収集が完了済み
+                    // （ResultDayCollectionState.Complete）と分かっている場合は再登録を
+                    // スキップし、後からの訂正取り込みが必要な場合のみ手動再実行に委ねる。
+                    var dayStatus = await _stateStore
+                        .GetResultDayCollectionStatusAsync(JraProviderType, date, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (dayStatus?.Status == ResultDayCollectionState.Complete)
+                    {
+                        _logger.LogInformation(
+                            "[収集登録] 成績収集は既に完了済みのためスキップします。Date={Date}",
+                            date);
+                        continue;
+                    }
+
                     var payload = new RaceResultCollectionJobPayload(date, JraProviderType, AgentWorkMode.Idle);
                     var key = AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, date);
                     var priority = CalculateRaceResultPriority(date, today);
