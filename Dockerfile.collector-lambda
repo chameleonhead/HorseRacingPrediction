@@ -2,10 +2,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY . .
+# playwright/dotnet ランタイムイメージ側の .NET ランタイムのバージョンに依存しないよう、
+# 自己完結（self-contained）で発行する。フレームワーク依存発行のままだと、ベースイメージに
+# net10.0 ランタイムが存在しない場合（例: Playwright公式イメージがまだ.NET10へ追従していない）、
+# dotnet起動直後（数十ms）にRuntime.ExitErrorでLambdaが即失敗する。
 RUN dotnet publish src/HorseRacingPrediction.Collector/HorseRacingPrediction.Collector.csproj \
-    -c Release -o /opt/collector /p:UseAppHost=false
+    -c Release -o /opt/collector -r linux-x64 --self-contained true \
+    /p:PublishReadyToRun=false
 
-FROM mcr.microsoft.com/playwright/dotnet:v1.60.0-noble
+FROM mcr.microsoft.com/playwright/dotnet:v1.62.0-noble
 WORKDIR /var/task
 
 RUN apt-get update \
@@ -14,7 +19,7 @@ RUN apt-get update \
 
 COPY --from=build /opt/collector ./
 COPY deploy/lambda-bootstrap /var/runtime/bootstrap
-RUN chmod 0755 /var/runtime/bootstrap /var/task/.playwright/node/linux-x64/node \
+RUN chmod 0755 /var/runtime/bootstrap /var/task/HorseRacingPrediction.Collector /var/task/.playwright/node/linux-x64/node \
     && test -x /var/task/.playwright/node/linux-x64/node
 
 ENV ASPNETCORE_URLS=http://127.0.0.1:8080
