@@ -982,11 +982,20 @@ public sealed class JraNavigator
             _ => throw new ArgumentOutOfRangeException(nameof(course)),
         };
 
+    private static readonly Regex SchemePrefixRegex = new(
+        @"^[a-zA-Z][a-zA-Z0-9+.\-]*:",
+        RegexOptions.Compiled);
+
     internal static string? ResolveUrl(
         string? currentUrl,
         string href)
     {
-        if (Uri.TryCreate(
+        // Uri.TryCreate(href, UriKind.Absolute, ...) は "/keiba/calendar/" のような
+        // 相対パスであっても、環境によっては file:// スキームの絶対URIとして誤判定
+        // してしまうことがある。href が実際にスキーム（"https:" 等）を持つ場合のみ
+        // 絶対URIとして扱い、それ以外は常に currentUrl を基準に相対解決する。
+        if (SchemePrefixRegex.IsMatch(href) &&
+            Uri.TryCreate(
                 href,
                 UriKind.Absolute,
                 out var absolute))
