@@ -73,6 +73,18 @@ public sealed class JraRaceResultCollectionWorkflow
                 $"レース結果ページを取得できませんでした。 Kind={resultPageResult.Kind}, Url={resultPageResult.Url}");
         }
 
+        // 依頼書8節: Navigationで要求したRaceIdと、ページ自身から解析したRaceIdを
+        // 必ず照合する。HTMLとして正常なページが取得できていても、別レースであれば
+        // 成功扱いにしない。
+        if (resultPage.RaceId != raceId)
+        {
+            throw new JraRaceIdentityMismatchException(
+                JraPageKind.RaceResult,
+                resultPage.Url,
+                raceId.ToString(),
+                resultPage.RaceId.ToString());
+        }
+
         var racecourseName = RaceCourseNames.GetJraName(raceId.Course);
         var dataCollectionRaceId = DeterministicIdGenerator.BuildRaceId(
             raceId.Date, racecourseName, raceId.Number);
@@ -120,15 +132,32 @@ public sealed class JraRaceResultCollectionWorkflow
             errors.Add("レース確定宣言エラー: 1着馬が結果に見つかりませんでした。");
         }
 
+        // 依頼書4節: 明確な過去レースでは出馬表を探しに行かず、レース結果ページから
+        // 出走馬相当情報（馬名・性齢・斤量・騎手・調教師等）も復元する。RaceCardが
+        // 別途取得できていた場合はそちら（UpsertRaceEntryAsync経由）の情報が優先されるが、
+        // RaceCardなしでもRaceEntry相当の状態を保存できるよう、ここで解析済みの
+        // 出走馬属性をRaceResultBulkEntryにも含めて送信する。
         var entries = validResults
             .Select(entry => new RaceResultBulkEntry(
                 entry.HorseNumber,
                 entry.FinishPosition,
                 FormatTime(entry.Time),
-                MarginText: null,
+                MarginText: entry.MarginRaw,
                 LastThreeFurlongTime: null,
-                AbnormalResultCode: null,
-                PrizeMoney: null))
+                AbnormalResultCode: ToAbnormalResultCode(entry.ResultStatus),
+                PrizeMoney: null,
+                HorseName: entry.HorseName,
+                JockeyName: entry.JockeyName,
+                TrainerName: entry.TrainerName,
+                GateNumber: entry.FrameNumber,
+                AssignedWeight: entry.AssignedWeight,
+                SexCode: entry.Sex is { } sex ? HorseSexText.ToSexCode(sex) : null,
+                Age: entry.Age,
+                Popularity: entry.Popularity,
+                BodyWeight: entry.BodyWeight,
+                BodyWeightChange: entry.BodyWeightChange,
+                OriginalFinishPosition: entry.OriginalFinishPosition,
+                IsDeadHeat: entry.IsDeadHeat))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
@@ -159,9 +188,16 @@ public sealed class JraRaceResultCollectionWorkflow
             RaceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
             EntryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
             GradeCode: null,
-            SurfaceCode: null,
-            DistanceMeters: null,
-            DirectionCode: null,
+            SurfaceCode: resultPage.CourseSpec is { } courseSpec
+                ? string.Join("→", courseSpec.Surfaces.Select(ToSurfaceCode))
+                : null,
+            DistanceMeters: resultPage.CourseSpec?.DistanceMeters,
+            DirectionCode: resultPage.CourseSpec?.Direction switch
+            {
+                CourseDirection.Left => "左",
+                CourseDirection.Right => "右",
+                _ => null,
+            },
             WinningHorseName: winningEntry?.HorseName,
             DeclaredAt: null,
             Entries: entries,
@@ -210,6 +246,25 @@ public sealed class JraRaceResultCollectionWorkflow
         => payouts.Count == 0
             ? null
             : payouts.Select(p => new RaceResultBulkPayoutEntry(p.Combination, p.Amount)).ToList();
+
+    private static string ToSurfaceCode(CourseSurface surface) =>
+        surface switch
+        {
+            CourseSurface.Turf => "芝",
+            CourseSurface.Dirt => "ダート",
+            _ => throw new ArgumentOutOfRangeException(nameof(surface), surface, null),
+        };
+
+    private static string? ToAbnormalResultCode(ResultStatus status) =>
+        status switch
+        {
+            ResultStatus.Finished => null,
+            ResultStatus.Cancelled => "取消",
+            ResultStatus.Excluded => "除外",
+            ResultStatus.DidNotFinish => "中止",
+            ResultStatus.Disqualified => "失格",
+            _ => null,
+        };
 
     private static string? FormatTime(TimeSpan? time) =>
         time is null

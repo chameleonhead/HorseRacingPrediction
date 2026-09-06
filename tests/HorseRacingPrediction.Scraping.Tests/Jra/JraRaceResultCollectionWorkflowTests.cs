@@ -39,9 +39,9 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
-            new RaceResultEntry(2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
-            new RaceResultEntry(3, 1, "テストホースC", "テスト騎手C", TimeSpan.FromSeconds(85.3)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
+            new RaceResultEntry(ResultStatus.Finished, 3, 1, "テストホースC", "テスト騎手C", TimeSpan.FromSeconds(85.3)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -91,8 +91,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
-            new RaceResultEntry(2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -116,8 +116,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
-            new RaceResultEntry(2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -145,7 +145,7 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -168,8 +168,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
-            new RaceResultEntry(2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -192,8 +192,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(1, 0, string.Empty, null, TimeSpan.FromSeconds(84.5)),
-            new RaceResultEntry(2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 0, string.Empty, null, TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
         };
         var resultPage = CreateResultPage(TestRaceId, entries);
 
@@ -221,6 +221,28 @@ public sealed class JraRaceResultCollectionWorkflowTests
 
         await Assert.ThrowsExactlyAsync<ArgumentException>(
             () => workflow.CollectAsync(unknownRaceId));
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_ページから解析したRaceIdが要求と異なる場合はJraRaceIdentityMismatchExceptionを投げる()
+    {
+        // 依頼書8節: HTMLとして正常なページが取得できていても、別レースであれば
+        // 成功扱いにしない。
+        var mismatchedRaceId = new RaceId(Date, Course, 6);
+        var resultPage = CreateResultPage(
+            mismatchedRaceId,
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)));
+
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
+
+        await using var _ = session;
+        var workflow = new JraRaceResultCollectionWorkflow(session, writeService);
+
+        await Assert.ThrowsExactlyAsync<JraRaceIdentityMismatchException>(
+            () => workflow.CollectAsync(TestRaceId));
+
+        Assert.IsEmpty(writeService.DeclareRaceResultBulkCalls);
     }
 
     [TestMethod]

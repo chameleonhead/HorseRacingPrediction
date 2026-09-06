@@ -41,4 +41,19 @@ public interface IJraNavigator
 
     Task<IJraPage> ToHistoricalRaceSearchAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 対象日がRaceCard（出馬表）探索対象期間（依頼書3.1節の
+    /// <c>RaceCardLookupPeriod</c>）内かどうかを判定する。
+    ///
+    /// これは「今週開催」を判定するものではなく、古いレースについて無意味に
+    /// 出馬表探索（<see cref="ToRaceListAsync"/> / <see cref="ToRaceCardAsync"/>）を
+    /// 試みないための最適化に過ぎない（依頼書3.1節）。最終的にRaceCardを取得するか
+    /// どうかは、この期間ではなく「出馬表に対象レースが実在するか」で判定する
+    /// （依頼書3.2節）。RaceResult Navigationの経路分岐（Current/Recent/Historical、
+    /// ±3日/±92日）とは無関係の、完全に独立した判定であり、この5日という値を
+    /// RaceResult側の分岐条件として流用してはならない（依頼書5節）。
+    /// </summary>
+    bool IsWithinRaceCardLookupPeriod(
+        DateOnly date);
 }

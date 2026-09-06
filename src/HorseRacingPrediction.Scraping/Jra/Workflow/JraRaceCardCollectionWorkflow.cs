@@ -36,6 +36,19 @@ public sealed class JraRaceCardCollectionWorkflow
                 nameof(course));
         }
 
+        // 依頼書3.1節: RaceCardLookupPeriod（既定5日、`IJraNavigator.IsWithinRaceCardLookupPeriod`）
+        // より古い対象日は、出馬表探索自体（レース一覧取得を含む）を試みず早期にスキップする。
+        // これは古いレースについて無意味に出馬表を探索しないための最適化であり、「今週開催」
+        // 判定ではない（依頼書3.2節: 最終的な取得可否は出馬表への実在有無で決める）。
+        // RaceResult Navigation側の期間しきい値（±3日/±92日、JraNavigator内部のIsCurrentRacePeriod/
+        // IsRecentRacePeriod）とは無関係の別ロジックであり、本判定の値をそちらへ流用しない
+        // （依頼書5節）。スキップは既存の「RaceCard取得失敗の許容」（依頼書3.3節）と同じ
+        // 「RaceCardなし」として扱い、Collector全体を失敗させない。
+        if (!_session.Navigate.IsWithinRaceCardLookupPeriod(date))
+        {
+            return new RaceCardCollectionResult(date, course, [], [], []);
+        }
+
         JraRaceListPage raceList;
         try
         {
