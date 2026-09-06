@@ -15,7 +15,7 @@ public static class JobManagementEndpointExtensions
     {
         var group = endpoints.MapGroup("/api/admin/jobs").WithTags("Job Management API");
         group.MapGet("/queue-state", (CollectionMaintenanceState maintenance) =>
-            Results.Ok(new { isPaused = maintenance.IsActive }));
+            Results.Ok(new { isPaused = maintenance.IsActive, collectorOnly = maintenance.IsCollectorOnly }));
         group.MapGet("", async (string? jobType, AgentJobStatus? status, int? limit, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));
         group.MapGet("/search", async (string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int? page, int? pageSize, ProcessingStateStore store, CancellationToken token) =>
@@ -39,7 +39,12 @@ public static class JobManagementEndpointExtensions
         });
         group.MapPost("/pause", async (ICollectionTaskQueue queue, CollectionMaintenanceState maintenance, ProcessingStateStore store, CancellationToken token) =>
         {
-            if (!maintenance.TryBegin()) return Results.Conflict();
+            // collectorOnly: true — この一時停止はCollectorが原因不明の致命的エラーを
+            // 検知した際に自動で呼び出すものであり、影響範囲はCollectorが最初に呼ぶ
+            // 内部RPCエンドポイントのみに限定する。管理画面からのレース補正・メモ登録
+            // 等の書き込みは、一時停止中でも通常通り行えるようにする
+            // （実運用で「一時停止すると管理画面の操作までできなくなる」事象が確認された）。
+            if (!maintenance.TryBegin(collectorOnly: true)) return Results.Conflict();
             try
             {
                 await queue.PurgeAsync(token);
