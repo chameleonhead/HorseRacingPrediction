@@ -62,7 +62,7 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
             WaitTimeSeconds = 0
         }, cancellationToken).ConfigureAwait(false);
 
-        return response.Messages
+        return (response.Messages ?? [])
             .Select(x => new DeadLetterQueueMessage(x.ReceiptHandle, x.Body))
             .ToList();
     }
