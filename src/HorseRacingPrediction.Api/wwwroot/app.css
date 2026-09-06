@@ -100,7 +100,7 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
 /* CSS Grid (not flex-wrap) keeps every row's columns the same width, so fields never
    reflow into a ragged, unevenly-wrapped layout as the container is resized. */
 .filter-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: 8px 12px; }
-.filter-toolbar > .filter-field { display: grid; min-width: 0; gap: 4px; }
+.filter-toolbar > .filter-field { display: grid; min-width: 0; gap: 4px; position: relative; z-index: 1; }
 .filter-toolbar > .filter-field-primary, .filter-toolbar > .filter-field-wide { grid-column: span 2; }
 .filter-toolbar > .filter-field > * { box-sizing: border-box; width: 100%; }
 .filter-toolbar > .filter-field fluent-text-field, .filter-toolbar > .filter-field fluent-select, .filter-toolbar > fluent-button { min-height: 40px; }
