@@ -79,13 +79,38 @@ public sealed class JraRaceResultCollectionWorkflow
 
         var errors = new List<string>();
 
-        var winningEntry = resultPage.Results.FirstOrDefault(e => e.FinishPosition == 1);
+        // 実運用で、結果ページのパース失敗時に馬番=0・馬名=空のプレースホルダー値の
+        // まま登録が続行され、DB上に「1着〜7着すべて馬番0・馬名なし」という
+        // 見かけ上は成功しているが実際は無意味なデータが記録される事象が確認された。
+        // 想定した情報（馬番・馬名）を取得できていないエントリーは、ここで検知して
+        // 送信対象から除外し、エラーとして記録する（サイレントな欠損データ登録を防ぐ）。
+        var validResults = new List<RaceResultEntry>();
+        foreach (var entry in resultPage.Results)
+        {
+            if (entry.HorseNumber <= 0 || string.IsNullOrWhiteSpace(entry.HorseName))
+            {
+                errors.Add(
+                    $"着順記録エラー: 想定した馬番/馬名を取得できませんでした（パース失敗の可能性）。HorseNumber={entry.HorseNumber} HorseName='{entry.HorseName}' FinishPosition={entry.FinishPosition}");
+                continue;
+            }
+
+            validResults.Add(entry);
+        }
+
+        if (resultPage.Results.Count > 0 && validResults.Count == 0)
+        {
+            // 全エントリーが不正（ページ全体のパース失敗）の場合、送信しても
+            // 意味のあるデータは何も登録できないため、API呼び出し自体を行わない。
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors);
+        }
+
+        var winningEntry = validResults.FirstOrDefault(e => e.FinishPosition == 1);
         if (winningEntry is null)
         {
             errors.Add("レース確定宣言エラー: 1着馬が結果に見つかりませんでした。");
         }
 
-        var entries = resultPage.Results
+        var entries = validResults
             .Select(entry => new RaceResultBulkEntry(
                 entry.HorseNumber,
                 entry.FinishPosition,

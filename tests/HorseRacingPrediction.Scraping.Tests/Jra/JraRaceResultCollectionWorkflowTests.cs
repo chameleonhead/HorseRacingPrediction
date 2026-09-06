@@ -164,6 +164,53 @@ public sealed class JraRaceResultCollectionWorkflowTests
     }
 
     [TestMethod]
+    public async Task CollectAsync_馬番が0のエントリーはエラーとして扱われ送信されない()
+    {
+        var entries = new[]
+        {
+            new RaceResultEntry(1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
+        };
+        var resultPage = CreateResultPage(TestRaceId, entries);
+
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
+
+        await using var _ = session;
+        var workflow = new JraRaceResultCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(TestRaceId);
+
+        Assert.HasCount(1, result.Errors);
+        Assert.Contains("想定した馬番/馬名を取得できませんでした", result.Errors[0]);
+        Assert.HasCount(1, writeService.DeclareRaceEntryResultCalls);
+        CollectionAssert.AreEqual(new[] { 3 }, result.SavedHorseNumbers.ToArray());
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_全エントリーの馬番馬名が不正な場合はAPIを呼ばずにエラーを返す()
+    {
+        var entries = new[]
+        {
+            new RaceResultEntry(1, 0, string.Empty, null, TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(2, 0, string.Empty, null, TimeSpan.FromSeconds(85.0)),
+        };
+        var resultPage = CreateResultPage(TestRaceId, entries);
+
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
+
+        await using var _ = session;
+        var workflow = new JraRaceResultCollectionWorkflow(session, writeService);
+
+        var result = await workflow.CollectAsync(TestRaceId);
+
+        Assert.HasCount(2, result.Errors);
+        Assert.IsEmpty(result.SavedHorseNumbers);
+        Assert.IsEmpty(writeService.DeclareRaceResultBulkCalls);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_RaceCourseUnknown_ArgumentExceptionを投げる()
     {
         var (session, _, writeService) = CreateContext(new Dictionary<RaceId, IJraPage>());
