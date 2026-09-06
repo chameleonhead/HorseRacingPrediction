@@ -34,6 +34,21 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<long> GetDeadLetterQueueDepthAsync(CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled) return 0;
+
+        var deadLetterQueueUrl = await ResolveQueueUrlAsync(
+            _options.DeadLetterQueueUrl, _options.DeadLetterQueueName, cancellationToken).ConfigureAwait(false);
+        var attributes = await _sqs.GetQueueAttributesAsync(new GetQueueAttributesRequest
+        {
+            QueueUrl = deadLetterQueueUrl,
+            AttributeNames = [QueueAttributeName.ApproximateNumberOfMessages]
+        }, cancellationToken).ConfigureAwait(false);
+
+        return attributes.ApproximateNumberOfMessages;
+    }
+
     public async Task PurgeAsync(CancellationToken cancellationToken)
     {
         if (!_options.Enabled) return;

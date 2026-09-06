@@ -99,6 +99,7 @@ builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
 builder.Services.AddSingleton<CollectionMaintenanceState>();
+builder.Services.AddSingleton<CollectionQueueCircuitBreakerState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
 if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))

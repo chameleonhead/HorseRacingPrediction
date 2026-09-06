@@ -32,17 +32,23 @@ public sealed class CollectionJobWatchdogService : BackgroundService
 
     private readonly ProcessingStateStore _store;
     private readonly CollectionMaintenanceState _maintenance;
+    private readonly ICollectionTaskQueue _queue;
+    private readonly CollectionQueueCircuitBreakerState _circuitBreaker;
     private readonly CollectionJobWatchdogOptions _options;
     private readonly ILogger<CollectionJobWatchdogService> _logger;
 
     public CollectionJobWatchdogService(
         ProcessingStateStore store,
         CollectionMaintenanceState maintenance,
+        ICollectionTaskQueue queue,
+        CollectionQueueCircuitBreakerState circuitBreaker,
         Microsoft.Extensions.Options.IOptions<CollectionJobWatchdogOptions> options,
         ILogger<CollectionJobWatchdogService> logger)
     {
         _store = store;
         _maintenance = maintenance;
+        _queue = queue;
+        _circuitBreaker = circuitBreaker;
         _options = options.Value;
         _logger = logger;
     }
@@ -108,21 +114,66 @@ public sealed class CollectionJobWatchdogService : BackgroundService
                 recoveredRunning);
         }
 
+        // DLQ（デッドレターキュー）が滞留している状態は、実行基盤側（Lambda/コンテナ等）で
+        // 恒常的な失敗が起きているサインである。この状態のまま再ディスパッチを続けると、
+        // 同じ失敗を繰り返すジョブへSQSメッセージを送出し続け、Lambda起動コストとDLQへの
+        // 積み上がりが際限なく増加してしまう。DLQ深さが閾値以上の間はサーキットブレーカーを
+        // トリップし、新規ジョブも含めたディスパッチを一時停止する（Fail Fast）。
+        long dlqDepth;
+        try
+        {
+            dlqDepth = await _queue.GetDeadLetterQueueDepthAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "収集ジョブ監視: DLQ深さの取得に失敗しました。サーキットブレーカー判定をスキップします。");
+            dlqDepth = _circuitBreaker.LastKnownDeadLetterQueueDepth;
+        }
+
+        if (dlqDepth >= _options.DeadLetterQueueDepthCircuitBreakerThreshold)
+        {
+            _circuitBreaker.Trip(dlqDepth);
+            _logger.LogCritical(
+                "収集ジョブ監視: DLQにメッセージが{Depth}件滞留しているため、サーキットブレーカーをトリップしSQSへの新規ディスパッチを停止します（閾値={Threshold}）。実行基盤側の恒常的な失敗が疑われます。",
+                dlqDepth,
+                _options.DeadLetterQueueDepthCircuitBreakerThreshold);
+            return;
+        }
+
+        if (_circuitBreaker.IsTripped)
+        {
+            _logger.LogInformation(
+                "収集ジョブ監視: DLQが{Depth}件まで減少したためサーキットブレーカーを解除します（閾値={Threshold}）。",
+                dlqDepth,
+                _options.DeadLetterQueueDepthCircuitBreakerThreshold);
+        }
+
+        _circuitBreaker.Reset(dlqDepth);
+
         // Ready 状態なのに SQS へのディスパッチ通知（outbox）が存在しないジョブへ
         // 再ディスパッチを行う。ディスパッチの取りこぼしや、Worker 側の実行失敗で
-        // ジョブが Ready のまま長時間進行しないケースを拾う。
-        var redispatched = await _store
-            .RequeueReadyCollectionDispatchesAsync(now, cancellationToken)
+        // ジョブが Ready のまま長時間進行しないケースを拾う。再送しても実行のたびに
+        // 失敗を繰り返しているジョブ（MaxJobDispatchAttempts超過）はDeadLetterへ落とす。
+        var result = await _store
+            .RequeueReadyCollectionDispatchesAsync(now, _options.MaxJobDispatchAttempts, cancellationToken)
             .ConfigureAwait(false);
 
-        if (redispatched > 0)
+        if (result.DispatchedCount > 0)
         {
             _logger.LogWarning(
                 "収集ジョブ監視: ディスパッチ通知の無い Ready ジョブを再ディスパッチしました。Count={Count}",
-                redispatched);
+                result.DispatchedCount);
         }
 
-        if (recoveredRunning == 0 && redispatched == 0)
+        if (result.DeadLetteredCount > 0)
+        {
+            _logger.LogError(
+                "収集ジョブ監視: 再ディスパッチ回数の上限({MaxAttempts})を超えたジョブを DeadLetter として打ち切りました。Count={Count}",
+                _options.MaxJobDispatchAttempts,
+                result.DeadLetteredCount);
+        }
+
+        if (recoveredRunning == 0 && result.DispatchedCount == 0 && result.DeadLetteredCount == 0)
         {
             _logger.LogInformation("収集ジョブ監視: 詰まっているジョブは見つかりませんでした。");
         }

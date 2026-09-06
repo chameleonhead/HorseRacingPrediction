@@ -9,14 +9,16 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
     private readonly ICollectionTaskQueue _queue;
     private readonly CollectionQueueOptions _options;
     private readonly CollectionMaintenanceState _maintenance;
+    private readonly CollectionQueueCircuitBreakerState _circuitBreaker;
     private readonly ILogger<CollectionTaskOutboxDispatcher> _logger;
 
     public CollectionTaskOutboxDispatcher(
         ProcessingStateStore store,
         ICollectionTaskQueue queue,
         IOptions<CollectionQueueOptions> options,
+        CollectionQueueCircuitBreakerState circuitBreaker,
         ILogger<CollectionTaskOutboxDispatcher> logger)
-        : this(store, queue, options, new CollectionMaintenanceState(), logger)
+        : this(store, queue, options, new CollectionMaintenanceState(), circuitBreaker, logger)
     {
     }
 
@@ -25,12 +27,14 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
         ICollectionTaskQueue queue,
         IOptions<CollectionQueueOptions> options,
         CollectionMaintenanceState maintenance,
+        CollectionQueueCircuitBreakerState circuitBreaker,
         ILogger<CollectionTaskOutboxDispatcher> logger)
     {
         _store = store;
         _queue = queue;
         _options = options.Value;
         _maintenance = maintenance;
+        _circuitBreaker = circuitBreaker;
         _logger = logger;
     }
 
@@ -53,6 +57,14 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
         if (_maintenance.IsActive) return;
+        // DLQ滞留によりCollectionJobWatchdogServiceがサーキットブレーカーをトリップしている間は、
+        // 新規ジョブも含めて一切SQSへ送出しない。実行基盤側の恒常的な失敗が解消されるまで、
+        // 送っても失敗するメッセージでコストを積み増さないため。
+        if (_circuitBreaker.IsTripped)
+        {
+            _logger.LogDebug("Collection task dispatch skipped: circuit breaker is tripped (DLQ backlog).");
+            return;
+        }
         var now = DateTimeOffset.UtcNow;
         var dispatches = await _store.GetPendingCollectionTaskDispatchesAsync(
             now,

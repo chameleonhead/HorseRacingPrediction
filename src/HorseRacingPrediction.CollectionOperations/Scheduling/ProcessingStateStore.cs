@@ -510,7 +510,10 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         finally { _gate.Release(); }
     }
 
-    public async Task<int> RequeueReadyCollectionDispatchesAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    public async Task<RequeueReadyCollectionDispatchesResult> RequeueReadyCollectionDispatchesAsync(
+        DateTimeOffset now,
+        int maxAttemptCount = int.MaxValue,
+        CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -532,15 +535,35 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     .ConfigureAwait(false))
                 .ToHashSet(StringComparer.Ordinal);
 
-            var count = 0;
+            var dispatchedCount = 0;
+            var deadLetteredCount = 0;
             foreach (var job in readyJobs.Where(x => CollectionDispatchPolicy.IsDispatchable(x.JobType) && !pendingJobIds.Contains(x.JobId)))
             {
+                // 何度再ディスパッチしても Ready に戻ってくる（＝実行のたびに失敗している）ジョブを
+                // 際限なく再送し続けると、SQSメッセージ発行・Lambda起動のコストが積み上がり続ける。
+                // AttemptCount は成功/失敗/デッドレターの終端遷移時にしか増えないため、Worker側が
+                // 完了報告すらできずに落ち続けるケース（Lambdaのクラッシュループ等）を捉えられない。
+                // そのため、実際にSQSへ送出した回数である DispatchGeneration を基準に打ち切る。
+                if (job.DispatchGeneration >= maxAttemptCount)
+                {
+                    var previousStatus = job.Status;
+                    job.Status = AgentJobStatus.DeadLetter;
+                    job.LeaseExpiresAt = null;
+                    job.LeaseToken = null;
+                    job.LastError = $"Exceeded max dispatch attempts ({job.DispatchGeneration}/{maxAttemptCount}); marked as dead letter by the job watchdog.";
+                    job.UpdatedAt = now;
+                    QueueFailureNotification(dbContext, job, previousStatus, job.Status, job.LastError, now);
+                    await ReconcileParentJobAsync(dbContext, job, now, cancellationToken).ConfigureAwait(false);
+                    deadLetteredCount++;
+                    continue;
+                }
+
                 QueueDispatch(dbContext, job, now > job.AvailableAt ? now : job.AvailableAt);
-                count++;
+                dispatchedCount++;
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return count;
+            return new RequeueReadyCollectionDispatchesResult(dispatchedCount, deadLetteredCount);
         }
         finally { _gate.Release(); }
     }

@@ -39,9 +39,9 @@ public static class JobManagementEndpointExtensions
         });
         group.MapPost("/resume", async (ProcessingStateStore store, CollectionMaintenanceState maintenance, CancellationToken token) =>
         {
-            var requeued = await store.RequeueReadyCollectionDispatchesAsync(DateTimeOffset.UtcNow, token);
+            var result = await store.RequeueReadyCollectionDispatchesAsync(DateTimeOffset.UtcNow, cancellationToken: token);
             maintenance.End();
-            return Results.Ok(new { status = "Running", requeued });
+            return Results.Ok(new { status = "Running", requeued = result.DispatchedCount, deadLettered = result.DeadLetteredCount });
         });
         return endpoints;
     }

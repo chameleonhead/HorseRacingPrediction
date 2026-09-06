@@ -529,8 +529,40 @@ public sealed class ProcessingStateStoreTests
         var requeued = await sut.RequeueReadyCollectionDispatchesAsync(now.AddSeconds(6));
         var next = await sut.GetPendingCollectionTaskDispatchesAsync(now.AddSeconds(7), 10);
 
-        Assert.AreEqual(2, requeued);
+        Assert.AreEqual(2, requeued.DispatchedCount);
+        Assert.AreEqual(0, requeued.DeadLetteredCount);
         CollectionAssert.AreEqual(new[] { "high", "low" }, next.Select(x => x.Notification.DeduplicationKey).ToArray());
+    }
+
+    [TestMethod]
+    public async Task RequeueReadyCollectionDispatchesAsync_MarksJobsExceedingMaxAttemptsAsDeadLetter()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sut = CreateStore(5);
+        // ScheduleJobAsync自体が最初のディスパッチ（DispatchGeneration=1）を作る。
+        // Worker側がSQS通知を受けて実行するたびに失敗し、ジョブがReadyへ戻り続ける状況を
+        // 模すため、都度「ディスパッチ済みにする→再ディスパッチする」を繰り返す。
+        await sut.ScheduleJobAsync("RaceCardCollection", "flaky", "{}", now);
+        await MarkAllPendingDispatchedAsync(sut, now.AddSeconds(1));
+
+        var first = await sut.RequeueReadyCollectionDispatchesAsync(now.AddSeconds(2), maxAttemptCount: 2);
+        Assert.AreEqual(1, first.DispatchedCount);
+        Assert.AreEqual(0, first.DeadLetteredCount);
+        await MarkAllPendingDispatchedAsync(sut, now.AddSeconds(3));
+
+        var second = await sut.RequeueReadyCollectionDispatchesAsync(now.AddSeconds(4), maxAttemptCount: 2);
+
+        Assert.AreEqual(0, second.DispatchedCount);
+        Assert.AreEqual(1, second.DeadLetteredCount);
+        var detail = await sut.GetJobDetailAsync("RaceCardCollection:flaky");
+        Assert.AreEqual(AgentJobStatus.DeadLetter, detail!.Status);
+    }
+
+    private static async Task MarkAllPendingDispatchedAsync(ProcessingStateStore store, DateTimeOffset now)
+    {
+        var pending = await store.GetPendingCollectionTaskDispatchesAsync(now.AddMinutes(1), 100);
+        foreach (var dispatch in pending)
+            await store.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now);
     }
 
     [TestMethod]

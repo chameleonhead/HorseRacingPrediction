@@ -11,6 +11,10 @@ public sealed record PendingCollectionTaskDispatch(
     CollectionTaskNotification Notification,
     int AttemptCount);
 
+public sealed record RequeueReadyCollectionDispatchesResult(
+    int DispatchedCount,
+    int DeadLetteredCount);
+
 public sealed record LeasedCollectionTask(
     string TaskId,
     string JobType,

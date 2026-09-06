@@ -23,6 +23,7 @@ public sealed class CollectionTaskOutboxDispatcherTests
                 store,
                 queue,
                 Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 10 }),
+                new CollectionQueueCircuitBreakerState(),
                 NullLogger<CollectionTaskOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -55,6 +56,7 @@ public sealed class CollectionTaskOutboxDispatcherTests
                 queue,
                 Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 10 }),
                 maintenance,
+                new CollectionQueueCircuitBreakerState(),
                 NullLogger<CollectionTaskOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -63,6 +65,36 @@ public sealed class CollectionTaskOutboxDispatcherTests
             var pending = await store.GetPendingCollectionTaskDispatchesAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10);
             Assert.AreEqual(1, pending.Count);
             Assert.AreEqual("paused-task", pending[0].Notification.DeduplicationKey);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task DispatchOnceAsync_DoesNotSendWhileCircuitBreakerIsTripped()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-dispatch-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var processingOptions = Options.Create(new AgentProcessingOptions { StateDirectory = directory });
+            var store = new ProcessingStateStore(processingOptions, NullLogger<ProcessingStateStore>.Instance);
+            var now = DateTimeOffset.UtcNow;
+            await store.ScheduleJobAsync("RaceCardCollection", "tripped-task", "{}", now);
+            var queue = new RecordingQueue();
+            var circuitBreaker = new CollectionQueueCircuitBreakerState();
+            circuitBreaker.Trip(deadLetterQueueDepth: 100);
+            var dispatcher = new CollectionTaskOutboxDispatcher(
+                store,
+                queue,
+                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 10 }),
+                circuitBreaker,
+                NullLogger<CollectionTaskOutboxDispatcher>.Instance);
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            Assert.AreEqual(0, queue.Notifications.Count);
         }
         finally
         {
