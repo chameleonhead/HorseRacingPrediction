@@ -73,6 +73,18 @@ public sealed class JraRaceResultCollectionWorkflow
                 $"レース結果ページを取得できませんでした。 Kind={resultPageResult.Kind}, Url={resultPageResult.Url}");
         }
 
+        // 依頼書8節: Navigationで要求したRaceIdと、ページ自身から解析したRaceIdを
+        // 必ず照合する。HTMLとして正常なページが取得できていても、別レースであれば
+        // 成功扱いにしない。
+        if (resultPage.RaceId != raceId)
+        {
+            throw new JraRaceIdentityMismatchException(
+                JraPageKind.RaceResult,
+                resultPage.Url,
+                raceId.ToString(),
+                resultPage.RaceId.ToString());
+        }
+
         var racecourseName = RaceCourseNames.GetJraName(raceId.Course);
         var dataCollectionRaceId = DeterministicIdGenerator.BuildRaceId(
             raceId.Date, racecourseName, raceId.Number);
@@ -125,9 +137,9 @@ public sealed class JraRaceResultCollectionWorkflow
                 entry.HorseNumber,
                 entry.FinishPosition,
                 FormatTime(entry.Time),
-                MarginText: null,
+                MarginText: entry.MarginRaw,
                 LastThreeFurlongTime: null,
-                AbnormalResultCode: null,
+                AbnormalResultCode: ToAbnormalResultCode(entry.ResultStatus),
                 PrizeMoney: null))
             .ToList();
 
@@ -210,6 +222,17 @@ public sealed class JraRaceResultCollectionWorkflow
         => payouts.Count == 0
             ? null
             : payouts.Select(p => new RaceResultBulkPayoutEntry(p.Combination, p.Amount)).ToList();
+
+    private static string? ToAbnormalResultCode(ResultStatus status) =>
+        status switch
+        {
+            ResultStatus.Finished => null,
+            ResultStatus.Cancelled => "取消",
+            ResultStatus.Excluded => "除外",
+            ResultStatus.DidNotFinish => "中止",
+            ResultStatus.Disqualified => "失格",
+            _ => null,
+        };
 
     private static string? FormatTime(TimeSpan? time) =>
         time is null

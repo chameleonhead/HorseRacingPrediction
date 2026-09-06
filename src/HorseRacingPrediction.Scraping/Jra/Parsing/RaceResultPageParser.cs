@@ -28,18 +28,24 @@ public sealed class RaceResultPageParser
         new(@"(?:(?<min>\d{1,2}):)?(?<sec>\d{1,2})\.(?<frac>\d{1})", RegexOptions.Compiled);
 
     // 天候/馬場は実ページのHTML構造が未調査のため、見出し・本文中のテキストパターンから
-    // 緩やかに抽出する方式にしている（見つからない場合は null を返し、既存の着順取得は妨げない）。
-    private static readonly Regex WeatherRegex =
-        new(@"天候\s*[:：]?\s*(?<value>晴|曇|雨|小雨|雪|小雪)", RegexOptions.Compiled);
+    // 緩やかに抽出する方式にしている。ラベル自体が存在しない場合は「天候・馬場欄なし」の
+    // 正常系（null）として扱うが、ラベルは存在するのに続く値がJRAの既知値集合に無い場合は
+    // 「未知の値」（依頼書10節・11節）としてJraUnexpectedValueExceptionにする。
+    private static readonly Regex WeatherLabelRegex =
+        new(@"天候\s*[:：]?\s*(?<value>\S+)", RegexOptions.Compiled);
+
+    private static readonly string[] KnownWeatherValues = ["晴", "曇", "小雨", "雨", "小雪", "雪"];
 
     // 実サイト確認（2026-09-07）で判明: 実ページの馬場状態表記は「天候 雨 芝 稍重 ダート 重」
     // のように「馬場」「馬場状態」という語を伴わず、「芝」「ダート」の直後に状態値が
     // 続くのみ。旧正規表現は「馬場」の語を必須としていたため常にマッチしなかった。
-    private static readonly Regex TurfConditionRegex =
-        new(@"芝\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
+    private static readonly Regex TurfConditionLabelRegex =
+        new(@"芝\s*(?<value>\S+)", RegexOptions.Compiled);
 
-    private static readonly Regex DirtConditionRegex =
-        new(@"ダート\s*(?<value>良|稍重|重|不良)", RegexOptions.Compiled);
+    private static readonly Regex DirtConditionLabelRegex =
+        new(@"ダート\s*(?<value>\S+)", RegexOptions.Compiled);
+
+    private static readonly string[] KnownTrackConditionValues = ["良", "稍重", "重", "不良"];
 
     public JraPageKind Kind =>
         JraPageKind.RaceResult;
@@ -75,7 +81,7 @@ public sealed class RaceResultPageParser
             ParseRaceName(snapshot);
 
         var results =
-            ParseResults(table);
+            ParseResults(table, snapshot.Url);
 
         var weatherText =
             ParseWeatherText(snapshot);
@@ -103,9 +109,26 @@ public sealed class RaceResultPageParser
             $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
         var match =
-            WeatherRegex.Match(searchText);
+            WeatherLabelRegex.Match(searchText);
 
-        return match.Success ? match.Groups["value"].Value : null;
+        if (!match.Success)
+        {
+            // 「天候」ラベル自体が存在しない＝仕様上optionalな要素が存在しない正常系。
+            return null;
+        }
+
+        var value = match.Groups["value"].Value;
+
+        if (!KnownWeatherValues.Contains(value, StringComparer.Ordinal))
+        {
+            throw new JraUnexpectedValueException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "Weather",
+                value);
+        }
+
+        return value;
     }
 
     private static string? ParseTrackConditionText(
@@ -114,8 +137,8 @@ public sealed class RaceResultPageParser
         var searchText =
             $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
-        var turfMatch = TurfConditionRegex.Match(searchText);
-        var dirtMatch = DirtConditionRegex.Match(searchText);
+        var turfMatch = TurfConditionLabelRegex.Match(searchText);
+        var dirtMatch = DirtConditionLabelRegex.Match(searchText);
 
         if (!turfMatch.Success && !dirtMatch.Success)
         {
@@ -125,12 +148,34 @@ public sealed class RaceResultPageParser
         var parts = new List<string>();
         if (turfMatch.Success)
         {
-            parts.Add($"芝:{turfMatch.Groups["value"].Value}");
+            var value = turfMatch.Groups["value"].Value;
+
+            if (!KnownTrackConditionValues.Contains(value, StringComparer.Ordinal))
+            {
+                throw new JraUnexpectedValueException(
+                    JraPageKind.RaceResult,
+                    snapshot.Url,
+                    "TrackCondition(Turf)",
+                    value);
+            }
+
+            parts.Add($"芝:{value}");
         }
 
         if (dirtMatch.Success)
         {
-            parts.Add($"ダート:{dirtMatch.Groups["value"].Value}");
+            var value = dirtMatch.Groups["value"].Value;
+
+            if (!KnownTrackConditionValues.Contains(value, StringComparer.Ordinal))
+            {
+                throw new JraUnexpectedValueException(
+                    JraPageKind.RaceResult,
+                    snapshot.Url,
+                    "TrackCondition(Dirt)",
+                    value);
+            }
+
+            parts.Add($"ダート:{value}");
         }
 
         return string.Join(" ", parts);
@@ -381,6 +426,26 @@ public sealed class RaceResultPageParser
         return -1;
     }
 
+    // 性齢列は「性齢」列見出しがあるページでのみ解析する（依頼書33節: 実サイトの
+    // 列構成が本タスクの既存Fixtureでは未確認のため、列が存在しない場合は正常に
+    // null/nullを返し、列が存在するのに値を解析できない場合のみエラーとする）。
+    private static int FindSexAgeColumnIndex(
+        IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("性齢", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static readonly Regex SexAgeRegex =
+        new(@"^(?<sex>牡|牝|せん)(?<age>\d{1,2})$", RegexOptions.Compiled);
+
     private static DateOnly ParseDate(
         PageSnapshot snapshot)
     {
@@ -505,13 +570,15 @@ public sealed class RaceResultPageParser
     }
 
     private static IReadOnlyList<RaceResultEntry> ParseResults(
-        PageTableSnapshot table)
+        PageTableSnapshot table,
+        string url)
     {
         var finishIndex = FindFinishPositionColumnIndex(table.Headers);
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
         var horseNameIndex = FindHorseNameColumnIndex(table.Headers);
         var jockeyIndex = FindJockeyColumnIndex(table.Headers);
         var timeIndex = FindTimeColumnIndex(table.Headers);
+        var sexAgeIndex = FindSexAgeColumnIndex(table.Headers);
 
         var results = new List<RaceResultEntry>();
 
@@ -533,16 +600,40 @@ public sealed class RaceResultPageParser
                 continue;
             }
 
-            var finishMatch =
-                LeadingNumberRegex.Match(row[finishIndex]);
+            var finishText = row[finishIndex].Trim();
 
-            if (!finishMatch.Success)
+            // 数字着順以外に、JRAの正常な特殊状態（取消・除外・中止・失格）を
+            // ResultStatusとしてモデル化する（依頼書16節）。従来はここで単純に
+            // 行を読み飛ばしていたため、これらの馬が結果からサイレントに欠落していた。
+            ResultStatus status;
+            int? finishPosition;
+
+            var finishMatch = LeadingNumberRegex.Match(finishText);
+
+            if (finishMatch.Success)
             {
+                status = ResultStatus.Finished;
+                finishPosition = int.Parse(finishMatch.Groups["num"].Value);
+            }
+            else if (ResultStatusText.TryParse(finishText, out var specialStatus))
+            {
+                status = specialStatus;
+                finishPosition = null;
+            }
+            else if (string.IsNullOrWhiteSpace(finishText))
+            {
+                // 着順欄が完全に空白の行は、罫線用の空行等パース対象外の行である
+                // 可能性が高く、既存の挙動（読み飛ばし）を維持する。
                 continue;
             }
-
-            var finishPosition =
-                int.Parse(finishMatch.Groups["num"].Value);
+            else
+            {
+                throw new JraUnexpectedValueException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "ResultStatus",
+                    finishText);
+            }
 
             var numberMatch =
                 LeadingNumberRegex.Match(row[horseNumberIndex]);
@@ -587,12 +678,59 @@ public sealed class RaceResultPageParser
                 }
             }
 
+            // Finishedであれば必須（依頼書19節）。値が存在するのに解析できない場合と
+            // 区別できるよう、タイム列自体が存在するかどうかで判定する。
+            if (status == ResultStatus.Finished &&
+                time is null &&
+                timeIndex >= 0 && timeIndex < row.Count &&
+                !string.IsNullOrWhiteSpace(row[timeIndex]))
+            {
+                throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "Time",
+                    row[timeIndex]);
+            }
+
+            HorseSex? sex = null;
+            int? age = null;
+
+            if (sexAgeIndex >= 0 && sexAgeIndex < row.Count && !string.IsNullOrWhiteSpace(row[sexAgeIndex]))
+            {
+                var sexAgeText = row[sexAgeIndex].Trim();
+                var sexAgeMatch = SexAgeRegex.Match(sexAgeText);
+
+                if (!sexAgeMatch.Success)
+                {
+                    throw new JraUnexpectedValueException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "Sex",
+                        sexAgeText);
+                }
+
+                if (!HorseSexText.TryParse(sexAgeMatch.Groups["sex"].Value, out var parsedSex))
+                {
+                    throw new JraUnexpectedValueException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "Sex",
+                        sexAgeText);
+                }
+
+                sex = parsedSex;
+                age = int.Parse(sexAgeMatch.Groups["age"].Value);
+            }
+
             results.Add(new RaceResultEntry(
+                status,
                 finishPosition,
                 horseNumber,
                 horseName,
                 jockeyName,
-                time));
+                time,
+                Sex: sex,
+                Age: age));
         }
 
         return results;

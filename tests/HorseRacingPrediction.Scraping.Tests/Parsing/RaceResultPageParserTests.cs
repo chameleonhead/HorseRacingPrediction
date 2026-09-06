@@ -173,4 +173,180 @@ public sealed class RaceResultPageParserTests
         var ex = Assert.ThrowsExactly<JraPageParseException>(() => parser.Parse(snapshot));
         StringAssert.Contains(ex.Message, "レース名");
     }
+
+    [TestMethod]
+    public void Parse_取消除外中止失格を正常に解析できる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows:
+            [
+                ["1", "1", "テストホースA", "騎手A", "1:33.4"],
+                ["取消", "2", "テストホースB", "騎手B", string.Empty],
+                ["除外", "3", "テストホースC", "騎手C", string.Empty],
+                ["中止", "4", "テストホースD", "騎手D", string.Empty],
+                ["失格", "5", "テストホースE", "騎手E", "1:35.0"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        Assert.AreEqual(5, page.Results.Count);
+
+        Assert.AreEqual(ResultStatus.Finished, page.Results[0].ResultStatus);
+        Assert.AreEqual(1, page.Results[0].FinishPosition);
+
+        Assert.AreEqual(ResultStatus.Cancelled, page.Results[1].ResultStatus);
+        Assert.IsNull(page.Results[1].FinishPosition);
+        Assert.IsNull(page.Results[1].Time);
+
+        Assert.AreEqual(ResultStatus.Excluded, page.Results[2].ResultStatus);
+        Assert.IsNull(page.Results[2].FinishPosition);
+
+        Assert.AreEqual(ResultStatus.DidNotFinish, page.Results[3].ResultStatus);
+        Assert.IsNull(page.Results[3].FinishPosition);
+
+        // 失格馬にタイムが存在しても正常（依頼書19節）。
+        Assert.AreEqual(ResultStatus.Disqualified, page.Results[4].ResultStatus);
+        Assert.IsNull(page.Results[4].FinishPosition);
+        Assert.IsNotNull(page.Results[4].Time);
+    }
+
+    [TestMethod]
+    public void Parse_着順欄が未知の値の場合はJraUnexpectedValueExceptionを投げる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows: [["再検討", "1", "テストホースA", "騎手A", "1:33.4"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("ResultStatus", ex.FieldName);
+        Assert.AreEqual("再検討", ex.RawValue);
+    }
+
+    [TestMethod]
+    public void Parse_天候が未知の値の場合はJraUnexpectedValueExceptionを投げる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 不明 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("Weather", ex.FieldName);
+        Assert.AreEqual("不明", ex.RawValue);
+    }
+
+    [TestMethod]
+    public void Parse_馬場状態が未知の値の場合はJraUnexpectedValueExceptionを投げる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 極重",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("TrackCondition(Turf)", ex.FieldName);
+        Assert.AreEqual("極重", ex.RawValue);
+    }
+
+    [TestMethod]
+    public void Parse_性齢列がある場合はSexとAgeへ分解できる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "性齢", "騎手", "タイム"],
+            Rows:
+            [
+                ["1", "1", "テストホースA", "牡6", "騎手A", "1:33.4"],
+                ["2", "2", "テストホースB", "牝5", "騎手B", "1:33.6"],
+                ["3", "3", "テストホースC", "せん5", "騎手C", "1:33.9"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        Assert.AreEqual(HorseSex.Colt, page.Results[0].Sex);
+        Assert.AreEqual(6, page.Results[0].Age);
+
+        Assert.AreEqual(HorseSex.Filly, page.Results[1].Sex);
+        Assert.AreEqual(5, page.Results[1].Age);
+
+        Assert.AreEqual(HorseSex.Gelding, page.Results[2].Sex);
+        Assert.AreEqual(5, page.Results[2].Age);
+    }
+
+    [TestMethod]
+    public void Parse_性齢列の値が未知の場合はJraUnexpectedValueExceptionを投げる()
+    {
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "性齢", "騎手", "タイム"],
+            Rows: [["1", "1", "テストホースA", "騙5", "騎手A", "1:33.4"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("Sex", ex.FieldName);
+    }
 }
