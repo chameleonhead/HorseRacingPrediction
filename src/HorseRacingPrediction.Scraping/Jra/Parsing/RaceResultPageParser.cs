@@ -91,6 +91,35 @@ public sealed class RaceResultPageParser
         var results =
             ParseResults(table, snapshot.Url);
 
+        // 依頼書29節: RaceResult全体Validationとして「結果行が1件以上存在する」ことを
+        // 必須とする。着順テーブル自体は見つかったが結果行が0件の場合、成績なしの
+        // レース結果ページとして正常扱いにはせず、Parser異常として検知する。
+        if (results.Count == 0)
+        {
+            throw new JraPageStructureException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "レース結果テーブルに結果行が1件も存在しませんでした。",
+                "Results");
+        }
+
+        // 依頼書14・29節: HorseNumberはレース内で一意であること。
+        var duplicateHorseNumbers = results
+            .GroupBy(r => r.HorseNumber)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicateHorseNumbers.Count > 0)
+        {
+            throw new JraResultConsistencyException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "HorseNumberがレース内で重複しています。",
+                "HorseNumber",
+                string.Join(",", duplicateHorseNumbers));
+        }
+
         var weatherText =
             ParseWeatherText(snapshot);
 
@@ -990,7 +1019,16 @@ public sealed class RaceResultPageParser
 
             if (!numberMatch.Success)
             {
-                continue;
+                // この時点でfinishTextから既にResultStatusを確定できており、
+                // 見出し行・空行等の「そもそも結果行ではない行」は上のフィルタで
+                // 既に除外済みのため、ここへ到達する行は正真正銘の結果行である。
+                // 馬番セル自体は存在するのに数字として解析できない場合は、
+                // 既知項目の形式不正（依頼書7・29節）としてエラーにする。
+                throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    url,
+                    "HorseNumber",
+                    row[horseNumberIndex]);
             }
 
             var horseNumber =
@@ -1028,18 +1066,37 @@ public sealed class RaceResultPageParser
                 }
             }
 
-            // Finishedであれば必須（依頼書19節）。値が存在するのに解析できない場合と
-            // 区別できるよう、タイム列自体が存在するかどうかで判定する。
-            if (status == ResultStatus.Finished &&
-                time is null &&
-                timeIndex >= 0 && timeIndex < row.Count &&
-                !string.IsNullOrWhiteSpace(row[timeIndex]))
+            // Finishedであれば必須（依頼書19・29節）。値が存在するのに解析できない場合と
+            // 完全に欠落している場合の両方をエラーにする（依頼書29節「Finished: Timeあり」）。
+            if (status == ResultStatus.Finished && time is null)
             {
-                throw new JraValueParseException(
+                if (timeIndex >= 0 && timeIndex < row.Count && !string.IsNullOrWhiteSpace(row[timeIndex]))
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        url,
+                        "Time",
+                        row[timeIndex]);
+                }
+
+                throw new JraResultConsistencyException(
                     JraPageKind.RaceResult,
                     url,
+                    $"ResultStatus=Finishedの馬番{horseNumber}にTimeが存在しません。",
                     "Time",
-                    row[timeIndex]);
+                    timeIndex >= 0 && timeIndex < row.Count ? row[timeIndex] : null);
+            }
+
+            // FinishPositionは構造上、Finished判定分岐で必ず設定されるが、
+            // 依頼書29節が明示的に求める整合性チェックとして防御的に確認する。
+            if (status == ResultStatus.Finished && finishPosition is null)
+            {
+                throw new JraResultConsistencyException(
+                    JraPageKind.RaceResult,
+                    url,
+                    $"ResultStatus=Finishedの馬番{horseNumber}にFinishPositionが存在しません。",
+                    "FinishPosition",
+                    finishText);
             }
 
             HorseSex? sex = null;

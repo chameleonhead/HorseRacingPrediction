@@ -923,14 +923,11 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
-    public void Parse_結果行が0件の場合は例外を投げずに空の結果を返す()
+    public void Parse_結果行が0件の場合はJraPageStructureExceptionを投げる()
     {
-        // 現状のParser実装は、着順テーブル自体は見つかったが結果行が
-        // 0件（見出し行のみ）の場合に例外を投げず、空の結果リストを返す。
-        // 依頼書29節は「結果行が1件以上存在する」ことをValidation対象として
-        // 求めているが、本フェーズ時点ではParser/Workflowのいずれもこの
-        // チェックを実装していない（Deviations参照）。本テストは現状の
-        // 実際の挙動を明文化するもの。
+        // 依頼書29節「結果行が1件以上存在する」というRaceResult全体Validationを
+        // 検証する。着順テーブル自体は見つかったが結果行が0件（見出し行のみ）の
+        // 場合、正常な空結果として扱わずParser異常として検知する。
         var table = new PageTableSnapshot(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: []);
@@ -945,9 +942,39 @@ public sealed class RaceResultPageParserTests
 
         var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
 
-        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        var ex = Assert.ThrowsExactly<JraPageStructureException>(
+            () => new RaceResultPageParser().Parse(snapshot));
 
-        Assert.AreEqual(0, page.Results.Count);
+        Assert.AreEqual("Results", ex.FieldName);
+    }
+
+    [TestMethod]
+    public void Parse_HorseNumberが重複する場合はJraResultConsistencyExceptionを投げる()
+    {
+        // 依頼書14・29節「HorseNumberがレース内で一意」というValidation。
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
+            Rows:
+            [
+                ["1", "1", "テストホースA", "騎手A", "1:33.4"],
+                ["2", "1", "テストホースB", "騎手B", "1:33.6"],
+            ]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("HorseNumber", ex.FieldName);
+        Assert.AreEqual("1", ex.RawValue);
     }
 
     [TestMethod]
@@ -975,12 +1002,10 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
-    public void Parse_馬番が解析不能な行は読み飛ばされる()
+    public void Parse_馬番が解析不能な行はJraValueParseExceptionを投げる()
     {
-        // 現状のParser実装は、馬番セルから数字を抽出できない行を静かに
-        // 読み飛ばす（例外にしない）。依頼書32節「HorseNumber Parse不能」の
-        // 異常系として、この現状挙動を明文化するテスト。将来この読み飛ばしを
-        // エラー化する場合は本テストも合わせて更新すること。
+        // 依頼書7・29節「既知項目だが形式不正→Error」。馬番セルから数字を
+        // 抽出できない結果行を静かに読み飛ばさず、Parser異常として検知する。
         var table = new PageTableSnapshot(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
@@ -999,10 +1024,36 @@ public sealed class RaceResultPageParserTests
 
         var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
 
-        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        var ex = Assert.ThrowsExactly<JraValueParseException>(
+            () => new RaceResultPageParser().Parse(snapshot));
 
-        Assert.AreEqual(1, page.Results.Count);
-        Assert.AreEqual(2, page.Results[0].HorseNumber);
+        Assert.AreEqual("HorseNumber", ex.FieldName);
+        Assert.AreEqual("不明", ex.RawValue);
+    }
+
+    [TestMethod]
+    public void Parse_FinishedなのにTimeが完全に欠落している場合はJraResultConsistencyExceptionを投げる()
+    {
+        // 依頼書19・29節「Finished: Timeあり」。タイム列自体が存在しない
+        // （見出しなし）ケースでFinishedにTimeが欠落する場合をエラーにする。
+        var table = new PageTableSnapshot(
+            Headers: ["着順", "馬番", "馬名", "騎手"],
+            Rows: [["1", "1", "テストホースA", "騎手A"]]);
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
+            () => new RaceResultPageParser().Parse(snapshot));
+
+        Assert.AreEqual("Time", ex.FieldName);
     }
 
     [TestMethod]
