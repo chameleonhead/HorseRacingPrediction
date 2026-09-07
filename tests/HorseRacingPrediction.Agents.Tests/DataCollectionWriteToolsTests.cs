@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -131,8 +132,8 @@ public class DataCollectionWriteToolsTests
             CancellationToken cancellationToken = default)
             => Task.FromResult($"レース {raceId} の馬場状態を記録しました。");
 
-        public Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(RaceResultBulkRequest request,
+        public Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(DeclareRaceResultBulkRequest request,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(new RaceResultBulkOutcome($"race-fake-{request.RaceDate}", []));
+            => Task.FromResult(new DeclareRaceResultBulkResponse($"race-fake-{request.RaceDate}", []));
     }
 }

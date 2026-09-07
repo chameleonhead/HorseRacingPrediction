@@ -1,3 +1,5 @@
+using HorseRacingPrediction.Contracts;
+
 namespace HorseRacingPrediction.ApiClient;
 
 /// <summary>
@@ -148,11 +150,11 @@ public interface IDataCollectionWriteService
     /// <see cref="DeclareRacePayoutsAsync"/>を個別に呼び出すと、レース1件あたり
     /// 10〜20回超のHTTPラウンドトリップが発生していたため、これらをまとめる。
     /// 個々の項目が失敗しても他の項目の登録は継続し、失敗内容は戻り値の
-    /// <see cref="RaceResultBulkOutcome.Errors"/> に集約される。
+    /// <see cref="DeclareRaceResultBulkResponse.Errors"/> に集約される。
     /// </para>
     /// </summary>
-    Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
-        RaceResultBulkRequest request,
+    Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(
+        DeclareRaceResultBulkRequest request,
         CancellationToken cancellationToken = default);
 
     /// <summary>

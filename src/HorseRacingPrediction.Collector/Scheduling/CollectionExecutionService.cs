@@ -507,8 +507,6 @@ public sealed class CollectionExecutionService : BackgroundService
                 continue;
             }
 
-            var isFirstRaceInMeeting = true;
-
             foreach (var race in raceList.Races)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -523,10 +521,8 @@ public sealed class CollectionExecutionService : BackgroundService
                     result = await resultWorkflow
                         .CollectAsync(
                             new RaceId(raceDate, course, race.Number),
-                            useSiblingNavigation: !isFirstRaceInMeeting,
                             cancellationToken)
                         .ConfigureAwait(false);
-                    isFirstRaceInMeeting = false;
                     _logger.LogInformation(
                         "[Diag] 成績収集: 1レースぶんの取得が完了しました。Date={Date} Course={Course} RaceNumber={RaceNumber} ElapsedMs={ElapsedMs}",
                         raceDate, course, race.Number, raceStopwatch.ElapsedMilliseconds);

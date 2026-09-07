@@ -742,8 +742,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         return $"レース {raceId} の馬場状態を記録しました。";
     }
 
-    public async Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
-        RaceResultBulkRequest request,
+    public async Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(
+        DeclareRaceResultBulkRequest request,
         CancellationToken cancellationToken = default)
     {
         var response = await _httpClient
@@ -752,10 +752,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         response.EnsureSuccessStatusCode();
 
         var outcome = await response.Content
-            .ReadFromJsonAsync<RaceResultBulkOutcome>(JsonOptions, cancellationToken)
+            .ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
-        return outcome ?? new RaceResultBulkOutcome(string.Empty, []);
+        return outcome ?? new DeclareRaceResultBulkResponse(string.Empty, []);
     }
 
     public async Task RecordSourceCitationAsync(

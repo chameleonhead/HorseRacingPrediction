@@ -1,4 +1,4 @@
-namespace HorseRacingPrediction.Api.Contracts;
+namespace HorseRacingPrediction.Contracts;
 
 /// <summary>
 /// 一括登録の結果。個々の項目（結果宣言・各馬の成績・天候・馬場状態・払戻）は
