@@ -123,6 +123,12 @@ PlaywrightWebBrowser.GetRaceCardAsync(...)
 
 `PlaywrightWebBrowser` は今後も汎用Webブラウザーとして維持する。
 
+テーブルセル内で複数の意味を持つ要素がCSS class等で区別されている場合、`innerText`だけへ
+平坦化すると項目境界を復元できない。`PageTableSnapshot`は既存の文字列行との互換性を保ちつつ、
+セルごとに要素名・class・正規化テキストを持つ汎用fragment metadataを任意で保持してよい。
+`PlaywrightWebBrowser`はclass名の意味を解釈せず構造だけを保存し、`RaceCardPageParser`等の
+provider parserが`owner`、`breeder`、`weight`等の意味を解釈する。
+
 ---
 
 # 3. 新規ディレクトリ構成
@@ -496,18 +502,16 @@ public sealed record RaceEntry(
     string HorseName,
     int? FrameNumber,
     string? JockeyName,
-    decimal? Weight);
+    decimal? AssignedWeight,
+    string? TrainerName,
+    string? OwnerName,
+    int? BodyWeight,
+    int? BodyWeightChange);
 ```
 
-ここでの `Weight` が馬体重なのか斤量なのか曖昧なため、実際のJRA項目に合わせて命名を調整すること。
-
-例えば斤量なら、
-
-```csharp
-decimal? AssignedWeight
-```
-
-のようにする。
+`AssignedWeight`（負担重量）と`BodyWeight`（馬体重）を混同しない。出馬表の馬名複合セルでは、
+馬主・生産者・調教師・馬体重をDOM上のclass付き要素から識別し、表示順だけに依存しない。
+`OwnerName`は馬プロフィールの現在値と、レース時点の出走スナップショットの両方へ保存する。
 
 ---
 
