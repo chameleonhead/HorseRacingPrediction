@@ -1,6 +1,6 @@
 # JRA出馬表の馬主・馬体重取得修正
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -325,10 +325,17 @@ flowchart LR
 - 実装チェックポイント2: 既存Entryの馬主・馬体重を非null patch semanticsで更新する
   `EntryCollectedDataUpdated`、PUT API、read model反映、Collector呼び出しを実装。Domain 96件、
   Collector HTTP 11件、Scraping関連15件のテストが成功。
-- 次のチェックポイント: 全体回帰テストと最終記録。
+- `dotnet build HorseRacingPrediction.sln --no-restore`: 成功（警告0、エラー0）。
+- `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"`: 657件成功、失敗0。
+  リポジトリ既定値`Headless=true`で検証後、ユーザーの未コミット変更`Headless=false`を復元した。
+- `JraSiteE2ETests.現在週RaceCard取得`: 実サイトに対して1件成功（44秒）。全Entryの馬主が非空かつ
+  数値ではなく、馬体重が正数であることを検証した。このE2Eはユーザー設定`Headless=false`でも成功した。
 
 ## Deviations and follow-up
 
+- 設計案の更新DTOは出走登録の全収集項目を列挙していたが、今回の不具合修正に必要な
+  `DeclaredWeight`、`DeclaredWeightDiff`、`OwnerName`だけを更新対象にした。騎手・調教師等の既存値を
+  変更する要件はなく、履歴read modelへの不要な影響を避けるためである。
 - 馬体重の正式な欠損表記は今回取得したレースに現れなかった。実装中に確認できなければ、既知形式だけを
   正常扱いし、未知表記は例外として観測可能にする。
 - 生産者の永続化は別change recordで扱う。
