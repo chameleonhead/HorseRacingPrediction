@@ -4,6 +4,7 @@ using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Jra;
 
@@ -96,34 +97,7 @@ public sealed class JraSiteE2ETests
     {
         using var cts = new CancellationTokenSource(TestTimeout);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        // 今日以降で最も近い開催日・競馬場を選ぶ（今日開催がなければ未来の開催日）。
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        var course = target.Courses[0];
-
-        var raceListPage = await _session.Navigate.ToRaceListAsync(
-            target.Date,
-            course,
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraRaceListPage>(raceListPage);
-        var raceList = (JraRaceListPage)raceListPage;
-
-        Assert.AreEqual(target.Date, raceList.Date);
-        Assert.AreEqual(course, raceList.Course);
-        Assert.IsTrue(raceList.Races.Count > 0, $"{target.Date:yyyy-MM-dd} {course} のレース一覧が空でした。");
+        await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
     }
 
     [TestMethod]
@@ -131,30 +105,7 @@ public sealed class JraSiteE2ETests
     {
         using var cts = new CancellationTokenSource(TestTimeout);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        var course = target.Courses[0];
-
-        var raceListPage = await _session.Navigate.ToRaceListAsync(
-            target.Date,
-            course,
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraRaceListPage>(raceListPage);
-        var raceList = (JraRaceListPage)raceListPage;
-        Assert.IsTrue(raceList.Races.Count > 0, "レース一覧が空のため出馬表を取得できません。");
+        var raceList = await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
 
         var race = raceList.Races[0];
 

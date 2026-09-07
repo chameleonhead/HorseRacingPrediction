@@ -3,7 +3,7 @@
 - Status: In progress (Phase 1-7 実装済み。Phase 7で監査により発見されたバグA1/A2を修正。残るDeviationsは末尾参照)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-06
-- Updated: 2026-09-06
+- Updated: 2026-09-07
 
 ## Context
 
@@ -166,7 +166,44 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 
 ## Verification record
 
+### 2026-09-07 リベース後の確認
+
+- 開始地点の訂正依頼により、今回の2コミットを `origin/claude/jra-scraping-navigation-raceresult-h1rvx6` の `27439b0`（Phase 8）へリベースした。
+- Course解析は先方のPhase 6修正を採用し、こちらの回帰テスト2件を保持。変更記録の競合は双方の履歴を保持して解消した。
+- リベース後: Scraping単体137件成功（`--filter "FullyQualifiedName!~E2ETests"`）、Collector91件成功、ソリューション全体ビルド成功（警告0・エラー0）、`git diff --check`成功。
+- このリベース後の状態では実サイトE2Eを再実行していない。以下の14件成功の記録はPhase 5基点での結果であり、Phase 8の検証結果とは区別する。既存stashは変更していない。
+
 - Phase 6: ユーザーが実サイト（`TestCategory=External`）に対して`dotnet test`を実行し、`Course.Direction`未知値エラー（`芝・右 外`）を発見。修正後、`dotnet build`（ソリューション全体）成功・`dotnet test tests/HorseRacingPrediction.Scraping.Tests --filter "FullyQualifiedName!~E2ETests"`成功（130件）を本セッションで確認。実サイトに対する`古いRaceResult取得`の再実行はユーザー側で未実施（要フォローアップ）。
+### 2026-09-07 Windows実行・デバッグ（リベース前: Phase 5基点）
+
+- ユーザーから本変更の既存テスト実行とデバッグを依頼された。既存仕様内の不具合修正と検証を対象とする。
+- 初回実行: Scraping単体129件、Collector90件成功。ソリューションビルド成功（警告・エラー0）。実サイトE2Eは14件中10件成功、4件失敗。
+- 実サイトの2020-05-03 京都11R（天皇賞・春）で `Course.Direction` / RawValue=`芝・右 外` を確認。依頼書12・33節に従い、この正式表記をDirection=Right、Layout=外として扱う回帰修正を行う。取得URL: https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1008202003041120200503/5B
+- 他の3件は、未公開の2026-09-12開催をE2Eテストが無条件に選択したことによる失敗。公開期間内の開催を探索し、未公開・掲載範囲外のみ次候補へ進む。公開済み候補がない場合は成功扱いにせずInconclusiveとする。
+- 開始時点の `PlaywrightWebBrowser.cs` の利用者変更（headed起動、single-process無効化）を保持した状態で実行。
+- 修正後の単体テストは131件成功（右外回りの正常系と未知方向の異常系を追加）。Collector90件、APIの `RaceEndpointsTests` 20件も成功。
+- 修正後の実サイトE2Eは14件全件成功、失敗0、スキップ0（5分3秒）。古いRaceResult取得、直近結果取得、2ヶ月前のHistoricalフォールバック、出馬表の一覧・個別取得・開催単位収集まで成功。全体ビルドも警告0・エラー0、`git diff --check`成功。
+- 今回のデバッグ対象は完了。コミットはParserの右外回り解析修正（回帰テスト付き）と、公開状況に応じたE2Eテスト対象選択・検証記録に分ける。前者のチェックポイント時点では後者のコミットを残作業とする。元の変更セット全体の未実装項目は引き続き残る。
+- 検証範囲の制約: 実サイトWorkflow E2Eの書き込み先は `FakeDataCollectionWriteService`。実API/DBへの永続化はこのE2Eでは検証していない。
+- 追加の静的確認で、API側 `RaceResultEntryBulkDto` はHorseName/Sex/Age等の追加属性を持たず、一括登録処理も `DeclareEntryResultCommand` のみを発行していることを確認。Phase 2の「送信経路追加」はAPIへの保存完了を意味しない。受け入れ基準5の永続化部分は未達であり、既存テスト成功のみで仕様全体をImplementedへ変更しない。これは今回の実サイトParser修正とは別の未実装範囲として残す。
+
+#### 実行コマンド
+
+```powershell
+dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests" --logger "trx;LogFileName=jra-unit.trx"
+dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --logger "trx;LogFileName=jra-collector.trx"
+dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build --filter "FullyQualifiedName~RaceEndpointsTests" --logger "trx;LogFileName=jra-api-races.trx"
+dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-build --filter "TestCategory=External" --logger "trx;LogFileName=jra-external-fixed.trx"
+dotnet build HorseRacingPrediction.sln --no-restore -v quiet
+git diff --check
+```
+
+## Documentation updates
+
+- 今回のデバッグでは本変更記録へ再現条件、修正、検証結果、検証限界を追記。設計・外部仕様を変更せず既存コースモデルへの解析不具合を修正するため、既存アーキテクチャ文書の変更は不要と判断した。
+
+## 過去フェーズの検証記録
+
 - `dotnet --version`: `10.0.100`（本セッションでインストール。`/home/user/.dotnet` に配置、`dotnet-install.sh --version 10.0.100`）
 - `dotnet build tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj`: 成功、0 Warning / 0 Error
 - `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、95件（実サイトE2Eテストは除外）

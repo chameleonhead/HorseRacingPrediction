@@ -112,21 +112,8 @@ public sealed class JraWorkflowSiteE2ETests
     private async Task<(DateOnly Date, RaceCourse Course)> FindUpcomingOrTodayRaceDateAsync(
         CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cancellationToken);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        return (target.Date, target.Courses[0]);
+        var list = await PublishedRaceCardMeeting.FindAsync(_session, cancellationToken);
+        return (list.Date, list.Course);
     }
 
     /// <summary>
