@@ -326,13 +326,17 @@ flowchart LR
   `EntryCollectedDataUpdated`、PUT API、read model反映、Collector呼び出しを実装。Domain 96件、
   Collector HTTP 11件、Scraping関連15件のテストが成功。
 - `dotnet build HorseRacingPrediction.sln --no-restore`: 成功（警告0、エラー0）。
-- `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"`: 657件成功、失敗0。
+- `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"`: 最終実装で658件成功、失敗0。
   リポジトリ既定値`Headless=true`で検証後、ユーザーの未コミット変更`Headless=false`を復元した。
 - `JraSiteE2ETests.現在週RaceCard取得`: 実サイトに対して1件成功（44秒）。全Entryの馬主が非空かつ
   数値ではなく、馬体重が正数であることを検証した。このE2Eはユーザー設定`Headless=false`でも成功した。
 - PlaywrightのJavaScript objectをprivate recordへ直接返すと`Return type mismatch`になることが判明したため、
   JavaScript側でJSON文字列化し、.NET側で明示的にデシリアライズする方式へ修正。localhost上のHTMLを
   実ブラウザーでsnapshot化する回帰テストを追加し、DOM fragmentの取得成功を確認した。
+- レース一覧を含む既存ページの取得方法を尊重しつつ高速化するため、セルごとのPlaywright呼び出しを廃止し、
+  テーブル全体のセル本文・class fragment・`a[href]`を1回のDOM評価で取得する方式へ変更した。
+  `RaceListPageParser`はレース番号セルのリンクを`RaceCardUrl`/`ResultUrl`へ保持する。
+- 上記変更後、JRA実サイトの`現在週RaceList取得`と`現在週RaceCard取得`を連続実行し、2件とも成功（49秒）。
 
 ## Deviations and follow-up
 

@@ -125,9 +125,14 @@ PlaywrightWebBrowser.GetRaceCardAsync(...)
 
 テーブルセル内で複数の意味を持つ要素がCSS class等で区別されている場合、`innerText`だけへ
 平坦化すると項目境界を復元できない。`PageTableSnapshot`は既存の文字列行との互換性を保ちつつ、
-セルごとに要素名・class・正規化テキストを持つ汎用fragment metadataを任意で保持してよい。
+セルごとに要素名・class・正規化テキスト・リンク先を持つ汎用fragment metadataを任意で保持してよい。
 `PlaywrightWebBrowser`はclass名の意味を解釈せず構造だけを保存し、`RaceCardPageParser`等の
 provider parserが`owner`、`breeder`、`weight`等の意味を解釈する。
+
+snapshotはPlaywrightとの往復を要素ごとに行わず、可能な範囲を1回のDOM評価でまとめて取得し、
+正規化・項目解釈を.NET側で行う。テーブルはテーブル単位で全文とfragmentを一括取得する。
+テーブル以外のsection、link、form、action、imageも同じ原則で汎用のテキストと必要最小限のDOM属性を
+一括取得する。provider固有selectorやclass名の解釈はBrowser層へ追加しない。
 
 ---
 

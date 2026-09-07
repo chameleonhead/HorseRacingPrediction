@@ -13,7 +13,7 @@ public sealed class PlaywrightWebBrowserSnapshotTests
     public async Task GetPageSnapshotAsync_TableCellWithClasses_ReturnsDomFragments()
     {
         await using var browser = await PlaywrightWebBrowser.CreateAsync();
-        const string html = "<table><tr><th>馬名</th></tr><tr><td><p class='owner'>藤田 晋</p><div class='cell weight'>488kg<span class='transition'>(-2)</span></div></td></tr></table>";
+        const string html = "<table><tr><th>馬名</th></tr><tr><td><a href='/race/1'>1R</a><p class='owner'>藤田 晋</p><div class='cell weight'>488kg<span class='transition'>(-2)</span></div></td></tr></table>";
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -30,6 +30,7 @@ public sealed class PlaywrightWebBrowserSnapshotTests
         Assert.AreEqual("藤田 晋", cell.FindByClass("owner")?.Text);
         Assert.AreEqual("488kg(-2)", cell.FindByClass("weight")?.Text);
         Assert.AreEqual("(-2)", cell.FindByClass("transition")?.Text);
+        Assert.AreEqual("/race/1", cell.Fragments.Single(fragment => fragment.TagName == "a").Href);
     }
 
     private static async Task ServeHtmlOnceAsync(TcpListener listener, string html)

@@ -2029,30 +2029,46 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private async Task<ExtractedTableRows> ExtractTableRowsAsync(ILocator table, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = await table.EvaluateAsync<string>("""
+            (table, maxRows) => JSON.stringify(
+                Array.from(table.querySelectorAll('tr'))
+                    .slice(0, maxRows)
+                    .map(row => ({
+                        Cells: Array.from(row.querySelectorAll(':scope > th, :scope > td'))
+                            .map(cell => ({
+                                Text: (cell.innerText || '').trim()
+                                    || Array.from(cell.querySelectorAll('img[alt]'))
+                                        .map(image => image.getAttribute('alt') || '')
+                                        .filter(Boolean)
+                                        .join(' '),
+                                Fragments: Array.from(cell.querySelectorAll('[class], a[href]'))
+                                    .slice(0, 48)
+                                    .map(element => ({
+                                        TagName: element.tagName.toLowerCase(),
+                                        ClassName: element.getAttribute('class') || '',
+                                        Text: element.innerText || '',
+                                        Href: element.getAttribute('href')
+                                    }))
+                            }))
+                    }))
+            )
+            """, MaxSnapshotRowsPerTable);
+        cancellationToken.ThrowIfCancellationRequested();
+        var domRows = JsonSerializer.Deserialize<IReadOnlyList<TableDomRowResult>>(json)
+            ?? throw new InvalidOperationException("テーブルのDOM snapshotを読み取れませんでした。");
+
         var rows = new List<IReadOnlyList<string>>();
         var cellsByRow = new List<IReadOnlyList<PageTableCellSnapshot>>();
-        var rowLocator = table.Locator("tr");
-        var rowCount = await rowLocator.CountAsync();
-
-        for (var rowIndex = 0; rowIndex < rowCount && rows.Count < MaxSnapshotRowsPerTable; rowIndex++)
+        foreach (var domRow in domRows)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var row = rowLocator.Nth(rowIndex);
-            var cellLocator = row.Locator("th, td");
-            var cellCount = await cellLocator.CountAsync();
-            if (cellCount == 0)
+            if (domRow.Cells.Count == 0)
             {
                 continue;
             }
 
-            var cells = new List<string>();
-            var cellSnapshots = new List<PageTableCellSnapshot>();
-            for (var cellIndex = 0; cellIndex < cellCount; cellIndex++)
-            {
-                var cell = await ExtractTableCellAsync(cellLocator.Nth(cellIndex));
-                cells.Add(cell.Text);
-                cellSnapshots.Add(cell);
-            }
+            var cellSnapshots = domRow.Cells.Select(ToTableCellSnapshot).ToArray();
+            var cells = cellSnapshots.Select(cell => cell.Text).ToArray();
 
             if (cells.All(string.IsNullOrWhiteSpace))
             {
@@ -2406,37 +2422,24 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return string.Join("\n", lines);
     }
 
-    private async Task<PageTableCellSnapshot> ExtractTableCellAsync(ILocator locator)
+    private static PageTableCellSnapshot ToTableCellSnapshot(TableDomCellResult domCell)
     {
-        var json = await locator.EvaluateAsync<string>("""
-            cell => JSON.stringify({
-                Text: cell.innerText || '',
-                Fragments: Array.from(cell.querySelectorAll('[class]'))
-                    .slice(0, 48)
-                    .map(element => ({
-                        TagName: element.tagName.toLowerCase(),
-                        ClassName: element.getAttribute('class') || '',
-                        Text: element.innerText || ''
-                    }))
-            })
-            """);
-        var dom = JsonSerializer.Deserialize<CellDomResult>(json)
-            ?? throw new InvalidOperationException("テーブルセルのDOM評価結果を読み取れませんでした。");
-
-        var text = NormalizeMultilineCellText(dom.Text, MaxCellTextLength);
-        var fragments = dom.Fragments
+        var fragments = domCell.Fragments
             .Select(fragment => new PageDomTextFragment(
                 fragment.TagName,
                 fragment.ClassName
                     .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Take(MaxFragmentClassTokens)
                     .ToArray(),
-                NormalizeMultilineCellText(fragment.Text, MaxFragmentTextLength)))
-            .Where(fragment => fragment.Text.Length > 0)
+                NormalizeMultilineCellText(fragment.Text, MaxFragmentTextLength),
+                fragment.Href))
+            .Where(fragment => fragment.Text.Length > 0 || !string.IsNullOrWhiteSpace(fragment.Href))
             .Take(MaxFragmentsPerCell)
             .ToArray();
 
-        return new PageTableCellSnapshot(text, fragments);
+        return new PageTableCellSnapshot(
+            NormalizeMultilineCellText(domCell.Text, MaxCellTextLength),
+            fragments);
     }
 
     private static string NormalizeMultilineCellText(string? text, int maxLength)
@@ -2459,9 +2462,17 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         IReadOnlyList<IReadOnlyList<string>> Rows,
         IReadOnlyList<IReadOnlyList<PageTableCellSnapshot>> Cells);
 
-    private sealed record CellDomResult(string Text, IReadOnlyList<CellDomFragmentResult> Fragments);
+    private sealed record TableDomRowResult(IReadOnlyList<TableDomCellResult> Cells);
 
-    private sealed record CellDomFragmentResult(string TagName, string ClassName, string Text);
+    private sealed record TableDomCellResult(
+        string Text,
+        IReadOnlyList<CellDomFragmentResult> Fragments);
+
+    private sealed record CellDomFragmentResult(
+        string TagName,
+        string ClassName,
+        string Text,
+        string? Href);
 
     private async Task<string> GetLocatorTextAsync(ILocator locator)
     {

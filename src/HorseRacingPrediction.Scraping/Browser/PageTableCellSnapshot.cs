@@ -16,4 +16,5 @@ public sealed record PageTableCellSnapshot(
 public sealed record PageDomTextFragment(
     string TagName,
     IReadOnlyList<string> ClassTokens,
-    string Text);
+    string Text,
+    string? Href = null);
