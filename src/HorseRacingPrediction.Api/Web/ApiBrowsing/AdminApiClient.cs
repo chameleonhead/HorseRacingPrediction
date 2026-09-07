@@ -15,7 +15,7 @@ namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 /// admin Blazor UI, attaching the process's own configured X-Api-Key automatically.
 /// Reuses the Api project's own Contracts DTOs instead of duplicating them.
 /// </summary>
-public sealed class AdminApiClient
+public sealed partial class AdminApiClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

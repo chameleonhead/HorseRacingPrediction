@@ -41,5 +41,5 @@ public sealed class CollectionDispatchOutboxEntity
 public static class CollectionDispatchPolicy
 {
     public static bool IsDispatchable(string jobType)
-        => !string.Equals(jobType, AgentJobType.PredictionExecution, StringComparison.Ordinal);
+        => jobType is not (AgentJobType.PredictionExecution or AgentJobType.HorseHistoryExcluded);
 }

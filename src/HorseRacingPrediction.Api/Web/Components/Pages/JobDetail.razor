@@ -32,6 +32,10 @@ else
             {
                 <div class="relationship-row"><span>対象レース</span><a href="@RaceUrl(TargetRaceId)">対象レースを見る</a><span class="hint">@TargetRaceId</span></div>
             }
+            @if (TargetSubject is { } subject)
+            {
+                <div class="relationship-row"><span>取得元</span><a href="@($"/{(subject.SubjectType=="Horse"?"horses":"trainers")}/{Uri.EscapeDataString(subject.SubjectId)}")">@subject.Name</a></div>
+            }
             @if (TargetDate is not null)
             {
                 <div class="relationship-row"><span>対象日</span><a href="@JobsByDateUrl(TargetDate)">同じ対象日の収集ジョブを見る</a><span class="hint">@TargetDate</span></div>
@@ -124,6 +128,22 @@ else
     private IReadOnlyList<AgentRelatedJobReadModel> AggregatedChildren => job?.ChildJobs.Where(x => x.RelationType == JobRelationType.AggregatedBy).ToList() ?? [];
     private JobAttemptReadModel? LatestAttempt => job?.Attempts.OrderByDescending(x => x.AttemptNumber).FirstOrDefault();
     private string? TargetRaceId => TryGetPayloadValue("RaceId") ?? TryGetPayloadValue("RequestedByRaceId");
+    private SubjectCollectionPayload? TargetSubject
+    {
+        get
+        {
+            if(job is null) return null;
+            try
+            {
+                if(job.JobType is AgentJobType.SubjectProfileRefresh or AgentJobType.HorseHistoryDiscovery)
+                    return AgentJobPayloadSerializer.Deserialize<SubjectCollectionPayload>(job.Payload);
+                if(job.JobType is AgentJobType.HorseHistoryRace or AgentJobType.HorseHistoryExcluded)
+                    return AgentJobPayloadSerializer.Deserialize<HorseHistoryRacePayload>(job.Payload).Horse;
+            }
+            catch(JsonException) { }
+            return null;
+        }
+    }
     private string? TargetDate => TryGetPayloadValue("RaceDate") ?? TryGetPayloadValue("TargetDate") ?? ExtractTargetDate(job?.DeduplicationKey);
     private bool CanRerun => job is not null
         && job.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter
@@ -134,7 +154,7 @@ else
     private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
     private string HeaderDescription => TargetDate is { } date ? $"対象日 {date}・更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}" : $"更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}";
-    private static string DisplayJobType(string value) => value switch { "RaceReacquisition" => "レース情報の再取得", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value.Replace('-', ' ') };
+    private static string DisplayJobType(string value) => value switch { "SubjectProfileRefresh" => "公開プロフィールの再取得", "HorseHistoryDiscovery" => "馬の過去レース取得", "HorseHistoryRace" => "出走履歴のレース取得", "HorseHistoryExcluded" => "対象外の出走履歴", "RaceReacquisition" => "レース情報の再取得", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value.Replace('-', ' ') };
     private static string StatusClass(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "ok", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "bad", AgentJobStatus.Running => "info", _ => "warn" };
     private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
     private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", AgentJobStatus.WaitingDependency => "warning", _ => "neutral" };

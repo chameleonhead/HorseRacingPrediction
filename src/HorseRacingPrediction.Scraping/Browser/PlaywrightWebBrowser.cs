@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.Scraping.Browser;
 /// セッション中は同一の <see cref="IPage"/> を維持し、ナビゲーション・クリック・
 /// テキスト取得・リンク抽出などの操作を逐次実行する。
 /// </summary>
-public sealed class PlaywrightWebBrowser : IWebBrowser
+public sealed partial class PlaywrightWebBrowser : IWebBrowser
 {
     private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
     private const int MaxSnapshotSectionCount = 24;

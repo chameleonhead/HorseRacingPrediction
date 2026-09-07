@@ -35,6 +35,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     // 必要がある。
     private static readonly string[] RecoverableJobTypes =
     [
+        AgentJobType.SubjectProfileRefresh, AgentJobType.HorseHistoryDiscovery, AgentJobType.HorseHistoryRace,
         AgentJobType.RaceReacquisition,
         AgentJobType.RaceCardCollection,
         AgentJobType.RaceResultCollection
@@ -133,6 +134,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     {
         var now = DateTimeOffset.UtcNow;
 
+        foreach (var type in SubjectJobTypes) await ExecuteSubjectJobsAsync(type, now, cancellationToken);
         await ExecuteRaceReacquisitionJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceCardJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceResultJobsAsync(now, cancellationToken).ConfigureAwait(false);
@@ -677,6 +679,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         var now = DateTimeOffset.UtcNow;
         return jobType switch
         {
+            AgentJobType.SubjectProfileRefresh or AgentJobType.HorseHistoryDiscovery or AgentJobType.HorseHistoryRace => ExecuteSubjectJobsAsync(jobType,now,cancellationToken),
             AgentJobType.RaceReacquisition => ExecuteRaceReacquisitionJobsAsync(now, cancellationToken),
             AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
             AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
@@ -736,6 +739,12 @@ public sealed partial class CollectionExecutionService : BackgroundService
         {
             switch (notification.JobType)
             {
+                case AgentJobType.SubjectProfileRefresh:
+                case AgentJobType.HorseHistoryDiscovery:
+                case AgentJobType.HorseHistoryRace:
+                    if (await ExecuteSubjectTaskAsync(task.JobType,task.JobType+":"+task.DeduplicationKey,task.DeduplicationKey,task.Payload,jobTimeoutCts.Token))
+                        await _stateStore.CompleteCollectionTaskAsync(task.JobType,task.DeduplicationKey,task.LeaseToken,cancellationToken);
+                    break;
                 case AgentJobType.RaceReacquisition:
                     await ExecuteSingleRaceReacquisitionAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);
                     break;

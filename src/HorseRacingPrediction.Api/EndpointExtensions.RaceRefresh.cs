@@ -28,6 +28,10 @@ public static partial class EndpointExtensions
 
         var entries = new List<EntryDetails>();
         var results = new List<EntryResultDetails>();
+        var originHorse = request.SourceHorseId is null ? null
+            : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
+        if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x=>NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
+            return Results.Conflict(new[] { "取得元の馬がレースの出走馬に含まれていません。" });
         foreach (var source in request.Entries ?? [])
         {
             if (source.HorseNumber <= 0 || string.IsNullOrWhiteSpace(source.HorseName))
@@ -55,6 +59,7 @@ public static partial class EndpointExtensions
                     if (trainer is not null && NormalizeDisplayName(trainer.DisplayName) == NormalizeDisplayName(source.TrainerName)) trainerId = old.TrainerId;
                 }
             }
+            if (originHorse is not null && NormalizeDisplayName(source.HorseName) == NormalizeDisplayName(originHorse.RegisteredName)) horseId = originHorse.HorseId;
             var registration = new RegisterEntryRequest(horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight, source.BodyWeightChange,
                 EntryId: entryId, HorseName: source.HorseName, JockeyName: source.JockeyName,
@@ -76,7 +81,7 @@ public static partial class EndpointExtensions
         var winningId = winner is null ? null : entries.FirstOrDefault(x => x.HorseNumber == winner.HorseNumber)?.HorseId;
         var data = new CollectedRaceData(request.RaceName, request.GradeCode, request.SurfaceCode,
             request.DistanceMeters, request.DirectionCode, request.EntryCount, entries,
-            request.IsRaceCard ? null : results, request.WinningHorseName, winningId,
+            request.IsRaceCard ? null : results, request.WinningHorseName ?? winner?.HorseName, winningId,
             p is null ? null : new(p.DeclaredAt, Payouts(p.WinPayouts), Payouts(p.PlacePayouts),
                 Payouts(p.QuinellaPayouts), Payouts(p.ExactaPayouts), Payouts(p.TrifectaPayouts),
                 Payouts(p.BracketQuinellaPayouts), Payouts(p.WidePayouts), Payouts(p.TrioPayouts)),

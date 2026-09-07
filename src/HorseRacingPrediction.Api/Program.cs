@@ -101,6 +101,7 @@ builder.Services.AddSingleton<PredictionComparisonViewLocator>();
 builder.Services.AddSingleton<MemoBySubjectLocator>();
 builder.Services.AddSingleton<HorseRaceHistoryLocator>();
 builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
+builder.Services.AddSingleton<JraSubjectProfileLocator>();
 builder.Services.AddRacePredictor();
 builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
 builder.Services.AddSingleton<ProcessingStateStore>();
@@ -163,6 +164,7 @@ builder.Services.AddEventFlow(options =>
     .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
     .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
     .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
+    .UseEntityFrameworkReadModel<JraSubjectProfileReadModel, EventStoreDbContext, JraSubjectProfileLocator>()
     .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
     .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
     .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
@@ -283,6 +285,7 @@ app.MapAgentDashboardEndpoints();
 app.MapCollectionResetEndpoints();
 app.MapJobManagementEndpoints();
 app.MapRaceReacquisitionEndpoints();
+app.MapSubjectCollectionEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
 

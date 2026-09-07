@@ -64,6 +64,23 @@ public class SqliteDbContextProviderTests
     }
 
     [TestMethod]
+    public async Task Migrator_UpgradesPreviousEnsureCreatedSchemaWithoutLosingData()
+    {
+        using var provider = new SqliteDbContextProvider();
+        await using (var previous = provider.CreateContext())
+        {
+            await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE JraSubjectProfileReadModel");
+            await previous.Database.ExecuteSqlRawAsync("INSERT INTO Horses (HorseId, RegisteredName, NormalizedName, Aliases) VALUES ('horse-legacy', 'preserved', 'preserved', '[]')");
+        }
+        await CreateMigrator(provider).MigrateAsync();
+        await using var context = provider.CreateContext();
+        Assert.AreEqual("preserved", await context.Database.SqlQueryRaw<string>("SELECT RegisteredName AS Value FROM Horses").SingleAsync());
+        Assert.AreEqual(0, await context.Set<HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel>().CountAsync());
+        CollectionAssert.AreEquivalent(context.Database.GetMigrations().ToList(), (await context.Database.GetAppliedMigrationsAsync()).ToList());
+    }
+
+    [TestMethod]
     public void Dispose_DoesNotThrow()
     {
         var provider = new SqliteDbContextProvider();

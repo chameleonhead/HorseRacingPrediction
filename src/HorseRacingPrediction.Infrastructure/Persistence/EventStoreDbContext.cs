@@ -37,6 +37,11 @@ public class EventStoreDbContext : DbContext
     {
         modelBuilder.AddEventFlowEvents();
         modelBuilder.AddEventFlowSnapshots();
+        modelBuilder.Entity<JraSubjectProfileReadModel>(entity =>
+        {
+            entity.HasKey(x => x.SubjectId);
+            ConfigureJsonProperty(entity, x => x.Fields);
+        });
 
         modelBuilder.Entity<RaceSummaryReadModel>(entity =>
         {

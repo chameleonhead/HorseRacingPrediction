@@ -184,6 +184,35 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                     b.ToTable("Jockeys");
                 });
 
+            modelBuilder.Entity("HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel", b =>
+                {
+                    b.Property<string>("SubjectId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("AcquiredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Fields")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceIdentity")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("SubjectId");
+
+                    b.ToTable("JraSubjectProfileReadModel");
+                });
+
             modelBuilder.Entity("HorseRacingPrediction.Application.Queries.ReadModels.MemoBySubjectReadModel", b =>
                 {
                     b.Property<string>("SubjectKey")

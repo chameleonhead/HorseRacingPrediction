@@ -28,7 +28,8 @@ public sealed record DeclareRaceResultBulkRequest(
     RecordTrackConditionRequest? TrackCondition = null,
     DeclarePayoutResultRequest? Payouts = null,
     string? TargetRaceId = null, bool RefreshExistingData = false, bool IsRaceCard = false,
-    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null);
+    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null,
+    string? SourceHorseId = null);
 
 /// <summary>
 /// 出走馬1頭分の成績情報。

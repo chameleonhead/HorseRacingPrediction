@@ -61,7 +61,11 @@ public sealed class JraRaceResultCollectionWorkflow
     public Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
         => CollectCoreAsync(raceId, targetRaceId, cancellationToken);
 
-    private async Task<RaceResultCollectionResult> CollectCoreAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken)
+    public Task<RaceResultCollectionResult> RefreshPageAsync(JraRaceResultPage page, string targetRaceId, string sourceHorseId, CancellationToken cancellationToken = default)
+        => CollectCoreAsync(page.RaceId,targetRaceId,cancellationToken,page,sourceHorseId);
+
+    private async Task<RaceResultCollectionResult> CollectCoreAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken,
+        JraRaceResultPage? suppliedPage = null, string? sourceHorseId = null)
     {
         if (raceId.Course == RaceCourse.Unknown)
         {
@@ -70,7 +74,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 nameof(raceId));
         }
 
-        var resultPageResult = await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
+        var resultPageResult = suppliedPage ?? await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
 
         if (resultPageResult is not JraRaceResultPage resultPage)
         {
@@ -223,7 +227,7 @@ public sealed class JraRaceResultCollectionWorkflow
             Payouts: payouts, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null,
             OverallPaceText: resultPage.OverallPaceText,
             CornerPassagesText: resultPage.CornerPassages is null ? null : string.Join("\n", resultPage.CornerPassages.Select(x => $"{x.CornerNumber}: {x.OrderRaw}")),
-            CourseLayout: resultPage.CourseSpec?.RawLayout);
+            CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId);
 
         DeclareRaceResultBulkResponse outcome;
         try

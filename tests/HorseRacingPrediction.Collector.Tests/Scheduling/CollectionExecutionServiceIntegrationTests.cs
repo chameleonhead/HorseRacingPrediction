@@ -15,7 +15,7 @@ namespace HorseRacingPrediction.Collector.Tests.Scheduling;
 /// フェイクを組み合わせ、ジョブのdequeue→Workflow呼び出し→成功/失敗判定という一連の流れを検証する。
 /// </summary>
 [TestClass]
-public sealed class CollectionExecutionServiceIntegrationTests
+public sealed partial class CollectionExecutionServiceIntegrationTests
 {
     private string _stateDirectory = null!;
 
@@ -502,7 +502,7 @@ public sealed class CollectionExecutionServiceIntegrationTests
         IJraScheduleCollectionWorkflow scheduleWorkflow,
         IJraRaceCardCollectionWorkflow cardWorkflow,
         IJraRaceResultCollectionWorkflow resultWorkflow,
-        FakeJraSessionFactory? sessionFactory = null)
+        FakeJraSessionFactory? sessionFactory = null, IHttpClientFactory? httpClients = null)
     {
         sessionFactory ??= new FakeJraSessionFactory();
         var options = Options.Create(new AgentProcessingOptions
@@ -526,7 +526,7 @@ public sealed class CollectionExecutionServiceIntegrationTests
             _ => resultWorkflow,
             planner,
             new CollectionExecutionTrigger(),
-            new NoOpHttpClientFactory(),
+            httpClients ?? new NoOpHttpClientFactory(),
             NullLogger<CollectionExecutionService>.Instance);
     }
 

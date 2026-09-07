@@ -57,6 +57,15 @@ internal sealed class NoOpWebBrowser : IWebBrowser
 /// </summary>
 internal sealed class FakeJraNavigator : IJraNavigator
 {
+    public Func<JraSubjectIdentity,JraSubjectPage>? SubjectFactory { get; set; }
+    public Func<JraSubjectPage,JraSubjectPage?>? NextHistoryFactory { get; set; }
+    public Func<JraSubjectIdentity,HorseHistoryRaceLink,JraRaceResultPage>? HistoryResultFactory { get; set; }
+    public Task<JraSubjectPage> ToSubjectProfileAsync(JraSubjectIdentity subject,CancellationToken cancellationToken=default)
+        => Task.FromResult(SubjectFactory?.Invoke(subject) ?? throw new NotSupportedException());
+    public Task<JraSubjectPage?> NextHorseHistoryPageAsync(JraSubjectPage current,CancellationToken cancellationToken=default)
+        => Task.FromResult(NextHistoryFactory?.Invoke(current));
+    public Task<JraRaceResultPage> ToHorseHistoryResultAsync(JraSubjectIdentity subject,HorseHistoryRaceLink race,CancellationToken cancellationToken=default)
+        => Task.FromResult(HistoryResultFactory?.Invoke(subject,race) ?? throw new NotSupportedException());
     public IJraPage? RaceListResult { get; set; }
 
     /// <summary>
