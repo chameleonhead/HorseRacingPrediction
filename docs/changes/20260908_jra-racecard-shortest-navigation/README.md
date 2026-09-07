@@ -1,6 +1,6 @@
 # JRA出馬表の現在ページ認識と最短ナビゲーション
 
-- Status: Draft
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -134,6 +134,11 @@ JRA固有ラベル解釈はNavigatorで行い、`PlaywrightWebBrowser`へ競馬�
 2. RaceList、同一開催RaceCard、別競馬場、別日の短縮経路を順に追加。
 3. 各経路とフルパスfallbackの単体テストを追加。
 4. 実サイトで同一開催の複数レースを連続取得し、実行した操作・所要時間を検証記録へ追記。
+
+## Documentation updates
+
+- 現行のナビゲーション仕様を記載する非change-record文書を確認したが、本変更で更新が必要な文書はない。
+  本change recordを現在ページ認識と最短経路選択の設計・検証記録とする。
 
 ## Verification record
 
