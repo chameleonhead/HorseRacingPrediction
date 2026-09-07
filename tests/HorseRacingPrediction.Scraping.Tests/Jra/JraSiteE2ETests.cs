@@ -127,6 +127,24 @@ public sealed class JraSiteE2ETests
     }
 
     [TestMethod]
+    public async Task 初出走RaceCard取得_馬体重を保持し増減をnullにする()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        const string debutRaceUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604020520260906/25";
+
+        await _browser.NavigateAsync(debutRaceUrl, cts.Token);
+        var page = await _session.Pages.ReadAsync(cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceCardPage>(page);
+        var raceCard = (JraRaceCardPage)page;
+        Assert.IsTrue(raceCard.Entries.Count > 0, "初出走レースの出走馬が取得できませんでした。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
+            "初出走馬の馬体重が取得できませんでした。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeightChange is null),
+            "初出走馬の馬体重増減はnullである必要があります。");
+    }
+
+    [TestMethod]
     public async Task 完了済みRaceResult取得()
     {
         using var cts = new CancellationTokenSource(TestTimeout);

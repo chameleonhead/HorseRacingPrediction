@@ -49,7 +49,7 @@ public sealed class RaceCardPageParser
         new(@"^\d+(?:\.\d+)?$", RegexOptions.Compiled);
 
     private static readonly Regex BodyWeightRegex =
-        new(@"^(?<weight>\d{3})\s*kg\s*\((?<change>[+-]?\d+)\)$",
+        new(@"^(?<weight>\d{3})\s*kg\s*\((?:(?<change>[+-]?\d+)|(?<debut>初出走))\)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public JraPageKind Kind =>
@@ -575,7 +575,9 @@ public sealed class RaceCardPageParser
 
         return (
             int.Parse(match.Groups["weight"].Value),
-            int.Parse(match.Groups["change"].Value));
+            match.Groups["change"].Success
+                ? int.Parse(match.Groups["change"].Value)
+                : null);
     }
 
     private static string? NormalizeOptionalText(string? text)

@@ -303,7 +303,7 @@ flowchart LR
 - 実サイト例からOwnerName=`中西 宏彰`を得て、オッズ`28.0`や生産者名を馬主にしない。
 - 法人馬主`(株)ネクストトライ`をそのまま保持する。
 - `448kg(0)`、`456kg(+6)`、`488kg(-2)`を正しく分解する。
-- optionalな馬体重欄なしと、値あり解析不能を区別する。
+- optionalな馬体重欄なしと、値あり解析不能を区別する。`NNNkg(初出走)`は馬体重を保持し、増減をnullとする。
 - workflowがEntryへOwnerName/DeclaredWeight/DeclaredWeightDiffを渡す。
 - 馬プロフィールにもOwnerNameを保存する。
 - 実サイトRaceCard E2Eで全Entryの馬主が数値・人気・生産者になっておらず、馬体重が取得できる。
@@ -337,12 +337,15 @@ flowchart LR
   テーブル全体のセル本文・class fragment・`a[href]`を1回のDOM評価で取得する方式へ変更した。
   `RaceListPageParser`はレース番号セルのリンクを`RaceCardUrl`/`ResultUrl`へ保持する。
 - 上記変更後、JRA実サイトの`現在週RaceList取得`と`現在週RaceCard取得`を連続実行し、2件とも成功（49秒）。
+- 2026-09-06中山5Rで`464kg(初出走)`等の正式表記を確認。parserは体重を取得し、増減をnullとして扱う。
+- 同ページを直接読み込むE2Eテストに成功（全出走馬の馬体重あり・増減null）。parser単体テスト7件、
+  Externalを除くsolution全体テスト659件もすべて成功した。
 
 ## Deviations and follow-up
 
 - 設計案の更新DTOは出走登録の全収集項目を列挙していたが、今回の不具合修正に必要な
   `DeclaredWeight`、`DeclaredWeightDiff`、`OwnerName`だけを更新対象にした。騎手・調教師等の既存値を
   変更する要件はなく、履歴read modelへの不要な影響を避けるためである。
-- 馬体重の正式な欠損表記は今回取得したレースに現れなかった。実装中に確認できなければ、既知形式だけを
-  正常扱いし、未知表記は例外として観測可能にする。
+- 馬体重増減の正式な欠損表記`初出走`を実サイトで確認し、既知形式として追加した。その他の未知表記は
+  引き続き例外として観測可能にする。
 - 生産者の永続化は別change recordで扱う。

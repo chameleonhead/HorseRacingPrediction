@@ -93,7 +93,7 @@ public sealed class RaceCardPageParserTests
     // 馬名セルはブロック要素ごとの改行を保持した複数行テキストとして取得される
     // （馬名／オッズ(人気)／馬体重(増減)／馬主名／生産者名／調教師名(所属)／血統の順）。
     // 騎手列も同様に「性齢/毛色」「負担重量」「騎手名」が改行区切りで結合されている。
-    private static PageSnapshot BuildRealSiteSnapshot()
+    private static PageSnapshot BuildRealSiteSnapshot(string weightText = "488kg(-2)")
     {
         var table = new PageTableSnapshot(
             Headers: [
@@ -107,7 +107,7 @@ public sealed class RaceCardPageParserTests
                 [
                     "",
                     "1",
-                    "バニーラビット\n10.7(4番人気)\n488kg(-2)\n藤田 晋\nノーザンファーム\n武 幸四郎(栗東)\n父：アドマイヤマーズ\n母：トレジャリング(母の父：Havana Gold)",
+                    $"バニーラビット\n10.7(4番人気)\n{weightText}\n藤田 晋\nノーザンファーム\n武 幸四郎(栗東)\n父：アドマイヤマーズ\n母：トレジャリング(母の父：Havana Gold)",
                     "牡4/栗\n60.0kg\n小牧 加矢太",
                 ],
             ]);
@@ -121,6 +121,17 @@ public sealed class RaceCardPageParserTests
             headings: ["2026年9月5日 中山 1レース", "障害3歳以上オープン"]);
 
         return new PageSnapshot(Url, "出馬表", [section]);
+    }
+
+    [TestMethod]
+    public void Parse_初出走の馬体重_体重を取得し増減をnullにする()
+    {
+        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(
+            BuildRealSiteSnapshot("464kg(初出走)"));
+
+        var entry = page.Entries.Single();
+        Assert.AreEqual(464, entry.BodyWeight);
+        Assert.IsNull(entry.BodyWeightChange);
     }
 
     [TestMethod]
