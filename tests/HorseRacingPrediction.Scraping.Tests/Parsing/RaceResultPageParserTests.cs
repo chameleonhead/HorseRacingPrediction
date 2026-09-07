@@ -351,6 +351,27 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_天皇賞春の芝右外を方向とLayoutへ分解する()
+    {
+        var page = ParseWithMainText("天候 晴 芝 良 3,200メートル（芝・右 外）");
+
+        Assert.IsNotNull(page.CourseSpec);
+        Assert.AreEqual(3200, page.CourseSpec.DistanceMeters);
+        CollectionAssert.AreEqual(new[] { CourseSurface.Turf }, page.CourseSpec.Surfaces.ToArray());
+        Assert.AreEqual(CourseDirection.Right, page.CourseSpec.Direction);
+        Assert.AreEqual("外", page.CourseSpec.Layout);
+        Assert.AreEqual("芝・右 外", page.CourseSpec.RawLayout);
+    }
+
+    [TestMethod]
+    public void Parse_未知の方向は外回り表記を伴っても拒否する()
+    {
+        var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
+            () => ParseWithMainText("天候 晴 芝 良 3,200メートル（芝・北 外）"));
+        Assert.AreEqual("Course.Direction", ex.FieldName);
+    }
+
+    [TestMethod]
     public void Parse_コース表記_芝左を分解できる()
     {
         var page = ParseWithMainText("天候 晴 芝 良 1,600メートル（芝・左）");
