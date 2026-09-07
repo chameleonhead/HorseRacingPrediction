@@ -6,7 +6,7 @@ namespace HorseRacingPrediction.Agents.Tests;
 public sealed class PlaywrightWebBrowserSnapshotTests
 {
     [TestMethod]
-    public void DefaultLaunchOptions_AreSafeForServerlessChromium()
+    public void DefaultLaunchOptions_UsePlatformCompatibleChromiumArguments()
     {
         var options = PlaywrightWebBrowser.CreateDefaultLaunchOptions();
 
@@ -15,7 +15,14 @@ public sealed class PlaywrightWebBrowserSnapshotTests
         var arguments = options.Args!.ToArray();
         CollectionAssert.Contains(arguments, "--disable-dev-shm-usage");
         CollectionAssert.Contains(arguments, "--no-zygote");
-        CollectionAssert.Contains(arguments, "--single-process");
+        if (OperatingSystem.IsWindows())
+        {
+            CollectionAssert.DoesNotContain(arguments, "--single-process");
+        }
+        else
+        {
+            CollectionAssert.Contains(arguments, "--single-process");
+        }
     }
 
     [TestMethod]

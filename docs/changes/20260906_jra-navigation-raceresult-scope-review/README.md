@@ -166,6 +166,25 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 
 ## Verification record
 
+### 2026-09-07 Phase 8再テスト・ブラウザー終了の調査
+
+- `0683d4a`から再実行。全体ビルドは警告0・エラー0、Scraping単体137件、Collector91件、APIレース20件成功。
+- 標準のheadless / `--single-process`設定では、Windows上の実サイトE2E14件すべてが `TargetClosedException` で失敗。カレンダー1件だけの単独実行でも再現したため、テスト並列数だけが原因ではない。
+- 前回成功時は利用者の一時的な起動設定変更が適用されていた。まずheadlessを維持したままWindowsでのみ `--single-process` を外し、同じテストで切り分ける。Linuxの既存起動条件は維持する。これは依頼済みデバッグの一環であり、収集の外部仕様は変更しない。
+- 切り分け結果: カレンダー1件は修正前に失敗、Windowsで `--single-process` を除いた後は成功（7秒）。この条件を本修正として採用し、既存の起動設定テストをOS別の期待値へ更新した。利用者のstashは適用・変更していない。
+- 修正後: 全体ビルド成功（警告0・エラー0）、Scraping単体137件成功、ブラウザー設定・snapshot関連3件成功。実サイトWorkflow E2EはFake書き込み先を使用し、実DB永続化は今回も対象外。
+- 実サイトE2E再実行: **14件全件成功、失敗0・スキップ0**（開催単位Workflow 4分50秒、全体約4.85分）。結果TRXの標準出力・標準エラーに部分失敗の記録なし。`git diff --check`成功。本再テスト・デバッグは完了。Linuxでの実行検証は行っていない。
+- 検証コマンド（すべてソリューションビルド後に実行）:
+
+```powershell
+dotnet build HorseRacingPrediction.sln --no-restore -v quiet
+dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-build --filter "FullyQualifiedName!~E2ETests" --logger "trx;LogFileName=jra-phase8-unit-fixed.trx"
+dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-build --logger "trx;LogFileName=jra-phase8-collector.trx"
+dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-build --filter "FullyQualifiedName~RaceEndpointsTests" --logger "trx;LogFileName=jra-phase8-api.trx"
+dotnet test tests/HorseRacingPrediction.Agents.Tests/HorseRacingPrediction.Agents.Tests.csproj --no-build --filter "FullyQualifiedName~PlaywrightWebBrowserSnapshotTests" --logger "trx;LogFileName=jra-browser-options.trx"
+dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-build --filter "TestCategory=External" --logger "trx;LogFileName=jra-phase8-external-fixed.trx" --logger "console;verbosity=normal"
+```
+
 ### 2026-09-07 リベース後の確認
 
 - 開始地点の訂正依頼により、今回の2コミットを `origin/claude/jra-scraping-navigation-raceresult-h1rvx6` の `27439b0`（Phase 8）へリベースした。

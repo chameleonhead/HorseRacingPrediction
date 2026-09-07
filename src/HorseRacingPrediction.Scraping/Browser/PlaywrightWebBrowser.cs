@@ -123,7 +123,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
                 "--no-zygote",
-                "--single-process",
+                // Windowsではsingle-process指定でページ取得中にChromiumが終了する。
+                ..(OperatingSystem.IsWindows() ? Array.Empty<string>() : new[] { "--single-process" }),
                 "--disable-web-security",
                 "--ignore-certificate-errors",
             ]
