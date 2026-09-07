@@ -320,6 +320,9 @@ flowchart LR
 
 - 設計調査時に一時診断テストで実サイトsnapshotと対象セル`outerHTML`を取得。診断テストは成果物へ残していない。
 - 調査開始時点で`PlaywrightWebBrowser.cs`にユーザー変更（`Headless=false`）があり、変更していない。
+- 実装チェックポイント1: 汎用DOM fragment snapshot、class優先parser、文字列fallback、RaceEntryとworkflowの
+  値受け渡しを実装。parser/workflow関連15テストと実サイトRaceCard E2E 1テストが成功。
+- 次のチェックポイント: 既存Entry更新APIとread model反映の回帰検証、全体テスト、最終記録。
 
 ## Deviations and follow-up
 

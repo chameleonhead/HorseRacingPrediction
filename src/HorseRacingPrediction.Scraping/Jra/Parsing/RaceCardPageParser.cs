@@ -45,6 +45,13 @@ public sealed class RaceCardPageParser
     private static readonly Regex TrainerNameRegex =
         new(@"^(?<name>[^\(（]+)", RegexOptions.Compiled);
 
+    private static readonly Regex OddsOnlyRegex =
+        new(@"^\d+(?:\.\d+)?$", RegexOptions.Compiled);
+
+    private static readonly Regex BodyWeightRegex =
+        new(@"^(?<weight>\d{3})\s*kg\s*\((?<change>[+-]?\d+)\)$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public JraPageKind Kind =>
         JraPageKind.RaceCard;
 
@@ -85,7 +92,7 @@ public sealed class RaceCardPageParser
             ParseStartTime(snapshot);
 
         var entries =
-            ParseEntries(table);
+            ParseEntries(table, snapshot.Url);
 
         return new JraRaceCardPage(
             snapshot.Url,
@@ -323,7 +330,8 @@ public sealed class RaceCardPageParser
     }
 
     private static IReadOnlyList<RaceEntry> ParseEntries(
-        PageTableSnapshot table)
+        PageTableSnapshot table,
+        string url)
     {
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
         var frameNumberIndex = FindFrameNumberColumnIndex(table.Headers);
@@ -334,8 +342,9 @@ public sealed class RaceCardPageParser
         var entries = new List<RaceEntry>();
         var sequentialNumber = 0;
 
-        foreach (var row in table.Rows)
+        for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
+            var row = table.Rows[rowIndex];
             // Task16実サイト確認で判明: 抽出したテーブルの1行目にヘッダー行自体が
             // 重複して含まれることがある（rowspanの影響と見られる）。そのまま
             // 見出し文字列を1頭目として扱わないよう読み飛ばす。
@@ -350,8 +359,12 @@ public sealed class RaceCardPageParser
                 continue;
             }
 
-            var (horseName, trainerName, ownerName) =
-                ParseHorseNameCell(row[horseNameIndex]);
+            var parsedHorse = ParseHorseNameCell(
+                row[horseNameIndex],
+                table.GetCell(rowIndex, horseNameIndex),
+                url);
+
+            var horseName = parsedHorse.HorseName;
 
             if (string.IsNullOrWhiteSpace(horseName))
             {
@@ -414,8 +427,10 @@ public sealed class RaceCardPageParser
                 frameNumber,
                 jockeyName,
                 assignedWeight,
-                trainerName,
-                ownerName));
+                parsedHorse.TrainerName,
+                parsedHorse.OwnerName,
+                parsedHorse.BodyWeight,
+                parsedHorse.BodyWeightChange));
         }
 
         return entries;
@@ -477,9 +492,26 @@ public sealed class RaceCardPageParser
     /// 「馬名 / 単勝オッズ(人気) 馬体重 馬主名 / 生産者名 / 調教師名 / 血統」の順序による）。
     /// 調教師名の行だけは末尾に所属（例:"(栗東)"）が付くため、それを手掛かりに区別する。
     /// </summary>
-    private static (string HorseName, string? TrainerName, string? OwnerName) ParseHorseNameCell(
-        string cell)
+    private static ParsedHorseCell ParseHorseNameCell(
+        string cell,
+        PageTableCellSnapshot? cellSnapshot,
+        string url)
     {
+        var semanticName = cellSnapshot?.FindByClass("name")?.Text;
+        if (!string.IsNullOrWhiteSpace(semanticName))
+        {
+            var semanticTrainer = cellSnapshot?.FindByClass("trainer")?.Text;
+            var semanticWeight = cellSnapshot?.FindByClass("weight")?.Text;
+            var (semanticBodyWeight, semanticBodyWeightChange) = ParseBodyWeight(semanticWeight, url);
+
+            return new ParsedHorseCell(
+                semanticName.Trim(),
+                semanticTrainer is null ? null : ExtractTrainerName(semanticTrainer),
+                NormalizeOptionalText(cellSnapshot?.FindByClass("owner")?.Text),
+                semanticBodyWeight,
+                semanticBodyWeightChange);
+        }
+
         var lines = cell
             .Split('\n')
             .Select(l => l.Trim())
@@ -488,7 +520,7 @@ public sealed class RaceCardPageParser
 
         if (lines.Count == 0)
         {
-            return (string.Empty, null, null);
+            return new ParsedHorseCell(string.Empty, null, null, null, null);
         }
 
         var horseName = lines[0];
@@ -508,14 +540,55 @@ public sealed class RaceCardPageParser
         var ownerName =
             candidateLines.FirstOrDefault(l => l != trainerLine);
 
-        return (horseName, trainerName, ownerName);
+        var fallbackWeight = lines.FirstOrDefault(IsBodyWeightLine);
+        var (bodyWeight, bodyWeightChange) = ParseBodyWeight(fallbackWeight, url);
+
+        return new ParsedHorseCell(horseName, trainerName, ownerName, bodyWeight, bodyWeightChange);
     }
 
     private static bool IsStatLine(string line)
         => line.Contains("kg", StringComparison.OrdinalIgnoreCase) ||
-           line.Contains("番人気", StringComparison.Ordinal);
+           line.Contains("番人気", StringComparison.Ordinal) ||
+           OddsOnlyRegex.IsMatch(line);
+
+    private static bool IsBodyWeightLine(string line)
+        => line.Contains("kg", StringComparison.OrdinalIgnoreCase);
+
+    private static (int? BodyWeight, int? BodyWeightChange) ParseBodyWeight(
+        string? text,
+        string url)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return (null, null);
+        }
+
+        var match = BodyWeightRegex.Match(text.Trim());
+        if (!match.Success)
+        {
+            throw new JraValueParseException(
+                JraPageKind.RaceCard,
+                url,
+                "BodyWeight",
+                text);
+        }
+
+        return (
+            int.Parse(match.Groups["weight"].Value),
+            int.Parse(match.Groups["change"].Value));
+    }
+
+    private static string? NormalizeOptionalText(string? text)
+        => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     private static bool IsFamilyLine(string line)
         => line.StartsWith("父", StringComparison.Ordinal) ||
            line.StartsWith("母", StringComparison.Ordinal);
+
+    private sealed record ParsedHorseCell(
+        string HorseName,
+        string? TrainerName,
+        string? OwnerName,
+        int? BodyWeight,
+        int? BodyWeightChange);
 }

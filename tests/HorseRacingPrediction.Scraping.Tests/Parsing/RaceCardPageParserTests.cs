@@ -139,6 +139,52 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual("武 幸四郎", entry.TrainerName);
         Assert.AreEqual("小牧 加矢太", entry.JockeyName);
         Assert.AreEqual(60.0m, entry.AssignedWeight);
+        Assert.AreEqual(488, entry.BodyWeight);
+        Assert.AreEqual(-2, entry.BodyWeightChange);
+    }
+
+    [TestMethod]
+    public void Parse_DOM断片付きセル_Classに基づき馬主と馬体重を抽出する()
+    {
+        var rows = new IReadOnlyList<string>[]
+        {
+            ["", "1", "エーオーキング\n4.0\n(3番人気)\n456kg(+6)\n(株)ネクストトライ\n杵臼牧場\n久保田 貴士(美浦)", "牡3/鹿\n56.0kg\n騎手A"],
+        };
+        var cells = new IReadOnlyList<PageTableCellSnapshot>[]
+        {
+            [
+                new("", []),
+                new("1", []),
+                new(rows[0][2],
+                [
+                    new("div", ["name"], "エーオーキング"),
+                    new("span", ["num"], "4.0"),
+                    new("span", ["pop_rank"], "(3番人気)"),
+                    new("div", ["cell", "weight"], "456kg(+6)"),
+                    new("span", ["transition"], "(+6)"),
+                    new("p", ["owner"], "(株)ネクストトライ"),
+                    new("p", ["breeder"], "杵臼牧場"),
+                    new("p", ["trainer"], "久保田 貴士(美浦)"),
+                ]),
+                new(rows[0][3], []),
+            ],
+        };
+        var table = new PageTableSnapshot(
+            ["枠", "馬番", "馬名 / 単勝オッズ(人気)\n馬体重\n馬主名 / 生産者名 / 調教師名 / 血統", "性齢/毛色\n負担重量\n騎手名"],
+            rows,
+            cells);
+        var section = new PageSectionSnapshot("出馬表", "発走 10:05", [], [], [table],
+            ["2026年9月5日 中山 1レース", "テストレース"]);
+
+        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(new PageSnapshot(Url, "出馬表", [section]));
+
+        Assert.HasCount(1, page.Entries);
+        var entry = page.Entries[0];
+        Assert.AreEqual("エーオーキング", entry.HorseName);
+        Assert.AreEqual("(株)ネクストトライ", entry.OwnerName);
+        Assert.AreEqual("久保田 貴士", entry.TrainerName);
+        Assert.AreEqual(456, entry.BodyWeight);
+        Assert.AreEqual(6, entry.BodyWeightChange);
     }
 
     // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、

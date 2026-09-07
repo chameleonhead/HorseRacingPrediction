@@ -118,6 +118,12 @@ public sealed class JraSiteE2ETests
 
         Assert.AreEqual(race.Id, raceCard.RaceId);
         Assert.IsTrue(raceCard.Entries.Count > 0, $"{race.Id} の出馬表に出走馬がありません。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
+            $"{race.Id} に馬主を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
+            $"{race.Id} に馬体重を取得できない出走馬があります。");
+        Assert.IsFalse(raceCard.Entries.Any(entry => decimal.TryParse(entry.OwnerName, out _)),
+            $"{race.Id} で単勝オッズを馬主として誤取得しました。");
     }
 
     [TestMethod]

@@ -127,7 +127,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
         var card1 = CreateRaceCard(
             race1.Id,
             "1R テストレース",
-            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A"));
+            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A", 488, -2));
 
         var (session, _, writeService) = CreateContext(
             raceList,
@@ -142,6 +142,11 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.HasCount(1, writeService.UpsertHorseWithOwnerCalls);
         Assert.AreEqual("テストホースA", writeService.UpsertHorseWithOwnerCalls[0].RegisteredName);
         Assert.AreEqual("テスト馬主A", writeService.UpsertHorseWithOwnerCalls[0].OwnerName);
+        Assert.HasCount(1, writeService.UpsertRaceEntryCalls);
+        var entry = writeService.UpsertRaceEntryCalls[0];
+        Assert.AreEqual("テスト馬主A", entry.OwnerName);
+        Assert.AreEqual(488m, entry.DeclaredWeight);
+        Assert.AreEqual(-2m, entry.DeclaredWeightDiff);
     }
 
     [TestMethod]

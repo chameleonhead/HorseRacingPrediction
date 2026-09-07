@@ -10,4 +10,6 @@ public sealed record RaceEntry(
     string? JockeyName,
     decimal? AssignedWeight,
     string? TrainerName = null,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    int? BodyWeight = null,
+    int? BodyWeightChange = null);

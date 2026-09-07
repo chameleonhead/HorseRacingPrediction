@@ -21,7 +21,10 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string? JockeyName,
         string? TrainerName,
         int? GateNumber,
-        decimal? AssignedWeight);
+        decimal? AssignedWeight,
+        decimal? DeclaredWeight,
+        decimal? DeclaredWeightDiff,
+        string? OwnerName);
 
     public List<UpsertRaceCall> UpsertRaceCalls { get; } = [];
 
@@ -116,7 +119,21 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         CancellationToken cancellationToken = default)
     {
         UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(
-            raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber, assignedWeight));
+            raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber, assignedWeight,
+            declaredWeight, declaredWeightDiff, null));
+        return Task.FromResult($"{raceId}-entry-{horseNumber}");
+    }
+
+    public Task<string> UpsertRaceEntryAsync(
+        string raceId, int horseNumber, string horseName, string? jockeyName,
+        string? trainerName, int? gateNumber, decimal? assignedWeight,
+        string? sexCode, int? age, decimal? declaredWeight,
+        decimal? declaredWeightDiff, string? ownerName,
+        CancellationToken cancellationToken = default)
+    {
+        UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(
+            raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber, assignedWeight,
+            declaredWeight, declaredWeightDiff, ownerName));
         return Task.FromResult($"{raceId}-entry-{horseNumber}");
     }
 

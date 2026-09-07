@@ -82,6 +82,10 @@ public sealed class JraWorkflowSiteE2ETests
         Assert.IsTrue(result.RaceIds.Count > 0, "出馬表の保存に1件も成功しませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceCalls.Count > 0, "UpsertRaceAsyncが1度も呼ばれませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceEntryCalls.Count > 0, "UpsertRaceEntryAsyncが1度も呼ばれませんでした。");
+        Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
+            "出走登録に馬主名が渡されていないエントリーがあります。");
+        Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => entry.DeclaredWeight is > 0),
+            "出走登録に馬体重が渡されていないエントリーがあります。");
 
         if (result.Errors.Count > 0)
         {
