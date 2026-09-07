@@ -626,6 +626,25 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceListAsync_CurrentTargetRaceList_PerformsNoNavigation()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var page = await navigator.ToRaceListAsync(
+            new DateOnly(2026, 9, 5),
+            RaceCourse.Nakayama);
+
+        Assert.IsInstanceOfType<JraRaceListPage>(page);
+        Assert.AreEqual(raceListUrl, page.Url);
+        Assert.AreEqual(0, browser.NavigatedUrls.Count);
+        Assert.AreEqual(0, browser.ClickedTexts.Count);
+    }
+
+    [TestMethod]
     public async Task ToRaceCardAsync_CurrentTargetCard_PerformsNoNavigation()
     {
         const string url = "https://www.jra.go.jp/keiba/sample/racecard/11/";

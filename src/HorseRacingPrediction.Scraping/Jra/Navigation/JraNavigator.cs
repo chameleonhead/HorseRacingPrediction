@@ -173,6 +173,25 @@ public sealed class JraNavigator
             course,
             _browser.CurrentUrl);
 
+        if (!string.IsNullOrWhiteSpace(_browser.CurrentUrl))
+        {
+            var currentSnapshot = await _browser.GetPageSnapshotAsync(
+                cancellationToken: cancellationToken);
+            var currentPage = _pageReader.Parse(currentSnapshot);
+
+            if (currentPage is JraRaceListPage currentRaceList &&
+                currentRaceList.Date == date &&
+                currentRaceList.Course == course)
+            {
+                _logger.LogInformation(
+                    "JRA navigation skipped. Destination=RaceList Route=CurrentPage Date={Date} Course={Course} Url={Url}",
+                    date,
+                    course,
+                    currentRaceList.Url);
+                return currentRaceList;
+            }
+        }
+
         var calendarPage =
             await ToCalendarAsync(
                 new YearMonth(date.Year, date.Month),

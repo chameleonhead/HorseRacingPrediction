@@ -15,6 +15,7 @@
 ## Goals
 
 - `ToRaceCardAsync`の最初に現在ページを型付きページとして認識する。
+- `ToRaceListAsync`でも現在ページを認識し、要求日・競馬場のレース一覧を表示中なら操作せず返す。
 - レース一覧・出馬表上のリンクまたはactionをクリックして最短で対象出馬表へ移動する。
 - 最短経路の到達先を`RaceId`で検証し、不成立時だけ現行のフルパスへフォールバックする。
 - JRAのセッション依存URLを不用意に再GETせず、表示中ページの操作を優先する。
@@ -119,6 +120,7 @@ JRA固有ラベル解釈はNavigatorで行い、`PlaywrightWebBrowser`へ競馬�
 ## Acceptance criteria
 
 - 現在表示中ページを既存parserで認識してから経路を選ぶ。
+- 同一日・競馬場のRaceListへの要求はクリック・Navigateを行わない。
 - 同一RaceCardへの要求はクリック・Navigateを行わない。
 - 同一日・競馬場のRaceListからレース番号クリック1回でRaceCardへ移動する。
 - 同一日・競馬場のRaceCard間をレース番号クリック1回で移動する。
@@ -152,6 +154,9 @@ JRA固有ラベル解釈はNavigatorで行い、`PlaywrightWebBrowser`へ競馬�
   - 664件成功、失敗0件。
 - `git diff --check`
   - whitespace errorなし。
+- `ToRaceListAsync`の現在ページ再利用を追加後、Navigatorテスト30件が成功。同じ日・競馬場の
+  `JraRaceListPage`を表示中の場合、クリック・Navigateが0回であることを確認した。
+- 同変更後のExternalを除くsolution全体テスト665件が成功、失敗0件。
 
 ## Deviations and follow-up
 
