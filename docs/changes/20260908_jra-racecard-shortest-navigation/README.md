@@ -1,6 +1,6 @@
 # JRA出馬表の現在ページ認識と最短ナビゲーション
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -142,9 +142,22 @@ JRA固有ラベル解釈はNavigatorで行い、`PlaywrightWebBrowser`へ競馬�
 
 ## Verification record
 
-- 未実装。承認後に記録する。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName~JraNavigatorTests" --no-restore`
+  - 29件成功。現在ページと同一RaceCard、RaceListからの1クリック、同一日・同一競馬場、同一日の別競馬場、
+    同一競馬場の別日、到達RaceId不一致時のフルパスfallbackをFake browserで確認した。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName~現在週RaceCardを連続取得" --no-restore`
+  - 実サイト1件成功（1分47秒）。開催中のRaceListから先頭RaceCardを取得し、表示中RaceCardから次の
+    RaceCardを連続取得して両方のRaceId一致を確認した。
+- `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"`
+  - 664件成功、失敗0件。
+- `git diff --check`
+  - whitespace errorなし。
 
 ## Deviations and follow-up
 
 - JRA画面で別開催場・別日の切替後に現在レース番号が維持されるかはページ状態に依存するため、必ず到達
   RaceIdを読み直し、必要なときだけレース番号を追加クリックする。
+- 設計記載のhelper引数に`PageSnapshot`を追加した。型付きページは意図的にDOM操作情報を保持しないため、
+  最初の1回で取得したsnapshotを併せて渡し、再抽出せずリンク・action表示文字列を選ぶためである。
+- 別競馬場・別日の実サイト検証は、実行時に公開されている開催の組み合わせに依存するためFake browserで
+  到達RaceId検証まで確認した。実サイトではRaceList→RaceCard→同一開催の次RaceCardを確認した。

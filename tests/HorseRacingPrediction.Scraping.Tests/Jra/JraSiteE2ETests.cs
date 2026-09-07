@@ -127,6 +127,24 @@ public sealed class JraSiteE2ETests
     }
 
     [TestMethod]
+    public async Task 現在週RaceCardを連続取得_表示中ページからレース番号で切り替える()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var raceList = await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
+        Assert.IsTrue(raceList.Races.Count >= 2, "連続取得に必要な2レースがありません。");
+
+        var first = raceList.Races[0].Id;
+        var second = raceList.Races[1].Id;
+        var firstPage = await _session.Navigate.ToRaceCardAsync(first, cts.Token);
+        var secondPage = await _session.Navigate.ToRaceCardAsync(second, cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceCardPage>(firstPage);
+        Assert.IsInstanceOfType<JraRaceCardPage>(secondPage);
+        Assert.AreEqual(first, ((JraRaceCardPage)firstPage).RaceId);
+        Assert.AreEqual(second, ((JraRaceCardPage)secondPage).RaceId);
+    }
+
+    [TestMethod]
     public async Task 初出走RaceCard取得_馬体重を保持し増減をnullにする()
     {
         using var cts = new CancellationTokenSource(TestTimeout);

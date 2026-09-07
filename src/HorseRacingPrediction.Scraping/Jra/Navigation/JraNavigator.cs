@@ -244,6 +244,27 @@ public sealed class JraNavigator
                 JraNavigationFailureReason.OutOfDisplayedRange);
         }
 
+        if (!string.IsNullOrWhiteSpace(_browser.CurrentUrl))
+        {
+            var currentSnapshot = await _browser.GetPageSnapshotAsync(
+                cancellationToken: cancellationToken);
+            var currentPage = _pageReader.Parse(currentSnapshot);
+            var shortcutPage = await TryNavigateFromCurrentPageAsync(
+                currentPage,
+                currentSnapshot,
+                race,
+                cancellationToken);
+
+            if (shortcutPage is not null)
+            {
+                _logger.LogInformation(
+                    "JRA navigation done. Destination=RaceCard Route=Shortcut Race={Race} Url={Url}",
+                    race,
+                    shortcutPage.Url);
+                return shortcutPage;
+            }
+        }
+
         var listPage =
             await ToRaceListAsync(
                 race.Date,
@@ -296,6 +317,178 @@ public sealed class JraNavigator
 
         return page;
     }
+
+    private async Task<JraRaceCardPage?> TryNavigateFromCurrentPageAsync(
+        IJraPage currentPage,
+        PageSnapshot currentSnapshot,
+        RaceId target,
+        CancellationToken cancellationToken)
+    {
+        if (currentPage is JraRaceCardPage currentCard && currentCard.RaceId == target)
+        {
+            return currentCard;
+        }
+
+        try
+        {
+            if (currentPage is JraRaceListPage currentList &&
+                currentList.Date == target.Date &&
+                currentList.Course == target.Course &&
+                currentList.Races.Any(race => race.Id == target))
+            {
+                return await TryClickRaceNumberAsync(currentSnapshot, target, cancellationToken);
+            }
+
+            if (currentPage is not JraRaceCardPage card)
+            {
+                return null;
+            }
+
+            if (card.RaceId.Date == target.Date && card.RaceId.Course == target.Course)
+            {
+                return await TryClickRaceNumberAsync(currentSnapshot, target, cancellationToken);
+            }
+
+            if (card.RaceId.Date == target.Date)
+            {
+                if (!await TryClickCourseAsync(currentSnapshot, target.Course, cancellationToken))
+                {
+                    return null;
+                }
+
+                return await CompleteShortcutAfterSwitchAsync(target, cancellationToken);
+            }
+
+            if (card.RaceId.Course == target.Course)
+            {
+                if (!await TryClickDateAsync(currentSnapshot, target.Date, cancellationToken))
+                {
+                    return null;
+                }
+
+                return await CompleteShortcutAfterSwitchAsync(target, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "JRA RaceCard shortcut failed. Race={Race}; falling back to full navigation.",
+                target);
+        }
+
+        return null;
+    }
+
+    private async Task<JraRaceCardPage?> CompleteShortcutAfterSwitchAsync(
+        RaceId target,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await _browser.GetPageSnapshotAsync(cancellationToken: cancellationToken);
+        var page = _pageReader.Parse(snapshot);
+        if (page is JraRaceCardPage card && card.RaceId == target)
+        {
+            return card;
+        }
+
+        if (page is JraRaceListPage list &&
+            (list.Date != target.Date || list.Course != target.Course))
+        {
+            return null;
+        }
+
+        if (page is JraRaceCardPage switchedCard &&
+            (switchedCard.RaceId.Date != target.Date || switchedCard.RaceId.Course != target.Course))
+        {
+            return null;
+        }
+
+        return await TryClickRaceNumberAsync(snapshot, target, cancellationToken);
+    }
+
+    private async Task<JraRaceCardPage?> TryClickRaceNumberAsync(
+        PageSnapshot snapshot,
+        RaceId target,
+        CancellationToken cancellationToken)
+    {
+        var candidate = FindRaceNumberClickText(snapshot, target.Number);
+        if (candidate is null)
+        {
+            return null;
+        }
+
+        await _browser.ClickAsync(candidate, cancellationToken);
+        return await ReadAndValidateRaceCardAsync(target, cancellationToken);
+    }
+
+    private async Task<bool> TryClickCourseAsync(
+        PageSnapshot snapshot,
+        RaceCourse course,
+        CancellationToken cancellationToken)
+    {
+        var courseName = RaceCourseNames.GetJraName(course);
+        var candidate = FindClickText(snapshot, text =>
+            string.Equals(RemoveWhitespace(text), courseName, StringComparison.Ordinal));
+        if (candidate is null)
+        {
+            return false;
+        }
+
+        await _browser.ClickAsync(candidate, cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> TryClickDateAsync(
+        PageSnapshot snapshot,
+        DateOnly date,
+        CancellationToken cancellationToken)
+    {
+        var marker = $"{date.Month}月{date.Day}日";
+        var candidate = FindClickText(snapshot, text =>
+            RemoveWhitespace(text).Contains(marker, StringComparison.Ordinal));
+        if (candidate is null)
+        {
+            return false;
+        }
+
+        await _browser.ClickAsync(candidate, cancellationToken);
+        return true;
+    }
+
+    private async Task<JraRaceCardPage?> ReadAndValidateRaceCardAsync(
+        RaceId target,
+        CancellationToken cancellationToken)
+    {
+        var page = await _pageReader.ReadAsync(cancellationToken);
+        if (page is JraRaceCardPage card && card.RaceId == target)
+        {
+            return card;
+        }
+
+        _logger.LogWarning(
+            "JRA RaceCard shortcut reached unexpected page. Expected={Expected} ActualKind={Kind} ActualUrl={Url}",
+            target,
+            page.Kind,
+            page.Url);
+        return null;
+    }
+
+    private static string? FindRaceNumberClickText(PageSnapshot snapshot, int raceNumber)
+    {
+        var pattern = new Regex($@"(^|\D){raceNumber}\s*(?:R|レース)(?!\d)", RegexOptions.IgnoreCase);
+        return FindClickText(snapshot, text => pattern.IsMatch(text));
+    }
+
+    private static string? FindClickText(PageSnapshot snapshot, Func<string, bool> predicate)
+        => snapshot.Links.Select(link => link.Title)
+            .Concat(snapshot.Actions.Select(action => action.Text))
+            .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text) && predicate(text));
+
+    private static string RemoveWhitespace(string value)
+        => string.Concat(value.Where(character => !char.IsWhiteSpace(character)));
 
     public async Task<IJraPage> ToRaceResultAsync(
         RaceId race,
