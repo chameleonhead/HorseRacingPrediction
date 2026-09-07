@@ -966,7 +966,13 @@ public static class EndpointExtensions
                     }
                 }
 
-                if (request.Payouts is not null)
+                // 払戻宣言も結果宣言と同様、RaceAggregate.DeclarePayoutResult は
+                // Status == ResultDeclared のときしか受け付けない（PayoutDeclared 後の
+                // 再宣言は不変条件違反として拒否する）。同一レースの再収集時に無意味な
+                // 「払戻記録エラー」が毎回記録され続けないよう、既に払戻済みの場合は
+                // 呼び出し自体をスキップする。
+                if (request.Payouts is not null
+                    && currentStatus < HorseRacingPrediction.Domain.Races.RaceStatus.PayoutDeclared)
                 {
                     try
                     {
