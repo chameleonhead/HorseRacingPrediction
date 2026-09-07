@@ -253,6 +253,35 @@ Phase 1〜6の内容についてコードを直接確認する形の監査を行
 - **依頼書25節（人気とレース内出走頭数との整合性確認）**: 「可能であればレース内出走頭数との整合性も確認する」という付随的Validationは未着手のまま。Popularity自体の`>= 1`要求はPhase 3で実装済みだが、頭数との整合確認（例:Popularityが出走頭数を超えていないか）は行っていない。今回は見送り、フォローアップとする。
 - 27節（賞金）・22節（ハロンタイム独立テーブル）・13/28節（古い年代の券種差）は、Phase 3〜5の時点で既に本ドキュメントに既知の見送りとして記載済みのため、重複して記載しない（詳細はDeviations参照）。
 
+### Phase 8（実サイトスクリーンショットのground truthに基づく実装・本コミット）
+
+ユーザーが実際のJRAレース結果ページ（2026年9月6日 中山1R、障害3歳以上未勝利）のスクリーンショットを提供し、本セッションでその内容を正確に書き起こした上で「これは推測ではなく確実な実データである」という前提で実装した。依頼書33節が想定する「実装時に未考慮パターンを発見した場合、想像で補完せず確認する」フローにおいて、初めて実サイトの実データそのものをground truthとして使えた回である（Phase 6はユーザー自身が実サイトE2Eで発見したエラーメッセージからの推測だったのに対し、今回はページ内容そのものが確定情報として与えられた）。
+
+また、本フェーズ着手前にorigin/mainへユーザー自身が直接追加したフォローアップコミット（`83f94c5`、`ParseResults`内のTODOコメント「コーナー通過順位を取得する、3Fタイムは本テーブルではなく…」）を、前セッションでのマージ（マージコミット`901a926`）により本ブランチへ取り込み済みの状態から作業した。当該TODOコメントは本フェーズの2番目の実装項目（コーナー通過順位のインライン列対応）で解消し、コメント自体は具体的な実装コメントに置き換えた。
+
+実装内容:
+
+1. **払戻金Parserの再実装（最優先）**: `RaceResultPageParser.ParsePayouts`を、既存の「式別/組合せ/払戻金の3列を持つ単純な1テーブル」への対応（既存Fixture・既存テストとの後方互換のため維持）に加え、券種キーワード（単勝/複勝/枠連/馬連/ワイド/馬単/3連複/3連単、旧字体の三連複/三連単も許容）をアンカーとした本文全体のテキストスキャン方式を追加した。テーブル側で検出できなかった券種のみテキストスキャンで補完する設計（`populatedFromTable`で二重カウントを防止）。`RacePayouts`に`BracketQuinellaPayouts`（枠連）・`WidePayouts`（ワイド）・`TrioPayouts`（3連複）を追加し、8券種すべてに対応した。`PayoutLine`に`Popularity`（人気順、任意）を追加。実データFixtureに基づく回帰テスト`Parse_実サイト書き起こしFixture_全項目を正しく解析する`で、枠連が空欄でも正常（空リスト）であることを含め検証した。
+2. **コーナー通過順位（馬ごとのインライン列）**: `RaceResultEntry.CornerOrders`（`IReadOnlyList<int>?`）を新設。着順テーブル内の「コーナー通過順位」列見出しを検出する`FindCornerOrdersColumnIndex`を追加し、半角スペース区切りの整数列（例:「4 3 3 2」）をパースする。値ありでintに解析できないセルは`JraValueParseException`。ページ下方の集計テーブル用`ParseCornerPassages`（`CornerPassage`型）とは完全に独立した実装。
+3. **下方コーナー通過順位集計テーブルの行ラベル対応**: `ParseCornerPassages`が、コーナー番号が列見出しとして現れる既存レイアウトに加え、実データで確認された「行の1列目がラベルセル（例:「1コーナー」「2コーナー(2周目)」）、2列目以降が生文字列」という2列テーブルのレイアウトにも対応するよう修正した。列見出しレイアウトが1件でも見つかった場合はそちらを優先し（既存テストとの非干渉のため）、見つからない場合のみ行ラベルレイアウトを試みる。
+4. **タイム欄（上り集計、できれば対応）**: `JraRaceResultPage.OverallPaceText`（生文字列）を追加。「上り」ラベル以降の文字列を、数値分解はせず生のまま保持する簡易実装とした。フォーマットの分解（マイル/分秒/ハロンタイムへの構造化）は複雑さに対して優先度が低いため見送り、生文字列保持のみとした。
+5. **本賞金（依頼書27節）**: `JraRaceResultPage.PrizeMoneyByPosition`（`IReadOnlyDictionary<int, decimal>?`、着順→円単位の金額）を追加。「本賞金」ラベル以降の「N着 金額」繰り返しパターンを万円単位で解析し、円単位（×10,000）に変換して保持する。ラベル自体が存在しない場合はnull（正常）、ラベルはあるのに1件も解析できない場合は`JraValueParseException`。`JraRaceResultCollectionWorkflow`で`RaceResultBulkEntry.PrizeMoney`へ、各馬の`FinishPosition`に対応する金額を接続した（対応する着順の賞金がない場合はnullのまま）。
+6. **レース結果ページ内の他レースへの直接遷移**: 実HTML構造（リンクかJSボタンか、正確なテキスト）が本セッションでは確認できていないため、DOM構造を決め打ちにせず、既存の`NavigateRaceNumberLinkAsync`（例外送出）から派生させた`TryNavigateRaceNumberLinkAsync`（bool返却、例外を投げない）を新設し、`IJraNavigator.ToSiblingRaceResultAsync`を追加した。現在ページの`GetLinksAsync()`から対象R番号＋`JraNavigationLinks.RaceResult`のリンクを探して直接遷移を試み、リンクが見つからない・遷移先が期待した`RaceResult`ページでない場合は、既存の`ToRaceResultAsync`（開催選択経由のフルパス）へ自動的にフォールバックする。呼び出し元を例外で壊さない設計。`JraNavigatorTests`に直接リンクありのケース・フォールバックのケースの両方を追加した。あわせて`IJraRaceResultCollectionWorkflow.CollectAsync`に`useSiblingNavigation`引数を追加し、`CollectionExecutionService`の同日・同競馬場のレース一覧ループで、1レース目のみフルパス・2レース目以降は`ToSiblingRaceResultAsync`を使うよう変更した（同日・同競馬場の連続収集という既存ループにそのまま組み込める範囲だったため実施。ループ構造自体の変更は行っていない）。**実サイトでレース結果ページ上に他レースへの直接リンクが実在するかどうかは本タスクでは検証できていないため、確度は「フォールバック付きの保守的な実装」にとどまる。**
+
+Acceptance criteria表の更新:
+
+- **#10（平地・障害のページ差異）**: 実データで「障害レースではEstimatedLast3Fが常にnull・Average1Fのみ値を持つ」ことを回帰テストで確認できた。**引き続き一部満たす**（ハロンタイム独立テーブルの区間分割タイム自体は未着手のまま）。
+- **#12（払戻をRaceResultとして取得できる）**: 従来の「既存5券種＋テーブル1構造のみ対応」から、**8券種＋グリッドレイアウト対応の実装に更新し、満たす**へ格上げ。
+- **#13（古いレースの券種差）**: ワイド・枠連・3連複が既知バケットとして追加されたことで対応範囲が広がったが、古い年代（券種そのものが未発売だった時代）の実データはまだ未検証のため、引き続き一部満たす。
+
+## Verification record（Phase 8）
+
+- `dotnet build`（ソリューション全体）: 成功、0 Warning / 0 Error
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --filter "FullyQualifiedName!~E2ETests"`: 成功、134件（Phase 7までの131件のうち1件（`Parse_未知の券種はエラーになる`）をワイド対応に伴い既知集合外キーワードへ差し替え、Phase 8で新規4件を追加: 実サイト書き起こしFixture1件、ナビゲーション直接遷移/フォールバック各1件）
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj`: 成功、91件（`useSiblingNavigation`引数追加に伴う`FakeJraRaceResultCollectionWorkflow`拡張のみ、既存テストへの影響なし）
+- `dotnet test`（ソリューション全体、E2Eテスト含む）: Scraping.Tests以外は全て成功（Agents 108件・Api 106件・Collector 91件・MachineLearning 14件・Infrastructure 10件）。Scraping.Testsは非E2Eの134件は成功、E2Eテスト14件は既知のプロキシ制約（ECH拡張処理バグによる`ERR_CONNECTION_RESET`）により失敗（実行不可能）。これは本ドキュメント冒頭に記載済みの既知の環境制約であり、Phase 8の変更によるものではない。
+- 変更ファイル: `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceResultPageParser.cs`、`src/HorseRacingPrediction.Scraping/Jra/Pages/JraRaceResultPage.cs`、`src/HorseRacingPrediction.Scraping/Jra/Models/RaceResultEntry.cs`、`src/HorseRacingPrediction.Scraping/Jra/Navigation/IJraNavigator.cs`・`JraNavigator.cs`、`src/HorseRacingPrediction.Scraping/Jra/Workflow/IJraRaceResultCollectionWorkflow.cs`・`JraRaceResultCollectionWorkflow.cs`、`src/HorseRacingPrediction.Collector/Scheduling/CollectionExecutionService.cs`、テストファイル4件（`RaceResultPageParserTests.cs`、`JraNavigatorTests.cs`、`FakeJraNavigator.cs`、`FakeJraSessionInfra.cs`、`FakeJraWorkflows.cs`）、本ドキュメント。
+
 ---
 
 ## 付録: 元の変更依頼書全文
