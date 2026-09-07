@@ -603,6 +603,8 @@ Navigate.ToCalendarAsync(...)
 
 # 12. Page Parser
 
+レース名は競馬場名を含む場合も保持する。見出しの除外対象は競馬場名単独・開催情報・日付・サイト共通見出し。結果ページの走査は払戻金や勝馬紹介で終了し、後続の馬名を代用しない。[修正と検証](changes/20260908_jra-race-name-course-text/README.md)を参照。
+
 ページごとの解析責務を分離する。
 
 ```csharp

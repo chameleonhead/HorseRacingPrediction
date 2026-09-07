@@ -286,7 +286,7 @@ public sealed class RaceCardPageParser
                 RaceNumberRegex.Replace(heading, string.Empty).Trim();
 
             if (!string.IsNullOrWhiteSpace(withoutNumber) &&
-                RaceCourseNames.Parse(withoutNumber) == RaceCourse.Unknown &&
+                !RaceNameHeading.IsMeeting(withoutNumber) &&
                 !DateRegex.IsMatch(withoutNumber) &&
                 !IsKnownNonRaceNameHeading(withoutNumber))
             {

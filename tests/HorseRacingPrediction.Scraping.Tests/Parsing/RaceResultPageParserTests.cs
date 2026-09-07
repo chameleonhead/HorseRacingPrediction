@@ -46,6 +46,28 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    [DataRow("メイクデビュー中山")]
+    [DataRow("メイクデビュー阪神")]
+    [DataRow("東京優駿(GⅠ)")]
+    public void Parse_CourseNameWithinRaceName_PreservesFullName(string name)
+    {
+        var snapshot = BuildSnapshot();
+        snapshot.Headings.Clear();
+        snapshot.Headings.AddRange(["JRA 日本中央競馬会", "レース結果2026年9月6日（日曜）4回中山2日 6レース", "中山", "4回中山2日", name, "払戻金", "勝馬の紹介", "エンジャムメント 2024年4月11日生牝2"]);
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        Assert.AreEqual(name, page.RaceName);
+    }
+
+    [TestMethod]
+    public void Parse_MissingRaceName_DoesNotUseWinningHorseHeading()
+    {
+        var snapshot = BuildSnapshot();
+        snapshot.Headings.Clear();
+        snapshot.Headings.AddRange(["2026年9月6日 中山 6R", "払戻金", "勝馬の紹介", "エンジャムメント 2024年4月11日生牝2"]);
+        Assert.ThrowsExactly<JraPageParseException>(() => new RaceResultPageParser().Parse(snapshot));
+    }
+
+    [TestMethod]
     public void CanParse_TableWithResultColumns_ReturnsTrue()
     {
         var parser = new RaceResultPageParser();

@@ -1253,8 +1253,10 @@ public sealed class RaceResultPageParser
             {
                 var candidate = headings[i].Trim();
 
+                if (RaceNameHeading.IsFollowingSection(candidate)) break;
+
                 if (string.IsNullOrWhiteSpace(candidate) ||
-                    RaceCourseNames.Parse(candidate) != RaceCourse.Unknown ||
+                    RaceNameHeading.IsMeeting(candidate) ||
                     DateRegex.IsMatch(candidate) ||
                     NonRaceNameHeadings.Contains(candidate, StringComparer.Ordinal))
                 {
