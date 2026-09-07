@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -2407,45 +2408,35 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
     private async Task<PageTableCellSnapshot> ExtractTableCellAsync(ILocator locator)
     {
-        try
-        {
-            var dom = await locator.EvaluateAsync<CellDomResult>("""
-                cell => ({
-                    Text: cell.innerText || '',
-                    Fragments: Array.from(cell.querySelectorAll('[class]'))
-                        .slice(0, 48)
-                        .map(element => ({
-                            TagName: element.tagName.toLowerCase(),
-                            ClassName: element.getAttribute('class') || '',
-                            Text: element.innerText || ''
-                        }))
-                })
-                """);
+        var json = await locator.EvaluateAsync<string>("""
+            cell => JSON.stringify({
+                Text: cell.innerText || '',
+                Fragments: Array.from(cell.querySelectorAll('[class]'))
+                    .slice(0, 48)
+                    .map(element => ({
+                        TagName: element.tagName.toLowerCase(),
+                        ClassName: element.getAttribute('class') || '',
+                        Text: element.innerText || ''
+                    }))
+            })
+            """);
+        var dom = JsonSerializer.Deserialize<CellDomResult>(json)
+            ?? throw new InvalidOperationException("テーブルセルのDOM評価結果を読み取れませんでした。");
 
-            if (dom is not null)
-            {
-                var text = NormalizeMultilineCellText(dom.Text, MaxCellTextLength);
-                var fragments = dom.Fragments
-                    .Select(fragment => new PageDomTextFragment(
-                        fragment.TagName,
-                        fragment.ClassName
-                            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                            .Take(MaxFragmentClassTokens)
-                            .ToArray(),
-                        NormalizeMultilineCellText(fragment.Text, MaxFragmentTextLength)))
-                    .Where(fragment => fragment.Text.Length > 0)
-                    .Take(MaxFragmentsPerCell)
-                    .ToArray();
+        var text = NormalizeMultilineCellText(dom.Text, MaxCellTextLength);
+        var fragments = dom.Fragments
+            .Select(fragment => new PageDomTextFragment(
+                fragment.TagName,
+                fragment.ClassName
+                    .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Take(MaxFragmentClassTokens)
+                    .ToArray(),
+                NormalizeMultilineCellText(fragment.Text, MaxFragmentTextLength)))
+            .Where(fragment => fragment.Text.Length > 0)
+            .Take(MaxFragmentsPerCell)
+            .ToArray();
 
-                return new PageTableCellSnapshot(text, fragments);
-            }
-        }
-        catch (PlaywrightException)
-        {
-            // DOM評価が使えない一時状態では従来の文字列抽出へフォールバックする。
-        }
-
-        return new PageTableCellSnapshot(await GetCellTextAsync(locator), []);
+        return new PageTableCellSnapshot(text, fragments);
     }
 
     private static string NormalizeMultilineCellText(string? text, int maxLength)

@@ -330,6 +330,9 @@ flowchart LR
   リポジトリ既定値`Headless=true`で検証後、ユーザーの未コミット変更`Headless=false`を復元した。
 - `JraSiteE2ETests.現在週RaceCard取得`: 実サイトに対して1件成功（44秒）。全Entryの馬主が非空かつ
   数値ではなく、馬体重が正数であることを検証した。このE2Eはユーザー設定`Headless=false`でも成功した。
+- PlaywrightのJavaScript objectをprivate recordへ直接返すと`Return type mismatch`になることが判明したため、
+  JavaScript側でJSON文字列化し、.NET側で明示的にデシリアライズする方式へ修正。localhost上のHTMLを
+  実ブラウザーでsnapshot化する回帰テストを追加し、DOM fragmentの取得成功を確認した。
 
 ## Deviations and follow-up
 
