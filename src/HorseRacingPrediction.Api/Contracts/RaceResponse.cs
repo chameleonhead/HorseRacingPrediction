@@ -25,4 +25,5 @@ public sealed record RaceResponse(
     string? StewardReportText,
     DateTimeOffset? ResultDeclaredAt,
     IReadOnlyList<RaceEntryResultResponse> EntryResults,
-    RacePayoutResultResponse? PayoutResult);
+    RacePayoutResultResponse? PayoutResult,
+    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null);

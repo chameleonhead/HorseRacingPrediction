@@ -95,7 +95,7 @@ public class RaceResultViewReadModel : IReadModel,
         WinningHorseId = e.WinningHorseId;
         ResultDeclaredAt = e.DeclaredAt;
         StewardReportText = e.StewardReportText;
-        Status = RaceStatus.ResultDeclared;
+        if (Status < RaceStatus.ResultDeclared) Status = RaceStatus.ResultDeclared;
         return Task.CompletedTask;
     }
 
@@ -105,13 +105,14 @@ public class RaceResultViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var entryInfo = EntryIndexes.LastOrDefault(x => x.EntryId == e.EntryId);
+        EntryResults.RemoveAll(x => x.EntryId == e.EntryId);
         EntryResults.Add(new EntryResultSnapshot(
             e.EntryId,
             entryInfo?.HorseId ?? string.Empty,
             entryInfo?.HorseNumber ?? 0,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F));
         return Task.CompletedTask;
     }
 
@@ -126,8 +127,11 @@ public class RaceResultViewReadModel : IReadModel,
             e.PlacePayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
             e.QuinellaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
             e.ExactaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
-            e.TrifectaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList());
-        Status = RaceStatus.PayoutDeclared;
+            e.TrifectaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.BracketQuinellaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.WidePayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.TrioPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList());
+        if (Status < RaceStatus.PayoutDeclared) Status = RaceStatus.PayoutDeclared;
         return Task.CompletedTask;
     }
 
@@ -136,6 +140,7 @@ public class RaceResultViewReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        if (e.EntryCount.HasValue) EntryCount = e.EntryCount;
         if (e.RaceName != null) RaceName = e.RaceName;
         if (e.RacecourseCode != null) RacecourseCode = e.RacecourseCode;
         if (e.RaceNumber.HasValue) RaceNumber = e.RaceNumber;

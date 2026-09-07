@@ -7,6 +7,9 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// </summary>
 public interface IJraRaceResultCollectionWorkflow
 {
+    Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Single race refresh is not supported.");
+
     Task<RaceResultCollectionResult> CollectAsync(
         RaceId raceId,
         CancellationToken cancellationToken = default);

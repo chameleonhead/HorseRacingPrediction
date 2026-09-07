@@ -55,9 +55,13 @@ public sealed class JraRaceResultCollectionWorkflow
         _writeService = writeService;
     }
 
-    public async Task<RaceResultCollectionResult> CollectAsync(
-        RaceId raceId,
-        CancellationToken cancellationToken = default)
+    public Task<RaceResultCollectionResult> CollectAsync(RaceId raceId, CancellationToken cancellationToken = default)
+        => CollectCoreAsync(raceId, null, cancellationToken);
+
+    public Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+        => CollectCoreAsync(raceId, targetRaceId, cancellationToken);
+
+    private async Task<RaceResultCollectionResult> CollectCoreAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken)
     {
         if (raceId.Course == RaceCourse.Unknown)
         {
@@ -87,7 +91,7 @@ public sealed class JraRaceResultCollectionWorkflow
         }
 
         var racecourseName = RaceCourseNames.GetJraName(raceId.Course);
-        var dataCollectionRaceId = DeterministicIdGenerator.BuildRaceId(
+        var dataCollectionRaceId = targetRaceId ?? DeterministicIdGenerator.BuildRaceId(
             raceId.Date, racecourseName, raceId.Number);
 
         // 引用元（取得元URL）は、後段の登録が部分的に失敗した場合でも「このURLから
@@ -144,7 +148,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 entry.FinishPosition,
                 FormatTime(entry.Time),
                 MarginText: entry.MarginRaw,
-                LastThreeFurlongTime: null,
+                LastThreeFurlongTime: entry.EstimatedLast3F?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 AbnormalResultCode: ToAbnormalResultCode(entry.ResultStatus),
                 // Phase8（依頼書27節）: 本賞金を着順から解決して接続する。
                 // 「本賞金」欄自体が存在しない、またはこの馬の着順に対応する
@@ -165,7 +169,9 @@ public sealed class JraRaceResultCollectionWorkflow
                 BodyWeight: entry.BodyWeight,
                 BodyWeightChange: entry.BodyWeightChange,
                 OriginalFinishPosition: entry.OriginalFinishPosition,
-                IsDeadHeat: entry.IsDeadHeat))
+                IsDeadHeat: entry.IsDeadHeat,
+                CornerPositions: entry.CornerOrders is null ? null : string.Join(" ", entry.CornerOrders),
+                Average1F: entry.Average1F))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
@@ -187,7 +193,10 @@ public sealed class JraRaceResultCollectionWorkflow
                 ToPayoutEntries(resultPage.Payouts.PlacePayouts),
                 ToPayoutEntries(resultPage.Payouts.QuinellaPayouts),
                 ToPayoutEntries(resultPage.Payouts.ExactaPayouts),
-                ToPayoutEntries(resultPage.Payouts.TrifectaPayouts));
+                ToPayoutEntries(resultPage.Payouts.TrifectaPayouts),
+                ToPayoutEntries(resultPage.Payouts.BracketQuinellaPayoutsOrEmpty),
+                ToPayoutEntries(resultPage.Payouts.WidePayoutsOrEmpty),
+                ToPayoutEntries(resultPage.Payouts.TrioPayoutsOrEmpty));
 
         var request = new DeclareRaceResultBulkRequest(
             RaceDate: raceId.Date,
@@ -195,7 +204,7 @@ public sealed class JraRaceResultCollectionWorkflow
             RaceNumber: raceId.Number,
             RaceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
             EntryCount: resultPage.Results.Count > 0 ? resultPage.Results.Count : null,
-            GradeCode: null,
+            GradeCode: resultPage.GradeCode,
             SurfaceCode: resultPage.CourseSpec is { } courseSpec
                 ? string.Join("→", courseSpec.Surfaces.Select(ToSurfaceCode))
                 : null,
@@ -211,7 +220,10 @@ public sealed class JraRaceResultCollectionWorkflow
             Entries: entries,
             Weather: weather,
             TrackCondition: trackCondition,
-            Payouts: payouts);
+            Payouts: payouts, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null,
+            OverallPaceText: resultPage.OverallPaceText,
+            CornerPassagesText: resultPage.CornerPassages is null ? null : string.Join("\n", resultPage.CornerPassages.Select(x => $"{x.CornerNumber}: {x.OrderRaw}")),
+            CourseLayout: resultPage.CourseSpec?.RawLayout);
 
         DeclareRaceResultBulkResponse outcome;
         try

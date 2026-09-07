@@ -113,6 +113,10 @@ public class JockeyRaceHistoryReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        var previousEntry = Entries.FirstOrDefault(x => x.EntryId == e.EntryId);
+        Entries.RemoveAll(x => x.EntryId == e.EntryId);
+        if (!string.IsNullOrEmpty(JockeyId) && JockeyId != e.JockeyId) return Task.CompletedTask;
+
         if (e.JockeyId == null) return Task.CompletedTask;
         JockeyId = e.JockeyId;
         Entries.Add(new JockeyRaceHistoryEntry(
@@ -125,8 +129,8 @@ public class JockeyRaceHistoryReadModel : IReadModel,
             e.DistanceMeters,
             e.DirectionCode,
             e.GradeCode,
-            null,
-            null));
+            previousEntry?.FinishPosition,
+            previousEntry?.PrizeMoney));
         return Task.CompletedTask;
     }
 

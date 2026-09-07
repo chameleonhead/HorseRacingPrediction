@@ -169,10 +169,10 @@ public sealed class RaceResultPageParser
             courseSpec,
             cornerPassages is { Count: > 0 } ? cornerPassages : null,
             overallPaceText,
-            prizeMoneyByPosition);
+            prizeMoneyByPosition, RaceGrade.Parse(snapshot));
     }
 
-    private static RaceCourseSpec? ParseCourseSpec(
+    internal static RaceCourseSpec? ParseCourseSpec(
         PageSnapshot snapshot,
         string raceName)
     {

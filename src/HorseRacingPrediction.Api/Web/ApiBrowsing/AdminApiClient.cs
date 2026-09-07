@@ -44,6 +44,12 @@ public sealed class AdminApiClient
     public Task<PagedResponse<RaceSummaryResponse>?> SearchRacesAsync(SearchRacesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<RaceSummaryResponse>>($"/api/races?{BuildQueryString(request)}", cancellationToken);
 
+    public Task<AgentJobDetailReadModel?> GetRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", cancellationToken);
+
+    public Task<AdminApiResult> RequestRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
+        => SendAsync(HttpMethod.Post, $"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", new { }, cancellationToken);
+
     public Task<RaceResponse?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
         => GetJsonAsync<RaceResponse>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
 
@@ -235,7 +241,7 @@ public sealed class AdminApiClient
     private async Task<T?> GetJsonAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
         var response = await _httpClient.GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode == HttpStatusCode.NotFound) return default;
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NoContent) return default;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }

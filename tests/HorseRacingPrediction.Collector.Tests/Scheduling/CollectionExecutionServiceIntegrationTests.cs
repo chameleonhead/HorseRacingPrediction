@@ -448,6 +448,55 @@ public sealed class CollectionExecutionServiceIntegrationTests
         Assert.AreEqual(AgentJobStatus.Ready, statuses[0].Status);
     }
 
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task RaceReacquisition_ExecutesOnlyRequestedRaceInBothWorkerModes(bool single)
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2026, 1, 1);
+        var schedule = new FakeJraScheduleCollectionWorkflow();
+        var card = new FakeJraRaceCardCollectionWorkflow();
+        var result = new FakeJraRaceResultCollectionWorkflow();
+        var service = CreateService(store, schedule, card, result);
+        var id = await store.RequestRaceReacquisitionAsync(new("race-target", date, "中山", 6), "test", DateTimeOffset.UtcNow);
+        var job = (await store.GetJobDetailAsync(id))!;
+        if (single) await service.RunSingleTaskAsync(new(id, job.JobType, job.DeduplicationKey, 1), CancellationToken.None);
+        else await service.RunOneCycleAsync(CancellationToken.None);
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.AreEqual(0, schedule.Requests.Count);
+        Assert.AreEqual(0, card.Requests.Count);
+        Assert.AreEqual(1, card.RefreshRequests.Count);
+        Assert.AreEqual((new RaceId(date, RaceCourse.Nakayama, 6), "race-target"), card.RefreshRequests.Single());
+        Assert.AreEqual(new RaceId(date, RaceCourse.Nakayama, 6), result.Requests.Single());
+        Assert.AreEqual("race-target", result.RefreshTargets.Single());
+    }
+
+    [TestMethod]
+    public async Task RaceReacquisition_PartialFailureIsNotSuccess()
+    {
+        var store = CreateStore();
+        var result = new FakeJraRaceResultCollectionWorkflow { ResultFactory = id => new(id, "race-target", [], ["保存失敗"]) };
+        var service = CreateService(store, new FakeJraScheduleCollectionWorkflow(), new FakeJraRaceCardCollectionWorkflow(), result);
+        var id = await store.RequestRaceReacquisitionAsync(new("race-target", new(2026, 1, 1), "中山", 6), "test", DateTimeOffset.UtcNow);
+        await service.RunOneCycleAsync(CancellationToken.None);
+        Assert.AreEqual(AgentJobStatus.Failed, (await store.GetJobDetailAsync(id))!.Status);
+    }
+
+    [TestMethod]
+    public async Task RaceReacquisition_UnpublishedCardWaitsWithoutErasingData()
+    {
+        var store = CreateStore();
+        var card = new FakeJraRaceCardCollectionWorkflow { ThrowOnCollect = new JraNavigationException("未公開", JraNavigationFailureReason.NotYetPublished) };
+        var service = CreateService(store, new FakeJraScheduleCollectionWorkflow(), card, new FakeJraRaceResultCollectionWorkflow());
+        var id = await store.RequestRaceReacquisitionAsync(new("race-target", DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)), "中山", 6), "test", DateTimeOffset.UtcNow);
+        await service.RunOneCycleAsync(CancellationToken.None);
+        var job = (await store.GetJobDetailAsync(id))!;
+        Assert.AreEqual(AgentJobStatus.Ready, job.Status);
+        Assert.AreEqual("公開待ち", job.LastError);
+        Assert.IsTrue(job.AvailableAt > DateTimeOffset.UtcNow.AddMinutes(20));
+    }
+
     private static CollectionExecutionService CreateService(
         ProcessingStateStore stateStore,
         IJraScheduleCollectionWorkflow scheduleWorkflow,

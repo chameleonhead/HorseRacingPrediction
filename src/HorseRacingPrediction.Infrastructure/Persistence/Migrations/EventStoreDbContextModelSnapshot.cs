@@ -15,7 +15,7 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
             modelBuilder.Entity("EventFlow.EntityFramework.EventStores.EventEntity", b =>
                 {
@@ -350,6 +350,12 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                     b.Property<string>("RaceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CornerPassagesText")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CourseLayout")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DirectionCode")
                         .HasColumnType("TEXT");
 
@@ -363,6 +369,9 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                     b.Property<string>("GradeCode")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OverallPaceText")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("RaceDate")
                         .HasColumnType("TEXT");
 
@@ -373,6 +382,9 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("RacecourseCode")
+                        .HasColumnType("TEXT");
+
+                    b.Property<TimeOnly?>("StartTime")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Status")

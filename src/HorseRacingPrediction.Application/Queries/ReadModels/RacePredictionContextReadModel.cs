@@ -22,6 +22,10 @@ public class RacePredictionContextReadModel : IReadModel,
     public DateOnly? RaceDate { get; private set; }
     public string? RacecourseCode { get; private set; }
     public int? RaceNumber { get; private set; }
+    public TimeOnly? StartTime { get; private set; }
+    public string? OverallPaceText { get; private set; }
+    public string? CornerPassagesText { get; private set; }
+    public string? CourseLayout { get; private set; }
     public string? RaceName { get; private set; }
     public RaceStatus Status { get; private set; } = RaceStatus.Draft;
     public string? GradeCode { get; private set; }
@@ -65,6 +69,7 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        Entries.RemoveAll(x => x.EntryId == e.EntryId);
         Entries.Add(new RacePredictionContextEntry(
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
@@ -134,7 +139,7 @@ public class RacePredictionContextReadModel : IReadModel,
         IDomainEvent<RaceAggregate, RaceId, RaceResultDeclared> domainEvent,
         CancellationToken cancellationToken)
     {
-        Status = RaceStatus.ResultDeclared;
+        if (Status < RaceStatus.ResultDeclared) Status = RaceStatus.ResultDeclared;
         return Task.CompletedTask;
     }
 
@@ -142,7 +147,7 @@ public class RacePredictionContextReadModel : IReadModel,
         IDomainEvent<RaceAggregate, RaceId, PayoutResultDeclared> domainEvent,
         CancellationToken cancellationToken)
     {
-        Status = RaceStatus.PayoutDeclared;
+        if (Status < RaceStatus.PayoutDeclared) Status = RaceStatus.PayoutDeclared;
         return Task.CompletedTask;
     }
 
@@ -151,6 +156,10 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        StartTime = e.StartTime ?? StartTime;
+        OverallPaceText = e.OverallPaceText ?? OverallPaceText;
+        CornerPassagesText = e.CornerPassagesText ?? CornerPassagesText;
+        CourseLayout = e.CourseLayout ?? CourseLayout;
         if (e.RaceName != null) RaceName = e.RaceName;
         if (e.RacecourseCode != null) RacecourseCode = e.RacecourseCode;
         if (e.RaceNumber.HasValue) RaceNumber = e.RaceNumber;

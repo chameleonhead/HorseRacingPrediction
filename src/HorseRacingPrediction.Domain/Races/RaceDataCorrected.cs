@@ -7,7 +7,7 @@ public sealed class RaceDataCorrected : AggregateEvent<RaceAggregate, RaceId>
     public RaceDataCorrected(string? raceName = null, string? racecourseCode = null,
         int? raceNumber = null, string? gradeCode = null,
         string? surfaceCode = null, int? distanceMeters = null,
-        string? directionCode = null, string? reason = null)
+        string? directionCode = null, string? reason = null, int? entryCount = null, TimeOnly? startTime = null, string? overallPaceText = null, string? cornerPassagesText = null, string? courseLayout = null)
     {
         RaceName = raceName;
         RacecourseCode = racecourseCode;
@@ -17,8 +17,15 @@ public sealed class RaceDataCorrected : AggregateEvent<RaceAggregate, RaceId>
         DistanceMeters = distanceMeters;
         DirectionCode = directionCode;
         Reason = reason;
+        EntryCount = entryCount;
+        StartTime = startTime; OverallPaceText = overallPaceText; CornerPassagesText = cornerPassagesText; CourseLayout = courseLayout;
     }
 
+    public TimeOnly? StartTime { get; }
+    public string? OverallPaceText { get; }
+    public string? CornerPassagesText { get; }
+    public string? CourseLayout { get; }
+    public int? EntryCount { get; }
     public string? RaceName { get; }
     public string? RacecourseCode { get; }
     public int? RaceNumber { get; }

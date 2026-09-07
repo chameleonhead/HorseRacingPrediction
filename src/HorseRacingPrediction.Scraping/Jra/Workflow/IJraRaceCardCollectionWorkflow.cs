@@ -8,6 +8,9 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// </summary>
 public interface IJraRaceCardCollectionWorkflow
 {
+    Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Single race refresh is not supported.");
+
     /// <summary>
     /// 指定日・競馬場のレース一覧を取得し、各レースの出馬表を収集・保存する。
     /// 個別レースの取得・保存に失敗した場合はそのレースをスキップして処理を続行する

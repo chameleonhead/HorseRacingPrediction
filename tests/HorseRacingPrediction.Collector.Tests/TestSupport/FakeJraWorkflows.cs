@@ -27,6 +27,14 @@ internal sealed class FakeJraScheduleCollectionWorkflow : IJraScheduleCollection
 
 internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollectionWorkflow
 {
+    public List<(RaceId Race, string Target)> RefreshRequests { get; } = [];
+    public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+    {
+        RefreshRequests.Add((raceId, targetRaceId));
+        if (ThrowOnCollect is not null) throw ThrowOnCollect;
+        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId, "レース", "https://example.test/card", null));
+    }
+
     public Func<DateOnly, RaceCourse, RaceCardCollectionResult>? ResultFactory { get; set; }
 
     public Exception? ThrowOnCollect { get; set; }
@@ -49,6 +57,13 @@ internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollection
 
 internal sealed class FakeJraRaceResultCollectionWorkflow : IJraRaceResultCollectionWorkflow
 {
+    public List<string> RefreshTargets { get; } = [];
+    public Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+    {
+        RefreshTargets.Add(targetRaceId);
+        return CollectAsync(raceId, cancellationToken);
+    }
+
     public Func<RaceId, RaceResultCollectionResult>? ResultFactory { get; set; }
 
     public Exception? ThrowOnCollect { get; set; }

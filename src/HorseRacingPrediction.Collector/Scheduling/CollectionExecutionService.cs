@@ -22,7 +22,7 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 // 独立している（CollectRaceCardsAsync/CollectRaceResultsAsync 内の course ループ）ため、
 // 競馬場単位でジョブを分割するのが最小変更で済む対処となる。現時点ではLambda運用自体が
 // 無効化されており必要性がないため、本タスクでは分割の実装は行わない。
-public sealed class CollectionExecutionService : BackgroundService
+public sealed partial class CollectionExecutionService : BackgroundService
 {
     private static readonly string JraProviderType = "JRA";
 
@@ -35,6 +35,7 @@ public sealed class CollectionExecutionService : BackgroundService
     // 必要がある。
     private static readonly string[] RecoverableJobTypes =
     [
+        AgentJobType.RaceReacquisition,
         AgentJobType.RaceCardCollection,
         AgentJobType.RaceResultCollection
     ];
@@ -132,6 +133,7 @@ public sealed class CollectionExecutionService : BackgroundService
     {
         var now = DateTimeOffset.UtcNow;
 
+        await ExecuteRaceReacquisitionJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceCardJobsAsync(now, cancellationToken).ConfigureAwait(false);
         await ExecuteRaceResultJobsAsync(now, cancellationToken).ConfigureAwait(false);
     }
@@ -675,6 +677,7 @@ public sealed class CollectionExecutionService : BackgroundService
         var now = DateTimeOffset.UtcNow;
         return jobType switch
         {
+            AgentJobType.RaceReacquisition => ExecuteRaceReacquisitionJobsAsync(now, cancellationToken),
             AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
             AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
             _ => throw new InvalidOperationException($"Unsupported collection job type: {jobType}")
@@ -733,6 +736,9 @@ public sealed class CollectionExecutionService : BackgroundService
         {
             switch (notification.JobType)
             {
+                case AgentJobType.RaceReacquisition:
+                    await ExecuteSingleRaceReacquisitionAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);
+                    break;
                 case AgentJobType.RaceCardCollection:
                     await ExecuteSingleRaceCardTaskAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);
                     break;

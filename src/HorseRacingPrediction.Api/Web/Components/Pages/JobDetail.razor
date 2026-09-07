@@ -134,7 +134,7 @@ else
     private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
     private string HeaderDescription => TargetDate is { } date ? $"対象日 {date}・更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}" : $"更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}";
-    private static string DisplayJobType(string value) => value switch { "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value.Replace('-', ' ') };
+    private static string DisplayJobType(string value) => value switch { "RaceReacquisition" => "レース情報の再取得", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value.Replace('-', ' ') };
     private static string StatusClass(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "ok", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "bad", AgentJobStatus.Running => "info", _ => "warn" };
     private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
     private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", AgentJobStatus.WaitingDependency => "warning", _ => "neutral" };

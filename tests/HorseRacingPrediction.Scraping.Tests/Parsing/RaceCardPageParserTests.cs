@@ -46,6 +46,19 @@ public sealed class RaceCardPageParserTests
     }
 
     [TestMethod]
+    [DataRow("テストステークス(GⅢ)", "G3")]
+    [DataRow("テスト大障害(J・GⅠ)", "JG1")]
+    [DataRow("テスト記念(GII)", "G2")]
+    public void Parse_ExtractsGradeFromHeading(string name, string grade)
+    {
+        var snapshot = BuildSnapshot();
+        snapshot.Headings.Clear();
+        snapshot.Headings.AddRange(["2026年9月5日 中山 11R", name]);
+        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(snapshot);
+        Assert.AreEqual(grade, page.GradeCode);
+    }
+
+    [TestMethod]
     public void CanParse_TableWithHorseColumns_ReturnsTrue()
     {
         var parser = new RaceCardPageParser();

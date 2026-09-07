@@ -99,7 +99,7 @@ public sealed class RaceCardPageParser
             raceId,
             raceName,
             startTime,
-            entries);
+            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot));
     }
 
     private static PageTableSnapshot? FindEntryTable(
@@ -421,6 +421,10 @@ public sealed class RaceCardPageParser
                 }
             }
 
+            var sexAgeIndex = table.Headers.ToList().FindIndex(h => h.Contains("性齢", StringComparison.Ordinal));
+            var sexAge = Regex.Match(sexAgeIndex >= 0 && sexAgeIndex < row.Count ? row[sexAgeIndex] : string.Empty,
+                @"(?<sex>牡|牝|せん|セン)\s*(?<age>\d+)");
+            var sexCode = sexAge.Success ? sexAge.Groups["sex"].Value switch { "牡" => "M", "牝" => "F", _ => "G" } : null;
             entries.Add(new RaceEntry(
                 horseNumber,
                 horseName,
@@ -430,7 +434,7 @@ public sealed class RaceCardPageParser
                 parsedHorse.TrainerName,
                 parsedHorse.OwnerName,
                 parsedHorse.BodyWeight,
-                parsedHorse.BodyWeightChange));
+                parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null));
         }
 
         return entries;

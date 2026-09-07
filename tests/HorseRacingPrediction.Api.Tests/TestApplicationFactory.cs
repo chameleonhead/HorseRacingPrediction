@@ -123,6 +123,7 @@ internal static class TestApplicationFactory
         app.MapProcessingStateRpcEndpoint();
         app.MapAgentDashboardEndpoints();
         app.MapJobManagementEndpoints();
+        app.MapRaceReacquisitionEndpoints();
         app.MapAgentAcquisitionStatusEndpoints();
 
         await app.StartAsync();
