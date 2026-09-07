@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 
@@ -233,25 +234,25 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         return Task.FromResult("recorded");
     }
 
-    public List<RaceResultBulkRequest> DeclareRaceResultBulkCalls { get; } = [];
+    public List<DeclareRaceResultBulkRequest> DeclareRaceResultBulkCalls { get; } = [];
 
     /// <summary>
     /// 実際の /api/races/result-bulk エンドポイントと同様、レース確定宣言・各馬の成績・
     /// 天候・馬場状態・払戻は1件失敗しても他の項目の登録を継続し、失敗内容は
-    /// <see cref="RaceResultBulkOutcome.Errors"/> に集約する挙動をインメモリで再現する。
+    /// <see cref="DeclareRaceResultBulkResponse.Errors"/> に集約する挙動をインメモリで再現する。
     /// <see cref="FailForHorseNumber"/>・<see cref="FailDeclareRaceResult"/> による
     /// 部分失敗テストは、既存の個別Call記録（<see cref="DeclareRaceEntryResultCalls"/>等）
     /// を引き続き利用できるよう、この一括呼び出しの中でも同じリストに記録する。
     /// </summary>
-    public Task<RaceResultBulkOutcome> DeclareRaceResultBulkAsync(
-        RaceResultBulkRequest request,
+    public Task<DeclareRaceResultBulkResponse> DeclareRaceResultBulkAsync(
+        DeclareRaceResultBulkRequest request,
         CancellationToken cancellationToken = default)
     {
         DeclareRaceResultBulkCalls.Add(request);
 
         var raceId = DeterministicIdGenerator.BuildRaceId(
-            DateOnly.Parse(request.RaceDate), request.RacecourseCode, request.RaceNumber);
-        UpsertRaceCalls.Add(new UpsertRaceCall(request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName, request.EntryCount));
+            request.RaceDate, request.RacecourseCode, request.RaceNumber);
+        UpsertRaceCalls.Add(new UpsertRaceCall(request.RaceDate.ToString("yyyy-MM-dd"), request.RacecourseCode, request.RaceNumber, request.RaceName, request.EntryCount));
 
         var errors = new List<string>();
 
@@ -303,10 +304,10 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
                 SerializePayouts(request.Payouts.TrifectaPayouts)));
         }
 
-        return Task.FromResult(new RaceResultBulkOutcome(raceId, errors));
+        return Task.FromResult(new DeclareRaceResultBulkResponse(raceId, errors));
     }
 
-    private static string? SerializePayouts(IReadOnlyList<RaceResultBulkPayoutEntry>? payouts) =>
+    private static string? SerializePayouts(IReadOnlyList<PayoutEntryDto>? payouts) =>
         payouts is null || payouts.Count == 0
             ? null
             : System.Text.Json.JsonSerializer.Serialize(payouts.Select(p => new { combination = p.Combination, amount = p.Amount }));

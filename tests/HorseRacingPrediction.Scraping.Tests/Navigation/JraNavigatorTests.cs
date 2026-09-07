@@ -442,7 +442,7 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
-    public async Task ToSiblingRaceResultAsync_DirectLinkFoundOnCurrentPage_NavigatesDirectlyWithoutMeetingSelection()
+    public async Task ToRaceResultAsync_DirectLinkFoundOnCurrentPage_NavigatesDirectlyWithoutMeetingSelection()
     {
         const string currentRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/1/";
         const string siblingRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/2/";
@@ -464,7 +464,7 @@ public sealed class JraNavigatorTests
 
         var targetRace = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2);
 
-        var page = await navigator.ToSiblingRaceResultAsync(targetRace);
+        var page = await navigator.ToRaceResultAsync(targetRace);
 
         Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
         CollectionAssert.Contains(browser.NavigatedUrls, siblingRaceResultUrl);
@@ -474,7 +474,7 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
-    public async Task ToSiblingRaceResultAsync_NoDirectLinkOnCurrentPage_FallsBackToFullMeetingSelectionRoute()
+    public async Task ToRaceResultAsync_NoDirectLinkOnCurrentPage_FallsBackToFullMeetingSelectionRoute()
     {
         const string currentRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/1/";
         const string siblingRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/2/";
@@ -502,7 +502,7 @@ public sealed class JraNavigatorTests
 
         var targetRace = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2);
 
-        var page = await navigator.ToSiblingRaceResultAsync(targetRace);
+        var page = await navigator.ToRaceResultAsync(targetRace);
 
         Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
         CollectionAssert.Contains(browser.NavigatedUrls, siblingRaceResultUrl);

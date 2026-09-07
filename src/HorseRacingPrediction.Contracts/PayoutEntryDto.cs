@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace HorseRacingPrediction.Api.Contracts;
+namespace HorseRacingPrediction.Contracts;
 
 public sealed record PayoutEntryDto(
     [property: Required] string Combination,

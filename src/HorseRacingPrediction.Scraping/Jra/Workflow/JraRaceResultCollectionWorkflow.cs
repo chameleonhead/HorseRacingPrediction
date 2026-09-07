@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -54,14 +55,8 @@ public sealed class JraRaceResultCollectionWorkflow
         _writeService = writeService;
     }
 
-    public Task<RaceResultCollectionResult> CollectAsync(
-        RaceId raceId,
-        CancellationToken cancellationToken = default)
-        => CollectAsync(raceId, useSiblingNavigation: false, cancellationToken);
-
     public async Task<RaceResultCollectionResult> CollectAsync(
         RaceId raceId,
-        bool useSiblingNavigation,
         CancellationToken cancellationToken = default)
     {
         if (raceId.Course == RaceCourse.Unknown)
@@ -71,12 +66,7 @@ public sealed class JraRaceResultCollectionWorkflow
                 nameof(raceId));
         }
 
-        // Phase8: 同日・同競馬場の連続収集時、ブラウザが既に直前のレース結果ページを
-        // 表示している前提で「1R」等の直接リンクからの遷移を試み、見つからなければ
-        // 自動的に開催選択経由のフルパスへフォールバックする（呼び出し元を壊さない）。
-        var resultPageResult = useSiblingNavigation
-            ? await _session.Navigate.ToSiblingRaceResultAsync(raceId, cancellationToken)
-            : await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
+        var resultPageResult = await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
 
         if (resultPageResult is not JraRaceResultPage resultPage)
         {
@@ -149,7 +139,7 @@ public sealed class JraRaceResultCollectionWorkflow
         // RaceCardなしでもRaceEntry相当の状態を保存できるよう、ここで解析済みの
         // 出走馬属性をRaceResultBulkEntryにも含めて送信する。
         var entries = validResults
-            .Select(entry => new RaceResultBulkEntry(
+            .Select(entry => new RaceResultEntryBulkDto(
                 entry.HorseNumber,
                 entry.FinishPosition,
                 FormatTime(entry.Time),
@@ -180,18 +170,18 @@ public sealed class JraRaceResultCollectionWorkflow
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
             ? null
-            : new RaceResultBulkWeather(
+            : new RecordWeatherObservationRequest(
                 DateTimeOffset.UtcNow, WeatherCode: null, resultPage.WeatherText,
                 TemperatureCelsius: null, HumidityPercent: null, WindDirectionCode: null, WindSpeedMeterPerSecond: null);
 
         var trackCondition = string.IsNullOrWhiteSpace(resultPage.TrackConditionText)
             ? null
-            : new RaceResultBulkTrackCondition(
+            : new RecordTrackConditionRequest(
                 DateTimeOffset.UtcNow, TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
 
         var payouts = resultPage.Payouts is null || winningEntry is null
             ? null
-            : new RaceResultBulkPayouts(
+            : new DeclarePayoutResultRequest(
                 DateTimeOffset.UtcNow,
                 ToPayoutEntries(resultPage.Payouts.WinPayouts),
                 ToPayoutEntries(resultPage.Payouts.PlacePayouts),
@@ -199,8 +189,8 @@ public sealed class JraRaceResultCollectionWorkflow
                 ToPayoutEntries(resultPage.Payouts.ExactaPayouts),
                 ToPayoutEntries(resultPage.Payouts.TrifectaPayouts));
 
-        var request = new RaceResultBulkRequest(
-            RaceDate: raceId.Date.ToString("yyyy-MM-dd"),
+        var request = new DeclareRaceResultBulkRequest(
+            RaceDate: raceId.Date,
             RacecourseCode: racecourseName,
             RaceNumber: raceId.Number,
             RaceName: string.IsNullOrWhiteSpace(resultPage.RaceName) ? $"{racecourseName}{raceId.Number}R" : resultPage.RaceName,
@@ -223,7 +213,7 @@ public sealed class JraRaceResultCollectionWorkflow
             TrackCondition: trackCondition,
             Payouts: payouts);
 
-        RaceResultBulkOutcome outcome;
+        DeclareRaceResultBulkResponse outcome;
         try
         {
             outcome = await _writeService.DeclareRaceResultBulkAsync(request, cancellationToken);
@@ -260,10 +250,10 @@ public sealed class JraRaceResultCollectionWorkflow
         return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors, resultPage.Url);
     }
 
-    private static IReadOnlyList<RaceResultBulkPayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)
+    private static IReadOnlyList<PayoutEntryDto>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)
         => payouts.Count == 0
             ? null
-            : payouts.Select(p => new RaceResultBulkPayoutEntry(p.Combination, p.Amount)).ToList();
+            : payouts.Select(p => new PayoutEntryDto(p.Combination, p.Amount)).ToList();
 
     private static string ToSurfaceCode(CourseSurface surface) =>
         surface switch

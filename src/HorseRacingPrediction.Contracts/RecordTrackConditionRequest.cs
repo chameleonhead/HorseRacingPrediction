@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace HorseRacingPrediction.Api.Contracts;
+namespace HorseRacingPrediction.Contracts;
 
 public sealed record RecordTrackConditionRequest(
     [property: Required] DateTimeOffset ObservationTime,

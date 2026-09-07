@@ -521,6 +521,26 @@ public sealed class JraNavigator
         IJraPage page;
         string route;
 
+        try
+        {
+            if (await TryNavigateRaceNumberLinkAsync(
+                    race.Number,
+                    JraNavigationLinks.RaceResult,
+                    cancellationToken))
+            {
+                page = await _pageReader.ReadAsync(cancellationToken);
+
+                if (page.Kind == JraPageKind.RaceResult)
+                {
+                    return page;
+                }
+            }
+        }
+        catch (JraNavigationException)
+        {
+            // 直接遷移の失敗は致命的ではない。フルパスへフォールバックする。
+        }
+
         if (IsCurrentRacePeriod(race.Date))
         {
             route = "Current";
@@ -1163,41 +1183,6 @@ public sealed class JraNavigator
             cancellationToken);
 
         return true;
-    }
-
-    /// <summary>
-    /// 依頼書33節フォローアップ: レース結果ページを表示中に、同じ開催日・競馬場の
-    /// 別レース番号へ「開催選択→レース選択」を経由せず直接遷移することを試みる。
-    /// JRAの実際のレース結果ページ上に他レースへの直接リンク（画面上部の「1R」等の
-    /// ボタン）が存在するかどうかは本タスクでは実サイト検証ができていないため、
-    /// 見つからない場合は必ず<see cref="ToRaceResultAsync"/>（開催選択経由のフルパス）
-    /// へフォールバックし、例外で呼び出し元を壊さないようにする。
-    /// </summary>
-    public async Task<IJraPage> ToSiblingRaceResultAsync(
-        RaceId targetRace,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            if (await TryNavigateRaceNumberLinkAsync(
-                    targetRace.Number,
-                    JraNavigationLinks.RaceResult,
-                    cancellationToken))
-            {
-                var page = await _pageReader.ReadAsync(cancellationToken);
-
-                if (page.Kind == JraPageKind.RaceResult)
-                {
-                    return page;
-                }
-            }
-        }
-        catch (JraNavigationException)
-        {
-            // 直接遷移の失敗は致命的ではない。フルパスへフォールバックする。
-        }
-
-        return await ToRaceResultAsync(targetRace, cancellationToken);
     }
 
     private static string RaceCourseName(RaceCourse course)

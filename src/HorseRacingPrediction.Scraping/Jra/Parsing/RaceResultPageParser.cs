@@ -1123,7 +1123,8 @@ public sealed class RaceResultPageParser
     }
 
     private static readonly Regex BodyWeightRegex =
-        new(@"^(?<weight>\d{2,4})(?:\((?<change>[+-]?\d+)\))?$", RegexOptions.Compiled);
+        new(@"^(?<weight>\d{3})\s*\((?:(?<change>[+-]?\d+)|(?<debut>初出走))\)$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // 降着（依頼書18節）。着順欄に確定順位と元の入線順位が
     // 「10(1位降着)」のように併記されるケースを検出する。

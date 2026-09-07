@@ -582,7 +582,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/weather",
             [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
-        async (string raceId, RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ApiContracts.RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -621,7 +621,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/track-condition",
             [SwaggerOperation(Summary = "Record track condition", Description = "Records a track condition observation for a race")]
-        async (string raceId, RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ApiContracts.RecordTrackConditionRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -718,11 +718,11 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/{raceId}/payout",
             [SwaggerOperation(Summary = "Declare payout result", Description = "Declares payout information for win/place/quinella/exacta/trifecta bets")]
-        async (string raceId, DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (string raceId, ApiContracts.DeclarePayoutResultRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
             {
                 try
                 {
-                    static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? dtos) =>
+                    static IReadOnlyList<PayoutEntry>? ToPayoutEntries(IReadOnlyList<ApiContracts.PayoutEntryDto>? dtos) =>
                         dtos?.Select(d => new PayoutEntry(d.Combination, d.Amount)).ToList();
 
                     var command = new DeclarePayoutResultCommand(
@@ -769,7 +769,7 @@ public static class EndpointExtensions
 
         writeGroup.MapPost("/races/result-bulk",
             [SwaggerOperation(Summary = "Declare race result in bulk", Description = "Creates/updates the race and declares result, entry results, weather, track condition and payouts in a single call")]
-        async (DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (ApiContracts.DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 // NOTE: データ収集エージェント（Collector）は従来、1レース分の登録に
                 // UpsertRace/DeclareRaceResult/DeclareEntryResult(N件)/RecordWeather/
@@ -824,7 +824,7 @@ public static class EndpointExtensions
                 catch (InvalidOperationException ex)
                 {
                     errors.Add($"レース登録エラー: {ex.Message}");
-                    return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors));
+                    return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors));
                 }
 
                 var currentStatus = existing?.Status ?? HorseRacingPrediction.Domain.Races.RaceStatus.Draft;
@@ -842,7 +842,11 @@ public static class EndpointExtensions
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(request.WinningHorseName))
+                // レース結果は一度確定すると RaceAggregate.DeclareResult が再確定を拒否するため、
+                // 同一レースの再収集・再登録時に無意味な「レース確定宣言エラー」が
+                // 毎回記録され続けないよう、既に確定済みの場合は呼び出し自体をスキップする。
+                if (!string.IsNullOrWhiteSpace(request.WinningHorseName)
+                    && currentStatus < HorseRacingPrediction.Domain.Races.RaceStatus.ResultDeclared)
                 {
                     try
                     {
@@ -858,6 +862,10 @@ public static class EndpointExtensions
 
                 if (request.Entries is not null)
                 {
+                    var existingEntryIds = (existing?.Entries ?? [])
+                        .Select(e => e.EntryId)
+                        .ToHashSet(StringComparer.Ordinal);
+
                     foreach (var entry in request.Entries)
                     {
                         if (entry.HorseNumber <= 0)
@@ -865,9 +873,56 @@ public static class EndpointExtensions
                             continue;
                         }
 
+                        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, entry.HorseNumber);
+
+                        // レース結果ページのみから収集した過去レースは出馬表（RegisterEntry）が
+                        // 一度も呼ばれていないことがあるため、ここで初回のみ馬・騎手・調教師の
+                        // 自動登録とエントリー登録を行い、馬名等がRaceEntryとして永続化されない
+                        // 問題（着順のみ記録されRaceEntryは作られない）を防ぐ。RaceCard収集経由で
+                        // 既にエントリーが存在する場合はそちらの情報を優先し、ここでは上書きしない。
+                        if (!existingEntryIds.Contains(entryId) && !string.IsNullOrWhiteSpace(entry.HorseName))
+                        {
+                            try
+                            {
+                                var horseId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+                                    "horse", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(entry.HorseName));
+                                var jockeyId = string.IsNullOrWhiteSpace(entry.JockeyName)
+                                    ? null
+                                    : HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+                                        "jockey", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(entry.JockeyName));
+                                var trainerId = string.IsNullOrWhiteSpace(entry.TrainerName)
+                                    ? null
+                                    : HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+                                        "trainer", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(entry.TrainerName));
+
+                                var registerEntryRequest = new RegisterEntryRequest(
+                                    horseId, entry.HorseNumber, jockeyId, trainerId,
+                                    entry.GateNumber, entry.AssignedWeight, entry.SexCode, entry.Age,
+                                    DeclaredWeight: entry.BodyWeight,
+                                    DeclaredWeightDiff: entry.BodyWeightChange,
+                                    RunningStyleCode: null,
+                                    EntryId: entryId,
+                                    HorseName: entry.HorseName,
+                                    JockeyName: entry.JockeyName,
+                                    TrainerName: entry.TrainerName);
+
+                                await EnsureRelatedSubjectsAsync(registerEntryRequest, commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
+
+                                var registerEntryCommand = new RegisterEntryCommand(
+                                    raceId, entryId, horseId, entry.HorseNumber,
+                                    jockeyId, trainerId, entry.GateNumber, entry.AssignedWeight,
+                                    entry.SexCode, entry.Age, entry.BodyWeight, entry.BodyWeightChange);
+                                await commandBus.PublishAsync(registerEntryCommand, cancellationToken).ConfigureAwait(false);
+                                existingEntryIds.Add(entryId);
+                            }
+                            catch (InvalidOperationException ex)
+                            {
+                                errors.Add($"出馬表登録エラー: HorseNumber={entry.HorseNumber} — {ex.Message}");
+                            }
+                        }
+
                         try
                         {
-                            var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, entry.HorseNumber);
                             var entryCommand = new DeclareEntryResultCommand(
                                 raceId, entryId, entry.FinishPosition, entry.OfficialTime, entry.MarginText,
                                 entry.LastThreeFurlongTime, entry.AbnormalResultCode, entry.PrizeMoney);
@@ -915,7 +970,7 @@ public static class EndpointExtensions
                 {
                     try
                     {
-                        static IReadOnlyList<HorseRacingPrediction.Domain.Races.PayoutEntry>? ToPayoutEntries(IReadOnlyList<PayoutEntryDto>? dtos) =>
+                        static IReadOnlyList<HorseRacingPrediction.Domain.Races.PayoutEntry>? ToPayoutEntries(IReadOnlyList<ApiContracts.PayoutEntryDto>? dtos) =>
                             dtos?.Select(d => new HorseRacingPrediction.Domain.Races.PayoutEntry(d.Combination, d.Amount)).ToList();
 
                         var payoutCommand = new DeclarePayoutResultCommand(
@@ -933,11 +988,11 @@ public static class EndpointExtensions
                     }
                 }
 
-                return Results.Ok(new DeclareRaceResultBulkResponse(raceIdValue, errors));
+                return Results.Ok(new ApiContracts.DeclareRaceResultBulkResponse(raceIdValue, errors));
             })
             .WithName("DeclareRaceResultBulk")
             .WithTags("Race API")
-            .Produces<DeclareRaceResultBulkResponse>(StatusCodes.Status200OK)
+            .Produces<ApiContracts.DeclareRaceResultBulkResponse>(StatusCodes.Status200OK)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
