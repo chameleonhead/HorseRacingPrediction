@@ -322,7 +322,10 @@ flowchart LR
 - 調査開始時点で`PlaywrightWebBrowser.cs`にユーザー変更（`Headless=false`）があり、変更していない。
 - 実装チェックポイント1: 汎用DOM fragment snapshot、class優先parser、文字列fallback、RaceEntryとworkflowの
   値受け渡しを実装。parser/workflow関連15テストと実サイトRaceCard E2E 1テストが成功。
-- 次のチェックポイント: 既存Entry更新APIとread model反映の回帰検証、全体テスト、最終記録。
+- 実装チェックポイント2: 既存Entryの馬主・馬体重を非null patch semanticsで更新する
+  `EntryCollectedDataUpdated`、PUT API、read model反映、Collector呼び出しを実装。Domain 96件、
+  Collector HTTP 11件、Scraping関連15件のテストが成功。
+- 次のチェックポイント: 全体回帰テストと最終記録。
 
 ## Deviations and follow-up
 

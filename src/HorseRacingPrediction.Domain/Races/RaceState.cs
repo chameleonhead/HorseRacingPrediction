@@ -6,6 +6,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     IApply<RaceCreated>,
     IApply<RaceCardPublished>,
     IApply<EntryRegistered>,
+    IApply<EntryCollectedDataUpdated>,
     IApply<RaceWeatherObserved>,
     IApply<RaceTrackConditionObserved>,
     IApply<RaceLifecycleStatusChanged>,
@@ -73,7 +74,21 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
             e.JockeyId, e.TrainerId, e.GateNumber,
             e.AssignedWeight, e.SexCode, e.Age,
             e.DeclaredWeight, e.DeclaredWeightDiff,
-            e.RunningStyleCode));
+            e.RunningStyleCode, e.OwnerName));
+    }
+
+    public void Apply(EntryCollectedDataUpdated e)
+    {
+        var index = _entries.FindIndex(x => x.EntryId == e.EntryId);
+        if (index < 0) return;
+
+        var current = _entries[index];
+        _entries[index] = current with
+        {
+            DeclaredWeight = e.DeclaredWeight ?? current.DeclaredWeight,
+            DeclaredWeightDiff = e.DeclaredWeightDiff ?? current.DeclaredWeightDiff,
+            OwnerName = e.OwnerName ?? current.OwnerName,
+        };
     }
 
     public void Apply(RaceWeatherObserved e)

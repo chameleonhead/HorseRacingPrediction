@@ -12,5 +12,9 @@ public class HorseWeightHistoryLocator : IReadModelLocator
         {
             yield return entryEvent.AggregateEvent.HorseId;
         }
+        else if (domainEvent is IDomainEvent<RaceAggregate, RaceId, EntryCollectedDataUpdated> updateEvent)
+        {
+            yield return updateEvent.AggregateEvent.HorseId;
+        }
     }
 }

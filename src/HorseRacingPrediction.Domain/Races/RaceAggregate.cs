@@ -6,6 +6,7 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     IEmit<RaceCreated>,
     IEmit<RaceCardPublished>,
     IEmit<EntryRegistered>,
+    IEmit<EntryCollectedDataUpdated>,
     IEmit<RaceWeatherObserved>,
     IEmit<RaceTrackConditionObserved>,
     IEmit<RaceLifecycleStatusChanged>,
@@ -87,6 +88,25 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         Emit(new RaceWeatherObserved(observationTime,
             weatherCode, weatherText, temperatureCelsius, humidityPercent,
             windDirectionCode, windSpeedMeterPerSecond));
+    }
+
+    public void UpdateEntryCollectedData(
+        string entryId,
+        decimal? declaredWeight = null,
+        decimal? declaredWeightDiff = null,
+        string? ownerName = null)
+    {
+        if (!_state.IsCreated)
+            throw new InvalidOperationException("Race is not created.");
+
+        var entry = _state.Entries.FirstOrDefault(x => x.EntryId == entryId)
+            ?? throw new InvalidOperationException($"Entry '{entryId}' is not registered.");
+
+        if (declaredWeight is null && declaredWeightDiff is null && ownerName is null)
+            return;
+
+        Emit(new EntryCollectedDataUpdated(
+            entryId, entry.HorseId, declaredWeight, declaredWeightDiff, ownerName));
     }
 
     public void RecordTrackConditionObservation(DateTimeOffset observationTime,
@@ -222,6 +242,7 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     public void Apply(RaceCreated e) { }
     public void Apply(RaceCardPublished e) { }
     public void Apply(EntryRegistered e) { }
+    public void Apply(EntryCollectedDataUpdated e) { }
     public void Apply(RaceWeatherObserved e) { }
     public void Apply(RaceTrackConditionObserved e) { }
     public void Apply(RaceLifecycleStatusChanged e) { }
