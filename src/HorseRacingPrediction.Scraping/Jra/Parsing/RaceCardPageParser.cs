@@ -310,14 +310,16 @@ public sealed class RaceCardPageParser
         return false;
     }
 
-    private static TimeOnly? ParseStartTime(
-        PageSnapshot snapshot)
+    internal static TimeOnly? ParseStartTime(
+        PageSnapshot snapshot, bool allowUnlabelledTime = true)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
         var match =
-            TimeRegex.Match(searchText);
+            Regex.Match(searchText, @"発走(?:時刻)?\s*[:：]?\s*(?<hour>\d{1,2})(?:時|:)\s*(?<minute>\d{2})(?:分)?");
+
+        if (!match.Success && allowUnlabelledTime) match = TimeRegex.Match(searchText);
 
         if (!match.Success)
         {

@@ -46,6 +46,36 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_ResultTimesAndEstimatedFurlongColumnAreNotRaceStartOrPace()
+    {
+        var original = BuildSnapshot();
+        var snapshot = new PageSnapshot(Url, original.Title, [new PageSectionSnapshot("結果",
+            "推定上り 馬体重 調教師名 1 3 テストホース 1:33.4", [], [], original.Tables, original.Headings)]);
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        Assert.IsNull(page.StartTime);
+        Assert.IsNull(page.OverallPaceText);
+    }
+
+    [TestMethod]
+    public void Parse_RowHeadersAndEstimatedLastFurlongHeadingDoNotCorruptRaceMetadata()
+    {
+        var original = BuildSnapshot();
+        var time = new PageTableSnapshot(["ハロンタイム", ""],
+            [["ハロンタイム", "12.7 - 11.8 - 13.3"], ["上り", "4F 50.2 - 3F 37.9"]]);
+        var corners = new PageTableSnapshot(["1コーナー", "7(8,12)"],
+            [["1コーナー", "7(8,12)"], ["2コーナー", "7-8(10,9,12)"], ["3コーナー", "7,8,12"], ["4コーナー", "7,8=12"]]);
+        var snapshot = new PageSnapshot(Url, original.Title, [new PageSectionSnapshot("結果",
+            "発走時刻：13時00分 推定上り 馬体重 （増減） 調教師名 単勝 人気 1 8 テストホース",
+            [], [], [..original.Tables, time, corners], original.Headings)]);
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        Assert.AreEqual(new TimeOnly(13, 0), page.StartTime);
+        Assert.AreEqual("ハロンタイム: 12.7 - 11.8 - 13.3 / 上り: 4F 50.2 - 3F 37.9", page.OverallPaceText);
+        Assert.AreEqual(4, page.CornerPassages!.Count);
+        Assert.AreEqual("7(8,12)", page.CornerPassages[0].OrderRaw);
+        Assert.AreEqual(4, page.CornerPassages[3].CornerNumber);
+    }
+
+    [TestMethod]
     [DataRow("メイクデビュー中山")]
     [DataRow("メイクデビュー阪神")]
     [DataRow("東京優駿(GⅠ)")]

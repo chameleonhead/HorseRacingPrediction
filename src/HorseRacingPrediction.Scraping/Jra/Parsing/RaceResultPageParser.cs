@@ -169,7 +169,7 @@ public sealed class RaceResultPageParser
             courseSpec,
             cornerPassages is { Count: > 0 } ? cornerPassages : null,
             overallPaceText,
-            prizeMoneyByPosition, RaceGrade.Parse(snapshot));
+            prizeMoneyByPosition, RaceGrade.Parse(snapshot), RaceCardPageParser.ParseStartTime(snapshot, allowUnlabelledTime: false));
     }
 
     internal static RaceCourseSpec? ParseCourseSpec(
@@ -330,7 +330,9 @@ public sealed class RaceResultPageParser
             // （既存Fixtureが前提とする構造）。
             var headerLayoutMatched = false;
 
-            for (var i = 0; i < table.Headers.Count; i++)
+            // tbodyの先頭thもHeadersへ投影されるため、行ラベルがあればそちらを優先する。
+            var hasRowLabels = table.Rows.Any(row => row.Count >= 2 && CornerNumberRegex.IsMatch(row[0]));
+            for (var i = 0; !hasRowLabels && i < table.Headers.Count; i++)
             {
                 var header = table.Headers[i];
 
@@ -477,11 +479,18 @@ public sealed class RaceResultPageParser
     // （できれば対応、依頼書34節フォローアップ）。「上り」ラベル自体が
     // 存在しない場合は正常（null）。
     private static readonly Regex OverallPaceRegex =
-        new(@"上り[:：]?\s*(?<val>.{0,80})", RegexOptions.Compiled);
+        new(@"上り[:：]?\s*(?<val>\d[^\r\n]{0,79})", RegexOptions.Compiled);
 
     private static string? ParseOverallPaceText(
         PageSnapshot snapshot)
     {
+        var labelledRows = snapshot.Tables.SelectMany(table => table.Rows)
+            .Where(row => row.Count >= 2 && row[0].Trim() is "ハロンタイム" or "上り")
+            .Where(row => row.Skip(1).Any(value => !string.IsNullOrWhiteSpace(value)))
+            .Select(row => $"{row[0].Trim()}: {string.Join(" ", row.Skip(1)).Trim()}")
+            .Distinct().ToList();
+        if (labelledRows.Count > 0) return string.Join(" / ", labelledRows);
+
         var match = OverallPaceRegex.Match(snapshot.MainText);
 
         if (!match.Success)

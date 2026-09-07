@@ -30,6 +30,11 @@ public sealed class JraSubjectSiteE2ETests
         var result = await navigator.ToHorseHistoryResultAsync(identity, race, timeout.Token);
         Assert.AreEqual(6, result.RaceId.Number);
         Assert.AreEqual("メイクデビュー中山", result.RaceName);
+        Assert.AreEqual(new TimeOnly(13, 0), result.StartTime);
+        StringAssert.Contains(result.OverallPaceText!, "12.7 - 11.8");
+        StringAssert.Contains(result.OverallPaceText!, "4F 50.2 - 3F 37.9");
+        Assert.AreEqual("7(8,12)(10,9)11,4(1,6)(3,5)-2", result.CornerPassages![0].OrderRaw);
+        Assert.AreEqual(4, result.CornerPassages[^1].CornerNumber);
     }
 
     [TestMethod]

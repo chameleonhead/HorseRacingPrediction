@@ -227,7 +227,7 @@ public sealed class JraRaceResultCollectionWorkflow
             Payouts: payouts, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null,
             OverallPaceText: resultPage.OverallPaceText,
             CornerPassagesText: resultPage.CornerPassages is null ? null : string.Join("\n", resultPage.CornerPassages.Select(x => $"{x.CornerNumber}: {x.OrderRaw}")),
-            CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId);
+            CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId, StartTime: resultPage.StartTime);
 
         DeclareRaceResultBulkResponse outcome;
         try
