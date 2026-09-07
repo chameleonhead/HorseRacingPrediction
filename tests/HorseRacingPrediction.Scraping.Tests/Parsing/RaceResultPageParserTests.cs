@@ -698,9 +698,11 @@ public sealed class RaceResultPageParserTests
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
+        // Phase8でワイド・枠連・3連複は既知の券種として対応済みのため、
+        // ここでは引き続き既知集合に含まれない架空の券種名を用いる。
         var payoutTable = new PageTableSnapshot(
             Headers: ["式別", "組合せ", "払戻金"],
-            Rows: [["ワイド", "1-3", "250円"]]);
+            Rows: [["馬複", "1-3", "250円"]]);
 
         var section = new PageSectionSnapshot(
             title: "レース結果",
@@ -716,7 +718,7 @@ public sealed class RaceResultPageParserTests
             () => new RaceResultPageParser().Parse(snapshot));
 
         Assert.AreEqual("PayoutType", ex.FieldName);
-        Assert.AreEqual("ワイド", ex.RawValue);
+        Assert.AreEqual("馬複", ex.RawValue);
     }
 
     [TestMethod]
@@ -1139,6 +1141,125 @@ public sealed class RaceResultPageParserTests
         Assert.AreEqual("テストホースA", page.Results[0].HorseName);
         Assert.IsNotNull(page.Payouts);
         Assert.AreEqual(1, page.Payouts!.WinPayouts.Count);
+    }
+
+    // Phase8: 2026-09-06 中山1R（実サイトのスクリーンショット書き起こしに基づく
+    // 実データFixture）。障害レース、払戻グリッドレイアウト（枠連は空欄）、
+    // 着順テーブル内インライン「コーナー通過順位」列、行ラベル形式の下方
+    // コーナー通過順位集計テーブル、本賞金・上り集計テキストを含む。
+    [TestMethod]
+    public void Parse_実サイト書き起こしFixture_全項目を正しく解析する()
+    {
+        var table = new PageTableSnapshot(
+            Headers:
+            [
+                "着順", "枠", "馬番", "馬名", "性齢", "負担重量", "騎手名", "タイム", "着差",
+                "コーナー通過順位", "平均1F", "馬体重(増減)", "調教師名", "単勝人気",
+            ],
+            Rows:
+            [
+                ["1", "2", "2", "エーオーキング", "牡4", "60.0", "草野太郎", "3:19.8", "", "4 3 3 2", "13.9", "456(+6)", "久保田貴士", "3"],
+                ["2", "7", "7", "ベラトール", "牡4", "60.0", "大江原壱", "3:20.0", "1 1/4", "1 1 1 1", "13.9", "508(+6)", "西田雄一郎", "2"],
+            ]);
+
+        var cornerTable = new PageTableSnapshot(
+            Headers: ["コーナー通過順位", ""],
+            Rows:
+            [
+                ["1コーナー", "7=3-6,2,1-5,4"],
+                ["2コーナー(2周目)", "7=3(6,2)-(1,5)4"],
+                ["3コーナー(2周目)", "7-3(6,2)-5=(1,4)"],
+                ["4コーナー(2周目)", "7-(6,2)-3-5=1=4"],
+            ]);
+
+        var mainText =
+            "天候 雨 芝 稍重 ダート 重 " +
+            "障害3歳以上 未勝利（混合） 定量 コース：2,880メートル（芝→ダート） " +
+            "本賞金(万円) 1着 840 2着 340 3着 210 4着 130 5着 84 " +
+            "タイム 上り: 1マイル1分48秒1 4F 51.3 - 3F 38.5 " +
+            "単勝 2 400円 (3人気) 枠連 馬連 2-7 810円 (4人気) " +
+            "複勝 2 140円 (1人気) 7 190円 (3人気) ワイド 2-7 330円 (5人気) 2-6 360円 (6人気) 6-7 300円 (4人気) 馬単 2-7 1,650円 (9人気) " +
+            "3連複 2-6-7 1,160円 (5人気) 3連単 2-7-6 5,650円 (25人気)";
+
+        var section = new PageSectionSnapshot(
+            title: "レース結果",
+            mainText: mainText,
+            links: [],
+            actions: [],
+            tables: [table, cornerTable],
+            headings: ["JRA 日本中央競馬会", "2026年9月6日（日曜）4回中山2日 1レース", "障害3歳以上未勝利"]);
+
+        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        // コースは既存のカンマ入り数字対応で解析できる（2,880メートル）。
+        Assert.IsNotNull(page.CourseSpec);
+        Assert.AreEqual(2880, page.CourseSpec!.DistanceMeters);
+
+        // 着順テーブル内インラインのコーナー通過順位列。
+        CollectionAssert.AreEqual(new[] { 4, 3, 3, 2 }, page.Results[0].CornerOrders!.ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 1, 1, 1 }, page.Results[1].CornerOrders!.ToArray());
+        Assert.IsNull(page.Results[0].EstimatedLast3F);
+        Assert.AreEqual(13.9m, page.Results[0].Average1F);
+
+        // 下方集計テーブル（行ラベル形式）。
+        Assert.IsNotNull(page.CornerPassages);
+        Assert.AreEqual(4, page.CornerPassages!.Count);
+        Assert.AreEqual(1, page.CornerPassages[0].CornerNumber);
+        Assert.AreEqual("7=3-6,2,1-5,4", page.CornerPassages[0].OrderRaw);
+        Assert.AreEqual(4, page.CornerPassages[3].CornerNumber);
+        Assert.AreEqual("7-(6,2)-3-5=1=4", page.CornerPassages[3].OrderRaw);
+
+        // 本賞金（万円→円換算）。
+        Assert.IsNotNull(page.PrizeMoneyByPosition);
+        Assert.AreEqual(8_400_000m, page.PrizeMoneyByPosition![1]);
+        Assert.AreEqual(3_400_000m, page.PrizeMoneyByPosition[2]);
+        Assert.AreEqual(840_000m, page.PrizeMoneyByPosition[5]);
+
+        // 上り集計（生文字列のまま）。
+        Assert.IsNotNull(page.OverallPaceText);
+        StringAssert.Contains(page.OverallPaceText, "1マイル1分48秒1");
+
+        // 払戻金（グリッドレイアウト、8券種）。
+        Assert.IsNotNull(page.Payouts);
+        var payouts = page.Payouts!;
+
+        Assert.AreEqual(1, payouts.WinPayouts.Count);
+        Assert.AreEqual("2", payouts.WinPayouts[0].Combination);
+        Assert.AreEqual(400m, payouts.WinPayouts[0].Amount);
+        Assert.AreEqual(3, payouts.WinPayouts[0].Popularity);
+
+        Assert.AreEqual(2, payouts.PlacePayouts.Count);
+        Assert.AreEqual("2", payouts.PlacePayouts[0].Combination);
+        Assert.AreEqual(140m, payouts.PlacePayouts[0].Amount);
+        Assert.AreEqual("7", payouts.PlacePayouts[1].Combination);
+        Assert.AreEqual(190m, payouts.PlacePayouts[1].Amount);
+
+        // 枠連はこのレースではデータなし（空欄）でも正常。
+        Assert.AreEqual(0, payouts.BracketQuinellaPayoutsOrEmpty.Count);
+
+        Assert.AreEqual(1, payouts.QuinellaPayouts.Count);
+        Assert.AreEqual("2-7", payouts.QuinellaPayouts[0].Combination);
+        Assert.AreEqual(810m, payouts.QuinellaPayouts[0].Amount);
+
+        Assert.AreEqual(3, payouts.WidePayoutsOrEmpty.Count);
+        Assert.AreEqual("2-7", payouts.WidePayoutsOrEmpty[0].Combination);
+        Assert.AreEqual(330m, payouts.WidePayoutsOrEmpty[0].Amount);
+
+        Assert.AreEqual(1, payouts.ExactaPayouts.Count);
+        Assert.AreEqual("2-7", payouts.ExactaPayouts[0].Combination);
+        Assert.AreEqual(1650m, payouts.ExactaPayouts[0].Amount);
+        Assert.AreEqual(9, payouts.ExactaPayouts[0].Popularity);
+
+        Assert.AreEqual(1, payouts.TrioPayoutsOrEmpty.Count);
+        Assert.AreEqual("2-6-7", payouts.TrioPayoutsOrEmpty[0].Combination);
+        Assert.AreEqual(1160m, payouts.TrioPayoutsOrEmpty[0].Amount);
+
+        Assert.AreEqual(1, payouts.TrifectaPayouts.Count);
+        Assert.AreEqual("2-7-6", payouts.TrifectaPayouts[0].Combination);
+        Assert.AreEqual(5650m, payouts.TrifectaPayouts[0].Amount);
+        Assert.AreEqual(25, payouts.TrifectaPayouts[0].Popularity);
     }
 
     private static PageSectionSnapshot SectionWithMainText(string mainText)

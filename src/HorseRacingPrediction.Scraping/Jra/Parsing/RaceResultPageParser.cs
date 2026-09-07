@@ -135,6 +135,12 @@ public sealed class RaceResultPageParser
         var cornerPassages =
             ParseCornerPassages(snapshot);
 
+        var overallPaceText =
+            ParseOverallPaceText(snapshot);
+
+        var prizeMoneyByPosition =
+            ParsePrizeMoney(snapshot);
+
         return new JraRaceResultPage(
             snapshot.Url,
             new RaceId(date, course, number),
@@ -144,7 +150,9 @@ public sealed class RaceResultPageParser
             trackConditionText,
             payouts is not null && !payouts.IsEmpty ? payouts : null,
             courseSpec,
-            cornerPassages is { Count: > 0 } ? cornerPassages : null);
+            cornerPassages is { Count: > 0 } ? cornerPassages : null,
+            overallPaceText,
+            prizeMoneyByPosition);
     }
 
     private static RaceCourseSpec? ParseCourseSpec(
@@ -301,6 +309,10 @@ public sealed class RaceResultPageParser
 
         foreach (var table in snapshot.Tables)
         {
+            // レイアウト1: コーナー番号が列見出し（ヘッダー）として現れるテーブル
+            // （既存Fixtureが前提とする構造）。
+            var headerLayoutMatched = false;
+
             for (var i = 0; i < table.Headers.Count; i++)
             {
                 var header = table.Headers[i];
@@ -320,6 +332,7 @@ public sealed class RaceResultPageParser
                     continue;
                 }
 
+                headerLayoutMatched = true;
                 var cornerNumber = int.Parse(cornerNumberMatch.Groups["num"].Value);
 
                 foreach (var row in table.Rows)
@@ -332,9 +345,149 @@ public sealed class RaceResultPageParser
                     result.Add(new CornerPassage(cornerNumber, row[i].Trim()));
                 }
             }
+
+            if (headerLayoutMatched)
+            {
+                continue;
+            }
+
+            // レイアウト2（実サイトで確認）: 「1コーナー」「2コーナー(2周目)」等が
+            // 列見出しではなく、行の1列目（ラベルセル）として現れ、2列目以降に
+            // 通過順位の生文字列が続く2列テーブル。
+            foreach (var row in table.Rows)
+            {
+                if (row.Count < 2 || string.IsNullOrWhiteSpace(row[0]))
+                {
+                    continue;
+                }
+
+                var label = row[0].Trim();
+
+                if (!label.Contains("コーナー", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var cornerNumberMatch = CornerNumberRegex.Match(label);
+
+                if (!cornerNumberMatch.Success)
+                {
+                    continue;
+                }
+
+                var cornerNumber = int.Parse(cornerNumberMatch.Groups["num"].Value);
+
+                for (var i = 1; i < row.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(row[i]))
+                    {
+                        continue;
+                    }
+
+                    result.Add(new CornerPassage(cornerNumber, row[i].Trim()));
+                }
+            }
         }
 
         return result;
+    }
+
+    // Phase8（依頼書27節）: 本賞金(万円)。「1着 840　2着 340…」のように、
+    // 着順ラベルと万円単位の金額が繰り返し現れる。円単位に変換して保持する
+    // （既存のPayoutLine.Amountとの単位整合を優先）。「本賞金」欄自体が存在
+    // しない場合は正常（null）。存在するのに1件も解析できない場合はエラー。
+    private static readonly Regex PrizeMoneySectionRegex =
+        new(@"本賞金[^\d]*", RegexOptions.Compiled);
+
+    private static readonly Regex PrizeMoneyEntryRegex =
+        new(@"(?<position>\d{1,2})着\s*(?<amount>[\d,]+)", RegexOptions.Compiled);
+
+    private static IReadOnlyDictionary<int, decimal>? ParsePrizeMoney(
+        PageSnapshot snapshot)
+    {
+        var searchText = $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
+
+        var sectionMatch = PrizeMoneySectionRegex.Match(searchText);
+
+        if (!sectionMatch.Success)
+        {
+            // 「本賞金」欄自体が存在しない＝仕様上optionalな要素が存在しない正常系。
+            return null;
+        }
+
+        var tail = searchText[(sectionMatch.Index + sectionMatch.Length)..];
+
+        // 「本賞金」ラベル自体は見つかったが、その直後にラベル+金額の並びが
+        // 1件も解析できない場合はParser異常（依頼書27節）。
+        var truncated = tail.Length > 200 ? tail[..200] : tail;
+
+        var entries = PrizeMoneyEntryRegex.Matches(truncated);
+
+        if (entries.Count == 0)
+        {
+            throw new JraValueParseException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "PrizeMoneyByPosition",
+                truncated);
+        }
+
+        var result = new Dictionary<int, decimal>();
+
+        foreach (Match entry in entries)
+        {
+            var position = int.Parse(entry.Groups["position"].Value);
+            var amountDigits = entry.Groups["amount"].Value.Replace(",", string.Empty);
+
+            if (!decimal.TryParse(amountDigits, out var manEn))
+            {
+                throw new JraValueParseException(
+                    JraPageKind.RaceResult,
+                    snapshot.Url,
+                    "PrizeMoneyByPosition",
+                    entry.Value);
+            }
+
+            // 万円単位→円単位。
+            result[position] = manEn * 10_000m;
+        }
+
+        return result;
+    }
+
+    // Phase8: レース全体の「タイム」欄（上り集計）。フォーマット解析難易度が
+    // 高いため、数値分解はせず「上り」ラベル以降の生文字列のみ保持する
+    // （できれば対応、依頼書34節フォローアップ）。「上り」ラベル自体が
+    // 存在しない場合は正常（null）。
+    private static readonly Regex OverallPaceRegex =
+        new(@"上り[:：]?\s*(?<val>.{0,80})", RegexOptions.Compiled);
+
+    private static string? ParseOverallPaceText(
+        PageSnapshot snapshot)
+    {
+        var match = OverallPaceRegex.Match(snapshot.MainText);
+
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var value = match.Groups["val"].Value;
+
+        // 次のセクションラベルが混入していれば、そこで打ち切る。
+        foreach (var stopWord in new[] { "本賞金", "コーナー通過順位", "払戻金" })
+        {
+            var stopIndex = value.IndexOf(stopWord, StringComparison.Ordinal);
+
+            if (stopIndex >= 0)
+            {
+                value = value[..stopIndex];
+            }
+        }
+
+        value = value.Trim();
+
+        return value.Length == 0 ? null : value;
     }
 
     private static string? ParseWeatherText(
@@ -416,17 +569,64 @@ public sealed class RaceResultPageParser
         return string.Join(" ", parts);
     }
 
+    // Phase8: 券種キーワード→格納先バケット名の対応。「三連複」「三連単」（旧字体）
+    // と「3連複」「3連単」（実サイトで確認された算用数字表記）の両方を許容する。
+    private static readonly string[] KnownPayoutTypeNames =
+        ["単勝", "複勝", "枠連", "馬連", "ワイド", "馬単", "三連複", "3連複", "三連単", "3連単"];
+
+    private enum PayoutBucketKind
+    {
+        Win,
+        Place,
+        BracketQuinella,
+        Quinella,
+        Wide,
+        Exacta,
+        Trio,
+        Trifecta,
+    }
+
+    private static PayoutBucketKind? ResolvePayoutBucketKind(
+        string typeName)
+        => typeName switch
+        {
+            "単勝" => PayoutBucketKind.Win,
+            "複勝" => PayoutBucketKind.Place,
+            "枠連" => PayoutBucketKind.BracketQuinella,
+            "馬連" => PayoutBucketKind.Quinella,
+            "ワイド" => PayoutBucketKind.Wide,
+            "馬単" => PayoutBucketKind.Exacta,
+            "三連複" or "3連複" => PayoutBucketKind.Trio,
+            "三連単" or "3連単" => PayoutBucketKind.Trifecta,
+            _ => null,
+        };
+
+    // Phase8: 券種の組合せ→払戻金→(人気)を繰り返し抽出するための正規表現。
+    // 「2 → 400円 (3人気)」「2-7 → 810円 (4人気)」「2-6-7 → 1,160円 (5人気)」の
+    // ように、矢印の有無・カッコの有無いずれにも対応する。
+    private static readonly Regex PayoutEntryRegex =
+        new(@"(?<combo>\d+(?:[-－]\d+){0,2})\s*(?:→\s*)?(?<amount>[\d,]+)\s*円\s*(?:[\(（]?\s*(?<pop>\d+)\s*人気\s*[\)）]?)?", RegexOptions.Compiled);
+
     private static RacePayouts? ParsePayouts(
         PageSnapshot snapshot,
         PageTableSnapshot resultTable)
     {
-        // TODO: 通常の表形式ではなく、払戻金のテーブルを確認する必要がある
-        var winPayouts = new List<PayoutLine>();
-        var placePayouts = new List<PayoutLine>();
-        var quinellaPayouts = new List<PayoutLine>();
-        var exactaPayouts = new List<PayoutLine>();
-        var trifectaPayouts = new List<PayoutLine>();
+        var buckets = new Dictionary<PayoutBucketKind, List<PayoutLine>>
+        {
+            [PayoutBucketKind.Win] = [],
+            [PayoutBucketKind.Place] = [],
+            [PayoutBucketKind.BracketQuinella] = [],
+            [PayoutBucketKind.Quinella] = [],
+            [PayoutBucketKind.Wide] = [],
+            [PayoutBucketKind.Exacta] = [],
+            [PayoutBucketKind.Trio] = [],
+            [PayoutBucketKind.Trifecta] = [],
+        };
 
+        var populatedFromTable = new HashSet<PayoutBucketKind>();
+
+        // 1. 既存方式: 「式別」「組合せ」「払戻金」の3列を持つ単純な1テーブル構造
+        // （旧来のJRA表記、または本パーサーの既存Fixtureが前提とする構造）。
         foreach (var table in snapshot.Tables)
         {
             if (ReferenceEquals(table, resultTable))
@@ -460,17 +660,9 @@ public sealed class RaceResultPageParser
                     continue;
                 }
 
-                var bucket = currentTypeName switch
-                {
-                    "単勝" => winPayouts,
-                    "複勝" => placePayouts,
-                    "馬連" => quinellaPayouts,
-                    "馬単" => exactaPayouts,
-                    "三連単" => trifectaPayouts,
-                    _ => null,
-                };
+                var bucketKind = ResolvePayoutBucketKind(currentTypeName);
 
-                if (bucket is null)
+                if (bucketKind is null)
                 {
                     // 券種らしきデータ（式別セルの値）があるのに既知の券種集合に
                     // 含まれない場合は黙って無視せずエラーとする（依頼書28節）。
@@ -489,11 +681,115 @@ public sealed class RaceResultPageParser
                     continue;
                 }
 
-                AppendPayoutLines(bucket, row[combinationColumnIndex], row[amountColumnIndex], snapshot.Url);
+                AppendPayoutLines(buckets[bucketKind.Value], row[combinationColumnIndex], row[amountColumnIndex], snapshot.Url);
+                populatedFromTable.Add(bucketKind.Value);
             }
         }
 
-        return new RacePayouts(winPayouts, placePayouts, quinellaPayouts, exactaPayouts, trifectaPayouts);
+        // 2. 実サイトで確認された払戻金テーブルはグリッドレイアウト（複数券種ブロックが
+        // 横並び）であり、単純な「式別/組合せ/払戻金」列構造への依存では壊れやすい。
+        // そのため、テーブル構造から取得できなかった券種については、ページ本文
+        // テキスト全体を対象に、券種キーワードをアンカーとした正規表現スキャンで
+        // 補完する（既存の天候・馬場状態解析と同じ方式）。
+        var searchText = BuildPayoutSearchText(snapshot, resultTable);
+
+        var anchors = new List<(int Index, int Length, string TypeName)>();
+
+        foreach (var typeName in KnownPayoutTypeNames)
+        {
+            var searchFrom = 0;
+
+            while (true)
+            {
+                var index = searchText.IndexOf(typeName, searchFrom, StringComparison.Ordinal);
+
+                if (index < 0)
+                {
+                    break;
+                }
+
+                anchors.Add((index, typeName.Length, typeName));
+                searchFrom = index + typeName.Length;
+            }
+        }
+
+        anchors.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+        for (var i = 0; i < anchors.Count; i++)
+        {
+            var bucketKind = ResolvePayoutBucketKind(anchors[i].TypeName);
+
+            if (bucketKind is null || populatedFromTable.Contains(bucketKind.Value))
+            {
+                continue;
+            }
+
+            var blockStart = anchors[i].Index + anchors[i].Length;
+            var blockEnd = i + 1 < anchors.Count ? anchors[i + 1].Index : searchText.Length;
+
+            if (blockEnd <= blockStart)
+            {
+                continue;
+            }
+
+            var block = searchText[blockStart..blockEnd];
+            var bucket = buckets[bucketKind.Value];
+
+            foreach (Match entryMatch in PayoutEntryRegex.Matches(block))
+            {
+                var combination = entryMatch.Groups["combo"].Value.Replace('－', '-');
+                var amountDigits = entryMatch.Groups["amount"].Value.Replace(",", string.Empty);
+
+                if (!decimal.TryParse(amountDigits, out var amount))
+                {
+                    throw new JraValueParseException(
+                        JraPageKind.RaceResult,
+                        snapshot.Url,
+                        "Payout.Amount",
+                        entryMatch.Groups["amount"].Value);
+                }
+
+                int? popularity = entryMatch.Groups["pop"].Success
+                    ? int.Parse(entryMatch.Groups["pop"].Value)
+                    : null;
+
+                bucket.Add(new PayoutLine(combination, amount, popularity));
+            }
+        }
+
+        return new RacePayouts(
+            buckets[PayoutBucketKind.Win],
+            buckets[PayoutBucketKind.Place],
+            buckets[PayoutBucketKind.Quinella],
+            buckets[PayoutBucketKind.Exacta],
+            buckets[PayoutBucketKind.Trifecta],
+            buckets[PayoutBucketKind.BracketQuinella],
+            buckets[PayoutBucketKind.Wide],
+            buckets[PayoutBucketKind.Trio]);
+    }
+
+    private static string BuildPayoutSearchText(
+        PageSnapshot snapshot,
+        PageTableSnapshot resultTable)
+    {
+        var parts = new List<string> { snapshot.MainText };
+
+        foreach (var table in snapshot.Tables)
+        {
+            if (ReferenceEquals(table, resultTable))
+            {
+                continue;
+            }
+
+            parts.Add(string.Join(" ", table.Headers));
+
+            foreach (var row in table.Rows)
+            {
+                parts.Add(string.Join(" ", row));
+            }
+        }
+
+        return string.Join(" ", parts);
     }
 
     private static void AppendPayoutLines(
@@ -797,6 +1093,22 @@ public sealed class RaceResultPageParser
         return -1;
     }
 
+    // Phase8: 着順テーブル内の「コーナー通過順位」列（馬ごとのインライン列、
+    // 例:「4 3 3 2」）。ページ下方の集計テーブル（ParseCornerPassages）とは別物。
+    private static int FindCornerOrdersColumnIndex(IReadOnlyList<string> headers)
+    {
+        for (var i = 0; i < headers.Count; i++)
+        {
+            if (RemoveWhitespace(headers[i]).Contains("コーナー通過順位", StringComparison.Ordinal) ||
+                RemoveWhitespace(headers[i]).Contains("通過順位", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     private static int FindAverage1FColumnIndex(IReadOnlyList<string> headers)
     {
         for (var i = 0; i < headers.Count; i++)
@@ -954,7 +1266,7 @@ public sealed class RaceResultPageParser
         var jockeyIndex = FindJockeyColumnIndex(table.Headers);
         var timeIndex = FindTimeColumnIndex(table.Headers);
         var marginIndex = FindMarginColumnIndex(table.Headers);
-        // TODO: コーナー通過順位を取得する、3Fタイムは本テーブルではなく、本テーブルの下方にあるタイムを見るように変更
+        var cornerOrdersIndex = FindCornerOrdersColumnIndex(table.Headers);
         var estimatedLast3FIndex = FindEstimatedLast3FColumnIndex(table.Headers);
         var average1FIndex = FindAverage1FColumnIndex(table.Headers);
         var bodyWeightIndex = FindBodyWeightColumnIndex(table.Headers);
@@ -1268,6 +1580,31 @@ public sealed class RaceResultPageParser
                 }
             }
 
+            IReadOnlyList<int>? cornerOrders = null;
+
+            if (cornerOrdersIndex >= 0 && cornerOrdersIndex < row.Count && !string.IsNullOrWhiteSpace(row[cornerOrdersIndex]))
+            {
+                var text = row[cornerOrdersIndex].Trim();
+                var tokens = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                var parsedOrders = new List<int>();
+
+                foreach (var token in tokens)
+                {
+                    if (!int.TryParse(token, out var order))
+                    {
+                        throw new JraValueParseException(
+                            JraPageKind.RaceResult,
+                            url,
+                            "CornerOrders",
+                            text);
+                    }
+
+                    parsedOrders.Add(order);
+                }
+
+                cornerOrders = parsedOrders;
+            }
+
             decimal? estimatedLast3F = null;
 
             if (estimatedLast3FIndex >= 0 && estimatedLast3FIndex < row.Count && !string.IsNullOrWhiteSpace(row[estimatedLast3FIndex]))
@@ -1323,7 +1660,8 @@ public sealed class RaceResultPageParser
                 MarginRaw: marginRaw,
                 IsDeadHeat: isDeadHeat,
                 EstimatedLast3F: estimatedLast3F,
-                Average1F: average1F));
+                Average1F: average1F,
+                CornerOrders: cornerOrders));
         }
 
         return results;

@@ -30,4 +30,9 @@ public sealed record RaceResultEntry(
     string? MarginRaw = null,
     bool IsDeadHeat = false,
     decimal? EstimatedLast3F = null,
-    decimal? Average1F = null);
+    decimal? Average1F = null,
+    // Phase8: 着順テーブル内の「コーナー通過順位」列（馬ごとの半角スペース区切り
+    // 整数列、例:「4 3 3 2」=1〜4コーナーの通過順位）。ページ下方の集計テーブル
+    // （<see cref="JraRaceResultPage.CornerPassages"/>、<see cref="CornerPassage"/>型）
+    // とは別物。列自体が存在しない場合はnull（正常）。
+    IReadOnlyList<int>? CornerOrders = null);
