@@ -1,4 +1,4 @@
-# JRA出馬表の生産者・血統取得と馬プロフィール登録
+# JRA出馬表の生産者・血統・毛色取得と馬プロフィール登録
 
 - Status: Draft
 - Owner: HorseRacingPrediction maintainers
@@ -19,10 +19,13 @@ JRA出馬表の馬名セルには、馬主・馬体重に加えて生産者と�
 
 現行`RaceCardPageParser`は`breeder` fragmentを馬主との識別にだけ使い、父・母行を除外している。
 `RaceEntry`およびHorse aggregate/APIにはこれらを渡すフィールドがないため保存できない。
+また、別セルの`性齢/毛色`には`牡4/栗`、`牡3/鹿`のように毛色が表示されるが、現行parserは
+同じセルから斤量と騎手名だけを取り出し、毛色を保持していない。
 
 ## Goals
 
 - 出馬表から生産者名、父名、母名、母の父名を項目境界を保って取得する。
+- 出馬表の`性齢/毛色`から毛色を取得する。
 - 取得値を現在の競走馬プロフィールへ登録し、再収集時にも非null値で更新する。
 - Playwrightはテーブル全体を一括snapshot化し、JRA固有の意味解釈はparserで行う。
 - 既存の馬主、馬体重、レース一覧リンク取得を維持する。
@@ -55,7 +58,8 @@ Playwright側は`父`や`母`という文字列を解釈しない。
 string? BreederName = null,
 string? SireName = null,
 string? DamName = null,
-string? DamsireName = null
+string? DamsireName = null,
+string? CoatColor = null
 ```
 
 ## Horse profile and API design
@@ -67,12 +71,13 @@ BreederName
 SireName
 DamName
 DamsireName
+CoatColor
 ```
 
 父母をHorse IDで保持しない理由は、海外馬を含む親馬が当システムへ登録済みとは限らず、出馬表の
 表示名だけで同一性を確定できないためである。今回の取得値はJRA表示のプロフィール文字列として扱う。
 
-以下へ4項目を追加する。
+以下へ5項目を追加する。
 
 - `HorseRegistered` / `HorseProfileUpdated` / `HorseState` / `HorseDetails`
 - `RegisterHorseCommand` / `UpdateHorseProfileCommand`
@@ -92,21 +97,28 @@ Task<string> UpsertHorseProfileAsync(
     string? sireName,
     string? damName,
     string? damsireName,
+    string? coatColor,
     CancellationToken cancellationToken = default);
 ```
 
 既存`UpsertHorseAsync`と`UpsertHorseWithOwnerAsync`は互換用に維持し、新メソッドへ委譲する。
 登録済みHorseへのPUTは既存と同じ非null patch semanticsとし、出馬表に項目がない再収集で既存値を消さない。
 `JraRaceCardCollectionWorkflow`はEntry登録前に1回だけ`UpsertHorseProfileAsync`を呼び、馬主・生産者・
-父・母・母父をまとめて渡す。
+父・母・母父・毛色をまとめて渡す。
+
+毛色は現行ドメインにコード体系がなく、JRAの表示値が日本語の短縮表記で提供されるため、まず
+`CoatColor`文字列として`栗`、`鹿`、`黒鹿`、`青鹿`、`芦`等を原文のまま保存する。未知値を推測で
+コード化しない。`性齢/毛色`欄が存在するのに`/`以降を分離できない場合は`JraValueParseException`
+（FieldName=`CoatColor`）とする。
 
 ## Acceptance criteria
 
 - 提示例から`ノーザンファーム`、`アドマイヤマーズ`、`トレジャリング`、`Havana Gold`を取得する。
+- `牡4/栗`から`CoatColor=栗`、`牡3/鹿`から`CoatColor=鹿`を取得する。
 - 法人格・空白・英字を表示どおり保持する。
 - 生産者を馬主、父母を調教師として誤認しない。
-- workflowから馬プロフィール登録へ馬主・生産者・父・母・母父が渡る。
-- 新規登録と既存プロフィール更新の両方で4項目が保存される。
+- workflowから馬プロフィール登録へ馬主・生産者・父・母・母父・毛色が渡る。
+- 新規登録と既存プロフィール更新の両方で5項目が保存される。
 - 欠損値によって既存の非nullプロフィールを消さない。
 - RaceCard parser、workflow、Horse domain/API/Collector、実サイトE2E、全体回帰テストが成功する。
 
