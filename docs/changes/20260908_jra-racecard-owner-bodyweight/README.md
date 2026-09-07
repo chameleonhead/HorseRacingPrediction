@@ -1,6 +1,6 @@
 # JRA出馬表の馬主・馬体重取得修正
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-08
 - Updated: 2026-09-08
