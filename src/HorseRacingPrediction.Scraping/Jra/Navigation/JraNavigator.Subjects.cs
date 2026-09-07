@@ -76,7 +76,7 @@ public sealed partial class JraNavigator
         if (found.Count != 1) throw new JraCollectionException(found.Count == 0
             ? "同定不能: 公開検索から対象馬を確認できませんでした。" : "同定不能: 同名の馬が複数います。生年月日を登録して再依頼してください。");
         await OpenHorseSearchAsync(subject.Name, token);
-        for (var i=0;i<found[0].Page;i++)
+        for (var i = 0; i < found[0].Page; i++)
         {
             var next = FindNext(await _browser.GetDataPageSnapshotAsync(token)) ?? throw new JraCollectionException("検索ページが変化しました。");
             await _browser.ClickLinkAsync(next, token);
@@ -96,7 +96,7 @@ public sealed partial class JraNavigator
         await ToKeibaTopAsync(token);
         await _browser.ClickAsync("競走馬検索", token);
         await _browser.SetFieldValueAsync("iv_h_name", name, token);
-        var search = (await _browser.GetDataPageSnapshotAsync(token)).Links.FirstOrDefault(l=>l.Title.Trim()=="検索" && l.Region=="content")
+        var search = (await _browser.GetDataPageSnapshotAsync(token)).Links.FirstOrDefault(l => l.Title.Trim() == "検索" && l.Region == "content")
             ?? throw new JraCollectionException("競走馬の検索操作が見つかりません。");
         await _browser.ClickLinkAsync(search, token);
     }
@@ -122,14 +122,14 @@ public sealed partial class JraNavigator
         var seen = new HashSet<string>();
         while (page is not null)
         {
-            if (!seen.Add(string.Join("|", page.Races.Select(r=>r.Key)))) throw new JraCollectionException("出走履歴のページ送りが進みません。");
-            var target = page.Races.FirstOrDefault(r=>r.Date==race.Date && r.Course==race.Course && r.Link?.Url==race.Link?.Url && r.Link is not null);
+            if (!seen.Add(string.Join("|", page.Races.Select(r => r.Key)))) throw new JraCollectionException("出走履歴のページ送りが進みません。");
+            var target = page.Races.FirstOrDefault(r => r.Date == race.Date && r.Course == race.Course && r.Link?.Url == race.Link?.Url && r.Link is not null);
             if (target?.Link is not null)
             {
                 await _browser.ClickLinkAsync(target.Link, cancellationToken);
                 var result = (JraRaceResultPage)new RaceResultPageParser().Parse(await _browser.GetPageSnapshotAsync(cancellationToken: cancellationToken));
                 if (result.RaceId.Date != race.Date || result.RaceId.Course != RaceCourseNames.Parse(race.Course)
-                    || !result.Results.Any(r=>SubjectProfilePageParser.Normalize(r.HorseName ?? "") == SubjectProfilePageParser.Normalize(horse.Name)))
+                    || !result.Results.Any(r => SubjectProfilePageParser.Normalize(r.HorseName ?? "") == SubjectProfilePageParser.Normalize(horse.Name)))
                     throw new JraCollectionException("取得したレースが馬の出走履歴と一致しません。");
                 return result;
             }

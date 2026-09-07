@@ -55,7 +55,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
     {
         var race = CreateRaceSummary(6);
         var card = CreateRaceCard(race.Id, "メイクデビュー中山",
-            new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2)) with { GradeCode = "G3" };
+            new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2)) with
+        { GradeCode = "G3" };
         var (session, navigator, writer) = CreateContext(CreateRaceList(race, CreateRaceSummary(7)),
             new Dictionary<RaceId, IJraPage> { [race.Id] = card });
         await using var disposable = session;

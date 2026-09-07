@@ -73,10 +73,19 @@ public class RaceReacquisitionTests
             Entries: [entry], Payouts: payouts, TargetRaceId: raceId, RefreshExistingData: true);
         (await http.PostAsJsonAsync("/api/races/result-bulk", request)).EnsureSuccessStatusCode();
         (await http.PostAsJsonAsync($"/api/races/{raceId}/close", new { })).EnsureSuccessStatusCode();
-        var updated = request with { RaceName = "メイクデビュー中山", GradeCode = null, DistanceMeters = 1900,
-            WinningHorseName = "エンジャムメント", Entries = [entry with { JockeyName = "新騎手", AssignedWeight = 54m, BodyWeight = 500, OwnerName = null, OfficialTime = "1:53.8", Popularity = 2 }],
-            StartTime = new TimeOnly(12, 55), OverallPaceText = "12.5 - 11.4", CornerPassagesText = "4角 8,7,12", CourseLayout = "内",
-            Payouts = payouts with { WinPayouts = [new("8", 320)], PlacePayouts = null, WidePayouts = [new("7-8", 350)] } };
+        var updated = request with
+        {
+            RaceName = "メイクデビュー中山",
+            GradeCode = null,
+            DistanceMeters = 1900,
+            WinningHorseName = "エンジャムメント",
+            Entries = [entry with { JockeyName = "新騎手", AssignedWeight = 54m, BodyWeight = 500, OwnerName = null, OfficialTime = "1:53.8", Popularity = 2 }],
+            StartTime = new TimeOnly(12, 55),
+            OverallPaceText = "12.5 - 11.4",
+            CornerPassagesText = "4角 8,7,12",
+            CourseLayout = "内",
+            Payouts = payouts with { WinPayouts = [new("8", 320)], PlacePayouts = null, WidePayouts = [new("7-8", 350)] }
+        };
         for (var i = 0; i < 2; i++) (await http.PostAsJsonAsync("/api/races/result-bulk", updated)).EnsureSuccessStatusCode();
         var race = (await http.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}"))!;
         Assert.AreEqual("メイクデビュー中山", race.RaceName);

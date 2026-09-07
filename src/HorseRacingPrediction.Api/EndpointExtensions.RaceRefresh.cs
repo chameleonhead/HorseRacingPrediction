@@ -30,7 +30,7 @@ public static partial class EndpointExtensions
         var results = new List<EntryResultDetails>();
         var originHorse = request.SourceHorseId is null ? null
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
-        if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x=>NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
+        if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x => NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
             return Results.Conflict(new[] { "取得元の馬がレースの出走馬に含まれていません。" });
         foreach (var source in request.Entries ?? [])
         {

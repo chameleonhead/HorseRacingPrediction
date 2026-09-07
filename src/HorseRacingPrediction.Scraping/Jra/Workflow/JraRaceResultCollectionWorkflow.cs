@@ -62,7 +62,7 @@ public sealed class JraRaceResultCollectionWorkflow
         => CollectCoreAsync(raceId, targetRaceId, cancellationToken);
 
     public Task<RaceResultCollectionResult> RefreshPageAsync(JraRaceResultPage page, string targetRaceId, string sourceHorseId, CancellationToken cancellationToken = default)
-        => CollectCoreAsync(page.RaceId,targetRaceId,cancellationToken,page,sourceHorseId);
+        => CollectCoreAsync(page.RaceId, targetRaceId, cancellationToken, page, sourceHorseId);
 
     private async Task<RaceResultCollectionResult> CollectCoreAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken,
         JraRaceResultPage? suppliedPage = null, string? sourceHorseId = null)

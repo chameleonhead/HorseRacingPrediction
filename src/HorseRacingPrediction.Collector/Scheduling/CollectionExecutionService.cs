@@ -679,7 +679,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         var now = DateTimeOffset.UtcNow;
         return jobType switch
         {
-            AgentJobType.SubjectProfileRefresh or AgentJobType.HorseHistoryDiscovery or AgentJobType.HorseHistoryRace => ExecuteSubjectJobsAsync(jobType,now,cancellationToken),
+            AgentJobType.SubjectProfileRefresh or AgentJobType.HorseHistoryDiscovery or AgentJobType.HorseHistoryRace => ExecuteSubjectJobsAsync(jobType, now, cancellationToken),
             AgentJobType.RaceReacquisition => ExecuteRaceReacquisitionJobsAsync(now, cancellationToken),
             AgentJobType.RaceCardCollection => ExecuteRaceCardJobsAsync(now, cancellationToken),
             AgentJobType.RaceResultCollection => ExecuteRaceResultJobsAsync(now, cancellationToken),
@@ -742,8 +742,8 @@ public sealed partial class CollectionExecutionService : BackgroundService
                 case AgentJobType.SubjectProfileRefresh:
                 case AgentJobType.HorseHistoryDiscovery:
                 case AgentJobType.HorseHistoryRace:
-                    if (await ExecuteSubjectTaskAsync(task.JobType,task.JobType+":"+task.DeduplicationKey,task.DeduplicationKey,task.Payload,jobTimeoutCts.Token))
-                        await _stateStore.CompleteCollectionTaskAsync(task.JobType,task.DeduplicationKey,task.LeaseToken,cancellationToken);
+                    if (await ExecuteSubjectTaskAsync(task.JobType, task.JobType + ":" + task.DeduplicationKey, task.DeduplicationKey, task.Payload, jobTimeoutCts.Token))
+                        await _stateStore.CompleteCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken, cancellationToken);
                     break;
                 case AgentJobType.RaceReacquisition:
                     await ExecuteSingleRaceReacquisitionAsync(task, now, jobTimeoutCts.Token).ConfigureAwait(false);

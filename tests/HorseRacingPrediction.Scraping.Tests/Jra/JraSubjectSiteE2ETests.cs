@@ -21,12 +21,12 @@ public sealed class JraSubjectSiteE2ETests
         try { page = await navigator.ToSubjectProfileAsync(identity, timeout.Token); }
         catch
         {
-            var snapshot=await browser.GetDataPageSnapshotAsync(timeout.Token);
-            TestContext.WriteLine(snapshot.Url+"\n"+snapshot.MainText);
+            var snapshot = await browser.GetDataPageSnapshotAsync(timeout.Token);
+            TestContext.WriteLine(snapshot.Url + "\n" + snapshot.MainText);
             throw;
         }
         Assert.AreEqual("栗毛", page.Profile.Fields["毛色"]);
-        var race = page.Races.Single(r=>r.Date == new DateOnly(2026,9,6) && r.Course == "中山");
+        var race = page.Races.Single(r => r.Date == new DateOnly(2026, 9, 6) && r.Course == "中山");
         var result = await navigator.ToHorseHistoryResultAsync(identity, race, timeout.Token);
         Assert.AreEqual(6, result.RaceId.Number);
         Assert.AreEqual("メイクデビュー中山", result.RaceName);
