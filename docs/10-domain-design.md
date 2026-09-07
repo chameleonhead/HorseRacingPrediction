@@ -117,7 +117,6 @@ PredictionTicket
 - DayNumber
 - RaceNumber
 - RaceName
-
 - GradeCode
 - SurfaceCode
 - DistanceMeters

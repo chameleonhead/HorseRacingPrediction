@@ -1,6 +1,6 @@
 # 馬・調教師の再取得と馬を起点とする過去レース収集
 
-- Status: Approved
+- Status: Implemented
 - Created: 2026-09-08
 - Updated: 2026-09-08
 
@@ -51,10 +51,10 @@
 
 ## Documentation updates
 
-- `docs/20-admin-ui-design.md`: 馬・調教師詳細の新しい収集操作と状態表示を提案として追記。画面設計の正本。
-- `docs/22-collector-design.md`: プロフィール更新・馬起点の親子収集ジョブ経路を提案として追記。収集運用の正本。
-- `docs/23-jra-scraping-redesign.md`: 馬・調教師ナビゲーションとページ解析の拡張を提案として追記。スクレイピング設計の正本。
-- `docs/10-domain-design.md`: プロフィール・出走履歴の追加フィールドと公開識別子について本提案を参照し、承認後に実装した契約を確定する。
+- `docs/20-admin-ui-design.md`: 馬・調教師詳細の新しい収集操作と状態表示を反映。画面設計の正本。
+- `docs/22-collector-design.md`: プロフィール更新・馬起点の親子収集ジョブ経路を反映。収集運用の正本。
+- `docs/23-jra-scraping-redesign.md`: 馬・調教師ナビゲーションとページ解析の拡張を反映。スクレイピング設計の正本。
+- `docs/10-domain-design.md`: プロフィール・出走履歴の公開プロフィールのイベント・投影・取得不能値の保持、元の馬IDと過去出走時点の情報を維持する契約を反映。
 
 ## Acceptance criteria
 
@@ -72,7 +72,7 @@
 
 ## Verification record
 
-調査済み: 馬/調教師詳細、現行IJraNavigator、旧要求ペイロード・HistoricalDataRequestPlanner・無効化されたWorker登録。追加要望は設計承認待ちであり、実装未着手。
+調査済み: 馬/調教師詳細、現行IJraNavigator、旧要求ペイロード・HistoricalDataRequestPlanner・無効化されたWorker登録。初期調査時は設計承認待ち。以後の承認・実装・最終検証は以下に記録する。
 
 ## Approval
 
@@ -85,3 +85,15 @@
 検証: API 116、Collector 98、Scraping（External除外）158、Domain 96、Application 56、Infrastructure 11件成功。実JRAの馬検索→プロフィール→指定レース、調教師名鑑→プロフィールのテストも成功。隔離したlocalhostで馬詳細から依頼し、親・子を実Collector --onceで実行。12頭の出走情報・結果と払戻8種類を保存し、元の馬IDの履歴とプロフィールが画面へ自動反映された。360pxの横溢れなし、Enter送信・Escape取消・フォーカス復帰を確認。
 
 残り: 調教師詳細の実取得完了表示、レース払戻タブのブラウザー確認、正本と最終検証記録の確定。
+
+## Implementation result and final verification — 2026-09-08
+
+承認済みの受け入れ基準1〜7を実装・検証済み。馬・調教師の公開プロフィール、馬起点の全掲載JRA履歴収集、全出走馬・結果・払戻の更新、対象外理由、親子進捗、重複抑止と失敗分再試行を提供する。公開ページの同定情報が一致しない場合は保存せず失敗を表示する。外部仕様の変更はない。
+
+- 自動検証: API 116件（認証・更新・同定不一致・既存ID維持・bUnit依頼/失敗/再試行）、Collector 99件（2ページ・重複・対象外・部分失敗・成功済み維持・中断探索再開・常駐/単発）、Scraping固定160件（70行超・ページ送り・対象外・レース名/ラップ等）、Domain 96件、Application 56件、Infrastructure 11件（追加移行・旧EnsureCreatedと既存行保持）が成功。実行は dotnet test 各testsプロジェクト --artifacts-path 一時検証ディレクトリ。
+- 外部検証: JraSubjectSiteE2ETestsの馬検索→出走履歴→指定レースと調教師名鑑→プロフィールの2件成功。指定レースの名前、発走時刻、ラップ、上り、コーナー隊列も照合。
+- 結合検証: 隔離SQLiteのlocalhostで、画面から馬履歴・馬プロフィール・調教師プロフィールを依頼し、実Collector --onceで成功。馬の現在馬主・血統等、既存馬IDの出走履歴、調教師所属・免許等が画面へ自動反映された。保存済みレースの12頭分の出走情報・結果と払戻8種類を確認した。
+- UI: 360pxで馬・調教師・払戻画面に横溢れなし。Enterで確認・送信、Escapeで取消・依頼ボタンへフォーカス復帰、受付/実行中/完了と重複ボタン無効化を確認。bUnitでエラー表示と失敗分再試行を確認。
+- 最終APIビルドは警告0・エラー0、git diff --check成功。利用者の既存PlaywrightWebBrowser変更はコミット対象外。
+
+正本docs/10、20、22、23と本記録を同期した。実装上の未完了事項はない。既存の開発プロセス・利用者DBは変更せず、適用にはApiとCollectorを最新ビルドで再起動する。検証データは隔離環境のみ。

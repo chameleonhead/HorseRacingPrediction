@@ -54,6 +54,43 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task HorseHistory_ResumesInterruptedDiscoveryWithoutReplacingCompletedChild()
+    {
+        var store = CreateStore();
+        using var cancellation = new CancellationTokenSource();
+        var profile = new HorseRacingPrediction.Contracts.JraSubjectProfileDto("Horse", "対象馬", "public-key",
+            "https://www.jra.go.jp/horse", new(), DateTimeOffset.UtcNow);
+        var first = new HorseHistoryRaceLink(new(2026, 9, 6), "中山", "レースA", new("https://www.jra.go.jp/A", "レースA"), null);
+        var second = new HorseHistoryRaceLink(new(2026, 9, 6), "中山", "レースB", new("https://www.jra.go.jp/B", "レースB"), null);
+        var page1 = new JraSubjectPage(profile, [first], new("https://www.jra.go.jp/next", "次へ"));
+        var page2 = new JraSubjectPage(profile, [second], null);
+        var interrupt = true;
+        var sessions = new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator {
+            SubjectFactory = _ => page1,
+            NextHistoryFactory = page => {
+                if (page != page1) return null;
+                if (interrupt) { interrupt = false; cancellation.Cancel(); }
+                return page2;
+            }
+        }};
+        var service = CreateService(store, new FakeJraScheduleCollectionWorkflow(), new FakeJraRaceCardCollectionWorkflow(),
+            new FakeJraRaceResultCollectionWorkflow(), sessions, new SubjectApiFactory());
+        var parentId = await store.RequestSubjectCollectionAsync(AgentJobType.HorseHistoryDiscovery,
+            new("horse-origin", "Horse", "対象馬"), "test", DateTimeOffset.UtcNow);
+        try { await service.RunTaskAsync(AgentJobType.HorseHistoryDiscovery, cancellation.Token); }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        var interrupted = (await store.GetJobDetailAsync(parentId))!;
+        Assert.AreEqual(AgentJobStatus.Ready, interrupted.Status);
+        var completed = interrupted.ChildJobs.Single();
+        await store.CompleteJobAsync(completed.JobType, completed.DeduplicationKey);
+        await service.RunTaskAsync(AgentJobType.HorseHistoryDiscovery, CancellationToken.None);
+        var resumed = (await store.GetJobDetailAsync(parentId))!;
+        Assert.AreEqual(2, resumed.ChildJobs.Count);
+        Assert.AreEqual(AgentJobStatus.Succeeded, resumed.ChildJobs.Single(x => x.JobId == completed.JobId).Status);
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, resumed.Status);
+    }
+
+    [TestMethod]
     public async Task ProfileRefresh_RejectsIdentityMismatchBeforeApiWrite()
     {
         var store=CreateStore();var api=new SubjectApiFactory();
