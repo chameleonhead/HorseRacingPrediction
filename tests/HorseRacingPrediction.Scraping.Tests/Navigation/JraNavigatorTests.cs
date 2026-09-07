@@ -435,6 +435,74 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToSiblingRaceResultAsync_DirectLinkFoundOnCurrentPage_NavigatesDirectlyWithoutMeetingSelection()
+    {
+        const string currentRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/1/";
+        const string siblingRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/2/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(currentRaceResultUrl);
+
+        // 現在ページ（1R結果ページ）に他レースへの直接リンクが存在するケース。
+        browser.SetLinks(
+            currentRaceResultUrl,
+            [new PageLinkSnapshot(siblingRaceResultUrl, "2レース結果")]);
+        browser.SetSnapshot(siblingRaceResultUrl, BuildRaceResultSnapshot(siblingRaceResultUrl, "2R"));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var targetRace = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2);
+
+        var page = await navigator.ToSiblingRaceResultAsync(targetRace);
+
+        Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, siblingRaceResultUrl);
+
+        // 開催選択トップ（重い経路）へは一切遷移していないこと。
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, ResultSelectionUrl);
+    }
+
+    [TestMethod]
+    public async Task ToSiblingRaceResultAsync_NoDirectLinkOnCurrentPage_FallsBackToFullMeetingSelectionRoute()
+    {
+        const string currentRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/1/";
+        const string siblingRaceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/2/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(currentRaceResultUrl);
+
+        // 現在ページに直接リンクは存在しない（links未設定＝空）。
+        browser.SetLinks(currentRaceResultUrl, []);
+
+        // フォールバック先のフルパス（開催選択経由）。
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", siblingRaceResultUrl);
+        browser.SetLinks(siblingRaceResultUrl, [new PageLinkSnapshot(siblingRaceResultUrl, "2レース")]);
+        browser.SetSnapshot(siblingRaceResultUrl, BuildRaceResultSnapshot(siblingRaceResultUrl, "2R"));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var targetRace = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2);
+
+        var page = await navigator.ToSiblingRaceResultAsync(targetRace);
+
+        Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, siblingRaceResultUrl);
+        CollectionAssert.Contains(browser.NavigatedUrls, ResultSelectionUrl);
+    }
+
+    [TestMethod]
     public async Task ToRaceResultAsync_HistoricalPeriod_UsesSearchFormAndReturnsRaceResultPage()
     {
         const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/";

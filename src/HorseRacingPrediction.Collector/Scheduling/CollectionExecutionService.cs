@@ -507,6 +507,8 @@ public sealed class CollectionExecutionService : BackgroundService
                 continue;
             }
 
+            var isFirstRaceInMeeting = true;
+
             foreach (var race in raceList.Races)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -515,9 +517,16 @@ public sealed class CollectionExecutionService : BackgroundService
                 RaceResultCollectionResult result;
                 try
                 {
+                    // Phase8: 同日・同競馬場の2レース目以降は、直前のレース結果ページから
+                    // 直接遷移することを試み（見つからなければ自動フォールバック）、
+                    // 毎回「開催選択→レース選択」を経由する重い経路を避ける。
                     result = await resultWorkflow
-                        .CollectAsync(new RaceId(raceDate, course, race.Number), cancellationToken)
+                        .CollectAsync(
+                            new RaceId(raceDate, course, race.Number),
+                            useSiblingNavigation: !isFirstRaceInMeeting,
+                            cancellationToken)
                         .ConfigureAwait(false);
+                    isFirstRaceInMeeting = false;
                     _logger.LogInformation(
                         "[Diag] 成績収集: 1レースぶんの取得が完了しました。Date={Date} Course={Course} RaceNumber={RaceNumber} ElapsedMs={ElapsedMs}",
                         raceDate, course, race.Number, raceStopwatch.ElapsedMilliseconds);

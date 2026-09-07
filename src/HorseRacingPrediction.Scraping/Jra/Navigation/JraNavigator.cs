@@ -895,6 +895,23 @@ public sealed class JraNavigator
         IReadOnlyList<string> linkTextCandidates,
         CancellationToken cancellationToken)
     {
+        if (!await TryNavigateRaceNumberLinkAsync(raceNumber, linkTextCandidates, cancellationToken))
+        {
+            throw new JraNavigationException(
+                $"{raceNumber}R のリンクが見つかりませんでした。");
+        }
+    }
+
+    /// <summary>
+    /// 現在ページの<see cref="IWebBrowser.GetLinksAsync"/>結果から対象R番号への
+    /// リンクを探し、見つかった場合はそこへ直接遷移する。見つからない場合は
+    /// 例外を送出せずfalseを返す（呼び出し元がフォールバック経路を選べるようにするため）。
+    /// </summary>
+    private async Task<bool> TryNavigateRaceNumberLinkAsync(
+        int raceNumber,
+        IReadOnlyList<string> linkTextCandidates,
+        CancellationToken cancellationToken)
+    {
         var links =
             await _browser.GetLinksAsync(
                 cancellationToken: cancellationToken);
@@ -919,18 +936,56 @@ public sealed class JraNavigator
 
         if (target is null)
         {
-            throw new JraNavigationException(
-                $"{raceNumber}R のリンクが見つかりませんでした。");
+            return false;
         }
 
-        var url =
-            ResolveUrl(_browser.CurrentUrl, target.Url)
-            ?? throw new JraNavigationException(
-                $"URLを解決できません: {target.Url}");
+        var url = ResolveUrl(_browser.CurrentUrl, target.Url);
+
+        if (url is null)
+        {
+            return false;
+        }
 
         await _browser.NavigateAsync(
             url,
             cancellationToken);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 依頼書33節フォローアップ: レース結果ページを表示中に、同じ開催日・競馬場の
+    /// 別レース番号へ「開催選択→レース選択」を経由せず直接遷移することを試みる。
+    /// JRAの実際のレース結果ページ上に他レースへの直接リンク（画面上部の「1R」等の
+    /// ボタン）が存在するかどうかは本タスクでは実サイト検証ができていないため、
+    /// 見つからない場合は必ず<see cref="ToRaceResultAsync"/>（開催選択経由のフルパス）
+    /// へフォールバックし、例外で呼び出し元を壊さないようにする。
+    /// </summary>
+    public async Task<IJraPage> ToSiblingRaceResultAsync(
+        RaceId targetRace,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (await TryNavigateRaceNumberLinkAsync(
+                    targetRace.Number,
+                    JraNavigationLinks.RaceResult,
+                    cancellationToken))
+            {
+                var page = await _pageReader.ReadAsync(cancellationToken);
+
+                if (page.Kind == JraPageKind.RaceResult)
+                {
+                    return page;
+                }
+            }
+        }
+        catch (JraNavigationException)
+        {
+            // 直接遷移の失敗は致命的ではない。フルパスへフォールバックする。
+        }
+
+        return await ToRaceResultAsync(targetRace, cancellationToken);
     }
 
     private static string RaceCourseName(RaceCourse course)
