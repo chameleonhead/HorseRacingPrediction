@@ -171,8 +171,13 @@ public sealed class JobManagementEndpointTests
     }
 
     [TestMethod]
-    public async Task Pause_BlocksJobMutationsButAllowsResume()
+    public async Task Pause_BlocksOnlyCollectorInternalRpcButAllowsAdminMutations()
     {
+        // /pauseによる一時停止は「Collectorからのリクエストのみ」をエラーにする
+        // 仕様（管理画面からのジョブ操作・レース補正・メモ登録等は通常通り動作する）。
+        // Collectorが最初に呼ぶ内部RPCエンドポイント（/api/internal/collection/state/*）
+        // のみが503で拒否され、管理画面向けのエンドポイント（reacquire等）は
+        // 一時停止中でも通常通り処理されることを確認する。
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var disposable = app;
         using var requestClient = client;
@@ -184,13 +189,20 @@ public sealed class JobManagementEndpointTests
         var source = (await store.GetJobDetailAsync("Collection:source"))!;
 
         var pause = await requestClient.PostAsync("/api/admin/jobs/pause", null);
-        var blocked = await requestClient.PostAsJsonAsync(
+
+        var blockedCollectorRpc = await requestClient.PostAsJsonAsync(
+            "/api/internal/collection/state/AcquireReadyJobsAsync",
+            new { method = "AcquireReadyJobsAsync", arguments = Array.Empty<object>() });
+
+        var allowedAdminMutation = await requestClient.PostAsJsonAsync(
             $"/api/admin/jobs/{Uri.EscapeDataString(source.JobId)}/reacquire",
-            new { expectedUpdatedAt = source.UpdatedAt, reason = "blocked while paused" });
+            new { expectedUpdatedAt = source.UpdatedAt, reason = "allowed while collector-only paused" });
+
         var resume = await requestClient.PostAsync("/api/admin/jobs/resume", null);
 
         Assert.AreEqual(HttpStatusCode.Accepted, pause.StatusCode);
-        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, blocked.StatusCode);
+        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, blockedCollectorRpc.StatusCode);
+        Assert.AreNotEqual(HttpStatusCode.ServiceUnavailable, allowedAdminMutation.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, resume.StatusCode);
     }
 
