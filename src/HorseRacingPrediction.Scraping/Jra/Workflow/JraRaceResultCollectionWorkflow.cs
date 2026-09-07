@@ -54,8 +54,14 @@ public sealed class JraRaceResultCollectionWorkflow
         _writeService = writeService;
     }
 
+    public Task<RaceResultCollectionResult> CollectAsync(
+        RaceId raceId,
+        CancellationToken cancellationToken = default)
+        => CollectAsync(raceId, useSiblingNavigation: false, cancellationToken);
+
     public async Task<RaceResultCollectionResult> CollectAsync(
         RaceId raceId,
+        bool useSiblingNavigation,
         CancellationToken cancellationToken = default)
     {
         if (raceId.Course == RaceCourse.Unknown)
@@ -65,7 +71,12 @@ public sealed class JraRaceResultCollectionWorkflow
                 nameof(raceId));
         }
 
-        var resultPageResult = await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
+        // Phase8: 同日・同競馬場の連続収集時、ブラウザが既に直前のレース結果ページを
+        // 表示している前提で「1R」等の直接リンクからの遷移を試み、見つからなければ
+        // 自動的に開催選択経由のフルパスへフォールバックする（呼び出し元を壊さない）。
+        var resultPageResult = useSiblingNavigation
+            ? await _session.Navigate.ToSiblingRaceResultAsync(raceId, cancellationToken)
+            : await _session.Navigate.ToRaceResultAsync(raceId, cancellationToken);
 
         if (resultPageResult is not JraRaceResultPage resultPage)
         {
@@ -145,7 +156,14 @@ public sealed class JraRaceResultCollectionWorkflow
                 MarginText: entry.MarginRaw,
                 LastThreeFurlongTime: null,
                 AbnormalResultCode: ToAbnormalResultCode(entry.ResultStatus),
-                PrizeMoney: null,
+                // Phase8（依頼書27節）: 本賞金を着順から解決して接続する。
+                // 「本賞金」欄自体が存在しない、またはこの馬の着順に対応する
+                // 賞金がない場合はnullのまま（正常）。
+                PrizeMoney: entry.FinishPosition is { } finishPosition &&
+                    resultPage.PrizeMoneyByPosition is { } prizeMoneyByPosition &&
+                    prizeMoneyByPosition.TryGetValue(finishPosition, out var prizeMoney)
+                        ? prizeMoney
+                        : null,
                 HorseName: entry.HorseName,
                 JockeyName: entry.JockeyName,
                 TrainerName: entry.TrainerName,

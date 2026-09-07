@@ -112,6 +112,35 @@ public class RaceAggregateTests
     }
 
     [TestMethod]
+    public void UpdateEntryCollectedData_ReplacesOnlyProvidedValues()
+    {
+        var sut = new RaceAggregate(RaceId.New);
+        sut.Create(new DateOnly(2026, 9, 6), "NAKAYAMA", 1, "テストレース");
+        sut.PublishCard(1);
+        sut.RegisterEntry("entry-1", "horse-1", 1,
+            declaredWeight: 480m, declaredWeightDiff: 0m, ownerName: "旧馬主");
+
+        sut.UpdateEntryCollectedData("entry-1", declaredWeight: 488m,
+            declaredWeightDiff: -2m, ownerName: "藤田 晋");
+
+        var entry = sut.GetDetails().Entries.Single();
+        Assert.AreEqual(488m, entry.DeclaredWeight);
+        Assert.AreEqual(-2m, entry.DeclaredWeightDiff);
+        Assert.AreEqual("藤田 晋", entry.OwnerName);
+    }
+
+    [TestMethod]
+    public void UpdateEntryCollectedData_WhenEntryDoesNotExist_ThrowsInvalidOperationException()
+    {
+        var sut = new RaceAggregate(RaceId.New);
+        sut.Create(new DateOnly(2026, 9, 6), "NAKAYAMA", 1, "テストレース");
+        sut.PublishCard(1);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            sut.UpdateEntryCollectedData("entry-missing", declaredWeight: 488m));
+    }
+
+    [TestMethod]
     public void RecordWeatherObservation_SetsObservation()
     {
         var sut = new RaceAggregate(RaceId.New);

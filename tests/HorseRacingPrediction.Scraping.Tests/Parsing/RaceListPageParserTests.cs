@@ -60,6 +60,28 @@ public sealed class RaceListPageParserTests
         Assert.AreEqual(new TimeOnly(15, 40), page.Races[1].StartTime);
     }
 
+    [TestMethod]
+    public void Parse_レース番号セルのDOMリンク_RaceCardUrlへ保持する()
+    {
+        var rows = new IReadOnlyList<string>[] { ["1R", "10:10", "2歳未勝利"] };
+        var cells = new IReadOnlyList<PageTableCellSnapshot>[]
+        {
+            [
+                new("1R", [new("a", [], "1R", "/JRADB/race/1")]),
+                new("10:10", []),
+                new("2歳未勝利", []),
+            ],
+        };
+        var table = new PageTableSnapshot(["R", "発走時刻", "レース名"], rows, cells);
+        var section = new PageSectionSnapshot("レース一覧", "", [], [], [table], ["2026年9月5日 中山"]);
+
+        var page = (JraRaceListPage)new RaceListPageParser().Parse(
+            new PageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
+
+        Assert.AreEqual("/JRADB/race/1", page.Races.Single().RaceCardUrl);
+        Assert.IsNull(page.Races.Single().ResultUrl);
+    }
+
     // 「レース結果 レース選択」ページ（過去レース結果検索→開催選択を経由した際に
     // 到達する一覧ページ）は、出馬表側の一覧ページと異なり「R」「レース番号」列を
     // 持たず、「レース結果」列のセル値（「1レース」「2レース」...）にレース番号が

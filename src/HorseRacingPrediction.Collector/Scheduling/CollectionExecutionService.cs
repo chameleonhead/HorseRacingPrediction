@@ -485,6 +485,16 @@ public sealed class CollectionExecutionService : BackgroundService
                         "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
                         raceDate, course, singleResult.RaceId.Number);
                 }
+                catch (Scraping.Jra.Pages.JraPageParseException ex)
+                {
+                    // Phase 7 A2: RaceResult Parserの解析異常（JraCollectionExceptionとは
+                    // 継承関係が異なる）を無関係な他レース・他競馬場まで巻き添えにしない。
+                    // 当該レースのみをエラーとして記録し、ループ自体は継続する。
+                    _logger.LogWarning(
+                        ex,
+                        "[収集実行] 成績ページの解析に失敗したため、このレースのみスキップします。RaceId={RaceId} Date={Date} Course={Course} RaceNumber={RaceNumber} FieldName={FieldName} RawValue={RawValue}",
+                        singleResult.RaceId, raceDate, course, singleResult.RaceId.Number, ex.FieldName, ex.RawValue);
+                }
 
                 continue;
             }
@@ -497,6 +507,8 @@ public sealed class CollectionExecutionService : BackgroundService
                 continue;
             }
 
+            var isFirstRaceInMeeting = true;
+
             foreach (var race in raceList.Races)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -505,9 +517,16 @@ public sealed class CollectionExecutionService : BackgroundService
                 RaceResultCollectionResult result;
                 try
                 {
+                    // Phase8: 同日・同競馬場の2レース目以降は、直前のレース結果ページから
+                    // 直接遷移することを試み（見つからなければ自動フォールバック）、
+                    // 毎回「開催選択→レース選択」を経由する重い経路を避ける。
                     result = await resultWorkflow
-                        .CollectAsync(new RaceId(raceDate, course, race.Number), cancellationToken)
+                        .CollectAsync(
+                            new RaceId(raceDate, course, race.Number),
+                            useSiblingNavigation: !isFirstRaceInMeeting,
+                            cancellationToken)
                         .ConfigureAwait(false);
+                    isFirstRaceInMeeting = false;
                     _logger.LogInformation(
                         "[Diag] 成績収集: 1レースぶんの取得が完了しました。Date={Date} Course={Course} RaceNumber={RaceNumber} ElapsedMs={ElapsedMs}",
                         raceDate, course, race.Number, raceStopwatch.ElapsedMilliseconds);
@@ -520,6 +539,19 @@ public sealed class CollectionExecutionService : BackgroundService
                         ex,
                         "[収集実行] 成績ページ未取得のためスキップします。Date={Date} Course={Course} RaceNumber={RaceNumber}",
                         raceDate, course, race.Number);
+                    continue;
+                }
+                catch (Scraping.Jra.Pages.JraPageParseException ex)
+                {
+                    // Phase 7 A2: 従来は JraCollectionException のみを捕捉していたため、
+                    // 継承関係が異なる JraPageParseException 系（Parser異常）がこのレース単位
+                    // ループを突き抜け、同日・同競馬場の他の正常なレースの収集まで巻き添えで
+                    // 停止していた。当該レースのみをエラーとして記録し、ループを継続する。
+                    var raceId = new RaceId(raceDate, course, race.Number);
+                    _logger.LogWarning(
+                        ex,
+                        "[収集実行] 成績ページの解析に失敗したため、このレースのみスキップします。RaceId={RaceId} Date={Date} Course={Course} RaceNumber={RaceNumber} FieldName={FieldName} RawValue={RawValue}",
+                        raceId, raceDate, course, race.Number, ex.FieldName, ex.RawValue);
                     continue;
                 }
 

@@ -179,8 +179,9 @@ public sealed class JraRaceCardCollectionWorkflow
                 assignedWeight: entry.AssignedWeight,
                 sexCode: null,
                 age: null,
-                declaredWeight: null,
-                declaredWeightDiff: null,
+                declaredWeight: entry.BodyWeight,
+                declaredWeightDiff: entry.BodyWeightChange,
+                ownerName: entry.OwnerName,
                 cancellationToken: cancellationToken);
         }
 

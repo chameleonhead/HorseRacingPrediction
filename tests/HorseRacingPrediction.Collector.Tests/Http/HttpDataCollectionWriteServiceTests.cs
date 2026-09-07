@@ -225,6 +225,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         handler.Add(HttpMethod.Post, "/api/jockeys", new HttpResponseMessage(HttpStatusCode.Created));
         handler.Add(HttpMethod.Get, $"/api/trainers/{trainerId}", new HttpResponseMessage(HttpStatusCode.NotFound));
         handler.Add(HttpMethod.Post, "/api/trainers", new HttpResponseMessage(HttpStatusCode.Created));
+        handler.Add(HttpMethod.Put, $"/api/races/{raceId}/entries/entry-1", new HttpResponseMessage(HttpStatusCode.OK));
 
         using var httpClient = new HttpClient(handler)
         {
@@ -242,8 +243,9 @@ public sealed class HttpDataCollectionWriteServiceTests
             55.0m,
             "M",
             3,
-            470,
-            2);
+            488,
+            -2,
+            "補完馬主");
 
         StringAssert.Contains(message, "補完");
         Assert.IsFalse(handler.Requests.Any(x => x == $"POST /api/races/{raceId}/entries"));
@@ -253,6 +255,7 @@ public sealed class HttpDataCollectionWriteServiceTests
         CollectionAssert.Contains(handler.Requests, "POST /api/jockeys");
         CollectionAssert.Contains(handler.Requests, $"GET /api/trainers/{trainerId}");
         CollectionAssert.Contains(handler.Requests, "POST /api/trainers");
+        CollectionAssert.Contains(handler.Requests, $"PUT /api/races/{raceId}/entries/entry-1");
     }
 
     [TestMethod]

@@ -30,6 +30,18 @@ public interface IJraNavigator
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 既にレース結果ページを表示中の状態から、同じ開催日・競馬場の別レース番号の
+    /// レース結果へ直接遷移することを試みる（画面上部の「1R」「2R」等のリンクを想定）。
+    /// 直接リンクが見つからない場合は<see cref="ToRaceResultAsync"/>（開催選択経由の
+    /// フルパス）へ自動的にフォールバックするため、呼び出し元は失敗を気にせず
+    /// 常にこちらを呼んでよい。現在ページがレース結果ページでない場合も同様に
+    /// フォールバックする。
+    /// </summary>
+    Task<IJraPage> ToSiblingRaceResultAsync(
+        RaceId targetRace,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 対象日・競馬場の「レース結果 レース選択」ページ（またはそれに相当するページ）を
     /// 取得する。<see cref="ToRaceListAsync"/>（出馬表専用、掲載期間が短い）とは異なり、
     /// Current/Recent/Historicalのルート分岐を経て過去日にも対応する。

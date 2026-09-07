@@ -4,6 +4,7 @@ using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Jra;
 
@@ -96,34 +97,7 @@ public sealed class JraSiteE2ETests
     {
         using var cts = new CancellationTokenSource(TestTimeout);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        // 今日以降で最も近い開催日・競馬場を選ぶ（今日開催がなければ未来の開催日）。
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        var course = target.Courses[0];
-
-        var raceListPage = await _session.Navigate.ToRaceListAsync(
-            target.Date,
-            course,
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraRaceListPage>(raceListPage);
-        var raceList = (JraRaceListPage)raceListPage;
-
-        Assert.AreEqual(target.Date, raceList.Date);
-        Assert.AreEqual(course, raceList.Course);
-        Assert.IsTrue(raceList.Races.Count > 0, $"{target.Date:yyyy-MM-dd} {course} のレース一覧が空でした。");
+        await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
     }
 
     [TestMethod]
@@ -131,30 +105,7 @@ public sealed class JraSiteE2ETests
     {
         using var cts = new CancellationTokenSource(TestTimeout);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        var course = target.Courses[0];
-
-        var raceListPage = await _session.Navigate.ToRaceListAsync(
-            target.Date,
-            course,
-            cts.Token);
-
-        Assert.IsInstanceOfType<JraRaceListPage>(raceListPage);
-        var raceList = (JraRaceListPage)raceListPage;
-        Assert.IsTrue(raceList.Races.Count > 0, "レース一覧が空のため出馬表を取得できません。");
+        var raceList = await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
 
         var race = raceList.Races[0];
 
@@ -167,6 +118,48 @@ public sealed class JraSiteE2ETests
 
         Assert.AreEqual(race.Id, raceCard.RaceId);
         Assert.IsTrue(raceCard.Entries.Count > 0, $"{race.Id} の出馬表に出走馬がありません。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
+            $"{race.Id} に馬主を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
+            $"{race.Id} に馬体重を取得できない出走馬があります。");
+        Assert.IsFalse(raceCard.Entries.Any(entry => decimal.TryParse(entry.OwnerName, out _)),
+            $"{race.Id} で単勝オッズを馬主として誤取得しました。");
+    }
+
+    [TestMethod]
+    public async Task 現在週RaceCardを連続取得_表示中ページからレース番号で切り替える()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var raceList = await PublishedRaceCardMeeting.FindAsync(_session, cts.Token);
+        Assert.IsTrue(raceList.Races.Count >= 2, "連続取得に必要な2レースがありません。");
+
+        var first = raceList.Races[0].Id;
+        var second = raceList.Races[1].Id;
+        var firstPage = await _session.Navigate.ToRaceCardAsync(first, cts.Token);
+        var secondPage = await _session.Navigate.ToRaceCardAsync(second, cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceCardPage>(firstPage);
+        Assert.IsInstanceOfType<JraRaceCardPage>(secondPage);
+        Assert.AreEqual(first, ((JraRaceCardPage)firstPage).RaceId);
+        Assert.AreEqual(second, ((JraRaceCardPage)secondPage).RaceId);
+    }
+
+    [TestMethod]
+    public async Task 初出走RaceCard取得_馬体重を保持し増減をnullにする()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        const string debutRaceUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604020520260906/25";
+
+        await _browser.NavigateAsync(debutRaceUrl, cts.Token);
+        var page = await _session.Pages.ReadAsync(cts.Token);
+
+        Assert.IsInstanceOfType<JraRaceCardPage>(page);
+        var raceCard = (JraRaceCardPage)page;
+        Assert.IsTrue(raceCard.Entries.Count > 0, "初出走レースの出走馬が取得できませんでした。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
+            "初出走馬の馬体重が取得できませんでした。");
+        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeightChange is null),
+            "初出走馬の馬体重増減はnullである必要があります。");
     }
 
     [TestMethod]

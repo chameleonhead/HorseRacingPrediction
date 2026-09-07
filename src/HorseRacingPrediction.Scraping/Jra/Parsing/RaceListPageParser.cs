@@ -196,8 +196,9 @@ public sealed class RaceListPageParser
 
         var races = new List<RaceSummary>();
 
-        foreach (var row in table.Rows)
+        for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
+            var row = table.Rows[rowIndex];
             if (numberIndex >= row.Count)
             {
                 continue;
@@ -239,12 +240,19 @@ public sealed class RaceListPageParser
                 }
             }
 
+            var raceLink = table.GetCell(rowIndex, numberIndex)?.Fragments
+                .FirstOrDefault(fragment =>
+                    fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(fragment.Href))
+                ?.Href;
+            var isResultSelection = RemoveWhitespace(table.Headers[numberIndex]) is "レース結果";
+
             races.Add(new RaceSummary(
                 new RaceId(date, course, number),
                 name,
                 startTime,
-                RaceCardUrl: null,
-                ResultUrl: null));
+                RaceCardUrl: isResultSelection ? null : raceLink,
+                ResultUrl: isResultSelection ? raceLink : null));
         }
 
         return races;

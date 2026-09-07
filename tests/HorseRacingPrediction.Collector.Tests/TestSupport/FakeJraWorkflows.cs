@@ -55,9 +55,15 @@ internal sealed class FakeJraRaceResultCollectionWorkflow : IJraRaceResultCollec
 
     public List<RaceId> Requests { get; } = new();
 
+    public List<bool> UseSiblingNavigationRequests { get; } = new();
+
     public Task<RaceResultCollectionResult> CollectAsync(RaceId raceId, CancellationToken cancellationToken = default)
+        => CollectAsync(raceId, useSiblingNavigation: false, cancellationToken);
+
+    public Task<RaceResultCollectionResult> CollectAsync(RaceId raceId, bool useSiblingNavigation, CancellationToken cancellationToken = default)
     {
         Requests.Add(raceId);
+        UseSiblingNavigationRequests.Add(useSiblingNavigation);
         if (ThrowOnCollect is not null)
         {
             throw ThrowOnCollect;

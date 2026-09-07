@@ -554,6 +554,32 @@ public static class EndpointExtensions
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
+        writeGroup.MapPut("/races/{raceId}/entries/{entryId}",
+            [SwaggerOperation(Summary = "Update collected entry data", Description = "Adds or refreshes owner and declared body weight collected from a race card")]
+        async (string raceId, string entryId, UpdateEntryCollectedDataRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var command = new UpdateEntryCollectedDataCommand(
+                        new RaceId(raceId), entryId,
+                        request.DeclaredWeight, request.DeclaredWeightDiff, request.OwnerName);
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess
+                        ? Results.Ok(new { RaceId = raceId, EntryId = entryId })
+                        : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
+            })
+            .WithName("UpdateEntryCollectedData")
+            .WithTags("Race API")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
+
         writeGroup.MapPost("/races/{raceId}/weather",
             [SwaggerOperation(Summary = "Record weather observation", Description = "Records a weather observation for a race")]
         async (string raceId, RecordWeatherObservationRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>

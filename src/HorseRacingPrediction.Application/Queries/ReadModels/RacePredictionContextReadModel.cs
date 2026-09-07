@@ -8,6 +8,7 @@ public class RacePredictionContextReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCreated>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCardPublished>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,
+    IAmReadModelFor<RaceAggregate, RaceId, EntryCollectedDataUpdated>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceWeatherObserved>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceTrackConditionObserved>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceLifecycleStatusChanged>,
@@ -69,6 +70,25 @@ public class RacePredictionContextReadModel : IReadModel,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
             e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff,
             e.RunningStyleCode, e.OwnerName));
+        return Task.CompletedTask;
+    }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, EntryCollectedDataUpdated> domainEvent,
+        CancellationToken cancellationToken)
+    {
+        var e = domainEvent.AggregateEvent;
+        var index = Entries.FindIndex(x => x.EntryId == e.EntryId);
+        if (index >= 0)
+        {
+            var current = Entries[index];
+            Entries[index] = current with
+            {
+                DeclaredWeight = e.DeclaredWeight ?? current.DeclaredWeight,
+                DeclaredWeightDiff = e.DeclaredWeightDiff ?? current.DeclaredWeightDiff,
+                OwnerName = e.OwnerName ?? current.OwnerName,
+            };
+        }
         return Task.CompletedTask;
     }
 

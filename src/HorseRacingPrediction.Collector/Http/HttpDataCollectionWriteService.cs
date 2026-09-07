@@ -453,7 +453,21 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 await EnsureTrainerExistsByIdAsync(existingEntry.TrainerId, trainerName, cancellationToken).ConfigureAwait(false);
             }
 
-            return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです（関連エンティティを補完しました）。";
+            var updateRequest = new
+            {
+                DeclaredWeight = declaredWeight,
+                DeclaredWeightDiff = declaredWeightDiff,
+                OwnerName = ownerName
+            };
+            var updateResponse = await _httpClient
+                .PutAsJsonAsync(
+                    $"/api/races/{Uri.EscapeDataString(raceId)}/entries/{Uri.EscapeDataString(existingEntry.EntryId)}",
+                    updateRequest,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            updateResponse.EnsureSuccessStatusCode();
+
+            return $"レース {raceId} の馬番 {horseNumber} の収集データを更新し、関連エンティティを補完しました。";
         }
 
         var horseId = await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null, cancellationToken: cancellationToken).ConfigureAwait(false);

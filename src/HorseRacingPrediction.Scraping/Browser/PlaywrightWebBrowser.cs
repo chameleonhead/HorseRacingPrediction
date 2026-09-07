@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,6 +23,10 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
     private const int MaxImagesPerSection = 40;
     private const int MaxSnapshotTableCount = 10;
     private const int MaxSnapshotRowsPerTable = 60;
+    private const int MaxFragmentsPerCell = 48;
+    private const int MaxFragmentClassTokens = 8;
+    private const int MaxCellTextLength = 4000;
+    private const int MaxFragmentTextLength = 1000;
     private const int MinSectionTextLength = 24;
     private const int MergeCompactSectionTextThreshold = 140;
     private const int MaxMergedCompactSections = 4;
@@ -123,7 +128,8 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
                 "--disable-dev-shm-usage",
                 "--disable-setuid-sandbox",
                 "--no-zygote",
-                "--single-process",
+                // Windowsではsingle-process指定でページ取得中にChromiumが終了する。
+                ..(OperatingSystem.IsWindows() ? Array.Empty<string>() : new[] { "--single-process" }),
                 "--disable-web-security",
                 "--ignore-certificate-errors",
             ]
@@ -1786,13 +1792,13 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             var headers = await ExtractTableHeadersAsync(table, cancellationToken);
-            var rows = await ExtractTableRowsAsync(table, cancellationToken);
-            if (headers.Count == 0 && rows.Count == 0)
+            var extractedRows = await ExtractTableRowsAsync(table, cancellationToken);
+            if (headers.Count == 0 && extractedRows.Rows.Count == 0)
             {
                 continue;
             }
 
-            tables.Add(new PageTableSnapshot(headers, rows));
+            tables.Add(new PageTableSnapshot(headers, extractedRows.Rows, extractedRows.Cells));
         }
 
         return tables;
@@ -1986,13 +1992,13 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             var headers = await ExtractTableHeadersAsync(table, cancellationToken);
-            var rows = await ExtractTableRowsAsync(table, cancellationToken);
-            if (headers.Count == 0 && rows.Count == 0)
+            var extractedRows = await ExtractTableRowsAsync(table, cancellationToken);
+            if (headers.Count == 0 && extractedRows.Rows.Count == 0)
             {
                 continue;
             }
 
-            tables.Add(new PageTableSnapshot(headers, rows));
+            tables.Add(new PageTableSnapshot(headers, extractedRows.Rows, extractedRows.Cells));
         }
 
         return tables;
@@ -2021,29 +2027,48 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
         return headers;
     }
 
-    private async Task<IReadOnlyList<IReadOnlyList<string>>> ExtractTableRowsAsync(ILocator table, CancellationToken cancellationToken)
+    private async Task<ExtractedTableRows> ExtractTableRowsAsync(ILocator table, CancellationToken cancellationToken)
     {
-        var rows = new List<IReadOnlyList<string>>();
-        var rowLocator = table.Locator("tr");
-        var rowCount = await rowLocator.CountAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        var json = await table.EvaluateAsync<string>("""
+            (table, maxRows) => JSON.stringify(
+                Array.from(table.querySelectorAll('tr'))
+                    .slice(0, maxRows)
+                    .map(row => ({
+                        Cells: Array.from(row.querySelectorAll(':scope > th, :scope > td'))
+                            .map(cell => ({
+                                Text: (cell.innerText || '').trim()
+                                    || Array.from(cell.querySelectorAll('img[alt]'))
+                                        .map(image => image.getAttribute('alt') || '')
+                                        .filter(Boolean)
+                                        .join(' '),
+                                Fragments: Array.from(cell.querySelectorAll('[class], a[href]'))
+                                    .slice(0, 48)
+                                    .map(element => ({
+                                        TagName: element.tagName.toLowerCase(),
+                                        ClassName: element.getAttribute('class') || '',
+                                        Text: element.innerText || '',
+                                        Href: element.getAttribute('href')
+                                    }))
+                            }))
+                    }))
+            )
+            """, MaxSnapshotRowsPerTable);
+        cancellationToken.ThrowIfCancellationRequested();
+        var domRows = JsonSerializer.Deserialize<IReadOnlyList<TableDomRowResult>>(json)
+            ?? throw new InvalidOperationException("テーブルのDOM snapshotを読み取れませんでした。");
 
-        for (var rowIndex = 0; rowIndex < rowCount && rows.Count < MaxSnapshotRowsPerTable; rowIndex++)
+        var rows = new List<IReadOnlyList<string>>();
+        var cellsByRow = new List<IReadOnlyList<PageTableCellSnapshot>>();
+        foreach (var domRow in domRows)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var row = rowLocator.Nth(rowIndex);
-            var cellLocator = row.Locator("th, td");
-            var cellCount = await cellLocator.CountAsync();
-            if (cellCount == 0)
+            if (domRow.Cells.Count == 0)
             {
                 continue;
             }
 
-            var cells = new List<string>();
-            for (var cellIndex = 0; cellIndex < cellCount; cellIndex++)
-            {
-                var text = await GetCellTextAsync(cellLocator.Nth(cellIndex));
-                cells.Add(text);
-            }
+            var cellSnapshots = domRow.Cells.Select(ToTableCellSnapshot).ToArray();
+            var cells = cellSnapshots.Select(cell => cell.Text).ToArray();
 
             if (cells.All(string.IsNullOrWhiteSpace))
             {
@@ -2051,9 +2076,10 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
             }
 
             rows.Add(cells);
+            cellsByRow.Add(cellSnapshots);
         }
 
-        return rows;
+        return new ExtractedTableRows(rows, cellsByRow);
     }
 
     private async Task<ILocator?> FindClickableLocatorAsync(string text, CancellationToken cancellationToken)
@@ -2395,6 +2421,58 @@ public sealed class PlaywrightWebBrowser : IWebBrowser
 
         return string.Join("\n", lines);
     }
+
+    private static PageTableCellSnapshot ToTableCellSnapshot(TableDomCellResult domCell)
+    {
+        var fragments = domCell.Fragments
+            .Select(fragment => new PageDomTextFragment(
+                fragment.TagName,
+                fragment.ClassName
+                    .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Take(MaxFragmentClassTokens)
+                    .ToArray(),
+                NormalizeMultilineCellText(fragment.Text, MaxFragmentTextLength),
+                fragment.Href))
+            .Where(fragment => fragment.Text.Length > 0 || !string.IsNullOrWhiteSpace(fragment.Href))
+            .Take(MaxFragmentsPerCell)
+            .ToArray();
+
+        return new PageTableCellSnapshot(
+            NormalizeMultilineCellText(domCell.Text, MaxCellTextLength),
+            fragments);
+    }
+
+    private static string NormalizeMultilineCellText(string? text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var normalized = string.Join("\n", text
+            .Replace("\r", string.Empty, StringComparison.Ordinal)
+            .Split('\n')
+            .Select(line => WhitespaceRegex.Replace(line, " ").Trim())
+            .Where(line => line.Length > 0));
+
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private sealed record ExtractedTableRows(
+        IReadOnlyList<IReadOnlyList<string>> Rows,
+        IReadOnlyList<IReadOnlyList<PageTableCellSnapshot>> Cells);
+
+    private sealed record TableDomRowResult(IReadOnlyList<TableDomCellResult> Cells);
+
+    private sealed record TableDomCellResult(
+        string Text,
+        IReadOnlyList<CellDomFragmentResult> Fragments);
+
+    private sealed record CellDomFragmentResult(
+        string TagName,
+        string ClassName,
+        string Text,
+        string? Href);
 
     private async Task<string> GetLocatorTextAsync(ILocator locator)
     {

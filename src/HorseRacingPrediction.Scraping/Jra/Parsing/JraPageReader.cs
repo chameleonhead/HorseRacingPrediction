@@ -35,6 +35,11 @@ public sealed class JraPageReader
             await _browser.GetPageSnapshotAsync(
                 cancellationToken: cancellationToken);
 
+        return Parse(snapshot);
+    }
+
+    internal IJraPage Parse(PageSnapshot snapshot)
+    {
         foreach (var parser in _parsers)
         {
             if (parser.CanParse(snapshot))

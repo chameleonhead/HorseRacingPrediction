@@ -82,6 +82,10 @@ public sealed class JraWorkflowSiteE2ETests
         Assert.IsTrue(result.RaceIds.Count > 0, "出馬表の保存に1件も成功しませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceCalls.Count > 0, "UpsertRaceAsyncが1度も呼ばれませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceEntryCalls.Count > 0, "UpsertRaceEntryAsyncが1度も呼ばれませんでした。");
+        Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
+            "出走登録に馬主名が渡されていないエントリーがあります。");
+        Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => entry.DeclaredWeight is > 0),
+            "出走登録に馬体重が渡されていないエントリーがあります。");
 
         if (result.Errors.Count > 0)
         {
@@ -112,21 +116,8 @@ public sealed class JraWorkflowSiteE2ETests
     private async Task<(DateOnly Date, RaceCourse Course)> FindUpcomingOrTodayRaceDateAsync(
         CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var calendarPage = await _session.Navigate.ToCalendarAsync(
-            new YearMonth(today.Year, today.Month),
-            cancellationToken);
-
-        Assert.IsInstanceOfType<JraCalendarPage>(calendarPage);
-        var calendar = (JraCalendarPage)calendarPage;
-
-        var target = calendar.RaceDates
-            .Where(x => x.Date >= today)
-            .OrderBy(x => x.Date)
-            .FirstOrDefault()
-            ?? calendar.RaceDates.OrderBy(x => x.Date).First();
-
-        return (target.Date, target.Courses[0]);
+        var list = await PublishedRaceCardMeeting.FindAsync(_session, cancellationToken);
+        return (list.Date, list.Course);
     }
 
     /// <summary>

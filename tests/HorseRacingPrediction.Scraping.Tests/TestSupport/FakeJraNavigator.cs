@@ -112,6 +112,9 @@ internal sealed class FakeJraNavigator : IJraNavigator
         return Task.FromResult(page);
     }
 
+    public Task<IJraPage> ToSiblingRaceResultAsync(RaceId targetRace, CancellationToken cancellationToken = default)
+        => ToRaceResultAsync(targetRace, cancellationToken);
+
     public Task<IJraPage> ToHistoricalRaceSearchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
