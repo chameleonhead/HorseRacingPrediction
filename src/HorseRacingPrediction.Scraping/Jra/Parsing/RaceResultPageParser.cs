@@ -13,6 +13,23 @@ namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 public sealed class RaceResultPageParser
     : IJraPageParser
 {
+    // 実運用で、払戻金額欄が半角数字ではなく全角数字（例: "０"）で出力される
+    // ケースが確認された。char.IsDigit は全角数字も真を返すため一見数字文字列に
+    // 見えるが、decimal.Parse/TryParse は全角数字を受け付けず解析に失敗する
+    // （依頼書28節のエラーとして誤検知されてしまう）。数値解析の直前に全角数字を
+    // 半角に正規化することで、実際に数値でない文字列だけを解析失敗として扱う。
+    private static string NormalizeDigits(string value)
+    {
+        Span<char> buffer = value.Length <= 256 ? stackalloc char[value.Length] : new char[value.Length];
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            buffer[i] = c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c;
+        }
+
+        return new string(buffer);
+    }
+
     private static readonly Regex DateRegex =
         new(@"(?<year>\d{4})年\s*(?<month>\d{1,2})月\s*(?<day>\d{1,2})日", RegexOptions.Compiled);
 
@@ -737,8 +754,8 @@ public sealed class RaceResultPageParser
 
             foreach (Match entryMatch in PayoutEntryRegex.Matches(block))
             {
-                var combination = entryMatch.Groups["combo"].Value.Replace('－', '-');
-                var amountDigits = entryMatch.Groups["amount"].Value.Replace(",", string.Empty);
+                var combination = NormalizeDigits(entryMatch.Groups["combo"].Value).Replace('－', '-');
+                var amountDigits = NormalizeDigits(entryMatch.Groups["amount"].Value).Replace(",", string.Empty);
 
                 if (!decimal.TryParse(amountDigits, out var amount))
                 {
@@ -750,7 +767,7 @@ public sealed class RaceResultPageParser
                 }
 
                 int? popularity = entryMatch.Groups["pop"].Success
-                    ? int.Parse(entryMatch.Groups["pop"].Value)
+                    ? int.Parse(NormalizeDigits(entryMatch.Groups["pop"].Value))
                     : null;
 
                 bucket.Add(new PayoutLine(combination, amount, popularity));
@@ -810,9 +827,9 @@ public sealed class RaceResultPageParser
                 continue;
             }
 
-            var digitsOnly = new string(amountText.Where(char.IsDigit).ToArray());
+            var digitsOnly = new string(NormalizeDigits(amountText).Where(char.IsAsciiDigit).ToArray());
 
-            if (digitsOnly.Length == 0)
+            if (digitsOnly.Length == 0 || !decimal.TryParse(digitsOnly, out var amount))
             {
                 // 払戻値らしきセルが存在するのに数値として解析できない（依頼書28節）。
                 throw new JraValueParseException(
@@ -822,7 +839,7 @@ public sealed class RaceResultPageParser
                     amountText);
             }
 
-            bucket.Add(new PayoutLine(combinations[i], decimal.Parse(digitsOnly)));
+            bucket.Add(new PayoutLine(combinations[i], amount));
         }
     }
 
