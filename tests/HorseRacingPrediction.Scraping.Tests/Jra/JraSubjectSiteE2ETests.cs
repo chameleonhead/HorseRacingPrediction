@@ -39,6 +39,18 @@ public sealed class JraSubjectSiteE2ETests
     }
 
     [TestMethod]
+    public async Task HorseProfileSearch_DaiyuVenti()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        await using var browser = await PlaywrightWebBrowser.CreateAsync();
+        var navigator = new JraNavigator(browser, new JraPageReader(browser, []));
+        var page = await navigator.ToSubjectProfileAsync(new("Horse", "ダイユウヴェンティ"), timeout.Token);
+        Assert.AreEqual(SubjectProfilePageParser.Normalize("ダイユウヴェンティ"),
+            SubjectProfilePageParser.Normalize(page.Profile.Name));
+        Assert.IsTrue(page.Profile.Fields.ContainsKey("生年月日"));
+    }
+
+    [TestMethod]
     public async Task TrainerProfileIsReachedFromPublicDirectory()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(6));

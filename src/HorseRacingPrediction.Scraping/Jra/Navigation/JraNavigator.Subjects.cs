@@ -58,7 +58,7 @@ public sealed partial class JraNavigator
             var view = JraSnapshotView.Create(snapshot);
             var signature = string.Join("|", view.Tables.SelectMany(t => t.Rows).Select(r => string.Join(" ", r)));
             if (!pages.Add(signature)) throw new JraCollectionException("競走馬検索のページ送りが進みません。");
-            var links = await _browser.GetLinksAsync(cancellationToken: token);
+            var links = view.Links.Select(l => new PageLinkSnapshot(l.Url, l.Title)).ToArray();
             var candidates = links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
                 .DistinctBy(l => l.Url).ToArray();
             foreach (var link in candidates)
@@ -83,7 +83,8 @@ public sealed partial class JraNavigator
             var next = FindNext(await _browser.GetLinksAsync(cancellationToken: token)) ?? throw new JraCollectionException("検索ページが変化しました。");
             await _browser.ClickLinkAsync(next, token);
         }
-        var currentLinks = await _browser.GetLinksAsync(cancellationToken: token);
+        var currentSnapshot = JraSnapshotView.Create(await _browser.GetDataPageSnapshotAsync(token));
+        var currentLinks = currentSnapshot.Links.Select(l => new PageLinkSnapshot(l.Url, l.Title)).ToArray();
         var selected = currentLinks.FirstOrDefault(l => l.Url == found[0].Link.Url && SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
             ?? throw new JraCollectionException("対象馬の検索結果が変化しました。");
         await _browser.ClickLinkAsync(selected, token);
@@ -98,9 +99,7 @@ public sealed partial class JraNavigator
         await ToKeibaTopAsync(token);
         await _browser.ClickAsync("競走馬検索", token);
         await _browser.SetFieldValueAsync("iv_h_name", name, token);
-        var search = (await _browser.GetLinksAsync(cancellationToken: token)).FirstOrDefault(l => l.Title.Trim() == "検索" && l.Region == "content")
-            ?? throw new JraCollectionException("競走馬の検索操作が見つかりません。");
-        await _browser.ClickLinkAsync(search, token);
+        await _browser.SubmitFormAsync("iv_h_name", token);
     }
 
     internal static bool HasPath(string url, string expectedPath)

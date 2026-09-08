@@ -603,3 +603,15 @@ identify the owner. Owner must therefore be populated only from race-card or hor
 collection must leave both current and race-time owner unset and must never infer or carry an unrelated owner.
 The same implementation pass will diagnose and repair the reported standalone horse-information acquisition
 failure, provided the repair remains within the approved JRA semantic-navigation/profile scope.
+
+### Standalone horse-search remediation
+
+The reported `ダイユウヴェンティ` failure (`取得済みリンクが現在ページに見つかりません: 検索`) was reproduced as a
+racehorse-search submission identity problem. The page contains multiple search actions and recreates its
+JavaScript search anchor after field changes. The navigator now submits the actual form containing
+`iv_h_name`, while `PlaywrightWebBrowser` can select a form by a contained field name. Search-result matching
+uses links from the already captured semantic snapshot rather than re-enumerating hundreds of live anchors;
+this also removes an observed 30-second Playwright timeout during link extraction.
+
+Verification: 36/36 navigator tests passed; the existing horse profile/history live test passed; and a new
+live regression test for `ダイユウヴェンティ` passed and confirmed a profile with birth-date evidence.

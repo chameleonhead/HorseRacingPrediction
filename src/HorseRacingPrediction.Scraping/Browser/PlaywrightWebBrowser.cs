@@ -872,6 +872,12 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             {
                 return form;
             }
+
+            var escapedTarget = EscapeForCss(formLabel);
+            if (await form.Locator($"input[name='{escapedTarget}'], textarea[name='{escapedTarget}'], select[name='{escapedTarget}']").CountAsync() > 0)
+            {
+                return form;
+            }
         }
 
         return null;
