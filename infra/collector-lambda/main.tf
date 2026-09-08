@@ -240,6 +240,7 @@ resource "aws_lambda_function" "collector" {
       AgentProcessing__UseApiStateStore    = "true"
       AgentProcessing__CollectionBatchSize = "1"
       AgentProcessing__MaxConcurrentJobs   = "1"
+      AgentProcessing__ResultLookbackDays  = "5"
       ASPNETCORE_ENVIRONMENT               = "Production"
     }
   }

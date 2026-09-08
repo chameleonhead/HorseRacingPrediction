@@ -74,7 +74,7 @@ public sealed class AgentProcessingOptions
     public int HistoricalRequestMaxAttempts { get; set; } = 3;
 
     /// <summary>結果収集対象日付の遡り日数（JST基準）。</summary>
-    public int ResultLookbackDays { get; set; } = 2;
+    public int ResultLookbackDays { get; set; } = 5;
 
     /// <summary>初回バックフィル対象年数。</summary>
     public int InitialResultBackfillYears { get; set; } = 3;
