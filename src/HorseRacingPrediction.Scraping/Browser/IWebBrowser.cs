@@ -1,5 +1,7 @@
 namespace HorseRacingPrediction.Scraping.Browser;
 
+using SemanticPageSnapshot = Snapshots.PageSnapshot;
+
 /// <summary>
 /// セッションベースのブラウザインターフェース。
 /// ページはセッション中ずっと開いたままで、エージェントが
@@ -14,7 +16,7 @@ public interface IWebBrowser : IAsyncDisposable
     string? CurrentUrl { get; }
 
     /// <summary>データページの表を件数で切り詰めず取得する。</summary>
-    Task<PageSnapshot> GetDataPageSnapshotAsync(CancellationToken cancellationToken = default)
+    Task<SemanticPageSnapshot> GetDataPageSnapshotAsync(CancellationToken cancellationToken = default)
         => GetPageSnapshotAsync(cancellationToken: cancellationToken);
 
     /// <summary>現在ページに実在する取得済みリンクをクリックする。URLへ直接遷移しない。</summary>
@@ -70,13 +72,9 @@ public interface IWebBrowser : IAsyncDisposable
     Task<string> GetPageContentAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 現在のページをモデル向けの構造化スナップショットとして取得する。
-    /// 既定実装は本文とリンク一覧のみを利用する。
+    /// 現在のページをSemantic Snapshotとして取得する。
     /// </summary>
-    Task<PageSnapshot> GetPageSnapshotAsync(
-        int maxLinks = 0,
-        CancellationToken cancellationToken = default)
-        => GetDefaultPageSnapshotAsync(maxLinks, cancellationToken);
+    Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 現在のページからリンク（&lt;a&gt; 要素の href）を抽出する。
@@ -137,22 +135,4 @@ public interface IWebBrowser : IAsyncDisposable
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException("SubmitFormAsync is not implemented.");
 
-    private async Task<PageSnapshot> GetDefaultPageSnapshotAsync(
-        int maxLinks,
-        CancellationToken cancellationToken)
-    {
-        var url = CurrentUrl ?? string.Empty;
-        var mainText = await GetPageContentAsync(cancellationToken);
-        var links = await GetLinksAsync(maxLinks, cancellationToken);
-        var rootSection = new PageSectionSnapshot(
-            title: string.Empty,
-            mainText: mainText,
-            links: links.ToList(),
-            actions: [],
-            tables: [],
-            headings: [],
-            forms: [],
-            images: []);
-        return new PageSnapshot(url, string.Empty, [rootSection]);
-    }
 }

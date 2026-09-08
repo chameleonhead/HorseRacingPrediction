@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
 
 namespace HorseRacingPrediction.Scraping.Tests.Jra;
 
@@ -22,7 +23,7 @@ public sealed class JraSubjectSiteE2ETests
         catch
         {
             var snapshot = await browser.GetDataPageSnapshotAsync(timeout.Token);
-            TestContext.WriteLine(snapshot.Url + "\n" + snapshot.MainText);
+            TestContext.WriteLine(snapshot.Url + "\n" + snapshot.Root.GetEffectiveText());
             throw;
         }
         Assert.AreEqual("栗毛", page.Profile.Fields["毛色"]);

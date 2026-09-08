@@ -1,4 +1,4 @@
-using HorseRacingPrediction.Scraping.Browser;
+using PageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;

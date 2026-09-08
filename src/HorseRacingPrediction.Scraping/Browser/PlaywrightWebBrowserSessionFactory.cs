@@ -1,14 +1,19 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
 
 namespace HorseRacingPrediction.Scraping.Browser;
 
 public sealed class PlaywrightWebBrowserSessionFactory : IWebBrowserSessionFactory
 {
     private readonly ILogger<PlaywrightWebBrowser> _logger;
+    private readonly IPageSnapshotter _pageSnapshotter;
 
-    public PlaywrightWebBrowserSessionFactory(ILogger<PlaywrightWebBrowser>? logger = null)
+    public PlaywrightWebBrowserSessionFactory(
+        IPageSnapshotter pageSnapshotter,
+        ILogger<PlaywrightWebBrowser>? logger = null)
     {
+        _pageSnapshotter = pageSnapshotter;
         _logger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
     }
 
@@ -19,5 +24,5 @@ public sealed class PlaywrightWebBrowserSessionFactory : IWebBrowserSessionFacto
     }
 
     private async Task<IWebBrowser> CreateBrowserAsync()
-        => await PlaywrightWebBrowser.CreateAsync(logger: _logger).ConfigureAwait(false);
+        => await PlaywrightWebBrowser.CreateAsync(logger: _logger, pageSnapshotter: _pageSnapshotter).ConfigureAwait(false);
 }

@@ -3,6 +3,9 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using SemanticSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+using BrowserPageLinkSnapshot = HorseRacingPrediction.Scraping.Browser.PageLinkSnapshot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -56,14 +59,8 @@ public sealed class PlaywrightTools
             _logger.LogInformation("PlaywrightTools BrowserSearch start. Query={Query} Site={Site}", query, site);
             var rawText = await _browser.SearchAsync(searchQuery, ct);
             var currentUrl = NormalizePageUrl(_browser.CurrentUrl) ?? string.Empty;
-            var snapshot = await _browser.GetPageSnapshotAsync(GetSearchLinkLimit(), ct);
+            var snapshot = await _browser.GetPageSnapshotAsync(ct);
             var links = NormalizeLinks(await _browser.GetLinksAsync(GetSearchLinkLimit(), ct), currentUrl);
-
-            if (snapshot.Links.Count > 0)
-            {
-                links = NormalizeLinks(snapshot.Links, currentUrl);
-                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
-            }
 
             if (string.IsNullOrWhiteSpace(rawText) && links.Count == 0)
             {
@@ -98,14 +95,8 @@ public sealed class PlaywrightTools
             _logger.LogInformation("PlaywrightTools BrowserReadPage start. Url={Url} Objective={Objective}", url, objective);
             var rawText = await _browser.NavigateAsync(url, ct);
             var currentUrl = NormalizePageUrl(_browser.CurrentUrl) ?? NormalizePageUrl(url) ?? url;
-            var snapshot = await _browser.GetPageSnapshotAsync(GetPageLinkLimit(), ct);
+            var snapshot = await _browser.GetPageSnapshotAsync(ct);
             var links = NormalizeLinks(await _browser.GetLinksAsync(GetPageLinkLimit(), ct), currentUrl);
-
-            if (snapshot.Links.Count > 0)
-            {
-                links = NormalizeLinks(snapshot.Links, currentUrl);
-                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
-            }
 
             var extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
             if (extraction.ShouldFollowDetailLink && !string.IsNullOrWhiteSpace(extraction.DetailLinkText))
@@ -135,13 +126,8 @@ public sealed class PlaywrightTools
                         }
                         else
                         {
-                            snapshot = await _browser.GetPageSnapshotAsync(GetPageLinkLimit(), ct);
+                            snapshot = await _browser.GetPageSnapshotAsync(ct);
                             links = NormalizeLinks(await _browser.GetLinksAsync(GetPageLinkLimit(), ct), currentUrl);
-                            if (snapshot.Links.Count > 0)
-                            {
-                                links = NormalizeLinks(snapshot.Links, currentUrl);
-                                snapshot = ReplaceSnapshotLinks(snapshot, links, currentUrl);
-                            }
 
                             extraction = await AnalyzePageAsync(rawText, currentUrl, objective, links, snapshot, ct);
                         }
@@ -188,8 +174,8 @@ public sealed class PlaywrightTools
     private async Task<string> FormatIfAvailableAsync(
         string rawText,
         string url,
-        IReadOnlyList<PageLinkSnapshot> pageLinks,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot> pageLinks,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         if (_extractionAgent is null)
@@ -222,8 +208,8 @@ public sealed class PlaywrightTools
             : null;
     }
 
-    private static IReadOnlyList<PageLinkSnapshot> NormalizeLinks(
-        IReadOnlyList<PageLinkSnapshot> links,
+    private static IReadOnlyList<BrowserPageLinkSnapshot> NormalizeLinks(
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
         string? baseUrl)
     {
         if (links.Count == 0)
@@ -237,7 +223,7 @@ public sealed class PlaywrightTools
             Uri.TryCreate(baseUrl, UriKind.Absolute, out baseUri);
         }
 
-        var normalized = new List<PageLinkSnapshot>(links.Count);
+        var normalized = new List<BrowserPageLinkSnapshot>(links.Count);
         foreach (var link in links)
         {
             var normalizedUrl = NormalizeLinkUrl(link.Url, baseUri);
@@ -250,27 +236,6 @@ public sealed class PlaywrightTools
         }
 
         return normalized;
-    }
-
-    private static PageSnapshot ReplaceSnapshotLinks(
-        PageSnapshot snapshot,
-        IReadOnlyList<PageLinkSnapshot> links,
-        string? overrideUrl = null)
-    {
-        var mergedSection = new PageSectionSnapshot(
-            title: snapshot.Title,
-            mainText: snapshot.MainText,
-            links: links.ToList(),
-            actions: snapshot.Actions.ToList(),
-            tables: snapshot.Tables.ToList(),
-            headings: snapshot.Headings.ToList(),
-            forms: snapshot.Forms.ToList(),
-            images: snapshot.Images.ToList());
-
-        return new PageSnapshot(
-            url: overrideUrl ?? snapshot.Url,
-            title: snapshot.Title,
-            sections: [mergedSection]);
     }
 
     private static string? NormalizeLinkUrl(string? url, Uri? baseUri)
@@ -299,8 +264,8 @@ public sealed class PlaywrightTools
         string rawText,
         string url,
         string? objective,
-        IReadOnlyList<PageLinkSnapshot> links,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         if (_extractionAgent is null)
@@ -341,7 +306,7 @@ public sealed class PlaywrightTools
     private string BuildSearchResult(
         string searchQuery,
         string currentUrl,
-        IReadOnlyList<PageLinkSnapshot> links,
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
         string formattedText)
     {
         var sb = new StringBuilder();
@@ -368,7 +333,7 @@ public sealed class PlaywrightTools
     private string BuildPageResult(
         string currentUrl,
         string contentMarkdown,
-        IReadOnlyList<PageLinkSnapshot> links)
+        IReadOnlyList<BrowserPageLinkSnapshot> links)
     {
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(currentUrl))
@@ -385,7 +350,7 @@ public sealed class PlaywrightTools
 
     private static void AppendLinks(
         StringBuilder sb,
-        IReadOnlyList<PageLinkSnapshot> links,
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
         string emptyMessage,
         bool groupByRegion)
     {
@@ -408,7 +373,7 @@ public sealed class PlaywrightTools
         }
     }
 
-    private static void AppendGroupedLinks(StringBuilder sb, IReadOnlyList<PageLinkSnapshot> links)
+    private static void AppendGroupedLinks(StringBuilder sb, IReadOnlyList<BrowserPageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {
@@ -425,7 +390,7 @@ public sealed class PlaywrightTools
     private static void AppendLinkSection(
         StringBuilder sb,
         string heading,
-        IReadOnlyList<PageLinkSnapshot> links)
+        IReadOnlyList<BrowserPageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {
@@ -458,8 +423,8 @@ public sealed class PlaywrightTools
 
     private static string? ResolveSafeDetailClickText(
         string detailLinkText,
-        IReadOnlyList<PageLinkSnapshot> links,
-        PageSnapshot? snapshot)
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
+        SemanticSnapshot? snapshot)
     {
         var candidate = NormalizeMatchText(detailLinkText);
         if (string.IsNullOrWhiteSpace(candidate))
@@ -472,9 +437,10 @@ public sealed class PlaywrightTools
             .Select(link => link.Title)
             .ToList();
 
-        var actionMatches = snapshot?.Actions
-            .Where(action => string.Equals(NormalizeMatchText(action.Text), candidate, StringComparison.Ordinal))
-            .Select(action => action.Text)
+        var actionMatches = snapshot?.FindByKind(PageContentKind.Button)
+            .Select(node => node.GetEffectiveText())
+            .Where(text => string.Equals(NormalizeMatchText(text), candidate, StringComparison.Ordinal))
+            .Select(text => text!)
             .ToList()
             ?? [];
 
@@ -499,8 +465,8 @@ public sealed class PlaywrightTools
         string url,
         string? objective,
         string rawText,
-        IReadOnlyList<PageLinkSnapshot> links,
-        PageSnapshot? snapshot)
+        IReadOnlyList<BrowserPageLinkSnapshot> links,
+        SemanticSnapshot? snapshot)
     {
         _logger.LogInformation(
             "PlaywrightTools AI IN Operation={Operation} Url={Url} Objective={Objective} RawTextLength={RawTextLength} LinkCount={LinkCount} Snapshot={Snapshot}\nRawText:\n{RawText}\nLinks:\n{Links}\nSnapshotJson:\n{SnapshotJson}",
@@ -535,7 +501,7 @@ public sealed class PlaywrightTools
             ClipForLog(output.ContentMarkdown));
     }
 
-    private static string BuildLinksLogText(IReadOnlyList<PageLinkSnapshot> links)
+    private static string BuildLinksLogText(IReadOnlyList<BrowserPageLinkSnapshot> links)
     {
         if (links.Count == 0)
         {
@@ -545,20 +511,20 @@ public sealed class PlaywrightTools
         return string.Join(Environment.NewLine, links.Select(link => $"- {link.Title} | {link.Url} | {link.Region}"));
     }
 
-    private static string BuildSnapshotLogText(PageSnapshot snapshot)
+    private static string BuildSnapshotLogText(SemanticSnapshot snapshot)
     {
         var compactSnapshot = new
         {
-            snapshot.Url,
+            Url = snapshot.Url.ToString(),
             snapshot.Title,
-            snapshot.Headings,
-            MainText = snapshot.MainText.Length <= 4_000 ? snapshot.MainText : snapshot.MainText[..4_000],
-            Links = snapshot.Links.Take(50).Select(link => new { link.Title, link.Url, link.Region }),
-            Actions = snapshot.Actions.Take(30).Select(action => new { action.Text, action.Kind }),
+            Headings = snapshot.FindHeadings().Select(node => node.GetEffectiveText()).Take(30),
+            MainText = Truncate(snapshot.Root.GetEffectiveText() ?? string.Empty, 4_000),
+            Links = snapshot.Links.Take(50).Select(link => new { link.Text, Url = link.Url?.ToString() ?? link.RawHref }),
+            Actions = snapshot.FindByKind(PageContentKind.Button).Take(30).Select(node => node.GetEffectiveText()),
             Tables = snapshot.Tables.Take(5).Select(table => new
             {
-                Headers = table.Headers,
-                Rows = table.Rows.Take(10)
+                table.Caption,
+                Rows = table.Rows.Take(10).Select(row => row.Cells.Select(cell => cell.Text))
             })
         };
 
@@ -567,6 +533,8 @@ public sealed class PlaywrightTools
             WriteIndented = true,
         });
     }
+
+    private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
 
     private static string ClipForLog(string? text)
     {

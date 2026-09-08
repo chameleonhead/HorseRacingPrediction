@@ -4,6 +4,7 @@ using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Collector.Tests.TestSupport;
 
@@ -38,6 +39,9 @@ internal sealed class NoOpWebBrowser : IWebBrowser
         => throw new NotSupportedException();
 
     public Task<string> GetPageContentAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
     public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(int maxResults = 0, CancellationToken cancellationToken = default)

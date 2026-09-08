@@ -17,8 +17,14 @@ public static class JobManagementEndpointExtensions
         group.MapGet("/queue-state", async (ProcessingStateStore store, CollectionMaintenanceState maintenance, CancellationToken token) =>
         {
             var state = await store.GetCollectionPipelineStateAsync(token);
-            return Results.Ok(new { isPaused = state.IsPaused || maintenance.IsActive,
-                collectorOnly = state.IsPaused || maintenance.IsCollectorOnly, state.Reason, state.JobId, state.StoppedAt });
+            return Results.Ok(new
+            {
+                isPaused = state.IsPaused || maintenance.IsActive,
+                collectorOnly = state.IsPaused || maintenance.IsCollectorOnly,
+                state.Reason,
+                state.JobId,
+                state.StoppedAt
+            });
         });
         group.MapGet("", async (string? jobType, AgentJobStatus? status, int? limit, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));

@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Jra.Parsing;
+using PageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
@@ -30,7 +32,7 @@ public static class HistoricalRaceReferenceParser
 
         var references = new List<HistoricalRaceReference>();
 
-        foreach (var table in snapshot.Tables)
+        foreach (var table in snapshot.Tables.Select(JraTableView.Create).Where(table => table is not null).Select(table => table!))
         {
             var dateIndex = FindHeaderIndex(table.Headers, DateHeaders);
             var racecourseIndex = FindHeaderIndex(table.Headers, RacecourseHeaders);

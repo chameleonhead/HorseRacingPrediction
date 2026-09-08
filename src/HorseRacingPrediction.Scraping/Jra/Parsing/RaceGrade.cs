@@ -1,14 +1,16 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.Browser;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 
 internal static class RaceGrade
 {
-    public static string? Parse(PageSnapshot snapshot)
+    public static string? Parse(JraSnapshotView snapshot)
     {
-        var text = (string.Join(" ", snapshot.Headings) + " " + string.Join(" ", snapshot.Images.Select(x => x.Alt)))
+        var imageText = snapshot.Source.Images.SelectMany(image =>
+            new[] { image.AltText, image.AccessibleName, image.Title })
+            .Where(value => !string.IsNullOrWhiteSpace(value));
+        var text = (string.Join(" ", snapshot.Headings) + " " + string.Join(" ", imageText))
             .Normalize(NormalizationForm.FormKC);
         var match = Regex.Match(text, @"(?:J[・.]?)?G\s*(III|II|I|[123])(?![A-Za-z0-9])", RegexOptions.IgnoreCase);
         if (!match.Success) return null;

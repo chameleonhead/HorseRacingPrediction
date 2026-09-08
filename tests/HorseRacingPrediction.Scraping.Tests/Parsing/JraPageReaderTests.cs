@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using HorseRacingPrediction.Scraping.Tests.TestSupport;
+using PageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 
@@ -19,14 +20,14 @@ public sealed class JraPageReaderTests
         public bool CanParse(PageSnapshot snapshot) => canParse;
 
         public IJraPage Parse(PageSnapshot snapshot)
-            => new FakePage(kind, snapshot.Url);
+            => new FakePage(kind, snapshot.Url.ToString());
     }
 
     [TestMethod]
     public async Task ReadAsync_MultipleParsersMatch_HigherPriorityWins()
     {
         var browser = new FakeWebBrowser();
-        browser.SetSnapshot(string.Empty, new PageSnapshot(string.Empty, "title", []));
+        browser.SetSnapshot(string.Empty, SemanticSnapshotFactory.Create(title: "title"));
 
         var low = new StubParser(JraPageKind.RaceList, priority: 10, canParse: true);
         var high = new StubParser(JraPageKind.Calendar, priority: 100, canParse: true);
@@ -42,7 +43,7 @@ public sealed class JraPageReaderTests
     public async Task ReadAsync_NoParserMatches_ReturnsUnknownPage()
     {
         var browser = new FakeWebBrowser();
-        browser.SetSnapshot(string.Empty, new PageSnapshot(string.Empty, "title", []));
+        browser.SetSnapshot(string.Empty, SemanticSnapshotFactory.Create(title: "title"));
 
         var parser = new StubParser(JraPageKind.Calendar, priority: 100, canParse: false);
 

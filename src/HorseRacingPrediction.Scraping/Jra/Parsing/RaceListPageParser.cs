@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.Browser;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -29,14 +29,16 @@ public sealed class RaceListPageParser
     public int Priority => 90;
 
     public bool CanParse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         return FindRaceTable(snapshot) is not null;
     }
 
     public IJraPage Parse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         var table =
             FindRaceTable(snapshot)
             ?? throw new JraPageParseException(
@@ -60,8 +62,8 @@ public sealed class RaceListPageParser
             races);
     }
 
-    private static PageTableSnapshot? FindRaceTable(
-        PageSnapshot snapshot)
+    private static JraTableView? FindRaceTable(
+        JraSnapshotView snapshot)
     {
         foreach (var table in snapshot.Tables)
         {
@@ -143,7 +145,7 @@ public sealed class RaceListPageParser
     }
 
     private static DateOnly ParseDate(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -166,7 +168,7 @@ public sealed class RaceListPageParser
     }
 
     private static RaceCourse ParseCourse(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -186,7 +188,7 @@ public sealed class RaceListPageParser
     }
 
     private static IReadOnlyList<RaceSummary> ParseRaces(
-        PageTableSnapshot table,
+        JraTableView table,
         DateOnly date,
         RaceCourse course)
     {
@@ -243,8 +245,10 @@ public sealed class RaceListPageParser
             var raceLink = table.GetCell(rowIndex, numberIndex)?.Fragments
                 .FirstOrDefault(fragment =>
                     fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(fragment.Href))
-                ?.Href;
+                    (fragment.Url is not null || !string.IsNullOrWhiteSpace(fragment.RawUrl)))
+                is { } linkFragment
+                    ? linkFragment.RawUrl ?? linkFragment.Url?.ToString()
+                    : null;
             var isResultSelection = RemoveWhitespace(table.Headers[numberIndex]) is "レース結果";
 
             races.Add(new RaceSummary(

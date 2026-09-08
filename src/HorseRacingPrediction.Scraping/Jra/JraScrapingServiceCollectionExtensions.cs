@@ -41,6 +41,7 @@ public static class JraScrapingServiceCollectionExtensions
 {
     public static IServiceCollection AddJraScraping(this IServiceCollection services)
     {
+        services.AddSingleton<Browser.Snapshots.IPageSnapshotter, Browser.Snapshots.PlaywrightPageSnapshotter>();
         services.AddSingleton<IWebBrowserSessionFactory, PlaywrightWebBrowserSessionFactory>();
 
         services.AddSingleton<IJraPageParser, CalendarPageParser>();

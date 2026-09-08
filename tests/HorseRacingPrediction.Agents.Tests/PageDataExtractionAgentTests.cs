@@ -1,5 +1,9 @@
 using HorseRacingPrediction.Agents.Agents;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+using PageLinkSnapshot = HorseRacingPrediction.Scraping.Browser.PageLinkSnapshot;
+using PageTableCellSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageTableCellSnapshot;
 using Microsoft.Extensions.AI;
 
 namespace HorseRacingPrediction.Agents.Tests;
@@ -153,26 +157,63 @@ public class PageDataExtractionAgentTests
     {
         var chatClient = new CapturingChatClient("整形済み");
         var agent = new PageDataExtractionAgent(chatClient);
-        var snapshot = new PageSnapshot(
-            "https://example.com/page",
-            "ページタイトル",
-            [
-            new PageSectionSnapshot(
-                title: "見出し1",
-                mainText: "本文",
-                headings: ["見出し1"],
-                links: [new PageLinkSnapshot("https://example.com/detail", "詳細")],
-                actions: [new PageActionSnapshot("もっと見る", "button")],
-                tables: [new PageTableSnapshot(["列1", "列2"], [["値1", "値2"]])])
-            ,
-            new PageSectionSnapshot(
-                title: "見出し2",
-                mainText: string.Empty,
-                headings: ["見出し2"],
-                links: [],
-                actions: [],
-                tables: [])
-        ]);
+        var snapshot = new SemanticPageSnapshot
+        {
+            Url = new Uri("https://example.com/page"),
+            Title = "ページタイトル",
+            Root = new PageContentNode
+            {
+                Kind = PageContentKind.Document,
+                Children =
+                [
+                    new PageContentNode { Kind = PageContentKind.Heading, Text = "見出し1" },
+                    new PageContentNode { Kind = PageContentKind.Paragraph, Text = "本文" },
+                    new PageContentNode
+                    {
+                        Kind = PageContentKind.List,
+                        Children = [new PageContentNode { Kind = PageContentKind.ListItem, Text = "項目" }],
+                    },
+                    new PageContentNode { Kind = PageContentKind.Image, Text = "画像の説明" },
+                    new PageContentNode { Kind = PageContentKind.Button, Text = "もっと見る" },
+                    new PageContentNode { Kind = PageContentKind.Heading, Text = "見出し2" },
+                ],
+            },
+            Metadata = new PageMetadataSnapshot { Meta = new Dictionary<string, string>(), JsonLd = [] },
+            KeyValues = [],
+            Tables = [new HorseRacingPrediction.Scraping.Browser.Snapshots.PageTableSnapshot
+            {
+                Rows = [new PageTableRowSnapshot { Cells =
+                [
+                    new PageTableCellSnapshot { Text = "列1", IsHeader = true },
+                    new PageTableCellSnapshot { Text = "列2", IsHeader = true },
+                ] }, new PageTableRowSnapshot { Cells =
+                [
+                    new PageTableCellSnapshot
+                    {
+                        Text = "値1",
+                        Fragments =
+                        [
+                            new PageElementFragmentSnapshot
+                            {
+                                TagName = "span",
+                                Text = "秘密の断片",
+                                ClassTokens = ["internal-class"],
+                            },
+                        ],
+                    },
+                    new PageTableCellSnapshot { Text = "値2" },
+                ] }],
+            }],
+            Links = [new HorseRacingPrediction.Scraping.Browser.Snapshots.PageLinkSnapshot
+            {
+                Text = string.Empty,
+                AccessibleName = "画像詳細",
+                Url = new Uri("https://example.com/detail"),
+            }],
+            Images = [],
+            Forms = [],
+            Diagnostics = [],
+        };
 
         await agent.FormatPageContentAsync(snapshot);
 
@@ -180,9 +221,17 @@ public class PageDataExtractionAgentTests
         var userMsg = chatClient.CapturedMessages!.Last(m => m.Role == ChatRole.User);
         StringAssert.Contains(userMsg.Text!, "--- ページ構造スナップショット(JSON) ---");
         StringAssert.Contains(userMsg.Text!, "\"Title\": ");
+        StringAssert.Contains(userMsg.Text!, "\"ContentBlocks\": [");
+        StringAssert.Contains(userMsg.Text!, "\"Kind\": \"Paragraph\"");
+        StringAssert.Contains(userMsg.Text!, "\"Kind\": \"ListItem\"");
+        StringAssert.Contains(userMsg.Text!, "\"Kind\": \"Image\"");
+        Assert.DoesNotContain(userMsg.Text!, "\"MainText\"");
+        Assert.DoesNotContain(userMsg.Text!, "internal-class");
+        Assert.DoesNotContain(userMsg.Text!, "\"ClassTokens\"");
         StringAssert.Contains(userMsg.Text!, "\"Actions\": [");
         StringAssert.Contains(userMsg.Text!, "\"Kind\": \"button\"");
-        StringAssert.Contains(userMsg.Text!, "\"Headers\": [");
+        StringAssert.Contains(userMsg.Text!, "\"Rows\": [");
+        StringAssert.Contains(userMsg.Text!, "- 画像詳細 | https://example.com/detail");
     }
 
     [TestMethod]

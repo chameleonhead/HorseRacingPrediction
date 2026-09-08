@@ -14,17 +14,17 @@ public sealed partial class JraNavigator
         if (subject.SubjectType != "Trainer") throw new ArgumentException("対象の種別が不正です。");
         await ToKeibaTopAsync(cancellationToken);
         await _browser.ClickAsync("騎手・調教師", cancellationToken);
-        var directory = await _browser.GetDataPageSnapshotAsync(cancellationToken);
-        var profileLink = directory.Links.FirstOrDefault(l => new Uri(l.Url).AbsolutePath == "/datafile/meikan/trainer.html")
+        var directoryLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
+        var profileLink = directoryLinks.FirstOrDefault(l => new Uri(l.Url).AbsolutePath == "/datafile/meikan/trainer.html")
             ?? throw new JraCollectionException("調教師プロフィールの公開リンクが見つかりません。");
         await _browser.ClickLinkAsync(profileLink, cancellationToken);
         foreach (var initial in new[] { "あ行", "か行", "さ行", "た行", "な行", "は行", "ま行", "や行", "ら行", "わ行" })
         {
-            var before = await _browser.GetDataPageSnapshotAsync(cancellationToken);
-            var group = before.Links.FirstOrDefault(l => l.Title.Trim() == initial);
+            var beforeLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
+            var group = beforeLinks.FirstOrDefault(l => l.Title.Trim() == initial);
             if (group is not null) await _browser.ClickLinkAsync(group, cancellationToken);
-            var snapshot = await _browser.GetDataPageSnapshotAsync(cancellationToken);
-            var matches = snapshot.Links.Where(l => SubjectProfilePageParser.Normalize(Regex.Replace(l.Title, "^(美浦|栗東)\\s*", ""))
+            var links = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
+            var matches = links.Where(l => SubjectProfilePageParser.Normalize(Regex.Replace(l.Title, "^(美浦|栗東)\\s*", ""))
                 == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
             if (matches.Length > 1) throw new JraCollectionException("同定不能: 同名の調教師が複数見つかりました。");
             if (matches.Length == 0) continue;
@@ -37,8 +37,8 @@ public sealed partial class JraNavigator
         await ToKeibaTopAsync(cancellationToken);
         await _browser.ClickAsync("騎手・調教師", cancellationToken);
         await _browser.ClickAsync("引退調教師一覧", cancellationToken);
-        var retired = await _browser.GetDataPageSnapshotAsync(cancellationToken);
-        var retiredMatches = retired.Links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
+        var retiredLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
+        var retiredMatches = retiredLinks.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
         if (retiredMatches.Length != 1) throw new JraCollectionException("同定不能: 公開名簿から調教師を一意に確認できませんでした。");
         await _browser.ClickLinkAsync(retiredMatches[0], cancellationToken);
         var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), "Trainer");
@@ -55,9 +55,11 @@ public sealed partial class JraNavigator
         while (true)
         {
             var snapshot = await _browser.GetDataPageSnapshotAsync(token);
-            var signature = string.Join("|", snapshot.Tables.SelectMany(t => t.Rows).Select(r => string.Join(" ", r)));
+            var view = JraSnapshotView.Create(snapshot);
+            var signature = string.Join("|", view.Tables.SelectMany(t => t.Rows).Select(r => string.Join(" ", r)));
             if (!pages.Add(signature)) throw new JraCollectionException("競走馬検索のページ送りが進みません。");
-            var candidates = snapshot.Links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
+            var links = await _browser.GetLinksAsync(cancellationToken: token);
+            var candidates = links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
                 .DistinctBy(l => l.Url).ToArray();
             foreach (var link in candidates)
             {
@@ -69,7 +71,7 @@ public sealed partial class JraNavigator
                     found.Add((link, pageNumber));
                 await _browser.GoBackAsync(token);
             }
-            var next = FindNext(snapshot);
+            var next = FindNext(links);
             if (next is null) break;
             await _browser.ClickLinkAsync(next, token); pageNumber++;
         }
@@ -78,11 +80,11 @@ public sealed partial class JraNavigator
         await OpenHorseSearchAsync(subject.Name, token);
         for (var i = 0; i < found[0].Page; i++)
         {
-            var next = FindNext(await _browser.GetDataPageSnapshotAsync(token)) ?? throw new JraCollectionException("検索ページが変化しました。");
+            var next = FindNext(await _browser.GetLinksAsync(cancellationToken: token)) ?? throw new JraCollectionException("検索ページが変化しました。");
             await _browser.ClickLinkAsync(next, token);
         }
-        var current = await _browser.GetDataPageSnapshotAsync(token);
-        var selected = current.Links.FirstOrDefault(l => l.Url == found[0].Link.Url && SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
+        var currentLinks = await _browser.GetLinksAsync(cancellationToken: token);
+        var selected = currentLinks.FirstOrDefault(l => l.Url == found[0].Link.Url && SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
             ?? throw new JraCollectionException("対象馬の検索結果が変化しました。");
         await _browser.ClickLinkAsync(selected, token);
         var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(token), "Horse");
@@ -96,12 +98,12 @@ public sealed partial class JraNavigator
         await ToKeibaTopAsync(token);
         await _browser.ClickAsync("競走馬検索", token);
         await _browser.SetFieldValueAsync("iv_h_name", name, token);
-        var search = (await _browser.GetDataPageSnapshotAsync(token)).Links.FirstOrDefault(l => l.Title.Trim() == "検索" && l.Region == "content")
+        var search = (await _browser.GetLinksAsync(cancellationToken: token)).FirstOrDefault(l => l.Title.Trim() == "検索" && l.Region == "content")
             ?? throw new JraCollectionException("競走馬の検索操作が見つかりません。");
         await _browser.ClickLinkAsync(search, token);
     }
 
-    private static PageLinkSnapshot? FindNext(PageSnapshot snapshot) => snapshot.Links.FirstOrDefault(l =>
+    private static PageLinkSnapshot? FindNext(IEnumerable<PageLinkSnapshot> links) => links.FirstOrDefault(l =>
         Regex.IsMatch(SubjectProfilePageParser.Normalize(l.Title), @"^(次へ|次のページ|次の[0-9]+件|次)$"));
 
     public async Task<JraSubjectPage?> NextHorseHistoryPageAsync(JraSubjectPage current, CancellationToken cancellationToken = default)

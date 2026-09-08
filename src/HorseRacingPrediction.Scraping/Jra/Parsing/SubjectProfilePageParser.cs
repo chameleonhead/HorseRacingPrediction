@@ -5,20 +5,25 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 
 public static class SubjectProfilePageParser
 {
     public static string Normalize(string value) => Regex.Replace(value.Normalize(NormalizationForm.FormKC), @"\s+", "");
-    public static JraSubjectPage Parse(PageSnapshot snapshot, string subjectType)
+    public static JraSubjectPage Parse(SemanticPageSnapshot source, string subjectType)
     {
+        var snapshot = JraSnapshotView.Create(source);
         var prefix = subjectType == "Horse" ? "競走馬情報" : "調教師情報";
         var heading = snapshot.Headings.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
         if (heading is null) throw new JraCollectionException(prefix + "の見出しを確認できません。");
         var name = Regex.Split(heading[prefix.Length..].Trim(), subjectType == "Horse" ? "[A-Za-z（(]" : "[（(]")[0].Trim();
         if (name.Length == 0) throw new JraCollectionException("プロフィールの名前を取得できません。");
         var fields = new Dictionary<string, string>();
+        foreach (var keyValue in source.KeyValues)
+            if (!string.IsNullOrWhiteSpace(keyValue.Key) && !string.IsNullOrWhiteSpace(keyValue.Value))
+                fields[keyValue.Key.Trim()] = keyValue.Value.Trim();
         foreach (var row in snapshot.Tables.Where(t => t.Headers.SequenceEqual(new[] { "項目", "値" })).SelectMany(t => t.Rows))
             if (row.Count >= 2 && !string.IsNullOrWhiteSpace(row[0]) && !string.IsNullOrWhiteSpace(row[1]))
                 fields[row[0].Trim()] = row[1].Trim();
@@ -37,15 +42,21 @@ public static class SubjectProfilePageParser
                 if (Cell("年月日") == "年月日") continue;
                 var date = TryDate(Cell("年月日"), out var day) ? day : (DateOnly?)null;
                 var course = Cell("場"); var raceName = Cell("レース名");
-                var fragment = table.GetCell(i, Index("レース名"))?.Fragments.FirstOrDefault(f => f.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(f.Href));
-                var link = fragment is null ? null : new PageLinkSnapshot(fragment.Href!, fragment.Text);
+                var fragment = table.GetCell(i, Index("レース名"))?.Fragments.FirstOrDefault(f =>
+                    f.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) &&
+                    (!string.IsNullOrEmpty(f.RawUrl) || f.Url is not null));
+                var fragmentUrl = fragment?.Url?.ToString() ?? fragment?.RawUrl;
+                var link = fragmentUrl is null ? null : new PageLinkSnapshot(
+                    fragmentUrl,
+                    fragment!.Text ?? fragment.AccessibleName ?? string.Empty);
                 var reason = RaceCourseNames.Parse(course) == RaceCourse.Unknown || link is null
                     ? "JRA結果ページがない履歴（地方・海外等）" : null;
                 if (date is null && reason is null) throw new JraCollectionException("出走履歴の日付を取得できません: " + raceName);
                 races.Add(new(date, course, raceName, link, reason));
             }
         }
-        var next = snapshot.Links.FirstOrDefault(l => Regex.IsMatch(Normalize(l.Title), @"^(次へ|次のページ|次の[0-9]+件|次)$"));
+        var nextView = snapshot.Links.FirstOrDefault(l => Regex.IsMatch(Normalize(l.Title), @"^(次へ|次のページ|次の[0-9]+件|次)$"));
+        var next = nextView is null ? null : new PageLinkSnapshot(nextView.Url, nextView.Title);
         return new(new(subjectType, name, sourceIdentity, snapshot.Url, fields, DateTimeOffset.UtcNow), races.DistinctBy(x => x.Key).ToArray(), next);
     }
     public static void Validate(JraSubjectPage page, JraSubjectIdentity expected)

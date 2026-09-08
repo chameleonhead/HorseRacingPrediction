@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using PageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 
@@ -60,7 +61,7 @@ public sealed class JraPageReader
             snapshot.Url);
 
         return new JraUnknownPage(
-            snapshot.Url,
-            snapshot.Title);
+            snapshot.Url.ToString(),
+            snapshot.Title ?? string.Empty);
     }
 }
