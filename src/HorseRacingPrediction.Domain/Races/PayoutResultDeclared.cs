@@ -9,8 +9,14 @@ public sealed class PayoutResultDeclared : AggregateEvent<RaceAggregate, RaceId>
         IReadOnlyList<PayoutEntry>? placePayouts = null,
         IReadOnlyList<PayoutEntry>? quinellaPayouts = null,
         IReadOnlyList<PayoutEntry>? exactaPayouts = null,
-        IReadOnlyList<PayoutEntry>? trifectaPayouts = null)
+        IReadOnlyList<PayoutEntry>? trifectaPayouts = null,
+        IReadOnlyList<PayoutEntry>? bracketQuinellaPayouts = null,
+        IReadOnlyList<PayoutEntry>? widePayouts = null,
+        IReadOnlyList<PayoutEntry>? trioPayouts = null)
     {
+        BracketQuinellaPayouts = bracketQuinellaPayouts ?? [];
+        WidePayouts = widePayouts ?? [];
+        TrioPayouts = trioPayouts ?? [];
         DeclaredAt = declaredAt;
         WinPayouts = winPayouts ?? Array.Empty<PayoutEntry>();
         PlacePayouts = placePayouts ?? Array.Empty<PayoutEntry>();
@@ -19,6 +25,9 @@ public sealed class PayoutResultDeclared : AggregateEvent<RaceAggregate, RaceId>
         TrifectaPayouts = trifectaPayouts ?? Array.Empty<PayoutEntry>();
     }
 
+    public IReadOnlyList<PayoutEntry> BracketQuinellaPayouts { get; }
+    public IReadOnlyList<PayoutEntry> WidePayouts { get; }
+    public IReadOnlyList<PayoutEntry> TrioPayouts { get; }
     public DateTimeOffset DeclaredAt { get; }
     public IReadOnlyList<PayoutEntry> WinPayouts { get; }
     public IReadOnlyList<PayoutEntry> PlacePayouts { get; }

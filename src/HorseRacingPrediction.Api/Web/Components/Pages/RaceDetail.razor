@@ -3,7 +3,7 @@
 @inject AdminApiClient Api
 
 <RaceOpsObjectHeader BackHref="/races" BackLabel="← レース一覧に戻る" Title="@(race?.RaceName ?? "レース詳細")" Section="レース・予想 / レース">
-    <Actions><FluentButton Appearance="@Appearance.Outline" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
+    <Actions>@if (race is not null) { <RaceReacquisitionAction Race="race" OnCompleted="LoadAsync" /> }<FluentButton Appearance="@Appearance.Outline" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
 </RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
@@ -25,6 +25,10 @@ else
             <dt>RaceId</dt><dd><code>@race.RaceId</code></dd>
             <dt>日付</dt><dd>@race.RaceDate</dd>
             <dt>競馬場 / R</dt><dd>@race.RacecourseCode / @race.RaceNumber</dd>
+            @if (race.StartTime is not null) { <dt>発走時刻</dt><dd>@race.StartTime?.ToString("HH:mm")</dd> }
+            @if (race.CourseLayout is not null) { <dt>コース補足</dt><dd>@race.CourseLayout</dd> }
+            @if (race.OverallPaceText is not null) { <dt>ラップ・上り</dt><dd>@race.OverallPaceText</dd> }
+            @if (race.CornerPassagesText is not null) { <dt>コーナー通過</dt><dd>@race.CornerPassagesText</dd> }
             <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
             <dt>勝ち馬</dt>
             <dd>
@@ -46,6 +50,11 @@ else
         </dl>
     </section>
     </FluentTab>
+
+    @if (race.PayoutResult is not null)
+    {
+        <FluentTab Label="払戻" Id="payouts"><RacePayoutPanel Payouts="race.PayoutResult" /></FluentTab>
+    }
 
     @if (race.Odds is not null && (race.Odds.WinOdds.Count > 0 || race.Odds.PlaceOdds.Count > 0))
     {

@@ -12,7 +12,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 /// JRAサイト内のページ遷移を担う。どのページからでもリンク経由で目的ページへ
 /// 遷移できるようにし、見つからなければ競馬トップへフォールバックする。
 /// </summary>
-public sealed class JraNavigator
+public sealed partial class JraNavigator
     : IJraNavigator
 {
     private readonly IWebBrowser _browser;

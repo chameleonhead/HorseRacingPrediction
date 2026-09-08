@@ -6,4 +6,7 @@ public sealed record RacePayoutResultResponse(
     IReadOnlyList<RacePayoutEntryResponse> PlacePayouts,
     IReadOnlyList<RacePayoutEntryResponse> QuinellaPayouts,
     IReadOnlyList<RacePayoutEntryResponse> ExactaPayouts,
-    IReadOnlyList<RacePayoutEntryResponse> TrifectaPayouts);
+    IReadOnlyList<RacePayoutEntryResponse> TrifectaPayouts,
+    IReadOnlyList<RacePayoutEntryResponse>? BracketQuinellaPayouts = null,
+    IReadOnlyList<RacePayoutEntryResponse>? WidePayouts = null,
+    IReadOnlyList<RacePayoutEntryResponse>? TrioPayouts = null);

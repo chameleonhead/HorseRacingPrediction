@@ -51,6 +51,30 @@ public sealed class JraRaceCardCollectionWorkflowTests
             entries);
 
     [TestMethod]
+    public async Task RefreshAsync_OnlyRequestsTargetAndPreservesTargetIdentity()
+    {
+        var race = CreateRaceSummary(6);
+        var card = CreateRaceCard(race.Id, "メイクデビュー中山",
+            new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2)) with
+        { GradeCode = "G3" };
+        var (session, navigator, writer) = CreateContext(CreateRaceList(race, CreateRaceSummary(7)),
+            new Dictionary<RaceId, IJraPage> { [race.Id] = card });
+        await using var disposable = session;
+        var outcome = await new JraRaceCardCollectionWorkflow(session, writer).RefreshAsync(race.Id, "manual-race");
+        Assert.HasCount(1, navigator.RequestedRaceCards);
+        Assert.AreEqual(race.Id, navigator.RequestedRaceCards.Single());
+        var request = writer.DeclareRaceResultBulkCalls.Single();
+        Assert.AreEqual("manual-race", request.TargetRaceId);
+        Assert.IsTrue(request.RefreshExistingData);
+        Assert.IsTrue(request.IsRaceCard);
+        Assert.AreEqual("G3", request.GradeCode);
+        Assert.AreEqual(new TimeOnly(10, 0), request.StartTime);
+        Assert.AreEqual("F", request.Entries!.Single().SexCode);
+        Assert.AreEqual(2, request.Entries.Single().Age);
+        Assert.AreEqual("manual-race", outcome.RaceId);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_2レース2頭ずつ_全レース保存される()
     {
         var race1 = CreateRaceSummary(1);

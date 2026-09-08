@@ -80,13 +80,14 @@ public class PredictionComparisonViewReadModel : IReadModel,
     {
         var e = domainEvent.AggregateEvent;
         var entryInfo = EntryIndexes.LastOrDefault(x => x.EntryId == e.EntryId);
+        EntryResults.RemoveAll(x => x.EntryId == e.EntryId);
         EntryResults.Add(new EntryResultSnapshot(
             e.EntryId,
             entryInfo?.HorseId ?? string.Empty,
             entryInfo?.HorseNumber ?? 0,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F));
         return Task.CompletedTask;
     }
 
@@ -101,7 +102,10 @@ public class PredictionComparisonViewReadModel : IReadModel,
             e.PlacePayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
             e.QuinellaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
             e.ExactaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
-            e.TrifectaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList());
+            e.TrifectaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.BracketQuinellaPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.WidePayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList(),
+            e.TrioPayouts.Select(p => new PayoutEntrySnapshot(p.Combination, p.Amount)).ToList());
         return Task.CompletedTask;
     }
 

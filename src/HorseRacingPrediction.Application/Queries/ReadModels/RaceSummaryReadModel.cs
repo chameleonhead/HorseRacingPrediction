@@ -92,7 +92,7 @@ public class RaceSummaryReadModel : IReadModel,
         var aggregateEvent = domainEvent.AggregateEvent;
         WinningHorseName = aggregateEvent.WinningHorseName;
         ResultDeclaredAt = aggregateEvent.DeclaredAt;
-        Status = RaceStatus.ResultDeclared;
+        if (Status < RaceStatus.ResultDeclared) Status = RaceStatus.ResultDeclared;
         return Task.CompletedTask;
     }
 
@@ -101,7 +101,7 @@ public class RaceSummaryReadModel : IReadModel,
         IDomainEvent<RaceAggregate, RaceId, PayoutResultDeclared> domainEvent,
         CancellationToken cancellationToken)
     {
-        Status = RaceStatus.PayoutDeclared;
+        if (Status < RaceStatus.PayoutDeclared) Status = RaceStatus.PayoutDeclared;
         return Task.CompletedTask;
     }
 

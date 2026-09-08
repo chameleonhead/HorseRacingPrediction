@@ -2,7 +2,7 @@ using EventFlow.Aggregates;
 
 namespace HorseRacingPrediction.Domain.Trainers;
 
-public class TrainerAggregate : AggregateRoot<TrainerAggregate, TrainerId>,
+public partial class TrainerAggregate : AggregateRoot<TrainerAggregate, TrainerId>,
     IEmit<TrainerRegistered>,
     IEmit<TrainerProfileUpdated>,
     IEmit<TrainerAliasMerged>,

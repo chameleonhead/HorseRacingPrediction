@@ -10,7 +10,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// オーケストレーションのみを行い、HTML解析やページ遷移の詳細は
 /// <see cref="JraSession.Navigate"/>（Navigator/Parser層）に委譲する。
 /// </summary>
-public sealed class JraRaceCardCollectionWorkflow
+public sealed partial class JraRaceCardCollectionWorkflow
     : IJraRaceCardCollectionWorkflow
 {
     private readonly JraSession _session;

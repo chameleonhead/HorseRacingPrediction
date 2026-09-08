@@ -15,11 +15,18 @@ public class SqliteDbContextProvider : IDbContextProvider<EventStoreDbContext>, 
         {
             Pooling = false
         };
+        if (connectionStringBuilder.DataSource == ":memory:")
+        {
+            connectionStringBuilder.DataSource = "hrp-" + Guid.NewGuid().ToString("N");
+            connectionStringBuilder.Mode = SqliteOpenMode.Memory;
+            connectionStringBuilder.Cache = SqliteCacheMode.Shared;
+        }
+        // インメモリDBの寿命を維持する接続。各DbContextは専用接続を所有する。
         _connection = new SqliteConnection(connectionStringBuilder.ConnectionString);
         _connection.Open();
 
         _options = new DbContextOptionsBuilder<EventStoreDbContext>()
-            .UseSqlite(_connection)
+            .UseSqlite(connectionStringBuilder.ConnectionString)
             .Options;
 
     }

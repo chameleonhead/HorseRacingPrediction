@@ -2,6 +2,11 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public static class AgentJobType
 {
+    public const string SubjectProfileRefresh = "SubjectProfileRefresh";
+    public const string HorseHistoryDiscovery = "HorseHistoryDiscovery";
+    public const string HorseHistoryRace = "HorseHistoryRace";
+    public const string HorseHistoryExcluded = "HorseHistoryExcluded";
+    public const string RaceReacquisition = "RaceReacquisition";
     public const string CollectionPlanning = "CollectionPlanning";
     public const string ResultBackfillPlanningRequest = "ResultBackfillPlanningRequest";
     public const string ResultMonthDiscoveryRequest = "ResultMonthDiscoveryRequest";

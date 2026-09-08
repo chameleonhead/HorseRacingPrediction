@@ -2,7 +2,7 @@ using EventFlow.Aggregates;
 
 namespace HorseRacingPrediction.Domain.Races;
 
-public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
+public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     IEmit<RaceCreated>,
     IEmit<RaceCardPublished>,
     IEmit<EntryRegistered>,
@@ -68,13 +68,14 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         if (_state.Status == RaceStatus.Draft)
             throw new InvalidOperationException("Race card must be published before registering entries.");
 
+        var previous = _state.Entries.LastOrDefault(x => x.EntryId == entryId);
         Emit(new EntryRegistered(entryId, horseId, horseNumber,
             jockeyId, trainerId, gateNumber, assignedWeight,
             sexCode, age, declaredWeight, declaredWeightDiff,
             runningStyleCode,
             _state.RaceDate, _state.RacecourseCode, _state.SurfaceCode,
             _state.DistanceMeters, _state.DirectionCode, _state.GradeCode,
-            ownerName));
+            ownerName, previous?.HorseId, previous?.JockeyId));
     }
 
     public void RecordWeatherObservation(DateTimeOffset observationTime,
@@ -236,7 +237,7 @@ public class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             _state.StewardReportText,
             _state.ResultDeclaredAt,
             _state.EntryResults,
-            _state.PayoutResult);
+            _state.PayoutResult, _state.StartTime, _state.OverallPaceText, _state.CornerPassagesText, _state.CourseLayout);
     }
 
     public void Apply(RaceCreated e) { }

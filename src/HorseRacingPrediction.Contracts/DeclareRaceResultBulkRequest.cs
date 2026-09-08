@@ -26,7 +26,10 @@ public sealed record DeclareRaceResultBulkRequest(
     IReadOnlyList<RaceResultEntryBulkDto>? Entries = null,
     RecordWeatherObservationRequest? Weather = null,
     RecordTrackConditionRequest? TrackCondition = null,
-    DeclarePayoutResultRequest? Payouts = null);
+    DeclarePayoutResultRequest? Payouts = null,
+    string? TargetRaceId = null, bool RefreshExistingData = false, bool IsRaceCard = false,
+    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null,
+    string? SourceHorseId = null);
 
 /// <summary>
 /// 出走馬1頭分の成績情報。
@@ -56,4 +59,4 @@ public sealed record RaceResultEntryBulkDto(
     int? BodyWeight = null,
     int? BodyWeightChange = null,
     int? OriginalFinishPosition = null,
-    bool IsDeadHeat = false);
+    bool IsDeadHeat = false, string? OwnerName = null, string? CornerPositions = null, decimal? Average1F = null);

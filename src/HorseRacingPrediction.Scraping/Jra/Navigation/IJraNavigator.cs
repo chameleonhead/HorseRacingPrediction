@@ -9,6 +9,12 @@ namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 /// </summary>
 public interface IJraNavigator
 {
+    Task<JraSubjectPage> ToSubjectProfileAsync(JraSubjectIdentity subject, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+    Task<JraSubjectPage?> NextHorseHistoryPageAsync(JraSubjectPage current, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+    Task<JraRaceResultPage> ToHorseHistoryResultAsync(JraSubjectIdentity horse, HorseHistoryRaceLink race, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
     Task<IJraPage> ToKeibaTopAsync(
         CancellationToken cancellationToken = default);
 

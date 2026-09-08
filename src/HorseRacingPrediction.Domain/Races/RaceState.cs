@@ -26,6 +26,10 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     public DateOnly? RaceDate { get; private set; }
     public string? RacecourseCode { get; private set; }
     public int? RaceNumber { get; private set; }
+    public TimeOnly? StartTime { get; private set; }
+    public string? OverallPaceText { get; private set; }
+    public string? CornerPassagesText { get; private set; }
+    public string? CourseLayout { get; private set; }
     public string? RaceName { get; private set; }
     public RaceStatus Status { get; private set; } = RaceStatus.Draft;
     public int? MeetingNumber { get; private set; }
@@ -69,6 +73,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
 
     public void Apply(EntryRegistered e)
     {
+        _entries.RemoveAll(x => x.EntryId == e.EntryId);
         _entries.Add(new EntryDetails(
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber,
@@ -122,27 +127,33 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
         WinningHorseId = e.WinningHorseId;
         StewardReportText = e.StewardReportText;
         ResultDeclaredAt = e.DeclaredAt;
-        Status = RaceStatus.ResultDeclared;
+        if (Status < RaceStatus.ResultDeclared) Status = RaceStatus.ResultDeclared;
     }
 
     public void Apply(EntryResultDeclared e)
     {
+        _entryResults.RemoveAll(x => x.EntryId == e.EntryId);
         _entryResults.Add(new EntryResultDetails(
             e.EntryId, e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F));
     }
 
     public void Apply(PayoutResultDeclared e)
     {
         PayoutResult = new PayoutResultDetails(
             e.DeclaredAt, e.WinPayouts, e.PlacePayouts,
-            e.QuinellaPayouts, e.ExactaPayouts, e.TrifectaPayouts);
-        Status = RaceStatus.PayoutDeclared;
+            e.QuinellaPayouts, e.ExactaPayouts, e.TrifectaPayouts, e.BracketQuinellaPayouts, e.WidePayouts, e.TrioPayouts);
+        if (Status < RaceStatus.PayoutDeclared) Status = RaceStatus.PayoutDeclared;
     }
 
     public void Apply(RaceDataCorrected e)
     {
+        if (e.EntryCount.HasValue) EntryCount = e.EntryCount;
+        StartTime = e.StartTime ?? StartTime;
+        OverallPaceText = e.OverallPaceText ?? OverallPaceText;
+        CornerPassagesText = e.CornerPassagesText ?? CornerPassagesText;
+        CourseLayout = e.CourseLayout ?? CourseLayout;
         if (e.RaceName != null) RaceName = e.RaceName;
         if (e.RacecourseCode != null) RacecourseCode = e.RacecourseCode;
         if (e.RaceNumber.HasValue) RaceNumber = e.RaceNumber;

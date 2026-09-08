@@ -6,4 +6,7 @@ public sealed record PayoutResultDetails(
     IReadOnlyList<PayoutEntry> PlacePayouts,
     IReadOnlyList<PayoutEntry> QuinellaPayouts,
     IReadOnlyList<PayoutEntry> ExactaPayouts,
-    IReadOnlyList<PayoutEntry> TrifectaPayouts);
+    IReadOnlyList<PayoutEntry> TrifectaPayouts,
+    IReadOnlyList<PayoutEntry>? BracketQuinellaPayouts = null,
+    IReadOnlyList<PayoutEntry>? WidePayouts = null,
+    IReadOnlyList<PayoutEntry>? TrioPayouts = null);

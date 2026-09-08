@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
-public sealed class ProcessingStateStore : IProcessingStateStore
+public sealed partial class ProcessingStateStore : IProcessingStateStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly DbContextOptions<ProcessingStateDbContext> _dbContextOptions;

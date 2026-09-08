@@ -30,7 +30,7 @@ using System.Text;
 
 namespace HorseRacingPrediction.Api;
 
-public static class EndpointExtensions
+public static partial class EndpointExtensions
 {
     public static WebApplication MapApiEndpoints(this WebApplication app)
     {
@@ -771,6 +771,9 @@ public static class EndpointExtensions
             [SwaggerOperation(Summary = "Declare race result in bulk", Description = "Creates/updates the race and declares result, entry results, weather, track condition and payouts in a single call")]
         async (ApiContracts.DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
+                if (request.RefreshExistingData)
+                    return await RefreshCollectedRaceAsync(request, commandBus, queryProcessor, dbContextProvider, cancellationToken);
+
                 // NOTE: データ収集エージェント（Collector）は従来、1レース分の登録に
                 // UpsertRace/DeclareRaceResult/DeclareEntryResult(N件)/RecordWeather/
                 // RecordTrackCondition/DeclarePayoutという6種類以上のAPI呼び出しに
@@ -1373,7 +1376,8 @@ public static class EndpointExtensions
                         ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId),
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [],
-                    resultReadModel?.PayoutResult is null ? null : ToRacePayoutResultResponse(resultReadModel.PayoutResult));
+                    resultReadModel?.PayoutResult is null ? null : ToRacePayoutResultResponse(resultReadModel.PayoutResult),
+                    readModel.StartTime, readModel.OverallPaceText, readModel.CornerPassagesText, readModel.CourseLayout);
 
                 return Results.Ok(response);
             })
@@ -2603,7 +2607,7 @@ public static class EndpointExtensions
             entryResult.LastThreeFurlongTime,
             entryResult.AbnormalResultCode,
             entryResult.PrizeMoney,
-            entryResult.CornerPositions);
+            entryResult.CornerPositions, entryResult.Popularity, entryResult.OriginalFinishPosition, entryResult.IsDeadHeat, entryResult.Average1F);
 
     private static string? ResolveHorseId(IReadOnlyDictionary<string, string> entryHorseIdsByEntryId, string entryId, string? horseId)
         => !string.IsNullOrWhiteSpace(horseId)
@@ -2670,7 +2674,10 @@ public static class EndpointExtensions
             payoutResult.PlacePayouts.Select(ToRacePayoutEntryResponse).ToList(),
             payoutResult.QuinellaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
             payoutResult.ExactaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
-            payoutResult.TrifectaPayouts.Select(ToRacePayoutEntryResponse).ToList());
+            payoutResult.TrifectaPayouts.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.BracketQuinellaPayouts?.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.WidePayouts?.Select(ToRacePayoutEntryResponse).ToList(),
+            payoutResult.TrioPayouts?.Select(ToRacePayoutEntryResponse).ToList());
 
     private static RacePayoutEntryResponse ToRacePayoutEntryResponse(AppReadModels.PayoutEntrySnapshot payout)
         => new(payout.Combination, payout.Amount);

@@ -26,6 +26,7 @@ public class SqliteDbContextProviderTests
         using var context2 = provider.CreateContext();
 
         Assert.AreNotSame(context1, context2);
+        Assert.AreNotSame(context1.Database.GetDbConnection(), context2.Database.GetDbConnection());
     }
 
     [TestMethod]
@@ -55,10 +56,28 @@ public class SqliteDbContextProviderTests
 
         await using var context = provider.CreateContext();
         var applied = (await context.Database.GetAppliedMigrationsAsync()).ToList();
-        Assert.AreEqual(3, applied.Count);
+        CollectionAssert.AreEquivalent(context.Database.GetMigrations().ToList(), applied);
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_InitialEventStore", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public async Task Migrator_UpgradesPreviousEnsureCreatedSchemaWithoutLosingData()
+    {
+        using var provider = new SqliteDbContextProvider();
+        await using (var previous = provider.CreateContext())
+        {
+            await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE JraSubjectProfileReadModel");
+            await previous.Database.ExecuteSqlRawAsync("INSERT INTO Horses (HorseId, RegisteredName, NormalizedName, Aliases) VALUES ('horse-legacy', 'preserved', 'preserved', '[]')");
+        }
+        await CreateMigrator(provider).MigrateAsync();
+        await using var context = provider.CreateContext();
+        Assert.AreEqual("preserved", await context.Database.SqlQueryRaw<string>("SELECT RegisteredName AS Value FROM Horses").SingleAsync());
+        Assert.AreEqual(0, await context.Set<HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel>().CountAsync());
+        CollectionAssert.AreEquivalent(context.Database.GetMigrations().ToList(), (await context.Database.GetAppliedMigrationsAsync()).ToList());
     }
 
     [TestMethod]

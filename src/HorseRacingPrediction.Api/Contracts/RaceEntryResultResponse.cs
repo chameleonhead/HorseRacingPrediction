@@ -11,4 +11,5 @@ public sealed record RaceEntryResultResponse(
     string? LastThreeFurlongTime,
     string? AbnormalResultCode,
     decimal? PrizeMoney,
-    string? CornerPositions);
+    string? CornerPositions,
+    int? Popularity = null, int? OriginalFinishPosition = null, bool IsDeadHeat = false, decimal? Average1F = null);

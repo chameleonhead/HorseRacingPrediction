@@ -2,7 +2,7 @@ using EventFlow.Aggregates;
 
 namespace HorseRacingPrediction.Domain.Horses;
 
-public class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
+public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     IEmit<HorseRegistered>,
     IEmit<HorseProfileUpdated>,
     IEmit<HorseAliasMerged>,
