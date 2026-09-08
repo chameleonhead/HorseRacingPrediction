@@ -171,13 +171,9 @@ public sealed class JobManagementEndpointTests
     }
 
     [TestMethod]
-    public async Task Pause_BlocksOnlyCollectorInternalRpcButAllowsAdminMutations()
+    public async Task Pause_DeniesNewLeasesButAllowsStateRpcAndAdminMutations()
     {
-        // /pauseによる一時停止は「Collectorからのリクエストのみ」をエラーにする
-        // 仕様（管理画面からのジョブ操作・レース補正・メモ登録等は通常通り動作する）。
-        // Collectorが最初に呼ぶ内部RPCエンドポイント（/api/internal/collection/state/*）
-        // のみが503で拒否され、管理画面向けのエンドポイント（reacquire等）は
-        // 一時停止中でも通常通り処理されることを確認する。
+        // Pause denies lease acquisition without blocking result-reporting RPC.
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var disposable = app;
         using var requestClient = client;
@@ -192,7 +188,7 @@ public sealed class JobManagementEndpointTests
 
         var blockedCollectorRpc = await requestClient.PostAsJsonAsync(
             "/api/internal/collection/state/AcquireReadyJobsAsync",
-            new { method = "AcquireReadyJobsAsync", arguments = Array.Empty<object>() });
+            new { method = "AcquireReadyJobsAsync", arguments = new object[] { "Collection", now, TimeSpan.Zero, 1, TimeSpan.FromMinutes(30) } });
 
         var allowedAdminMutation = await requestClient.PostAsJsonAsync(
             $"/api/admin/jobs/{Uri.EscapeDataString(source.JobId)}/reacquire",
@@ -201,7 +197,8 @@ public sealed class JobManagementEndpointTests
         var resume = await requestClient.PostAsync("/api/admin/jobs/resume", null);
 
         Assert.AreEqual(HttpStatusCode.Accepted, pause.StatusCode);
-        Assert.AreEqual(HttpStatusCode.ServiceUnavailable, blockedCollectorRpc.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, blockedCollectorRpc.StatusCode);
+        Assert.IsEmpty((await blockedCollectorRpc.Content.ReadFromJsonAsync<AcquiredProcessingJob[]>())!);
         Assert.AreNotEqual(HttpStatusCode.ServiceUnavailable, allowedAdminMutation.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, resume.StatusCode);
     }

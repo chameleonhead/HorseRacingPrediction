@@ -8,12 +8,9 @@ public sealed class CollectionMaintenanceState
     public bool IsActive => Volatile.Read(ref _active) == 1;
 
     /// <summary>
-    /// true の場合、一時停止の影響範囲はCollector（データ収集エージェント）からの
-    /// リクエストのみに限定される（Collectorが最初に呼ぶ内部RPCエンドポイント
-    /// <c>/api/internal/collection/state/*</c> のみを503で拒否し、それ以外の
-    /// 管理画面等からの書き込みは通常通り許可する）。false の場合は従来通り、
-    /// 全ての書き込み系エンドポイントを拒否する（データベース完全初期化中など、
-    /// システム全体を止める必要がある操作向け）。
+    /// true: collection dispatch/acquisition is stopped by the persisted store state;
+    /// active workers can still report results. false: full database maintenance
+    /// rejects mutations, including collection result reporting.
     /// </summary>
     public bool IsCollectorOnly => Volatile.Read(ref _collectorOnly) == 1;
     public int DlqFailureCount => Volatile.Read(ref _dlqFailureCount);

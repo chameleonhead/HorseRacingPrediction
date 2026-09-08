@@ -106,8 +106,7 @@ internal static class TestApplicationFactory
             var isMutation = !HttpMethods.IsGet(context.Request.Method)
                 && !HttpMethods.IsHead(context.Request.Method)
                 && !HttpMethods.IsOptions(context.Request.Method);
-            var isTargetPath = !maintenance.IsCollectorOnly
-                || context.Request.Path.StartsWithSegments("/api/internal/collection/state");
+            var isTargetPath = !maintenance.IsCollectorOnly;
             if (maintenance.IsActive && isMutation && isTargetPath
                 && !context.Request.Path.StartsWithSegments("/api/collection/reset")
                 && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))

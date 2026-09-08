@@ -261,12 +261,9 @@ app.Use(async (context, next) =>
     var isMutation = !HttpMethods.IsGet(context.Request.Method)
         && !HttpMethods.IsHead(context.Request.Method)
         && !HttpMethods.IsOptions(context.Request.Method);
-    // IsCollectorOnly（原因不明の致命的エラー検知による自動一時停止）の場合は、
-    // Collectorが最初に呼ぶ内部RPCエンドポイントのみを拒否対象とし、管理画面等
-    // からの書き込みリクエストは通常通り処理する。IsCollectorOnlyでない場合
-    // （データベース完全初期化など）は従来通り全ての書き込みを拒否する。
-    var isTargetPath = !maintenance.IsCollectorOnly
-        || context.Request.Path.StartsWithSegments("/api/internal/collection/state");
+    // Collection-only stop is enforced atomically at dispatch/lease acquisition in the store.
+    // Existing workers must still read hold requests and report completion/cancellation.
+    var isTargetPath = !maintenance.IsCollectorOnly;
     if (maintenance.IsActive && isMutation && isTargetPath
         && !context.Request.Path.StartsWithSegments("/api/collection/reset")
         && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))

@@ -11,32 +11,7 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 public sealed partial class CollectionExecutionService
 {
     private static readonly string[] SubjectJobTypes = [AgentJobType.SubjectProfileRefresh, AgentJobType.HorseHistoryDiscovery, AgentJobType.HorseHistoryRace];
-    private async Task ExecuteSubjectJobsAsync(string type, DateTimeOffset now, CancellationToken token)
-    {
-        var jobs = await _stateStore.AcquireReadyJobsAsync(type, now, TimeSpan.Zero, _options.CollectionBatchSize,
-            TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)), token);
-        foreach (var job in jobs)
-        {
-            using var timeout = CreateJobTimeoutCts(token);
-            try
-            {
-                if (await ExecuteSubjectTaskAsync(type, job.JobId, job.DeduplicationKey, job.Payload, timeout.Token))
-                    await _stateStore.CompleteJobAsync(type, job.DeduplicationKey, token);
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                await _stateStore.RequeueJobAsync(type, job.DeduplicationKey, now, "処理が中断されました。", CancellationToken.None);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                await _stateStore.FailJobAsync(type, job.DeduplicationKey, ex.Message, CancellationToken.None);
-                await PausePipelineIfFatalErrorAsync(ex, job.DeduplicationKey);
-            }
-        }
-    }
-
-    private async Task<bool> ExecuteSubjectTaskAsync(string type, string jobId, string key, string payload, CancellationToken token)
+    private async Task<bool> ExecuteSubjectTaskAsync(string type, string jobId, string key, string payload, CancellationToken token, LeasedCollectionTask task)
     {
         using var api = _httpClientFactory.CreateClient("ProcessingState");
         if (type == AgentJobType.HorseHistoryRace)
@@ -93,12 +68,7 @@ public sealed partial class CollectionExecutionService
         foreach (var failed in parent.ChildJobs.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter))
             await _stateStore.ForceRequeueJobAsync(failed.JobType, failed.DeduplicationKey, DateTimeOffset.UtcNow, token);
         if (parent.ChildJobs.Count == 0) return true;
-        await _stateStore.WaitForDependenciesAsync(type, key, token);
-        // 子が先に完了した場合も親を待機状態に取り残さない。
-        parent = await _stateStore.GetJobDetailAsync(jobId, token) ?? parent;
-        if (parent.ChildJobs.All(x => x.Status == AgentJobStatus.Succeeded)) await _stateStore.CompleteJobAsync(type, key, token);
-        else if (parent.ChildJobs.All(x => x.Status is AgentJobStatus.Succeeded or AgentJobStatus.Failed or AgentJobStatus.DeadLetter))
-            await _stateStore.FailJobAsync(type, key, "一部の過去レース取得に失敗しました。", token);
+        await _stateStore.WaitForCollectionDependenciesAsync(type, key, task.LeaseToken, token);
         return false;
     }
     private static JraSubjectIdentity Identity(SubjectCollectionPayload subject) => new(subject.SubjectType, subject.Name, subject.BirthDate, subject.SourceIdentity);

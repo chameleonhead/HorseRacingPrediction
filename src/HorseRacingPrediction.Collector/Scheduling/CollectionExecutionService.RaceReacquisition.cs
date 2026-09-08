@@ -5,32 +5,6 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public sealed partial class CollectionExecutionService
 {
-    private async Task ExecuteRaceReacquisitionJobsAsync(DateTimeOffset now, CancellationToken token)
-    {
-        var jobs = await _stateStore.AcquireReadyJobsAsync(AgentJobType.RaceReacquisition, now, TimeSpan.Zero,
-            _options.CollectionBatchSize, TimeSpan.FromMinutes(Math.Max(1, _options.CollectionLeaseMinutes)), token);
-        foreach (var job in jobs)
-        {
-            using var timeout = CreateJobTimeoutCts(token);
-            try
-            {
-                var published = await ReacquireRaceAsync(AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(job.Payload), timeout.Token);
-                if (published) await _stateStore.CompleteJobAsync(AgentJobType.RaceReacquisition, job.DeduplicationKey, token);
-                else await _stateStore.RequeueJobAsync(AgentJobType.RaceReacquisition, job.DeduplicationKey, now, "公開待ち", token, now.AddMinutes(30));
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                await _stateStore.RequeueJobAsync(AgentJobType.RaceReacquisition, job.DeduplicationKey, now, "処理が中断されました。", CancellationToken.None);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                await _stateStore.FailJobAsync(AgentJobType.RaceReacquisition, job.DeduplicationKey, ex.Message, CancellationToken.None);
-                await PausePipelineIfFatalErrorAsync(ex, job.DeduplicationKey);
-            }
-        }
-    }
-
     private async Task ExecuteSingleRaceReacquisitionAsync(LeasedCollectionTask task, DateTimeOffset now, CancellationToken token)
     {
         var published = await ReacquireRaceAsync(AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(task.Payload), token);
@@ -57,7 +31,7 @@ public sealed partial class CollectionExecutionService
                 else published = true;
             }
             catch (JraNavigationException ex) when (ex.Reason is JraNavigationFailureReason.NotYetPublished or JraNavigationFailureReason.OutOfDisplayedRange) { }
-            catch (Exception ex) when (ex is not OperationCanceledException && !HorseRacingPrediction.Scraping.Jra.Workflow.ApiFailureClassifier.IsFatalServerError(ex))
+            catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !HorseRacingPrediction.Scraping.Jra.Workflow.ApiFailureClassifier.IsFatalServerError(ex))
             { errors.Add("出馬表: " + ex.Message); }
         }
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst).Date);

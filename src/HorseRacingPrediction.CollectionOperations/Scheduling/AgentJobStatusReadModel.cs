@@ -12,4 +12,5 @@ public sealed record AgentJobStatusReadModel(
     DateTimeOffset? StartedAt,
     DateTimeOffset? LeaseExpiresAt,
     string? LastError,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool IsHeld = false);

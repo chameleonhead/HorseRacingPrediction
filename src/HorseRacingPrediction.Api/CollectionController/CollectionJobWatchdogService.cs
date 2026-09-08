@@ -91,7 +91,7 @@ public sealed class CollectionJobWatchdogService : BackgroundService
 
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        if (_maintenance.IsActive)
+        if (_maintenance.IsActive || (await _store.GetCollectionPipelineStateAsync(cancellationToken)).IsPaused)
         {
             _logger.LogInformation("収集ジョブ監視: メンテナンス中のためスキップします。");
             return;

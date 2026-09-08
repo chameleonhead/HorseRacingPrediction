@@ -413,7 +413,7 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task RunSingleTaskAsync_WhenCancelledByInternalDeadline_RequeuesInsteadOfFailing()
+    public async Task RunSingleTaskAsync_WhenCancelledByInternalDeadline_FailsAndPausesPipeline()
     {
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var raceDate = DateOnly.FromDateTime(now.UtcDateTime);
@@ -439,13 +439,12 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
         await stateStore.EnqueueJobAsync(AgentJobType.RaceCardCollection, key, AgentJobPayloadSerializer.Serialize(payload), now);
 
         var notification = new CollectionTaskNotification(key, AgentJobType.RaceCardCollection, key, DispatchGeneration: 1);
-        var handled = await service.RunSingleTaskAsync(notification, cts.Token);
+        await Assert.ThrowsAsync<TimeoutException>(() => service.RunSingleTaskAsync(notification, cts.Token));
 
-        // 恒久的な失敗（Failed）ではなく、Readyへ戻され再試行可能になっている。
-        Assert.IsTrue(handled);
+        Assert.IsTrue((await stateStore.GetCollectionPipelineStateAsync()).IsPaused);
         var statuses = await stateStore.GetJobStatusesAsync(AgentJobType.RaceCardCollection, null, 10, CancellationToken.None);
         Assert.HasCount(1, statuses);
-        Assert.AreEqual(AgentJobStatus.Ready, statuses[0].Status);
+        Assert.AreEqual(AgentJobStatus.Failed, statuses[0].Status);
     }
 
     [TestMethod]

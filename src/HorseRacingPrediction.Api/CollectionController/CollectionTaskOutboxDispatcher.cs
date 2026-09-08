@@ -73,6 +73,7 @@ public sealed class CollectionTaskOutboxDispatcher : BackgroundService
 
         foreach (var dispatch in dispatches)
         {
+            if (_maintenance.IsActive || (await _store.GetCollectionPipelineStateAsync(cancellationToken)).IsPaused) break;
             try
             {
                 await _queue.SendAsync(dispatch.Notification, cancellationToken).ConfigureAwait(false);
