@@ -1,6 +1,6 @@
 # 収集タイムアウトの失敗確定・実行保留と過去データ抽出の調査
 
-- Status: Approved
+- Status: Implemented
 - Created: 2026-09-08
 - Updated: 2026-09-08
 
@@ -8,7 +8,7 @@
 
 利用者から、内部デッドライン到達もエラーとしてジョブ全体を停止すること、実行を明示的に保留できること、過去データ抽出ジョブが登録されない状況の調査を依頼された。
 
-### 確認できた原因
+### 設計時に確認できた原因
 
 - `CollectionExecutionService.RunSingleTaskAsync` は外側のキャンセル時に `RequeueCollectionTaskAsync` を呼び、Readyへ戻して正常にreturnする。14分の内部デッドラインに達しても失敗試行を確定しない。既存テスト `RunSingleTaskAsync_WhenCancelledByInternalDeadline_RequeuesInsteadOfFailing` もこの挙動を要求している。
 - `Program.cs` の計画ジョブにも同じ再投入があり、こちらは例外を再送出する。単発収集と計画の終了結果が一致しない。
@@ -37,9 +37,9 @@
 
 過去データについて今回の依頼は状況確認であり、自動復旧・大量の補完再登録は未実施。復旧する場合は旧Workerの再有効化ではなく、稼働中の馬起点履歴探索へ自動Plannerを接続する案を別途確定する。騎手補完や既存旧要求の移行、既存レースからのバックフィル範囲もその際に決める。
 
-## Proposed behavior
+## Approved behavior
 
-以下は利用者の指定を反映したレビュー用の改訂設計。
+以下は利用者の指定を反映し、承認後に実装した設計。
 
 - タイムアウトしたジョブはFailedにし、理由・期限・試行履歴・RequestIdを保存する。Readyへの自動復帰を行わない。Lambda側にもタイムアウトを失敗として返す。処理結果報告には処理用のキャンセル済みトークンを使わず、終了猶予内の独立した期限を設ける。
 - 収集全体の停止理由を永続化し、後続の配送・新規リース取得を止める。既に取得済みの別ジョブは完了/失敗報告を受け付ける。実行中プロセスを強制終了する操作にはしない。
@@ -66,8 +66,8 @@ Collectorの単発/計画/常駐経路、状態ストアとRPC、APIの実行制
 ## Documentation updates
 
 - `docs/22-collector-design.md`: 旧補完Workerと過去参照抽出を実装済みと記載していた表を修正。現行の自動経路の欠落と手動経路を区別する収集設計の正本。
-- `docs/20-admin-ui-design.md`: 既存の全体停止説明に現状の結果報告拒否の制限と本提案への参照を追加し、単一ジョブの保留・実行中キャンセルの改訂案を明記。承認前の案を実装済みとして扱わない。
-- `docs/01-lambda-collector-architecture.md`: 内部デッドラインの現行再投入挙動と本提案への参照を追加。承認後に停止契約を同期する。
+- `docs/20-admin-ui-design.md`: 全体停止・再開、単一ジョブの保留・中断確認・解除、状態表示と操作履歴を実装内容へ同期した。
+- `docs/01-lambda-collector-architecture.md`: 内部デッドラインによる失敗確定・収集全体停止と明示再開の契約を同期した。
 
 ## Acceptance criteria
 
@@ -88,7 +88,7 @@ Collectorの単発/計画/常駐経路、状態ストアとRPC、APIの実行制
 
 設計確定後、状態/APIと停止処理、Workerのタイムアウト報告、UIの順に実装し、各単位をビルド・関連テスト・差分確認後にコミットする。最後に正本と実装結果を同期する。過去データの自動復旧は今回の状況報告から切り分け、未承認の再登録をしない。
 
-## Verification record
+## Verification record — 設計段階の記録
 
 - コード・既存テスト・既存変更記録・AWS Lambda設定/SQS連携/CloudWatchの読み取り調査を実施。
 - 生産コード、稼働環境、キュー、ジョブDBの変更は未実施。設計段階のためビルド・テストは未実行。
@@ -102,4 +102,20 @@ Collectorの単発/計画/常駐経路、状態ストアとRPC、APIの実行制
 
 先行検証: Collector 113件、API 118件、Scraping固定テスト160件成功。APIビルドは警告0・エラー0。Scrapingテストビルドには変更していない既存テストのnullable警告1件がある。起動中の開発プロセスが通常の出力DLLを使用していたため、以降のビルド・テストは`.artifacts/collection-hold`へ隔離した。
 
-未完了: 最終差分の回帰確認、UIの最終検証とコミット、正本文書の同期。本チェックポイント後も継続する。
+チェックポイント時の未完了: 最終差分の回帰確認、UIの最終検証とコミット、正本文書の同期。以下の最終検証で完了した。
+
+## Implementation result and final verification
+
+承認済み仕様を実装した。ジョブ詳細から単一ジョブを保留でき、実行中は中断待ちとして解除を無効化し、中断確認後に解除できる。一覧には全体停止の理由・日時・原因ジョブと再開操作、個別保留の表示を追加した。全体停止と個別保留は独立し、解除だけでは全体停止を解除しない。承認済み外部仕様からの変更はない。
+
+- `dotnet build HorseRacingPrediction.sln --artifacts-path .artifacts/collection-hold -v quiet`: 成功、警告0・エラー0。
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests --artifacts-path .artifacts/collection-hold`: 113件成功。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests --artifacts-path .artifacts/collection-hold --no-restore`: 119件成功。タイムアウト停止、リース・完了との競合、保留中の再取得拒否、中断応答、解除、旧DB移行、ホスト終了の区別、UIの中断待ち・読込失敗と再試行を含む。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests --artifacts-path .artifacts/collection-hold --filter 'TestCategory!=External'`: 固定テスト160件成功。自動テスト合計392件成功。
+- 隔離したlocalhost API・SQLiteと合成ジョブを用いてEdge/Playwrightで検証。Enterキーでの保留と解除、中断待ちの解除無効化、中断応答後の自動更新、全体停止中の個別解除、明示的な全体再開、409競合表示、空一覧を確認。360px幅でページの横溢れなし、ブラウザー例外なし。
+- 画面確認: [実行中の中断待ち](verification/desktop-pending.png)、[360pxの保留状態](verification/mobile-held.png)、[収集全体停止](verification/mobile-stopped.png)。
+- `git diff --check`で差分を確認。利用者の既存`PlaywrightWebBrowser.cs`変更は保持し、コミット対象から除外した。
+
+残課題: 承認範囲の実装・検証に未完了はない。本番へのデプロイや既存開発プロセスの再起動、実ジョブ・キューの変更は実施していない。反映時は新しい状態RPCとキャンセル監視を持つAPI・Collectorを合わせて更新する。旧Workerは新しい保留監視を持たないため、更新前の実行には即時の中断確認を期待しない。
+
+過去データ抽出は調査のみ完了。自動経路のNoOp登録と旧補完Workerの無効化が原因であり、手動の馬起点履歴探索とは未接続。自動復旧・既存要求の移行・大量再登録は今回の対象外として未実施。

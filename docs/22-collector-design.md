@@ -33,6 +33,14 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 | `HistoricalDataRequestExecutionService`（旧経路） | 現行CollectorではDI登録が無効で、旧補完要求を実行しない |
 | `CollectionExecutionTrigger` | 収集実行の即時トリガー |
 
+### タイムアウトと実行保留
+
+`CollectionTaskRunner`が単発・常駐・計画ジョブの有効リース、個別保留、内部デッドラインとジョブ制限時間を監視する。タイムアウトは失敗試行と収集全体停止を同時保存し、Readyへ戻さない。ホストの通常終了による中断は再投入、個別保留による中断はキャンセルした試行として記録する。
+
+個別保留は既存の実行状態とは独立した`IsHeld`で永続化する。Running中はキャンセル要求済みを表し、Workerは1秒間隔（照会のタイムアウト3秒）で確認する。ブラウザー等の後始末後に有効リースで中断応答すると、実行状態をReadyへ戻し、IsHeldを維持して保留を確定する。保留解除だけがIsHeldを解除し、新しい配送世代を作る。旧リース/通知の結果は新しい実行に適用しない。
+
+保留中の親を依存解消で完了させず、解除時に子の結果を再集計する。親・子への保留の連鎖は行わない。スケジュール再登録、watchdog、リラン、重複依頼でも個別保留を維持する。全体停止中も実行中Workerの状態照会・結果報告を受け付ける。DBの追加列は既存行を非保留として移行し、データと履歴を保持する。[設計と検証](changes/20260908_collection-timeout-hold/README.md)を参照。
+
 ### 過去データ補完
 
 馬・調教師の /api/admin/subjects/{kind}/{id}/collection/profile と馬の collection/history がSubjectProfileRefresh / HorseHistoryDiscoveryを登録する。履歴探索の親ジョブが、全ページからHorseHistoryRace子ジョブを作る。地方・海外等はHorseHistoryExcludedとして理由を保存し配送しない。探索完了を永続チェックポイントに記録し、再開・再試行は成功済み子を維持して失敗分だけ投入する。新規依頼では保存済みレースも再更新する。常駐・単発とも稼働中CollectionExecutionServiceが実行し、下表の旧補完Workerには依存しない。[決定と検証](changes/20260908_subject-refresh-horse-history/README.md)を参照。

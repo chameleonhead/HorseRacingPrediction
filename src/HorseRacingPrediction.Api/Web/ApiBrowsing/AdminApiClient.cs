@@ -124,6 +124,9 @@ public sealed partial class AdminApiClient
     public Task<AdminApiResult> RerunJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/rerun", new { expectedUpdatedAt, reason }, cancellationToken);
 
+    public Task<AdminApiResult> SetJobHoldAsync(string jobId, bool hold, DateTimeOffset expectedUpdatedAt, CancellationToken token = default)
+        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/{(hold ? "hold" : "release-hold")}", new { expectedUpdatedAt }, token);
+
     public Task<AdminApiResult> ReacquireJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/reacquire", new { expectedUpdatedAt, reason }, cancellationToken);
 
@@ -332,7 +335,7 @@ public sealed partial class AdminApiClient
     private sealed record MemoIdResponse(string MemoId);
 }
 
-public sealed record JobQueueStateResponse(bool IsPaused);
+public sealed record JobQueueStateResponse(bool IsPaused, string? Reason = null, string? JobId = null, DateTimeOffset? StoppedAt = null);
 
 public sealed record AdminApiResult(bool Success, IReadOnlyList<string> Errors)
 {

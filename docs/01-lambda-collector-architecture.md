@@ -149,7 +149,7 @@ public interface ICollectionWorker
 - SQS event source mapping が通知1件につき Worker Lambda を起動する
 - reserved concurrency は当初 `1` とし、JRA への負荷と現行 `MaxConcurrentJobs = 1` を維持する
 - Lambda timeout は15分、Workerの内部deadlineは14分、現行タスクリースの既定値は30分とする
-- 2026-09-08時点の実装は内部deadline到達時にジョブをReadyへ戻す。通常の単発収集はそのままreturnし、計画ジョブはキャンセルを再送出する。この再投入が実ログでも確認されている。期限到達を失敗確定とし、明示的な停止・保留を提供する[変更案](changes/20260908_collection-timeout-hold/README.md)は承認待ちであり、現行挙動とは区別する。
+- 内部deadlineとジョブ単位のタイムアウトは失敗として確定し、失敗試行・RequestIdと収集全体の停止を同時に保存する。自動再投入せず、Lambdaにも失敗を返す。明示的な全体再開まで後続の配送・新規リースを拒否する。個別保留は単一ジョブのキャンセル要求として扱い、失敗や全体停止と区別する。[設計と検証](changes/20260908_collection-timeout-hold/README.md)を参照。
 - APIの5分ごとの監視は、対象ジョブのリース期限が存在し、現在時刻以下の場合だけ再送する。有効なリースと期限未設定のジョブは変更しない。リース不一致による状態更新拒否はAPIの警告ログへ記録する。
 - `/tmp` はブラウザーの一時ファイル専用とし、状態の正本にはしない
 - API キーなどは Secrets Manager または SSM Parameter Store から注入し、イメージや設定ファイルへ含めない
