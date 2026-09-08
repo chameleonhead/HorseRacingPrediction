@@ -13,7 +13,11 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string RacecourseCode,
         int RaceNumber,
         string RaceName,
-        int? EntryCount);
+        int? EntryCount,
+        string? GradeCode = null,
+        string? SurfaceCode = null,
+        int? DistanceMeters = null,
+        string? DirectionCode = null);
 
     public sealed record UpsertRaceEntryCall(
         string RaceId,
@@ -25,7 +29,9 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         decimal? AssignedWeight,
         decimal? DeclaredWeight,
         decimal? DeclaredWeightDiff,
-        string? OwnerName);
+        string? OwnerName,
+        string? SexCode = null,
+        int? Age = null);
 
     public List<UpsertRaceCall> UpsertRaceCalls { get; } = [];
 
@@ -63,7 +69,8 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         string? directionCode,
         CancellationToken cancellationToken = default)
     {
-        UpsertRaceCalls.Add(new UpsertRaceCall(raceDate, racecourseCode, raceNumber, raceName, entryCount));
+        UpsertRaceCalls.Add(new UpsertRaceCall(raceDate, racecourseCode, raceNumber, raceName, entryCount,
+            gradeCode, surfaceCode, distanceMeters, directionCode));
         return Task.FromResult($"race-{raceDate}-{racecourseCode}-{raceNumber}");
     }
 
@@ -121,7 +128,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     {
         UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(
             raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber, assignedWeight,
-            declaredWeight, declaredWeightDiff, null));
+            declaredWeight, declaredWeightDiff, null, sexCode, age));
         return Task.FromResult($"{raceId}-entry-{horseNumber}");
     }
 
@@ -134,7 +141,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     {
         UpsertRaceEntryCalls.Add(new UpsertRaceEntryCall(
             raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber, assignedWeight,
-            declaredWeight, declaredWeightDiff, ownerName));
+            declaredWeight, declaredWeightDiff, ownerName, sexCode, age));
         return Task.FromResult($"{raceId}-entry-{horseNumber}");
     }
 

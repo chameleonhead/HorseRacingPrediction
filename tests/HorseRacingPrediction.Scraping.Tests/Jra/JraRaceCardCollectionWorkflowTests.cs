@@ -84,8 +84,12 @@ public sealed class JraRaceCardCollectionWorkflowTests
         var card1 = CreateRaceCard(
             race1.Id,
             "1R テストレース",
-            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m),
-            new RaceEntry(2, "テストホースB", 2, "テスト騎手B", 54.0m));
+            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, SexCode: "F", Age: 3),
+            new RaceEntry(2, "テストホースB", 2, "テスト騎手B", 54.0m)) with
+        {
+            GradeCode = "G2",
+            CourseSpec = new RaceCourseSpec(1600, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Left, "外", "芝・左 外"),
+        };
 
         var card2 = CreateRaceCard(
             race2.Id,
@@ -117,8 +121,16 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.AreEqual(1, writeService.UpsertRaceCalls[0].RaceNumber);
         Assert.AreEqual("1R テストレース", writeService.UpsertRaceCalls[0].RaceName);
         Assert.AreEqual(2, writeService.UpsertRaceCalls[0].EntryCount);
+        Assert.AreEqual("G2", writeService.UpsertRaceCalls[0].GradeCode);
+        Assert.AreEqual(1600, writeService.UpsertRaceCalls[0].DistanceMeters);
+        Assert.AreEqual("芝", writeService.UpsertRaceCalls[0].SurfaceCode);
+        Assert.AreEqual("左", writeService.UpsertRaceCalls[0].DirectionCode);
 
         Assert.AreEqual(2, writeService.UpsertRaceCalls[1].RaceNumber);
+
+        var firstEntry = writeService.UpsertRaceEntryCalls.Single(x => x.RaceId == "race-2026-09-06-東京-1" && x.HorseNumber == 1);
+        Assert.AreEqual("F", firstEntry.SexCode);
+        Assert.AreEqual(3, firstEntry.Age);
 
         var expectedRaceId1 = $"race-2026-09-06-東京-1";
         var expectedRaceId2 = $"race-2026-09-06-東京-2";

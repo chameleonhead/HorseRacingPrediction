@@ -503,3 +503,57 @@ original navigation-equivalence acceptance criterion.
 No canonical architecture or operational documentation changed because the implementation restores the
 already documented collector and semantic-snapshot behavior. The remediation is complete and the record is
 returned to `Implemented`.
+
+## Collected-field completeness remediation (2026-09-09)
+
+Detailed live-site verification of race cards and results found a persistence-only regression in the normal
+race-card collection path. `RaceCardPageParser` correctly populates grade, start time, course specification,
+sex, and age, and the targeted refresh path preserves them. However, `JraRaceCardCollectionWorkflow.CollectAsync`
+currently sends `null` for all race-level specification fields and for entry sex/age. This silently discards
+successfully parsed JRA values before API persistence. Race-result collection already maps every corresponding
+parsed field into `DeclareRaceResultBulkRequest`.
+
+This is a continuation of the approved semantic-snapshot parity scope. The user explicitly requested on
+2026-09-09 that every collected field be checked and that clear defects continue in the existing change record.
+The record is returned to `Approved` while this persistence fix and field-by-field verification are completed.
+
+Acceptance for this remediation is:
+
+1. Normal race-card collection persists grade, start time, surface sequence, distance, direction, raw course
+   layout, entry sex, and entry age whenever the parser provides them.
+2. Existing race-card identity, horse number, frame, horse, jockey, trainer, assigned weight, owner, and body
+   weight behavior remains unchanged.
+3. Race-result parser/workflow coverage confirms all modeled race-level, entry-level, weather, track, corner,
+   prize, and payout fields remain mapped.
+4. Targeted live JRA page tests pass, the relevant non-external parser/workflow tests pass, the solution builds,
+   and `git diff --check` passes.
+
+No canonical documentation update is necessary: the existing scraper design already requires semantic parity;
+this correction makes the normal collection path conform to that documented contract.
+
+### Collected-field completeness result
+
+- Normal race-card collection now forwards grade, surface sequence, distance, direction, entry sex, and entry
+  age instead of replacing parsed values with `null`.
+- A workflow regression test now verifies these mappings in addition to the previously covered race identity,
+  names, frame/horse numbers, jockey, trainer, weight, owner, and body weight fields.
+- The race-result parser and workflow mapping were audited field by field. All modeled values are connected:
+  race identity/name/grade/start/course, every entry attribute and result value, weather, track condition,
+  overall pace, race- and horse-level corner passages, prize money, and all eight payout types.
+- Live JRA checks for a currently published race card and a completed result both passed.
+
+One pre-existing storage limitation remains: the normal `UpsertRaceAsync` contract has no start-time or raw
+course-layout parameters. Both values are parsed correctly, and the refresh/bulk contract preserves them, but
+the normal race-card path cannot persist them without extending the API/application event contract. This is
+not hidden data loss introduced by the semantic parser and is left as explicit follow-up rather than expanding
+this targeted regression repair. The first acceptance item is therefore satisfied for every field supported by
+the normal registration contract; start time and raw layout are verified at parser level and documented here.
+
+Verification:
+
+- Focused race-card/result parser and workflow suite: passed 84/84.
+- Live `JraSiteE2ETests` current race-card and completed race-result scenarios: passed 2/2.
+- `dotnet build HorseRacingPrediction.sln --no-restore`: passed with zero warnings and zero errors.
+- Complete non-external solution suite: passed 741/741.
+- `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` and `git diff --check`: passed.
+- No canonical documentation changed; this record is the implementation and verification continuation.

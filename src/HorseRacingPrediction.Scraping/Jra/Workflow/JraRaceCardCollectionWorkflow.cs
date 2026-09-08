@@ -134,10 +134,17 @@ public sealed partial class JraRaceCardCollectionWorkflow
             raceNumber: race.Number,
             raceName: raceName,
             entryCount: card.Entries.Count > 0 ? card.Entries.Count : null,
-            gradeCode: null,
-            surfaceCode: null,
-            distanceMeters: null,
-            directionCode: null,
+            gradeCode: card.GradeCode,
+            surfaceCode: card.CourseSpec is null
+                ? null
+                : string.Join("→", card.CourseSpec.Surfaces.Select(ToSurfaceCode)),
+            distanceMeters: card.CourseSpec?.DistanceMeters,
+            directionCode: card.CourseSpec?.Direction switch
+            {
+                CourseDirection.Left => "左",
+                CourseDirection.Right => "右",
+                _ => null,
+            },
             cancellationToken: cancellationToken);
 
         await _writeService.RecordSourceCitationAsync(
@@ -177,8 +184,8 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 trainerName: entry.TrainerName,
                 gateNumber: entry.FrameNumber,
                 assignedWeight: entry.AssignedWeight,
-                sexCode: null,
-                age: null,
+                sexCode: entry.SexCode,
+                age: entry.Age,
                 declaredWeight: entry.BodyWeight,
                 declaredWeightDiff: entry.BodyWeightChange,
                 ownerName: entry.OwnerName,
@@ -187,4 +194,12 @@ public sealed partial class JraRaceCardCollectionWorkflow
 
         return (raceId, raceName, card.Url);
     }
+
+    private static string ToSurfaceCode(CourseSurface surface) =>
+        surface switch
+        {
+            CourseSurface.Turf => "芝",
+            CourseSurface.Dirt => "ダート",
+            _ => throw new ArgumentOutOfRangeException(nameof(surface), surface, null),
+        };
 }
