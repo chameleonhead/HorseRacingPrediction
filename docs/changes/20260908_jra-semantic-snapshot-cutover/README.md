@@ -80,6 +80,7 @@ Extend semantic `PageTableCellSnapshot` with:
 
 ```csharp
 public IReadOnlyList<PageElementFragmentSnapshot> Fragments { get; init; } = [];
+public PageSourceReference? Source { get; init; }
 
 public sealed record PageElementFragmentSnapshot
 {
@@ -164,6 +165,66 @@ prompt/link limits at formatting time. `HistoricalRaceReferenceParser` moves to 
 These consumers are part of the cutover acceptance criteria, not follow-up work, because deleting the old
 model otherwise breaks the solution outside JRA.
 
+## Design review and resolved implementation details
+
+### Buildable transition without a runtime fallback
+
+The first draft switched `IWebBrowser.GetPageSnapshotAsync` before migrating consumers, which cannot form a
+buildable checkpoint. During development only, add a clearly named semantic capture member alongside the
+legacy member. Migrate one consumer slice at a time; no call path invokes both captures for one read. After
+the last consumer switches, remove the legacy member and rename the semantic member to
+`GetPageSnapshotAsync` in the removal checkpoint.
+
+The temporary member is a branch-local compatibility seam, not a production rollout fallback. The branch is
+not mergeable until it is deleted, satisfying the requested final direct cutover while keeping every commit
+buildable and testable.
+
+### Snapshotter construction
+
+`PlaywrightWebBrowser` will own an `IPageSnapshotter` field. `CreateAsync` accepts an optional snapshotter for
+focused tests and otherwise constructs `PlaywrightPageSnapshotter`; `PlaywrightWebBrowserSessionFactory`
+receives the registered singleton and passes it to `CreateAsync`. This avoids exposing `IPage`, permits a
+capture spy in browser tests, and does not introduce a JRA-specific browser dependency.
+
+### Cell identity and truncation evidence
+
+Semantic cells gain `Source` in addition to `Fragments`. Fragment truncation diagnostics identify the table,
+row, and cell indexes in the message and attach the cell source. Locator hints are investigation aids, not
+stable primary keys; parsers consume fragments nested in their owning cell and never join them by selector.
+
+### Span-aware projection algorithm
+
+The JRA projection walks source rows in order and places each cell in the first unoccupied logical column.
+It reserves the covered rectangle for `RowSpan` and `ColumnSpan`, rejecting overlap, non-positive effective
+width, or a span extending beyond configured safety bounds. Header labels are built per logical column from
+applicable `th` cells in header rows, joining multi-row labels in top-to-bottom order without adjacent
+duplicates. Body rows expose logical columns while retaining references to originating cells.
+
+A table with irreconcilable overlap or inconsistent width produces a projection diagnostic and is not passed
+to a JRA parser. It is never padded in a way that silently moves a value under another header.
+
+### Agent text and snapshot prompts
+
+`Root.GetEffectiveText()` is acceptable for parser searches but is not a readable replacement for agent
+prompts by itself because it flattens block boundaries. Add a bounded generic text projection that emits
+headings, paragraphs, list items, links/images, and dedicated tables with line boundaries. Agent snapshot
+JSON is rebuilt from a size-bounded semantic projection rather than serializing source/location evidence and
+fragments wholesale. This preserves prompt budgets and avoids exposing class-token noise to the LLM.
+
+### Standalone browser models
+
+`GetLinksAsync`, click/form interaction operations, and their existing result records remain during this
+cutover because `JraNavigator` also uses link-only reads in paths where a full snapshot is unnecessary.
+They are not the removed page snapshot contract. Their names must be explicitly aliased where semantic link
+types coexist. Consolidating those standalone APIs is a separate cleanup after snapshot cutover and must not
+delay deletion of section capture.
+
+### Zero-reference removal gate
+
+Before deleting each legacy file, search the entire solution, including Agents and Collector tests—not only
+the Scraping project. The removal commit must contain a machine-readable zero-match check for legacy
+`PageSectionSnapshot`, `PageActionSnapshot`, `PageDomTextFragment`, and the legacy snapshot constructor.
+
 ## Performance and diagnostics
 
 - Normal snapshot capture performs one `EvaluateAsync`; fragment collection is part of that traversal.
@@ -179,14 +240,15 @@ model otherwise breaks the solution outside JRA.
 
 1. **Semantic fragment model and capture:** model, browser DTO, conversion, diagnostics, and focused tests.
 2. **Table projection and fixtures:** JRA-owned view plus multi-row header/span/malformed-table tests.
-3. **Browser boundary:** switch `IWebBrowser.GetPageSnapshotAsync`, `PlaywrightWebBrowser`, and fakes to the
-   semantic type while temporarily leaving dead compatibility files present.
+3. **Browser boundary:** add the temporary branch-only semantic capture member to `IWebBrowser`,
+   `PlaywrightWebBrowser`, and fakes; verify no request performs both captures.
 4. **Calendar and race-list:** migrate parsers and parity fixtures.
 5. **Race-card:** migrate fragment-dependent parsing and parity fixtures.
 6. **Race-result:** migrate all result/payout table variants and parity fixtures.
 7. **Navigator:** migrate semantic action/link candidates and navigation tests.
 8. **Agents and collector:** migrate prompt formatting, tool limits, and historical reference parsing.
-9. **Removal:** delete compatibility models and extraction implementation after zero-reference checks.
+9. **Removal:** remove the legacy member, rename semantic capture to `GetPageSnapshotAsync`, and delete
+   compatibility models/extraction after solution-wide zero-reference checks.
 10. **Final verification:** performance record, full non-external suite, selected local-browser scenarios,
     documentation synchronization, and status `Implemented`.
 
@@ -224,6 +286,9 @@ rollouts.
     receive explicit re-approval.
 11. `dotnet build HorseRacingPrediction.sln` and the complete non-external suite pass.
 12. Canonical documentation contains no statement that the compatibility snapshot remains active.
+13. The temporary semantic capture member used for buildable migration is absent from the final public API.
+14. Agent text and JSON projections preserve useful block/table structure and enforce existing prompt limits
+    without serializing fragment class tokens or source/location evidence by default.
 
 ## Risks and mitigations
 
@@ -249,3 +314,7 @@ rollouts.
 This record is `Proposed`. Approval authorizes the breaking in-repository cutover, generic bounded cell
 fragments, removal of compatibility types and extraction, and migration of every listed first-party consumer.
 No production code changes are made before that approval.
+
+The design review found no remaining technical blocker to starting the cutover. The intentionally breaking
+scope, temporary build-only seam, fragment bounds, span projection failure behavior, and agent prompt
+projection are now explicit parts of the approval request.
