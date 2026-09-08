@@ -637,3 +637,11 @@ Final verification:
 - Live current-week race-card field verification and `ダイユウヴェンティ` standalone profile search: passed
   2/2 in 12 seconds.
 - `dotnet format --verify-no-changes` and `git diff --check`: passed.
+
+### Linux CI relative-URL remediation
+
+The first CI run after implementation exposed an OS-specific `System.Uri` behavior: Linux interpreted a JRA
+root-relative link such as `/datafile/meikan/trainer.html?initial=a` as an absolute `file:` URI, while Windows
+treated it as relative. `JraNavigator.HasPath` now recognizes only HTTP(S) values as browser absolute URLs and
+normalizes every other non-JavaScript value as a JRA relative link. This keeps query and fragment removal
+platform-independent.

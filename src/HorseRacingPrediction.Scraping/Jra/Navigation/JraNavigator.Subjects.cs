@@ -104,18 +104,19 @@ public sealed partial class JraNavigator
 
     internal static bool HasPath(string url, string expectedPath)
     {
-        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+        if (url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Unixでは先頭が / のJRA相対リンクを file: の絶対URIとして解釈する。
+        // ブラウザー上の絶対URLとして扱うのはHTTP(S)だけに限定する。
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
         {
             return absolute.AbsolutePath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase);
         }
 
-        if (!Uri.TryCreate(url, UriKind.Relative, out var relative) ||
-            url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var path = relative.OriginalString.Split(['?', '#'], 2)[0];
+        var path = url.Split(['?', '#'], 2)[0];
         return path.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) ||
                expectedPath.EndsWith('/' + path, StringComparison.OrdinalIgnoreCase);
     }
