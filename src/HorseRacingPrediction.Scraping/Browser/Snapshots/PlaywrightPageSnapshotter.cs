@@ -327,7 +327,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
             };
             const nullable = value => {
                 const text = normalize(value);
-                return text.length === 0 ? null : text;
+                return text.trim().length === 0 ? null : text;
             };
             const sourceOf = element => {
                 const tagName = element.tagName.toLowerCase();
@@ -382,6 +382,13 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                 const hint = `${element.id} ${element.className || ''} ${element.getAttribute('aria-label') || ''}`.toLowerCase();
                 return /(^|[\s_-])(cookie|advert|ads|social|related)([\s_-]|$)/u.test(hint);
             };
+            const isPruned = element => {
+                if (isHidden(element)) return true;
+                for (let current = element; current instanceof Element; current = current.parentElement) {
+                    if (isAggressiveNoise(current)) return true;
+                }
+                return false;
+            };
             const omittedTags = new Set(['script', 'style', 'noscript', 'template', 'canvas']);
             const roleKind = new Map([
                 ['navigation', 'Navigation'], ['article', 'Article'], ['complementary', 'Aside'],
@@ -402,36 +409,44 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
             };
             const walk = element => {
                 const tag = element.tagName.toLowerCase();
-                if (omittedTags.has(tag) || isHidden(element) || isAggressiveNoise(element)) return [];
+                if (omittedTags.has(tag) || isPruned(element)) return [];
                 if (tag === 'svg') {
                     const name = accessibleName(element);
                     return name ? [{ kind: 'Image', text: null, headingLevel: null, role: nullable(element.getAttribute('role')), accessibleName: name, location: locationOf(element), source: sourceOf(element), children: [] }] : [];
                 }
 
-                const children = Array.from(element.children).flatMap(walk);
                 const text = ownText(element);
+                const hasElementChildren = element.childElementCount > 0;
+                const children = hasElementChildren ? Array.from(element.childNodes).flatMap(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE) return walk(child);
+                    if (child.nodeType !== Node.TEXT_NODE) return [];
+                    const childText = normalize(child.textContent);
+                    return childText.trim() ? [{ kind: 'Text', text: childText, headingLevel: null, role: null, accessibleName: null,
+                        location: locationOf(element), source: sourceOf(element), children: [] }] : [];
+                }) : [];
                 const explicitRole = nullable(element.getAttribute('role'));
                 let kind = explicitRole ? roleKind.get(explicitRole.toLowerCase()) : null;
                 kind ||= tagKind.get(tag) || null;
 
                 if (!kind && options.pruning === 'none' && (tag === 'div' || tag === 'span')) kind = 'Section';
                 if (!kind) {
-                    const result = [];
-                    if (text) result.push({ kind: 'Text', text, headingLevel: null, role: explicitRole, accessibleName: null, location: locationOf(element), source: sourceOf(element), children: [] });
-                    return result.concat(children);
+                    if (hasElementChildren) return children;
+                    return text.trim() ? [{ kind: 'Text', text, headingLevel: null, role: explicitRole, accessibleName: null,
+                        location: locationOf(element), source: sourceOf(element), children: [] }] : [];
                 }
 
                 const headingLevel = kind === 'Heading'
                     ? (/^h[1-6]$/u.test(tag) ? Number(tag.substring(1)) : Number(element.getAttribute('aria-level')) || null)
                     : null;
-                const nodeText = tag === 'img' ? null : (text || null);
+                const nodeText = tag === 'img' || hasElementChildren ? null : (text || null);
                 const name = ['Link', 'Image', 'Button'].includes(kind) || explicitRole ? accessibleName(element) : null;
-                if (!nodeText && children.length === 0 && !name) return [];
+                if ((!nodeText || !nodeText.trim()) && children.length === 0 && !name) return [];
                 return [{ kind, text: nodeText, headingLevel, role: explicitRole, accessibleName: name, location: locationOf(element), source: sourceOf(element), children }];
             };
 
             const diagnostics = [];
             const meta = {};
+            const metaNames = new Map();
             const jsonLd = [];
             let metadata = null;
             if (options.includeMetadata || options.includeStructuredData) {
@@ -440,8 +455,14 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                         const key = nullable(element.getAttribute('name') || element.getAttribute('property'));
                         const content = nullable(element.getAttribute('content'));
                         if (!key || !content) continue;
-                        if (!(key in meta)) meta[key] = content;
-                        else if (meta[key] !== content) diagnostics.push({ code: 'duplicate-meta', message: `Conflicting metadata for '${key}' was ignored.`, source: sourceOf(element) });
+                        const identity = key.toLowerCase();
+                        const existingKey = metaNames.get(identity);
+                        if (!existingKey) {
+                            metaNames.set(identity, key);
+                            meta[key] = content;
+                        } else if (meta[existingKey] !== content) {
+                            diagnostics.push({ code: 'duplicate-meta', message: `Conflicting metadata for '${key}' was ignored.`, source: sourceOf(element) });
+                        }
                     }
                 }
                 if (options.includeStructuredData) {
@@ -459,7 +480,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                 };
             }
 
-            const keyValues = options.includeStructuredData ? Array.from(document.querySelectorAll('dl')).flatMap(dl => {
+            const keyValues = options.includeStructuredData ? Array.from(document.querySelectorAll('dl')).filter(dl => !isPruned(dl)).flatMap(dl => {
                 const result = [];
                 let key = null;
                 let values = [];
@@ -468,6 +489,7 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                     values = [];
                 };
                 for (const child of Array.from(dl.children)) {
+                    if (isPruned(child)) continue;
                     if (child.tagName === 'DT') { flush(); key = renderedText(child); }
                     else if (child.tagName === 'DD' && key) values.push(renderedText(child));
                 }
@@ -476,31 +498,31 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
             }) : [];
 
             const tables = options.includeStructuredData ? Array.from(document.querySelectorAll('table'))
-                .filter(table => !isHidden(table))
+                .filter(table => !isPruned(table))
                 .map(table => ({
                     caption: nullable(table.caption?.innerText),
                     source: sourceOf(table),
-                    rows: Array.from(table.rows).map(row => ({ cells: Array.from(row.cells).map(cell => ({
+                    rows: Array.from(table.rows).filter(row => !isPruned(row)).map(row => ({ cells: Array.from(row.cells).filter(cell => !isPruned(cell)).map(cell => ({
                         text: renderedText(cell), isHeader: cell.tagName === 'TH', rowSpan: cell.rowSpan || 1, columnSpan: cell.colSpan || 1
                     })) }))
                 })) : [];
 
             const links = options.includeLinks ? Array.from(document.querySelectorAll('a[href]'))
-                .filter(link => !isHidden(link))
+                .filter(link => !isPruned(link))
                 .map(link => ({ text: renderedText(link), rawHref: link.getAttribute('href'), resolvedHref: link.href || null,
                     relation: nullable(link.getAttribute('rel')), title: nullable(link.getAttribute('title')),
                     accessibleName: accessibleName(link), source: sourceOf(link) })) : [];
 
             const images = options.includeImages ? Array.from(document.querySelectorAll('img'))
-                .filter(image => !isHidden(image))
+                .filter(image => !isPruned(image))
                 .map(image => ({ rawSource: image.getAttribute('src'), resolvedSource: image.src || null,
                     altText: nullable(image.alt), title: nullable(image.title), accessibleName: accessibleName(image), source: sourceOf(image) })) : [];
 
             const forms = options.includeForms ? Array.from(document.forms)
-                .filter(form => !isHidden(form))
+                .filter(form => !isPruned(form))
                 .map(form => ({ name: nullable(form.getAttribute('name')), rawAction: form.getAttribute('action'), resolvedAction: form.action || null,
                     method: (form.getAttribute('method') || 'get').toUpperCase(), source: sourceOf(form),
-                    controls: Array.from(form.querySelectorAll('input, select, textarea, button')).filter(control => !isHidden(control)).map(control => {
+                    controls: Array.from(form.querySelectorAll('input, select, textarea, button')).filter(control => !isPruned(control)).map(control => {
                         const type = (control.getAttribute('type') || control.tagName.toLowerCase()).toLowerCase();
                         const sensitive = type === 'password' || type === 'file';
                         const selectedOptions = control instanceof HTMLSelectElement

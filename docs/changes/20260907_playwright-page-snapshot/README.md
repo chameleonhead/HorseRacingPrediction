@@ -211,11 +211,21 @@ Implementation completed on 2026-09-07:
 
 - Added the additive immutable semantic model and query helpers under `Browser/Snapshots`.
 - Added `PlaywrightPageSnapshotter`, using one page-level `EvaluateAsync` followed by .NET DTO conversion and JSON-LD parsing.
-- Added eleven local Chromium integration tests covering semantic compression, direct-text ownership, visibility, all pruning levels, structured collections, metadata, invalid JSON-LD, sensitive form values, locations, options, cancellation, dynamic DOM, and large nested DOM reduction.
+- Added twelve local Chromium integration tests covering semantic compression, direct-text ownership/order, visibility, all pruning levels, structured collections, metadata, invalid JSON-LD, sensitive form values, locations, options, cancellation, dynamic DOM, and large nested DOM reduction.
 - `dotnet build src/HorseRacingPrediction.Scraping/HorseRacingPrediction.Scraping.csproj --no-restore` — passed with zero warnings and errors.
-- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-restore --filter "FullyQualifiedName~PlaywrightPageSnapshotterTests"` — passed 11/11.
-- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-build --filter "TestCategory!=External"` — passed 157/157.
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-restore --filter "FullyQualifiedName~PlaywrightPageSnapshotterTests"` — passed 12/12.
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests/HorseRacingPrediction.Scraping.Tests.csproj --no-build --filter "TestCategory!=External"` — passed 158/158.
 - The initial unfiltered test invocation was stopped because it included the explicitly external JRA site suites; the repository-documented non-external filter was then used for deterministic regression verification.
+
+## Post-implementation review
+
+The implementation was reviewed again on 2026-09-08. Three correctness issues were found and corrected:
+
+- Mixed text and inline elements were previously grouped as parent own-text followed by all child nodes, which could change `before <strong>middle</strong> after` into `before after middle`. Direct text nodes are now emitted at their original child-node positions whenever an element has element children.
+- Aggressive and hidden pruning originally applied fully to the semantic tree but not to every dedicated collection. Definition lists, table rows/cells, links, images, forms, and controls now use the same ancestor-aware pruning decision.
+- Metadata keys differing only by case could survive browser collection and then collide in the case-insensitive .NET dictionary. Browser extraction now deduplicates keys case-insensitively, retains the first value, and emits a conflict diagnostic.
+
+The review also tightened `NormalizeWhitespace = false`: formatting is preserved for meaningful text, while whitespace-only DOM nodes remain excluded as empty nodes.
 
 ## Deviations and follow-up
 

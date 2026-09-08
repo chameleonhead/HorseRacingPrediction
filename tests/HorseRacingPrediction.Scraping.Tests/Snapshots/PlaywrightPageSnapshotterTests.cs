@@ -34,7 +34,7 @@ public sealed class PlaywrightPageSnapshotterTests
     public async Task CaptureAsync_BuildsSemanticTreeWithoutWrapperOrParentTextDuplication()
     {
         await SetContentAsync("""
-            <main><article><h1>Title</h1><p>Hello <strong>World</strong></p></article></main>
+            <main><article><h1>Title</h1><p>Hello <strong>World</strong> again</p></article></main>
             <div><span><span>Wrapper text</span></span></div>
             """);
 
@@ -45,6 +45,9 @@ public sealed class PlaywrightPageSnapshotterTests
         Assert.AreEqual("Title", snapshot.FindHeadings().Single().Text);
         Assert.AreEqual(1, nodes.Count(node => node.Text == "Hello"));
         Assert.AreEqual(1, nodes.Count(node => node.Text == "World"));
+        CollectionAssert.AreEqual(
+            new[] { "Hello", "World", "again" },
+            nodes.Where(node => node.Text is "Hello" or "World" or "again").Select(node => node.Text).ToArray());
         Assert.AreEqual(1, nodes.Count(node => node.Text == "Wrapper text"));
         Assert.IsFalse(nodes.Any(node => node.Text?.Contains("Title Hello World", StringComparison.Ordinal) == true));
     }
@@ -113,6 +116,7 @@ public sealed class PlaywrightPageSnapshotterTests
             <html lang="ja"><head><title>Example</title>
               <meta name="description" content="A page">
               <meta property="og:title" content="OG title">
+              <meta property="OG:TITLE" content="Conflicting title">
               <meta name="twitter:card" content="summary">
               <link rel="canonical" href="https://example.test/canonical">
               <script type="application/ld+json">{"@type":"Thing","name":"Valid"}</script>
@@ -130,6 +134,7 @@ public sealed class PlaywrightPageSnapshotterTests
         Assert.AreEqual("https://example.test/canonical", snapshot.Metadata.CanonicalUrl!.AbsoluteUri);
         Assert.AreEqual("Valid", snapshot.Metadata.JsonLd.Single().Value.GetProperty("name").GetString());
         Assert.IsTrue(snapshot.Diagnostics.Any(item => item.Code == "invalid-json-ld"));
+        Assert.IsTrue(snapshot.Diagnostics.Any(item => item.Code == "duplicate-meta"));
     }
 
     [TestMethod]
@@ -194,6 +199,7 @@ public sealed class PlaywrightPageSnapshotterTests
         Assert.IsEmpty(snapshot.Tables);
         Assert.IsEmpty(snapshot.Metadata.Meta);
         Assert.IsEmpty(snapshot.Metadata.JsonLd);
+        Assert.IsFalse(snapshot.Root.Descendants().Any(node => node.Text is not null && string.IsNullOrWhiteSpace(node.Text)));
     }
 
     [TestMethod]
@@ -210,6 +216,26 @@ public sealed class PlaywrightPageSnapshotterTests
             safe.Root.Descendants().Count(node => node.Kind == PageContentKind.Section),
             unpruned.Root.Descendants().Count(node => node.Kind == PageContentKind.Section));
         Assert.Contains("Grouped", SnapshotText(unpruned));
+    }
+
+    [TestMethod]
+    public async Task CaptureAsync_PruningAlsoAppliesToStructuredCollections()
+    {
+        await SetContentAsync("""
+            <main><a href="/kept">Kept</a><dl><dt>Shown</dt><dd>Value</dd></dl></main>
+            <nav><a href="/pruned">Pruned</a></nav>
+            <footer><table><tr><td>Footer table</td></tr></table></footer>
+            <div hidden><dl><dt>Hidden</dt><dd>Value</dd></dl><form><input name="secret"></form></div>
+            """);
+
+        var snapshot = await _snapshotter.CaptureAsync(
+            _page,
+            new PageSnapshotOptions { Pruning = PageSnapshotPruningLevel.Aggressive });
+
+        Assert.AreEqual("Kept", snapshot.Links.Single().Text);
+        Assert.AreEqual("Shown", snapshot.KeyValues.Single().Key);
+        Assert.IsEmpty(snapshot.Tables);
+        Assert.IsEmpty(snapshot.Forms);
     }
 
     [TestMethod]
