@@ -152,6 +152,10 @@ parser単位の推奨順序は、[JRA Semantic Snapshot Migration](changes/20260
 で管理する。同recordは`Proposed`であり、明示的な承認と実装が完了するまでは本書の互換snapshot経路を
 現行設計として維持する。
 
+既存Snapshotを削除してSemantic Snapshotへ直接切り替え、汎用Table Cell Fragmentを追加する具体案は、
+[JRA Semantic Snapshot Cutover](changes/20260908_jra-semantic-snapshot-cutover/README.md)で管理する。
+このcutover recordが承認された場合は、先行する段階移行案より優先する。
+
 ---
 
 # 3. 新規ディレクトリ構成

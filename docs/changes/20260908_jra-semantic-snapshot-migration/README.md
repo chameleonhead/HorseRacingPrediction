@@ -15,6 +15,10 @@ to migrate JRA without conflating browser capture, parser rewrites, and navigati
 This is a planning record. Production migration starts only after its open decisions are resolved and the
 user explicitly approves the resulting design.
 
+The later [direct-cutover proposal](../20260908_jra-semantic-snapshot-cutover/README.md) incorporates the
+user's requested deletion of the compatibility snapshot and bounded Table Cell Fragments. If approved, that
+record supersedes this document's staged-runtime and fallback recommendations.
+
 ## Current execution path
 
 ```text
