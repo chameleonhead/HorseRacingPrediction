@@ -174,6 +174,9 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual(1, entry.HorseNumber);
         Assert.AreEqual("バニーラビット", entry.HorseName);
         Assert.AreEqual("藤田 晋", entry.OwnerName);
+        Assert.AreEqual("ノーザンファーム", entry.BreederName);
+        Assert.AreEqual("アドマイヤマーズ", entry.SireName);
+        Assert.AreEqual("トレジャリング", entry.DamName);
         Assert.AreEqual("武 幸四郎", entry.TrainerName);
         Assert.AreEqual("小牧 加矢太", entry.JockeyName);
         Assert.AreEqual(60.0m, entry.AssignedWeight);

@@ -17,21 +17,23 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     }
 
     public void RegisterHorse(string registeredName, string normalizedName,
-        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null)
+        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null,
+        string? breederName = null, string? sireName = null, string? damName = null)
     {
         if (_state.IsRegistered)
             throw new InvalidOperationException("Horse is already registered.");
 
-        Emit(new HorseRegistered(registeredName, normalizedName, sexCode, birthDate, ownerName));
+        Emit(new HorseRegistered(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName));
     }
 
     public void UpdateProfile(string? registeredName = null, string? normalizedName = null,
-        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null)
+        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null,
+        string? breederName = null, string? sireName = null, string? damName = null)
     {
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Horse is not registered.");
 
-        Emit(new HorseProfileUpdated(registeredName, normalizedName, sexCode, birthDate, ownerName));
+        Emit(new HorseProfileUpdated(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName));
     }
 
     public void MergeAlias(string aliasType, string aliasValue, string sourceName, bool isPrimary)
@@ -60,6 +62,9 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
             _state.SexCode,
             _state.BirthDate,
             _state.OwnerName,
+            _state.BreederName,
+            _state.SireName,
+            _state.DamName,
             _state.Aliases);
     }
 

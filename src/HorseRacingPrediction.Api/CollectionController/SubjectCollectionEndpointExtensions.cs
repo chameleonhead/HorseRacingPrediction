@@ -75,7 +75,18 @@ public static class SubjectCollectionEndpointExtensions
                 || (subject.SourceIdentity is not null && subject.SourceIdentity != request.SourceIdentity))
                 return Results.Conflict(new[] { "同定不能: 保存済みの対象とプロフィールが一致しません。" });
             var data = new CollectedSubjectProfile(request.Name, request.SourceIdentity, request.SourceUrl, request.Fields, request.AcquiredAt);
-            if (kind == "Horse") await commands.PublishAsync(new CollectHorseProfileCommand(new HorseId(subjectId), data), token);
+            if (kind == "Horse")
+            {
+                await commands.PublishAsync(new CollectHorseProfileCommand(new HorseId(subjectId), data), token);
+                static string? Field(IReadOnlyDictionary<string, string> fields, params string[] names) =>
+                    names.Select(fields.GetValueOrDefault).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+                var dam = Field(request.Fields, "母", "母馬");
+                if (dam is not null) dam = Regex.Replace(dam, @"[\(（]母の父：.*$", string.Empty).Trim();
+                await commands.PublishAsync(new UpdateHorseProfileCommand(new HorseId(subjectId),
+                    ownerName: Field(request.Fields, "馬主", "馬主名"),
+                    breederName: Field(request.Fields, "生産者", "生産牧場"),
+                    sireName: Field(request.Fields, "父", "父馬"), damName: dam), token);
+            }
             else await commands.PublishAsync(new CollectTrainerProfileCommand(new TrainerId(subjectId), data), token);
             return Results.Ok();
         });

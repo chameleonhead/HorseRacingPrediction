@@ -41,6 +41,11 @@ public interface IDataCollectionWriteService
         CancellationToken cancellationToken = default)
         => UpsertHorseAsync(registeredName, normalizedName, sexCode, birthDate, cancellationToken);
 
+    Task<string> UpsertHorseProfileAsync(string registeredName, string? normalizedName, string? sexCode,
+        string? birthDate, string? ownerName, string? breederName, string? sireName, string? damName,
+        CancellationToken cancellationToken = default)
+        => UpsertHorseWithOwnerAsync(registeredName, normalizedName, sexCode, birthDate, ownerName, cancellationToken);
+
     /// <summary>騎手を作成または更新し、騎手 ID を返す。</summary>
     Task<string> UpsertJockeyAsync(
         string displayName,

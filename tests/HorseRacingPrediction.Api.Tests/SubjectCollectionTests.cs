@@ -20,13 +20,17 @@ public sealed class SubjectCollectionTests
         (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("エンジャムメント", "エンジャムメント", "F", new DateOnly(2024, 4, 11), id, "旧馬主"))).EnsureSuccessStatusCode();
         var path = $"/api/admin/subjects/Horse/{id}/profile";
         var profile = new JraSubjectProfileDto("Horse", "エンジャムメント", "public-horse-id", "https://www.jra.go.jp/JRADB/accessU.html",
-            new() { ["生年月日"] = "2024年4月11日", ["性別"] = "牝", ["馬主名"] = "新馬主", ["父"] = "父馬", ["毛色"] = "栗毛" }, DateTimeOffset.UtcNow);
+            new() { ["生年月日"] = "2024年4月11日", ["性別"] = "牝", ["馬主名"] = "新馬主", ["生産牧場"] = "新生産者", ["父"] = "父馬", ["母"] = "母馬(母の父：母父馬)", ["毛色"] = "栗毛" }, DateTimeOffset.UtcNow);
         (await client.PostAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
         var next = profile with { Fields = new() { ["生年月日"] = "2024年4月11日", ["毛色"] = "鹿毛" } };
         (await client.PostAsJsonAsync(path, next)).EnsureSuccessStatusCode();
         var saved = (await client.GetFromJsonAsync<JraSubjectProfileDto>(path))!;
         Assert.AreEqual("鹿毛", saved.Fields["毛色"]); Assert.AreEqual("父馬", saved.Fields["父"]);
-        Assert.AreEqual("新馬主", (await client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{id}"))!.OwnerName);
+        var horse = (await client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{id}"))!;
+        Assert.AreEqual("新馬主", horse.OwnerName);
+        Assert.AreEqual("新生産者", horse.BreederName);
+        Assert.AreEqual("父馬", horse.SireName);
+        Assert.AreEqual("母馬", horse.DamName);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { SourceIdentity = "different" })).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { Fields = new() { ["生年月日"] = "2023年4月11日" } })).StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, profile with { Name = "別の馬" })).StatusCode);

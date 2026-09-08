@@ -14,4 +14,7 @@ public sealed record RaceEntry(
     int? BodyWeight = null,
     int? BodyWeightChange = null,
     string? SexCode = null,
-    int? Age = null);
+    int? Age = null,
+    string? BreederName = null,
+    string? SireName = null,
+    string? DamName = null);

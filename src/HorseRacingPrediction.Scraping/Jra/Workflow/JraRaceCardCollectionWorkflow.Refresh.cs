@@ -20,7 +20,8 @@ public sealed partial class JraRaceCardCollectionWorkflow
         var entries = card.Entries.Select(x => new RaceResultEntryBulkDto(x.HorseNumber, null, null, null,
             null, null, null, HorseName: x.HorseName, JockeyName: x.JockeyName, TrainerName: x.TrainerName,
             GateNumber: x.FrameNumber, AssignedWeight: x.AssignedWeight, BodyWeight: x.BodyWeight,
-            BodyWeightChange: x.BodyWeightChange, OwnerName: x.OwnerName, SexCode: x.SexCode, Age: x.Age)).ToArray();
+            BodyWeightChange: x.BodyWeightChange, OwnerName: x.OwnerName, SexCode: x.SexCode, Age: x.Age,
+            BreederName: x.BreederName, SireName: x.SireName, DamName: x.DamName)).ToArray();
         var saved = await _writeService.DeclareRaceResultBulkAsync(new(raceId.Date,
             RaceCourseNames.GetJraName(raceId.Course), raceId.Number, card.RaceName, EntryCount: entries.Length,
             GradeCode: card.GradeCode, DistanceMeters: card.CourseSpec?.DistanceMeters,

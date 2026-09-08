@@ -8,5 +8,8 @@ public sealed class HorseReadModel
     public string? SexCode { get; set; }
     public DateOnly? BirthDate { get; set; }
     public string? OwnerName { get; set; }
+    public string? BreederName { get; set; }
+    public string? SireName { get; set; }
+    public string? DamName { get; set; }
     public List<HorseAliasEntry> Aliases { get; set; } = [];
 }

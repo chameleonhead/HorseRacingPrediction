@@ -16,6 +16,9 @@ public class HorseReadModel : IReadModel,
     public string? SexCode { get; private set; }
     public DateOnly? BirthDate { get; private set; }
     public string? OwnerName { get; private set; }
+    public string? BreederName { get; private set; }
+    public string? SireName { get; private set; }
+    public string? DamName { get; private set; }
     public List<HorseAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
@@ -29,6 +32,7 @@ public class HorseReadModel : IReadModel,
         SexCode = e.SexCode;
         BirthDate = e.BirthDate;
         OwnerName = e.OwnerName;
+        BreederName = e.BreederName; SireName = e.SireName; DamName = e.DamName;
         return Task.CompletedTask;
     }
 
@@ -42,6 +46,9 @@ public class HorseReadModel : IReadModel,
         if (e.SexCode != null) SexCode = e.SexCode;
         if (e.BirthDate.HasValue) BirthDate = e.BirthDate;
         if (e.OwnerName != null) OwnerName = e.OwnerName;
+        if (e.BreederName != null) BreederName = e.BreederName;
+        if (e.SireName != null) SireName = e.SireName;
+        if (e.DamName != null) DamName = e.DamName;
         return Task.CompletedTask;
     }
 

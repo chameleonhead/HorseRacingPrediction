@@ -1,9 +1,9 @@
 # JRA Semantic Snapshot Cutover
 
-- Status: Approved
+- Status: Implemented
 - Owner: Scraping team
 - Created: 2026-09-08
-- Updated: 2026-09-08
+- Updated: 2026-09-09
 
 ## Context
 
@@ -596,7 +596,7 @@ Documentation updates:
 - `docs/23-jra-scraping-redesign.md`: updated the canonical field policy to include owner, breeder, sire, and
   dam and to distinguish the already-working owner path from the proposed model expansion.
 
-Production implementation is blocked until this proposed extension is explicitly approved.
+The extension was approved and has now been implemented.
 
 The user approved implementation on 2026-09-09 with one explicit source constraint: race-result pages cannot
 identify the owner. Owner must therefore be populated only from race-card or horse-profile evidence; result-only
@@ -615,3 +615,25 @@ this also removes an observed 30-second Playwright timeout during link extractio
 
 Verification: 36/36 navigator tests passed; the existing horse profile/history live test passed; and a new
 live regression test for `ダイユウヴェンティ` passed and confirmed a profile with birth-date evidence.
+
+### Horse ownership, breeder, and pedigree implementation result
+
+- Race-card parsing now retains owner, breeder, sire, and dam from semantic fragments and the ordered-text
+  fallback. A maternal-grandsire suffix is removed from the stored dam name.
+- Normal collection and race-card reacquisition forward all four fields into the horse profile. Profile events
+  and projections preserve an existing value when a later source omits it.
+- Race-result acquisition does not populate these profile fields. The reacquisition API updates them only when
+  the request is explicitly marked as a race card, so result-only collection cannot infer an owner.
+- Horse aggregate events, read models, HTTP contracts, detail API, and the horse detail screen expose breeder,
+  sire, and dam. The nullable SQLite columns are supplied by `AddHorseBreederAndPedigree`; legacy
+  `EnsureCreated` database baselining recognizes the columns and avoids duplicate-column migration failures.
+
+Final verification:
+
+- Solution build: passed with zero warnings and zero errors.
+- Complete non-external solution suite: passed 741/741.
+- Focused parser/race-card workflow suite: passed 23/23; focused subject/reacquisition API suite: passed 8/8;
+  SQLite migration suite: passed 11/11.
+- Live current-week race-card field verification and `ダイユウヴェンティ` standalone profile search: passed
+  2/2 in 12 seconds.
+- `dotnet format --verify-no-changes` and `git diff --check`: passed.

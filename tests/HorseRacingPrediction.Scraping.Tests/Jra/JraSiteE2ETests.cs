@@ -120,6 +120,12 @@ public sealed class JraSiteE2ETests
         Assert.IsTrue(raceCard.Entries.Count > 0, $"{race.Id} の出馬表に出走馬がありません。");
         Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
             $"{race.Id} に馬主を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.BreederName)),
+            $"{race.Id} に生産者を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.SireName)),
+            $"{race.Id} に父を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.DamName)),
+            $"{race.Id} に母を取得できない出走馬があります。");
         Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
             $"{race.Id} に馬体重を取得できない出走馬があります。");
         Assert.IsFalse(raceCard.Entries.Any(entry => decimal.TryParse(entry.OwnerName, out _)),

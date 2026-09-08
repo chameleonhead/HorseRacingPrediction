@@ -7,4 +7,7 @@ public sealed record HorseDetails(
     string? SexCode,
     DateOnly? BirthDate,
     string? OwnerName,
+    string? BreederName,
+    string? SireName,
+    string? DamName,
     IReadOnlyCollection<AliasDetails> Aliases);

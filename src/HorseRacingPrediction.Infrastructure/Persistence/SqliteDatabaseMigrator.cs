@@ -113,12 +113,22 @@ public sealed class SqliteDatabaseMigrator
         if (isPreviousEnsureCreatedSchema)
         {
             await using var columnCommand = connection.CreateCommand();
-            columnCommand.CommandText = "SELECT COUNT(*) FROM pragma_table_info('RacePredictionContexts') WHERE name='StartTime'";
-            var hasRaceMetadata = Convert.ToInt32(await columnCommand.ExecuteScalarAsync(cancellationToken)) > 0;
+            columnCommand.CommandText = """
+                SELECT
+                    EXISTS(SELECT 1 FROM pragma_table_info('RacePredictionContexts') WHERE name='StartTime'),
+                    EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='BreederName')
+                    AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='SireName')
+                    AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='DamName');
+                """;
+            await using var reader = await columnCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var hasRaceMetadata = reader.GetBoolean(0);
+            var hasHorsePedigree = reader.GetBoolean(1);
             baselineMigrations = migrations.Where(m => m.EndsWith("_InitialEventStore", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)
-                || (hasRaceMetadata && m.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal))).ToList();
+                || (hasRaceMetadata && m.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal))
+                || (hasHorsePedigree && m.EndsWith("_AddHorseBreederAndPedigree", StringComparison.Ordinal))).ToList();
         }
         foreach (var migration in baselineMigrations)
         {

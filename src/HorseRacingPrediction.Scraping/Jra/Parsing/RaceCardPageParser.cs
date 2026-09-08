@@ -439,7 +439,8 @@ public sealed class RaceCardPageParser
                 parsedHorse.TrainerName,
                 parsedHorse.OwnerName,
                 parsedHorse.BodyWeight,
-                parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null));
+                parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null,
+                parsedHorse.BreederName, parsedHorse.SireName, parsedHorse.DamName));
         }
 
         return entries;
@@ -511,6 +512,8 @@ public sealed class RaceCardPageParser
         {
             var semanticTrainer = cellSnapshot?.FindByClass("trainer")?.Text;
             var semanticWeight = cellSnapshot?.FindByClass("weight")?.Text;
+            var semanticBreeder = cellSnapshot?.FindByClass("breeder")?.Text;
+            var pedigreeText = cellSnapshot?.FindByClass("blood")?.Text ?? cellSnapshot?.FindByClass("pedigree")?.Text ?? cell;
             var (semanticBodyWeight, semanticBodyWeightChange) = ParseBodyWeight(semanticWeight, url);
 
             return new ParsedHorseCell(
@@ -518,7 +521,9 @@ public sealed class RaceCardPageParser
                 semanticTrainer is null ? null : ExtractTrainerName(semanticTrainer),
                 NormalizeOptionalText(cellSnapshot?.FindByClass("owner")?.Text),
                 semanticBodyWeight,
-                semanticBodyWeightChange);
+                semanticBodyWeightChange,
+                NormalizeOptionalText(semanticBreeder) ?? ParseBreeder(cell),
+                ParseParent(pedigreeText, "父"), ParseParent(pedigreeText, "母"));
         }
 
         var lines = cell
@@ -529,7 +534,7 @@ public sealed class RaceCardPageParser
 
         if (lines.Count == 0)
         {
-            return new ParsedHorseCell(string.Empty, null, null, null, null);
+            return new ParsedHorseCell(string.Empty, null, null, null, null, null, null, null);
         }
 
         var horseName = lines[0];
@@ -552,7 +557,28 @@ public sealed class RaceCardPageParser
         var fallbackWeight = lines.FirstOrDefault(IsBodyWeightLine);
         var (bodyWeight, bodyWeightChange) = ParseBodyWeight(fallbackWeight, url);
 
-        return new ParsedHorseCell(horseName, trainerName, ownerName, bodyWeight, bodyWeightChange);
+        return new ParsedHorseCell(horseName, trainerName, ownerName, bodyWeight, bodyWeightChange,
+            candidateLines.Where(l => l != trainerLine && l != ownerName).Skip(0).FirstOrDefault(),
+            ParseParent(cell, "父"), ParseParent(cell, "母"));
+    }
+
+    private static string? ParseBreeder(string cell)
+    {
+        var lines = cell.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+        var candidates = lines.Skip(1).Where(x => !IsStatLine(x) && !IsFamilyLine(x)
+            && !TrainerAffiliationSuffixRegex.IsMatch(x)).ToArray();
+        return candidates.Length >= 2 ? candidates[1] : null;
+    }
+
+    private static string? ParseParent(string cell, string label)
+    {
+        var match = Regex.Match(cell, label == "父"
+            ? @"父：(?<value>.*?)(?=母：|$)"
+            : @"母：(?<value>.*)$", RegexOptions.Singleline);
+        if (!match.Success) return null;
+        var value = match.Groups["value"].Value.Trim();
+        if (label == "母") value = Regex.Replace(value, @"[\(（]母の父：.*$", string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static bool IsStatLine(string line)
@@ -601,5 +627,8 @@ public sealed class RaceCardPageParser
         string? TrainerName,
         string? OwnerName,
         int? BodyWeight,
-        int? BodyWeightChange);
+        int? BodyWeightChange,
+        string? BreederName,
+        string? SireName,
+        string? DamName);
 }

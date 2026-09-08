@@ -4,6 +4,7 @@ using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Races;
+using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -65,6 +66,14 @@ public static partial class EndpointExtensions
                 EntryId: entryId, HorseName: source.HorseName, JockeyName: source.JockeyName,
                 TrainerName: source.TrainerName, OwnerName: source.OwnerName);
             await EnsureRelatedSubjectsAsync(registration, commands, dbProvider, token);
+            // 馬主・生産者・血統は出馬表由来の場合だけ馬プロフィールへ反映する。
+            // レース結果には馬主を特定できる情報がないため、結果再取得からは更新しない。
+            if (request.IsRaceCard && new[] { source.OwnerName, source.BreederName, source.SireName, source.DamName }
+                    .Any(value => !string.IsNullOrWhiteSpace(value)))
+                await commands.PublishAsync(new UpdateHorseProfileCommand(
+                    new HorseRacingPrediction.Domain.Horses.HorseId(horseId),
+                    ownerName: source.OwnerName, breederName: source.BreederName,
+                    sireName: source.SireName, damName: source.DamName), token);
             entries.Add(new(entryId, horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight,
                 source.BodyWeightChange, null, source.OwnerName));

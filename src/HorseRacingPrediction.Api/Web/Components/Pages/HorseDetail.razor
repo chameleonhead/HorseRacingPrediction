@@ -18,6 +18,9 @@ else
         <div class="profile-fact"><span>性別</span><strong>@Display(horse.SexCode)</strong></div>
         <div class="profile-fact"><span>生年月日</span><strong>@(horse.BirthDate?.ToString("yyyy年M月d日") ?? "未登録")</strong></div>
         <div class="profile-fact"><span>馬主</span><strong>@(string.IsNullOrWhiteSpace(horse.OwnerName) ? "未登録" : horse.OwnerName)</strong></div>
+        <div class="profile-fact"><span>生産者</span><strong>@(string.IsNullOrWhiteSpace(horse.BreederName) ? "未登録" : horse.BreederName)</strong></div>
+        <div class="profile-fact"><span>父</span><strong>@(string.IsNullOrWhiteSpace(horse.SireName) ? "未登録" : horse.SireName)</strong></div>
+        <div class="profile-fact"><span>母</span><strong>@(string.IsNullOrWhiteSpace(horse.DamName) ? "未登録" : horse.DamName)</strong></div>
         <div class="profile-fact"><span>登録表記</span><strong>@(horse.Aliases.Count + 1) 件</strong></div>
     </section>
 

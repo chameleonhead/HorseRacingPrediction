@@ -55,7 +55,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
     {
         var race = CreateRaceSummary(6);
         var card = CreateRaceCard(race.Id, "メイクデビュー中山",
-            new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2)) with
+            new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2,
+                BreederName: "テスト生産者", SireName: "テスト父", DamName: "テスト母")) with
         { GradeCode = "G3" };
         var (session, navigator, writer) = CreateContext(CreateRaceList(race, CreateRaceSummary(7)),
             new Dictionary<RaceId, IJraPage> { [race.Id] = card });
@@ -69,8 +70,13 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.IsTrue(request.IsRaceCard);
         Assert.AreEqual("G3", request.GradeCode);
         Assert.AreEqual(new TimeOnly(10, 0), request.StartTime);
-        Assert.AreEqual("F", request.Entries!.Single().SexCode);
-        Assert.AreEqual(2, request.Entries.Single().Age);
+        var savedEntry = request.Entries!.Single();
+        Assert.AreEqual("F", savedEntry.SexCode);
+        Assert.AreEqual(2, savedEntry.Age);
+        Assert.AreEqual("馬主", savedEntry.OwnerName);
+        Assert.AreEqual("テスト生産者", savedEntry.BreederName);
+        Assert.AreEqual("テスト父", savedEntry.SireName);
+        Assert.AreEqual("テスト母", savedEntry.DamName);
         Assert.AreEqual("manual-race", outcome.RaceId);
     }
 
@@ -163,7 +169,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
         var card1 = CreateRaceCard(
             race1.Id,
             "1R テストレース",
-            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A", 488, -2));
+            new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A", 488, -2,
+                BreederName: "テスト生産者", SireName: "テスト父", DamName: "テスト母"));
 
         var (session, _, writeService) = CreateContext(
             raceList,
@@ -178,6 +185,10 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.HasCount(1, writeService.UpsertHorseWithOwnerCalls);
         Assert.AreEqual("テストホースA", writeService.UpsertHorseWithOwnerCalls[0].RegisteredName);
         Assert.AreEqual("テスト馬主A", writeService.UpsertHorseWithOwnerCalls[0].OwnerName);
+        var profile = writeService.UpsertHorseProfileCalls.Single();
+        Assert.AreEqual("テスト生産者", profile.BreederName);
+        Assert.AreEqual("テスト父", profile.SireName);
+        Assert.AreEqual("テスト母", profile.DamName);
         Assert.HasCount(1, writeService.UpsertRaceEntryCalls);
         var entry = writeService.UpsertRaceEntryCalls[0];
         Assert.AreEqual("テスト馬主A", entry.OwnerName);
