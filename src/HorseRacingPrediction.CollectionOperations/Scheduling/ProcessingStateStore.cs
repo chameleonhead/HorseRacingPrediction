@@ -929,16 +929,20 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
         {
             await using var dbContext = CreateDbContext();
             var runningJobs = await dbContext.Jobs
-                .Where(x => x.Status == AgentJobStatus.Running && jobTypeSet.Contains(x.JobType))
+                .Where(x => x.Status == AgentJobStatus.Running && jobTypeSet.Contains(x.JobType)
+                    && x.LeaseExpiresAt.HasValue)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            if (runningJobs.Count == 0)
+            // SQLite cannot compare DateTimeOffset values server-side. Match the
+            // lease acquisition recovery path and compare instants in memory.
+            var expiredJobs = runningJobs.Where(x => x.LeaseExpiresAt <= now).ToList();
+            if (expiredJobs.Count == 0)
             {
                 return 0;
             }
 
-            foreach (var job in runningJobs)
+            foreach (var job in expiredJobs)
             {
                 job.Status = AgentJobStatus.Ready;
                 job.StartedAt = null;
@@ -951,7 +955,7 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return runningJobs.Count;
+            return expiredJobs.Count;
         }
         finally
         {
@@ -1977,7 +1981,13 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
                     && x.Status == AgentJobStatus.Running
                     && x.LeaseToken == leaseToken,
                 cancellationToken).ConfigureAwait(false);
-            if (job is null) return false;
+            if (job is null)
+            {
+                _logger.LogWarning(
+                    "Collection task state update rejected: no matching active lease. JobType={JobType} JobKey={JobKey} RequestedStatus={RequestedStatus}",
+                    jobType, deduplicationKey, status);
+                return false;
+            }
 
             var now = DateTimeOffset.UtcNow;
             var previousStatus = job.Status;

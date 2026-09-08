@@ -213,6 +213,77 @@ public sealed class ProcessingStateStoreTests
     }
 
     [TestMethod]
+    public async Task RequeueRunningJobsAsync_PreservesActiveLeaseAcrossWatchdogCycles()
+    {
+        var now = new DateTimeOffset(2026, 9, 8, 9, 0, 0, TimeSpan.FromHours(9));
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync(AgentJobType.RaceResultCollection, "active", "{}", now);
+        var dispatch = (await sut.GetPendingCollectionTaskDispatchesAsync(now, 10)).Single();
+        await sut.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now);
+        var lease = await sut.AcquireCollectionTaskAsync(AgentJobType.RaceResultCollection, "active",
+            dispatch.Notification.DispatchGeneration, now, TimeSpan.FromMinutes(30));
+        Assert.IsNotNull(lease);
+
+        foreach (var minutes in new[] { 5, 10, 15 })
+            Assert.AreEqual(0, await sut.RequeueRunningJobsAsync(
+                [AgentJobType.RaceResultCollection], now.AddMinutes(minutes).ToUniversalTime()));
+
+        Assert.IsEmpty(await sut.GetPendingCollectionTaskDispatchesAsync(now.AddMinutes(15), 10));
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync(lease.JobType, lease.DeduplicationKey, lease.LeaseToken));
+    }
+
+    [TestMethod]
+    [DataRow(30)]
+    [DataRow(31)]
+    public async Task RequeueRunningJobsAsync_RecoversExpiredLeaseOnlyOnce(int elapsedMinutes)
+    {
+        var now = new DateTimeOffset(2026, 9, 8, 9, 0, 0, TimeSpan.FromHours(9));
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync(AgentJobType.RaceResultCollection, "expired", "{}", now);
+        await sut.ScheduleJobAsync(AgentJobType.CollectionPlanning, "other", "{}", now);
+        foreach (var dispatch in await sut.GetPendingCollectionTaskDispatchesAsync(now, 10))
+            await sut.MarkCollectionTaskDispatchedAsync(dispatch.OutboxId, now);
+        var lease = await sut.AcquireCollectionTaskAsync(AgentJobType.RaceResultCollection, "expired", now, TimeSpan.FromMinutes(30));
+        var other = await sut.AcquireCollectionTaskAsync(AgentJobType.CollectionPlanning, "other", now, TimeSpan.FromMinutes(30));
+        Assert.IsNotNull(lease);
+        Assert.IsNotNull(other);
+        var later = now.AddMinutes(elapsedMinutes).ToUniversalTime();
+
+        Assert.AreEqual(1, await sut.RequeueRunningJobsAsync([AgentJobType.RaceResultCollection], later));
+        Assert.AreEqual(0, await sut.RequeueRunningJobsAsync([AgentJobType.RaceResultCollection], later));
+        Assert.IsFalse(await sut.CompleteCollectionTaskAsync(lease.JobType, lease.DeduplicationKey, lease.LeaseToken));
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync(other.JobType, other.DeduplicationKey, other.LeaseToken));
+        var retry = (await sut.GetPendingCollectionTaskDispatchesAsync(later, 10)).Single();
+        var newLease = await sut.AcquireCollectionTaskAsync(lease.JobType, lease.DeduplicationKey,
+            retry.Notification.DispatchGeneration, later, TimeSpan.FromMinutes(30));
+        Assert.IsNotNull(newLease);
+        Assert.AreNotEqual(lease.LeaseToken, newLease.LeaseToken);
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync(newLease.JobType, newLease.DeduplicationKey, newLease.LeaseToken));
+    }
+
+    [TestMethod]
+    public async Task RequeueRunningJobsAsync_DoesNotTreatMissingExpiryAsExpired()
+    {
+        var now = new DateTimeOffset(2026, 9, 8, 0, 0, 0, TimeSpan.Zero);
+        var sut = CreateStore(predictionLeaseMinutes: 5);
+        await sut.ScheduleJobAsync(AgentJobType.RaceResultCollection, "missing-expiry", "{}", now);
+        await MarkAllPendingDispatchedAsync(sut, now);
+        var lease = await sut.AcquireCollectionTaskAsync(AgentJobType.RaceResultCollection, "missing-expiry", now, TimeSpan.FromMinutes(30));
+        Assert.IsNotNull(lease);
+        await using (var connection = new SqliteConnection($"Data Source={Path.Combine(_stateDirectory, "processing-jobs.db")};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE jobs SET lease_expires_at = NULL WHERE deduplication_key = 'missing-expiry'";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.AreEqual(0, await sut.RequeueRunningJobsAsync([AgentJobType.RaceResultCollection], now.AddHours(1)));
+        Assert.IsEmpty(await sut.GetPendingCollectionTaskDispatchesAsync(now.AddHours(1), 10));
+        Assert.IsTrue(await sut.CompleteCollectionTaskAsync(lease.JobType, lease.DeduplicationKey, lease.LeaseToken));
+    }
+
+    [TestMethod]
     public async Task FailCollectionTaskAsync_MarksTaskFailedWithoutRedispatch()
     {
         var now = new DateTimeOffset(2026, 8, 28, 0, 0, 0, TimeSpan.Zero);
