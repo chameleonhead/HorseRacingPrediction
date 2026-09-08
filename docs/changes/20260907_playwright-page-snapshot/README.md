@@ -3,7 +3,7 @@
 - Status: Implemented
 - Owner: Scraping team
 - Created: 2026-09-07
-- Updated: 2026-09-07
+- Updated: 2026-09-08
 
 ## Context
 
@@ -162,6 +162,7 @@ The user authorized implementation on 2026-09-07 after requesting a final concer
 ## Documentation updates
 
 - `docs/23-jra-scraping-redesign.md`: links the canonical description of the existing browser snapshot to the implemented additive semantic API and records that both contracts coexist without a breaking replacement.
+- [`live-site-evaluation.md`](live-site-evaluation.md): records a real public-page execution, functional observations, performance measurements, and implementation-level cost analysis.
 - No user-facing operations document changes are needed: the API does not alter collection workflows, navigation, deployment, authentication, or persisted data.
 
 ## Alternatives considered
