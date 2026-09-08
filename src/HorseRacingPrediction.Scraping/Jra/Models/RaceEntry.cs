@@ -12,4 +12,6 @@ public sealed record RaceEntry(
     string? TrainerName = null,
     string? OwnerName = null,
     int? BodyWeight = null,
-    int? BodyWeightChange = null);
+    int? BodyWeightChange = null,
+    string? SexCode = null,
+    int? Age = null);

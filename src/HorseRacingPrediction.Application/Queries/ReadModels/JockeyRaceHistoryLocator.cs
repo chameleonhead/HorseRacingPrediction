@@ -13,6 +13,8 @@ public class JockeyRaceHistoryLocator : IReadModelLocator
     {
         if (domainEvent is IDomainEvent<RaceAggregate, RaceId, EntryRegistered> entryEvent)
         {
+
+            if (entryEvent.AggregateEvent.PreviousJockeyId is { } previous && previous != entryEvent.AggregateEvent.JockeyId) yield return previous;
             var jockeyId = entryEvent.AggregateEvent.JockeyId;
             if (jockeyId != null)
             {
@@ -22,7 +24,8 @@ public class JockeyRaceHistoryLocator : IReadModelLocator
         }
         else if (domainEvent is IDomainEvent<RaceAggregate, RaceId, EntryResultDeclared> resultEvent)
         {
-            if (_entryToJockey.TryGetValue(resultEvent.AggregateEvent.EntryId, out var jockeyId))
+            if (resultEvent.AggregateEvent.JockeyId is { } collectedId) yield return collectedId;
+            else if (_entryToJockey.TryGetValue(resultEvent.AggregateEvent.EntryId, out var jockeyId))
                 yield return jockeyId;
         }
     }

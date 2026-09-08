@@ -204,6 +204,10 @@ public class HorseRaceHistoryReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        var previousEntry = Entries.FirstOrDefault(x => x.EntryId == e.EntryId);
+        Entries.RemoveAll(x => x.EntryId == e.EntryId);
+        if (!string.IsNullOrEmpty(HorseId) && HorseId != e.HorseId) return Task.CompletedTask;
+
         HorseId = e.HorseId;
         Entries.Add(new HorseRaceHistoryEntry(
             domainEvent.AggregateIdentity.Value,
@@ -221,7 +225,7 @@ public class HorseRaceHistoryReadModel : IReadModel,
             e.RunningStyleCode,
             e.JockeyId,
             e.TrainerId,
-            null, null, null, null));
+            previousEntry?.FinishPosition, previousEntry?.LastThreeFurlongTime, previousEntry?.CornerPositions, previousEntry?.PrizeMoney));
         return Task.CompletedTask;
     }
 

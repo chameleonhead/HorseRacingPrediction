@@ -101,7 +101,7 @@ public sealed class RaceCardPageParser
             raceId,
             raceName,
             startTime,
-            entries);
+            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot));
     }
 
     private static JraTableView? FindEntryTable(
@@ -288,7 +288,7 @@ public sealed class RaceCardPageParser
                 RaceNumberRegex.Replace(heading, string.Empty).Trim();
 
             if (!string.IsNullOrWhiteSpace(withoutNumber) &&
-                RaceCourseNames.Parse(withoutNumber) == RaceCourse.Unknown &&
+                !RaceNameHeading.IsMeeting(withoutNumber) &&
                 !DateRegex.IsMatch(withoutNumber) &&
                 !IsKnownNonRaceNameHeading(withoutNumber))
             {
@@ -312,14 +312,17 @@ public sealed class RaceCardPageParser
         return false;
     }
 
-    private static TimeOnly? ParseStartTime(
-        JraSnapshotView snapshot)
+    internal static TimeOnly? ParseStartTime(
+        JraSnapshotView snapshot,
+        bool allowUnlabelledTime = true)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
         var match =
-            TimeRegex.Match(searchText);
+            Regex.Match(searchText, @"発走(?:時刻)?\s*[:：]?\s*(?<hour>\d{1,2})(?:時|:)\s*(?<minute>\d{2})(?:分)?");
+
+        if (!match.Success && allowUnlabelledTime) match = TimeRegex.Match(searchText);
 
         if (!match.Success)
         {
@@ -423,6 +426,10 @@ public sealed class RaceCardPageParser
                 }
             }
 
+            var sexAgeIndex = table.Headers.ToList().FindIndex(h => h.Contains("性齢", StringComparison.Ordinal));
+            var sexAge = Regex.Match(sexAgeIndex >= 0 && sexAgeIndex < row.Count ? row[sexAgeIndex] : string.Empty,
+                @"(?<sex>牡|牝|せん|セン)\s*(?<age>\d+)");
+            var sexCode = sexAge.Success ? sexAge.Groups["sex"].Value switch { "牡" => "M", "牝" => "F", _ => "G" } : null;
             entries.Add(new RaceEntry(
                 horseNumber,
                 horseName,
@@ -432,7 +439,7 @@ public sealed class RaceCardPageParser
                 parsedHorse.TrainerName,
                 parsedHorse.OwnerName,
                 parsedHorse.BodyWeight,
-                parsedHorse.BodyWeightChange));
+                parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null));
         }
 
         return entries;

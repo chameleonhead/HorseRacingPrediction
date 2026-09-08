@@ -19,7 +19,8 @@ public sealed record AgentJobDetailReadModel(
     JobRelationType? ParentRelationType,
     IReadOnlyList<AgentRelatedJobReadModel> ChildJobs,
     IReadOnlyList<JobOperationAuditReadModel> AuditHistory,
-    IReadOnlyList<JobAttemptReadModel> Attempts);
+    IReadOnlyList<JobAttemptReadModel> Attempts,
+    bool IsHeld = false);
 
 public sealed record AgentRelatedJobReadModel(
     string JobId,

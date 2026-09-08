@@ -39,6 +39,7 @@ public sealed class ProcessingStateDbContext : DbContext
             entity.Property(x => x.ParentJobId).HasColumnName("parent_job_id");
             entity.Property(x => x.ParentRelationType).HasColumnName("parent_relation_type").HasConversion<string>();
             entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>();
+            entity.Property(x => x.IsHeld).HasColumnName("is_held").HasDefaultValue(false);
             entity.Property(x => x.Priority).HasColumnName("priority");
             entity.Property(x => x.FirstQueuedAt).HasColumnName("first_queued_at");
             entity.Property(x => x.AvailableAt).HasColumnName("available_at");

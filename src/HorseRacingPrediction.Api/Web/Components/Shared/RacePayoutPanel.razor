@@ -1,0 +1,19 @@
+<section class="detail-card detail-section" aria-label="払戻金">
+    <h3>払戻金</h3>
+    <dl class="detail-grid">
+        @foreach(var group in Groups)
+        {
+            <dt>@group.Name</dt>
+            <dd>@if(group.Values.Count==0) { <span>未取得・該当なし</span> }
+                @foreach(var payout in group.Values) { <div>@payout.Combination <strong>@payout.Amount.ToString("N0") 円</strong></div> }
+            </dd>
+        }
+    </dl>
+</section>
+@code {
+    [Parameter,EditorRequired] public RacePayoutResultResponse Payouts {get;set;}=default!;
+    private (string Name,IReadOnlyList<RacePayoutEntryResponse> Values)[] Groups =>
+    [ ("単勝",Payouts.WinPayouts),("複勝",Payouts.PlacePayouts),("枠連",Payouts.BracketQuinellaPayouts??[]),
+      ("馬連",Payouts.QuinellaPayouts),("ワイド",Payouts.WidePayouts??[]),("馬単",Payouts.ExactaPayouts),
+      ("3連複",Payouts.TrioPayouts??[]),("3連単",Payouts.TrifectaPayouts) ];
+}

@@ -1,0 +1,33 @@
+@inject AdminApiClient Api
+
+<section class="detail-group" aria-label="JRA公開プロフィール">
+    <h3>JRA公開プロフィール</h3>
+    @if (loading) { <p role="status">読み込み中…</p> }
+    else if (error) { <p role="alert">公開プロフィールを表示できませんでした。</p> }
+    else if (profile is null) { <p class="hint">まだ取得していません。「JRAから再取得」で公開情報を取得できます。</p> }
+    else
+    {
+        <dl class="detail-grid">
+            @foreach (var field in profile.Fields) { <dt>@field.Key</dt><dd>@field.Value</dd> }
+        </dl>
+        <p class="hint">取得日時 @profile.AcquiredAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · <a href="@profile.SourceUrl" target="_blank" rel="noopener">JRAの取得元</a></p>
+    }
+</section>
+
+@code {
+    [Parameter,EditorRequired] public string SubjectType { get; set; } = "Horse";
+    [Parameter,EditorRequired] public string SubjectId { get; set; } = "";
+    [Parameter] public int Revision { get; set; }
+    private string? loadedKey;
+    private HorseRacingPrediction.Contracts.JraSubjectProfileDto? profile;
+    private bool loading,error;
+    protected override async Task OnParametersSetAsync()
+    {
+        var key=$"{SubjectType}/{SubjectId}/{Revision}";
+        if(loadedKey==key) return;
+        loadedKey=key; loading=true; error=false;
+        try { profile=await Api.GetJraSubjectProfileAsync(SubjectType,SubjectId); }
+        catch(Exception ex) when(ex is HttpRequestException or System.Text.Json.JsonException or TaskCanceledException) { error=true; }
+        finally { loading=false; }
+    }
+}

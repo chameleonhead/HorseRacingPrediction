@@ -6,4 +6,7 @@ public sealed record PayoutResultSnapshot(
     List<PayoutEntrySnapshot> PlacePayouts,
     List<PayoutEntrySnapshot> QuinellaPayouts,
     List<PayoutEntrySnapshot> ExactaPayouts,
-    List<PayoutEntrySnapshot> TrifectaPayouts);
+    List<PayoutEntrySnapshot> TrifectaPayouts,
+    List<PayoutEntrySnapshot>? BracketQuinellaPayouts = null,
+    List<PayoutEntrySnapshot>? WidePayouts = null,
+    List<PayoutEntrySnapshot>? TrioPayouts = null);

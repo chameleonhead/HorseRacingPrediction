@@ -16,6 +16,10 @@ public class HorseWeightHistoryReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        var previousEntry = WeightHistory.FirstOrDefault(x => x.EntryId == e.EntryId);
+        WeightHistory.RemoveAll(x => x.EntryId == e.EntryId);
+        if (!string.IsNullOrEmpty(HorseId) && HorseId != e.HorseId) return Task.CompletedTask;
+
         HorseId = e.HorseId;
         WeightHistory.Add(new HorseWeightEntry(
             domainEvent.AggregateIdentity.Value,

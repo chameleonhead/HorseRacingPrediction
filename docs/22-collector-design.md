@@ -24,24 +24,38 @@
 
 ### 収集トリガー・実行
 
+Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを登録する。同一対象の実行中依頼は原子的に重複抑止し、監査とoutboxを保存する。CollectionExecutionServiceの常駐・--once両経路で指定レースを再取得する。元ジョブや日別取得状態には依存しない。未公開は待機、部分失敗は失敗として扱う。[決定と検証](changes/20260908_race-detail-reacquisition/README.md)を参照。
+
 | クラス | 役割 |
 |---|---|
 | `ScrapingRegistrationService` | 開催予定・出馬表・結果収集ジョブの投入を定期実行する |
 | `CollectionExecutionService` | 投入済み収集ジョブを取り出して実行する |
-| `HistoricalDataRequestExecutionService` | 過去成績・プロフィール補完要求を実行する |
+| `HistoricalDataRequestExecutionService`（旧経路） | 現行CollectorではDI登録が無効で、旧補完要求を実行しない |
 | `CollectionExecutionTrigger` | 収集実行の即時トリガー |
 
+### タイムアウトと実行保留
+
+`CollectionTaskRunner`が単発・常駐・計画ジョブの有効リース、個別保留、内部デッドラインとジョブ制限時間を監視する。タイムアウトは失敗試行と収集全体停止を同時保存し、Readyへ戻さない。ホストの通常終了による中断は再投入、個別保留による中断はキャンセルした試行として記録する。
+
+個別保留は既存の実行状態とは独立した`IsHeld`で永続化する。Running中はキャンセル要求済みを表し、Workerは1秒間隔（照会のタイムアウト3秒）で確認する。ブラウザー等の後始末後に有効リースで中断応答すると、実行状態をReadyへ戻し、IsHeldを維持して保留を確定する。保留解除だけがIsHeldを解除し、新しい配送世代を作る。旧リース/通知の結果は新しい実行に適用しない。
+
+保留中の親を依存解消で完了させず、解除時に子の結果を再集計する。親・子への保留の連鎖は行わない。スケジュール再登録、watchdog、リラン、重複依頼でも個別保留を維持する。全体停止中も実行中Workerの状態照会・結果報告を受け付ける。DBの追加列は既存行を非保留として移行し、データと履歴を保持する。[設計と検証](changes/20260908_collection-timeout-hold/README.md)を参照。
+
 ### 過去データ補完
+
+馬・調教師の /api/admin/subjects/{kind}/{id}/collection/profile と馬の collection/history がSubjectProfileRefresh / HorseHistoryDiscoveryを登録する。履歴探索の親ジョブが、全ページからHorseHistoryRace子ジョブを作る。地方・海外等はHorseHistoryExcludedとして理由を保存し配送しない。探索完了を永続チェックポイントに記録し、再開・再試行は成功済み子を維持して失敗分だけ投入する。新規依頼では保存済みレースも再更新する。常駐・単発とも稼働中CollectionExecutionServiceが実行し、下表の旧補完Workerには依存しない。[決定と検証](changes/20260908_subject-refresh-horse-history/README.md)を参照。
 
 | クラス | 役割 |
 |---|---|
 | `IJraResultDateDiscoveryService` / `JraResultMonthDateDiscoveryService` | 月単位で未取得の結果日付を発見する |
-| `IHistoricalRaceReferenceCollector` / `JraHistoricalRaceReferenceCollector` | 出走馬の過去レース参照を収集する |
+| `IHistoricalRaceReferenceCollector` / `NoOpHistoricalRaceReferenceCollector` | 現行DIは常に空の参照を返す暫定実装。過去レース結果の自動補完要求は登録されない |
 | `IJraRaceResultLookup` / `JraSiteDataCollectorRaceResultLookup` | `JraSiteDataCollector` 経由でレース結果を参照する |
-| `IHistoricalRaceResultCollector` / `JraHistoricalRaceResultCollector` | 過去レース結果を収集し Api へ登録する |
+| `IHistoricalRaceResultCollector`（旧経路） | 実行実装のDI登録は無効 |
 | `IJraProfileLookup` / `JraSiteDataCollectorProfileLookup` | 馬・騎手・調教師のプロフィールを参照する |
-| `IHistoricalDataRequestHandler` / `JraHistoricalDataRequestHandler` | 過去データ補完要求を処理する |
-| `HistoricalDataRequestPlanner` | 補完要求の計画を立てる |
+| `IHistoricalDataRequestHandler`（旧経路） | ハンドラーのDI登録は無効 |
+| `HistoricalDataRequestPlanner` | 出馬表収集後に旧プロフィール等の補完要求を条件付き登録する。手動の馬起点履歴探索には未接続 |
+
+2026-09-08調査: 上記の旧自動経路と、稼働中の手動 `HorseHistoryDiscovery` / `HorseHistoryRace` は別経路である。過去データの自動抽出停止と旧要求の実行停止が併存している。[調査とタイムアウト・保留の変更案](changes/20260908_collection-timeout-hold/README.md)を参照。自動経路の復旧や既存データの一括再登録は未実施。
 
 ### 状態管理
 
@@ -106,6 +120,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 
 - 収集系: `ScrapingIntervalMinutes`, `CollectionExecutionIntervalMinutes`, `CollectionBatchSize`, `CollectionLeaseMinutes`
 - 結果収集対象範囲: `ResultLookbackDays`, `InitialResultBackfillYears`, `LiveResultLookbackDays`, `PreRaceResultLookbackDays`, `ResultLookaheadDays`
+  - 自動登録の `ResultLookbackDays` は既定5日。JSTの当日〜5日前（両端を含む）の開催日を対象とし、日次収集完了済みの日付は再登録しない。
 - 過去データ補完: `HistoricalRequestExecutionIntervalMinutes`, `HistoricalRequestBatchSize`, `HistoricalRequestLeaseMinutes`, `HistoricalRequestMaxAttempts`
 - 機能フラグ: `EnableScheduleCollection`, `EnableRaceCardCollection`, `EnableRaceResultCollection`
 - 同時実行制御: `MaxConcurrentJobs`（既定 1。単一実行制御はジョブ種別ごとではなくグローバルなリースで保証する）

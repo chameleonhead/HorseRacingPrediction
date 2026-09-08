@@ -51,7 +51,7 @@ public sealed class ScrapingRegistrationService : BackgroundService
         {
             try
             {
-                await RunOneCycleAsync(stoppingToken).ConfigureAwait(false);
+                await RunScheduledCycleAsync(false, null, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -72,6 +72,20 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 break;
             }
         }
+    }
+
+    public async Task RunScheduledCycleAsync(bool internalDeadline, string? requestId, CancellationToken token)
+    {
+        const string key = "JRA:collection-planning";
+        if ((await _stateStore.GetCollectionPipelineStateAsync(token)).IsPaused) return;
+        await _stateStore.ScheduleJobAsync(AgentJobType.CollectionPlanning, key, "{}", DateTimeOffset.UtcNow, priority: 250, cancellationToken: token);
+        var task = await _stateStore.AcquireCollectionTaskAsync(AgentJobType.CollectionPlanning, key, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(30), token);
+        if (task is null) return;
+        await CollectionTaskRunner.RunAsync(_stateStore, task, async workToken =>
+        {
+            await RunOneCycleAsync(workToken);
+            await _stateStore.CompleteCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken, workToken);
+        }, TimeSpan.FromMinutes(14), internalDeadline, requestId, token);
     }
 
     public async Task RunOneCycleAsync(CancellationToken cancellationToken)

@@ -15,6 +15,14 @@ public interface IWebBrowser : IAsyncDisposable
     /// </summary>
     string? CurrentUrl { get; }
 
+    /// <summary>データページの表を件数で切り詰めず取得する。</summary>
+    Task<SemanticPageSnapshot> GetDataPageSnapshotAsync(CancellationToken cancellationToken = default)
+        => GetPageSnapshotAsync(cancellationToken: cancellationToken);
+
+    /// <summary>現在ページに実在する取得済みリンクをクリックする。URLへ直接遷移しない。</summary>
+    Task<string> ClickLinkAsync(PageLinkSnapshot link, CancellationToken cancellationToken = default)
+        => ClickAsync(link.Title, cancellationToken);
+
     /// <summary>
     /// 指定した URL に移動し、ページの本文テキストを返す。
     /// ページはセッション中再利用される。

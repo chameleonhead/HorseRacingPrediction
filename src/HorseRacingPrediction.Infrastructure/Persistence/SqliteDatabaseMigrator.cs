@@ -28,12 +28,13 @@ public sealed class SqliteDatabaseMigrator
         "Trainers"
     ];
 
-    private static readonly HashSet<string> CurrentEnsureCreatedTables =
+    private static readonly HashSet<string> PreviousEnsureCreatedTables =
     [
         .. InitialTables,
         "OwnerAliasMappings",
         "OwnerMergeAudits"
     ];
+    private static readonly HashSet<string> CurrentEnsureCreatedTables = [.. PreviousEnsureCreatedTables, "JraSubjectProfileReadModel"];
 
     private readonly IDbContextProvider<EventStoreDbContext> _contextProvider;
     private readonly SqliteMigrationOptions _options;
@@ -93,7 +94,8 @@ public sealed class SqliteDatabaseMigrator
 
         var isInitialSchema = existingTables.SetEquals(InitialTables);
         var isCurrentEnsureCreatedSchema = existingTables.SetEquals(CurrentEnsureCreatedTables);
-        if (!isInitialSchema && !isCurrentEnsureCreatedSchema)
+        var isPreviousEnsureCreatedSchema = existingTables.SetEquals(PreviousEnsureCreatedTables);
+        if (!isInitialSchema && !isCurrentEnsureCreatedSchema && !isPreviousEnsureCreatedSchema)
         {
             var missing = InitialTables.Except(existingTables).OrderBy(x => x);
             var unexpected = existingTables.Except(InitialTables).OrderBy(x => x);
@@ -107,7 +109,17 @@ public sealed class SqliteDatabaseMigrator
         if (initialMigration is null)
             throw new InvalidOperationException("InitialEventStore migrationが見つかりません。");
 
-        var baselineMigrations = isCurrentEnsureCreatedSchema ? migrations : [initialMigration];
+        var baselineMigrations = isCurrentEnsureCreatedSchema ? migrations : (IReadOnlyCollection<string>)[initialMigration];
+        if (isPreviousEnsureCreatedSchema)
+        {
+            await using var columnCommand = connection.CreateCommand();
+            columnCommand.CommandText = "SELECT COUNT(*) FROM pragma_table_info('RacePredictionContexts') WHERE name='StartTime'";
+            var hasRaceMetadata = Convert.ToInt32(await columnCommand.ExecuteScalarAsync(cancellationToken)) > 0;
+            baselineMigrations = migrations.Where(m => m.EndsWith("_InitialEventStore", StringComparison.Ordinal)
+                || m.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)
+                || m.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)
+                || (hasRaceMetadata && m.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal))).ToList();
+        }
         foreach (var migration in baselineMigrations)
         {
             await using var command = connection.CreateCommand();

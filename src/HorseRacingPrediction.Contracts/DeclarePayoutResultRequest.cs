@@ -8,4 +8,7 @@ public sealed record DeclarePayoutResultRequest(
     IReadOnlyList<PayoutEntryDto>? PlacePayouts,
     IReadOnlyList<PayoutEntryDto>? QuinellaPayouts,
     IReadOnlyList<PayoutEntryDto>? ExactaPayouts,
-    IReadOnlyList<PayoutEntryDto>? TrifectaPayouts);
+    IReadOnlyList<PayoutEntryDto>? TrifectaPayouts,
+    IReadOnlyList<PayoutEntryDto>? BracketQuinellaPayouts = null,
+    IReadOnlyList<PayoutEntryDto>? WidePayouts = null,
+    IReadOnlyList<PayoutEntryDto>? TrioPayouts = null);

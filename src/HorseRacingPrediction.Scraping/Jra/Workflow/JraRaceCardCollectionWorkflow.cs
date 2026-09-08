@@ -10,7 +10,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// オーケストレーションのみを行い、HTML解析やページ遷移の詳細は
 /// <see cref="JraSession.Navigate"/>（Navigator/Parser層）に委譲する。
 /// </summary>
-public sealed class JraRaceCardCollectionWorkflow
+public sealed partial class JraRaceCardCollectionWorkflow
     : IJraRaceCardCollectionWorkflow
 {
     private readonly JraSession _session;
@@ -99,7 +99,7 @@ public sealed class JraRaceCardCollectionWorkflow
                 raceIds.Add(raceId);
                 outcomes.Add(new RaceCardRaceOutcome(race.Number, raceId, raceName, sourceUrl, null));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
+            catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
                 var message = $"レース収集エラー: RaceNumber={race.Number} — {ex.Message}";
                 errors.Add(message);
@@ -163,7 +163,7 @@ public sealed class JraRaceCardCollectionWorkflow
                         ownerName: entry.OwnerName,
                         cancellationToken: cancellationToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException && !ApiFailureClassifier.IsFatalServerError(ex))
+                catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))
                 {
                     // 馬主登録の失敗で出走登録自体は失敗させない。
                 }

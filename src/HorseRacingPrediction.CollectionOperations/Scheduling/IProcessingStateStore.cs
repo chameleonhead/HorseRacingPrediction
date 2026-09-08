@@ -2,6 +2,15 @@ namespace HorseRacingPrediction.Collector.Scheduling;
 
 public interface IProcessingStateStore
 {
+    Task<LeasedCollectionTask?> AcquireLocalCollectionTaskAsync(string jobType, string deduplicationKey, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
+    Task<CollectionPipelineState> GetCollectionPipelineStateAsync(CancellationToken cancellationToken = default);
+    Task PauseCollectionAsync(string reason, string? jobId, CancellationToken cancellationToken = default);
+    Task<int> ResumeCollectionAsync(CancellationToken cancellationToken = default);
+    Task<CollectionLeaseControl> GetCollectionLeaseControlAsync(string jobId, string leaseToken, CancellationToken cancellationToken = default);
+    Task<bool> AcknowledgeCollectionHoldAsync(string jobId, string leaseToken, CancellationToken cancellationToken = default);
+    Task<bool> FailAndPauseCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, string error, CancellationToken cancellationToken = default);
+    Task<bool> WaitForCollectionDependenciesAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);
+
     Task EnqueuePredictionCandidatesAsync(IEnumerable<string> raceIds, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> TakeReadyPredictionCandidatesAsync(DateTimeOffset now, TimeSpan minAge, int maxCount, CancellationToken cancellationToken = default);
     Task MarkPredictionCompletedAsync(string raceId, CancellationToken cancellationToken = default);

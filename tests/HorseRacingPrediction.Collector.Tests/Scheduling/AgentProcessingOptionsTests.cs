@@ -16,7 +16,7 @@ public sealed class AgentProcessingOptionsTests
         Assert.AreEqual(10, options.PredictionMinAgeMinutes);
         Assert.AreEqual(30, options.PredictionLeaseMinutes);
         Assert.AreEqual(20, options.PredictionBatchSize);
-        Assert.AreEqual(2, options.ResultLookbackDays);
+        Assert.AreEqual(5, options.ResultLookbackDays);
         Assert.AreEqual(0, options.ResultLookaheadDays);
         Assert.IsTrue(options.EnableScheduleCollection);
         Assert.IsTrue(options.EnableRaceCardCollection);

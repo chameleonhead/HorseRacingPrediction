@@ -1,3 +1,4 @@
+@implements IAsyncDisposable
 @page "/jobs"
 @attribute [Authorize]
 @inject AdminApiClient Api
@@ -7,14 +8,24 @@
     <Actions>
         @if (queuePaused)
         {
-            <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@operating">再開</FluentButton>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@(operating || !queueStateKnown)">再開</FluentButton>
         }
         else
         {
-            <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog" Disabled="@operating">すべてのジョブを一時停止</FluentButton>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog" Disabled="@(operating || !queueStateKnown)">すべてのジョブを一時停止</FluentButton>
         }
     </Actions>
 </RaceOpsPageHeader>
+
+@if (queuePaused)
+{
+    <section role="status" aria-live="polite"><h2>収集全体を停止中</h2><p>@queueState?.Reason</p>
+        @if (queueState?.StoppedAt is { } stopped) { <p>@stopped.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</p> }
+        @if (queueState?.JobId is { } cause) { <a href="@JobUrl(cause)">原因のジョブを見る</a> }
+        <p>明示的に再開するまで新しいジョブは実行しません。失敗したジョブのリランと個別保留の解除は別に行います。</p>
+    </section>
+}
+@if (operationErrors.Count > 0 && !showPauseDialog) { <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", operationErrors)" /> }
 
 <nav class="view-tabs" aria-label="収集ジョブの表示">
     @foreach (var option in views)
@@ -57,7 +68,7 @@ else
     <RaceOpsObjectList Label="収集ジョブ一覧">
         @foreach (var job in jobs)
         {
-            <RaceOpsObjectListItem Href="@JobUrl(job.JobId)" Title="@DisplayJobType(job.JobType)" Description="@DisplayTarget(job)" Status="@StatusLabel(job.Status)" StatusTone="@StatusTone(job.Status)" Metadata="@DisplayMetadata(job)" />
+            <RaceOpsObjectListItem Href="@JobUrl(job.JobId)" Title="@DisplayJobType(job.JobType)" Description="@DisplayTarget(job)" Status="@(job.IsHeld ? (job.Status == AgentJobStatus.Running ? "中断待ち" : "保留中") : StatusLabel(job.Status))" StatusTone="@StatusTone(job.Status)" Metadata="@DisplayMetadata(job)" />
         }
     </RaceOpsObjectList>
     @if (totalPages > 1) { <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="@(() => GoPageAsync(page - 1))">前へ</FluentButton><span>@($"{page} / {totalPages}")</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= totalPages)" OnClick="@(() => GoPageAsync(page + 1))">次へ</FluentButton></div> }
@@ -66,12 +77,12 @@ else
 <FluentDialog Hidden="@(!showPauseDialog)" HiddenChanged="@(hidden => showPauseDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px, calc(100vw - 32px));">
         <FluentDialogHeader ShowDismiss="true"><h2 id="pause-title">すべてのジョブを一時停止しますか</h2></FluentDialogHeader>
         <FluentDialogBody>
-            <p>SQS本体とデッドレターキューを消去し、新しい配送を停止します。起動済みのジョブは完了まで進み、ReadyとPendingはDBに保持されます。</p>
+            <p>新しいジョブの実行を停止します。開始済みの処理は結果を保存します。待機中のジョブと個別保留は維持されます。</p>
             @if (operationErrors.Count > 0) { <UiState Kind="error" Title="一時停止できませんでした" Message="@string.Join(' ', operationErrors)" /> }
         </FluentDialogBody>
         <FluentDialogFooter>
                 <FluentButton OnClick="@ClosePauseDialog">キャンセル</FluentButton>
-                <FluentButton Appearance="@Appearance.Accent" OnClick="@PauseAsync" Disabled="@operating">一時停止</FluentButton>
+                <FluentButton Appearance="@Appearance.Accent" OnClick="@PauseAsync" Disabled="@(operating || !queueStateKnown)">一時停止</FluentButton>
         </FluentDialogFooter>
 </FluentDialog>
 
@@ -84,7 +95,7 @@ else
     private string statusText = string.Empty;
     private string view = "action";
     private static readonly IReadOnlyList<FilterOption> views = [
-        new("action", "要対応"), new("running", "処理中"), new("ready", "待機中"), new("recent", "最近完了"), new("all", "すべて")];
+        new("action", "要対応"), new("running", "処理中"), new("ready", "待機中"), new("held", "保留中"), new("recent", "最近完了"), new("all", "すべて")];
     private static readonly IReadOnlyList<FilterOption> statusFilters = [
         new("", "すべて"), .. Enum.GetValues<AgentJobStatus>().Select(x => new FilterOption(x.ToString(), StatusLabel(x)))];
     private int page = 1;
@@ -93,6 +104,10 @@ else
     private bool loading;
     private bool operating;
     private bool queuePaused;
+    private bool queueStateKnown;
+    private readonly CancellationTokenSource refreshStop = new();
+    private Task? refreshTask;
+    private JobQueueStateResponse? queueState;
     private bool showPauseDialog;
     private IReadOnlyList<string> operationErrors = [];
 
@@ -158,28 +173,76 @@ else
     {
         loading = true;
         try {
-            queuePaused = (await Api.GetJobQueueStateAsync())?.IsPaused ?? false;
+            queueState = await Api.GetJobQueueStateAsync();
+            queueStateKnown = queueState is not null;
+            queuePaused = queueState?.IsPaused ?? false;
             var result = await Api.SearchJobsAsync(view, keyword, targetDateText, jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null, page, pageSize);
             jobs = result?.Items ?? [];
             daySummaries = result?.DaySummaries ?? [];
             totalPages = Math.Max(1, (int)Math.Ceiling((result?.TotalCount ?? 0) / (double)pageSize));
             if (page > totalPages) { page = totalPages; await LoadAsync(); return; }
             UpdateUrl();
+            refreshTask ??= RefreshAsync();
         }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { queueStateKnown = false; operationErrors = ["収集状態を取得できませんでした。再読み込みしてください。"]; }
         finally { loading = false; }
     }
     private void OpenPauseDialog() { operationErrors = []; showPauseDialog = true; }
     private void ClosePauseDialog() => showPauseDialog = false;
-    private async Task PauseAsync() { operating = true; var result = await Api.PauseJobsAsync(); operating = false; if (result.Success) { showPauseDialog = false; await LoadAsync(); } else operationErrors = result.Errors; }
-    private async Task ResumeAsync() { operating = true; var result = await Api.ResumeJobsAsync(); operating = false; if (result.Success) await LoadAsync(); else operationErrors = result.Errors; }
+    private Task PauseAsync() => ChangePipelineAsync(true);
+    private Task ResumeAsync() => ChangePipelineAsync(false);
+    private async Task ChangePipelineAsync(bool pause)
+    {
+        if (operating) return;
+        operating = true; operationErrors = [];
+        try
+        {
+            var result = pause ? await Api.PauseJobsAsync(refreshStop.Token) : await Api.ResumeJobsAsync(refreshStop.Token);
+            if (result.Success) { showPauseDialog = false; await LoadAsync(); }
+            else operationErrors = result.Errors;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { operationErrors = ["操作結果を確認できませんでした。最新の状態を確認してください。"]; }
+        finally { operating = false; }
+    }
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+            while (await timer.WaitForNextTickAsync(refreshStop.Token))
+                await InvokeAsync(async () =>
+                {
+                    if (loading || operating) return;
+                    try
+                    {
+                        var state = await Api.GetJobQueueStateAsync(refreshStop.Token);
+                        if (operating) return;
+                        queueState = state; queueStateKnown = state is not null; queuePaused = state?.IsPaused ?? false;
+                    }
+                    catch (OperationCanceledException) when (refreshStop.IsCancellationRequested) { }
+                    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                    { queueStateKnown = false; operationErrors = ["最新の収集状態を確認できません。次の更新で再確認します。"]; }
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (refreshStop.IsCancellationRequested) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        await refreshStop.CancelAsync();
+        if (refreshTask is not null) await refreshTask;
+        refreshStop.Dispose();
+    }
     private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
     private async Task SetViewAsync(string value) { view = value; page = 1; await LoadAsync(); }
     private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
-    private static string DisplayJobType(string value) => value switch { "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
+    private static string DisplayJobType(string value) => value switch { "CollectionPlanning" => "収集対象の確認", "RaceCardCollection" => "出馬表の収集", "RaceResultCollection" => "レース結果の収集", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
     private static string DisplayTarget(AgentJobStatusReadModel job) => ExtractTargetDate(job.DeduplicationKey) is { } targetDate ? $"対象日 {targetDate}" : "対象は詳細で確認";
     private static string DisplayMetadata(AgentJobStatusReadModel job) => $"更新 {job.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm} ・ 試行 {job.AttemptCount} 回";
     private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", _ => "warning" };
-    private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
+    private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Cancelled => "中断", AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
     private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jobs", new Dictionary<string, string?> { ["view"] = view, ["page"] = page.ToString(), ["query"] = keyword, ["jobType"] = jobType, ["targetDate"] = targetDateText, ["status"] = statusText }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
     private void NavigateIfChanged(string uri)
     {

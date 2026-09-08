@@ -17,7 +17,7 @@ public sealed class CollectionPlanningScheduler : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!_maintenance.IsActive)
+            if (!_maintenance.IsActive && !(await _store.GetCollectionPipelineStateAsync(stoppingToken)).IsPaused)
             {
                 var now = DateTimeOffset.UtcNow;
                 await _store.ScheduleJobAsync(

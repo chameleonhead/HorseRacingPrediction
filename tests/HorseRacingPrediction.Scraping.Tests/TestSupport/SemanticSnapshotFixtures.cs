@@ -59,6 +59,9 @@ internal sealed class TestPageSection
 
 internal sealed record TestPageSnapshot(string Url, string Title, List<TestPageSection> Sections)
 {
+    public List<string> Headings => Sections.Count == 0 ? [] : Sections[0].Headings;
+    public List<TestPageTable> Tables => Sections.SelectMany(section => section.Tables).ToList();
+
     public static implicit operator PageSnapshot(TestPageSnapshot fixture)
     {
         var content = new List<PageContentNode>();

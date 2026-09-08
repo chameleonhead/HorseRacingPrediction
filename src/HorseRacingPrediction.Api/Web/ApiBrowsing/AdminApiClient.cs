@@ -15,7 +15,7 @@ namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 /// admin Blazor UI, attaching the process's own configured X-Api-Key automatically.
 /// Reuses the Api project's own Contracts DTOs instead of duplicating them.
 /// </summary>
-public sealed class AdminApiClient
+public sealed partial class AdminApiClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -43,6 +43,12 @@ public sealed class AdminApiClient
 
     public Task<PagedResponse<RaceSummaryResponse>?> SearchRacesAsync(SearchRacesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<RaceSummaryResponse>>($"/api/races?{BuildQueryString(request)}", cancellationToken);
+
+    public Task<AgentJobDetailReadModel?> GetRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", cancellationToken);
+
+    public Task<AdminApiResult> RequestRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
+        => SendAsync(HttpMethod.Post, $"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", new { }, cancellationToken);
 
     public Task<RaceResponse?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
         => GetJsonAsync<RaceResponse>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
@@ -117,6 +123,9 @@ public sealed class AdminApiClient
 
     public Task<AdminApiResult> RerunJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/rerun", new { expectedUpdatedAt, reason }, cancellationToken);
+
+    public Task<AdminApiResult> SetJobHoldAsync(string jobId, bool hold, DateTimeOffset expectedUpdatedAt, CancellationToken token = default)
+        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/{(hold ? "hold" : "release-hold")}", new { expectedUpdatedAt }, token);
 
     public Task<AdminApiResult> ReacquireJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/reacquire", new { expectedUpdatedAt, reason }, cancellationToken);
@@ -235,7 +244,7 @@ public sealed class AdminApiClient
     private async Task<T?> GetJsonAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
         var response = await _httpClient.GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode == HttpStatusCode.NotFound) return default;
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NoContent) return default;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken).ConfigureAwait(false);
     }
@@ -326,7 +335,7 @@ public sealed class AdminApiClient
     private sealed record MemoIdResponse(string MemoId);
 }
 
-public sealed record JobQueueStateResponse(bool IsPaused);
+public sealed record JobQueueStateResponse(bool IsPaused, string? Reason = null, string? JobId = null, DateTimeOffset? StoppedAt = null);
 
 public sealed record AdminApiResult(bool Success, IReadOnlyList<string> Errors)
 {

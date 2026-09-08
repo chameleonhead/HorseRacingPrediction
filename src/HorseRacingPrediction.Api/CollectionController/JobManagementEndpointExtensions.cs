@@ -14,8 +14,12 @@ public static class JobManagementEndpointExtensions
     public static IEndpointRouteBuilder MapJobManagementEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/admin/jobs").WithTags("Job Management API");
-        group.MapGet("/queue-state", (CollectionMaintenanceState maintenance) =>
-            Results.Ok(new { isPaused = maintenance.IsActive, collectorOnly = maintenance.IsCollectorOnly }));
+        group.MapGet("/queue-state", async (ProcessingStateStore store, CollectionMaintenanceState maintenance, CancellationToken token) =>
+        {
+            var state = await store.GetCollectionPipelineStateAsync(token);
+            return Results.Ok(new { isPaused = state.IsPaused || maintenance.IsActive,
+                collectorOnly = state.IsPaused || maintenance.IsCollectorOnly, state.Reason, state.JobId, state.StoppedAt });
+        });
         group.MapGet("", async (string? jobType, AgentJobStatus? status, int? limit, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));
         group.MapGet("/search", async (string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int? page, int? pageSize, ProcessingStateStore store, CancellationToken token) =>
@@ -37,31 +41,21 @@ public static class JobManagementEndpointExtensions
                 _ => Results.Conflict()
             };
         });
-        group.MapPost("/pause", async (ICollectionTaskQueue queue, CollectionMaintenanceState maintenance, ProcessingStateStore store, CancellationToken token) =>
+        group.MapPost("/{jobId}/hold", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+            ToResult(await store.SetJobHoldAsync(jobId, true, request.ExpectedUpdatedAt, "Admin UI", token)));
+        group.MapPost("/{jobId}/release-hold", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+            ToResult(await store.SetJobHoldAsync(jobId, false, request.ExpectedUpdatedAt, "Admin UI", token)));
+        group.MapPost("/pause", async (CollectionMaintenanceState maintenance, ProcessingStateStore store, CancellationToken token) =>
         {
-            // collectorOnly: true — この一時停止はCollectorが原因不明の致命的エラーを
-            // 検知した際に自動で呼び出すものであり、影響範囲はCollectorが最初に呼ぶ
-            // 内部RPCエンドポイントのみに限定する。管理画面からのレース補正・メモ登録
-            // 等の書き込みは、一時停止中でも通常通り行えるようにする
-            // （実運用で「一時停止すると管理画面の操作までできなくなる」事象が確認された）。
-            if (!maintenance.TryBegin(collectorOnly: true)) return Results.Conflict();
-            try
-            {
-                await queue.PurgeAsync(token);
-                // 一時停止状態をDBに永続化する。CollectionMaintenanceStateはプロセス内
-                // メモリのみの状態のため、これがないとデプロイ/再起動のたびに
-                // 一時停止が解除されてしまう（実運用で確認された事象）。
-                await store.MarkMarkerAsync(MaintenanceMarkerType, MaintenanceMarkerKey, token);
-            }
-            catch { maintenance.End(); throw; }
+            await store.PauseCollectionAsync("管理画面またはWorkerから収集停止が要求されました。", null, token);
+            maintenance.TryBegin(collectorOnly: true);
             return Results.Accepted();
         });
         group.MapPost("/resume", async (ProcessingStateStore store, CollectionMaintenanceState maintenance, CancellationToken token) =>
         {
-            var result = await store.RequeueReadyCollectionDispatchesAsync(DateTimeOffset.UtcNow, cancellationToken: token);
+            var count = await store.ResumeCollectionAsync(token);
             maintenance.End();
-            await store.UnmarkMarkerAsync(MaintenanceMarkerType, MaintenanceMarkerKey, token);
-            return Results.Ok(new { status = "Running", requeued = result.DispatchedCount, deadLettered = result.DeadLetteredCount });
+            return Results.Ok(new { status = "Running", requeued = count, deadLettered = 0 });
         });
         return endpoints;
     }

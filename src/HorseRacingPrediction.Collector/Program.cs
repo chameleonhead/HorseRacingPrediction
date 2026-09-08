@@ -90,7 +90,7 @@ if (runOnce)
             // トリガーとなったSQSメッセージを読み取れない場合（ローカル実行等）は、
             // 従来通り登録サイクル＋その時点のReadyジョブ全件処理にフォールバックする。
             var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
-            await registrationService.RunOneCycleAsync(cts.Token);
+            await registrationService.RunScheduledCycleAsync(true, requestId, cts.Token);
 
             var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
             await executionService.RunOneCycleAsync(cts.Token);
@@ -108,17 +108,14 @@ if (runOnce)
             await executionService.RunSingleTaskAsync(notification, requestId, cts.Token);
         }
     }
-    catch (OperationCanceledException) when (cts.IsCancellationRequested)
+    catch (Exception ex) when (ex is TimeoutException || (ex is OperationCanceledException && cts.IsCancellationRequested))
     {
-        // ここに到達するのは、個々のジョブ単位のtry/catch（CollectionExecutionServiceの
-        // ジョブループ等）で捕捉されない箇所（例: ScrapingRegistrationServiceのジョブ登録処理
-        // 自体や、ジョブ取得のためのHTTP呼び出し）で14分の内部デッドラインに達した場合。
-        // ここで捕捉せず素通りさせると、未処理例外としてプロセスがクラッシュ（Aborted (core
-        // dumped)）し、bootstrap側は原因不明の固定文言("Collector execution failed")しか
-        // Lambdaランタイムへ報告できず、CloudWatch Logs上でタイムアウトか他の異常かの
-        // 判別ができなくなる。ここで捕捉し、原因が分かる形でログ出力した上でファイルに書き出し、
-        // bootstrapがLambdaランタイムAPIへのエラー応答にその内容を使えるようにする。
-        var reason = $"Collector execution timed out (14-minute internal deadline reached). RequestId={requestId}";
+        // The shared runner has already failed the leased job and persisted the stop.
+        // This also covers a deadline reached before lease acquisition completed.
+        var reason = ex is TimeoutException ? ex.Message : $"Collector execution timed out (14-minute internal deadline reached). RequestId={requestId}";
+        using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try { await app.Services.GetRequiredService<IProcessingStateStore>().PauseCollectionAsync(reason, null, report.Token); }
+        catch (Exception pauseError) { Console.Error.WriteLine($"収集停止の報告に失敗しました: {pauseError.Message}"); }
         Console.Error.WriteLine(reason);
         try
         {
@@ -164,38 +161,12 @@ static async Task RunCollectionPlanningTaskAsync(
         return;
     }
 
-    try
+    await CollectionTaskRunner.RunAsync(stateStore, task, async token =>
     {
-        var registrationService = services.GetRequiredService<ScrapingRegistrationService>();
-        await registrationService.RunOneCycleAsync(cancellationToken).ConfigureAwait(false);
-        await stateStore.CompleteCollectionTaskAsync(
-            notification.JobType, notification.DeduplicationKey, task.LeaseToken, CancellationToken.None).ConfigureAwait(false);
-    }
-    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-    {
-        // 14分の内部デッドラインによる中断。恒久的な失敗ではないため、Readyへ戻し
-        // 次回の送出で再試行させる。呼び出し元にキャンセルを伝播し、Lambda実行結果に
-        // タイムアウトである旨を明示させる。
-        await stateStore.RequeueCollectionTaskAsync(
-            notification.JobType,
-            notification.DeduplicationKey,
-            task.LeaseToken,
-            now,
-            $"Collector execution timed out (14-minute internal deadline reached). Retry scheduled. (RequestId={requestId})",
-            CancellationToken.None).ConfigureAwait(false);
-        throw;
-    }
-    catch (Exception ex)
-    {
-        await stateStore.FailCollectionTaskAsync(
-            notification.JobType,
-            notification.DeduplicationKey,
-            task.LeaseToken,
-            $"{ex.Message} (RequestId={requestId})",
-            CancellationToken.None)
-            .ConfigureAwait(false);
-        throw;
-    }
+        await services.GetRequiredService<ScrapingRegistrationService>().RunOneCycleAsync(token);
+        await stateStore.CompleteCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken, token);
+    }, TimeSpan.FromMinutes(14), true, requestId, cancellationToken);
+
 }
 
 /// <summary>

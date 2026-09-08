@@ -61,6 +61,7 @@ internal static class TestApplicationFactory
         builder.Services.AddSingleton<MemoBySubjectLocator>();
         builder.Services.AddSingleton<HorseRaceHistoryLocator>();
         builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
+        builder.Services.AddSingleton<JraSubjectProfileLocator>();
         builder.Services.AddRacePredictor();
         builder.Services.Configure<AgentProcessingOptions>(options =>
         {
@@ -84,6 +85,7 @@ internal static class TestApplicationFactory
                 .UseEntityFrameworkReadModel<HorseReadModel, EventStoreDbContext>()
                 .UseEntityFrameworkReadModel<JockeyReadModel, EventStoreDbContext>()
                 .UseEntityFrameworkReadModel<TrainerReadModel, EventStoreDbContext>()
+                .UseEntityFrameworkReadModel<JraSubjectProfileReadModel, EventStoreDbContext, JraSubjectProfileLocator>()
                 .UseEntityFrameworkReadModel<RacePredictionContextReadModel, EventStoreDbContext>()
                 .UseEntityFrameworkReadModel<RaceResultViewReadModel, EventStoreDbContext>()
                 .UseEntityFrameworkReadModel<PredictionTicketReadModel, EventStoreDbContext>()
@@ -104,8 +106,7 @@ internal static class TestApplicationFactory
             var isMutation = !HttpMethods.IsGet(context.Request.Method)
                 && !HttpMethods.IsHead(context.Request.Method)
                 && !HttpMethods.IsOptions(context.Request.Method);
-            var isTargetPath = !maintenance.IsCollectorOnly
-                || context.Request.Path.StartsWithSegments("/api/internal/collection/state");
+            var isTargetPath = !maintenance.IsCollectorOnly;
             if (maintenance.IsActive && isMutation && isTargetPath
                 && !context.Request.Path.StartsWithSegments("/api/collection/reset")
                 && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))
@@ -123,6 +124,8 @@ internal static class TestApplicationFactory
         app.MapProcessingStateRpcEndpoint();
         app.MapAgentDashboardEndpoints();
         app.MapJobManagementEndpoints();
+        app.MapRaceReacquisitionEndpoints();
+        app.MapSubjectCollectionEndpoints();
         app.MapAgentAcquisitionStatusEndpoints();
 
         await app.StartAsync();

@@ -9,6 +9,7 @@ public sealed class ProcessingJobEntity
     public string? ParentJobId { get; set; }
     public JobRelationType ParentRelationType { get; set; }
     public AgentJobStatus Status { get; set; }
+    public bool IsHeld { get; set; }
     public int Priority { get; set; }
     public DateTimeOffset FirstQueuedAt { get; set; }
     public DateTimeOffset AvailableAt { get; set; }

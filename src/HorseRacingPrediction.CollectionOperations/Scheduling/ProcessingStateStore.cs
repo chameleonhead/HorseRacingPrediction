@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
-public sealed class ProcessingStateStore : IProcessingStateStore
+public sealed partial class ProcessingStateStore : IProcessingStateStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly DbContextOptions<ProcessingStateDbContext> _dbContextOptions;
@@ -267,6 +267,8 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 return;
             }
 
+            if (job.IsHeld) return;
+
             job.Payload = payload;
             job.Priority = priority;
             if (job.ParentJobId is null && parentJobId is not null)
@@ -315,6 +317,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         try
         {
             await using var dbContext = CreateDbContext();
+            if (CollectionDispatchPolicy.IsDispatchable(jobType) && await IsPausedAsync(dbContext, cancellationToken)) return [];
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
             await ReclaimExpiredLeasesAsync(dbContext, now, cancellationToken).ConfigureAwait(false);
@@ -332,7 +335,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
             var readyJobCandidates = await dbContext.Jobs
                 .Where(x => x.JobType == jobType
-                    && x.Status == AgentJobStatus.Ready)
+                    && x.Status == AgentJobStatus.Ready && !x.IsHeld)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -409,24 +412,36 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         CancellationToken cancellationToken = default)
         => AcquireCollectionTaskAsync(jobType, deduplicationKey, -1, now, leaseDuration, cancellationToken);
 
-    public async Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
+    public Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
         string jobType,
         string deduplicationKey,
         long dispatchGeneration,
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default)
+        => AcquireCollectionTaskCoreAsync(jobType, deduplicationKey, dispatchGeneration, now, leaseDuration, false, cancellationToken);
+
+    public Task<LeasedCollectionTask?> AcquireLocalCollectionTaskAsync(string jobType, string deduplicationKey,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
+        => AcquireCollectionTaskCoreAsync(jobType, deduplicationKey, -1, now, leaseDuration, true, cancellationToken);
+
+    private async Task<LeasedCollectionTask?> AcquireCollectionTaskCoreAsync(string jobType, string deduplicationKey,
+        long dispatchGeneration, DateTimeOffset now, TimeSpan leaseDuration, bool enforceConcurrency, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await using var dbContext = CreateDbContext();
+            if (CollectionDispatchPolicy.IsDispatchable(jobType) && await IsPausedAsync(dbContext, cancellationToken)) return null;
             await ReclaimExpiredLeasesAsync(dbContext, now, cancellationToken).ConfigureAwait(false);
             var job = await dbContext.Jobs.SingleOrDefaultAsync(
                 x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
                 cancellationToken).ConfigureAwait(false);
-            if (job is null || job.Status != AgentJobStatus.Ready || job.AvailableAt > now
+            if (job is null || job.IsHeld || job.Status != AgentJobStatus.Ready || job.AvailableAt > now
                 || (dispatchGeneration >= 0 && job.DispatchGeneration != dispatchGeneration))
+                return null;
+
+            if (enforceConcurrency && await dbContext.Jobs.CountAsync(x => x.Status == AgentJobStatus.Running, cancellationToken) >= Math.Max(1, _options.MaxConcurrentJobs))
                 return null;
 
             var leaseToken = Guid.NewGuid().ToString("N");
@@ -478,6 +493,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         try
         {
             await using var dbContext = CreateDbContext();
+            if (await IsPausedAsync(dbContext, cancellationToken)) return [];
             var pendingCandidates = await dbContext.DispatchOutbox
                 .Where(x => x.DispatchedAt == null)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -487,7 +503,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 .ToDictionaryAsync(x => x.JobId, x => x, cancellationToken)
                 .ConfigureAwait(false);
             var entities = pendingCandidates
-                .Where(x => x.AvailableAt <= now)
+                .Where(x => x.AvailableAt <= now && jobsById.TryGetValue(x.TaskId, out var candidate) && !candidate.IsHeld && candidate.Status == AgentJobStatus.Ready && candidate.DispatchGeneration == x.DispatchGeneration)
                 .OrderByDescending(x => jobsById.TryGetValue(x.TaskId, out var job) ? job.Priority : 0)
                 .ThenBy(x => x.AvailableAt)
                 .ThenBy(x => x.CreatedAt)
@@ -549,7 +565,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         {
             await using var dbContext = CreateDbContext();
             var readyJobs = (await dbContext.Jobs
-                .Where(x => x.Status == AgentJobStatus.Ready)
+                .Where(x => x.Status == AgentJobStatus.Ready && !x.IsHeld)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
                 .OrderByDescending(x => x.Priority)
@@ -564,10 +580,10 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             // ディスパッチからの猶予期間」を疑似的なリースとして扱い、二重送出を防ぐ。
             var dispatchGraceCutoff = now.AddMinutes(-Math.Max(0, dispatchGraceMinutes));
             var pendingJobIds = (await dbContext.DispatchOutbox
-                    .Select(x => new { x.TaskId, x.DispatchedAt })
+                    .Select(x => new { x.TaskId, x.DispatchedAt, x.DispatchGeneration })
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false))
-                .Where(x => x.DispatchedAt is null || x.DispatchedAt >= dispatchGraceCutoff)
+                .Where(x => (x.DispatchedAt is null || x.DispatchedAt >= dispatchGraceCutoff) && readyJobs.Any(job => job.JobId == x.TaskId && job.DispatchGeneration == x.DispatchGeneration))
                 .Select(x => x.TaskId)
                 .ToHashSet(StringComparer.Ordinal);
 
@@ -851,7 +867,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (job is null)
+            if (job is null || job.IsHeld)
             {
                 return;
             }
@@ -887,7 +903,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (job is null)
+            if (job is null || job.IsHeld)
             {
                 return false;
             }
@@ -929,17 +945,22 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         {
             await using var dbContext = CreateDbContext();
             var runningJobs = await dbContext.Jobs
-                .Where(x => x.Status == AgentJobStatus.Running && jobTypeSet.Contains(x.JobType))
+                .Where(x => x.Status == AgentJobStatus.Running && jobTypeSet.Contains(x.JobType)
+                    && x.LeaseExpiresAt.HasValue)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            if (runningJobs.Count == 0)
+            // SQLite cannot compare DateTimeOffset values server-side. Match the
+            // lease acquisition recovery path and compare instants in memory.
+            var expiredJobs = runningJobs.Where(x => x.LeaseExpiresAt <= now).ToList();
+            if (expiredJobs.Count == 0)
             {
                 return 0;
             }
 
-            foreach (var job in runningJobs)
+            foreach (var job in expiredJobs)
             {
+                if (job.IsHeld) { await FinishHoldAsync(dbContext, job, now, cancellationToken); continue; }
                 job.Status = AgentJobStatus.Ready;
                 job.StartedAt = null;
                 job.LeaseExpiresAt = null;
@@ -951,7 +972,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             }
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return runningJobs.Count;
+            return expiredJobs.Count;
         }
         finally
         {
@@ -1268,7 +1289,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     x.StartedAt,
                     x.LeaseExpiresAt,
                     x.LastError,
-                    x.UpdatedAt))
+                    x.UpdatedAt, x.IsHeld))
                 .ToList();
         }
         finally
@@ -1284,6 +1305,12 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         try
         {
             await using var dbContext = CreateDbContext();
+            var heldRunning = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId && x.IsHeld && x.Status == AgentJobStatus.Running, cancellationToken);
+            if (heldRunning?.LeaseExpiresAt is { } expiry && expiry <= DateTimeOffset.UtcNow)
+            {
+                await FinishHoldAsync(dbContext, heldRunning, DateTimeOffset.UtcNow, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
             var entity = await dbContext.Jobs
                 .SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken)
                 .ConfigureAwait(false);
@@ -1322,7 +1349,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                 string.IsNullOrWhiteSpace(entity.ParentJobId) ? null : entity.ParentRelationType,
                 children,
                 audits,
-                attempts);
+                attempts, entity.IsHeld);
         }
         finally
         {
@@ -1497,6 +1524,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
     {
         using var dbContext = CreateDbContext();
         dbContext.Database.EnsureCreated();
+        dbContext.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS markers (marker_type TEXT NOT NULL, marker_key TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (marker_type, marker_key));");
+        if (dbContext.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_table_info('jobs') WHERE name = 'is_held'").Single() == 0)
+            dbContext.Database.ExecuteSqlRaw("ALTER TABLE jobs ADD COLUMN is_held INTEGER NOT NULL DEFAULT 0;");
         dbContext.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS job_attempts (attempt_id TEXT NOT NULL PRIMARY KEY, job_id TEXT NOT NULL, attempt_number INTEGER NOT NULL, status TEXT NOT NULL, error TEXT NULL, started_at TEXT NOT NULL, completed_at TEXT NULL);");
         dbContext.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS ix_job_attempts_job_id_attempt_number ON job_attempts(job_id, attempt_number);");
         var leaseTokenColumnExists = dbContext.Database
@@ -1786,7 +1816,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
                     x => x.JobType == jobType && x.DeduplicationKey == deduplicationKey,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (job is null)
+            if (job is null || job.IsHeld)
             {
                 return;
             }
@@ -1837,6 +1867,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
         foreach (var job in expiredJobs)
         {
+            if (job.IsHeld) { await FinishHoldAsync(dbContext, job, now, cancellationToken); continue; }
             job.Status = AgentJobStatus.Ready;
             job.LeaseExpiresAt = null;
             job.LeaseToken = null;
@@ -1896,8 +1927,9 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         IEnumerable<AgentJobStatusReadModel> filtered = view switch
         {
             "action" => allItems.Where(x => x.Status is AgentJobStatus.Failed or AgentJobStatus.DeadLetter),
-            "running" => allItems.Where(x => x.Status == AgentJobStatus.Running),
-            "ready" => allItems.Where(x => x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency),
+            "held" => allItems.Where(x => x.IsHeld),
+            "running" => allItems.Where(x => x.Status == AgentJobStatus.Running && !x.IsHeld),
+            "ready" => allItems.Where(x => !x.IsHeld && x.Status is AgentJobStatus.Ready or AgentJobStatus.WaitingDependency),
             "recent" => allItems.Where(x => x.Status == AgentJobStatus.Succeeded),
             _ => allItems
         };
@@ -1965,7 +1997,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
         AgentJobStatus status,
         DateTimeOffset? availableAt,
         string? error,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool pausePipeline = false)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -1974,12 +2006,20 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             var job = await dbContext.Jobs.SingleOrDefaultAsync(
                 x => x.JobType == jobType
                     && x.DeduplicationKey == deduplicationKey
+                    && !x.IsHeld
                     && x.Status == AgentJobStatus.Running
                     && x.LeaseToken == leaseToken,
                 cancellationToken).ConfigureAwait(false);
-            if (job is null) return false;
+            if (job is null)
+            {
+                _logger.LogWarning(
+                    "Collection task state update rejected: no matching active lease. JobType={JobType} JobKey={JobKey} RequestedStatus={RequestedStatus}",
+                    jobType, deduplicationKey, status);
+                return false;
+            }
 
             var now = DateTimeOffset.UtcNow;
+            if (pausePipeline) await PauseAsync(dbContext, error ?? "収集がタイムアウトしました。", job.JobId, cancellationToken);
             var previousStatus = job.Status;
             job.Status = status;
             job.LeaseToken = null;
@@ -1997,6 +2037,11 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             }
             QueueFailureNotification(dbContext, job, previousStatus, status, error, now);
 
+            if (status == AgentJobStatus.WaitingDependency)
+            {
+                var child = await dbContext.Jobs.FirstOrDefaultAsync(x => x.ParentJobId == job.JobId, cancellationToken);
+                if (child is not null) await ReconcileParentJobAsync(dbContext, child, now, cancellationToken);
+            }
             await ReconcileParentJobAsync(dbContext, job, now, cancellationToken).ConfigureAwait(false);
 
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -2018,7 +2063,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
         var parent = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == child.ParentJobId, cancellationToken)
             .ConfigureAwait(false);
-        if (parent is null || parent.Status != AgentJobStatus.WaitingDependency)
+        if (parent is null || parent.IsHeld || parent.Status != AgentJobStatus.WaitingDependency)
             return;
 
         var children = await dbContext.Jobs.Where(x => x.ParentJobId == parent.JobId).ToListAsync(cancellationToken)
@@ -2068,7 +2113,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
 
     private static void QueueDispatch(ProcessingStateDbContext dbContext, ProcessingJobEntity job, DateTimeOffset availableAt)
     {
-        if (!CollectionDispatchPolicy.IsDispatchable(job.JobType)) return;
+        if (job.IsHeld || !CollectionDispatchPolicy.IsDispatchable(job.JobType)) return;
         job.DispatchGeneration += 1;
         dbContext.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
         {
@@ -2095,7 +2140,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await using var dbContext = CreateDbContext();
             var job = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken).ConfigureAwait(false);
             if (job is null) return ForceRequeueJobResult.NotFound;
-            if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
+            if (job.IsHeld || job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
 
             var previousStatus = job.Status;
             job.Status = AgentJobStatus.Ready;
@@ -2134,7 +2179,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await using var db = CreateDbContext();
             var job = await db.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken).ConfigureAwait(false);
             if (job is null) return ForceRequeueJobResult.NotFound;
-            if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
+            if (job.IsHeld || job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
             if (job.Status is not (AgentJobStatus.Failed or AgentJobStatus.DeadLetter))
                 return ForceRequeueJobResult.Conflict;
             if (!string.IsNullOrWhiteSpace(job.ParentJobId) && job.ParentRelationType == JobRelationType.AggregatedBy)
@@ -2250,7 +2295,7 @@ public sealed class ProcessingStateStore : IProcessingStateStore
             await using var dbContext = CreateDbContext();
             var job = await dbContext.Jobs.SingleOrDefaultAsync(x => x.JobId == jobId, cancellationToken).ConfigureAwait(false);
             if (job is null) return ForceRequeueJobResult.NotFound;
-            if (job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
+            if (job.IsHeld || job.UpdatedAt != expectedUpdatedAt) return ForceRequeueJobResult.Conflict;
 
             var previousStatus = job.Status;
             job.Status = AgentJobStatus.Cancelled;
