@@ -1,6 +1,6 @@
 # JRA Semantic Snapshot Cutover
 
-- Status: Proposed
+- Status: Approved
 - Owner: Scraping team
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -597,3 +597,9 @@ Documentation updates:
   dam and to distinguish the already-working owner path from the proposed model expansion.
 
 Production implementation is blocked until this proposed extension is explicitly approved.
+
+The user approved implementation on 2026-09-09 with one explicit source constraint: race-result pages cannot
+identify the owner. Owner must therefore be populated only from race-card or horse-profile evidence; result-only
+collection must leave both current and race-time owner unset and must never infer or carry an unrelated owner.
+The same implementation pass will diagnose and repair the reported standalone horse-information acquisition
+failure, provided the repair remains within the approved JRA semantic-navigation/profile scope.
