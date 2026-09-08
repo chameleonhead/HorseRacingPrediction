@@ -134,6 +134,11 @@ snapshotはPlaywrightとの往復を要素ごとに行わず、可能な範囲�
 テーブル以外のsection、link、form、action、imageも同じ原則で汎用のテキストと必要最小限のDOM属性を
 一括取得する。provider固有selectorやclass名の解釈はBrowser層へ追加しない。
 
+`Microsoft.Playwright.IPage` から直接取得する追加のSemantic Snapshot APIは、
+[Playwright Page Snapshot API change record](changes/20260907_playwright-page-snapshot/README.md)に基づき、
+`HorseRacingPrediction.Scraping.Browser.Snapshots`へ実装している。本書の既存`IWebBrowser`向けsection
+snapshotも互換契約として維持し、新APIは既存型を破壊的に置換しない。
+
 ---
 
 # 3. 新規ディレクトリ構成
