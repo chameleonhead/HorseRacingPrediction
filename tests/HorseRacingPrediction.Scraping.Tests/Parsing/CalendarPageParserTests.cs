@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 
@@ -10,9 +11,9 @@ public sealed class CalendarPageParserTests
 {
     private const string Url = "https://www.jra.go.jp/keiba/calendar/";
 
-    private static PageSnapshot BuildSnapshot()
+    private static TestPageSnapshot BuildSnapshot()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["日", "月", "火", "水", "木", "金", "土"],
             Rows:
             [
@@ -20,7 +21,7 @@ public sealed class CalendarPageParserTests
                 ["8", "9", "10", "11", "12", "13 中山", "14"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "開催日程",
             mainText: string.Empty,
             links: [],
@@ -28,7 +29,7 @@ public sealed class CalendarPageParserTests
             tables: [table],
             headings: ["開催日程>2026年9月"]);
 
-        return new PageSnapshot(Url, "開催日程", [section]);
+        return new TestPageSnapshot(Url, "開催日程", [section]);
     }
 
     [TestMethod]
@@ -63,7 +64,7 @@ public sealed class CalendarPageParserTests
     [TestMethod]
     public void Parse_MonthNotFound_Throws()
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "開催日程",
             mainText: string.Empty,
             links: [],
@@ -71,7 +72,7 @@ public sealed class CalendarPageParserTests
             tables: [],
             headings: []);
 
-        var snapshot = new PageSnapshot(Url, "開催日程", [section]);
+        var snapshot = new TestPageSnapshot(Url, "開催日程", [section]);
 
         var parser = new CalendarPageParser();
 

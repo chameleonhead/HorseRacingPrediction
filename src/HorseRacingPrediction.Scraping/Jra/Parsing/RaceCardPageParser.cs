@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.Browser;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -58,14 +58,16 @@ public sealed class RaceCardPageParser
     public int Priority => 90;
 
     public bool CanParse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         return FindEntryTable(snapshot) is not null;
     }
 
     public IJraPage Parse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         var table =
             FindEntryTable(snapshot)
             ?? throw new JraPageParseException(
@@ -102,8 +104,8 @@ public sealed class RaceCardPageParser
             entries);
     }
 
-    private static PageTableSnapshot? FindEntryTable(
-        PageSnapshot snapshot)
+    private static JraTableView? FindEntryTable(
+        JraSnapshotView snapshot)
     {
         foreach (var table in snapshot.Tables)
         {
@@ -204,7 +206,7 @@ public sealed class RaceCardPageParser
     }
 
     private static DateOnly ParseDate(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -227,7 +229,7 @@ public sealed class RaceCardPageParser
     }
 
     private static RaceCourse ParseCourse(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -247,7 +249,7 @@ public sealed class RaceCardPageParser
     }
 
     private static int ParseRaceNumber(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -278,7 +280,7 @@ public sealed class RaceCardPageParser
     ];
 
     private static string? ParseRaceName(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         foreach (var heading in snapshot.Headings)
         {
@@ -311,7 +313,7 @@ public sealed class RaceCardPageParser
     }
 
     private static TimeOnly? ParseStartTime(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
@@ -330,7 +332,7 @@ public sealed class RaceCardPageParser
     }
 
     private static IReadOnlyList<RaceEntry> ParseEntries(
-        PageTableSnapshot table,
+        JraTableView table,
         string url)
     {
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
@@ -494,7 +496,7 @@ public sealed class RaceCardPageParser
     /// </summary>
     private static ParsedHorseCell ParseHorseNameCell(
         string cell,
-        PageTableCellSnapshot? cellSnapshot,
+        JraCellView? cellSnapshot,
         string url)
     {
         var semanticName = cellSnapshot?.FindByClass("name")?.Text;

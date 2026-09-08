@@ -5,6 +5,8 @@ using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 
@@ -339,7 +341,7 @@ public sealed class JraNavigator
 
     private async Task<JraRaceCardPage?> TryNavigateFromCurrentPageAsync(
         IJraPage currentPage,
-        PageSnapshot currentSnapshot,
+        SemanticPageSnapshot currentSnapshot,
         RaceId target,
         CancellationToken cancellationToken)
     {
@@ -406,7 +408,7 @@ public sealed class JraNavigator
         RaceId target,
         CancellationToken cancellationToken)
     {
-        var snapshot = await _browser.GetPageSnapshotAsync(cancellationToken: cancellationToken);
+        var snapshot = await _browser.GetPageSnapshotAsync(cancellationToken);
         var page = _pageReader.Parse(snapshot);
         if (page is JraRaceCardPage card && card.RaceId == target)
         {
@@ -429,7 +431,7 @@ public sealed class JraNavigator
     }
 
     private async Task<JraRaceCardPage?> TryClickRaceNumberAsync(
-        PageSnapshot snapshot,
+        SemanticPageSnapshot snapshot,
         RaceId target,
         CancellationToken cancellationToken)
     {
@@ -444,7 +446,7 @@ public sealed class JraNavigator
     }
 
     private async Task<bool> TryClickCourseAsync(
-        PageSnapshot snapshot,
+        SemanticPageSnapshot snapshot,
         RaceCourse course,
         CancellationToken cancellationToken)
     {
@@ -461,7 +463,7 @@ public sealed class JraNavigator
     }
 
     private async Task<bool> TryClickDateAsync(
-        PageSnapshot snapshot,
+        SemanticPageSnapshot snapshot,
         DateOnly date,
         CancellationToken cancellationToken)
     {
@@ -495,15 +497,15 @@ public sealed class JraNavigator
         return null;
     }
 
-    private static string? FindRaceNumberClickText(PageSnapshot snapshot, int raceNumber)
+    private static string? FindRaceNumberClickText(SemanticPageSnapshot snapshot, int raceNumber)
     {
         var pattern = new Regex($@"(^|\D){raceNumber}\s*(?:R|レース)(?!\d)", RegexOptions.IgnoreCase);
         return FindClickText(snapshot, text => pattern.IsMatch(text));
     }
 
-    private static string? FindClickText(PageSnapshot snapshot, Func<string, bool> predicate)
-        => snapshot.Links.Select(link => link.Title)
-            .Concat(snapshot.Actions.Select(action => action.Text))
+    private static string? FindClickText(SemanticPageSnapshot snapshot, Func<string, bool> predicate)
+        => snapshot.Links.Select(link => link.Text)
+            .Concat(snapshot.FindByKind(PageContentKind.Button).Select(node => node.GetEffectiveText()))
             .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text) && predicate(text));
 
     private static string RemoveWhitespace(string value)
@@ -1031,7 +1033,7 @@ public sealed class JraNavigator
         var courseName =
             RaceCourseName(course);
 
-        // ハング調査用: GetPageSnapshotAsync自体がブラウザ側の要素走査を伴う重い
+        // ハング調査用: Snapshot取得はブラウザ側の要素走査を伴う重い
         // 処理であるため、開催選択ページの候補件数が多い場合にここで時間がかかって
         // いないかを切り分けられるよう、所要時間を計測してログに残す。
         var snapshotStopwatch =
@@ -1040,16 +1042,17 @@ public sealed class JraNavigator
         var snapshot =
             await _browser.GetPageSnapshotAsync(
                 cancellationToken: cancellationToken);
+        var snapshotView = JraSnapshotView.Create(snapshot);
 
         _logger.LogInformation(
-            "[Diag] GetPageSnapshotAsync done. Date={Date} Course={Course} ElapsedMs={ElapsedMs} SectionCount={SectionCount}",
+            "[Diag] Semantic snapshot done. Date={Date} Course={Course} ElapsedMs={ElapsedMs} NodeCount={NodeCount}",
             date,
             course,
             snapshotStopwatch.ElapsedMilliseconds,
-            snapshot.Sections.Count);
+            snapshot.Root.Descendants().Count());
 
         var buttonText =
-            FindMeetingButtonText(snapshot.MainText, date, courseName);
+            FindMeetingButtonText(snapshotView.MainText, date, courseName);
 
         if (buttonText is null)
         {

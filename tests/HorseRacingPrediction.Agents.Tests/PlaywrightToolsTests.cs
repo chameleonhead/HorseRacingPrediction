@@ -3,6 +3,9 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Agents.Plugins;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+using PageLinkSnapshot = HorseRacingPrediction.Scraping.Browser.PageLinkSnapshot;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -359,6 +362,34 @@ public class PlaywrightToolsTests
         {
             IReadOnlyList<PageLinkSnapshot> result = CurrentPageLinks.Take(maxResults).ToList();
             return Task.FromResult(result);
+        }
+
+        public Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            var links = CurrentPageLinks.Select(link => new HorseRacingPrediction.Scraping.Browser.Snapshots.PageLinkSnapshot
+            {
+                Text = link.Title,
+                RawHref = link.Url,
+                Url = Uri.TryCreate(link.Url, UriKind.Absolute, out var url) ? url : null,
+            }).ToArray();
+            return Task.FromResult(new SemanticPageSnapshot
+            {
+                Url = Uri.TryCreate(SimulatedCurrentUrl, UriKind.Absolute, out var pageUrl) ? pageUrl : new Uri("about:blank"),
+                Root = new PageContentNode
+                {
+                    Kind = PageContentKind.Document,
+                    Children = string.IsNullOrWhiteSpace(ResponseText)
+                        ? []
+                        : [new PageContentNode { Kind = PageContentKind.Paragraph, Text = ResponseText }],
+                },
+                Metadata = new PageMetadataSnapshot { Meta = new Dictionary<string, string>(), JsonLd = [] },
+                KeyValues = [],
+                Tables = [],
+                Links = links,
+                Images = [],
+                Forms = [],
+                Diagnostics = [],
+            });
         }
 
         public Task<string> SearchAsync(

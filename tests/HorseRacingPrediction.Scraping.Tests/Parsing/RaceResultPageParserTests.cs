@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 
@@ -10,9 +11,9 @@ public sealed class RaceResultPageParserTests
 {
     private const string Url = "https://www.jra.go.jp/keiba/sample/raceresult/";
 
-    private static PageSnapshot BuildSnapshot()
+    private static TestPageSnapshot BuildSnapshot()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -21,7 +22,7 @@ public sealed class RaceResultPageParserTests
                 ["3", "2", "テストホースB", "騎手B", "1:33.9"],
             ]);
 
-        var payoutTable = new PageTableSnapshot(
+        var payoutTable = new TestPageTable(
             Headers: ["式別", "組合せ", "払戻金"],
             Rows:
             [
@@ -32,7 +33,7 @@ public sealed class RaceResultPageParserTests
                 ["三連単", "3-1-2", "3,120円"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             // 実サイト確認（2026-09-07）で判明した実際の表記に合わせる:
             // 「馬場」「馬場状態」という語を伴わず、「芝」「ダート」の直後に状態値が続く。
@@ -42,7 +43,7 @@ public sealed class RaceResultPageParserTests
             tables: [table, payoutTable],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
 
-        return new PageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 結果", [section]);
+        return new TestPageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 結果", [section]);
     }
 
     [TestMethod]
@@ -56,7 +57,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void CanParse_NoResultTable_ReturnsFalse()
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "無関係ページ",
             mainText: string.Empty,
             links: [],
@@ -64,7 +65,7 @@ public sealed class RaceResultPageParserTests
             tables: [],
             headings: []);
 
-        var snapshot = new PageSnapshot(Url, "無関係ページ", [section]);
+        var snapshot = new TestPageSnapshot(Url, "無関係ページ", [section]);
 
         var parser = new RaceResultPageParser();
 
@@ -128,11 +129,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_障害レースで芝とダートの両方の馬場状態を取得できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "3:19.8"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 雨 芝 稍重 ダート 重",
             links: [],
@@ -140,7 +141,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R", "障害3歳以上未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var parser = new RaceResultPageParser();
         var page = (JraRaceResultPage)parser.Parse(snapshot);
@@ -152,11 +153,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_マストヘッド見出しのみでレース名を特定できない場合は例外を投げる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -166,7 +167,7 @@ public sealed class RaceResultPageParserTests
             // 見出しが続かないケース（想定外のページ構造）。
             headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var parser = new RaceResultPageParser();
 
@@ -177,7 +178,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_取消除外中止失格を正常に解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -188,7 +189,7 @@ public sealed class RaceResultPageParserTests
                 ["失格", "5", "テストホースE", "騎手E", "1:35.0"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -196,7 +197,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -224,11 +225,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_着順欄が未知の値の場合はJraUnexpectedValueExceptionを投げる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["再検討", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -236,7 +237,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -248,11 +249,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_天候が未知の値の場合はJraUnexpectedValueExceptionを投げる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 不明 芝 良",
             links: [],
@@ -260,7 +261,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -272,11 +273,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_馬場状態が未知の値の場合はJraUnexpectedValueExceptionを投げる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 極重",
             links: [],
@@ -284,7 +285,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -296,7 +297,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_性齢列がある場合はSexとAgeへ分解できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "性齢", "騎手", "タイム"],
             Rows:
             [
@@ -305,7 +306,7 @@ public sealed class RaceResultPageParserTests
                 ["3", "3", "テストホースC", "せん5", "騎手C", "1:33.9"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -313,7 +314,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -330,11 +331,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_性齢列の値が未知の場合はJraUnexpectedValueExceptionを投げる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "性齢", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騙5", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -342,7 +343,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -428,11 +429,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_コース表記_障害の芝からダートへの複数surfaceを許容する()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "3:19.8"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良 ダート 良 3,000メートル（芝→ダート）",
             links: [],
@@ -440,7 +441,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R", "障害3歳以上未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -462,7 +463,7 @@ public sealed class RaceResultPageParserTests
     public void Parse_コース表記の馬場種別が未知の場合はエラーになる()
     {
         var section = SectionWithMainText("天候 晴 芝 良 1,600メートル（水・左）");
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -473,11 +474,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_平地では推定上りダートは平均1Fを分離して解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "推定上り"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4", "34.5"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -485,7 +486,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -496,11 +497,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_障害では平均1Fを解析でき推定上りは要求しない()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "平均1F"],
             Rows: [["1", "1", "テストホースA", "騎手A", "3:19.8", "13.2"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -508,7 +509,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R", "障害3歳以上未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -519,7 +520,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_同着を検出できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "着差"],
             Rows:
             [
@@ -527,7 +528,7 @@ public sealed class RaceResultPageParserTests
                 ["1", "2", "テストホースB", "騎手B", "1:33.4", "同着"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -535,7 +536,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -548,7 +549,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_降着を検出しFinishPositionとOriginalFinishPositionを分離できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -556,7 +557,7 @@ public sealed class RaceResultPageParserTests
                 ["1", "2", "テストホースB", "騎手B", "1:33.5"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -564,7 +565,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -579,11 +580,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_降着表現を検出したのに元順位を解析できない場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["10(降着)", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -591,7 +592,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -602,7 +603,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_通常完走の2着以下で着差列が存在するのに空の場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "着差"],
             Rows:
             [
@@ -610,7 +611,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "2", "テストホースB", "騎手B", "1:33.6", string.Empty],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -618,7 +619,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -629,7 +630,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_馬体重人気斤量調教師枠番を解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "枠番", "馬番", "馬名", "騎手", "調教師", "斤量", "タイム", "人気", "馬体重"],
             Rows:
             [
@@ -638,7 +639,7 @@ public sealed class RaceResultPageParserTests
                 ["3", "3", "3", "テストホースC", "騎手C", "調教師C", "54.0", "1:33.9", string.Empty, "400 (初出走)"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -646,7 +647,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -669,11 +670,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_人気が0の場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "人気"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4", "0"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -681,7 +682,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -692,11 +693,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_馬体重が値ありで解析不能な場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "馬体重"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4", "計不"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -704,7 +705,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -715,17 +716,17 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_未知の券種はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
         // Phase8でワイド・枠連・3連複は既知の券種として対応済みのため、
         // ここでは引き続き既知集合に含まれない架空の券種名を用いる。
-        var payoutTable = new PageTableSnapshot(
+        var payoutTable = new TestPageTable(
             Headers: ["式別", "組合せ", "払戻金"],
             Rows: [["馬複", "1-3", "250円"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -733,7 +734,7 @@ public sealed class RaceResultPageParserTests
             tables: [table, payoutTable],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraUnexpectedValueException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -745,15 +746,15 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_払戻値が存在するのに解析不能な場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var payoutTable = new PageTableSnapshot(
+        var payoutTable = new TestPageTable(
             Headers: ["式別", "組合せ", "払戻金"],
             Rows: [["単勝", "1", "不明"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -761,7 +762,7 @@ public sealed class RaceResultPageParserTests
             tables: [table, payoutTable],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -772,7 +773,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_複数の特殊状態と同着降着が混在しても正常に解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "着差"],
             Rows:
             [
@@ -785,7 +786,7 @@ public sealed class RaceResultPageParserTests
                 ["失格", "7", "テストホースG", "騎手G", "1:35.0", string.Empty],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -793,7 +794,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -815,7 +816,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_通常のダートレースを解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -823,7 +824,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "2", "テストホースB", "騎手B", "1:24.8"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 ダート 良 1,400メートル（ダート・左）",
             links: [],
@@ -831,7 +832,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 東京 3R", "3歳未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -847,11 +848,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_障害芝単独レースを解析できる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "3:19.8"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良 2,890メートル（芝 外内）",
             links: [],
@@ -859,7 +860,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月6日 中山 1R", "障害3歳以上未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -875,7 +876,7 @@ public sealed class RaceResultPageParserTests
         // 表記（メートル表記・性齢・馬体重・人気列等）が一切存在しない簡略な
         // ページでも、既存の必須列（着順・馬番・馬名・騎手・タイム）だけで
         // 正常にParseできることを確認する。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -883,7 +884,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "2", "テストホースB", "騎手B", "1:33.6"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -891,7 +892,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "1990年5月5日 中山 11R", "皐月賞"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -911,11 +912,11 @@ public sealed class RaceResultPageParserTests
         // 古い年代等で馬単・三連単が発売されていないレースを想定し、
         // 単勝・複勝のみの払戻テーブルでも正常に解析できることを確認する
         // （依頼書13・28節: 全券種が存在することを要求しない）。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var payoutTable = new PageTableSnapshot(
+        var payoutTable = new TestPageTable(
             Headers: ["式別", "組合せ", "払戻金"],
             Rows:
             [
@@ -923,7 +924,7 @@ public sealed class RaceResultPageParserTests
                 ["複勝", "1", "120円"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -931,7 +932,7 @@ public sealed class RaceResultPageParserTests
             tables: [table, payoutTable],
             headings: ["JRA 日本中央競馬会", "1990年5月5日 中山 11R", "皐月賞"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -946,7 +947,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_必須テーブルが存在しない場合は例外を投げる()
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "無関係ページ",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -954,7 +955,7 @@ public sealed class RaceResultPageParserTests
             tables: [],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraPageParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -968,11 +969,11 @@ public sealed class RaceResultPageParserTests
         // 依頼書29節「結果行が1件以上存在する」というRaceResult全体Validationを
         // 検証する。着順テーブル自体は見つかったが結果行が0件（見出し行のみ）の
         // 場合、正常な空結果として扱わずParser異常として検知する。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: []);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -980,7 +981,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraPageStructureException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -992,7 +993,7 @@ public sealed class RaceResultPageParserTests
     public void Parse_HorseNumberが重複する場合はJraResultConsistencyExceptionを投げる()
     {
         // 依頼書14・29節「HorseNumberがレース内で一意」というValidation。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -1000,7 +1001,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "1", "テストホースB", "騎手B", "1:33.6"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1008,7 +1009,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -1020,11 +1021,11 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_Finishedでタイム列に値があるのに解析不能な場合はエラーになる()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "計時不能"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1032,7 +1033,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -1046,7 +1047,7 @@ public sealed class RaceResultPageParserTests
     {
         // 依頼書7・29節「既知項目だが形式不正→Error」。馬番セルから数字を
         // 抽出できない結果行を静かに読み飛ばさず、Parser異常として検知する。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -1054,7 +1055,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "2", "テストホースB", "騎手B", "1:33.6"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1062,7 +1063,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -1078,7 +1079,7 @@ public sealed class RaceResultPageParserTests
         // いるのに馬名列だけが空/空白の結果行を静かに読み飛ばさず、Parser異常
         // として検知する（Phase 7 A1）。見出し行フィルタ・着順欄空白行フィルタは
         // この行より前に確定しているため、誤って正常な非結果行を巻き込まない。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows:
             [
@@ -1086,7 +1087,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "2", "テストホースB", "騎手B", "1:33.6"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1094,7 +1095,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -1108,11 +1109,11 @@ public sealed class RaceResultPageParserTests
     {
         // 依頼書19・29節「Finished: Timeあり」。タイム列自体が存在しない
         // （見出しなし）ケースでFinishedにTimeが欠落する場合をエラーにする。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手"],
             Rows: [["1", "1", "テストホースA", "騎手A"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1120,7 +1121,7 @@ public sealed class RaceResultPageParserTests
             tables: [table],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var ex = Assert.ThrowsExactly<JraResultConsistencyException>(
             () => new RaceResultPageParser().Parse(snapshot));
@@ -1135,17 +1136,17 @@ public sealed class RaceResultPageParserTests
         // 内容一致）で探索する設計のため、払戻テーブルを着順テーブルより前に
         // 置く・見出しの並びを変えるといったDOM位置変更があっても解析結果が
         // 変わらないことを確認する（依頼書32節「DOM位置変更を模したFixture」）。
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]]);
 
-        var payoutTable = new PageTableSnapshot(
+        var payoutTable = new TestPageTable(
             Headers: ["式別", "組合せ", "払戻金"],
             Rows: [["単勝", "1", "250円"]]);
 
         // 払戻テーブルを結果テーブルより先に置く。見出しの並びにも
         // 無関係な要素を挟む。
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: "天候 晴 芝 良",
             links: [],
@@ -1153,7 +1154,7 @@ public sealed class RaceResultPageParserTests
             tables: [payoutTable, table],
             headings: ["JRA 日本中央競馬会", "勝馬の紹介", "2026年9月5日 中山 11R", "テストステークス", "払戻金"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -1171,7 +1172,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_実サイト書き起こしFixture_全項目を正しく解析する()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers:
             [
                 "着順", "枠", "馬番", "馬名", "性齢", "負担重量", "騎手名", "タイム", "着差",
@@ -1183,7 +1184,7 @@ public sealed class RaceResultPageParserTests
                 ["2", "7", "7", "ベラトール", "牡4", "60.0", "大江原壱", "3:20.0", "1 1/4", "1 1 1 1", "13.9", "508(+6)", "西田雄一郎", "2"],
             ]);
 
-        var cornerTable = new PageTableSnapshot(
+        var cornerTable = new TestPageTable(
             Headers: ["コーナー通過順位", ""],
             Rows:
             [
@@ -1202,7 +1203,7 @@ public sealed class RaceResultPageParserTests
             "複勝 2 140円 (1人気) 7 190円 (3人気) ワイド 2-7 330円 (5人気) 2-6 360円 (6人気) 6-7 300円 (4人気) 馬単 2-7 1,650円 (9人気) " +
             "3連複 2-6-7 1,160円 (5人気) 3連単 2-7-6 5,650円 (25人気)";
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: mainText,
             links: [],
@@ -1210,7 +1211,7 @@ public sealed class RaceResultPageParserTests
             tables: [table, cornerTable],
             headings: ["JRA 日本中央競馬会", "2026年9月6日（日曜）4回中山2日 1レース", "障害3歳以上未勝利"]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -1290,7 +1291,7 @@ public sealed class RaceResultPageParserTests
     [TestMethod]
     public void Parse_実サイト書き起こしFixture_7頭分の統合テスト()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers:
             [
                 "着順", "枠", "馬番", "馬名", "性齢", "負担重量", "騎手名", "タイム", "着差",
@@ -1307,7 +1308,7 @@ public sealed class RaceResultPageParserTests
                 ["7", "4", "4", "シグムンド", "牡5", "60.0", "伴啓太", "3:25.4", "大差", "7 7 6 7", "14.3", "510(0)", "岩戸孝樹", "5"],
             ]);
 
-        var cornerTable = new PageTableSnapshot(
+        var cornerTable = new TestPageTable(
             Headers: ["コーナー通過順位", ""],
             Rows:
             [
@@ -1326,7 +1327,7 @@ public sealed class RaceResultPageParserTests
             "複勝 2 140円 (1人気) 7 190円 (3人気) ワイド 2-7 330円 (5人気) 2-6 360円 (6人気) 6-7 300円 (4人気) 馬単 2-7 1,650円 (9人気) " +
             "3連複 2-6-7 1,160円 (5人気) 3連単 2-7-6 5,650円 (25人気)";
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: mainText,
             links: [],
@@ -1339,7 +1340,7 @@ public sealed class RaceResultPageParserTests
                 "障害3歳以上未勝利",
             ]);
 
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
 
@@ -1521,13 +1522,13 @@ public sealed class RaceResultPageParserTests
         StringAssert.Contains(page.OverallPaceText, "1マイル1分48秒1");
     }
 
-    private static PageSectionSnapshot SectionWithMainText(string mainText)
+    private static TestPageSection SectionWithMainText(string mainText)
         => new(
             title: "レース結果",
             mainText: mainText,
             links: [],
             actions: [],
-            tables: [new PageTableSnapshot(
+            tables: [new TestPageTable(
                 Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
                 Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4"]])],
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
@@ -1535,7 +1536,7 @@ public sealed class RaceResultPageParserTests
     private static JraRaceResultPage ParseWithMainText(string mainText)
     {
         var section = SectionWithMainText(mainText);
-        var snapshot = new PageSnapshot(Url, "レース結果 JRA", [section]);
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
         return (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
     }

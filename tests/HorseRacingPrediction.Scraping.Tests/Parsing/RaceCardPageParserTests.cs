@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 
@@ -10,9 +11,9 @@ public sealed class RaceCardPageParserTests
 {
     private const string Url = "https://www.jra.go.jp/keiba/sample/racecard/";
 
-    private static PageSnapshot BuildSnapshot()
+    private static TestPageSnapshot BuildSnapshot()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["枠番", "馬番", "馬名", "騎手", "斤量"],
             Rows:
             [
@@ -21,7 +22,7 @@ public sealed class RaceCardPageParserTests
                 ["2", "3", "テストホースC", "騎手C", "56kg"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "出馬表",
             mainText: "発走 15:40",
             links: [],
@@ -29,7 +30,7 @@ public sealed class RaceCardPageParserTests
             tables: [table],
             headings: ["2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
 
-        return new PageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 出馬表", [section]);
+        return new TestPageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 出馬表", [section]);
     }
 
     [TestMethod]
@@ -43,7 +44,7 @@ public sealed class RaceCardPageParserTests
     [TestMethod]
     public void CanParse_NoEntryTable_ReturnsFalse()
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "無関係ページ",
             mainText: string.Empty,
             links: [],
@@ -51,7 +52,7 @@ public sealed class RaceCardPageParserTests
             tables: [],
             headings: []);
 
-        var snapshot = new PageSnapshot(Url, "無関係ページ", [section]);
+        var snapshot = new TestPageSnapshot(Url, "無関係ページ", [section]);
 
         var parser = new RaceCardPageParser();
 
@@ -93,9 +94,9 @@ public sealed class RaceCardPageParserTests
     // 馬名セルはブロック要素ごとの改行を保持した複数行テキストとして取得される
     // （馬名／オッズ(人気)／馬体重(増減)／馬主名／生産者名／調教師名(所属)／血統の順）。
     // 騎手列も同様に「性齢/毛色」「負担重量」「騎手名」が改行区切りで結合されている。
-    private static PageSnapshot BuildRealSiteSnapshot(string weightText = "488kg(-2)")
+    private static TestPageSnapshot BuildRealSiteSnapshot(string weightText = "488kg(-2)")
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: [
                 "枠",
                 "馬番",
@@ -112,7 +113,7 @@ public sealed class RaceCardPageParserTests
                 ],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "出馬表",
             mainText: "発走 10:05",
             links: [],
@@ -120,7 +121,7 @@ public sealed class RaceCardPageParserTests
             tables: [table],
             headings: ["2026年9月5日 中山 1レース", "障害3歳以上オープン"]);
 
-        return new PageSnapshot(Url, "出馬表", [section]);
+        return new TestPageSnapshot(Url, "出馬表", [section]);
     }
 
     [TestMethod]
@@ -161,7 +162,7 @@ public sealed class RaceCardPageParserTests
         {
             ["", "1", "エーオーキング\n4.0\n(3番人気)\n456kg(+6)\n(株)ネクストトライ\n杵臼牧場\n久保田 貴士(美浦)", "牡3/鹿\n56.0kg\n騎手A"],
         };
-        var cells = new IReadOnlyList<PageTableCellSnapshot>[]
+        var cells = new IReadOnlyList<TestPageCell>[]
         {
             [
                 new("", []),
@@ -180,14 +181,14 @@ public sealed class RaceCardPageParserTests
                 new(rows[0][3], []),
             ],
         };
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             ["枠", "馬番", "馬名 / 単勝オッズ(人気)\n馬体重\n馬主名 / 生産者名 / 調教師名 / 血統", "性齢/毛色\n負担重量\n騎手名"],
             rows,
             cells);
-        var section = new PageSectionSnapshot("出馬表", "発走 10:05", [], [], [table],
+        var section = new TestPageSection("出馬表", "発走 10:05", [], [], [table],
             ["2026年9月5日 中山 1レース", "テストレース"]);
 
-        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(new PageSnapshot(Url, "出馬表", [section]));
+        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(new TestPageSnapshot(Url, "出馬表", [section]));
 
         Assert.HasCount(1, page.Entries);
         var entry = page.Entries[0];
@@ -202,9 +203,9 @@ public sealed class RaceCardPageParserTests
     // Playwright側のテキスト抽出がimg alt「JRA 日本中央競馬会」にフォールバックするため、
     // ページ内の見出し一覧（Headings）の先頭付近にこの文字列が本文の見出しより先に混入する。
     // ParseRaceNameがこれをレース名として誤採用しないことを固定Fixtureで検証する。
-    private static PageSnapshot BuildSnapshotWithHeaderLogoHeading()
+    private static TestPageSnapshot BuildSnapshotWithHeaderLogoHeading()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["枠番", "馬番", "馬名", "騎手", "斤量"],
             Rows:
             [
@@ -213,7 +214,7 @@ public sealed class RaceCardPageParserTests
                 ["2", "3", "テストホースC", "騎手C", "56"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "出馬表",
             mainText: "発走 15:40",
             links: [],
@@ -222,7 +223,7 @@ public sealed class RaceCardPageParserTests
             // サイト共通ヘッダーの<h1>（ロゴのimg alt由来）がDOM順で本文見出しより先に来る。
             headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス(GⅢ)"]);
 
-        return new PageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 出馬表", [section]);
+        return new TestPageSnapshot(Url, "2026年9月5日 中山 11R テストステークス 出馬表", [section]);
     }
 
     [TestMethod]

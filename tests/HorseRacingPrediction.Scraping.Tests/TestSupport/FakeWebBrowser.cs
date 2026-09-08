@@ -1,4 +1,5 @@
 using HorseRacingPrediction.Scraping.Browser;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 
 namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 
@@ -11,7 +12,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
     public bool IsDisposed { get; private set; }
 
 
-    private readonly Dictionary<string, PageSnapshot> _snapshotsByUrl = new();
+    private readonly Dictionary<string, SemanticPageSnapshot> _snapshotsByUrl = new();
     private readonly Dictionary<string, List<PageLinkSnapshot>> _linksByUrl = new();
     private readonly Dictionary<string, List<PageFormSnapshot>> _formsByUrl = new();
     private readonly Dictionary<string, string> _clickDestinationsByText = new();
@@ -41,11 +42,14 @@ internal sealed class FakeWebBrowser : IWebBrowser
     public void SetCurrentUrl(string? url)
         => CurrentUrl = url;
 
-    public void SetSnapshot(string url, PageSnapshot snapshot)
+    public void SetSnapshot(string url, SemanticPageSnapshot snapshot)
         => _snapshotsByUrl[url] = snapshot;
 
     public void SetLinks(string url, IEnumerable<PageLinkSnapshot> links)
         => _linksByUrl[url] = links.ToList();
+
+    public void SetLinks(string url, IEnumerable<TestPageLink> links)
+        => _linksByUrl[url] = links.Select(link => (PageLinkSnapshot)link).ToList();
 
     public void SetForms(string url, IEnumerable<PageFormSnapshot> forms)
         => _formsByUrl[url] = forms.ToList();
@@ -74,18 +78,12 @@ internal sealed class FakeWebBrowser : IWebBrowser
         return Task.FromResult(string.Empty);
     }
 
-    public Task<PageSnapshot> GetPageSnapshotAsync(
-        int maxLinks = 0,
-        CancellationToken cancellationToken = default)
+    public Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default)
     {
         var url = CurrentUrl ?? string.Empty;
-
-        if (_snapshotsByUrl.TryGetValue(url, out var snapshot))
-        {
-            return Task.FromResult(snapshot);
-        }
-
-        return Task.FromResult(new PageSnapshot(url, string.Empty, []));
+        return Task.FromResult(_snapshotsByUrl.TryGetValue(url, out var snapshot)
+            ? snapshot
+            : SemanticSnapshotFactory.Create(url));
     }
 
     public Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(

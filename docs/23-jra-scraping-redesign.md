@@ -123,16 +123,21 @@ PlaywrightWebBrowser.GetRaceCardAsync(...)
 
 `PlaywrightWebBrowser` は今後も汎用Webブラウザーとして維持する。
 
-テーブルセル内で複数の意味を持つ要素がCSS class等で区別されている場合、`innerText`だけへ
-平坦化すると項目境界を復元できない。`PageTableSnapshot`は既存の文字列行との互換性を保ちつつ、
-セルごとに要素名・class・正規化テキスト・リンク先を持つ汎用fragment metadataを任意で保持してよい。
-`PlaywrightWebBrowser`はclass名の意味を解釈せず構造だけを保存し、`RaceCardPageParser`等の
-provider parserが`owner`、`breeder`、`weight`等の意味を解釈する。
+テーブルセル内で複数の意味を持つ要素がCSS class等で区別されている場合、Semantic Snapshotの
+`PageTableCellSnapshot.Fragments`へ要素名、class token、正規化テキスト、リンク先、source referenceを
+上限付きで保持する。`PlaywrightPageSnapshotter`はclass名の意味を解釈せず構造だけを保存し、
+`RaceCardPageParser`等のprovider parserが`owner`、`breeder`、`weight`等の意味を解釈する。
 
-snapshotはPlaywrightとの往復を要素ごとに行わず、可能な範囲を1回のDOM評価でまとめて取得し、
-正規化・項目解釈を.NET側で行う。テーブルはテーブル単位で全文とfragmentを一括取得する。
-テーブル以外のsection、link、form、action、imageも同じ原則で汎用のテキストと必要最小限のDOM属性を
-一括取得する。provider固有selectorやclass名の解釈はBrowser層へ追加しない。
+snapshotは`IWebBrowser.GetPageSnapshotAsync`からSemantic Snapshotを返す。内部では要素ごとの
+Playwright往復を行わず、`IPageSnapshotter`が1回のDOM評価でSemantic Tree、table、link、form、image、
+metadataをまとめて取得する。ナビゲーションやready判定は引き続き`IWebBrowser`の責務であり、
+Snapshotter自身はページ遷移や待機を行わない。
+
+JRA parserは`JraSnapshotView`でSemantic Snapshotを参照し、span-awareな矩形table projectionと
+bounded cell fragmentsを利用する。旧section-oriented `Browser.PageSnapshot`、`Sections`、`Actions`、
+旧table/cell型および互換抽出経路はcutoverで削除した。現在のcapture契約と移行結果は
+[Playwright Page Snapshot API](changes/20260907_playwright-page-snapshot/README.md)および
+[JRA Semantic Snapshot Cutover](changes/20260908_jra-semantic-snapshot-cutover/README.md)を参照する。
 
 ---
 
@@ -659,18 +664,17 @@ internal sealed class CalendarPageParser
     public bool CanParse(
         PageSnapshot snapshot)
     {
-        if (snapshot.Url.Contains(
+        if (snapshot.Url.AbsoluteUri.Contains(
                 "/keiba/calendar/",
                 StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        return snapshot.Sections.Any(section =>
-            section.Headings.Any(heading =>
-                heading.Contains(
-                    "開催日程",
-                    StringComparison.Ordinal)));
+        return snapshot.FindHeadings().Any(heading =>
+            heading.GetEffectiveText().Contains(
+                "開催日程",
+                StringComparison.Ordinal));
     }
 
     public IJraPage Parse(
@@ -699,7 +703,7 @@ private static YearMonth ParseMonth(
     PageSnapshot snapshot)
 {
     var match = Regex.Match(
-        $"{snapshot.Title} {string.Join(" ", snapshot.Sections.SelectMany(x => x.Headings))}",
+        $"{snapshot.Title} {string.Join(" ", snapshot.FindHeadings().Select(x => x.GetEffectiveText()))}",
         @"(?<year>\d{4})年\s*(?<month>\d{1,2})月");
 
     if (!match.Success)
@@ -724,9 +728,9 @@ private static YearMonth ParseMonth(
 
 # 14. Calendar開催日解析
 
-まずは `PageSnapshot.Sections` 内のテキスト・リンクから解析する。
+Semantic Treeのeffective textと構造化された`Links`から解析する。
 
-重要なのはHTML selectorをJRA層へ追加するのではなく、既存 `PageSnapshot` で取得可能な範囲を優先すること。
+重要なのはHTML selectorをJRA層へ追加するのではなく、Semantic Snapshotと`JraSnapshotView`で取得可能な汎用構造を優先することである。
 
 概念例。
 
@@ -741,20 +745,14 @@ private static IReadOnlyList<JraRaceDate>
             DateOnly,
             HashSet<RaceCourse>>();
 
-    foreach (var section in snapshot.Sections)
+    ParseText(snapshot.Root.GetEffectiveText(), month, results);
+
+    foreach (var link in snapshot.Links)
     {
         ParseText(
-            section.MainText,
+            $"{link.GetEffectiveText()} {link.RawHref ?? link.Url?.AbsoluteUri}",
             month,
             results);
-
-        foreach (var link in section.Links)
-        {
-            ParseText(
-                $"{link.Title} {link.Url}",
-                month,
-                results);
-        }
     }
 
     return results

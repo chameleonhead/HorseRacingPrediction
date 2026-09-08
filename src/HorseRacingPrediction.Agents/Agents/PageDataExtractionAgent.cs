@@ -2,6 +2,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using SemanticSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+using BrowserPageLinkSnapshot = HorseRacingPrediction.Scraping.Browser.PageLinkSnapshot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +24,8 @@ namespace HorseRacingPrediction.Agents.Agents;
 public sealed class PageDataExtractionAgent
 {
     private const int MaxLoggedTextLength = 8_000;
+    private const int MaxSnapshotValueLength = 1_000;
+    private const int MaxSnapshotCellsPerRow = 64;
 
     private const string AnalysisPrompt = """
         あなたはWebページの生テキストを読みやすく整形し、必要なら詳細表示への1回だけの追加入力が必要かを判定する専門エージェントです。
@@ -104,7 +109,7 @@ public sealed class PageDataExtractionAgent
     public async Task<string> FormatPageContentAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<PageLinkSnapshot>? pageLinks = null,
+        IReadOnlyList<BrowserPageLinkSnapshot>? pageLinks = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -162,9 +167,14 @@ public sealed class PageDataExtractionAgent
     /// ページの構造化スナップショットを LLM で整形し、クリーンなドキュメントを返す。
     /// </summary>
     public Task<string> FormatPageContentAsync(
-        PageSnapshot snapshot,
+        SemanticSnapshot snapshot,
         CancellationToken cancellationToken = default)
-        => FormatPageContentInternalAsync(snapshot.MainText, snapshot.Url, snapshot.Links, snapshot, cancellationToken);
+        => FormatPageContentInternalAsync(
+            snapshot.Root.GetEffectiveText() ?? string.Empty,
+            snapshot.Url.ToString(),
+            ToBrowserLinks(snapshot),
+            snapshot,
+            cancellationToken);
 
     /// <summary>
     /// ページ本文の整形と、詳細表示のための追加クリック要否を同時に判定する。
@@ -173,7 +183,7 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<PageLinkSnapshot> pageLinks,
+        IReadOnlyList<BrowserPageLinkSnapshot> pageLinks,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -243,16 +253,22 @@ public sealed class PageDataExtractionAgent
     /// ページ構造スナップショットを使って本文整形と追加クリック要否を同時に判定する。
     /// </summary>
     public Task<PageExtractionResult> AnalyzePageAsync(
-        PageSnapshot snapshot,
+        SemanticSnapshot snapshot,
         string? objective,
         CancellationToken cancellationToken = default)
-        => AnalyzePageInternalAsync(snapshot.MainText, snapshot.Url, objective, snapshot.Links, snapshot, cancellationToken);
+        => AnalyzePageInternalAsync(
+            snapshot.Root.GetEffectiveText() ?? string.Empty,
+            snapshot.Url.ToString(),
+            objective,
+            ToBrowserLinks(snapshot),
+            snapshot,
+            cancellationToken);
 
     private Task<string> FormatPageContentInternalAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<PageLinkSnapshot>? pageLinks,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot>? pageLinks,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         return FormatPageContentCoreAsync(rawPageText, pageUrl, pageLinks, snapshot, cancellationToken);
@@ -261,8 +277,8 @@ public sealed class PageDataExtractionAgent
     private async Task<string> FormatPageContentCoreAsync(
         string rawPageText,
         string pageUrl,
-        IReadOnlyList<PageLinkSnapshot>? pageLinks,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot>? pageLinks,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -328,8 +344,8 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<PageLinkSnapshot> pageLinks,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot> pageLinks,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         return AnalyzePageCoreAsync(rawPageText, pageUrl, objective, pageLinks, snapshot, cancellationToken);
@@ -339,8 +355,8 @@ public sealed class PageDataExtractionAgent
         string rawPageText,
         string pageUrl,
         string? objective,
-        IReadOnlyList<PageLinkSnapshot> pageLinks,
-        PageSnapshot? snapshot,
+        IReadOnlyList<BrowserPageLinkSnapshot> pageLinks,
+        SemanticSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rawPageText))
@@ -432,7 +448,7 @@ public sealed class PageDataExtractionAgent
         return false;
     }
 
-    private string BuildSearchResultLinkCollection(IReadOnlyList<PageLinkSnapshot> pageLinks)
+    private string BuildSearchResultLinkCollection(IReadOnlyList<BrowserPageLinkSnapshot> pageLinks)
     {
         var primaryLinks = SelectSearchResultLinks(pageLinks);
         var sb = new StringBuilder();
@@ -463,7 +479,7 @@ public sealed class PageDataExtractionAgent
         return sb.ToString().TrimEnd();
     }
 
-    private string BuildLinksPromptText(IReadOnlyList<PageLinkSnapshot> pageLinks)
+    private string BuildLinksPromptText(IReadOnlyList<BrowserPageLinkSnapshot> pageLinks)
     {
         var selectedLinks = pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
@@ -484,7 +500,7 @@ public sealed class PageDataExtractionAgent
         return string.Join(Environment.NewLine, selectedLinks);
     }
 
-    private List<PageLinkSnapshot> SelectSearchResultLinks(IReadOnlyList<PageLinkSnapshot> pageLinks)
+    private List<BrowserPageLinkSnapshot> SelectSearchResultLinks(IReadOnlyList<BrowserPageLinkSnapshot> pageLinks)
     {
         return pageLinks
             .Where(link => !string.IsNullOrWhiteSpace(link.Url))
@@ -496,7 +512,7 @@ public sealed class PageDataExtractionAgent
             .ToList();
     }
 
-    private static int GetSearchResultPriority(PageLinkSnapshot link)
+    private static int GetSearchResultPriority(BrowserPageLinkSnapshot link)
     {
         var score = 0;
         var title = (link.Title ?? string.Empty).ToLowerInvariant();
@@ -529,7 +545,7 @@ public sealed class PageDataExtractionAgent
         return score;
     }
 
-    private static bool IsSearchNoiseLink(PageLinkSnapshot link)
+    private static bool IsSearchNoiseLink(BrowserPageLinkSnapshot link)
     {
         var title = (link.Title ?? string.Empty).ToLowerInvariant();
         var url = (link.Url ?? string.Empty).ToLowerInvariant();
@@ -554,20 +570,28 @@ public sealed class PageDataExtractionAgent
                url.Contains("policies.google.com", StringComparison.Ordinal);
     }
 
-    private string BuildSnapshotJson(PageSnapshot snapshot)
+    private string BuildSnapshotJson(SemanticSnapshot snapshot)
     {
         var compactSnapshot = new
         {
-            snapshot.Url,
-            snapshot.Title,
-            snapshot.Headings,
-            MainText = TruncateSnapshotText(snapshot.MainText),
-            Links = snapshot.Links.Take(_profile.SnapshotLinks).Select(link => new { link.Title, link.Url, link.Region }),
-            Actions = snapshot.Actions.Take(_profile.SnapshotActions).Select(action => new { action.Text, action.Kind }),
+            Url = TruncateSnapshotValue(snapshot.Url.ToString()),
+            Title = TruncateSnapshotValue(snapshot.Title ?? string.Empty),
+            Headings = snapshot.FindHeadings()
+                .Select(node => TruncateSnapshotValue(node.GetEffectiveText() ?? string.Empty)).Take(50),
+            ContentBlocks = BuildContentBlocks(snapshot.Root),
+            Links = snapshot.Links.Take(_profile.SnapshotLinks).Select(link => new
+            {
+                Title = TruncateSnapshotValue(GetLinkText(link)),
+                Url = TruncateSnapshotValue(link.Url?.ToString() ?? link.RawHref ?? string.Empty),
+            }),
+            Actions = snapshot.FindByKind(PageContentKind.Button).Take(_profile.SnapshotActions)
+                .Select(node => new { Text = TruncateSnapshotValue(node.GetEffectiveText() ?? string.Empty), Kind = "button" }),
             Tables = snapshot.Tables.Take(_profile.SnapshotTables).Select(table => new
             {
-                Headers = table.Headers,
+                Caption = TruncateSnapshotValue(table.Caption ?? string.Empty),
                 Rows = table.Rows.Take(_profile.SnapshotRows)
+                    .Select(row => row.Cells.Take(MaxSnapshotCellsPerRow)
+                        .Select(cell => TruncateSnapshotValue(cell.Text)))
             })
         };
 
@@ -577,12 +601,63 @@ public sealed class PageDataExtractionAgent
         });
     }
 
-    private string TruncateSnapshotText(string text)
+    private IReadOnlyList<SnapshotTextBlock> BuildContentBlocks(PageContentNode root)
     {
-        return text.Length <= _profile.SnapshotTextLength
-            ? text
-            : text[.._profile.SnapshotTextLength];
+        var blocks = new List<SnapshotTextBlock>();
+        var remaining = Math.Max(0, _profile.SnapshotTextLength);
+        AppendContentBlocks(root, blocks, ref remaining);
+        return blocks;
     }
+
+    private static void AppendContentBlocks(
+        PageContentNode node,
+        List<SnapshotTextBlock> blocks,
+        ref int remaining)
+    {
+        if (remaining <= 0)
+        {
+            return;
+        }
+
+        if (IsContentBlock(node.Kind))
+        {
+            var text = node.GetEffectiveText();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                var length = Math.Min(text.Length, remaining);
+                blocks.Add(new SnapshotTextBlock(node.Kind.ToString(), text[..length]));
+                remaining -= length;
+            }
+
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            AppendContentBlocks(child, blocks, ref remaining);
+        }
+    }
+
+    private static bool IsContentBlock(PageContentKind kind)
+        => kind is PageContentKind.Heading
+            or PageContentKind.Paragraph
+            or PageContentKind.ListItem
+            or PageContentKind.Link
+            or PageContentKind.Image
+            or PageContentKind.Quote
+            or PageContentKind.Code;
+
+    private static IReadOnlyList<BrowserPageLinkSnapshot> ToBrowserLinks(SemanticSnapshot snapshot)
+        => snapshot.Links.Select(link => new BrowserPageLinkSnapshot(
+            link.Url?.ToString() ?? link.RawHref ?? string.Empty,
+            GetLinkText(link))).ToArray();
+
+    private static string GetLinkText(HorseRacingPrediction.Scraping.Browser.Snapshots.PageLinkSnapshot link)
+        => new[] { link.Text, link.AccessibleName, link.Title }
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+
+    private static string TruncateSnapshotValue(string text)
+        => text.Length <= MaxSnapshotValueLength ? text : text[..MaxSnapshotValueLength];
 
     private static string ExtractJsonObject(string responseText)
     {
@@ -662,7 +737,7 @@ public sealed class PageDataExtractionAgent
     private static string? NormalizeDetailLinkText(
         string? detailLinkText,
         string rawPageText,
-        IReadOnlyList<PageLinkSnapshot> pageLinks)
+        IReadOnlyList<BrowserPageLinkSnapshot> pageLinks)
     {
         if (string.IsNullOrWhiteSpace(detailLinkText))
         {
@@ -683,6 +758,8 @@ public sealed class PageDataExtractionAgent
             : null;
     }
 
+    private sealed record SnapshotTextBlock(string Kind, string Text);
+
     private sealed class PageExtractionResponse
     {
         public string? ContentMarkdown { get; init; }
@@ -695,7 +772,7 @@ public sealed class PageDataExtractionAgent
     private static string SanitizeUrls(
         string markdown,
         string pageUrl,
-        IReadOnlyList<PageLinkSnapshot>? pageLinks)
+        IReadOnlyList<BrowserPageLinkSnapshot>? pageLinks)
     {
         if (string.IsNullOrWhiteSpace(markdown))
         {

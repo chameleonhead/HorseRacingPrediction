@@ -1,7 +1,9 @@
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace HorseRacingPrediction.Agents.Tests;
 
@@ -12,7 +14,8 @@ public sealed class PlaywrightWebBrowserSnapshotTests
     [TestCategory("External")]
     public async Task GetPageSnapshotAsync_TableCellWithClasses_ReturnsDomFragments()
     {
-        await using var browser = await PlaywrightWebBrowser.CreateAsync();
+        var logger = new CapturingLogger<PlaywrightWebBrowser>();
+        await using var browser = await PlaywrightWebBrowser.CreateAsync(logger: logger);
         const string html = "<table><tr><th>馬名</th></tr><tr><td><a href='/race/1'>1R</a><p class='owner'>藤田 晋</p><div class='cell weight'>488kg<span class='transition'>(-2)</span></div></td></tr></table>";
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -23,14 +26,14 @@ public sealed class PlaywrightWebBrowserSnapshotTests
 
         var snapshot = await browser.GetPageSnapshotAsync();
 
-        var cell = snapshot.Sections.SelectMany(section => section.Tables)
-            .SelectMany(table => table.Cells ?? [])
-            .SelectMany(row => row)
-            .First(cell => cell.FindByClass("owner") is not null);
-        Assert.AreEqual("藤田 晋", cell.FindByClass("owner")?.Text);
-        Assert.AreEqual("488kg(-2)", cell.FindByClass("weight")?.Text);
-        Assert.AreEqual("(-2)", cell.FindByClass("transition")?.Text);
-        Assert.AreEqual("/race/1", cell.Fragments.Single(fragment => fragment.TagName == "a").Href);
+        var cell = snapshot.Tables.SelectMany(table => table.Rows)
+            .SelectMany(row => row.Cells)
+            .First(cell => cell.Fragments.Any(fragment => fragment.ClassTokens.Contains("owner")));
+        Assert.AreEqual("藤田 晋", FindByClass(cell, "owner")?.Text);
+        Assert.AreEqual("488kg(-2)", FindByClass(cell, "weight")?.Text);
+        Assert.AreEqual("(-2)", FindByClass(cell, "transition")?.Text);
+        Assert.AreEqual("/race/1", cell.Fragments.Single(fragment => fragment.TagName == "a").RawUrl);
+        Assert.IsTrue(logger.Messages.Any(message => message.Contains("Fragments=4", StringComparison.Ordinal)));
     }
 
     private static async Task ServeHtmlOnceAsync(TcpListener listener, string html)
@@ -69,39 +72,23 @@ public sealed class PlaywrightWebBrowserSnapshotTests
         }
     }
 
-    [TestMethod]
-    public void IsTextCoveredByExistingSections_ReturnsTrueForAlreadyCapturedBlock()
+    private static PageElementFragmentSnapshot? FindByClass(PageTableCellSnapshot cell, string className)
+        => cell.Fragments.FirstOrDefault(fragment => fragment.ClassTokens.Contains(className));
+
+    private sealed class CapturingLogger<T> : ILogger<T>
     {
-        var sections = CreateSections("3歳以上1勝クラス コース：1,700 メートル（ダート・右）");
+        public List<string> Messages { get; } = [];
 
-        var covered = PlaywrightWebBrowser.IsTextCoveredByExistingSections(
-            "コース：1,700 メートル（ダート・右）",
-            sections);
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-        Assert.IsTrue(covered);
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
     }
-
-    [TestMethod]
-    public void IsTextCoveredByExistingSections_ReturnsFalseForUncapturedCourseBlock()
-    {
-        var sections = CreateSections("着順 馬番 馬名 騎手 タイム");
-
-        var covered = PlaywrightWebBrowser.IsTextCoveredByExistingSections(
-            "コース：1,700 メートル（ダート・右）",
-            sections);
-
-        Assert.IsFalse(covered);
-    }
-
-    private static IReadOnlyList<PageSectionSnapshot> CreateSections(string mainText)
-        =>
-        [
-            new PageSectionSnapshot(
-                title: "Result",
-                mainText,
-                headings: [],
-                links: [],
-                actions: [],
-                tables: [])
-        ];
 }

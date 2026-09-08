@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.Browser;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -78,14 +78,16 @@ public sealed class RaceResultPageParser
     public int Priority => 85;
 
     public bool CanParse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         return FindResultTable(snapshot) is not null;
     }
 
     public IJraPage Parse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         var table =
             FindResultTable(snapshot)
             ?? throw new JraPageParseException(
@@ -173,7 +175,7 @@ public sealed class RaceResultPageParser
     }
 
     private static RaceCourseSpec? ParseCourseSpec(
-        PageSnapshot snapshot,
+        JraSnapshotView snapshot,
         string raceName)
     {
         var searchText =
@@ -320,7 +322,7 @@ public sealed class RaceResultPageParser
         new(@"(?<num>\d+)\s*コーナー", RegexOptions.Compiled);
 
     private static IReadOnlyList<CornerPassage> ParseCornerPassages(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var result = new List<CornerPassage>();
 
@@ -420,7 +422,7 @@ public sealed class RaceResultPageParser
         new(@"(?<position>\d{1,2})着\s*(?<amount>[\d,]+)", RegexOptions.Compiled);
 
     private static IReadOnlyDictionary<int, decimal>? ParsePrizeMoney(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText = $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
@@ -480,7 +482,7 @@ public sealed class RaceResultPageParser
         new(@"上り[:：]?\s*(?<val>.{0,80})", RegexOptions.Compiled);
 
     private static string? ParseOverallPaceText(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var match = OverallPaceRegex.Match(snapshot.MainText);
 
@@ -508,7 +510,7 @@ public sealed class RaceResultPageParser
     }
 
     private static string? ParseWeatherText(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
@@ -537,7 +539,7 @@ public sealed class RaceResultPageParser
     }
 
     private static string? ParseTrackConditionText(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
@@ -625,8 +627,8 @@ public sealed class RaceResultPageParser
         new(@"(?<combo>\d+(?:[-－]\d+){0,2})\s*(?:→\s*)?(?<amount>[\d,]+)\s*円\s*(?:[\(（]?\s*(?<pop>\d+)\s*人気\s*[\)）]?)?", RegexOptions.Compiled);
 
     private static RacePayouts? ParsePayouts(
-        PageSnapshot snapshot,
-        PageTableSnapshot resultTable)
+        JraSnapshotView snapshot,
+        JraTableView resultTable)
     {
         var buckets = new Dictionary<PayoutBucketKind, List<PayoutLine>>
         {
@@ -786,8 +788,8 @@ public sealed class RaceResultPageParser
     }
 
     private static string BuildPayoutSearchText(
-        PageSnapshot snapshot,
-        PageTableSnapshot resultTable)
+        JraSnapshotView snapshot,
+        JraTableView resultTable)
     {
         var parts = new List<string> { snapshot.MainText };
 
@@ -894,8 +896,8 @@ public sealed class RaceResultPageParser
         return -1;
     }
 
-    private static PageTableSnapshot? FindResultTable(
-        PageSnapshot snapshot)
+    private static JraTableView? FindResultTable(
+        JraSnapshotView snapshot)
     {
         foreach (var table in snapshot.Tables)
         {
@@ -1149,7 +1151,7 @@ public sealed class RaceResultPageParser
         new(@"^(?<pos>\d+)\s*[（(](?<original>\d+)\s*位?\s*降着[）)]$", RegexOptions.Compiled);
 
     private static DateOnly ParseDate(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -1172,7 +1174,7 @@ public sealed class RaceResultPageParser
     }
 
     private static RaceCourse ParseCourse(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -1192,7 +1194,7 @@ public sealed class RaceResultPageParser
     }
 
     private static int ParseRaceNumber(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)}";
@@ -1234,7 +1236,7 @@ public sealed class RaceResultPageParser
     /// 他の識別情報（日付・競馬場・レース番号）と同様に例外として扱う。
     /// </summary>
     private static string ParseRaceName(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var headings = snapshot.Headings;
         var metaIndex = -1;
@@ -1272,7 +1274,7 @@ public sealed class RaceResultPageParser
     }
 
     private static IReadOnlyList<RaceResultEntry> ParseResults(
-        PageTableSnapshot table,
+        JraTableView table,
         string url)
     {
         var finishIndex = FindFinishPositionColumnIndex(table.Headers);

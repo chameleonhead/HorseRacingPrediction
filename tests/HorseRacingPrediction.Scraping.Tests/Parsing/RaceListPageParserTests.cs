@@ -2,6 +2,7 @@ using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
+using HorseRacingPrediction.Scraping.Tests.TestSupport;
 
 namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 
@@ -10,9 +11,9 @@ public sealed class RaceListPageParserTests
 {
     private const string Url = "https://www.jra.go.jp/keiba/sample/racelist/";
 
-    private static PageSnapshot BuildSnapshot()
+    private static TestPageSnapshot BuildSnapshot()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["R", "発走時刻", "レース名"],
             Rows:
             [
@@ -20,7 +21,7 @@ public sealed class RaceListPageParserTests
                 ["11R", "15:40", "京成杯オータムハンデキャップ(GⅢ)"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース一覧",
             mainText: string.Empty,
             links: [],
@@ -28,7 +29,7 @@ public sealed class RaceListPageParserTests
             tables: [table],
             headings: ["2026年9月5日 中山"]);
 
-        return new PageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]);
+        return new TestPageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]);
     }
 
     [TestMethod]
@@ -64,7 +65,7 @@ public sealed class RaceListPageParserTests
     public void Parse_レース番号セルのDOMリンク_RaceCardUrlへ保持する()
     {
         var rows = new IReadOnlyList<string>[] { ["1R", "10:10", "2歳未勝利"] };
-        var cells = new IReadOnlyList<PageTableCellSnapshot>[]
+        var cells = new IReadOnlyList<TestPageCell>[]
         {
             [
                 new("1R", [new("a", [], "1R", "/JRADB/race/1")]),
@@ -72,11 +73,11 @@ public sealed class RaceListPageParserTests
                 new("2歳未勝利", []),
             ],
         };
-        var table = new PageTableSnapshot(["R", "発走時刻", "レース名"], rows, cells);
-        var section = new PageSectionSnapshot("レース一覧", "", [], [], [table], ["2026年9月5日 中山"]);
+        var table = new TestPageTable(["R", "発走時刻", "レース名"], rows, cells);
+        var section = new TestPageSection("レース一覧", "", [], [], [table], ["2026年9月5日 中山"]);
 
         var page = (JraRaceListPage)new RaceListPageParser().Parse(
-            new PageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
+            new TestPageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
 
         Assert.AreEqual("/JRADB/race/1", page.Races.Single().RaceCardUrl);
         Assert.IsNull(page.Races.Single().ResultUrl);
@@ -88,9 +89,9 @@ public sealed class RaceListPageParserTests
     // 入る形式。実サイトE2E調査（JraNavigationRegressionE2ETests）でこの形式に
     // 遭遇し、RaceListPageParser/RaceResultPageParserいずれもCanParseがfalseになり
     // JraPageKind.Unknownになる不具合が判明したため、この形式も解析できるようにした。
-    private static PageSnapshot BuildRaceResultSelectionSnapshot()
+    private static TestPageSnapshot BuildRaceResultSelectionSnapshot()
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["レース結果", "レース名", "レース映像", "距離", "馬場", "出走頭数", "最終 オッズ", "WIN5"],
             Rows:
             [
@@ -99,7 +100,7 @@ public sealed class RaceListPageParserTests
                 ["7レース", "関屋記念 3歳以上オープン（国際）（特指）", "PLAY", "1,600 メートル", "芝", "14頭", "7レースオッズ", "ウインファイヴ 5レース目"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果 レース選択",
             mainText: string.Empty,
             links: [],
@@ -107,7 +108,7 @@ public sealed class RaceListPageParserTests
             tables: [table],
             headings: ["レース結果 レース選択 2026年7月26日（日曜）2回新潟2日"]);
 
-        return new PageSnapshot(Url, "レース結果 レース選択 JRA", [section]);
+        return new TestPageSnapshot(Url, "レース結果 レース選択 JRA", [section]);
     }
 
     [TestMethod]
@@ -140,7 +141,7 @@ public sealed class RaceListPageParserTests
     [TestMethod]
     public void CanParse_NoRaceTable_ReturnsFalse()
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "無関係ページ",
             mainText: string.Empty,
             links: [],
@@ -148,7 +149,7 @@ public sealed class RaceListPageParserTests
             tables: [],
             headings: []);
 
-        var snapshot = new PageSnapshot(Url, "無関係ページ", [section]);
+        var snapshot = new TestPageSnapshot(Url, "無関係ページ", [section]);
 
         var parser = new RaceListPageParser();
 

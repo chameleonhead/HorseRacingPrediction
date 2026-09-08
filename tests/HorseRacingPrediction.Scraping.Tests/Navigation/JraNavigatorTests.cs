@@ -13,18 +13,18 @@ public sealed class JraNavigatorTests
     private const string KeibaTopUrl = "https://www.jra.go.jp/keiba/";
     private const string CalendarUrl = "https://www.jra.go.jp/keiba/calendar/";
 
-    private static PageSnapshot BuildCalendarSnapshot(
+    private static TestPageSnapshot BuildCalendarSnapshot(
         string url,
-        IEnumerable<PageLinkSnapshot> links)
+        IEnumerable<TestPageLink> links)
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: [],
             Rows:
             [
                 ["5 中山", "6", "7"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "開催日程",
             mainText: string.Empty,
             links: links.ToList(),
@@ -32,18 +32,18 @@ public sealed class JraNavigatorTests
             tables: [table],
             headings: ["開催日程>2026年9月"]);
 
-        return new PageSnapshot(url, "開催日程", [section]);
+        return new TestPageSnapshot(url, "開催日程", [section]);
     }
 
-    private static PageSnapshot BuildRaceListSnapshot(
+    private static TestPageSnapshot BuildRaceListSnapshot(
         string url,
-        IEnumerable<PageLinkSnapshot>? links = null)
+        IEnumerable<TestPageLink>? links = null)
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["R", "発走時刻", "レース名"],
             Rows: [["11R", "15:40", "テストステークス"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース一覧",
             mainText: string.Empty,
             links: links?.ToList() ?? [],
@@ -51,21 +51,21 @@ public sealed class JraNavigatorTests
             tables: [table],
             headings: ["2026年9月5日 中山"]);
 
-        return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
+        return new TestPageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
     }
 
-    private static PageSnapshot BuildRaceCardSnapshot(
+    private static TestPageSnapshot BuildRaceCardSnapshot(
         string url,
         string headingSuffix = "11R",
         string dateCourse = "2026年9月5日 中山",
-        IEnumerable<PageLinkSnapshot>? links = null,
-        IEnumerable<PageActionSnapshot>? actions = null)
+        IEnumerable<TestPageLink>? links = null,
+        IEnumerable<TestPageAction>? actions = null)
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["馬番", "馬名", "騎手"],
             Rows: [["1", "テストホース", "テスト騎手"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "出馬表",
             mainText: string.Empty,
             links: links?.ToList() ?? [],
@@ -73,16 +73,16 @@ public sealed class JraNavigatorTests
             tables: [table],
             headings: [$"{dateCourse} {headingSuffix}"]);
 
-        return new PageSnapshot(url, $"{dateCourse} {headingSuffix} 出馬表", [section]);
+        return new TestPageSnapshot(url, $"{dateCourse} {headingSuffix} 出馬表", [section]);
     }
 
-    private static PageSnapshot BuildRaceResultSnapshot(string url, string headingSuffix = "11R")
+    private static TestPageSnapshot BuildRaceResultSnapshot(string url, string headingSuffix = "11R")
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
             Rows: [["1", "3", "テストホース", "テスト騎手", "1:33.4"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース結果",
             mainText: string.Empty,
             links: [],
@@ -92,7 +92,7 @@ public sealed class JraNavigatorTests
             // (RaceResultPageParser.ParseRaceName参照)。
             headings: [$"2026年9月5日 中山 {headingSuffix}", "テストレース"]);
 
-        return new PageSnapshot(url, $"2026年9月5日 中山 {headingSuffix} レース結果", [section]);
+        return new TestPageSnapshot(url, $"2026年9月5日 中山 {headingSuffix} レース結果", [section]);
     }
 
     private static JraPageReader CreateReader(FakeWebBrowser browser)
@@ -122,7 +122,7 @@ public sealed class JraNavigatorTests
         browser.SetCurrentUrl(KeibaTopUrl);
         browser.SetLinks(KeibaTopUrl,
         [
-            new PageLinkSnapshot("calendar/", "開催日程"),
+            new TestPageLink("calendar/", "開催日程"),
         ]);
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
 
@@ -149,9 +149,9 @@ public sealed class JraNavigatorTests
 
     private const string MeetingSelectionUrl = "https://www.jra.go.jp/JRADB/accessD.html";
 
-    private static PageSnapshot BuildMeetingSelectionSnapshot(string url, string mainText)
+    private static TestPageSnapshot BuildMeetingSelectionSnapshot(string url, string mainText)
     {
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "開催選択",
             mainText: mainText,
             links: [],
@@ -159,7 +159,7 @@ public sealed class JraNavigatorTests
             tables: [],
             headings: ["開催選択"]);
 
-        return new PageSnapshot(url, "開催選択", [section]);
+        return new TestPageSnapshot(url, "開催選択", [section]);
     }
 
     [TestMethod]
@@ -234,21 +234,21 @@ public sealed class JraNavigatorTests
                 RaceCourse.Nakayama));
     }
 
-    private static PageSnapshot BuildRaceListSnapshotWithCardLink(string url, string raceCardUrl)
+    private static TestPageSnapshot BuildRaceListSnapshotWithCardLink(string url, string raceCardUrl)
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["R", "発走時刻", "レース名"],
             Rows: [["11R", "15:40", "テストステークス"]]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース一覧",
             mainText: string.Empty,
-            links: [new PageLinkSnapshot(raceCardUrl, "11R 出馬表")],
+            links: [new TestPageLink(raceCardUrl, "11R 出馬表")],
             actions: [],
             tables: [table],
             headings: ["2026年9月5日 中山"]);
 
-        return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
+        return new TestPageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
     }
 
     [TestMethod]
@@ -267,7 +267,7 @@ public sealed class JraNavigatorTests
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
         browser.SetLinks(
             raceListUrl,
-            [new PageLinkSnapshot(raceCardUrl, "11R 出馬表")]);
+            [new TestPageLink(raceCardUrl, "11R 出馬表")]);
         browser.SetSnapshot(raceCardUrl, BuildRaceCardSnapshot(raceCardUrl));
 
         var navigator = new JraNavigator(browser, CreateReader(browser));
@@ -391,7 +391,7 @@ public sealed class JraNavigatorTests
             ResultSelectionUrl,
             BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("4回中山1日", raceResultUrl);
-        browser.SetLinks(raceResultUrl, [new PageLinkSnapshot(raceResultUrl, "11レース")]);
+        browser.SetLinks(raceResultUrl, [new TestPageLink(raceResultUrl, "11レース")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         var navigator = new JraNavigator(
@@ -423,7 +423,7 @@ public sealed class JraNavigatorTests
             ResultSelectionUrl,
             BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("4回中山1日", raceResultUrl);
-        browser.SetLinks(raceResultUrl, [new PageLinkSnapshot(raceResultUrl, "11レース")]);
+        browser.SetLinks(raceResultUrl, [new TestPageLink(raceResultUrl, "11レース")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         // 現在から57日前 (現在開催週の範囲外・最近の過去開催の範囲内)。
@@ -453,7 +453,7 @@ public sealed class JraNavigatorTests
         // 現在ページ（1R結果ページ）に他レースへの直接リンクが存在するケース。
         browser.SetLinks(
             currentRaceResultUrl,
-            [new PageLinkSnapshot(siblingRaceResultUrl, "2レース結果")]);
+            [new TestPageLink(siblingRaceResultUrl, "2レース結果")]);
         browser.SetSnapshot(siblingRaceResultUrl, BuildRaceResultSnapshot(siblingRaceResultUrl, "2R"));
 
         var navigator = new JraNavigator(
@@ -483,7 +483,6 @@ public sealed class JraNavigatorTests
         browser.SetCurrentUrl(currentRaceResultUrl);
 
         // 現在ページに直接リンクは存在しない（links未設定＝空）。
-        browser.SetLinks(currentRaceResultUrl, []);
 
         // フォールバック先のフルパス（開催選択経由）。
         browser.SetClickDestination("レース結果", ResultSelectionUrl);
@@ -491,7 +490,7 @@ public sealed class JraNavigatorTests
             ResultSelectionUrl,
             BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("4回中山1日", siblingRaceResultUrl);
-        browser.SetLinks(siblingRaceResultUrl, [new PageLinkSnapshot(siblingRaceResultUrl, "2レース")]);
+        browser.SetLinks(siblingRaceResultUrl, [new TestPageLink(siblingRaceResultUrl, "2レース")]);
         browser.SetSnapshot(siblingRaceResultUrl, BuildRaceResultSnapshot(siblingRaceResultUrl, "2R"));
 
         var navigator = new JraNavigator(
@@ -528,7 +527,7 @@ public sealed class JraNavigatorTests
             searchResultUrl,
             BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("4回中山1日", raceResultUrl);
-        browser.SetLinks(searchResultUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
+        browser.SetLinks(searchResultUrl, [new TestPageLink(raceResultUrl, "11R レース結果")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         // 現在から遥か過去のレースであり、過去レース結果検索を利用する。
@@ -547,11 +546,11 @@ public sealed class JraNavigatorTests
         Assert.IsTrue(browser.SelectOptionCalls.Count > 0);
     }
 
-    private static PageSnapshot BuildRaceListSnapshotWithTwoRaces(
+    private static TestPageSnapshot BuildRaceListSnapshotWithTwoRaces(
         string url,
-        IEnumerable<PageLinkSnapshot>? links = null)
+        IEnumerable<TestPageLink>? links = null)
     {
-        var table = new PageTableSnapshot(
+        var table = new TestPageTable(
             Headers: ["R", "発走時刻", "レース名"],
             Rows:
             [
@@ -559,7 +558,7 @@ public sealed class JraNavigatorTests
                 ["12R", "15:10", "テストレース12"],
             ]);
 
-        var section = new PageSectionSnapshot(
+        var section = new TestPageSection(
             title: "レース一覧",
             mainText: string.Empty,
             links: links?.ToList() ?? [],
@@ -567,7 +566,7 @@ public sealed class JraNavigatorTests
             tables: [table],
             headings: ["2026年9月5日 中山"]);
 
-        return new PageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
+        return new TestPageSnapshot(url, "2026年9月5日 中山 レース一覧", [section]);
     }
 
     [TestMethod]
@@ -586,8 +585,8 @@ public sealed class JraNavigatorTests
         browser.SetClickDestination("4回中山1日", raceListUrl);
         var raceLinks = new[]
         {
-            new PageLinkSnapshot(raceCardUrl11, "11R 出馬表"),
-            new PageLinkSnapshot(raceCardUrl12, "12R 出馬表"),
+            new TestPageLink(raceCardUrl11, "11R 出馬表"),
+            new TestPageLink(raceCardUrl12, "12R 出馬表"),
         };
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshotWithTwoRaces(raceListUrl, raceLinks));
         browser.SetLinks(
@@ -596,7 +595,7 @@ public sealed class JraNavigatorTests
         browser.SetSnapshot(raceCardUrl11, BuildRaceCardSnapshot(
             raceCardUrl11,
             "11R",
-            links: [new PageLinkSnapshot(raceCardUrl12, "12R")]));
+            links: [new TestPageLink(raceCardUrl12, "12R")]));
         browser.SetSnapshot(raceCardUrl12, BuildRaceCardSnapshot(raceCardUrl12, "12R"));
         browser.SetClickDestination("12R", raceCardUrl12);
 
@@ -666,7 +665,7 @@ public sealed class JraNavigatorTests
     {
         const string listUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
         const string cardUrl = "https://www.jra.go.jp/keiba/sample/racecard/11/";
-        var link = new PageLinkSnapshot(cardUrl, "11R 出馬表");
+        var link = new TestPageLink(cardUrl, "11R 出馬表");
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(listUrl);
         browser.SetSnapshot(listUrl, BuildRaceListSnapshot(listUrl, [link]));
@@ -691,13 +690,13 @@ public sealed class JraNavigatorTests
         browser.SetCurrentUrl(currentUrl);
         browser.SetSnapshot(currentUrl, BuildRaceCardSnapshot(
             currentUrl,
-            actions: [new PageActionSnapshot("阪神", "button")]));
+            actions: [new TestPageAction("阪神", "button")]));
         browser.SetClickDestination("阪神", switchedUrl);
         browser.SetSnapshot(switchedUrl, BuildRaceCardSnapshot(
             switchedUrl,
             "11R",
             "2026年9月5日 阪神",
-            links: [new PageLinkSnapshot(targetUrl, "12R")]));
+            links: [new TestPageLink(targetUrl, "12R")]));
         browser.SetClickDestination("12R", targetUrl);
         browser.SetSnapshot(targetUrl, BuildRaceCardSnapshot(targetUrl, "12R", "2026年9月5日 阪神"));
         var navigator = new JraNavigator(browser, CreateReader(browser));
@@ -719,14 +718,14 @@ public sealed class JraNavigatorTests
         browser.SetCurrentUrl(currentUrl);
         browser.SetSnapshot(currentUrl, BuildRaceCardSnapshot(
             currentUrl,
-            links: [new PageLinkSnapshot(switchedUrl, "9月6日（日曜）")]));
+            links: [new TestPageLink(switchedUrl, "9月6日（日曜）")]));
         browser.SetClickDestination("9月6日（日曜）", switchedUrl);
-        var targetLink = new PageLinkSnapshot(targetUrl, "12R 出馬表");
-        browser.SetSnapshot(switchedUrl, new PageSnapshot(
+        var targetLink = new TestPageLink(targetUrl, "12R 出馬表");
+        browser.SetSnapshot(switchedUrl, new TestPageSnapshot(
             switchedUrl,
             "2026年9月6日 中山 レース一覧",
-            [new PageSectionSnapshot("レース一覧", string.Empty, [targetLink], [],
-                [new PageTableSnapshot(["R", "発走時刻", "レース名"], [["12R", "16:00", "テスト"]])],
+            [new TestPageSection("レース一覧", string.Empty, [targetLink], [],
+                [new TestPageTable(["R", "発走時刻", "レース名"], [["12R", "16:00", "テスト"]])],
                 ["2026年9月6日 中山"])]));
         browser.SetClickDestination(targetLink.Title, targetUrl);
         browser.SetSnapshot(targetUrl, BuildRaceCardSnapshot(targetUrl, "12R", "2026年9月6日 中山"));
@@ -746,12 +745,12 @@ public sealed class JraNavigatorTests
         const string wrongUrl = "https://www.jra.go.jp/keiba/sample/racecard/wrong/";
         const string listUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
         const string targetUrl = "https://www.jra.go.jp/keiba/sample/racecard/12/";
-        var targetLink = new PageLinkSnapshot(targetUrl, "12R 出馬表");
+        var targetLink = new TestPageLink(targetUrl, "12R 出馬表");
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(currentUrl);
         browser.SetSnapshot(currentUrl, BuildRaceCardSnapshot(
             currentUrl,
-            links: [new PageLinkSnapshot(wrongUrl, "12R")]));
+            links: [new TestPageLink(wrongUrl, "12R")]));
         browser.SetClickDestination("12R", wrongUrl);
         browser.SetSnapshot(wrongUrl, BuildRaceCardSnapshot(wrongUrl, "10R"));
         browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
@@ -787,17 +786,17 @@ public sealed class JraNavigatorTests
         var browser = new FakeWebBrowser();
 
         // カレンダーには2日程（9/5 中山, 9/6 阪神）を用意する。
-        var calendarTable = new PageTableSnapshot(
+        var calendarTable = new TestPageTable(
             Headers: [],
             Rows: [["5 中山", "6 阪神", "7"]]);
-        var calendarSection = new PageSectionSnapshot(
+        var calendarSection = new TestPageSection(
             title: "開催日程",
             mainText: string.Empty,
             links: [],
             actions: [],
             tables: [calendarTable],
             headings: ["開催日程>2026年9月"]);
-        browser.SetSnapshot(CalendarUrl, new PageSnapshot(CalendarUrl, "開催日程", [calendarSection]));
+        browser.SetSnapshot(CalendarUrl, new TestPageSnapshot(CalendarUrl, "開催日程", [calendarSection]));
 
         browser.SetClickDestination("出馬表", MeetingSelectionUrl);
         browser.SetSnapshot(
@@ -806,14 +805,14 @@ public sealed class JraNavigatorTests
 
         browser.SetClickDestination("4回中山1日", raceListUrl);
         browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
-        browser.SetLinks(raceListUrl, [new PageLinkSnapshot(raceCardUrl11, "11R 出馬表")]);
+        browser.SetLinks(raceListUrl, [new TestPageLink(raceCardUrl11, "11R 出馬表")]);
         browser.SetSnapshot(raceCardUrl11, BuildRaceCardSnapshot(raceCardUrl11, "11R"));
 
         browser.SetClickDestination("4回阪神1日", raceListUrlHanshin);
-        var hanshinListTable = new PageTableSnapshot(
+        var hanshinListTable = new TestPageTable(
             Headers: ["R", "発走時刻", "レース名"],
             Rows: [["1R", "10:00", "テスト1レース"]]);
-        var hanshinListSection = new PageSectionSnapshot(
+        var hanshinListSection = new TestPageSection(
             title: "レース一覧",
             mainText: string.Empty,
             links: [],
@@ -822,10 +821,10 @@ public sealed class JraNavigatorTests
             headings: ["2026年9月6日 阪神"]);
         browser.SetSnapshot(
             raceListUrlHanshin,
-            new PageSnapshot(raceListUrlHanshin, "2026年9月6日 阪神 レース一覧", [hanshinListSection]));
+            new TestPageSnapshot(raceListUrlHanshin, "2026年9月6日 阪神 レース一覧", [hanshinListSection]));
         browser.SetLinks(
             raceListUrlHanshin,
-            [new PageLinkSnapshot(raceCardUrlHanshin1, "1R 出馬表")]);
+            [new TestPageLink(raceCardUrlHanshin1, "1R 出馬表")]);
         browser.SetSnapshot(raceCardUrlHanshin1, BuildRaceCardSnapshot(raceCardUrlHanshin1, "1R"));
 
         var navigator = new JraNavigator(browser, CreateReader(browser));
@@ -947,7 +946,7 @@ public sealed class JraNavigatorTests
             searchResultUrl,
             BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
         browser.SetClickDestination("4回中山1日", raceResultUrl);
-        browser.SetLinks(searchResultUrl, [new PageLinkSnapshot(raceResultUrl, "11R レース結果")]);
+        browser.SetLinks(searchResultUrl, [new TestPageLink(raceResultUrl, "11R レース結果")]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
 
         // 現在から57日前 (IsRecentRacePeriod=trueの範囲内だが、実際のページ掲載範囲は

@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using HorseRacingPrediction.Scraping.Browser;
+using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -26,8 +26,9 @@ public sealed class CalendarPageParser
     public int Priority => 100;
 
     public bool CanParse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         if (snapshot.Url.Contains(
                 "/keiba/calendar/",
                 StringComparison.OrdinalIgnoreCase))
@@ -35,16 +36,14 @@ public sealed class CalendarPageParser
             return true;
         }
 
-        return snapshot.Sections.Any(section =>
-            section.Headings.Any(heading =>
-                heading.Contains(
-                    "開催日程",
-                    StringComparison.Ordinal)));
+        return snapshot.Headings.Any(heading =>
+            heading.Contains("開催日程", StringComparison.Ordinal));
     }
 
     public IJraPage Parse(
-        PageSnapshot snapshot)
+        SemanticPageSnapshot source)
     {
+        var snapshot = JraSnapshotView.Create(source);
         var month =
             ParseMonth(snapshot);
 
@@ -58,7 +57,7 @@ public sealed class CalendarPageParser
     }
 
     private static YearMonth ParseMonth(
-        PageSnapshot snapshot)
+        JraSnapshotView snapshot)
     {
         var searchText =
             $"{snapshot.Title} {string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
@@ -80,7 +79,7 @@ public sealed class CalendarPageParser
     }
 
     private static IReadOnlyList<JraRaceDate> ParseRaceDates(
-        PageSnapshot snapshot,
+        JraSnapshotView snapshot,
         YearMonth month)
     {
         var results =
@@ -97,11 +96,7 @@ public sealed class CalendarPageParser
 
         if (results.Count == 0)
         {
-            // テーブルとして抽出できなかった場合のフォールバック。
-            foreach (var section in snapshot.Sections)
-            {
-                AddFromCellText(section.MainText, month, daysInMonth, results);
-            }
+            AddFromCellText(snapshot.MainText, month, daysInMonth, results);
         }
 
         return results
