@@ -15,7 +15,7 @@ public sealed partial class JraNavigator
         await ToKeibaTopAsync(cancellationToken);
         await _browser.ClickAsync("騎手・調教師", cancellationToken);
         var directoryLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
-        var profileLink = directoryLinks.FirstOrDefault(l => new Uri(l.Url).AbsolutePath == "/datafile/meikan/trainer.html")
+        var profileLink = directoryLinks.FirstOrDefault(l => HasPath(l.Url, "/datafile/meikan/trainer.html"))
             ?? throw new JraCollectionException("調教師プロフィールの公開リンクが見つかりません。");
         await _browser.ClickLinkAsync(profileLink, cancellationToken);
         foreach (var initial in new[] { "あ行", "か行", "さ行", "た行", "な行", "は行", "ま行", "や行", "ら行", "わ行" })
@@ -101,6 +101,24 @@ public sealed partial class JraNavigator
         var search = (await _browser.GetLinksAsync(cancellationToken: token)).FirstOrDefault(l => l.Title.Trim() == "検索" && l.Region == "content")
             ?? throw new JraCollectionException("競走馬の検索操作が見つかりません。");
         await _browser.ClickLinkAsync(search, token);
+    }
+
+    internal static bool HasPath(string url, string expectedPath)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+        {
+            return absolute.AbsolutePath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Relative, out var relative) ||
+            url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var path = relative.OriginalString.Split(['?', '#'], 2)[0];
+        return path.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) ||
+               expectedPath.EndsWith('/' + path, StringComparison.OrdinalIgnoreCase);
     }
 
     private static PageLinkSnapshot? FindNext(IEnumerable<PageLinkSnapshot> links) => links.FirstOrDefault(l =>

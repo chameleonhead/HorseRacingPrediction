@@ -29,6 +29,40 @@ public sealed class JraSnapshotViewTests
     }
 
     [TestMethod]
+    public void Create_KeepsMixedRowHeaderAndDataCellsInBody()
+    {
+        var snapshot = Snapshot(
+            Row(Cell("R", header: true), Cell("発走時刻", header: true), Cell("レース名", header: true)),
+            Row(Cell("1R", header: true), Cell("10:00"), Cell("テストレース")),
+            Row(Cell("2R", header: true), Cell("10:30"), Cell("別のレース")));
+
+        var table = JraSnapshotView.Create(snapshot).Tables.Single();
+
+        CollectionAssert.AreEqual(new[] { "R", "発走時刻", "レース名" }, table.Headers.ToArray());
+        Assert.HasCount(2, table.Rows);
+        CollectionAssert.AreEqual(new[] { "1R", "10:00", "テストレース" }, table.Rows[0].ToArray());
+        CollectionAssert.AreEqual(new[] { "2R", "10:30", "別のレース" }, table.Rows[1].ToArray());
+    }
+
+    [TestMethod]
+    public void Create_UsesFragmentAlternativeTextWhenCellRenderedTextIsEmpty()
+    {
+        var image = new PageElementFragmentSnapshot
+        {
+            TagName = "img",
+            Text = "1レース",
+            AccessibleName = "1レース",
+        };
+        var snapshot = Snapshot(
+            Row(Cell("レース 番号", header: true), Cell("発走時刻", header: true)),
+            Row(Cell(string.Empty, header: true, fragments: [image]), Cell("10時05分")));
+
+        var table = JraSnapshotView.Create(snapshot).Tables.Single();
+
+        CollectionAssert.AreEqual(new[] { "1レース", "10時05分" }, table.Rows.Single().ToArray());
+    }
+
+    [TestMethod]
     public void Create_RejectsOverlappingSpansInsteadOfShiftingColumns()
     {
         var snapshot = Snapshot(

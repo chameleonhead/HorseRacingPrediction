@@ -114,7 +114,9 @@ public sealed class JraTableView
         }
 
         var headerRowCount = 0;
-        while (headerRowCount < table.Rows.Count && table.Rows[headerRowCount].Cells.Any(cell => cell.IsHeader))
+        while (headerRowCount < table.Rows.Count &&
+               table.Rows[headerRowCount].Cells.Count > 0 &&
+               table.Rows[headerRowCount].Cells.All(cell => cell.IsHeader))
         {
             headerRowCount++;
         }
@@ -237,5 +239,18 @@ public sealed class JraCellView
     public IReadOnlyList<PageElementFragmentSnapshot> Fragments { get; }
     public PageElementFragmentSnapshot? FindByClass(string classToken)
         => Fragments.FirstOrDefault(fragment => fragment.ClassTokens.Contains(classToken, StringComparer.Ordinal));
-    public static JraCellView Create(SemanticCell cell) => new(cell.Text, cell.Fragments);
+    public static JraCellView Create(SemanticCell cell)
+    {
+        var text = cell.Text;
+        if (text.Length == 0)
+        {
+            text = cell.Fragments
+                .Select(fragment => !string.IsNullOrWhiteSpace(fragment.Text)
+                    ? fragment.Text
+                    : fragment.AccessibleName)
+                .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+        }
+
+        return new JraCellView(text, cell.Fragments);
+    }
 }

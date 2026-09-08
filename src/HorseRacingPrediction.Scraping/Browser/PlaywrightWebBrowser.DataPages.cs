@@ -13,8 +13,12 @@ public sealed partial class PlaywrightWebBrowser
         {
             cancellationToken.ThrowIfCancellationRequested();
             var anchor = anchors.Nth(index);
-            var href = await anchor.EvaluateAsync<string>("e => e.href");
-            if (href != link.Url || !await IsElementRenderedAsync(anchor)) continue;
+            var rawHref = await anchor.GetAttributeAsync("href");
+            var resolvedHref = await anchor.EvaluateAsync<string>("e => e.href");
+            var expectedHref = ResolveLinkUrl(link.Url);
+            if (!string.Equals(rawHref, link.Url, StringComparison.Ordinal) &&
+                !string.Equals(resolvedHref, expectedHref, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!await IsElementRenderedAsync(anchor)) continue;
             var region = await anchor.EvaluateAsync<string>("e => e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal') ? 'header' : e.closest('footer,[role=contentinfo],#footer') ? 'footer' : 'content'");
             if (region != link.Region) continue;
             if (NormalizeForMatch(await GetLocatorTextAsync(anchor)) != NormalizeForMatch(link.Title)) continue;
@@ -24,6 +28,19 @@ public sealed partial class PlaywrightWebBrowser
             return await GetPageContentAsync(cancellationToken);
         }
         throw new InvalidOperationException("取得済みリンクが現在ページに見つかりません: " + link.Title);
+    }
+
+    private string ResolveLinkUrl(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+        {
+            return absolute.AbsoluteUri;
+        }
+
+        return Uri.TryCreate(CurrentUrl, UriKind.Absolute, out var current) &&
+               Uri.TryCreate(current, url, out var resolved)
+            ? resolved.AbsoluteUri
+            : url;
     }
 
     public Task<SemanticPageSnapshot> GetDataPageSnapshotAsync(CancellationToken cancellationToken = default)

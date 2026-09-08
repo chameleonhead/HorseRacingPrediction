@@ -1080,9 +1080,9 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     private async Task<IReadOnlyList<PageLinkSnapshot>> ExtractLinksAsync(int limit, CancellationToken cancellationToken)
     {
         var links = new List<PageLinkSnapshot>();
-        var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        await AddLinksFromSearchResultsAsync(links, seenUrls, limit, cancellationToken);
+        await AddLinksFromSearchResultsAsync(links, seenLinks, limit, cancellationToken);
         if (links.Count >= limit)
         {
             return links;
@@ -1096,7 +1096,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
             var anchor = anchors.Nth(index);
             var link = await CreateLinkAsync(anchor);
-            if (link is null || !seenUrls.Add(link.Url))
+            if (link is null || !seenLinks.Add(LinkIdentity(link)))
             {
                 continue;
             }
@@ -1106,6 +1106,9 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
         return links;
     }
+
+    private static string LinkIdentity(PageLinkSnapshot link)
+        => $"{link.Url}\u001f{link.Title}\u001f{link.Region}";
 
     private async Task<bool> DismissHeaderSearchModalIfVisibleAsync(CancellationToken cancellationToken)
     {
@@ -1137,7 +1140,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
     private async Task AddLinksFromSearchResultsAsync(
         List<PageLinkSnapshot> links,
-        HashSet<string> seenUrls,
+        HashSet<string> seenLinks,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -1165,7 +1168,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             cancellationToken.ThrowIfCancellationRequested();
 
             var link = await CreateLinkAsync(resultAnchors.Nth(index));
-            if (link is null || !seenUrls.Add(link.Url))
+            if (link is null || !seenLinks.Add(LinkIdentity(link)))
             {
                 continue;
             }

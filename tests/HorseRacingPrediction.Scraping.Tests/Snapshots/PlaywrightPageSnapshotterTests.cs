@@ -382,8 +382,10 @@ public sealed class PlaywrightPageSnapshotterTests
     [TestMethod]
     public async Task CaptureAsync_LargeNestedDomIsSemanticallyReduced()
     {
-        var wrappers = string.Concat(Enumerable.Repeat("<div><span>", 250));
-        var closers = string.Concat(Enumerable.Repeat("</span></div>", 250));
+        // Chromium crashes while parsing 500 alternating nested elements before the
+        // snapshotter runs. Keep the fixture deeply nested but below the browser limit.
+        var wrappers = string.Concat(Enumerable.Repeat("<div><span>", 30));
+        var closers = string.Concat(Enumerable.Repeat("</span></div>", 30));
         var html = $"<main>{wrappers}Useful content{closers}</main>";
         await SetContentAsync(html);
 

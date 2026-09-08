@@ -13,6 +13,18 @@ public sealed class JraNavigatorTests
     private const string KeibaTopUrl = "https://www.jra.go.jp/keiba/";
     private const string CalendarUrl = "https://www.jra.go.jp/keiba/calendar/";
 
+    [TestMethod]
+    [DataRow("/datafile/meikan/trainer.html", true)]
+    [DataRow("/datafile/meikan/trainer.html?initial=a", true)]
+    [DataRow("trainer.html", true)]
+    [DataRow("https://www.jra.go.jp/datafile/meikan/trainer.html", true)]
+    [DataRow("javascript:void(0)", false)]
+    [DataRow("/datafile/meikan/jockey.html", false)]
+    public void HasPath_HandlesRelativeAbsoluteAndPseudoActionUrls(string url, bool expected)
+    {
+        Assert.AreEqual(expected, JraNavigator.HasPath(url, "/datafile/meikan/trainer.html"));
+    }
+
     private static TestPageSnapshot BuildCalendarSnapshot(
         string url,
         IEnumerable<TestPageLink> links)

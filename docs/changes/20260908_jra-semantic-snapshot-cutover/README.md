@@ -424,3 +424,82 @@ the operational logging requirement under Performance and diagnostics.
 Final verification after remediation: `dotnet build HorseRacingPrediction.sln --no-restore` completed with
 zero warnings/errors, and `dotnet test HorseRacingPrediction.sln --no-build --filter 'TestCategory!=External'`
 passed all 683 selected tests.
+
+## Live-site regression remediation (2026-09-09)
+
+Post-merge local verification found that the solution still builds, but 8 of 198 scraping-project tests fail
+when external JRA scenarios are included. This is a continuation of the approved cutover rather than a new
+behavior change: it closes acceptance criteria 4, 6, and 7 against live HTML shapes that the synthetic parity
+fixtures did not reproduce.
+
+The primary defect is in `JraTableView.Project`. It classifies every leading row containing any header cell as
+a column-header row. JRA race tables use a row-header `<th>` for the race number inside otherwise ordinary
+mixed `<th>`/`<td>` data rows, so all race rows are removed from the projected body and collection jobs see an
+empty race list. The repair will classify a leading row as a column-header row only when it is non-empty and
+all its cells are header cells, and will add a mixed-row regression fixture.
+
+Two navigator regressions are also within the original navigation-equivalence scope. Trainer directory hrefs
+may be relative, but the migrated code constructs an absolute `Uri` unconditionally. Trainer path matching
+will use safe absolute-or-relative URI parsing and ignore malformed/pseudo-action hrefs. Horse search captures
+the submit action as a link and later requires exact stale link identity; it will instead use the existing
+`ClickAsync("検索")` action path after populating the field.
+
+Acceptance for this remediation is:
+
+1. Mixed `<th>`/`<td>` race rows remain body rows while all-header leading rows still supply column labels.
+2. Current-week race-list/race-card and historical result-list live tests produce non-empty race collections
+   when the provider publishes the target page.
+3. Relative trainer links and the current rendered horse-search action reach their expected subject pages.
+4. Existing span, malformed-table, parser, and navigator coverage remains green.
+5. The solution builds, the complete non-external suite passes, targeted live tests pass or are inconclusive
+   only when their public prerequisite is unavailable, and `git diff --check` passes.
+
+One additional failure occurred when Chromium crashed during `SetContentAsync` for an artificial deeply nested
+DOM, before semantic capture began. It is outside the JRA job path; it will be rerun in isolation and recorded
+separately if reproducible rather than being conflated with these confirmed consumer defects.
+
+The user requested on 2026-09-09 that this repair continue in the existing change record and authorized the
+clear bug fixes. The record is returned to `Approved` until implementation and verification are complete.
+
+### Remediation result
+
+- Header projection now treats only non-empty, all-`th` leading rows as column headers. Mixed row-header and
+  data-cell rows remain in the body.
+- Empty rendered cell text now falls back to bounded fragment text/accessibility evidence. This restores JRA
+  race numbers represented by image alternative text while preserving whitespace-only raw values used by
+  parser validation.
+- `ClickLinkAsync` compares both raw href values and URLs resolved against the current page, so captured
+  relative links remain clickable.
+- Standalone link extraction now deduplicates by URL, title, and page region instead of URL alone. JRA's
+  initial-group controls share hrefs but have distinct labels, so all groups remain navigable.
+- Trainer directory path matching accepts absolute paths, root-relative paths, and page-relative filenames
+  without throwing for malformed or pseudo-action hrefs.
+- The artificial nested-DOM fixture was reduced from 500 to 60 alternating wrapper elements. Chromium in the
+  local runtime reproducibly crashed in `SetContentAsync` before snapshot capture at the original depth; the
+  smaller fixture still verifies semantic wrapper reduction and serialized-size reduction.
+
+There was one deviation from the initial remediation diagnosis: changing header-row classification alone did
+not restore race numbers because JRA renders them as image alternative text inside otherwise empty cells. The
+approved fragment-evidence design already requires preservation of this information, so the adapter now uses
+that evidence as an empty-cell fallback. Investigation also found URL-only link deduplication as the reason
+trainer initial groups disappeared; fixing the standalone browser link contract was necessary to restore the
+original navigation-equivalence acceptance criterion.
+
+### Remediation verification
+
+- Focused `JraSnapshotViewTests` and `JraNavigatorTests` — passed 41/41 before the final added cases; the added
+  mixed-row, image-alternative, and URI cases are included in the full suite below.
+- Targeted external JRA suite covering `JraSiteE2ETests`, `JraSubjectSiteE2ETests`,
+  `JraWorkflowSiteE2ETests`, and `JraNavigationRegressionE2ETests` — passed 18/18 in 2 minutes 4 seconds.
+  This includes current race list/card, consecutive race navigation, historical result-list fallback, horse
+  profile/history/result, and trainer profile navigation.
+- Isolated `CaptureAsync_LargeNestedDomIsSemanticallyReduced` with the corrected browser-safe fixture — passed.
+- `dotnet build HorseRacingPrediction.sln --no-restore` — passed with zero errors. One pre-existing nullable
+  warning remains in `JraRaceCardCollectionWorkflowTests.cs:73` when that test project recompiles.
+- `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` — passed.
+- `dotnet test HorseRacingPrediction.sln --no-build --filter 'TestCategory!=External'` — passed all 741 tests.
+- `git diff --check` — passed; only Git's existing LF-to-CRLF working-copy notices were emitted.
+
+No canonical architecture or operational documentation changed because the implementation restores the
+already documented collector and semantic-snapshot behavior. The remediation is complete and the record is
+returned to `Implemented`.
