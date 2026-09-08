@@ -21,8 +21,12 @@ public sealed partial class ProcessingStateStore
         if (await IsPausedAsync(db, token)) return;
         var now = DateTimeOffset.UtcNow;
         db.Markers.Add(new() { MarkerType = CollectionControlKeys.MarkerType, MarkerKey = CollectionControlKeys.MarkerKey, CreatedAt = now });
-        db.Markers.Add(new() { MarkerType = CollectionControlKeys.ReasonType,
-            MarkerKey = JsonSerializer.Serialize(new CollectionPipelineState(true, reason, jobId, now)), CreatedAt = now });
+        db.Markers.Add(new()
+        {
+            MarkerType = CollectionControlKeys.ReasonType,
+            MarkerKey = JsonSerializer.Serialize(new CollectionPipelineState(true, reason, jobId, now)),
+            CreatedAt = now
+        });
     }
 
     public async Task PauseCollectionAsync(string reason, string? jobId, CancellationToken cancellationToken = default)
@@ -78,9 +82,17 @@ public sealed partial class ProcessingStateStore
             job.IsHeld = hold;
             job.UpdatedAt = now;
             job.DispatchGeneration++;
-            db.JobOperationAudits.Add(new() { AuditId = Guid.NewGuid().ToString("N"), JobId = jobId,
-                Operation = hold ? "Hold" : "ReleaseHold", PreviousStatus = job.Status, NewStatus = job.Status,
-                ActorId = actorId, Reason = hold ? "指定したジョブのみを中断・保留" : "個別保留の解除", CreatedAt = now });
+            db.JobOperationAudits.Add(new()
+            {
+                AuditId = Guid.NewGuid().ToString("N"),
+                JobId = jobId,
+                Operation = hold ? "Hold" : "ReleaseHold",
+                PreviousStatus = job.Status,
+                NewStatus = job.Status,
+                ActorId = actorId,
+                Reason = hold ? "指定したジョブのみを中断・保留" : "個別保留の解除",
+                CreatedAt = now
+            });
             if (!hold)
             {
                 if (job.Status == AgentJobStatus.Ready) QueueDispatch(db, job, job.AvailableAt);

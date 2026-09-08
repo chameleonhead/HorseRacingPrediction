@@ -10,7 +10,8 @@ public sealed class CollectionExecutionControlTests
 {
     private string directory = null!;
     private ProcessingStateStore store = null!;
-    [TestInitialize] public void Setup()
+    [TestInitialize]
+    public void Setup()
     {
         directory = Path.Combine(Path.GetTempPath(), "collection-control-tests", Guid.NewGuid().ToString("N"));
         store = CreateStore();
@@ -28,7 +29,8 @@ public sealed class CollectionExecutionControlTests
         Assert.AreEqual(ForceRequeueJobResult.Requeued, await store.SetJobHoldAsync(id, held, job.UpdatedAt, "test"));
     }
 
-    [TestMethod] public async Task ReadyHold_PersistsAcrossRestartAndRejectsOldNotifications()
+    [TestMethod]
+    public async Task ReadyHold_PersistsAcrossRestartAndRejectsOldNotifications()
     {
         await store.ScheduleJobAsync(AgentJobType.RaceCardCollection, "ready", "{}", DateTimeOffset.UtcNow.AddSeconds(-1));
         var old = (await store.GetPendingCollectionTaskDispatchesAsync(DateTimeOffset.UtcNow, 10)).Single();
@@ -43,7 +45,8 @@ public sealed class CollectionExecutionControlTests
         Assert.IsNotNull(await store.AcquireCollectionTaskAsync(AgentJobType.RaceCardCollection, "ready", DateTimeOffset.UtcNow, TimeSpan.FromMinutes(30)));
     }
 
-    [TestMethod] public async Task RunningHold_CancelsThenAcknowledgesWithoutFailingOrPausingOtherJobs()
+    [TestMethod]
+    public async Task RunningHold_CancelsThenAcknowledgesWithoutFailingOrPausingOtherJobs()
     {
         var task = await LeaseAsync("running");
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -70,7 +73,8 @@ public sealed class CollectionExecutionControlTests
         Assert.IsFalse(await store.CompleteCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken));
     }
 
-    [TestMethod] public async Task Timeout_AtomicallyFailsAndStopsNewLeasesButAcceptsExistingResults()
+    [TestMethod]
+    public async Task Timeout_AtomicallyFailsAndStopsNewLeasesButAcceptsExistingResults()
     {
         var timedOut = await LeaseAsync("timeout");
         var other = await LeaseAsync("already-running");
@@ -91,7 +95,8 @@ public sealed class CollectionExecutionControlTests
         Assert.IsNotNull(await store.AcquireCollectionTaskAsync(AgentJobType.RaceCardCollection, "next", DateTimeOffset.UtcNow, TimeSpan.FromMinutes(30)));
     }
 
-    [TestMethod] public async Task HoldWinsRaceWithCompletionAndTimeout()
+    [TestMethod]
+    public async Task HoldWinsRaceWithCompletionAndTimeout()
     {
         var task = await LeaseAsync("race");
         await HoldAsync(task.TaskId);
@@ -103,7 +108,8 @@ public sealed class CollectionExecutionControlTests
         Assert.IsFalse(await store.AcknowledgeCollectionHoldAsync(task.TaskId, task.LeaseToken));
     }
 
-    [TestMethod] public async Task ParentHold_DoesNotHoldChildAndReconcilesOnlyAfterRelease()
+    [TestMethod]
+    public async Task ParentHold_DoesNotHoldChildAndReconcilesOnlyAfterRelease()
     {
         await store.ScheduleJobAsync("Parent", "parent", "{}", DateTimeOffset.UtcNow);
         await store.ScheduleJobAsync("Child", "child", "{}", DateTimeOffset.UtcNow, parentJobId: "Parent:parent");
@@ -119,7 +125,8 @@ public sealed class CollectionExecutionControlTests
         Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync("Parent:parent"))!.Status);
     }
 
-    [TestMethod] public async Task HostShutdown_RequeuesWithoutStoppingPipeline()
+    [TestMethod]
+    public async Task HostShutdown_RequeuesWithoutStoppingPipeline()
     {
         var task = await LeaseAsync("shutdown");
         using var stop = new CancellationTokenSource();
@@ -130,7 +137,8 @@ public sealed class CollectionExecutionControlTests
         Assert.AreEqual(AgentJobStatus.Ready, (await store.GetJobDetailAsync(task.TaskId))!.Status);
     }
 
-    [TestMethod] public async Task ExistingDatabaseMigration_PreservesJobsAndDefaultsToNotHeld()
+    [TestMethod]
+    public async Task ExistingDatabaseMigration_PreservesJobsAndDefaultsToNotHeld()
     {
         await store.ScheduleJobAsync("Collection", "existing", "payload", DateTimeOffset.UtcNow);
         using (var db = new SqliteConnection($"Data Source={Path.Combine(directory, "processing-jobs.db")};Pooling=False"))
@@ -144,7 +152,8 @@ public sealed class CollectionExecutionControlTests
         await HoldAsync(job.JobId);
     }
 
-    [TestMethod] public async Task ExpiredHeldLease_IsAcknowledgedWithoutAutomaticExecution()
+    [TestMethod]
+    public async Task ExpiredHeldLease_IsAcknowledgedWithoutAutomaticExecution()
     {
         var task = await LeaseAsync("expired");
         await HoldAsync(task.TaskId);
@@ -159,7 +168,8 @@ public sealed class CollectionExecutionControlTests
         Assert.IsNotNull(await store.AcquireCollectionTaskAsync(task.JobType, task.DeduplicationKey, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(30)));
     }
 
-    [TestMethod] public async Task HoldBeforeRunnerBegins_DoesNotExecuteWork()
+    [TestMethod]
+    public async Task HoldBeforeRunnerBegins_DoesNotExecuteWork()
     {
         var task = await LeaseAsync("before-start");
         await HoldAsync(task.TaskId);
@@ -170,7 +180,8 @@ public sealed class CollectionExecutionControlTests
         Assert.AreEqual(AgentJobStatus.Ready, (await store.GetJobDetailAsync(task.TaskId))!.Status);
     }
 
-    [TestMethod] public async Task CompletedJob_RejectsLateHold()
+    [TestMethod]
+    public async Task CompletedJob_RejectsLateHold()
     {
         var task = await LeaseAsync("completed");
         var running = (await store.GetJobDetailAsync(task.TaskId))!;
