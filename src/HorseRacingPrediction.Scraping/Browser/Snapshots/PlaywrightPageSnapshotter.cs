@@ -348,6 +348,10 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                 .map(node => node.textContent ?? '')
                 .join(' '));
             const renderedText = element => normalize(element.innerText || element.textContent || '');
+            const descendantImageAltText = element => normalize(Array.from(element.querySelectorAll('img[alt]'))
+                .map(image => image.getAttribute('alt') || '')
+                .filter(value => value.trim().length > 0)
+                .join(' '));
             const labelledByText = element => normalize((element.getAttribute('aria-labelledby') || '')
                 .split(/\s+/u)
                 .filter(Boolean)
@@ -438,7 +442,9 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                 const headingLevel = kind === 'Heading'
                     ? (/^h[1-6]$/u.test(tag) ? Number(tag.substring(1)) : Number(element.getAttribute('aria-level')) || null)
                     : null;
-                const nodeText = tag === 'img' || hasElementChildren ? null : (text || null);
+                const nodeText = tag === 'img'
+                    ? nullable(element.getAttribute('alt'))
+                    : (hasElementChildren ? null : (text || null));
                 const name = ['Link', 'Image', 'Button'].includes(kind) || explicitRole ? accessibleName(element) : null;
                 if ((!nodeText || !nodeText.trim()) && children.length === 0 && !name) return [];
                 return [{ kind, text: nodeText, headingLevel, role: explicitRole, accessibleName: name, location: locationOf(element), source: sourceOf(element), children }];
@@ -509,9 +515,12 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
 
             const links = options.includeLinks ? Array.from(document.querySelectorAll('a[href]'))
                 .filter(link => !isPruned(link))
-                .map(link => ({ text: renderedText(link), rawHref: link.getAttribute('href'), resolvedHref: link.href || null,
-                    relation: nullable(link.getAttribute('rel')), title: nullable(link.getAttribute('title')),
-                    accessibleName: accessibleName(link), source: sourceOf(link) })) : [];
+                .map(link => {
+                    const name = accessibleName(link);
+                    return { text: nullable(renderedText(link)) || descendantImageAltText(link) || name || '', rawHref: link.getAttribute('href'),
+                        resolvedHref: link.href || null, relation: nullable(link.getAttribute('rel')), title: nullable(link.getAttribute('title')),
+                        accessibleName: name, source: sourceOf(link) };
+                }) : [];
 
             const images = options.includeImages ? Array.from(document.querySelectorAll('img'))
                 .filter(image => !isPruned(image))

@@ -93,7 +93,7 @@ Collections returned by the public model will be immutable snapshots rather than
 - **Tables:** preserve DOM row order, cell order, `th`/`td`, caption, and normalized positive `rowspan`/`colspan` (default 1). No dictionary conversion or expanded grid inference occurs.
 - **Key/value pairs:** pair explicit `dt` elements with their following `dd` siblings until the next `dt`; multiple values for one term are joined in displayed order without domain interpretation.
 - **Links:** preserve displayed text, resolved `href` where URI parsing succeeds, raw `href`, relation, title, accessible name, and source reference. Absolute, relative, fragment, `mailto:`, and `javascript:` values are not silently dropped. `Url` is nullable for invalid values, while `RawHref` and a diagnostic preserve evidence.
-- **Images:** preserve resolved source where valid, raw source, alt, title, accessible name, and source reference; no binary is fetched.
+- **Images:** preserve resolved source where valid, raw source, alt, title, accessible name, and source reference; no binary is fetched. A non-empty `alt` is also the Image semantic node's `Text`, while `alt=""` remains textless as an explicit decorative signal.
 - **Metadata:** preserve title, language, canonical URL when valid, and non-empty meta `name`/`property` values. Duplicate meta keys use the first value and emit a diagnostic for conflicting later values.
 - **JSON-LD:** parse each non-empty `application/ld+json` script independently. Invalid JSON is skipped and produces a warning diagnostic without failing capture.
 - **Forms:** preserve name, resolved/raw action, normalized method, source, and controls for input/select/textarea/button. Controls include name, type, label, value, placeholder, accessible name, selected option display values where applicable, disabled, and required state. Password control values are always `null`; file values are also omitted to avoid leaking local paths.
@@ -135,6 +135,10 @@ PageTableSnapshot? FindTableByCaption(this PageSnapshot snapshot, string caption
 ```
 
 Traversal order is depth-first document order. Caption matching is ordinal, with an overload or comparer deferred until a demonstrated need.
+
+The follow-up consumer-usability change adds include-self and kind traversal, effective semantic text, and
+predicate-based table selection. Image-only flattened links use descendant image `alt` as a fallback after
+visible text, while semantic Link nodes keep text on their Image child to avoid parent/child duplication.
 
 ## Compatibility and delivery
 

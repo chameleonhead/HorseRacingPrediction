@@ -1,6 +1,6 @@
 # Semantic Snapshot Consumer Usability
 
-- Status: Proposed
+- Status: Implemented
 - Owner: Scraping team
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -144,3 +144,37 @@ and an image node would remain textless despite having an explicit textual alter
 - On implementation, update `docs/changes/20260907_playwright-page-snapshot/README.md` and its live-site
   evaluation with the finalized text rules and verification results.
 - No operational or end-user documentation changes are required because this affects a developer API only.
+
+## Implementation result
+
+Implemented on 2026-09-08:
+
+- Image semantic nodes now expose normalized non-empty `alt` through `Text`; decorative empty alt and
+  missing alt remain textless even when a title exists.
+- Flattened links use visible text, descendant image alt, accessible name, then empty string. The semantic
+  Link node still owns no copied descendant text.
+- Added `GetEffectiveText`, `SelfAndDescendants`, `FindByKind`, and predicate-based `FindTables` helpers.
+- Added browser integration coverage for meaningful/decorative images, image-only and mixed links, and
+  text ownership, plus model-only coverage for effective-text precedence/deduplication and all new queries.
+
+There was no material deviation from the approved design. The implementation uses descendant image lookup
+only while constructing the already-enabled dedicated Link collection and adds no Playwright round trip.
+
+## Verification
+
+- `dotnet restore HorseRacingPrediction.sln` — passed.
+- `dotnet format` for the scraping and scraping-test projects — passed.
+- `dotnet build src/HorseRacingPrediction.Scraping/HorseRacingPrediction.Scraping.csproj --no-restore` —
+  passed with zero warnings and errors.
+- Filtered `PlaywrightPageSnapshotterTests` — passed 14/14.
+- The live Wikipedia page retained 1,060 semantic nodes and 331 links. Four Image nodes now had semantic
+  text and only two flattened links remained empty. Three repeated seven-sample runs measured medians of
+  213.4 ms, 213.9 ms, and 198.4 ms versus the earlier 253.2 ms reference; serialized JSON changed from
+  322,405 to 322,538 bytes (+0.04%). This satisfies the approved 5% non-regression budget, while remaining
+  a non-isolated engineering probe rather than a production benchmark.
+
+## Remaining work
+
+- The generic improvements do not provide the `IPage` integration boundary required by existing JRA code.
+- JRA adoption still requires saved provider fixtures, parser-oriented adapters, and explicit production
+  latency/allocation budgets in a separate approved migration change.

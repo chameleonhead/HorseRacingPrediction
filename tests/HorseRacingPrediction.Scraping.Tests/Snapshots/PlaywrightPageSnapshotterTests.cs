@@ -171,6 +171,82 @@ public sealed class PlaywrightPageSnapshotterTests
     }
 
     [TestMethod]
+    public async Task CaptureAsync_UsesImageAltAsSemanticAndImageOnlyLinkText()
+    {
+        await SetContentAsync("""
+            <main>
+              <img id="meaningful" src="finish.png" alt="  Finish   photo  " title="Photo title">
+              <img id="decorative" src="decoration.png" alt="" title="Decoration title">
+              <img id="untitled" src="horse.png" title="Horse title">
+              <a id="image-link" href="/result"><img src="result.png" alt="Race result"></a>
+              <a id="mixed-link" href="/details">Visible details<img src="detail.png" alt="Detail icon"></a>
+            </main>
+            """);
+
+        var snapshot = await _snapshotter.CaptureAsync(_page);
+        var meaningful = snapshot.Root.Descendants().Single(node => node.Source?.ElementId == "meaningful");
+        var decorative = snapshot.Root.Descendants().Single(node => node.Source?.ElementId == "decorative");
+        var untitled = snapshot.Root.Descendants().Single(node => node.Source?.ElementId == "untitled");
+        var imageLink = snapshot.Root.Descendants().Single(node => node.Source?.ElementId == "image-link");
+
+        Assert.AreEqual("Finish photo", meaningful.Text);
+        Assert.AreEqual("Finish photo", snapshot.Images.Single(image => image.SourceReference?.ElementId == "meaningful").AltText);
+        Assert.IsNull(decorative.Text);
+        Assert.IsNull(untitled.Text);
+        Assert.AreEqual("Decoration title", decorative.AccessibleName);
+        Assert.AreEqual("Race result", snapshot.Links.Single(link => link.Source?.ElementId == "image-link").Text);
+        Assert.AreEqual("Visible details", snapshot.Links.Single(link => link.Source?.ElementId == "mixed-link").Text);
+        Assert.IsNull(imageLink.Text);
+        Assert.AreEqual("Race result", imageLink.Children.Single().Text);
+        Assert.AreEqual("Race result", imageLink.GetEffectiveText());
+    }
+
+    [TestMethod]
+    public void QueryHelpers_ProvideEffectiveTextTraversalKindsAndTablePredicates()
+    {
+        var duplicateText = new PageContentNode { Kind = PageContentKind.Text, Text = "Repeated" };
+        var heading = new PageContentNode
+        {
+            Kind = PageContentKind.Heading,
+            AccessibleName = "Fallback",
+            Children =
+            [
+                duplicateText,
+                duplicateText with { Text = " Repeated " },
+                new PageContentNode { Kind = PageContentKind.Image, Text = "Photo" },
+            ],
+        };
+        var snapshot = new PageSnapshot
+        {
+            Url = new Uri("https://example.test"),
+            Root = new PageContentNode { Kind = PageContentKind.Document, Children = [heading] },
+            Metadata = new PageMetadataSnapshot { Meta = new Dictionary<string, string>(), JsonLd = [] },
+            KeyValues = [],
+            Tables =
+            [
+                new PageTableSnapshot
+                {
+                    Caption = null,
+                    Rows = [new PageTableRowSnapshot { Cells = [new PageTableCellSnapshot { Text = "Winner" }] }],
+                },
+            ],
+            Links = [],
+            Images = [],
+            Forms = [],
+            Diagnostics = [],
+        };
+
+        CollectionAssert.AreEqual(
+            new[] { PageContentKind.Document, PageContentKind.Heading, PageContentKind.Text, PageContentKind.Text, PageContentKind.Image },
+            snapshot.Root.SelfAndDescendants().Select(node => node.Kind).ToArray());
+        Assert.AreSame(heading, snapshot.FindByKind(PageContentKind.Heading).Single());
+        Assert.AreEqual("Repeated Photo", heading.GetEffectiveText());
+        Assert.AreEqual("Fallback", (heading with { Children = [] }).GetEffectiveText());
+        Assert.AreEqual("Winner", snapshot.FindTables(table => table.Rows.SelectMany(row => row.Cells).Any(cell => cell.Text == "Winner"))
+            .Single().Rows[0].Cells[0].Text);
+    }
+
+    [TestMethod]
     public async Task CaptureAsync_HonorsCollectionWhitespaceAndAggressiveOptions()
     {
         await SetContentAsync("""
