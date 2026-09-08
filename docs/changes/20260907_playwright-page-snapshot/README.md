@@ -227,8 +227,23 @@ The implementation was reviewed again on 2026-09-08. Three correctness issues we
 
 The review also tightened `NormalizeWhitespace = false`: formatting is preserved for meaningful text, while whitespace-only DOM nodes remain excluded as empty nodes.
 
+## Existing JRA scraper impact review
+
+The existing JRA scraping path was reviewed on 2026-09-08 after implementation. The new API has no current runtime or source impact on that path:
+
+- `JraPageReader` and `JraNavigator` still depend on `IWebBrowser.GetPageSnapshotAsync` and therefore continue to receive `HorseRacingPrediction.Scraping.Browser.PageSnapshot`, the existing section-oriented compatibility model.
+- All JRA parsers still accept the compatibility `PageSnapshot`; no parser, navigator, session, collector workflow, or test fake imports `HorseRacingPrediction.Scraping.Browser.Snapshots` or constructs `PlaywrightPageSnapshotter`.
+- `PlaywrightWebBrowser.GetPageSnapshotAsync` and its settling, section extraction, link-limit, and logging behavior were not modified. Consequently this addition does not change JRA page readiness, extraction output, parser selection, navigation decisions, or request volume.
+- The scraping project already referenced `Microsoft.Playwright`; the additive implementation introduces no new package or project dependency for JRA consumers.
+- The two `PageSnapshot` types have the same simple name but live in different namespaces. Existing source continues to compile because it imports only `HorseRacingPrediction.Scraping.Browser`. A future migration must use an alias or fully qualified name while both contracts coexist, rather than importing both namespaces and relying on the simple name.
+- The new snapshotter requires an `IPage`, while `PlaywrightWebBrowser` intentionally keeps its page private and `IWebBrowser` does not expose it. Adopting the semantic snapshot in `JraPageReader` is therefore not a drop-in type substitution: it needs a separately approved integration boundary or adapter plus parser migration.
+- The semantic model does not carry the compatibility model's `Sections`, `Actions`, table fragment metadata, or mutable aggregate lists. Existing JRA parsers rely on those shapes, including table fragments used to distinguish provider-specific cell content, so automatic model conversion would risk information loss. Migration should be parser-by-parser and retain regression fixtures for calendar, race-list, race-card, race-result, and navigation behavior.
+
+Regression verification built the whole solution and ran the non-external suite excluding only `PlaywrightPageSnapshotterTests`, including the existing JRA parser, navigator, workflow, collector, and agent tests. All 665 selected tests passed, so no compatibility regression was observed. The semantic integration tests could not launch Chromium in this container because the host lacks `libatk-1.0.so.0`; this does not affect the existing-JRA-path result. External live-JRA tests remain intentionally excluded from deterministic verification because their result depends on the live site and network state.
+
 ## Deviations and follow-up
 
 - No material design deviations were required.
 - The browser argument is passed as a string-keyed dictionary because Playwright preserves dictionary keys but serializes CLR object property names without the lower-camel transformation expected by the JavaScript DTO.
 - Migrating `IWebBrowser.GetPageSnapshotAsync` and existing consumers to this semantic API is intentionally deferred to a separately reviewable change.
+- Before such a migration, define how an `IPage` capture capability is supplied without exposing Playwright through the existing `IWebBrowser` abstraction, and map every compatibility-only structure consumed by JRA parsers. The impact review found no reason to alter the existing JRA scraper in this change.

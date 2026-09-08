@@ -139,6 +139,14 @@ snapshotはPlaywrightとの往復を要素ごとに行わず、可能な範囲�
 `HorseRacingPrediction.Scraping.Browser.Snapshots`へ実装している。本書の既存`IWebBrowser`向けsection
 snapshotも互換契約として維持し、新APIは既存型を破壊的に置換しない。
 
+現行の`JraPageReader`、`JraNavigator`、各JRA parserは引き続き`IWebBrowser.GetPageSnapshotAsync`と
+`HorseRacingPrediction.Scraping.Browser.PageSnapshot`だけを使用する。Semantic Snapshot APIは現時点で
+JRA実行経路から参照されず、ページ待機、section抽出、parser判定、ナビゲーションの挙動を変更しない。
+両snapshotは同名でも互換型ではなく、Semantic Snapshotには既存parserが利用する`Sections`、`Actions`、
+table fragment metadataがない。また`IWebBrowser`は`IPage`を公開しないため、JRA側の採用は単純な型置換では
+行わない。将来の移行では、Playwrightを既存抽象へ漏らさないcapture境界と、parser単位のモデル移行を別change
+recordで設計する。詳細な影響調査は[change record](changes/20260907_playwright-page-snapshot/README.md#existing-jra-scraper-impact-review)を参照する。
+
 ---
 
 # 3. 新規ディレクトリ構成
