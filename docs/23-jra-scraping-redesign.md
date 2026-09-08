@@ -147,6 +147,11 @@ table fragment metadataがない。また`IWebBrowser`は`IPage`を公開しな�
 行わない。将来の移行では、Playwrightを既存抽象へ漏らさないcapture境界と、parser単位のモデル移行を別change
 recordで設計する。詳細な影響調査は[change record](changes/20260907_playwright-page-snapshot/README.md#existing-jra-scraper-impact-review)を参照する。
 
+移行に必要なcapture境界、table projection、cell fragment、navigation、性能、段階的rolloutの課題と
+parser単位の推奨順序は、[JRA Semantic Snapshot Migration](changes/20260908_jra-semantic-snapshot-migration/README.md)
+で管理する。同recordは`Proposed`であり、明示的な承認と実装が完了するまでは本書の互換snapshot経路を
+現行設計として維持する。
+
 ---
 
 # 3. 新規ディレクトリ構成
