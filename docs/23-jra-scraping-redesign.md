@@ -2525,7 +2525,8 @@ Collector(`IDataCollectionWriteService` 経由の Web API 書き込み)へ接続
 - 開催回・開催日番号の配線(`FindMeetingButtonText` の正規表現拡張 → `IDataCollectionWriteService.UpsertRaceAsync` / `HttpDataCollectionWriteService` への引数追加 → 呼び出し側での値受け渡し)。表示用メタデータとして必要になった時点で対応する。
 - 払戻(`DeclareRacePayoutsAsync`)を呼ぶ処理の実装。
 - `HttpDataCollectionWriteService.DeclareRaceEntryResultAsync` が HTTP 409 を「既に記録済み」の成功として一律にマッピングしている点は、「本当の重複」と「ドメイン層の状態ガード違反」を区別できていない。今回は呼び出し順序(`DeclareRaceResultAsync` を先に呼ぶ)を保証することで実害を防いだが、レスポンス内容で区別できるようにする、またはエラーコードを分けるといった見直しは別途検討の余地がある。
-- 上記37節の `全RaceCard項目` / `全RaceResult項目` の割愛項目(調教師名・馬主名・生産者名・上がり3F・馬体重増減など)は、予測モデルで必要になった時点で個別に追加する。
+- 馬主名はRaceCardから取得し、レース時点の馬主と馬プロフィールの双方へ保存する。生産者名・父名・母名はRaceCardの同じ馬情報セルから取得して馬プロフィールへ保存する。母行に併記される母父は母名へ混入させず、当面は一次情報としてのみ保持する。詳細と移行条件は `docs/changes/20260908_jra-semantic-snapshot-cutover/README.md` の follow-up を参照する。
+- 上記37節の `全RaceCard項目` / `全RaceResult項目` のうち、ここで明示していない割愛項目は、予測モデルで必要になった時点で個別に追加する。
 
 この境界を実装中に崩さないこと。
 

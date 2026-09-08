@@ -1,6 +1,6 @@
 # JRA Semantic Snapshot Cutover
 
-- Status: Implemented
+- Status: Proposed
 - Owner: Scraping team
 - Created: 2026-09-08
 - Updated: 2026-09-08
@@ -557,3 +557,43 @@ Verification:
 - Complete non-external solution suite: passed 741/741.
 - `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` and `git diff --check`: passed.
 - No canonical documentation changed; this record is the implementation and verification continuation.
+
+## Horse ownership, breeder, and pedigree follow-up (2026-09-09)
+
+User review questioned whether owner, breeder, and parents are collected. Investigation confirmed three
+different states:
+
+- Owner is parsed from the race-card semantic `owner` fragment (with ordered-text fallback), is covered by a
+  live assertion for every entry, and is forwarded to both the race entry and horse profile write paths.
+- Breeder text is present in the same JRA cell but is currently discarded. The fallback parser even identifies
+  its position between owner and trainer without retaining it.
+- Sire and dam text are present in `父：` and `母：` lines but `IsFamilyLine` deliberately filters both lines.
+  The current `RaceEntry`, horse aggregate, API contracts, and read models have no fields for these values.
+
+This is a data-model expansion rather than a parser-only correction. Proposed scope:
+
+1. Add nullable `BreederName`, `SireName`, and `DamName` values to race-card parsing and horse profile storage.
+2. Parse the dam independently from the nested maternal-grandsire suffix; retain maternal grandsire only as
+   source evidence for now, not as a first-class relationship.
+3. Forward the three values through collector/API contracts and update the horse aggregate/read model without
+   overwriting an existing non-null value when a later source omits it.
+4. Expose the values on the horse detail response and screen; keep race-entry historical ownership unchanged.
+5. Add semantic-fragment and text-fallback parser tests, persistence tests, and live assertions where JRA
+   publishes the values.
+
+Acceptance criteria:
+
+1. A published JRA race card produces non-empty owner, breeder, sire, and dam for ordinary entries where all
+   four are displayed.
+2. Owner continues to be stored as both current horse owner and race-time owner.
+3. Breeder, sire, and dam are stored on the horse and returned by the horse detail API.
+4. `母：<dam>(母の父：<name>)` stores only `<dam>` as `DamName`.
+5. Missing or old-page values remain nullable and never erase existing known values.
+6. Existing scraper, domain, API, and UI tests remain green, and targeted live JRA verification passes.
+
+Documentation updates:
+
+- `docs/23-jra-scraping-redesign.md`: updated the canonical field policy to include owner, breeder, sire, and
+  dam and to distinguish the already-working owner path from the proposed model expansion.
+
+Production implementation is blocked until this proposed extension is explicitly approved.
