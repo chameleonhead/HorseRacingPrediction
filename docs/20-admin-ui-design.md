@@ -139,6 +139,8 @@ erDiagram
 
 ジョブ一覧の全体停止は個別ジョブを `Cancelled` にする操作ではない。dispatcher の送信を止めて SQS 本体と DLQ を purge し、Running は完了まで進め、Ready / Pending は DB に保持する。`再開` では Ready を priority 降順（同順位は AvailableAt、CreatedAt、JobId）で再投入し、Pending は通常のスケジュール条件を待つ。
 
+> 2026-09-08の実装調査で、停止中のmiddlewareが内部状態RPCの完了・失敗報告も503で拒否するため、上記の「Runningは完了まで進める」という設計を満たさないことを確認した。個別保留も未実装。[タイムアウト・実行保留の変更案](changes/20260908_collection-timeout-hold/README.md)で新規実行と結果報告を分離する案を提示している。停止範囲と保留単位は確認待ちで、提案は未実装。
+
 ### 5.3 収集ジョブ内の日別状況
 
 収集対象日は独立したナビゲーションと詳細 URL を持たせず、収集ジョブ一覧の検索条件と日別サマリーとして表現する。内部の日次状態 read model は、複数ジョブの進捗を集計するため維持する。

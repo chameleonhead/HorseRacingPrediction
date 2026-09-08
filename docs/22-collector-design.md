@@ -30,7 +30,7 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 |---|---|
 | `ScrapingRegistrationService` | 開催予定・出馬表・結果収集ジョブの投入を定期実行する |
 | `CollectionExecutionService` | 投入済み収集ジョブを取り出して実行する |
-| `HistoricalDataRequestExecutionService` | 過去成績・プロフィール補完要求を実行する |
+| `HistoricalDataRequestExecutionService`（旧経路） | 現行CollectorではDI登録が無効で、旧補完要求を実行しない |
 | `CollectionExecutionTrigger` | 収集実行の即時トリガー |
 
 ### 過去データ補完
@@ -40,12 +40,14 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 | クラス | 役割 |
 |---|---|
 | `IJraResultDateDiscoveryService` / `JraResultMonthDateDiscoveryService` | 月単位で未取得の結果日付を発見する |
-| `IHistoricalRaceReferenceCollector` / `JraHistoricalRaceReferenceCollector` | 出走馬の過去レース参照を収集する |
+| `IHistoricalRaceReferenceCollector` / `NoOpHistoricalRaceReferenceCollector` | 現行DIは常に空の参照を返す暫定実装。過去レース結果の自動補完要求は登録されない |
 | `IJraRaceResultLookup` / `JraSiteDataCollectorRaceResultLookup` | `JraSiteDataCollector` 経由でレース結果を参照する |
-| `IHistoricalRaceResultCollector` / `JraHistoricalRaceResultCollector` | 過去レース結果を収集し Api へ登録する |
+| `IHistoricalRaceResultCollector`（旧経路） | 実行実装のDI登録は無効 |
 | `IJraProfileLookup` / `JraSiteDataCollectorProfileLookup` | 馬・騎手・調教師のプロフィールを参照する |
-| `IHistoricalDataRequestHandler` / `JraHistoricalDataRequestHandler` | 過去データ補完要求を処理する |
-| `HistoricalDataRequestPlanner` | 補完要求の計画を立てる |
+| `IHistoricalDataRequestHandler`（旧経路） | ハンドラーのDI登録は無効 |
+| `HistoricalDataRequestPlanner` | 出馬表収集後に旧プロフィール等の補完要求を条件付き登録する。手動の馬起点履歴探索には未接続 |
+
+2026-09-08調査: 上記の旧自動経路と、稼働中の手動 `HorseHistoryDiscovery` / `HorseHistoryRace` は別経路である。過去データの自動抽出停止と旧要求の実行停止が併存している。[調査とタイムアウト・保留の変更案](changes/20260908_collection-timeout-hold/README.md)を参照。自動経路の復旧や既存データの一括再登録は未実施。
 
 ### 状態管理
 
