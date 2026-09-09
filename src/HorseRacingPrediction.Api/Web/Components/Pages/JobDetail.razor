@@ -1,5 +1,6 @@
 @implements IAsyncDisposable
 @page "/jobs/{JobId}"
+@page "/jobs/detail"
 @attribute [Authorize]
 @inject AdminApiClient Api
 @using System.Text.Json
@@ -141,6 +142,7 @@ else
 
 @code {
     [Parameter] public string JobId { get; set; } = string.Empty;
+    [Parameter, SupplyParameterFromQuery(Name = "jobId")] public string? QueryJobId { get; set; }
     private string NotFoundMessage => $"Job ID「{JobId}」は削除されたか、URLが正しくありません。";
     private AgentJobDetailReadModel? job;
     private bool loading = true;
@@ -203,7 +205,11 @@ else
         refreshStop.Dispose();
     }
 
-    protected override async Task OnParametersSetAsync() => await LoadJobAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(QueryJobId)) JobId = QueryJobId;
+        await LoadJobAsync();
+    }
     private async Task LoadJobAsync()
     {
         loading = true; loadError = false;
@@ -238,7 +244,7 @@ else
         && job.ParentRelationType != JobRelationType.AggregatedBy;
     private async Task RerunAsync() { if (job is null) return; var result = await Api.RerunJobAsync(job.JobId, job.UpdatedAt, reason); if (result.Success) { showRerunDialog = false; job = await Api.GetJobAsync(job.JobId); } }
     private void ShowTechnicalDetails() => technicalDetailsOpen = true;
-    private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
+    private static string JobUrl(string id) => JobNavigation.DetailUrl(id);
     private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
     private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
     private string HeaderDescription => TargetDate is { } date ? $"対象日 {date}・更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}" : $"更新 {job?.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm}";

@@ -34,7 +34,7 @@ public static class RaceReacquisitionEndpointExtensions
             var id = await store.RequestRaceReacquisitionAsync(new(raceId, race.RaceDate.Value,
                 course, race.RaceNumber.Value),
                 context.User.Identity?.Name ?? "Admin API", DateTimeOffset.UtcNow, token);
-            return Results.Accepted($"/api/admin/jobs/{Uri.EscapeDataString(id)}", new { jobId = id });
+            return Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(id), new { jobId = id });
         });
         return endpoints;
     }

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using Bunit;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Shared;
 using HorseRacingPrediction.Collector.Scheduling;
@@ -43,7 +44,7 @@ public class RaceReacquisitionComponentTests
         Assert.IsTrue(cut.FindComponent<FluentDialog>().Instance.Hidden);
         var store = app.Services.GetRequiredService<ProcessingStateStore>();
         var job = (await store.GetRaceReacquisitionAsync(raceId))!;
-        Assert.AreEqual($"/jobs/{Uri.EscapeDataString(job.JobId)}", cut.Find("a").GetAttribute("href"));
+        Assert.AreEqual(JobNavigation.DetailUrl(job.JobId), cut.Find("a").GetAttribute("href"));
         await store.CompleteJobAsync(job.JobType, job.DeduplicationKey);
         cut.WaitForAssertion(() => Assert.IsTrue(completed), TimeSpan.FromSeconds(8));
         StringAssert.Contains(cut.Find("[role=status]").TextContent, "完了");

@@ -27,6 +27,31 @@ public sealed class JobManagementEndpointTests
     }
 
     [TestMethod]
+    public async Task QueryEndpoints_AcceptOpaqueJobIdContainingEncodedSlash()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app;
+        using var requestClient = client;
+        requestClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = app.Services.GetRequiredService<ProcessingStateStore>();
+        var key = "RaceId { Date = 09/06/2026, Course = Sapporo, Number = 8 }";
+        await store.ScheduleJobAsync(AgentJobType.RaceReacquisition, key, "{}", DateTimeOffset.UtcNow);
+        var jobId = $"{AgentJobType.RaceReacquisition}:{key}";
+        var encoded = Uri.EscapeDataString(jobId);
+
+        var detailResponse = await requestClient.GetAsync($"/api/admin/jobs/detail?jobId={encoded}");
+        var detail = await detailResponse.Content.ReadFromJsonAsync<AgentJobDetailReadModel>();
+        var holdResponse = await requestClient.PostAsJsonAsync(
+            $"/api/admin/jobs/operations/hold?jobId={encoded}",
+            new { expectedUpdatedAt = detail!.UpdatedAt });
+
+        Assert.AreEqual(HttpStatusCode.OK, detailResponse.StatusCode);
+        Assert.AreEqual(jobId, detail.JobId);
+        Assert.AreEqual(HttpStatusCode.Accepted, holdResponse.StatusCode);
+        Assert.IsTrue((await store.GetJobDetailAsync(jobId))!.IsHeld);
+    }
+
+    [TestMethod]
     public async Task SearchJobs_PagesAcrossAllRowsAndReturnsCompleteDaySummary()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

@@ -30,6 +30,27 @@ public static class JobManagementEndpointExtensions
             Results.Ok(await store.GetJobStatusesAsync(jobType, status, limit ?? 100, token)));
         group.MapGet("/search", async (string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int? page, int? pageSize, ProcessingStateStore store, CancellationToken token) =>
             Results.Ok(await store.SearchJobStatusesAsync(view, query, targetDate, jobType, status, page ?? 1, pageSize ?? 50, token)));
+        group.MapGet("/detail", async (string jobId, ProcessingStateStore store, CancellationToken token) =>
+        {
+            var detail = await store.GetJobDetailAsync(jobId, token);
+            return detail is null ? Results.NotFound() : Results.Ok(detail);
+        });
+        group.MapPost("/operations/rerun", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+            ToResult(await store.RerunJobAsync(jobId, request.ExpectedUpdatedAt, "Admin UI", request.Reason, DateTimeOffset.UtcNow, token)));
+        group.MapPost("/operations/reacquire", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+        {
+            var result = await store.ReacquireCompletedJobAsync(jobId, request.ExpectedUpdatedAt, "Admin UI", request.Reason, DateTimeOffset.UtcNow, token);
+            return result.Result switch
+            {
+                ForceRequeueJobResult.Requeued => Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(result.JobId!), new { jobId = result.JobId }),
+                ForceRequeueJobResult.NotFound => Results.NotFound(),
+                _ => Results.Conflict()
+            };
+        });
+        group.MapPost("/operations/hold", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+            ToResult(await store.SetJobHoldAsync(jobId, true, request.ExpectedUpdatedAt, "Admin UI", token)));
+        group.MapPost("/operations/release-hold", async (string jobId, JobOperationRequest request, ProcessingStateStore store, CancellationToken token) =>
+            ToResult(await store.SetJobHoldAsync(jobId, false, request.ExpectedUpdatedAt, "Admin UI", token)));
         group.MapGet("/{jobId}", async (string jobId, ProcessingStateStore store, CancellationToken token) =>
         {
             var detail = await store.GetJobDetailAsync(jobId, token);
@@ -42,7 +63,7 @@ public static class JobManagementEndpointExtensions
             var result = await store.ReacquireCompletedJobAsync(jobId, request.ExpectedUpdatedAt, "Admin UI", request.Reason, DateTimeOffset.UtcNow, token);
             return result.Result switch
             {
-                ForceRequeueJobResult.Requeued => Results.Accepted($"/api/admin/jobs/{Uri.EscapeDataString(result.JobId!)}", new { jobId = result.JobId }),
+                ForceRequeueJobResult.Requeued => Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(result.JobId!), new { jobId = result.JobId }),
                 ForceRequeueJobResult.NotFound => Results.NotFound(),
                 _ => Results.Conflict()
             };

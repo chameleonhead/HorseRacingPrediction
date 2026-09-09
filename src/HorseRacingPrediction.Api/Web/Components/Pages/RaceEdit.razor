@@ -18,7 +18,7 @@ else
     @if (lease?.IsActive == true)
     {
         <RaceOpsAlert Title="収集中のためレース情報を編集できません" Messages="@LeaseMessages" />
-        @if (!string.IsNullOrWhiteSpace(lease.JobId)) { <p><a href="@($"/jobs/{Uri.EscapeDataString(lease.JobId)}")">収集ジョブを確認する</a></p> }
+        @if (!string.IsNullOrWhiteSpace(lease.JobId)) { <p><a href="@JobNavigation.DetailUrl(lease.JobId)">収集ジョブを確認する</a></p> }
     }
     <section class="detail-card">
         <h2>@(race.RaceName ?? race.RaceId)</h2>

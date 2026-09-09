@@ -3,5 +3,5 @@
 @inject NavigationManager Navigation
 @code {
     [Parameter] public string? JobId { get; set; }
-    protected override void OnInitialized() => Navigation.NavigateTo(string.IsNullOrWhiteSpace(JobId) ? "/jobs" : $"/jobs/{Uri.EscapeDataString(JobId)}", replace: true);
+    protected override void OnInitialized() => Navigation.NavigateTo(string.IsNullOrWhiteSpace(JobId) ? "/jobs" : JobNavigation.DetailUrl(JobId), replace: true);
 }

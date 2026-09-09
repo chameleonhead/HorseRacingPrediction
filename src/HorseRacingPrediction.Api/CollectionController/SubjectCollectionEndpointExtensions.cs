@@ -49,7 +49,7 @@ public static class SubjectCollectionEndpointExtensions
             var subject = await ResolveAsync(kind, subjectId, queries, token);
             if (subject is null) return Results.NotFound();
             var id = await store.RequestSubjectCollectionAsync(jobType, subject, context.User.Identity?.Name ?? "Admin API", DateTimeOffset.UtcNow, token);
-            return Results.Accepted($"/api/admin/jobs/{Uri.EscapeDataString(id)}", new { jobId = id });
+            return Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(id), new { jobId = id });
         });
         group.MapPost("/collection/{operation}/retry", async (string kind, string subjectId, string operation, IQueryProcessor queries, ProcessingStateStore store, HttpContext context, CancellationToken token) =>
         {

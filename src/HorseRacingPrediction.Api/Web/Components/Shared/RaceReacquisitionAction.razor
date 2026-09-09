@@ -10,7 +10,7 @@
         @if (job is not null)
         {
             <span>再取得: @StatusLabel</span>
-            <a href="@($"/jobs/{Uri.EscapeDataString(job.JobId)}")">処理の詳細</a>
+            <a href="@JobNavigation.DetailUrl(job.JobId)">処理の詳細</a>
         }
     </div>
     @if (error is not null) { <p role="alert">@error</p> }

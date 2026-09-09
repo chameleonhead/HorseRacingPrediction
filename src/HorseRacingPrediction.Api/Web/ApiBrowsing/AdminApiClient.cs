@@ -133,16 +133,16 @@ public sealed partial class AdminApiClient
         => GetJsonAsync<AgentJobSearchResult>(AppendQueryString("/api/admin/jobs/search", new { view, query, targetDate, jobType, status, page, pageSize }), cancellationToken);
 
     public Task<AgentJobDetailReadModel?> GetJobAsync(string jobId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/jobs/{Uri.EscapeDataString(jobId)}", cancellationToken);
+        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/jobs/detail?jobId={Uri.EscapeDataString(jobId)}", cancellationToken);
 
     public Task<AdminApiResult> RerunJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/rerun", new { expectedUpdatedAt, reason }, cancellationToken);
+        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/rerun?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt, reason }, cancellationToken);
 
     public Task<AdminApiResult> SetJobHoldAsync(string jobId, bool hold, DateTimeOffset expectedUpdatedAt, CancellationToken token = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/{(hold ? "hold" : "release-hold")}", new { expectedUpdatedAt }, token);
+        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/{(hold ? "hold" : "release-hold")}?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt }, token);
 
     public Task<AdminApiResult> ReacquireJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/{Uri.EscapeDataString(jobId)}/reacquire", new { expectedUpdatedAt, reason }, cancellationToken);
+        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/reacquire?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt, reason }, cancellationToken);
 
     public Task<AdminApiResult> PauseJobsAsync(CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, "/api/admin/jobs/pause", body: null, cancellationToken);

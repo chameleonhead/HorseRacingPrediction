@@ -23,7 +23,7 @@ public static class RaceDayReacquisitionEndpointExtensions
                 context.User.Identity?.Name ?? "Admin API",
                 DateTimeOffset.UtcNow,
                 token).ConfigureAwait(false);
-            return Results.Accepted($"/api/admin/jobs/{Uri.EscapeDataString(id)}", new RaceDayReacquisitionResponse(id));
+            return Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(id), new RaceDayReacquisitionResponse(id));
         });
         return endpoints;
     }

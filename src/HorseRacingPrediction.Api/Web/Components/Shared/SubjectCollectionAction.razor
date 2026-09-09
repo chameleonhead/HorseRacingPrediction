@@ -12,7 +12,7 @@
         {
             <span>@(History?"過去レース取得":"再取得"): @StatusLabel</span>
             @if (History) { <span>完了 @status.Completed / 発見 @status.Discovered / 失敗 @status.Failed / 対象外 @status.Excluded</span> }
-            <a href="@($"/jobs/{Uri.EscapeDataString(status.Job.JobId)}")">処理の詳細</a>
+            <a href="@JobNavigation.DetailUrl(status.Job.JobId)">処理の詳細</a>
         }
     </div>
     @if (Failed) { <p role="alert">@status!.Job.LastError</p> }
