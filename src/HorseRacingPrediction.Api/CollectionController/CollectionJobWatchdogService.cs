@@ -27,7 +27,12 @@ public sealed class CollectionJobWatchdogService : BackgroundService
     private static readonly string[] RecoverableJobTypes =
     [
         AgentJobType.RaceCardCollection,
-        AgentJobType.RaceResultCollection
+        AgentJobType.RaceResultCollection,
+        AgentJobType.CollectionPlanning,
+        AgentJobType.AcquisitionPlanReview,
+        AgentJobType.SubjectProfileRefresh,
+        AgentJobType.HorseHistoryDiscovery,
+        AgentJobType.HorseHistoryRace
     ];
 
     private readonly ProcessingStateStore _store;

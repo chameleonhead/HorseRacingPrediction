@@ -132,7 +132,7 @@ public sealed class JraRaceResultCollectionWorkflow
         {
             // 全エントリーが不正（ページ全体のパース失敗）の場合、送信しても
             // 意味のあるデータは何も登録できないため、API呼び出し自体を行わない。
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url, false);
         }
 
         var winningEntry = validResults.FirstOrDefault(e => e.FinishPosition == 1);
@@ -241,7 +241,7 @@ public sealed class JraRaceResultCollectionWorkflow
             // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、
             // ここで打ち切って分かりやすい1件のエラーにまとめる。
             errors.Add($"レース登録エラー: {ex.Message}");
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url, false);
         }
 
         errors.AddRange(outcome.Errors);
@@ -250,7 +250,7 @@ public sealed class JraRaceResultCollectionWorkflow
         // 処理されていないため、保存済み馬番は空のまま返す。
         if (outcome.Errors.Any(e => e.StartsWith("レース登録エラー", StringComparison.Ordinal)))
         {
-            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url);
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url, false);
         }
 
         var failedHorseNumbers = outcome.Errors
@@ -264,7 +264,13 @@ public sealed class JraRaceResultCollectionWorkflow
             .Select(e => e.HorseNumber)
             .ToList();
 
-        return new RaceResultCollectionResult(raceId, dataCollectionRaceId, savedHorseNumbers, errors, resultPage.Url);
+        return new RaceResultCollectionResult(
+            raceId,
+            dataCollectionRaceId,
+            savedHorseNumbers,
+            errors,
+            resultPage.Url,
+            winningEntry is not null && payouts is not null);
     }
 
     private static IReadOnlyList<PayoutEntryDto>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)

@@ -13,15 +13,20 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 public sealed partial class JraRaceCardCollectionWorkflow
     : IJraRaceCardCollectionWorkflow
 {
+    private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
     private readonly JraSession _session;
     private readonly IDataCollectionWriteService _writeService;
+    private readonly TimeProvider _timeProvider;
 
     public JraRaceCardCollectionWorkflow(
         JraSession session,
-        IDataCollectionWriteService writeService)
+        IDataCollectionWriteService writeService,
+        TimeProvider? timeProvider = null)
     {
         _session = session;
         _writeService = writeService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<RaceCardCollectionResult> CollectAsync(
@@ -92,6 +97,17 @@ public sealed partial class JraRaceCardCollectionWorkflow
         foreach (var race in raceList.Races)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var nowJst = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), Jst);
+            var todayJst = DateOnly.FromDateTime(nowJst.Date);
+            if (!string.IsNullOrWhiteSpace(race.ResultUrl)
+                || date < todayJst
+                || (date == todayJst && race.StartTime is { } start && TimeOnly.FromDateTime(nowJst.DateTime) >= start))
+            {
+                // 出馬表は発走前情報である。公式結果へのリンクが公開済み、過去日、
+                // または公式発走時刻に到達したレースの詳細ページは再訪しない。
+                continue;
+            }
 
             try
             {

@@ -93,6 +93,8 @@ public sealed class ScrapingRegistrationService : BackgroundService
         var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
         var today = DateOnly.FromDateTime(now.Date);
         var queuedJobs = false;
+        var deferHistoricalBackfill = _options.SuppressHistoricalBackfillDuringLive
+            && await HasForegroundCollectionWorkAsync(cancellationToken).ConfigureAwait(false);
 
         // NOTE(Task24): 成績収集の月次/日次バックフィル計画(ResultBackfillPlanningRequest /
         // ResultMonthDiscoveryRequest)は、旧URL列挙方式に依存しており、新Jra層への移行は
@@ -174,6 +176,12 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 {
                     foreach (var date in upcomingDates.Distinct().OrderBy(x => x))
                     {
+                        var resultDay = await _stateStore.GetResultDayCollectionStatusAsync(JraProviderType, date, cancellationToken).ConfigureAwait(false);
+                        if (resultDay?.Status == ResultDayCollectionState.Complete)
+                        {
+                            _logger.LogInformation("[収集登録] 結果収集完了済みのため出馬表を再登録しません。Date={Date}", date);
+                            continue;
+                        }
                         var payload = new RaceCardCollectionJobPayload(date, JraProviderType);
                         var key = AgentJobKeyFactory.BuildRaceCardCollectionKey(JraProviderType, date);
                         var priority = CalculateRaceCardPriority(date, today);
@@ -224,10 +232,82 @@ public sealed class ScrapingRegistrationService : BackgroundService
             }
         }
 
+        if (_options.EnableAutonomousHistoricalCollection
+            && _options.EnableRaceResultCollection
+            && !deferHistoricalBackfill)
+        {
+            queuedJobs |= await RegisterHistoricalBackfillAsync(today, now, cancellationToken).ConfigureAwait(false);
+        }
+
         if (queuedJobs)
         {
             _executionTrigger.Signal();
         }
+    }
+
+    private async Task<bool> HasForegroundCollectionWorkAsync(CancellationToken token)
+    {
+        string[] foregroundTypes =
+        [
+            AgentJobType.RaceCardCollection,
+            AgentJobType.SubjectProfileRefresh,
+            AgentJobType.HorseHistoryDiscovery,
+            AgentJobType.HorseHistoryRace,
+        ];
+
+        foreach (var type in foregroundTypes)
+        {
+            if ((await _stateStore.GetJobStatusesAsync(type, AgentJobStatus.Ready, 1, token).ConfigureAwait(false)).Count > 0
+                || (await _stateStore.GetJobStatusesAsync(type, AgentJobStatus.Running, 1, token).ConfigureAwait(false)).Count > 0)
+            {
+                _logger.LogInformation("[収集登録] 優先収集が残っているため過去結果バックフィルを延期します。JobType={JobType}", type);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<bool> RegisterHistoricalBackfillAsync(DateOnly today, DateTimeOffset now, CancellationToken token)
+    {
+        var targetCount = Math.Max(1, _options.HistoricalBackfillDaysPerCycle);
+        var lowerBound = today.AddYears(-Math.Max(1, _options.InitialResultBackfillYears));
+        var registered = 0;
+        var inspected = 0;
+        await using var session = await _sessionFactory.CreateAsync(token).ConfigureAwait(false);
+        var workflow = _scheduleWorkflowFactory(session);
+
+        for (var date = today.AddDays(-Math.Max(6, _options.ResultLookbackDays + 1));
+             date >= lowerBound && registered < targetCount && inspected < 45;
+             date = date.AddDays(-1))
+        {
+            inspected++;
+            var markerKey = $"JRA:{date:yyyy-MM-dd}";
+            var status = await _stateStore.GetResultDayCollectionStatusAsync(JraProviderType, date, token).ConfigureAwait(false);
+            if (status?.Status == ResultDayCollectionState.Complete) continue;
+            if (await _stateStore.HasMarkerAsync("historical-no-race-day", markerKey, token).ConfigureAwait(false)) continue;
+
+            var courses = await workflow.CollectAsync(date, token).ConfigureAwait(false);
+            if (!courses.Any(x => x != RaceCourse.Unknown))
+            {
+                await _stateStore.MarkMarkerAsync("historical-no-race-day", markerKey, token).ConfigureAwait(false);
+                continue;
+            }
+
+            var payload = new RaceResultCollectionJobPayload(date, JraProviderType, AgentWorkMode.Idle, RaceResultAcquisitionOrigin.HistoricalBackfill);
+            await _stateStore.EnqueueJobAsync(
+                AgentJobType.RaceResultCollection,
+                AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, date),
+                AgentJobPayloadSerializer.Serialize(payload),
+                now,
+                priority: 60,
+                cancellationToken: token).ConfigureAwait(false);
+            registered++;
+        }
+
+        if (registered > 0)
+            _logger.LogInformation("[収集登録] 過去結果バックフィルを登録しました。Count={Count} LowerBound={LowerBound}", registered, lowerBound);
+        return registered > 0;
     }
 
     // JRAのレースはほぼ土曜・日曜に集中するため、直近の週末（今日から7日以内の

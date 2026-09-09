@@ -40,7 +40,13 @@ public sealed class JraRaceCardCollectionWorkflowTests
             $"{number}R テストレース",
             new TimeOnly(10, 0),
             $"https://example.jra.go.jp/card/{number}",
-            $"https://example.jra.go.jp/result/{number}");
+            null);
+
+    private static JraRaceCardCollectionWorkflow CreateWorkflow(
+        JraSession session,
+        FakeDataCollectionWriteService writer,
+        DateTimeOffset? now = null)
+        => new(session, writer, new FixedTimeProvider(now ?? new DateTimeOffset(2026, 9, 6, 0, 0, 0, TimeSpan.Zero)));
 
     private static JraRaceCardPage CreateRaceCard(RaceId raceId, string raceName, params RaceEntry[] entries)
         => new(
@@ -117,7 +123,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             });
 
         await using var _ = session;
-        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+        var workflow = CreateWorkflow(session, writeService);
 
         var result = await workflow.CollectAsync(Date, Course);
 
@@ -182,7 +188,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new Dictionary<RaceId, IJraPage> { [race1.Id] = card1 });
 
         await using var _ = session;
-        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+        var workflow = CreateWorkflow(session, writeService);
 
         var result = await workflow.CollectAsync(Date, Course);
 
@@ -217,7 +223,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new Dictionary<RaceId, IJraPage> { [race1.Id] = card1 });
 
         await using var _ = session;
-        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+        var workflow = CreateWorkflow(session, writeService);
 
         var result = await workflow.CollectAsync(Date, Course);
 
@@ -248,7 +254,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             });
 
         await using var _ = session;
-        var workflow = new JraRaceCardCollectionWorkflow(session, writeService);
+        var workflow = CreateWorkflow(session, writeService);
 
         var result = await workflow.CollectAsync(Date, Course);
 
@@ -257,6 +263,37 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.Contains("RaceNumber=1", result.Errors[0]);
         Assert.HasCount(1, writeService.UpsertRaceCalls);
         Assert.AreEqual(2, writeService.UpsertRaceCalls[0].RaceNumber);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_結果リンク公開済みのレースは出馬表を再取得しない()
+    {
+        var race = CreateRaceSummary(1) with { ResultUrl = "https://example.jra.go.jp/result/1" };
+        var (session, navigator, writeService) = CreateContext(
+            CreateRaceList(race),
+            new Dictionary<RaceId, IJraPage>());
+
+        await using var _ = session;
+        var result = await CreateWorkflow(session, writeService).CollectAsync(Date, Course);
+
+        Assert.IsEmpty(result.RaceIds);
+        Assert.IsEmpty(navigator.RequestedRaceCards);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_公式発走時刻到達後は出馬表を再取得しない()
+    {
+        var race = CreateRaceSummary(1);
+        var (session, navigator, writeService) = CreateContext(
+            CreateRaceList(race),
+            new Dictionary<RaceId, IJraPage>());
+
+        await using var _ = session;
+        var afterStartUtc = new DateTimeOffset(2026, 9, 6, 1, 0, 0, TimeSpan.Zero); // JST 10:00
+        var result = await CreateWorkflow(session, writeService, afterStartUtc).CollectAsync(Date, Course);
+
+        Assert.IsEmpty(result.RaceIds);
+        Assert.IsEmpty(navigator.RequestedRaceCards);
     }
 
     [TestMethod]
@@ -361,5 +398,10 @@ public sealed class JraRaceCardCollectionWorkflowTests
 
         await Assert.ThrowsExactlyAsync<JraCollectionException>(
             () => workflow.CollectAsync(Date, Course));
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => value;
     }
 }

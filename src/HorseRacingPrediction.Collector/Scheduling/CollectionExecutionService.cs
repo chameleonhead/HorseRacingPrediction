@@ -40,6 +40,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private readonly JraRaceCardCollectionWorkflowFactory _raceCardWorkflowFactory;
     private readonly JraRaceResultCollectionWorkflowFactory _raceResultWorkflowFactory;
     private readonly HistoricalDataRequestPlanner _historicalDataRequestPlanner;
+    private readonly IRaceQueryService _raceQueryService;
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
@@ -52,6 +53,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         JraRaceCardCollectionWorkflowFactory raceCardWorkflowFactory,
         JraRaceResultCollectionWorkflowFactory raceResultWorkflowFactory,
         HistoricalDataRequestPlanner historicalDataRequestPlanner,
+        IRaceQueryService raceQueryService,
         CollectionExecutionTrigger executionTrigger,
         IHttpClientFactory httpClientFactory,
         ILogger<CollectionExecutionService> logger)
@@ -63,6 +65,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         _raceCardWorkflowFactory = raceCardWorkflowFactory;
         _raceResultWorkflowFactory = raceResultWorkflowFactory;
         _historicalDataRequestPlanner = historicalDataRequestPlanner;
+        _raceQueryService = raceQueryService;
         _executionTrigger = executionTrigger;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
@@ -471,6 +474,8 @@ public sealed partial class CollectionExecutionService : BackgroundService
             .ToList();
         if (distinctRaceIds.Count > 0)
         {
+            await ScheduleHorseOfficialInformationAsync(payload.RaceDate, distinctRaceIds, now, cancellationToken)
+                .ConfigureAwait(false);
             foreach (var raceId in distinctRaceIds)
             {
                 var plan = await _historicalDataRequestPlanner
@@ -514,7 +519,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         }
 
         var (results, savedRaceIds) = await CollectRaceResultsAsync(payload.RaceDate, cancellationToken).ConfigureAwait(false);
-        await RecordRaceResultStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
+        await RecordRaceResultStatusesAsync(payload.RaceDate, results, payload.Origin, now, cancellationToken).ConfigureAwait(false);
 
         var errorCount = results.Sum(x => x.Errors.Count);
         _logger.LogInformation(
@@ -562,7 +567,10 @@ public sealed partial class CollectionExecutionService : BackgroundService
         }
 
         var errorCount = results.Sum(x => x.Errors.Count);
-        var status = errorCount == 0 ? ResultDayCollectionState.Complete : ResultDayCollectionState.Incomplete;
+        var unconfirmedCount = results.Count(x => !x.IsOfficiallyConfirmed);
+        var status = errorCount == 0 && unconfirmedCount == 0
+            ? ResultDayCollectionState.Complete
+            : ResultDayCollectionState.Incomplete;
 
         try
         {
@@ -571,8 +579,10 @@ public sealed partial class CollectionExecutionService : BackgroundService
                 raceDate,
                 status,
                 expectedRaceCount: results.Count,
-                completedRaceCount: results.Count(x => x.Errors.Count == 0),
-                incompleteReason: errorCount > 0 ? $"{errorCount}件のエラーが残っています。" : null,
+                completedRaceCount: results.Count(x => x.Errors.Count == 0 && x.IsOfficiallyConfirmed),
+                incompleteReason: errorCount > 0
+                    ? $"{errorCount}件のエラーが残っています。"
+                    : unconfirmedCount > 0 ? $"{unconfirmedCount}レースが公式確定待ちです（着順・払戻未取得）。" : null,
                 lastCompletedAt: status == ResultDayCollectionState.Complete ? now : null,
                 retryAfter: null,
                 lastError: null,
@@ -675,6 +685,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private async Task RecordRaceResultStatusesAsync(
         DateOnly raceDate,
         IReadOnlyList<RaceResultCollectionResult> results,
+        RaceResultAcquisitionOrigin origin,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -708,7 +719,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
                 raceName: null,
                 sourceUrl: result.SourceUrl,
                 status,
-                RaceResultAcquisitionOrigin.Scheduled,
+                origin,
                 requestedByRaceId: null,
                 errorCode,
                 errorReason,

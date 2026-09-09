@@ -8,6 +8,7 @@ public static class AgentJobType
     public const string HorseHistoryExcluded = "HorseHistoryExcluded";
     public const string RaceReacquisition = "RaceReacquisition";
     public const string CollectionPlanning = "CollectionPlanning";
+    public const string AcquisitionPlanReview = "AcquisitionPlanReview";
     public const string ResultBackfillPlanningRequest = "ResultBackfillPlanningRequest";
     public const string ResultMonthDiscoveryRequest = "ResultMonthDiscoveryRequest";
     public const string ResultDayDiscoveryRequest = "ResultDayDiscoveryRequest";

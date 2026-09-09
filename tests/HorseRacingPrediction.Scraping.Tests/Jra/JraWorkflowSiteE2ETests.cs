@@ -78,6 +78,15 @@ public sealed class JraWorkflowSiteE2ETests
 
         Assert.AreEqual(date, result.Date);
         Assert.AreEqual(course, result.Course);
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).Date);
+        if (date < today)
+        {
+            Assert.IsEmpty(result.Races, "終了済みレースの出馬表詳細は再取得しません。");
+            Assert.IsEmpty(_writeService.UpsertRaceCalls);
+            return;
+        }
         Assert.IsTrue(result.Races.Count > 0, $"{date:yyyy-MM-dd} {course} のレースが1件も収集されませんでした。");
         Assert.IsTrue(result.RaceIds.Count > 0, "出馬表の保存に1件も成功しませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceCalls.Count > 0, "UpsertRaceAsyncが1度も呼ばれませんでした。");

@@ -130,12 +130,62 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
         Assert.AreNotEqual(twoDaysAgo, payload.RaceDate);
     }
 
+    [TestMethod]
+    public async Task RunOneCycleAsync_WhenResultDayIsComplete_DoesNotRegisterRaceCardAgain()
+    {
+        var stateStore = CreateStore();
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).Date);
+        await stateStore.UpsertResultDayCollectionStatusAsync(
+            "JRA", today, ResultDayCollectionState.Complete, 12, 12, null,
+            DateTimeOffset.UtcNow, null, null, DateTimeOffset.UtcNow);
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = date => date == today ? [RaceCourse.Tokyo] : [],
+        };
+
+        await CreateService(stateStore, schedule, 0).RunOneCycleAsync(CancellationToken.None);
+
+        var jobs = await stateStore.AcquireReadyJobsAsync(
+            AgentJobType.RaceCardCollection, DateTimeOffset.UtcNow.AddMinutes(1), TimeSpan.Zero, 10,
+            TimeSpan.FromMinutes(1));
+        Assert.IsEmpty(jobs);
+    }
+
+    [TestMethod]
+    public async Task RunOneCycleAsync_AutonomousBackfill_RegistersOldRaceDayWithHistoricalOrigin()
+    {
+        var stateStore = CreateStore();
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).Date);
+        var oldRaceDay = today.AddDays(-6);
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = date => date == oldRaceDay ? [RaceCourse.Nakayama] : [],
+        };
+
+        await CreateService(
+            stateStore, schedule, 0, enableRaceResultCollection: true,
+            enableAutonomousHistoricalCollection: true).RunOneCycleAsync(CancellationToken.None);
+
+        var jobs = await stateStore.AcquireReadyJobsAsync(
+            AgentJobType.RaceResultCollection, DateTimeOffset.UtcNow.AddMinutes(1), TimeSpan.Zero, 10,
+            TimeSpan.FromMinutes(1));
+        Assert.HasCount(1, jobs);
+        var payload = AgentJobPayloadSerializer.Deserialize<RaceResultCollectionJobPayload>(jobs[0].Payload);
+        Assert.AreEqual(oldRaceDay, payload.RaceDate);
+        Assert.AreEqual(RaceResultAcquisitionOrigin.HistoricalBackfill, payload.Origin);
+    }
+
     private static ScrapingRegistrationService CreateService(
         ProcessingStateStore stateStore,
         FakeJraScheduleCollectionWorkflow scheduleWorkflow,
         int scheduleLookaheadDays,
         bool enableRaceResultCollection = false,
-        int resultLookbackDays = 0)
+        int resultLookbackDays = 0,
+        bool enableAutonomousHistoricalCollection = false)
     {
         var sessionFactory = new FakeJraSessionFactory();
         var options = Options.Create(new AgentProcessingOptions
@@ -145,6 +195,8 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
             ScheduleLookaheadDays = scheduleLookaheadDays,
             EnableRaceResultCollection = enableRaceResultCollection,
             ResultLookbackDays = resultLookbackDays,
+            EnableAutonomousHistoricalCollection = enableAutonomousHistoricalCollection,
+            HistoricalBackfillDaysPerCycle = 1,
         });
 
         return new ScrapingRegistrationService(

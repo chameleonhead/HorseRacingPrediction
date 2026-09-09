@@ -79,6 +79,15 @@ public sealed class AgentProcessingOptions
     /// <summary>初回バックフィル対象年数。</summary>
     public int InitialResultBackfillYears { get; set; } = 3;
 
+    /// <summary>過去結果と馬公式情報の自律収集を有効化するか。</summary>
+    public bool EnableAutonomousHistoricalCollection { get; set; } = true;
+
+    /// <summary>1回の計画で登録する過去開催日の最大数。</summary>
+    public int HistoricalBackfillDaysPerCycle { get; set; } = 4;
+
+    /// <summary>取得計画を見直す間隔（分）。</summary>
+    public int AcquisitionPlanReviewIntervalMinutes { get; set; } = 15;
+
     /// <summary>開催中モード時の結果収集対象日付の遡り日数（JST基準）。</summary>
     public int LiveResultLookbackDays { get; set; } = 0;
 

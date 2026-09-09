@@ -95,7 +95,7 @@ if (runOnce)
             var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
             await executionService.RunOneCycleAsync(cts.Token);
         }
-        else if (string.Equals(notification.JobType, AgentJobType.CollectionPlanning, StringComparison.Ordinal))
+        else if (notification.JobType is AgentJobType.CollectionPlanning or AgentJobType.AcquisitionPlanReview)
         {
             // CollectionPlanningジョブは「新規開催日の登録」処理そのものを表すジョブ。
             // 1ジョブ=1Lambda実行の原則に合わせ、このジョブ自体をリースしてから

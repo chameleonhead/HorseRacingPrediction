@@ -524,6 +524,7 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
             _ => cardWorkflow,
             _ => resultWorkflow,
             planner,
+            new NullRaceQueryService(),
             new CollectionExecutionTrigger(),
             httpClients ?? new NoOpHttpClientFactory(),
             NullLogger<CollectionExecutionService>.Instance);
