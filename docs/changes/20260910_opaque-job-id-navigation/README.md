@@ -1,6 +1,6 @@
 # 任意文字を含むジョブIDを安全に参照・操作する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-10
 - Updated: 2026-09-10
@@ -74,8 +74,13 @@
 
 ## Verification record
 
-- 未実施（設計承認待ち）。
+- `dotnet build HorseRacingPrediction.sln --no-restore`: 成功（警告0、エラー0）。
+- Apiテスト: 122件成功、1件スキップ。既存のジョブ詳細・保留テストを含む。
+- `/`、空白、`{}`、`:`を含むジョブIDで、クエリ型の詳細取得と保留が成功するcomponent testを追加した。
+- 再取得コンポーネントとSNS通知のリンク形式テスト: 成功。
+- `git diff --check`: 成功。
 
 ## Deviations and follow-up
 
-- 未実装。
+- 設計どおり実装済み。正規画面URLと管理UIクライアントをクエリ方式へ移行し、安全な旧ルート/APIは互換用に維持した。
+- 報告された旧URL自体はプロキシで拒否され得るため、新形式URLを使用する。既存ジョブデータの移行は不要。
