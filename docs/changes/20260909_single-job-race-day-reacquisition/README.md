@@ -36,12 +36,14 @@
 
 - `docs/22-collector-design.md`: 開催日再取得の正本を、子ジョブ分割から単一セッション・単一ジョブ実行へ変更する。
 - `docs/20-admin-ui-design.md`: 確認文、遷移先、進捗・失敗表示を単一ジョブの体験へ変更する。
+- 開催日ジョブ実行中の更新資格情報と競合拒否は [レース収集リース中の更新をバッチに限定する](../20260909_race-mutation-lease-guard/README.md) に従う。
 - 既存の `docs/changes/20260909_race-day-reacquisition/README.md` は実装当時の履歴として書き換えず、本記録が子ジョブ分割の決定を置き換える。
 
 ## Technical impact
 
 - `ExecuteRaceDayReacquisitionAsync` は、公式レース発見後に `ScheduleJobAsync(RaceReacquisition)` と `WaitForCollectionDependenciesAsync` を呼ばない。
 - 公式レース発見と全レース再取得で同じ `IJraSession` を使用する。
+- 日付ジョブのジョブIDとリーストークンを全レースの書き込みへ伝播し、Apiは当該開催日を対象とする有効なバッチ資格情報として検証する。
 - 登録済みレースIDとの照合は日付ジョブ内で一度だけ行う。未登録レースには現行どおり決定論的IDを使用する。
 - 各レースについて、公式掲載期間内なら出馬表、当日以前なら結果・天候・馬場・払戻を既存workflowで更新する。
 - レース単位の非致命的エラーは対象識別子付きで収集し、残りのレースを継続する。全対象の処理後、エラー、未公開、未取得が1件でもあれば日付ジョブを完了させず失敗として報告する。

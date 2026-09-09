@@ -33,6 +33,7 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
 - レース・馬・騎手・調教師・予想票・結果・払戻を CQRS + Event Sourcing で管理する
 - 書き込みはコマンドエンドポイント、読み取りは用途別 ReadModel で提供する
 - 機械間通信（Collector / Predictor）向けの JSON API は例外なく `/api` 配下に置き、`X-Api-Key` ヘッダーで認証する（ML 予測系の `/api/races/{raceId}/ml-prediction`, `/api/ml/train` を含む）
+- `X-Api-Key` はサービス認証にのみ使用し、収集バッチ経由であることの証明には使用しない。レース収集ジョブの実行中にレース関連データを書き込む場合、Collector はジョブIDと短命なリーストークンを送信し、Api は実行中状態、有効期限、保留状態、対象レースまたは開催日のスコープを照合する。有効なリース資格情報を持たない管理画面や通常APIからの競合更新は `409 Conflict` で拒否する。詳細は [レース収集リース中の更新をバッチに限定する](changes/20260909_race-mutation-lease-guard/README.md) を参照する。
 - Collector と同様に、自身で Blazor Server 製の管理画面（`/races`, `/horses`, `/jockeys`, `/trainers`, `/predictions` などルート直下）をホストする（`Microsoft.NET.Sdk.Web`。旧読み取り UI を移管・拡張し、2026-07-07 に単なる参照ツールから馬・騎手・調教師の登録／編集／別名統合／データ訂正、レース・予想票のデータ訂正、メモの CRUD ができるメンテナンスツールへ変更）
   - JSON API が常に `/api` 配下、管理UIが常にルート直下という規約により両者のパスは重ならないため、認証免除の判定は管理UIのルート名（`/races`, `/horses` など）を明示的に列挙するだけでよい（`Security/ApiKeyApplicationBuilderExtensions.cs`）
   - 管理画面は Cookie 認証で保護する。ログイン画面（`/login`）はユーザー名固定「user」、パスワードは `ApiKey:Key`（JSON API と同じ値）で認証する
