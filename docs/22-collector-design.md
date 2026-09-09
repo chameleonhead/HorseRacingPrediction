@@ -26,6 +26,8 @@
 
 Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを登録する。同一対象の実行中依頼は原子的に重複抑止し、監査とoutboxを保存する。CollectionExecutionServiceの常駐・--once両経路で指定レースを再取得する。元ジョブや日別取得状態には依存しない。未公開は待機、部分失敗は失敗として扱う。[決定と検証](changes/20260908_race-detail-reacquisition/README.md)を参照。
 
+2026-09-09提案: 馬主欠落など開催日全体の修復では、Api管理画面からJSTの日付を1つ指定して `RaceDayReacquisition` 親ジョブを登録する。親はJRA開催日程・レース一覧から全レースを発見し、既存 `RaceReacquisition` を集約子としてレース単位に分割する。子は終了済みの自動停止を迂回して、基本情報、出馬表、馬主を含む出走情報、公開済み結果・払戻を更新するが、自動取得終了マーカーは解除しない。詳細は [開催日単位でJRAレースデータを再取得する](changes/20260909_race-day-reacquisition/README.md) を参照。承認前のため現行動作は変わらない。
+
 | クラス | 役割 |
 |---|---|
 | `ScrapingRegistrationService` | 開催予定・出馬表・結果収集ジョブの投入を定期実行する |
