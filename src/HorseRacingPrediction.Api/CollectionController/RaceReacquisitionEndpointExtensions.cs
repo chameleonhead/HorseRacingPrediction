@@ -8,6 +8,15 @@ public static class RaceReacquisitionEndpointExtensions
 {
     public static IEndpointRouteBuilder MapRaceReacquisitionEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/admin/races/{raceId}/collection-lease", async (
+            string raceId, IQueryProcessor queries, ProcessingStateStore store, CancellationToken token) =>
+        {
+            var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
+            if (race is null || string.IsNullOrEmpty(race.RaceId)) return Results.NotFound();
+            var decision = await store.ValidateRaceMutationLeaseAsync(raceId, race.RaceDate, null, null, token);
+            return Results.Ok(new RaceCollectionLeaseResponse(
+                decision.HasActiveLease, decision.ActiveJobId, decision.LeaseExpiresAt));
+        });
         var group = endpoints.MapGroup("/api/admin/races/{raceId}/reacquisition");
         group.MapGet("", async (string raceId, ProcessingStateStore store, CancellationToken token) =>
         {
@@ -45,3 +54,5 @@ public static class RaceReacquisitionEndpointExtensions
         _ => null
     };
 }
+
+public sealed record RaceCollectionLeaseResponse(bool IsActive, string? JobId, DateTimeOffset? LeaseExpiresAt);

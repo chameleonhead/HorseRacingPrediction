@@ -3,13 +3,18 @@
 @inject AdminApiClient Api
 
 <RaceOpsObjectHeader BackHref="/races" BackLabel="← レース一覧に戻る" Title="@(race?.RaceName ?? "レース詳細")" Section="レース・予想 / レース">
-    <Actions>@if (race is not null) { <RaceReacquisitionAction Race="race" OnCompleted="LoadAsync" /> }<FluentButton Appearance="@Appearance.Outline" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
+    <Actions>@if (race is not null) { <RaceReacquisitionAction Race="race" OnCompleted="LoadAsync" /> }<FluentButton Appearance="@Appearance.Outline" Disabled="@(lease?.IsActive == true)" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">編集</FluentButton></Actions>
 </RaceOpsObjectHeader>
 
 @if (loading) { <p>読み込み中…</p> }
 else if (race is null) { <p>RaceId「@RaceId」のレースは見つかりませんでした。</p> }
 else
 {
+    @if (lease?.IsActive == true)
+    {
+        <RaceOpsAlert Title="収集中のためレース情報を編集できません" Messages="@LeaseMessages" />
+        @if (!string.IsNullOrWhiteSpace(lease.JobId)) { <p><a href="@($"/jobs/{Uri.EscapeDataString(lease.JobId)}")">収集ジョブを確認する</a></p> }
+    }
     <section class="profile-facts" aria-label="レース基本情報">
         <div class="profile-fact"><span>コース</span><strong>@FormatDistanceSurface(race.DistanceMeters, race.SurfaceCode, race.DirectionCode)</strong></div>
         <div class="profile-fact"><span>天候・馬場</span><strong>@FormatWeatherAndTrack(race)</strong></div>
@@ -195,7 +200,7 @@ else
         <h3>管理情報</h3>
         <p class="hint">誤登録されたデータの補正は専用画面で行います。新規作成・出走登録・結果確定などのライフサイクル進行はCollector/Predictorが自動で行うため、ここでは対象外です。</p>
         <div class="action-row">
-            <FluentButton Appearance="@Appearance.Accent" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</FluentButton>
+            <FluentButton Appearance="@Appearance.Accent" Disabled="@(lease?.IsActive == true)" Href="@($"/races/{Uri.EscapeDataString(RaceId)}/edit")">データを補正する</FluentButton>
         </div>
     </section></FluentTab>
 
@@ -210,6 +215,9 @@ else
 
     private bool loading;
     private RaceResponse? race;
+    private RaceCollectionLeaseResponse? lease;
+    private IReadOnlyList<string> LeaseMessages =>
+        [$"ジョブ: {lease?.JobId}", $"リース期限: {lease?.LeaseExpiresAt?.ToLocalTime():yyyy-MM-dd HH:mm:ss}", "収集完了後に再試行してください。"];
 
     private string? correctRaceName;
     private string? correctRacecourseCode;
@@ -232,6 +240,7 @@ else
         try
         {
             race = await Api.GetRaceAsync(RaceId);
+            lease = await Api.GetRaceCollectionLeaseAsync(RaceId);
         }
         finally
         {

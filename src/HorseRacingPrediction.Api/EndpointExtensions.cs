@@ -40,7 +40,8 @@ public static partial class EndpointExtensions
             .WithSummary("Health check");
 
         var writeGroup = app.MapGroup("/api")
-            .AddEndpointFilter<ApiKeyEndpointFilter>();
+            .AddEndpointFilter<ApiKeyEndpointFilter>()
+            .AddEndpointFilter<RaceMutationLeaseEndpointFilter>();
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]

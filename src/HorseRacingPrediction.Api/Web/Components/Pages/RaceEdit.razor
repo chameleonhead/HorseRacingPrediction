@@ -15,6 +15,11 @@ else if (race is null)
 }
 else
 {
+    @if (lease?.IsActive == true)
+    {
+        <RaceOpsAlert Title="収集中のためレース情報を編集できません" Messages="@LeaseMessages" />
+        @if (!string.IsNullOrWhiteSpace(lease.JobId)) { <p><a href="@($"/jobs/{Uri.EscapeDataString(lease.JobId)}")">収集ジョブを確認する</a></p> }
+    }
     <section class="detail-card">
         <h2>@(race.RaceName ?? race.RaceId)</h2>
         <dl class="meta">
@@ -44,7 +49,7 @@ else
             }
         </ChildContent>
         <Actions>
-            <FluentButton Appearance="@Appearance.Accent" OnClick="@CorrectAsync" Disabled="@correcting">補正を保存する</FluentButton>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@CorrectAsync" Disabled="@(correcting || lease?.IsActive == true)">補正を保存する</FluentButton>
             <FluentButton Appearance="@Appearance.Outline" OnClick="@Back">キャンセル</FluentButton>
         </Actions>
     </RaceOpsFormSection>
@@ -55,6 +60,9 @@ else
 
     private bool loading;
     private RaceResponse? race;
+    private RaceCollectionLeaseResponse? lease;
+    private IReadOnlyList<string> LeaseMessages =>
+        [$"ジョブ: {lease?.JobId}", $"リース期限: {lease?.LeaseExpiresAt?.ToLocalTime():yyyy-MM-dd HH:mm:ss}", "収集完了後に再試行してください。"];
 
     private string? correctRaceName;
     private string? correctRacecourseCode;
@@ -75,6 +83,7 @@ else
         try
         {
             race = await Api.GetRaceAsync(RaceId);
+            lease = await Api.GetRaceCollectionLeaseAsync(RaceId);
             if (race is not null)
             {
                 correctRaceName = race.RaceName;

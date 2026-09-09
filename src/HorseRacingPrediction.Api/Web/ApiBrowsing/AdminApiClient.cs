@@ -64,6 +64,9 @@ public sealed partial class AdminApiClient
     public Task<RaceResponse?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
         => GetJsonAsync<RaceResponse>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
 
+    public Task<RaceCollectionLeaseResponse?> GetRaceCollectionLeaseAsync(string raceId, CancellationToken cancellationToken = default)
+        => GetJsonAsync<RaceCollectionLeaseResponse>($"/api/admin/races/{Uri.EscapeDataString(raceId)}/collection-lease", cancellationToken);
+
     public Task<PagedResponse<HorseSummaryResponse>?> SearchHorsesAsync(SearchHorsesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<HorseSummaryResponse>>($"/api/horses?{BuildQueryString(request)}", cancellationToken);
 
@@ -348,6 +351,7 @@ public sealed partial class AdminApiClient
 }
 
 public sealed record JobQueueStateResponse(bool IsPaused, string? Reason = null, string? JobId = null, DateTimeOffset? StoppedAt = null);
+public sealed record RaceCollectionLeaseResponse(bool IsActive, string? JobId, DateTimeOffset? LeaseExpiresAt);
 
 public sealed record AdminApiResult(bool Success, IReadOnlyList<string> Errors)
 {

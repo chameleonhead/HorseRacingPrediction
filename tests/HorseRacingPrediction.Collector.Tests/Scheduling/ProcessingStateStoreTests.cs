@@ -733,6 +733,42 @@ public sealed class ProcessingStateStoreTests
         Assert.AreEqual(1L, Convert.ToInt64(await command.ExecuteScalarAsync()));
     }
 
+    [TestMethod]
+    public async Task ValidateRaceMutationLeaseAsync_AllowsOnlyMatchingRaceLease()
+    {
+        var sut = CreateStore(5);
+        var now = DateTimeOffset.UtcNow;
+        const string raceId = "race-lease-target";
+        var payload = AgentJobPayloadSerializer.Serialize(new RaceReacquisitionPayload(raceId, new DateOnly(2026, 9, 9), "中山", 1));
+        await sut.ScheduleJobAsync(AgentJobType.RaceReacquisition, "lease-guard", payload, now);
+        var lease = await sut.AcquireCollectionTaskAsync(AgentJobType.RaceReacquisition, "lease-guard", now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        var manual = await sut.ValidateRaceMutationLeaseAsync(raceId, null, null, null);
+        var matching = await sut.ValidateRaceMutationLeaseAsync(raceId, null, lease.TaskId, lease.LeaseToken);
+        var otherRace = await sut.ValidateRaceMutationLeaseAsync("other-race", null, null, null);
+
+        Assert.IsFalse(manual.Allowed);
+        Assert.AreEqual(lease.TaskId, manual.ActiveJobId);
+        Assert.IsTrue(matching.Allowed);
+        Assert.IsTrue(otherRace.Allowed);
+    }
+
+    [TestMethod]
+    public async Task ValidateRaceMutationLeaseAsync_RaceDayLeaseProtectsOnlyItsDate()
+    {
+        var sut = CreateStore(5);
+        var now = DateTimeOffset.UtcNow;
+        var date = new DateOnly(2026, 9, 9);
+        await sut.ScheduleJobAsync(AgentJobType.RaceDayReacquisition, "day-guard", AgentJobPayloadSerializer.Serialize(new RaceDayReacquisitionPayload(date)), now);
+        var lease = await sut.AcquireCollectionTaskAsync(AgentJobType.RaceDayReacquisition, "day-guard", now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsFalse((await sut.ValidateRaceMutationLeaseAsync(null, date, null, null)).Allowed);
+        Assert.IsTrue((await sut.ValidateRaceMutationLeaseAsync(null, date, lease.TaskId, lease.LeaseToken)).Allowed);
+        Assert.IsTrue((await sut.ValidateRaceMutationLeaseAsync(null, date.AddDays(1), null, null)).Allowed);
+    }
+
     private ProcessingStateStore CreateStore(int predictionLeaseMinutes, int maxConcurrentJobs = 1)
     {
         var options = Options.Create(new AgentProcessingOptions

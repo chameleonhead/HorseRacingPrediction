@@ -7,6 +7,7 @@ public interface IProcessingStateStore
     Task PauseCollectionAsync(string reason, string? jobId, CancellationToken cancellationToken = default);
     Task<int> ResumeCollectionAsync(CancellationToken cancellationToken = default);
     Task<CollectionLeaseControl> GetCollectionLeaseControlAsync(string jobId, string leaseToken, CancellationToken cancellationToken = default);
+    Task<RaceMutationLeaseDecision> ValidateRaceMutationLeaseAsync(string? raceId, DateOnly? raceDate, string? jobId, string? leaseToken, CancellationToken cancellationToken = default);
     Task<bool> AcknowledgeCollectionHoldAsync(string jobId, string leaseToken, CancellationToken cancellationToken = default);
     Task<bool> FailAndPauseCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, string error, CancellationToken cancellationToken = default);
     Task<bool> WaitForCollectionDependenciesAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);

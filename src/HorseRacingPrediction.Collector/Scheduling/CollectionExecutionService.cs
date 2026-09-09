@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Collector.Http;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
@@ -45,6 +46,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private readonly CollectionExecutionTrigger _executionTrigger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
+    private readonly CollectionLeaseHttpContext _leaseHttpContext;
 
     public CollectionExecutionService(
         IOptions<AgentProcessingOptions> options,
@@ -57,7 +59,8 @@ public sealed partial class CollectionExecutionService : BackgroundService
         IRaceQueryService raceQueryService,
         CollectionExecutionTrigger executionTrigger,
         IHttpClientFactory httpClientFactory,
-        ILogger<CollectionExecutionService> logger)
+        ILogger<CollectionExecutionService> logger,
+        CollectionLeaseHttpContext? leaseHttpContext = null)
     {
         _options = options.Value;
         _stateStore = stateStore;
@@ -69,6 +72,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         _raceQueryService = raceQueryService;
         _executionTrigger = executionTrigger;
         _httpClientFactory = httpClientFactory;
+        _leaseHttpContext = leaseHttpContext ?? new CollectionLeaseHttpContext();
         _logger = logger;
     }
 
@@ -387,6 +391,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private Task RunLeasedTaskAsync(LeasedCollectionTask task, string? requestId, bool internalDeadline, CancellationToken token)
         => CollectionTaskRunner.RunAsync(_stateStore, task, async workToken =>
         {
+            using var leaseScope = _leaseHttpContext.Begin(task.TaskId, task.LeaseToken);
             var now = DateTimeOffset.UtcNow;
             switch (task.JobType)
             {
