@@ -558,11 +558,13 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
                 ]),
             },
         };
+        var card = new FakeJraRaceCardCollectionWorkflow();
+        var result = new FakeJraRaceResultCollectionWorkflow();
         var service = CreateService(
             store,
             new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Nakayama] },
-            new FakeJraRaceCardCollectionWorkflow(),
-            new FakeJraRaceResultCollectionWorkflow(),
+            card,
+            result,
             sessionFactory,
             raceQueryService: query);
         var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
@@ -571,13 +573,10 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
 
         var parent = await store.GetJobDetailAsync(id);
         Assert.IsNotNull(parent);
-        Assert.AreEqual(AgentJobStatus.WaitingDependency, parent.Status);
-        Assert.HasCount(2, parent.ChildJobs);
-        Assert.IsTrue(parent.ChildJobs.All(x => x.JobType == AgentJobType.RaceReacquisition
-            && x.RelationType == JobRelationType.AggregatedBy));
-        foreach (var child in parent.ChildJobs)
-            await store.CompleteJobAsync(child.JobType, child.DeduplicationKey);
-        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.AreEqual(AgentJobStatus.Succeeded, parent.Status);
+        Assert.HasCount(0, parent.ChildJobs);
+        CollectionAssert.AreEquivalent(new[] { "race-1", "race-2" }, card.RefreshRequests.Select(x => x.Target).ToArray());
+        CollectionAssert.AreEquivalent(new[] { "race-1", "race-2" }, result.RefreshTargets.ToArray());
     }
 
     [TestMethod]
@@ -591,24 +590,23 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
             RaceResultListFactory = (_, course) => new JraRaceListPage("https://example.test/results", date, course,
             [new(new RaceId(date, course, 3), "3R", null, null, "result-3")]),
         };
+        var result = new FakeJraRaceResultCollectionWorkflow();
         var service = CreateService(
             store,
             new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Kyoto] },
             new FakeJraRaceCardCollectionWorkflow(),
-            new FakeJraRaceResultCollectionWorkflow(),
+            result,
             new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
         var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
 
         await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
 
         var parent = (await store.GetJobDetailAsync(id))!;
-        Assert.AreEqual(AgentJobStatus.WaitingDependency, parent.Status);
-        Assert.HasCount(1, parent.ChildJobs);
+        Assert.AreEqual(AgentJobStatus.Succeeded, parent.Status);
+        Assert.HasCount(0, parent.ChildJobs);
         Assert.HasCount(0, navigator.RaceCardListRequests);
         Assert.HasCount(1, navigator.RaceResultListRequests);
-        var child = (await store.GetJobDetailAsync(parent.ChildJobs.Single().JobId))!;
-        var payload = AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(child.Payload);
-        Assert.AreEqual(DeterministicIdGenerator.BuildRaceId(date, "京都", 3), payload.RaceId);
+        CollectionAssert.AreEqual(new[] { DeterministicIdGenerator.BuildRaceId(date, "京都", 3) }, result.RefreshTargets.ToArray());
     }
 
     [TestMethod]
@@ -632,7 +630,7 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
 
         await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
 
-        Assert.AreEqual(AgentJobStatus.WaitingDependency, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
         Assert.HasCount(1, navigator.RaceCardListRequests);
         Assert.HasCount(0, navigator.RaceResultListRequests);
     }
@@ -652,23 +650,21 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
             RaceCardLookupPeriodResult = false,
             RaceResultListFactory = (_, _) => directResult,
         };
+        var result = new FakeJraRaceResultCollectionWorkflow();
         var service = CreateService(
             store,
             new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Kyoto] },
             new FakeJraRaceCardCollectionWorkflow(),
-            new FakeJraRaceResultCollectionWorkflow(),
+            result,
             new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
         var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
 
         await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
 
         var parent = (await store.GetJobDetailAsync(id))!;
-        Assert.HasCount(12, parent.ChildJobs);
-        var numbers = parent.ChildJobs
-            .Select(x => store.GetJobDetailAsync(x.JobId).GetAwaiter().GetResult())
-            .Select(x => AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(x!.Payload).RaceNumber)
-            .OrderBy(x => x)
-            .ToArray();
+        Assert.AreEqual(AgentJobStatus.Succeeded, parent.Status);
+        Assert.HasCount(0, parent.ChildJobs);
+        var numbers = result.Requests.Select(x => x.Number).OrderBy(x => x).ToArray();
         CollectionAssert.AreEqual(Enumerable.Range(1, 12).ToArray(), numbers);
     }
 

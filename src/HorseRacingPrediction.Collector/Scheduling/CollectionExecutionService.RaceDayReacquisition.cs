@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -17,7 +18,8 @@ public sealed partial class CollectionExecutionService
         if (!string.Equals(payload.ProviderType, JraProviderType, StringComparison.Ordinal))
             throw new InvalidOperationException($"未対応のProviderです: {payload.ProviderType}");
 
-        var discovered = await DiscoverOfficialRaceDayAsync(payload.RaceDate, token).ConfigureAwait(false);
+        await using var session = await _sessionFactory.CreateAsync(token).ConfigureAwait(false);
+        var discovered = await DiscoverOfficialRaceDayAsync(payload.RaceDate, session, token).ConfigureAwait(false);
         if (discovered.Count == 0)
         {
             _logger.LogInformation("[開催日再取得] JRA公式日程に開催レースがないため正常終了します。Date={Date}", payload.RaceDate);
@@ -36,36 +38,45 @@ public sealed partial class CollectionExecutionService
             .GroupBy(x => RaceDataCollectionKeyFactory.Build(payload.RaceDate, x.Course!, x.Race.RaceNumber!.Value))
             .ToDictionary(x => x.Key, x => x.First().Race.RaceId, StringComparer.Ordinal);
 
+        var errors = new List<string>();
         foreach (var race in discovered)
         {
             var racecourse = RaceCourseNames.GetJraName(race.Course);
             var identityKey = RaceDataCollectionKeyFactory.Build(race.Date, racecourse, race.Number);
             var targetRaceId = registeredIds.GetValueOrDefault(identityKey)
                 ?? DeterministicIdGenerator.BuildRaceId(race.Date, racecourse, race.Number);
-            var child = new RaceReacquisitionPayload(
+            var target = new RaceReacquisitionPayload(
                 targetRaceId,
                 race.Date,
                 racecourse,
                 race.Number);
-            await _stateStore.ScheduleJobAsync(
-                AgentJobType.RaceReacquisition,
-                $"{race}:{task.TaskId}",
-                AgentJobPayloadSerializer.Serialize(child),
-                now,
-                priority: 230,
-                parentJobId: task.TaskId,
-                parentRelationType: JobRelationType.AggregatedBy,
-                cancellationToken: token).ConfigureAwait(false);
+            try
+            {
+                if (!await ReacquireRaceAsync(target, session, token).ConfigureAwait(false))
+                    errors.Add($"{racecourse}{race.Number}R: 必要なレース情報が未公開または未取得です。");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not TimeoutException)
+            {
+                errors.Add($"{racecourse}{race.Number}R: {ex.Message}");
+            }
         }
 
-        _logger.LogInformation("[開催日再取得] JRA公式一覧から子ジョブを登録しました。Date={Date} Count={Count}", payload.RaceDate, discovered.Count);
-        await _stateStore.WaitForCollectionDependenciesAsync(
+        if (errors.Count > 0)
+            throw new InvalidOperationException(string.Join("; ", errors));
+
+        _logger.LogInformation("[開催日再取得] 同一セッションで当該日の全レースを取得しました。Date={Date} Count={Count}", payload.RaceDate, discovered.Count);
+        await _stateStore.CompleteCollectionTaskAsync(
             task.JobType, task.DeduplicationKey, task.LeaseToken, token).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<RaceId>> DiscoverOfficialRaceDayAsync(DateOnly raceDate, CancellationToken token)
     {
         await using var session = await _sessionFactory.CreateAsync(token).ConfigureAwait(false);
+        return await DiscoverOfficialRaceDayAsync(raceDate, session, token).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<RaceId>> DiscoverOfficialRaceDayAsync(DateOnly raceDate, JraSession session, CancellationToken token)
+    {
         var courses = await _scheduleWorkflowFactory(session).CollectAsync(raceDate, token).ConfigureAwait(false);
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst).Date);
         var includeCard = session.Navigate.IsWithinRaceCardLookupPeriod(raceDate);

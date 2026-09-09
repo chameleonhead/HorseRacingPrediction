@@ -1,5 +1,6 @@
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
+using HorseRacingPrediction.Scraping.Jra;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
@@ -15,11 +16,16 @@ public sealed partial class CollectionExecutionService
 
     private async Task<bool> ReacquireRaceAsync(RaceReacquisitionPayload payload, CancellationToken token)
     {
+        await using var session = await _sessionFactory.CreateAsync(token);
+        return await ReacquireRaceAsync(payload, session, token);
+    }
+
+    private async Task<bool> ReacquireRaceAsync(RaceReacquisitionPayload payload, JraSession session, CancellationToken token)
+    {
         var course = RaceCourseNames.Parse(payload.Racecourse);
         if (course == RaceCourse.Unknown || payload.RaceNumber is < 1 or > 12 || string.IsNullOrWhiteSpace(payload.RaceId))
             throw new InvalidOperationException("再取得対象の識別情報が不正です。");
         var raceId = new RaceId(payload.RaceDate, course, payload.RaceNumber);
-        await using var session = await _sessionFactory.CreateAsync(token);
         var published = false;
         var errors = new List<string>();
         // 出馬表は対象日が公式出馬表の探索期間内の場合だけ試す。
