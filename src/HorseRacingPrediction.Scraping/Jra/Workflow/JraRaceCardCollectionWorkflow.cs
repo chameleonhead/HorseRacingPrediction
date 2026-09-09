@@ -93,16 +93,19 @@ public sealed partial class JraRaceCardCollectionWorkflow
         var errors = new List<string>();
         var outcomes = new List<RaceCardRaceOutcome>();
         var racecourseName = RaceCourseNames.GetJraName(course);
+        var nowJst = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), Jst);
+        var todayJst = DateOnly.FromDateTime(nowJst.Date);
+        var allRacesClosed = raceList.Races.Count > 0;
 
         foreach (var race in raceList.Races)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var nowJst = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), Jst);
-            var todayJst = DateOnly.FromDateTime(nowJst.Date);
-            if (!string.IsNullOrWhiteSpace(race.ResultUrl)
+            var isClosed = !string.IsNullOrWhiteSpace(race.ResultUrl)
                 || date < todayJst
-                || (date == todayJst && race.StartTime is { } start && TimeOnly.FromDateTime(nowJst.DateTime) >= start))
+                || (date == todayJst && race.StartTime is { } start && TimeOnly.FromDateTime(nowJst.DateTime) >= start);
+            allRacesClosed &= isClosed;
+            if (isClosed)
             {
                 // 出馬表は発走前情報である。公式結果へのリンクが公開済み、過去日、
                 // または公式発走時刻に到達したレースの詳細ページは再訪しない。
@@ -123,7 +126,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             }
         }
 
-        return new RaceCardCollectionResult(date, course, raceIds, errors, outcomes);
+        return new RaceCardCollectionResult(date, course, raceIds, errors, outcomes, allRacesClosed);
     }
 
     private async Task<(string RaceId, string RaceName, string SourceUrl)> CollectAndSaveRaceAsync(

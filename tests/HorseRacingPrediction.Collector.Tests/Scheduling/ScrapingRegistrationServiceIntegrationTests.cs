@@ -154,6 +154,27 @@ public sealed class ScrapingRegistrationServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task RunOneCycleAsync_WhenAllRaceCardsEnded_DoesNotRegisterRaceCardAgain()
+    {
+        var stateStore = CreateStore();
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).Date);
+        await stateStore.MarkMarkerAsync("race-card-collection-ended", $"JRA:{today:yyyy-MM-dd}");
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = date => date == today ? [RaceCourse.Tokyo] : [],
+        };
+
+        await CreateService(stateStore, schedule, 0).RunOneCycleAsync(CancellationToken.None);
+
+        var jobs = await stateStore.AcquireReadyJobsAsync(
+            AgentJobType.RaceCardCollection, DateTimeOffset.UtcNow.AddMinutes(1), TimeSpan.Zero, 10,
+            TimeSpan.FromMinutes(1));
+        Assert.IsEmpty(jobs);
+    }
+
+    [TestMethod]
     public async Task RunOneCycleAsync_AutonomousBackfill_RegistersOldRaceDayWithHistoricalOrigin()
     {
         var stateStore = CreateStore();

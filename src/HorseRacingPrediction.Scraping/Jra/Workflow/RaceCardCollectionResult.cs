@@ -22,7 +22,8 @@ public sealed record RaceCardCollectionResult(
     RaceCourse Course,
     IReadOnlyList<string> RaceIds,
     IReadOnlyList<string> Errors,
-    IReadOnlyList<RaceCardRaceOutcome> Races);
+    IReadOnlyList<RaceCardRaceOutcome> Races,
+    bool AllRacesClosed = false);
 
 /// <summary>
 /// <see cref="RaceCardCollectionResult"/> 内の1レース分の収集結果。

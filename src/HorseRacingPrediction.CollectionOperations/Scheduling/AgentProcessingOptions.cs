@@ -80,7 +80,7 @@ public sealed class AgentProcessingOptions
     public int InitialResultBackfillYears { get; set; } = 3;
 
     /// <summary>過去結果と馬公式情報の自律収集を有効化するか。</summary>
-    public bool EnableAutonomousHistoricalCollection { get; set; } = true;
+    public bool EnableAutonomousHistoricalCollection { get; set; }
 
     /// <summary>1回の計画で登録する過去開催日の最大数。</summary>
     public int HistoricalBackfillDaysPerCycle { get; set; } = 4;

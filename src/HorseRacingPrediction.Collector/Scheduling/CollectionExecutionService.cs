@@ -453,6 +453,14 @@ public sealed partial class CollectionExecutionService : BackgroundService
 
         await RecordRaceCardStatusesAsync(payload.RaceDate, results, now, cancellationToken).ConfigureAwait(false);
 
+        if (results.Count > 0 && results.All(x => x.AllRacesClosed))
+        {
+            await _stateStore.MarkMarkerAsync(
+                "race-card-collection-ended",
+                $"{payload.ProviderType}:{payload.RaceDate:yyyy-MM-dd}",
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var errorCount = results.Sum(x => x.Errors.Count);
         _logger.LogInformation(
             "[収集実行] 出馬表収集完了: Date={Date} Saved={Saved} Errors={Errors}",

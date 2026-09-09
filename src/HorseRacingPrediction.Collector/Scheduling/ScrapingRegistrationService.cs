@@ -176,6 +176,14 @@ public sealed class ScrapingRegistrationService : BackgroundService
                 {
                     foreach (var date in upcomingDates.Distinct().OrderBy(x => x))
                     {
+                        if (await _stateStore.HasMarkerAsync(
+                                "race-card-collection-ended",
+                                $"{JraProviderType}:{date:yyyy-MM-dd}",
+                                cancellationToken).ConfigureAwait(false))
+                        {
+                            _logger.LogInformation("[収集登録] 全レースの発走時刻到達済みのため出馬表を再登録しません。Date={Date}", date);
+                            continue;
+                        }
                         var resultDay = await _stateStore.GetResultDayCollectionStatusAsync(JraProviderType, date, cancellationToken).ConfigureAwait(false);
                         if (resultDay?.Status == ResultDayCollectionState.Complete)
                         {
@@ -272,12 +280,41 @@ public sealed class ScrapingRegistrationService : BackgroundService
     {
         var targetCount = Math.Max(1, _options.HistoricalBackfillDaysPerCycle);
         var lowerBound = today.AddYears(-Math.Max(1, _options.InitialResultBackfillYears));
+        var recentBoundary = today.AddDays(-Math.Max(6, _options.ResultLookbackDays + 1));
         var registered = 0;
         var inspected = 0;
+        var knownDays = await _stateStore
+            .GetResultDayCollectionStatusesAsync(lowerBound, recentBoundary, token)
+            .ConfigureAwait(false);
+
+        // 公式確定待ちや部分失敗日は、新しい未取得日へ進む前に再登録する。
+        foreach (var incomplete in knownDays
+                     .Where(x => x.Status == ResultDayCollectionState.Incomplete)
+                     .OrderByDescending(x => x.TargetDate)
+                     .Take(targetCount))
+        {
+            var retryPayload = new RaceResultCollectionJobPayload(
+                incomplete.TargetDate, JraProviderType, AgentWorkMode.Idle, RaceResultAcquisitionOrigin.HistoricalBackfill);
+            await _stateStore.ScheduleJobAsync(
+                AgentJobType.RaceResultCollection,
+                AgentJobKeyFactory.BuildRaceResultCollectionKey(JraProviderType, incomplete.TargetDate),
+                AgentJobPayloadSerializer.Serialize(retryPayload),
+                now,
+                priority: 60,
+                cancellationToken: token).ConfigureAwait(false);
+            registered++;
+        }
+
+        if (registered >= targetCount) return true;
+
+        // 最古の処理済み開催日をチェックポイントとして、その翌サイクルはさらに古い日へ進む。
+        var startDate = knownDays.Count > 0
+            ? knownDays.Min(x => x.TargetDate).AddDays(-1)
+            : recentBoundary;
         await using var session = await _sessionFactory.CreateAsync(token).ConfigureAwait(false);
         var workflow = _scheduleWorkflowFactory(session);
 
-        for (var date = today.AddDays(-Math.Max(6, _options.ResultLookbackDays + 1));
+        for (var date = startDate;
              date >= lowerBound && registered < targetCount && inspected < 45;
              date = date.AddDays(-1))
         {
