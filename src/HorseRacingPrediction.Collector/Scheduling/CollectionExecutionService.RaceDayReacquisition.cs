@@ -106,7 +106,10 @@ public sealed partial class CollectionExecutionService
                     races.Add(race.Id);
                 break;
             case JraRaceResultPage result:
-                races.Add(result.RaceId);
+                // 過去検索では開催選択から重賞結果へ直接遷移し、一覧を返せないことがある。
+                // その場合も同じ公式開催の1R～12Rを個別の結果取得対象にして欠落を防ぐ。
+                for (var raceNumber = 1; raceNumber <= 12; raceNumber++)
+                    races.Add(new RaceId(result.RaceId.Date, result.RaceId.Course, raceNumber));
                 break;
             default:
                 throw new InvalidOperationException($"公式レース一覧を取得できませんでした。Kind={page.Kind}");

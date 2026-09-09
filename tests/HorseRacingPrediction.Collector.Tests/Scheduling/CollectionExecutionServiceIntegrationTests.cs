@@ -637,6 +637,41 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
         Assert.HasCount(0, navigator.RaceResultListRequests);
     }
 
+    [TestMethod]
+    public async Task RaceDayReacquisition_HistoricalDirectResultFallbackSchedulesAllTwelveRaces()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2020, 5, 3);
+        var directResult = new JraRaceResultPage(
+            "https://example.test/result-11",
+            new RaceId(date, RaceCourse.Kyoto, 11),
+            "天皇賞",
+            Results: []);
+        var navigator = new FakeJraNavigator
+        {
+            RaceCardLookupPeriodResult = false,
+            RaceResultListFactory = (_, _) => directResult,
+        };
+        var service = CreateService(
+            store,
+            new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Kyoto] },
+            new FakeJraRaceCardCollectionWorkflow(),
+            new FakeJraRaceResultCollectionWorkflow(),
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
+        var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
+
+        var parent = (await store.GetJobDetailAsync(id))!;
+        Assert.HasCount(12, parent.ChildJobs);
+        var numbers = parent.ChildJobs
+            .Select(x => store.GetJobDetailAsync(x.JobId).GetAwaiter().GetResult())
+            .Select(x => AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(x!.Payload).RaceNumber)
+            .OrderBy(x => x)
+            .ToArray();
+        CollectionAssert.AreEqual(Enumerable.Range(1, 12).ToArray(), numbers);
+    }
+
     private static CollectionExecutionService CreateService(
         ProcessingStateStore stateStore,
         IJraScheduleCollectionWorkflow scheduleWorkflow,
