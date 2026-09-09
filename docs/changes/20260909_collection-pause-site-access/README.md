@@ -1,6 +1,6 @@
 # 収集全体停止中も管理サイトを利用可能にする
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09

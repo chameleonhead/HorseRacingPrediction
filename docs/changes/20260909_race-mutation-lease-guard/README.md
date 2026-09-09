@@ -1,6 +1,6 @@
 # 収集リース中のレース手動更新を拒否する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09

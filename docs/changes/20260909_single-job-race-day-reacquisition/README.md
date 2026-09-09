@@ -1,6 +1,6 @@
 # 開催日再取得を単一ジョブで一括実行する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09
