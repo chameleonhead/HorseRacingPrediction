@@ -84,6 +84,8 @@ API が収集バッチ処理の状況を確認・操作する Minimal API と管
 
 #### API エンドポイント（`Scheduling/Agent*EndpointExtensions.cs`）
 
+ジョブIDは内部構造を解釈しない不透明値として扱い、管理画面向けの詳細取得・保留・解除・リラン・再取得ではクエリ文字列または本文で渡す。IDをURLパスへ埋め込むと、ID内の`/`が`%2F`になりアプリ到達前に拒否され得るため、新しいリンクと管理UIクライアントでは使用しない。詳細は [任意文字を含むジョブIDを安全に参照・操作する](changes/20260910_opaque-job-id-navigation/README.md) を参照する。
+
 | エンドポイント | 役割 |
 |---|---|
 | `GET /agent/job-statuses` | ジョブ一覧を JobType / Status で絞り込んで取得する |
