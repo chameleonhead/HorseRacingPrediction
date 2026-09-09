@@ -1,6 +1,6 @@
 # 任意文字を含むジョブIDを安全に参照・操作する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-10
 - Updated: 2026-09-10
