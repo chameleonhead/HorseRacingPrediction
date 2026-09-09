@@ -61,7 +61,7 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 
 2026-09-08調査: 上記の旧自動経路と、稼働中の手動 `HorseHistoryDiscovery` / `HorseHistoryRace` は別経路である。過去データの自動抽出停止と旧要求の実行停止が併存している。[調査とタイムアウト・保留の変更案](changes/20260908_collection-timeout-hold/README.md)を参照。自動経路の復旧や既存データの一括再登録は未実施。
 
-2026-09-09提案: 過去レースの自律取得は、馬起点の自動展開や旧 URL 列挙 Worker の復活ではなく、現行の `RaceResultCollection` を使う日付単位のローリングバックフィルへ統合する。直近5日より前を既定3年まで新しい順に進め、月をチェックポイント、開催日を実行単位とする。通常開催・利用者起点ジョブを優先し、開催中は新規バックフィルを抑制する。状態、再試行、導入手順を含む設計は [過去レースの自律バックフィル](changes/20260909_autonomous-historical-race-backfill/README.md) を参照。承認前のため未実装であり、現行動作は変わらない。
+2026-09-09提案: 過去レースの自律取得は、旧 URL 列挙 Worker の復活ではなく、現行の `RaceResultCollection` を使う日付単位のローリングバックフィルへ統合する。直近5日より前を既定3年まで新しい順に進め、月をチェックポイント、開催日を実行単位とする。さらに、出馬表または収集済みJRAレースから判明した馬を、稼働中の `SubjectProfileRefresh` / `HorseHistoryDiscovery` へ自動接続する。今週末の出馬表を最優先、その全出走予定馬の公式プロフィール・履歴探索・不足している直近5走を次順位とし、開催週につき1回更新する。全掲載履歴の残りも取得対象だが、当日結果を塞がない順位で継続する。通常・過去レース由来の未取得馬も各優先度と件数上限で補完するが、履歴レースから別馬の全履歴へ無制限に高優先度展開しない。開催中と週末向け前景ジョブ滞留中は長期バックフィルを抑制する。状態、再試行、導入手順を含む設計は [過去レースと馬公式情報の自律収集](changes/20260909_autonomous-historical-race-backfill/README.md) を参照。承認前のため未実装であり、現行動作は変わらない。
 
 ### 状態管理
 
@@ -117,7 +117,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 | モード | 条件 | 想定動作 |
 |---|---|---|
 | `Live` | 本日が開催日 | リアルタイム抽出を優先 |
-| `PreRace` | 開催が `PreRaceLeadDays` 以内に迫っている | 出馬表・過去成績補完を優先 |
+| `PreRace` | 開催が `PreRaceLeadDays` 以内に迫っている | 今週末の出馬表・出走予定馬の公式プロフィールと全掲載履歴を優先 |
 | `Idle` | それ以外 | バックフィルを優先 |
 
 ## 主要設定（`AgentProcessingOptions`）
