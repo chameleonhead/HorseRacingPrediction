@@ -61,7 +61,7 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 
 2026-09-08調査: 上記の旧自動経路と、稼働中の手動 `HorseHistoryDiscovery` / `HorseHistoryRace` は別経路である。過去データの自動抽出停止と旧要求の実行停止が併存している。[調査とタイムアウト・保留の変更案](changes/20260908_collection-timeout-hold/README.md)を参照。自動経路の復旧や既存データの一括再登録は未実施。
 
-2026-09-09提案: 過去レースの自律取得は、旧 URL 列挙 Worker の復活ではなく、現行の `RaceResultCollection` を使う日付単位のローリングバックフィルへ統合する。直近5日より前を既定3年まで新しい順に進め、月をチェックポイント、開催日を実行単位とする。さらに、出馬表または収集済みJRAレースから判明した馬を、稼働中の `SubjectProfileRefresh` / `HorseHistoryDiscovery` へ自動接続する。今週末の出馬表を最優先、その全出走予定馬の公式プロフィール・履歴探索・不足している直近5走を次順位とし、開催週につき1回更新する。全掲載履歴の残りも取得対象だが、当日結果を塞がない順位で継続する。通常・過去レース由来の未取得馬も各優先度と件数上限で補完するが、履歴レースから別馬の全履歴へ無制限に高優先度展開しない。開催中と週末向け前景ジョブ滞留中は長期バックフィルを抑制する。状態、再試行、導入手順を含む設計は [過去レースと馬公式情報の自律収集](changes/20260909_autonomous-historical-race-backfill/README.md) を参照。承認前のため未実装であり、現行動作は変わらない。
+2026-09-09提案: 過去レースの自律取得は、旧 URL 列挙 Worker の復活ではなく、現行の `RaceResultCollection` を使う日付単位のローリングバックフィルへ統合する。直近5日より前を既定3年まで新しい順に進め、月をチェックポイント、開催日を実行単位とする。さらに、出馬表または収集済みJRAレースから判明した馬を、稼働中の `SubjectProfileRefresh` / `HorseHistoryDiscovery` へ自動接続する。今週末の出馬表を最優先、その全出走予定馬の公式プロフィール・履歴探索・不足している直近5走を次順位とし、開催週につき1回更新する。全掲載履歴の残りも取得対象だが、当日結果を塞がない順位で継続する。通常・過去レース由来の未取得馬も各優先度と件数上限で補完するが、履歴レースから別馬の全履歴へ無制限に高優先度展開しない。既定15分ごとの永続 `AcquisitionPlanReview` ジョブが不足・滞留・進捗・失敗・キュー状態を再評価し、未実行ジョブの優先度と次回投入量を調整する。開催中と週末向け前景ジョブ滞留中は長期バックフィルを抑制する。見直しは実行中リース、停止、保留、DeadLetterを自動解除せず、基盤のリース・配送修復は既存watchdogに委ねる。状態、再試行、導入手順を含む設計は [過去レースと馬公式情報の自律収集](changes/20260909_autonomous-historical-race-backfill/README.md) を参照。承認前のため未実装であり、現行動作は変わらない。
 
 ### 状態管理
 
@@ -128,6 +128,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 - 結果収集対象範囲: `ResultLookbackDays`, `InitialResultBackfillYears`, `LiveResultLookbackDays`, `PreRaceResultLookbackDays`, `ResultLookaheadDays`
   - 自動登録の `ResultLookbackDays` は既定5日。JSTの当日〜5日前（両端を含む）の開催日を対象とし、日次収集完了済みの日付は再登録しない。
 - 過去データ補完: `HistoricalRequestExecutionIntervalMinutes`, `HistoricalRequestBatchSize`, `HistoricalRequestLeaseMinutes`, `HistoricalRequestMaxAttempts`
+- 自律収集見直し（提案）: 見直し有効化、見直し間隔（既定15分）、進捗停滞判定期間、低優先度投入上限
 - 機能フラグ: `EnableScheduleCollection`, `EnableRaceCardCollection`, `EnableRaceResultCollection`
 - 同時実行制御: `MaxConcurrentJobs`（既定 1。単一実行制御はジョブ種別ごとではなくグローバルなリースで保証する）
 
