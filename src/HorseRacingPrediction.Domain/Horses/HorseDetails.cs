@@ -10,4 +10,6 @@ public sealed record HorseDetails(
     string? BreederName,
     string? SireName,
     string? DamName,
+    string? DamsireName,
+    string? CoatColor,
     IReadOnlyCollection<AliasDetails> Aliases);

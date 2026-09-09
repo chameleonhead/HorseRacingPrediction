@@ -17,7 +17,13 @@ public sealed record JraRaceResultPage(
     string? OverallPaceText = null,
     // Phase8（依頼書27節）: 本賞金。着順(1着=1等)をキーに円単位の金額を保持する。
     // 「本賞金」欄自体が存在しない場合はnull（正常）。
-    IReadOnlyDictionary<int, decimal>? PrizeMoneyByPosition = null, string? GradeCode = null, TimeOnly? StartTime = null)
+    IReadOnlyDictionary<int, decimal>? PrizeMoneyByPosition = null,
+    string? GradeCode = null,
+    TimeOnly? StartTime = null,
+    int? MeetingNumber = null,
+    int? MeetingDay = null,
+    string? RaceConditions = null,
+    IReadOnlyList<string>? SectionalTimes = null)
     : IJraPage
 {
     public JraPageKind Kind =>

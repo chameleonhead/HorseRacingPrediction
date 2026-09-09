@@ -68,12 +68,13 @@ public static partial class EndpointExtensions
             await EnsureRelatedSubjectsAsync(registration, commands, dbProvider, token);
             // 馬主・生産者・血統は出馬表由来の場合だけ馬プロフィールへ反映する。
             // レース結果には馬主を特定できる情報がないため、結果再取得からは更新しない。
-            if (request.IsRaceCard && new[] { source.OwnerName, source.BreederName, source.SireName, source.DamName }
+            if (request.IsRaceCard && new[] { source.OwnerName, source.BreederName, source.SireName, source.DamName, source.DamsireName, source.CoatColor }
                     .Any(value => !string.IsNullOrWhiteSpace(value)))
                 await commands.PublishAsync(new UpdateHorseProfileCommand(
                     new HorseRacingPrediction.Domain.Horses.HorseId(horseId),
                     ownerName: source.OwnerName, breederName: source.BreederName,
-                    sireName: source.SireName, damName: source.DamName), token);
+                    sireName: source.SireName, damName: source.DamName,
+                    damsireName: source.DamsireName, coatColor: source.CoatColor), token);
             entries.Add(new(entryId, horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight,
                 source.BodyWeightChange, null, source.OwnerName));

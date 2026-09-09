@@ -427,9 +427,11 @@ public sealed class RaceCardPageParser
             }
 
             var sexAgeIndex = table.Headers.ToList().FindIndex(h => h.Contains("性齢", StringComparison.Ordinal));
-            var sexAge = Regex.Match(sexAgeIndex >= 0 && sexAgeIndex < row.Count ? row[sexAgeIndex] : string.Empty,
+            var sexAgeText = sexAgeIndex >= 0 && sexAgeIndex < row.Count ? row[sexAgeIndex] : string.Empty;
+            var sexAge = Regex.Match(sexAgeText,
                 @"(?<sex>牡|牝|せん|セン)\s*(?<age>\d+)");
             var sexCode = sexAge.Success ? sexAge.Groups["sex"].Value switch { "牡" => "M", "牝" => "F", _ => "G" } : null;
+            var coatColor = ParseCoatColor(sexAgeText, snapshotUrl: url);
             entries.Add(new RaceEntry(
                 horseNumber,
                 horseName,
@@ -440,7 +442,8 @@ public sealed class RaceCardPageParser
                 parsedHorse.OwnerName,
                 parsedHorse.BodyWeight,
                 parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null,
-                parsedHorse.BreederName, parsedHorse.SireName, parsedHorse.DamName));
+                parsedHorse.BreederName, parsedHorse.SireName, parsedHorse.DamName,
+                parsedHorse.DamsireName, coatColor));
         }
 
         return entries;
@@ -523,7 +526,7 @@ public sealed class RaceCardPageParser
                 semanticBodyWeight,
                 semanticBodyWeightChange,
                 NormalizeOptionalText(semanticBreeder) ?? ParseBreeder(cell),
-                ParseParent(pedigreeText, "父"), ParseParent(pedigreeText, "母"));
+                ParseParent(pedigreeText, "父"), ParseParent(pedigreeText, "母"), ParseDamsire(pedigreeText));
         }
 
         var lines = cell
@@ -534,7 +537,7 @@ public sealed class RaceCardPageParser
 
         if (lines.Count == 0)
         {
-            return new ParsedHorseCell(string.Empty, null, null, null, null, null, null, null);
+            return new ParsedHorseCell(string.Empty, null, null, null, null, null, null, null, null);
         }
 
         var horseName = lines[0];
@@ -559,7 +562,7 @@ public sealed class RaceCardPageParser
 
         return new ParsedHorseCell(horseName, trainerName, ownerName, bodyWeight, bodyWeightChange,
             candidateLines.Where(l => l != trainerLine && l != ownerName).Skip(0).FirstOrDefault(),
-            ParseParent(cell, "父"), ParseParent(cell, "母"));
+            ParseParent(cell, "父"), ParseParent(cell, "母"), ParseDamsire(cell));
     }
 
     private static string? ParseBreeder(string cell)
@@ -579,6 +582,26 @@ public sealed class RaceCardPageParser
         var value = match.Groups["value"].Value.Trim();
         if (label == "母") value = Regex.Replace(value, @"[\(（]母の父：.*$", string.Empty).Trim();
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? ParseDamsire(string cell)
+    {
+        var match = Regex.Match(cell, @"母の父\s*[:：]\s*(?<value>[^\)）\r\n]+)");
+        if (!match.Success) return null;
+        var value = match.Groups["value"].Value.Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? ParseCoatColor(string cell, string snapshotUrl)
+    {
+        if (string.IsNullOrWhiteSpace(cell)) return null;
+        var match = Regex.Match(cell, @"(?:牡|牝|せん|セン)\s*\d+\s*/\s*(?<value>[^\s]+)");
+        if (match.Success) return match.Groups["value"].Value.Trim();
+        if (cell.Contains('/', StringComparison.Ordinal))
+        {
+            throw new JraValueParseException(JraPageKind.RaceCard, snapshotUrl, "CoatColor", cell);
+        }
+        return null;
     }
 
     private static bool IsStatLine(string line)
@@ -630,5 +653,6 @@ public sealed class RaceCardPageParser
         int? BodyWeightChange,
         string? BreederName,
         string? SireName,
-        string? DamName);
+        string? DamName,
+        string? DamsireName);
 }

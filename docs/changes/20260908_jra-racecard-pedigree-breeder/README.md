@@ -1,9 +1,9 @@
 # JRA出馬表の生産者・血統・毛色取得と馬プロフィール登録
 
-- Status: Draft
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-08
-- Updated: 2026-09-08
+- Updated: 2026-09-09
 
 ## Context
 
@@ -131,8 +131,19 @@ Task<string> UpsertHorseProfileAsync(
 
 ## Verification record
 
-- 未実施（設計段階）。
+- 2026-09-09: 利用者の「両方とも対応をお願いします」を、本記録および併存する未完了 change record の実装に対する明示承認として記録し、実装を開始した。
+- 既存の生産者・父・母の部分実装を監査し、母父と毛色を parser、workflow、収集API、Horse domain event/state/read model、HTTP contract、SQLite migrationへ追加した。
+- 欠損値を送信しない既存のpatch semanticsを維持し、プロフィール再収集で既存の非null値を消さない。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests --no-restore --filter "FullyQualifiedName~RaceCardPageParserTests|FullyQualifiedName~JraRaceCardCollectionWorkflowTests"`: 25件成功。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests --no-restore --filter FullyQualifiedName~SubjectCollectionTests`: 4件成功。新規値の保存と、後続の部分更新後も血統値が維持されることを確認した。
+- `dotnet test tests/HorseRacingPrediction.Infrastructure.Tests --no-restore`: 11件成功。旧EnsureCreated DBからの非破壊移行を含む。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests --no-restore --filter "TestCategory=External"`: 19件成功。
+- 母父・毛色のassertionを追加した `現在週RaceCard取得` External E2Eを単独再実行し、1件成功。
+
+## Documentation updates
+
+- `docs/23-jra-scraping-redesign.md`: RaceCardから母父と毛色を取得・保存する現在の正本仕様へ更新し、本記録を詳細仕様としてリンクした。
 
 ## Deviations and follow-up
 
-- なし。
+- 設計との差分なし。承認範囲の実装・検証に未完了事項はない。

@@ -43,6 +43,7 @@ public interface IDataCollectionWriteService
 
     Task<string> UpsertHorseProfileAsync(string registeredName, string? normalizedName, string? sexCode,
         string? birthDate, string? ownerName, string? breederName, string? sireName, string? damName,
+        string? damsireName, string? coatColor,
         CancellationToken cancellationToken = default)
         => UpsertHorseWithOwnerAsync(registeredName, normalizedName, sexCode, birthDate, ownerName, cancellationToken);
 

@@ -10,4 +10,6 @@ public sealed record HorseProfileResponse(
     string? OwnerName = null,
     string? BreederName = null,
     string? SireName = null,
-    string? DamName = null);
+    string? DamName = null,
+    string? DamsireName = null,
+    string? CoatColor = null);

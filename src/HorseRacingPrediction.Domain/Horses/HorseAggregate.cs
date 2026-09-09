@@ -18,22 +18,24 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
 
     public void RegisterHorse(string registeredName, string normalizedName,
         string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null,
-        string? breederName = null, string? sireName = null, string? damName = null)
+        string? breederName = null, string? sireName = null, string? damName = null,
+        string? damsireName = null, string? coatColor = null)
     {
         if (_state.IsRegistered)
             throw new InvalidOperationException("Horse is already registered.");
 
-        Emit(new HorseRegistered(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName));
+        Emit(new HorseRegistered(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName, damsireName, coatColor));
     }
 
     public void UpdateProfile(string? registeredName = null, string? normalizedName = null,
         string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null,
-        string? breederName = null, string? sireName = null, string? damName = null)
+        string? breederName = null, string? sireName = null, string? damName = null,
+        string? damsireName = null, string? coatColor = null)
     {
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Horse is not registered.");
 
-        Emit(new HorseProfileUpdated(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName));
+        Emit(new HorseProfileUpdated(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName, damsireName, coatColor));
     }
 
     public void MergeAlias(string aliasType, string aliasValue, string sourceName, bool isPrimary)
@@ -65,6 +67,8 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
             _state.BreederName,
             _state.SireName,
             _state.DamName,
+            _state.DamsireName,
+            _state.CoatColor,
             _state.Aliases);
     }
 

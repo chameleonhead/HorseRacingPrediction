@@ -81,11 +81,14 @@ public static class SubjectCollectionEndpointExtensions
                 static string? Field(IReadOnlyDictionary<string, string> fields, params string[] names) =>
                     names.Select(fields.GetValueOrDefault).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
                 var dam = Field(request.Fields, "母", "母馬");
+                var damsire = dam is null ? null : Regex.Match(dam, @"母の父\s*[:：]\s*(?<value>[^\)）]+)").Groups["value"].Value.Trim();
                 if (dam is not null) dam = Regex.Replace(dam, @"[\(（]母の父：.*$", string.Empty).Trim();
                 await commands.PublishAsync(new UpdateHorseProfileCommand(new HorseId(subjectId),
                     ownerName: Field(request.Fields, "馬主", "馬主名"),
                     breederName: Field(request.Fields, "生産者", "生産牧場"),
-                    sireName: Field(request.Fields, "父", "父馬"), damName: dam), token);
+                    sireName: Field(request.Fields, "父", "父馬"), damName: dam,
+                    damsireName: string.IsNullOrWhiteSpace(damsire) ? null : damsire,
+                    coatColor: Field(request.Fields, "毛色")), token);
             }
             else await commands.PublishAsync(new CollectTrainerProfileCommand(new TrainerId(subjectId), data), token);
             return Results.Ok();

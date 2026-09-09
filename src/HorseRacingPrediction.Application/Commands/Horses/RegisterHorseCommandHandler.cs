@@ -8,7 +8,8 @@ public sealed class RegisterHorseCommandHandler : CommandHandler<HorseAggregate,
     public override Task ExecuteAsync(HorseAggregate aggregate, RegisterHorseCommand command, CancellationToken cancellationToken)
     {
         aggregate.RegisterHorse(command.RegisteredName, command.NormalizedName, command.SexCode, command.BirthDate,
-            command.OwnerName, command.BreederName, command.SireName, command.DamName);
+            command.OwnerName, command.BreederName, command.SireName, command.DamName,
+            command.DamsireName, command.CoatColor);
         return Task.CompletedTask;
     }
 }

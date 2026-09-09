@@ -55,7 +55,8 @@ public static partial class EndpointExtensions
                         request.NormalizedName,
                         request.SexCode,
                         request.BirthDate,
-                        request.OwnerName, request.BreederName, request.SireName, request.DamName);
+                        request.OwnerName, request.BreederName, request.SireName, request.DamName,
+                        request.DamsireName, request.CoatColor);
 
                     var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                     return result.IsSuccess
@@ -83,7 +84,8 @@ public static partial class EndpointExtensions
                     request.NormalizedName,
                     request.SexCode,
                     request.BirthDate,
-                    request.OwnerName, request.BreederName, request.SireName, request.DamName);
+                    request.OwnerName, request.BreederName, request.SireName, request.DamName,
+                    request.DamsireName, request.CoatColor);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -2804,6 +2806,8 @@ public static partial class EndpointExtensions
             BreederName = model.BreederName,
             SireName = model.SireName,
             DamName = model.DamName,
+            DamsireName = model.DamsireName,
+            CoatColor = model.CoatColor,
             Aliases = model.Aliases.Select(x => new ApiContracts.HorseAliasEntry(x.AliasType, x.AliasValue, x.SourceName, x.IsPrimary)).ToList()
         };
 

@@ -19,6 +19,8 @@ public class HorseReadModel : IReadModel,
     public string? BreederName { get; private set; }
     public string? SireName { get; private set; }
     public string? DamName { get; private set; }
+    public string? DamsireName { get; private set; }
+    public string? CoatColor { get; private set; }
     public List<HorseAliasEntry> Aliases { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
@@ -33,6 +35,7 @@ public class HorseReadModel : IReadModel,
         BirthDate = e.BirthDate;
         OwnerName = e.OwnerName;
         BreederName = e.BreederName; SireName = e.SireName; DamName = e.DamName;
+        DamsireName = e.DamsireName; CoatColor = e.CoatColor;
         return Task.CompletedTask;
     }
 
@@ -49,6 +52,8 @@ public class HorseReadModel : IReadModel,
         if (e.BreederName != null) BreederName = e.BreederName;
         if (e.SireName != null) SireName = e.SireName;
         if (e.DamName != null) DamName = e.DamName;
+        if (e.DamsireName != null) DamsireName = e.DamsireName;
+        if (e.CoatColor != null) CoatColor = e.CoatColor;
         return Task.CompletedTask;
     }
 

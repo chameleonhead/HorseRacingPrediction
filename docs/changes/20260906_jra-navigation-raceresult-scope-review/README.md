@@ -1,6 +1,6 @@
 # JRAスクレイピング層 Navigation / RaceResult取得仕様 変更
 
-- Status: In progress (Phase 1-7 実装済み。Phase 7で監査により発見されたバグA1/A2を修正。残るDeviationsは末尾参照)
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-06
 - Updated: 2026-09-07
@@ -139,18 +139,18 @@ Phase 4完了後、ユーザーレビューにより「Phase 4でテストとし
 | 2 | 直近レースでは出馬表を優先的に探索できる | **満たす（Phase 2で`RaceCardLookupPeriod`により名称・境界を明確化。最終判定は出馬表への実在有無のまま）** |
 | 3 | RaceCardが存在しなくても正常にRaceResultへ進める | 満たす（既存実装で確認済み） |
 | 4 | 古いレースでは出馬表を探索しない | **満たす（Phase 2で`RaceCardLookupPeriod`より古い場合は探索自体を早期スキップ）** |
-| 5 | 過去RaceResultからRaceEntry相当情報を復元できる | **一部満たす（Phase 2でHorseName/JockeyName/Sex/Ageの送信経路を追加。FrameNumber/AssignedWeight/TrainerName/Popularity/BodyWeightはParser側の列検出が未実装・実サイト未確認のためフォローアップ）** |
+| 5 | 過去RaceResultからRaceEntry相当情報を復元できる | **満たす**（結果ページの馬名・騎手・性齢・枠・斤量・調教師・人気・馬体重を一括APIへ送り、未登録Entryと関連対象を登録する） |
 | 6 | RaceResult Navigationが結果系導線だけで完結する | 満たす（既存実装で確認済み） |
 | 7 | RaceResultがRaceIdを自己検証する | **満たす（Phase 1で実装）** |
-| 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **一部満たす（Phase 1で天候・馬場・結果状態を実装。ただし依頼書9節が必須とする`StartTime`/`MeetingNumber`/`MeetingDay`/`RaceConditions`は`JraRaceResultPage`に一切存在せず未実装。Phase 7の監査で発見、実サイト未確認のためフォローアップとして記録。Deviations参照）** |
+| 8 | 天候・馬場・結果状態等の未知値をエラーにできる | **満たす**（天候・馬場・結果状態の厳格解析に加え、Phase 9で`StartTime`/`MeetingNumber`/`MeetingDay`/`RaceConditions`を取得） |
 | 9 | 取消・除外・中止・失格・同着・降着を正常に扱える | **満たす**（Phase 3で同着=`IsDeadHeat`、降着=`FinishPosition`/`OriginalFinishPosition`分離を実装。複数特殊状態混在のテストも追加） |
-| 10 | 平地・障害のページ差異を扱える | **一部満たす**（Phase 3で`EstimatedLast3F`/`Average1F`分離、Course構造でのRaceType判定を実装。ハロンタイム自体の分割タイム抽出は実サイト未確認のため未着手） |
+| 10 | 平地・障害のページ差異を扱える | **満たす**（`EstimatedLast3F`/`Average1F`、RaceType、独立ハロンタイム表の有無を扱う） |
 | 11 | 正常な欠損とParser異常を区別できる | **満たす**（天候/馬場/性齢/結果状態に加え、Phase 3で馬体重・人気・斤量・枠番・調教師・着差・払戻券種/金額でも「列/値なし＝null」と「値ありで解析不能＝エラー」を区別。**Phase 7で判明: Phase 5〜6時点ではHorseNameが空/空白の結果行が`ParseResults`内で`continue`により静かにスキップされており、「値が存在しているのに解析できない」ケースが正しくエラー化されず、実際にはこの基準が未達だった〈A1〉。Phase 7で`JraValueParseException`（FieldName=`HorseName`）を送出するよう修正し、回帰テストを追加。現時点で満たす**） |
-| 12 | 払戻をRaceResultとして取得できる | **満たす**（既存の5券種抽出に加え、Phase 3で未知券種・金額解析不能の検知を追加） |
-| 13 | 古いレースの券種差を正常に扱える | 一部満たす（券種section自体が存在しない場合は既存実装で正常扱い。古い年代の実際の券種差はFixtureで確認できておらず未検証。Phase 4で対応） |
+| 12 | 払戻をRaceResultとして取得できる | **満たす**（8券種を取得し、未知券種・金額解析不能を検知する） |
+| 13 | 古いレースの券種差を正常に扱える | **満たす**（主要8券種と券種section・個別券種の欠損を正常扱いし、古いRaceResultを含むExternal E2Eで検証） |
 | 14 | RaceResult全体のValidation完了前に部分保存しない | 満たす（既存実装で確認済み） |
 | 15 | RaceResult宣言後にEntryResultを保存する既存順序を維持する | 満たす（既存実装で確認済み） |
-| 16 | 特殊ケース・異常ケースを自動テストでカバーする | **一部満たす**（Phase 4〜5で依頼書32節のギャップを実装・テストで埋めた。結果行0件・HorseNumber重複・HorseNumber解析不能・Finished時のFinishPosition/Time完全欠落はPhase 5で実装・テスト済み。Phase 7でHorseName空欄〈A1〉・1レース解析例外による他レース巻き添え〈A2〉を実装・テストで解消。賞金情報・古い年代の券種差の追加バケット・StartTime等の未実装項目は依然未対応。詳細はDeviations参照） |
+| 16 | 特殊ケース・異常ケースを自動テストでカバーする | **満たす**（Phase 4〜9のfixture・workflow・API・External E2Eで正常欠損、特殊状態、構造・値・整合性異常を検証） |
 
 ## Delivery plan
 
@@ -337,6 +337,30 @@ Acceptance criteria表の更新:
 - `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj`: 成功、91件（`useSiblingNavigation`引数追加に伴う`FakeJraRaceResultCollectionWorkflow`拡張のみ、既存テストへの影響なし）
 - `dotnet test`（ソリューション全体、E2Eテスト含む）: Scraping.Tests以外は全て成功（Agents 108件・Api 106件・Collector 91件・MachineLearning 14件・Infrastructure 10件）。Scraping.Testsは非E2Eの134件は成功、E2Eテスト14件は既知のプロキシ制約（ECH拡張処理バグによる`ERR_CONNECTION_RESET`）により失敗（実行不可能）。これは本ドキュメント冒頭に記載済みの既知の環境制約であり、Phase 8の変更によるものではない。
 - 変更ファイル: `src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceResultPageParser.cs`、`src/HorseRacingPrediction.Scraping/Jra/Pages/JraRaceResultPage.cs`、`src/HorseRacingPrediction.Scraping/Jra/Models/RaceResultEntry.cs`、`src/HorseRacingPrediction.Scraping/Jra/Navigation/IJraNavigator.cs`・`JraNavigator.cs`、`src/HorseRacingPrediction.Scraping/Jra/Workflow/IJraRaceResultCollectionWorkflow.cs`・`JraRaceResultCollectionWorkflow.cs`、`src/HorseRacingPrediction.Collector/Scheduling/CollectionExecutionService.cs`、テストファイル4件（`RaceResultPageParserTests.cs`、`JraNavigatorTests.cs`、`FakeJraNavigator.cs`、`FakeJraSessionInfra.cs`、`FakeJraWorkflows.cs`）、本ドキュメント。
+
+### Phase 9（残件解消と最終照合・2026-09-09）
+
+Phase 8後のコードを基準に未完了記述を再照合した。過去RaceResultからのRaceEntry登録、8券種、本賞金、コーナー通過順位は既に実装済みだったため、残っていた次の項目を追加した。
+
+- 結果ページ見出しの `N回<競馬場>M日` から `MeetingNumber` と `MeetingDay` を取得する。
+- `StartTime` に加え、コース表記直前の条件サマリを `RaceConditions` として保持する。
+- 「ハロンタイム」見出しを持つ独立テーブルの行を `SectionalTimes` に境界を保って保持する。障害等でテーブルがない場合はnullを正常とする。
+- `Popularity` が取得済みの出走規模を超える場合を `JraResultConsistencyException` とする。部分fixtureでも誤検知しないよう、結果行数と最大馬番の大きい方を検証上の出走規模とする。
+- Phase 8の実サイト書き起こしfixtureへ開催回・開催日・発走時刻・条件・独立ハロンタイム表の検証を追加した。
+
+過去のDeviations節は各Phase時点の履歴として保持する。Phase 9時点では、賞金、主要8券種、RaceEntry復元、開催回・開催日、発走時刻、条件、ハロンタイム表、人気整合性まで実装済みである。実サイトExternalテストも全件成功し、承認範囲に残る未完了事項はない。
+
+### Phase 9 verification
+
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests --no-restore --filter "FullyQualifiedName~RaceResultPageParserTests|FullyQualifiedName~RaceCardPageParserTests|FullyQualifiedName~JraRaceCardCollectionWorkflowTests"`: 78件成功。
+- `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"`: 今回の変更に関係する全プロジェクトが成功。Api UIの既存非同期テスト1件が全体並列実行時のみ2秒でタイムアウトしたが、単独再実行は成功した。
+- `dotnet test tests/HorseRacingPrediction.Infrastructure.Tests --no-restore`: 11件成功。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests --no-restore --filter "FullyQualifiedName~JobHoldTests.Detail_ShowsCancellationPendingThenReleaseAndAudit"`: 単独再実行1件成功。
+- `dotnet test tests/HorseRacingPrediction.Scraping.Tests --no-restore --filter "TestCategory=External"`: 19件成功。
+
+### Phase 9 documentation updates
+
+- `docs/23-jra-scraping-redesign.md`: RaceResultの開催情報・条件・ハロンタイム・人気整合性、およびRaceCardの血統・毛色保存を現行仕様へ同期した。
 
 ---
 

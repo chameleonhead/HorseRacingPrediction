@@ -19,6 +19,8 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
     public string? BreederName { get; private set; }
     public string? SireName { get; private set; }
     public string? DamName { get; private set; }
+    public string? DamsireName { get; private set; }
+    public string? CoatColor { get; private set; }
     public IReadOnlyCollection<AliasDetails> Aliases => _aliases.AsReadOnly();
 
     public void Apply(HorseRegistered e)
@@ -30,6 +32,7 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
         BirthDate = e.BirthDate;
         OwnerName = e.OwnerName;
         BreederName = e.BreederName; SireName = e.SireName; DamName = e.DamName;
+        DamsireName = e.DamsireName; CoatColor = e.CoatColor;
     }
 
     public void Apply(HorseProfileUpdated e)
@@ -42,6 +45,8 @@ public sealed class HorseState : AggregateState<HorseAggregate, HorseId, HorseSt
         if (e.BreederName != null) BreederName = e.BreederName;
         if (e.SireName != null) SireName = e.SireName;
         if (e.DamName != null) DamName = e.DamName;
+        if (e.DamsireName != null) DamsireName = e.DamsireName;
+        if (e.CoatColor != null) CoatColor = e.CoatColor;
     }
 
     public void Apply(HorseAliasMerged e)

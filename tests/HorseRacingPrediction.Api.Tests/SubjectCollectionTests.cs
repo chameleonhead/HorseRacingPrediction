@@ -31,6 +31,8 @@ public sealed class SubjectCollectionTests
         Assert.AreEqual("新生産者", horse.BreederName);
         Assert.AreEqual("父馬", horse.SireName);
         Assert.AreEqual("母馬", horse.DamName);
+        Assert.AreEqual("母父馬", horse.DamsireName);
+        Assert.AreEqual("鹿毛", horse.CoatColor);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { SourceIdentity = "different" })).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { Fields = new() { ["生年月日"] = "2023年4月11日" } })).StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, profile with { Name = "別の馬" })).StatusCode);

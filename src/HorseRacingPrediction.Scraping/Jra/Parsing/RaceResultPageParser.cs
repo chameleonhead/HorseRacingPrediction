@@ -139,6 +139,18 @@ public sealed class RaceResultPageParser
                 string.Join(",", duplicateHorseNumbers));
         }
 
+        var inferredStarterCount = Math.Max(results.Count, results.Max(result => result.HorseNumber));
+        var invalidPopularity = results.FirstOrDefault(result => result.Popularity > inferredStarterCount);
+        if (invalidPopularity is not null)
+        {
+            throw new JraResultConsistencyException(
+                JraPageKind.RaceResult,
+                snapshot.Url,
+                "Popularityがレース内の出走頭数を超えています。",
+                "Popularity",
+                invalidPopularity.Popularity?.ToString());
+        }
+
         var weatherText =
             ParseWeatherText(snapshot);
 
@@ -171,7 +183,56 @@ public sealed class RaceResultPageParser
             courseSpec,
             cornerPassages is { Count: > 0 } ? cornerPassages : null,
             overallPaceText,
-            prizeMoneyByPosition, RaceGrade.Parse(snapshot), RaceCardPageParser.ParseStartTime(snapshot, allowUnlabelledTime: false));
+            prizeMoneyByPosition,
+            RaceGrade.Parse(snapshot),
+            RaceCardPageParser.ParseStartTime(snapshot, allowUnlabelledTime: false),
+            ParseMeetingNumber(snapshot),
+            ParseMeetingDay(snapshot),
+            ParseRaceConditions(snapshot),
+            ParseSectionalTimes(snapshot));
+    }
+
+    private static readonly Regex MeetingRegex = new(
+        @"(?<meeting>\d+)\s*回\s*[^\s\d]+\s*(?<day>\d+)\s*日",
+        RegexOptions.Compiled);
+
+    private static Match ParseMeeting(JraSnapshotView snapshot)
+        => MeetingRegex.Match($"{snapshot.Title} {string.Join(" ", snapshot.Headings)}");
+
+    private static int? ParseMeetingNumber(JraSnapshotView snapshot)
+    {
+        var match = ParseMeeting(snapshot);
+        return match.Success ? int.Parse(match.Groups["meeting"].Value) : null;
+    }
+
+    private static int? ParseMeetingDay(JraSnapshotView snapshot)
+    {
+        var match = ParseMeeting(snapshot);
+        return match.Success ? int.Parse(match.Groups["day"].Value) : null;
+    }
+
+    private static string? ParseRaceConditions(JraSnapshotView snapshot)
+    {
+        var source = snapshot.MainText;
+        var weatherIndex = source.LastIndexOf("天候", StringComparison.Ordinal);
+        if (weatherIndex >= 0) source = source[weatherIndex..];
+        var match = Regex.Match(source,
+            @"^\s*(?:天候\s*\S+\s+)?(?:芝\s*\S+\s+)?(?:ダート\s*\S+\s+)?(?<conditions>.+?)\s*コース\s*[:：]",
+            RegexOptions.Singleline);
+        if (!match.Success) return null;
+        var value = Regex.Replace(match.Groups["conditions"].Value, @"\s+", " ").Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static IReadOnlyList<string>? ParseSectionalTimes(JraSnapshotView snapshot)
+    {
+        var rows = snapshot.Tables
+            .Where(table => table.Headers.Any(header => header.Contains("ハロンタイム", StringComparison.Ordinal)))
+            .SelectMany(table => table.Rows)
+            .Select(row => string.Join(" ", row.Where(value => !string.IsNullOrWhiteSpace(value))).Trim())
+            .Where(value => value.Length > 0)
+            .ToList();
+        return rows.Count == 0 ? null : rows;
     }
 
     internal static RaceCourseSpec? ParseCourseSpec(

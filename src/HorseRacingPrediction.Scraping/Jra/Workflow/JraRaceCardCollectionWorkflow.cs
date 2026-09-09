@@ -178,7 +178,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             // 実サイト確認（2026-09-06）で判明: 馬主名は別ページへの遷移なしに出馬表の
             // 馬名セルから直接取得できる（RaceCardPageParser参照）。取得できた場合のみ
             // 馬主付きで馬を登録する（失敗しても出走登録自体は継続する）。
-            if (new[] { entry.OwnerName, entry.BreederName, entry.SireName, entry.DamName }.Any(x => !string.IsNullOrWhiteSpace(x)))
+            if (new[] { entry.OwnerName, entry.BreederName, entry.SireName, entry.DamName, entry.DamsireName, entry.CoatColor }.Any(x => !string.IsNullOrWhiteSpace(x)))
             {
                 try
                 {
@@ -191,6 +191,8 @@ public sealed partial class JraRaceCardCollectionWorkflow
                         breederName: entry.BreederName,
                         sireName: entry.SireName,
                         damName: entry.DamName,
+                        damsireName: entry.DamsireName,
+                        coatColor: entry.CoatColor,
                         cancellationToken: cancellationToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))

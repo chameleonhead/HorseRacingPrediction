@@ -60,4 +60,5 @@ public sealed record RaceResultEntryBulkDto(
     int? BodyWeightChange = null,
     int? OriginalFinishPosition = null,
     bool IsDeadHeat = false, string? OwnerName = null, string? CornerPositions = null, decimal? Average1F = null,
-    string? BreederName = null, string? SireName = null, string? DamName = null);
+    string? BreederName = null, string? SireName = null, string? DamName = null,
+    string? DamsireName = null, string? CoatColor = null);

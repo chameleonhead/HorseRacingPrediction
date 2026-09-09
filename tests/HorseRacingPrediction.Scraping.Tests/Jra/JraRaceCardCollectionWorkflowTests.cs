@@ -181,7 +181,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
             race1.Id,
             "1R テストレース",
             new RaceEntry(1, "テストホースA", 1, "テスト騎手A", 55.0m, "テスト調教師A", "テスト馬主A", 488, -2,
-                BreederName: "テスト生産者", SireName: "テスト父", DamName: "テスト母"));
+                BreederName: "テスト生産者", SireName: "テスト父", DamName: "テスト母",
+                DamsireName: "テスト母父", CoatColor: "鹿"));
 
         var (session, _, writeService) = CreateContext(
             raceList,
@@ -200,6 +201,8 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.AreEqual("テスト生産者", profile.BreederName);
         Assert.AreEqual("テスト父", profile.SireName);
         Assert.AreEqual("テスト母", profile.DamName);
+        Assert.AreEqual("テスト母父", profile.DamsireName);
+        Assert.AreEqual("鹿", profile.CoatColor);
         Assert.HasCount(1, writeService.UpsertRaceEntryCalls);
         var entry = writeService.UpsertRaceEntryCalls[0];
         Assert.AreEqual("テスト馬主A", entry.OwnerName);

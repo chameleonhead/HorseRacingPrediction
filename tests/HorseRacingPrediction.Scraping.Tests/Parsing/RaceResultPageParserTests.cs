@@ -1259,6 +1259,9 @@ public sealed class RaceResultPageParserTests
                 ["3コーナー(2周目)", "7-3(6,2)-5=(1,4)"],
                 ["4コーナー(2周目)", "7-(6,2)-3-5=1=4"],
             ]);
+        var sectionalTable = new TestPageTable(
+            Headers: ["ハロンタイム", "200m", "400m", "600m"],
+            Rows: [["", "13.2", "12.8", "12.5"]]);
 
         var mainText =
             "天候 雨 芝 稍重 ダート 重 " +
@@ -1274,7 +1277,7 @@ public sealed class RaceResultPageParserTests
             mainText: mainText,
             links: [],
             actions: [],
-            tables: [table, cornerTable],
+            tables: [table, cornerTable, sectionalTable],
             headings: ["JRA 日本中央競馬会", "2026年9月6日（日曜）4回中山2日 1レース", "障害3歳以上未勝利"]);
 
         var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
@@ -1393,12 +1396,16 @@ public sealed class RaceResultPageParserTests
             "複勝 2 140円 (1人気) 7 190円 (3人気) ワイド 2-7 330円 (5人気) 2-6 360円 (6人気) 6-7 300円 (4人気) 馬単 2-7 1,650円 (9人気) " +
             "3連複 2-6-7 1,160円 (5人気) 3連単 2-7-6 5,650円 (25人気)";
 
+        var sectionalTable = new TestPageTable(
+            Headers: ["ハロンタイム", "200m", "400m", "600m"],
+            Rows: [["", "13.2", "12.8", "12.5"]]);
+
         var section = new TestPageSection(
             title: "レース結果",
             mainText: mainText,
             links: [],
             actions: [],
-            tables: [table, cornerTable],
+            tables: [table, cornerTable, sectionalTable],
             headings:
             [
                 "JRA 日本中央競馬会",
@@ -1420,6 +1427,12 @@ public sealed class RaceResultPageParserTests
         Assert.IsNotNull(page.CourseSpec);
         Assert.AreEqual(2880, page.CourseSpec!.DistanceMeters);
         Assert.AreEqual(RaceType.Jump, page.CourseSpec.RaceType);
+        Assert.AreEqual(new TimeOnly(10, 5), page.StartTime);
+        Assert.AreEqual(4, page.MeetingNumber);
+        Assert.AreEqual(2, page.MeetingDay);
+        Assert.AreEqual("障害3歳以上 未勝利（混合） 定量", page.RaceConditions);
+        Assert.IsNotNull(page.SectionalTimes);
+        Assert.AreEqual("13.2 12.8 12.5", page.SectionalTimes![0]);
 
         // --- 着順テーブル：7頭すべて ---
         Assert.AreEqual(7, page.Results.Count);

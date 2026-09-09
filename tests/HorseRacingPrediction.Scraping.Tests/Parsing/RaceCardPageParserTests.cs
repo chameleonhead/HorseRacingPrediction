@@ -177,6 +177,8 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual("ノーザンファーム", entry.BreederName);
         Assert.AreEqual("アドマイヤマーズ", entry.SireName);
         Assert.AreEqual("トレジャリング", entry.DamName);
+        Assert.AreEqual("Havana Gold", entry.DamsireName);
+        Assert.AreEqual("栗", entry.CoatColor);
         Assert.AreEqual("武 幸四郎", entry.TrainerName);
         Assert.AreEqual("小牧 加矢太", entry.JockeyName);
         Assert.AreEqual(60.0m, entry.AssignedWeight);
@@ -226,6 +228,7 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual("久保田 貴士", entry.TrainerName);
         Assert.AreEqual(456, entry.BodyWeight);
         Assert.AreEqual(6, entry.BodyWeightChange);
+        Assert.AreEqual("鹿", entry.CoatColor);
     }
 
     // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、

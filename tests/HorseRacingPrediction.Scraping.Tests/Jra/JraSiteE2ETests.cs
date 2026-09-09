@@ -126,6 +126,10 @@ public sealed class JraSiteE2ETests
             $"{race.Id} に父を取得できない出走馬があります。");
         Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.DamName)),
             $"{race.Id} に母を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.DamsireName)),
+            $"{race.Id} に母父を取得できない出走馬があります。");
+        Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.CoatColor)),
+            $"{race.Id} に毛色を取得できない出走馬があります。");
         Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
             $"{race.Id} に馬体重を取得できない出走馬があります。");
         Assert.IsFalse(raceCard.Entries.Any(entry => decimal.TryParse(entry.OwnerName, out _)),
