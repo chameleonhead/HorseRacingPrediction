@@ -217,6 +217,7 @@ public sealed class JraRaceResultCollectionWorkflow
             {
                 CourseDirection.Left => "左",
                 CourseDirection.Right => "右",
+                CourseDirection.Straight => "直",
                 _ => null,
             },
             WinningHorseName: winningEntry?.HorseName,

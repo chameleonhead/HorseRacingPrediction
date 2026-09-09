@@ -120,7 +120,7 @@ PredictionTicket
 - GradeCode
 - SurfaceCode
 - DistanceMeters
-- DirectionCode
+- DirectionCode（コース方向の正規値: `左` / `右` / `直`。不明・表記なしはnull）
 - LifecycleStatus
 - RaceCardId
 - RaceResultId

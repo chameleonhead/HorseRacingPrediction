@@ -26,7 +26,13 @@ public sealed partial class JraRaceCardCollectionWorkflow
             RaceCourseNames.GetJraName(raceId.Course), raceId.Number, card.RaceName, EntryCount: entries.Length,
             GradeCode: card.GradeCode, DistanceMeters: card.CourseSpec?.DistanceMeters,
             SurfaceCode: card.CourseSpec is null ? null : string.Join("→", card.CourseSpec.Surfaces.Select(x => x == CourseSurface.Turf ? "芝" : "ダート")),
-            DirectionCode: card.CourseSpec?.Direction switch { CourseDirection.Left => "左", CourseDirection.Right => "右", _ => null },
+            DirectionCode: card.CourseSpec?.Direction switch
+            {
+                CourseDirection.Left => "左",
+                CourseDirection.Right => "右",
+                CourseDirection.Straight => "直",
+                _ => null
+            },
             StartTime: card.StartTime, CourseLayout: card.CourseSpec?.RawLayout,
             Entries: entries, TargetRaceId: targetRaceId, RefreshExistingData: true, IsRaceCard: true), cancellationToken);
         return new(raceId.Number, targetRaceId, card.RaceName, card.Url,

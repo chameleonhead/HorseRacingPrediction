@@ -290,6 +290,10 @@ public sealed class RaceResultPageParser
                     {
                         direction = CourseDirection.Right;
                     }
+                    else if (directionToken == "直")
+                    {
+                        direction = CourseDirection.Straight;
+                    }
                     else
                     {
                         throw new JraUnexpectedValueException(

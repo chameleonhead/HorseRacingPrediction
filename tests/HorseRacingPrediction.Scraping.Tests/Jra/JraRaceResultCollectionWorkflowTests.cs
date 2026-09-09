@@ -43,7 +43,11 @@ public sealed class JraRaceResultCollectionWorkflowTests
             new RaceResultEntry(ResultStatus.Finished, 2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
             new RaceResultEntry(ResultStatus.Finished, 3, 1, "テストホースC", "テスト騎手C", TimeSpan.FromSeconds(85.3)),
         };
-        var resultPage = CreateResultPage(TestRaceId, entries);
+        var resultPage = CreateResultPage(TestRaceId, entries) with
+        {
+            CourseSpec = new RaceCourseSpec(
+                1000, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Straight, null, "芝・直"),
+        };
 
         var (session, navigator, writeService) = CreateContext(
             new Dictionary<RaceId, IJraPage> { [TestRaceId] = resultPage });
@@ -62,6 +66,7 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.HasCount(1, writeService.DeclareRaceResultCalls);
         Assert.AreEqual(expectedRaceId, writeService.DeclareRaceResultCalls[0].RaceId);
         Assert.AreEqual("テストホースA", writeService.DeclareRaceResultCalls[0].WinningHorseName);
+        Assert.AreEqual("直", writeService.DeclareRaceResultBulkCalls.Single().DirectionCode);
 
         Assert.HasCount(3, writeService.DeclareRaceEntryResultCalls);
 

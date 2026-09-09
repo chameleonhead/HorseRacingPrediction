@@ -25,7 +25,8 @@ public enum CourseSurface
 public enum CourseDirection
 {
     Left, // 左
-    Right // 右
+    Right, // 右
+    Straight // 直
 }
 
 /// <summary>

@@ -143,6 +143,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             {
                 CourseDirection.Left => "左",
                 CourseDirection.Right => "右",
+                CourseDirection.Straight => "直",
                 _ => null,
             },
             cancellationToken: cancellationToken);

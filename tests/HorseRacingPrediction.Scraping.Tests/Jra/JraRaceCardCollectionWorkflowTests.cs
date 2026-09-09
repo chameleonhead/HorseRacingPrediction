@@ -57,7 +57,11 @@ public sealed class JraRaceCardCollectionWorkflowTests
         var card = CreateRaceCard(race.Id, "メイクデビュー中山",
             new RaceEntry(8, "テストホース", 6, "騎手", 55m, "調教師", "馬主", 480, 2, "F", 2,
                 BreederName: "テスト生産者", SireName: "テスト父", DamName: "テスト母")) with
-        { GradeCode = "G3" };
+        {
+            GradeCode = "G3",
+            CourseSpec = new RaceCourseSpec(
+                1000, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Straight, null, "芝・直"),
+        };
         var (session, navigator, writer) = CreateContext(CreateRaceList(race, CreateRaceSummary(7)),
             new Dictionary<RaceId, IJraPage> { [race.Id] = card });
         await using var disposable = session;
@@ -69,6 +73,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.IsTrue(request.RefreshExistingData);
         Assert.IsTrue(request.IsRaceCard);
         Assert.AreEqual("G3", request.GradeCode);
+        Assert.AreEqual("直", request.DirectionCode);
         Assert.AreEqual(new TimeOnly(10, 0), request.StartTime);
         var savedEntry = request.Entries!.Single();
         Assert.AreEqual("F", savedEntry.SexCode);
@@ -94,7 +99,7 @@ public sealed class JraRaceCardCollectionWorkflowTests
             new RaceEntry(2, "テストホースB", 2, "テスト騎手B", 54.0m)) with
         {
             GradeCode = "G2",
-            CourseSpec = new RaceCourseSpec(1600, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Left, "外", "芝・左 外"),
+            CourseSpec = new RaceCourseSpec(1000, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Straight, null, "芝・直"),
         };
 
         var card2 = CreateRaceCard(
@@ -128,9 +133,9 @@ public sealed class JraRaceCardCollectionWorkflowTests
         Assert.AreEqual("1R テストレース", writeService.UpsertRaceCalls[0].RaceName);
         Assert.AreEqual(2, writeService.UpsertRaceCalls[0].EntryCount);
         Assert.AreEqual("G2", writeService.UpsertRaceCalls[0].GradeCode);
-        Assert.AreEqual(1600, writeService.UpsertRaceCalls[0].DistanceMeters);
+        Assert.AreEqual(1000, writeService.UpsertRaceCalls[0].DistanceMeters);
         Assert.AreEqual("芝", writeService.UpsertRaceCalls[0].SurfaceCode);
-        Assert.AreEqual("左", writeService.UpsertRaceCalls[0].DirectionCode);
+        Assert.AreEqual("直", writeService.UpsertRaceCalls[0].DirectionCode);
 
         Assert.AreEqual(2, writeService.UpsertRaceCalls[1].RaceNumber);
 

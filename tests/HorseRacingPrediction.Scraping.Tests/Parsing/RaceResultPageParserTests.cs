@@ -450,6 +450,20 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_コース表記_芝直を直線方向として分解できる()
+    {
+        var page = ParseWithMainText("天候 晴 芝 良 1,000メートル（芝・直）");
+
+        Assert.IsNotNull(page.CourseSpec);
+        Assert.AreEqual(1000, page.CourseSpec!.DistanceMeters);
+        Assert.AreEqual(RaceType.Flat, page.CourseSpec.RaceType);
+        CollectionAssert.AreEqual(new[] { CourseSurface.Turf }, page.CourseSpec.Surfaces.ToArray());
+        Assert.AreEqual(CourseDirection.Straight, page.CourseSpec.Direction);
+        Assert.IsNull(page.CourseSpec.Layout);
+        Assert.AreEqual("芝・直", page.CourseSpec.RawLayout);
+    }
+
+    [TestMethod]
     public void Parse_コース表記_芝右外は方向とレイアウトの両方を分解できる()
     {
         // 実サイトE2E（過去レース結果、中山）で判明した表記。「芝・右」（方向）の後ろへ
