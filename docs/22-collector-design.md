@@ -132,6 +132,8 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 - 機能フラグ: `EnableScheduleCollection`, `EnableRaceCardCollection`, `EnableRaceResultCollection`
 - 同時実行制御: `MaxConcurrentJobs`（既定 1。単一実行制御はジョブ種別ごとではなくグローバルなリースで保証する）
 
+自律収集見直しは、本番有効化前に本番予定の15分間隔を短縮せず、隔離したリリース候補環境で連続4回・合計60分以上確認する。周期欠落・重複、前景優先、バックフィル抑制と復帰、no-op、実行中リース、キュー/DLQ、JRAアクセス量、Lambda相当の実行時間と費用見積りを評価し、[変更記録のGo/No-Go基準](changes/20260909_autonomous-historical-race-backfill/README.md#go--no-go-criteria)を満たすまで本番フラグを有効にしない。
+
 ## 今後の課題（未着手・要検討）
 
 Lambda 対応の詳細は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
