@@ -19,6 +19,8 @@ public interface IProcessingStateStore
     Task MarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task UnmarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task EnqueueJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, CancellationToken cancellationToken = default);
+    Task<string> RequestRaceDayReacquisitionAsync(RaceDayReacquisitionPayload payload, string actor, DateTimeOffset now, CancellationToken cancellationToken = default);
+    Task<AgentJobDetailReadModel?> GetRaceDayReacquisitionAsync(DateOnly raceDate, CancellationToken cancellationToken = default);
     Task ScheduleJobAsync(string jobType, string deduplicationKey, string payload, DateTimeOffset now, int priority = 0, string? parentJobId = null, JobRelationType parentRelationType = JobRelationType.AggregatedBy, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AcquiredProcessingJob>> AcquireReadyJobsAsync(string jobType, DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default);
     Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(string jobType, string deduplicationKey, long dispatchGeneration, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default);

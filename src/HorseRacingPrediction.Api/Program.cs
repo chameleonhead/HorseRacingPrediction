@@ -282,6 +282,7 @@ app.MapAgentDashboardEndpoints();
 app.MapCollectionResetEndpoints();
 app.MapJobManagementEndpoints();
 app.MapRaceReacquisitionEndpoints();
+app.MapRaceDayReacquisitionEndpoints();
 app.MapSubjectCollectionEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();

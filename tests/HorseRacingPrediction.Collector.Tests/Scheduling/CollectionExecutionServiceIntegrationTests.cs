@@ -1,3 +1,4 @@
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -496,12 +497,47 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
         Assert.IsTrue(job.AvailableAt > DateTimeOffset.UtcNow.AddMinutes(20));
     }
 
+    [TestMethod]
+    public async Task RaceDayReacquisition_SplitsRegisteredRacesIntoAggregateChildren()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2026, 9, 6);
+        var query = new NullRaceQueryService
+        {
+            Races =
+            [
+                new("race-1", date, "中山", 1),
+                new("race-2", date, "NAKAYAMA", 2),
+            ],
+        };
+        var service = CreateService(
+            store,
+            new FakeJraScheduleCollectionWorkflow(),
+            new FakeJraRaceCardCollectionWorkflow(),
+            new FakeJraRaceResultCollectionWorkflow(),
+            raceQueryService: query);
+        var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
+
+        var parent = await store.GetJobDetailAsync(id);
+        Assert.IsNotNull(parent);
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, parent.Status);
+        Assert.HasCount(2, parent.ChildJobs);
+        Assert.IsTrue(parent.ChildJobs.All(x => x.JobType == AgentJobType.RaceReacquisition
+            && x.RelationType == JobRelationType.AggregatedBy));
+        foreach (var child in parent.ChildJobs)
+            await store.CompleteJobAsync(child.JobType, child.DeduplicationKey);
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+    }
+
     private static CollectionExecutionService CreateService(
         ProcessingStateStore stateStore,
         IJraScheduleCollectionWorkflow scheduleWorkflow,
         IJraRaceCardCollectionWorkflow cardWorkflow,
         IJraRaceResultCollectionWorkflow resultWorkflow,
-        FakeJraSessionFactory? sessionFactory = null, IHttpClientFactory? httpClients = null)
+        FakeJraSessionFactory? sessionFactory = null, IHttpClientFactory? httpClients = null,
+        IRaceQueryService? raceQueryService = null)
     {
         sessionFactory ??= new FakeJraSessionFactory();
         var options = Options.Create(new AgentProcessingOptions
@@ -524,7 +560,7 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
             _ => cardWorkflow,
             _ => resultWorkflow,
             planner,
-            new NullRaceQueryService(),
+            raceQueryService ?? new NullRaceQueryService(),
             new CollectionExecutionTrigger(),
             httpClients ?? new NoOpHttpClientFactory(),
             NullLogger<CollectionExecutionService>.Instance);

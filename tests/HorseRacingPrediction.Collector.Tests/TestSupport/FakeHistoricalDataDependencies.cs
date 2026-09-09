@@ -11,8 +11,10 @@ namespace HorseRacingPrediction.Collector.Tests.TestSupport;
 /// </summary>
 internal sealed class NullRaceQueryService : IRaceQueryService
 {
+    public IReadOnlyList<RaceSearchSummary> Races { get; init; } = [];
+
     public Task<IReadOnlyList<RaceSearchSummary>> SearchRegisteredRacesAsync(DateOnly raceDate, CancellationToken cancellationToken = default)
-        => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(Array.Empty<RaceSearchSummary>());
+        => Task.FromResult<IReadOnlyList<RaceSearchSummary>>(Races.Where(x => x.RaceDate == raceDate).ToArray());
 
     public Task<RacePredictionContextReadModel?> GetRacePredictionContextAsync(string raceId, CancellationToken cancellationToken = default)
         => Task.FromResult<RacePredictionContextReadModel?>(null);

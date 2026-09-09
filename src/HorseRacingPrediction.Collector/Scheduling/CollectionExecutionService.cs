@@ -25,6 +25,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private static readonly string[] RecoverableJobTypes =
     [
         AgentJobType.SubjectProfileRefresh, AgentJobType.HorseHistoryDiscovery, AgentJobType.HorseHistoryRace,
+        AgentJobType.RaceDayReacquisition,
         AgentJobType.RaceReacquisition,
         AgentJobType.RaceCardCollection,
         AgentJobType.RaceResultCollection
@@ -124,7 +125,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
 
     public async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
-        foreach (var type in SubjectJobTypes.Concat(new[] { AgentJobType.RaceReacquisition, AgentJobType.RaceCardCollection, AgentJobType.RaceResultCollection }))
+        foreach (var type in SubjectJobTypes.Concat(new[] { AgentJobType.RaceDayReacquisition, AgentJobType.RaceReacquisition, AgentJobType.RaceCardCollection, AgentJobType.RaceResultCollection }))
             await RunTaskAsync(type, cancellationToken);
     }
 
@@ -397,6 +398,9 @@ public sealed partial class CollectionExecutionService : BackgroundService
                     break;
                 case AgentJobType.RaceReacquisition:
                     await ExecuteSingleRaceReacquisitionAsync(task, now, workToken);
+                    break;
+                case AgentJobType.RaceDayReacquisition:
+                    await ExecuteRaceDayReacquisitionAsync(task, now, workToken);
                     break;
                 case AgentJobType.RaceCardCollection:
                     await ExecuteSingleRaceCardTaskAsync(task, now, workToken);

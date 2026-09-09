@@ -50,6 +50,17 @@ public sealed partial class AdminApiClient
     public Task<AdminApiResult> RequestRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
         => SendAsync(HttpMethod.Post, $"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", new { }, cancellationToken);
 
+    public Task<AdminApiResult<string>> RequestRaceDayReacquisitionAsync(
+        DateOnly raceDate,
+        string? reason = null,
+        CancellationToken cancellationToken = default)
+        => SendForIdAsync<RaceDayReacquisitionIdResponse>(
+            HttpMethod.Post,
+            "/api/admin/race-days/reacquisition",
+            new { raceDate, reason },
+            x => x.JobId,
+            cancellationToken);
+
     public Task<RaceResponse?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
         => GetJsonAsync<RaceResponse>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
 
@@ -333,6 +344,7 @@ public sealed partial class AdminApiClient
     private sealed record JockeyIdResponse(string JockeyId);
     private sealed record TrainerIdResponse(string TrainerId);
     private sealed record MemoIdResponse(string MemoId);
+    private sealed record RaceDayReacquisitionIdResponse(string JobId);
 }
 
 public sealed record JobQueueStateResponse(bool IsPaused, string? Reason = null, string? JobId = null, DateTimeOffset? StoppedAt = null);

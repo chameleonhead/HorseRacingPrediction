@@ -31,6 +31,7 @@ public sealed class CollectionJobWatchdogService : BackgroundService
         AgentJobType.CollectionPlanning,
         AgentJobType.AcquisitionPlanReview,
         AgentJobType.SubjectProfileRefresh,
+        AgentJobType.RaceDayReacquisition,
         AgentJobType.HorseHistoryDiscovery,
         AgentJobType.HorseHistoryRace
     ];

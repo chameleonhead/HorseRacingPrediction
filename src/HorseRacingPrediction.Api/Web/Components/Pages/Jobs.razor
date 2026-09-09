@@ -6,6 +6,7 @@
 
 <RaceOpsPageHeader Section="運用" Title="収集ジョブ" Description="収集処理の進行状況を対象日から絞り込み、失敗から復旧します。">
     <Actions>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@OpenRaceDayDialog" Disabled="@operating">開催日を再取得</FluentButton>
         @if (queuePaused)
         {
             <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@(operating || !queueStateKnown)">再開</FluentButton>
@@ -86,6 +87,20 @@ else
         </FluentDialogFooter>
 </FluentDialog>
 
+<FluentDialog Hidden="@(!showRaceDayDialog)" HiddenChanged="@(hidden => showRaceDayDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="race-day-reacquisition-title" Style="width:min(560px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="race-day-reacquisition-title">開催日の全レースを再取得</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>指定日のJRA全レースについて、基本情報、出馬表、馬主を含む出走情報、公開済み結果・払戻を再取得します。</p>
+        <p>取得できなかった項目で既存値は消しません。レース単位のジョブへ分割するため、完了まで時間がかかる場合があります。</p>
+        <FluentTextField Label="開催日（JST）" Placeholder="yyyy-MM-dd" Required="true" @bind-Value="raceDayText" />
+        @if (raceDayErrors.Count > 0) { <UiState Kind="error" Title="再取得を開始できませんでした" Message="@string.Join(' ', raceDayErrors)" /> }
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@CloseRaceDayDialog">キャンセル</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@RequestRaceDayAsync" Disabled="@operating">再取得を依頼</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @code {
     private IReadOnlyList<AgentJobStatusReadModel> jobs = [];
     private IReadOnlyList<AgentJobDaySummary> daySummaries = [];
@@ -109,6 +124,9 @@ else
     private Task? refreshTask;
     private JobQueueStateResponse? queueState;
     private bool showPauseDialog;
+    private bool showRaceDayDialog;
+    private string? raceDayText;
+    private IReadOnlyList<string> raceDayErrors = [];
     private IReadOnlyList<string> operationErrors = [];
 
     private string? lastSyncedQuery;
@@ -190,6 +208,41 @@ else
     }
     private void OpenPauseDialog() { operationErrors = []; showPauseDialog = true; }
     private void ClosePauseDialog() => showPauseDialog = false;
+    private void OpenRaceDayDialog()
+    {
+        raceDayErrors = [];
+        raceDayText = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        showRaceDayDialog = true;
+    }
+    private void CloseRaceDayDialog() => showRaceDayDialog = false;
+    private async Task RequestRaceDayAsync()
+    {
+        if (operating) return;
+        if (!DateOnly.TryParseExact(raceDayText, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var raceDate))
+        {
+            raceDayErrors = ["開催日は yyyy-MM-dd 形式で入力してください。"];
+            return;
+        }
+
+        operating = true;
+        raceDayErrors = [];
+        try
+        {
+            var result = await Api.RequestRaceDayReacquisitionAsync(raceDate, "収集ジョブ画面から開催日単位で再取得", refreshStop.Token);
+            if (result.Success && !string.IsNullOrWhiteSpace(result.Value))
+            {
+                showRaceDayDialog = false;
+                Navigation.NavigateTo(JobUrl(result.Value));
+            }
+            else raceDayErrors = result.Errors;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            raceDayErrors = ["再取得依頼の結果を確認できませんでした。最新のジョブ一覧を確認してください。"];
+        }
+        finally { operating = false; }
+    }
     private Task PauseAsync() => ChangePipelineAsync(true);
     private Task ResumeAsync() => ChangePipelineAsync(false);
     private async Task ChangePipelineAsync(bool pause)
@@ -238,7 +291,7 @@ else
     private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
     private async Task SetViewAsync(string value) { view = value; page = 1; await LoadAsync(); }
     private static string JobUrl(string id) => $"/jobs/{Uri.EscapeDataString(id)}";
-    private static string DisplayJobType(string value) => value switch { "CollectionPlanning" => "収集対象の確認", "RaceCardCollection" => "出馬表の収集", "RaceResultCollection" => "レース結果の収集", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
+    private static string DisplayJobType(string value) => value switch { "CollectionPlanning" => "収集対象の確認", "RaceDayReacquisition" => "開催日の全レース再取得", "RaceReacquisition" => "レース情報の再取得", "RaceCardCollection" => "出馬表の収集", "RaceResultCollection" => "レース結果の収集", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
     private static string DisplayTarget(AgentJobStatusReadModel job) => ExtractTargetDate(job.DeduplicationKey) is { } targetDate ? $"対象日 {targetDate}" : "対象は詳細で確認";
     private static string DisplayMetadata(AgentJobStatusReadModel job) => $"更新 {job.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm} ・ 試行 {job.AttemptCount} 回";
     private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", _ => "warning" };

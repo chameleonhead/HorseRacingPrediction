@@ -125,6 +125,7 @@ internal static class TestApplicationFactory
         app.MapAgentDashboardEndpoints();
         app.MapJobManagementEndpoints();
         app.MapRaceReacquisitionEndpoints();
+        app.MapRaceDayReacquisitionEndpoints();
         app.MapSubjectCollectionEndpoints();
         app.MapAgentAcquisitionStatusEndpoints();
 
