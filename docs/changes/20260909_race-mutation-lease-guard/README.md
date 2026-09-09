@@ -1,6 +1,6 @@
 # 収集リース中のレース手動更新を拒否する
 
-- Status: Approved
+- Status: Completed
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09
@@ -110,8 +110,8 @@ APIキーはCollectorと管理UIで共有され、現在のジョブ・対象・
 
 ## Verification record
 
-- 未実施（設計承認待ち）。
+- Solution build成功（警告0、エラー0）。Apiテスト121件成功・1件スキップ、Collectorテスト124件成功。レース単位・開催日単位の資格検証テストを追加した。
 
 ## Deviations and follow-up
 
-- 未実装。
+- Collectorの実行スコープからリース資格をHTTPへ伝播し、Apiの共通filterでレース変更系APIを保護した。UIには理由・期限・ジョブリンクを表示する。

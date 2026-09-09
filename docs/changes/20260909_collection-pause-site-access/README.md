@@ -1,6 +1,6 @@
 # 収集全体停止中も管理サイトを利用可能にする
 
-- Status: Approved
+- Status: Completed
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09
@@ -83,8 +83,8 @@ DB初期化中は別状態として扱う。UIシェル、Blazor接続、初期�
 
 ## Verification record
 
-- 未実施（設計承認待ち）。
+- Solution build成功（警告0、エラー0）。DLQ停止テスト2件、Apiテスト121件が成功し1件がスキップされた。
 
 ## Deviations and follow-up
 
-- 未実装。
+- 設計どおり、DLQ経路もcollection-only停止へ統一し、停止時のキュー消去を廃止した。

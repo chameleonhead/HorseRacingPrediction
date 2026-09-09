@@ -1,6 +1,6 @@
 # 開催日再取得を単一ジョブで一括実行する
 
-- Status: Approved
+- Status: Completed
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-09
 - Updated: 2026-09-09
@@ -100,8 +100,8 @@
 
 ## Verification record
 
-- 未実施（設計承認待ち）。
+- Solution build成功（警告0、エラー0）。関連テスト4件とCollector全124件が成功した。
 
 ## Deviations and follow-up
 
-- 未実装。14分以内に最大開催日の処理が完了するかは実サイト相当検証で計測し、超過する場合は期限または再開方式を別change recordで扱う。
+- 設計どおり単一ジョブ・単一セッションで実装済み。14分以内に最大開催日の処理が完了するかは実サイト相当検証で計測し、超過する場合は期限または再開方式を別change recordで扱う。
