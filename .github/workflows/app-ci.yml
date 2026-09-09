@@ -51,7 +51,16 @@ jobs:
         run: dotnet build HorseRacingPrediction.sln --no-restore --configuration Release
 
       - name: Install Playwright Chromium
-        run: pwsh tests/HorseRacingPrediction.Scraping.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+        shell: bash
+        run: |
+          # ubuntu-latest includes an unrelated Google Chrome APT source. A mirror
+          # publication race there must not prevent Playwright Chromium setup.
+          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
+            if [ -f "$source" ]; then
+              sudo mv "$source" "$source.disabled"
+            fi
+          done
+          pwsh tests/HorseRacingPrediction.Scraping.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
 
       - name: Verify database migration model
         run: dotnet ef migrations has-pending-model-changes --project src/HorseRacingPrediction.Infrastructure/HorseRacingPrediction.Infrastructure.csproj --no-build --configuration Release
