@@ -1,6 +1,6 @@
 # 発走時刻到達後の出馬表自動取得を停止する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-09
 - Updated: 2026-09-09
@@ -162,6 +162,8 @@ JRA 公開ページに機械判定専用の安定した確定フラグがある�
 ## Verification record
 
 設計段階のため、実装検証は未実施。
+
+- 2026-09-09: 利用者が関連する自律収集設計とあわせて「問題なければ進めてください」と明示し、出馬表取得終了と公式結果確認を分離した本記録を承認した。
 
 - 2026-09-09: `ScrapingRegistrationService` が開催日ごとに出馬表ジョブを毎サイクル登録することを確認した。
 - 2026-09-09: 親を持たない成功済みジョブを `ScheduleJobAsync` が `Ready` に戻すことを確認した。

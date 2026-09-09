@@ -1,6 +1,6 @@
 # 過去レースと馬公式情報の自律収集
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-09
 - Updated: 2026-09-09
@@ -291,6 +291,8 @@ watchdogは実行基盤の配送・リース健全性を扱う。業務上の取
 ## Verification record
 
 設計段階のため、実装検証は未実施。
+
+- 2026-09-09: 利用者が最終設計に対して「問題なければ進めてください」と明示し、過去レース・馬公式情報・定期見直し・リリース前評価を含む本記録を承認した。
 
 - 2026-09-09: 現行の `ScrapingRegistrationService`、`CollectionExecutionService`、`AgentProcessingOptions`、状態ストア契約、旧バックフィル用ジョブ型を確認した。
 - 2026-09-09: `docs/00-system-architecture.md`、`docs/01-lambda-collector-architecture.md`、`docs/11-automation-design.md`、`docs/22-collector-design.md`、関連する直近5日収集・レース再取得・馬履歴取得の change record を確認した。
