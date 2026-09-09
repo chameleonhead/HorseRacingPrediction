@@ -37,7 +37,7 @@ public sealed class RaceDayReacquisitionTests
     }
 
     [TestMethod]
-    public async Task Request_RequiresAuthenticationAndRejectsFutureDate()
+    public async Task Request_RequiresAuthenticationAndAcceptsFutureDate()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var disposable = app;
@@ -46,7 +46,7 @@ public sealed class RaceDayReacquisitionTests
         var body = new { raceDate = DateOnly.FromDateTime(DateTime.Today.AddDays(1)) };
         Assert.AreEqual(HttpStatusCode.Unauthorized, (await http.PostAsJsonAsync(path, body)).StatusCode);
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PostAsJsonAsync(path, body)).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Accepted, (await http.PostAsJsonAsync(path, body)).StatusCode);
     }
 
     private sealed record RequestResult(string JobId);

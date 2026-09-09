@@ -498,7 +498,44 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task RaceDayReacquisition_SplitsRegisteredRacesIntoAggregateChildren()
+    public async Task RaceReacquisition_PastOutsideCardPeriodSkipsCardAndCollectsResult()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2020, 1, 5);
+        var navigator = new FakeJraNavigator { RaceCardLookupPeriodResult = false };
+        var card = new FakeJraRaceCardCollectionWorkflow();
+        var result = new FakeJraRaceResultCollectionWorkflow();
+        var service = CreateService(store, new FakeJraScheduleCollectionWorkflow(), card, result,
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
+        var id = await store.RequestRaceReacquisitionAsync(new("race-target", date, "京都", 3), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceReacquisition, CancellationToken.None);
+
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.HasCount(0, card.RefreshRequests);
+        Assert.AreEqual(new RaceId(date, RaceCourse.Kyoto, 3), result.Requests.Single());
+    }
+
+    [TestMethod]
+    public async Task RaceReacquisition_FutureDateCollectsCardWithoutVisitingResult()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2099, 5, 2);
+        var card = new FakeJraRaceCardCollectionWorkflow();
+        var result = new FakeJraRaceResultCollectionWorkflow();
+        var service = CreateService(store, new FakeJraScheduleCollectionWorkflow(), card, result,
+            new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator { RaceCardLookupPeriodResult = true } });
+        var id = await store.RequestRaceReacquisitionAsync(new("race-target", date, "東京", 1), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceReacquisition, CancellationToken.None);
+
+        Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.HasCount(1, card.RefreshRequests);
+        Assert.HasCount(0, result.Requests);
+    }
+
+    [TestMethod]
+    public async Task RaceDayReacquisition_DiscoversOfficialRacesAndPreservesRegisteredIds()
     {
         var store = CreateStore();
         var date = new DateOnly(2026, 9, 6);
@@ -510,11 +547,23 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
                 new("race-2", date, "NAKAYAMA", 2),
             ],
         };
+        var sessionFactory = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceListResult = new JraRaceListPage("https://example.test/list", date, RaceCourse.Nakayama,
+                [
+                    new(new RaceId(date, RaceCourse.Nakayama, 1), "1R", null, "card-1", "result-1"),
+                    new(new RaceId(date, RaceCourse.Nakayama, 2), "2R", null, "card-2", "result-2"),
+                ]),
+            },
+        };
         var service = CreateService(
             store,
-            new FakeJraScheduleCollectionWorkflow(),
+            new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Nakayama] },
             new FakeJraRaceCardCollectionWorkflow(),
             new FakeJraRaceResultCollectionWorkflow(),
+            sessionFactory,
             raceQueryService: query);
         var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
 
@@ -529,6 +578,63 @@ public sealed partial class CollectionExecutionServiceIntegrationTests
         foreach (var child in parent.ChildJobs)
             await store.CompleteJobAsync(child.JobType, child.DeduplicationKey);
         Assert.AreEqual(AgentJobStatus.Succeeded, (await store.GetJobDetailAsync(id))!.Status);
+    }
+
+    [TestMethod]
+    public async Task RaceDayReacquisition_DiscoversUnregisteredPastRacesWithoutVisitingRaceCards()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2020, 1, 5);
+        var navigator = new FakeJraNavigator
+        {
+            RaceCardLookupPeriodResult = false,
+            RaceResultListFactory = (_, course) => new JraRaceListPage("https://example.test/results", date, course,
+            [new(new RaceId(date, course, 3), "3R", null, null, "result-3")]),
+        };
+        var service = CreateService(
+            store,
+            new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Kyoto] },
+            new FakeJraRaceCardCollectionWorkflow(),
+            new FakeJraRaceResultCollectionWorkflow(),
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
+        var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
+
+        var parent = (await store.GetJobDetailAsync(id))!;
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, parent.Status);
+        Assert.HasCount(1, parent.ChildJobs);
+        Assert.HasCount(0, navigator.RaceCardListRequests);
+        Assert.HasCount(1, navigator.RaceResultListRequests);
+        var child = (await store.GetJobDetailAsync(parent.ChildJobs.Single().JobId))!;
+        var payload = AgentJobPayloadSerializer.Deserialize<RaceReacquisitionPayload>(child.Payload);
+        Assert.AreEqual(DeterministicIdGenerator.BuildRaceId(date, "京都", 3), payload.RaceId);
+    }
+
+    [TestMethod]
+    public async Task RaceDayReacquisition_FutureDateUsesOnlyOfficialRaceCardList()
+    {
+        var store = CreateStore();
+        var date = new DateOnly(2099, 5, 2);
+        var navigator = new FakeJraNavigator
+        {
+            RaceCardLookupPeriodResult = true,
+            RaceCardListFactory = (_, course) => new JraRaceListPage("https://example.test/cards", date, course,
+            [new(new RaceId(date, course, 1), "1R", null, "card-1", null)]),
+        };
+        var service = CreateService(
+            store,
+            new FakeJraScheduleCollectionWorkflow { CoursesByDate = _ => [RaceCourse.Tokyo] },
+            new FakeJraRaceCardCollectionWorkflow(),
+            new FakeJraRaceResultCollectionWorkflow(),
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator });
+        var id = await store.RequestRaceDayReacquisitionAsync(new(date), "test", DateTimeOffset.UtcNow);
+
+        await service.RunTaskAsync(AgentJobType.RaceDayReacquisition, CancellationToken.None);
+
+        Assert.AreEqual(AgentJobStatus.WaitingDependency, (await store.GetJobDetailAsync(id))!.Status);
+        Assert.HasCount(1, navigator.RaceCardListRequests);
+        Assert.HasCount(0, navigator.RaceResultListRequests);
     }
 
     private static CollectionExecutionService CreateService(

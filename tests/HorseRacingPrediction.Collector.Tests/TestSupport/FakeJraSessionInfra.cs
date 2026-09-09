@@ -71,6 +71,9 @@ internal sealed class FakeJraNavigator : IJraNavigator
     public Task<JraRaceResultPage> ToHorseHistoryResultAsync(JraSubjectIdentity subject, HorseHistoryRaceLink race, CancellationToken cancellationToken = default)
         => Task.FromResult(HistoryResultFactory?.Invoke(subject, race) ?? throw new NotSupportedException());
     public IJraPage? RaceListResult { get; set; }
+    public Func<DateOnly, RaceCourse, IJraPage>? RaceCardListFactory { get; set; }
+    public List<(DateOnly Date, RaceCourse Course)> RaceCardListRequests { get; } = [];
+    public List<(DateOnly Date, RaceCourse Course)> RaceResultListRequests { get; } = [];
 
     /// <summary>
     /// <see cref="ToRaceResultListAsync"/> の戻り値/例外を(日付, 競馬場)ごとに差し替えたい
@@ -85,12 +88,16 @@ internal sealed class FakeJraNavigator : IJraNavigator
         => throw new NotSupportedException();
 
     public Task<IJraPage> ToRaceListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
-        => RaceListResult is not null
-            ? Task.FromResult(RaceListResult)
-            : throw new NotSupportedException();
+    {
+        RaceCardListRequests.Add((date, course));
+        if (RaceCardListFactory is not null)
+            return Task.FromResult(RaceCardListFactory(date, course));
+        return RaceListResult is not null ? Task.FromResult(RaceListResult) : throw new NotSupportedException();
+    }
 
     public Task<IJraPage> ToRaceResultListAsync(DateOnly date, RaceCourse course, CancellationToken cancellationToken = default)
     {
+        RaceResultListRequests.Add((date, course));
         if (RaceResultListFactory is not null)
         {
             return Task.FromResult(RaceResultListFactory(date, course));

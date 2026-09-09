@@ -90,7 +90,8 @@ else
 <FluentDialog Hidden="@(!showRaceDayDialog)" HiddenChanged="@(hidden => showRaceDayDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="race-day-reacquisition-title" Style="width:min(560px, calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="race-day-reacquisition-title">開催日の全レースを再取得</h2></FluentDialogHeader>
     <FluentDialogBody>
-        <p>指定日のJRA全レースについて、基本情報、出馬表、馬主を含む出走情報、公開済み結果・払戻を再取得します。</p>
+        <p>JRA公式情報から指定日の全レースを探し直します。出馬表は公式掲載期間内の日だけ、結果・払戻は当日以前だけ取得します。</p>
+        <p>出馬表を取得できる場合は、馬主を含む出走情報も更新します。</p>
         <p>取得できなかった項目で既存値は消しません。レース単位のジョブへ分割するため、完了まで時間がかかる場合があります。</p>
         <FluentTextField Label="開催日（JST）" Placeholder="yyyy-MM-dd" Required="true" @bind-Value="raceDayText" />
         @if (raceDayErrors.Count > 0) { <UiState Kind="error" Title="再取得を開始できませんでした" Message="@string.Join(' ', raceDayErrors)" /> }

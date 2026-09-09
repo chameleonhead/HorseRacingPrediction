@@ -18,12 +18,6 @@ public static class RaceDayReacquisitionEndpointExtensions
             HttpContext context,
             CancellationToken token) =>
         {
-            var todayJst = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(
-                DateTimeOffset.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo")).Date);
-            if (request.RaceDate > todayJst)
-                return Results.BadRequest(new[] { "未来の開催日は全データ再取得の対象にできません。" });
-
             var id = await store.RequestRaceDayReacquisitionAsync(
                 new RaceDayReacquisitionPayload(request.RaceDate, "JRA", request.Reason),
                 context.User.Identity?.Name ?? "Admin API",

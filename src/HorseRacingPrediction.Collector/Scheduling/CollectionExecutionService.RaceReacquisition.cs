@@ -22,17 +22,19 @@ public sealed partial class CollectionExecutionService
         await using var session = await _sessionFactory.CreateAsync(token);
         var published = false;
         var errors = new List<string>();
-        // 定期収集の公開期間制限は自動巡回向けであり、管理者が明示した再取得には
-        // 適用しない。過去日もJRA側でページが辿れる限り出馬表（馬主を含む）を試す。
-        try
+        // 出馬表は対象日が公式出馬表の探索期間内の場合だけ試す。
+        if (session.Navigate.IsWithinRaceCardLookupPeriod(payload.RaceDate))
         {
-            var card = await _raceCardWorkflowFactory(session).RefreshAsync(raceId, payload.RaceId, token);
-            if (card.Error is not null) errors.Add(card.Error);
-            else published = true;
+            try
+            {
+                var card = await _raceCardWorkflowFactory(session).RefreshAsync(raceId, payload.RaceId, token);
+                if (card.Error is not null) errors.Add(card.Error);
+                else published = true;
+            }
+            catch (JraNavigationException ex) when (ex.Reason is JraNavigationFailureReason.NotYetPublished or JraNavigationFailureReason.OutOfDisplayedRange) { }
+            catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !HorseRacingPrediction.Scraping.Jra.Workflow.ApiFailureClassifier.IsFatalServerError(ex))
+            { errors.Add("出馬表: " + ex.Message); }
         }
-        catch (JraNavigationException ex) when (ex.Reason is JraNavigationFailureReason.NotYetPublished or JraNavigationFailureReason.OutOfDisplayedRange) { }
-        catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !HorseRacingPrediction.Scraping.Jra.Workflow.ApiFailureClassifier.IsFatalServerError(ex))
-        { errors.Add("出馬表: " + ex.Message); }
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst).Date);
         if (payload.RaceDate <= today)
         {
