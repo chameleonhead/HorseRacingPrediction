@@ -124,19 +124,10 @@ public sealed class CollectionDeadLetterQueueReconciler : BackgroundService
             totalFailureCount);
 
         if (totalFailureCount < _options.ConsecutiveFailureThreshold) return;
-        if (!_maintenance.TryBegin()) return; // 既に停止済み（二重トリップ防止）
+        if (!_maintenance.TryBegin(collectorOnly: true)) return; // 既に停止済み（二重トリップ防止）
 
         var reason = $"DLQ経由の失敗が{totalFailureCount}回に達したため（閾値={_options.ConsecutiveFailureThreshold}）、収集ジョブ全体を停止しました。";
         _logger.LogCritical("収集ジョブ監視: {Reason}", reason);
-
-        try
-        {
-            await _queue.PurgeAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "収集ジョブ停止時のキューパージに失敗しました。");
-        }
 
         try
         {

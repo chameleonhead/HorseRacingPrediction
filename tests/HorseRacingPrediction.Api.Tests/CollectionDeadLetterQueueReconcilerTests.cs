@@ -80,7 +80,8 @@ public sealed class CollectionDeadLetterQueueReconcilerTests
 
             Assert.AreEqual(2, maintenance.DlqFailureCount);
             Assert.IsTrue(maintenance.IsActive);
-            Assert.IsTrue(queue.Purged);
+            Assert.IsTrue(maintenance.IsCollectorOnly);
+            Assert.IsFalse(queue.Purged);
             Assert.AreEqual(1, alertPublisher.Calls.Count);
             Assert.AreEqual(2, alertPublisher.Calls[0].DlqFailureCount);
         }
