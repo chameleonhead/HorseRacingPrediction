@@ -1,5 +1,7 @@
 # 自動処理設計（分離ドキュメント）
 
+収集 scheduling の次期共通設計では、Resource + CollectionDefinition の状態を policy で評価し、NextCollectionAt、動的 priority、Realtime/Normal/Background lane を決める。Backfill と当日収集は別基盤にせず、公平配分と aging で starvation を防ぐ。正本は [26-collection-platform-design.md](26-collection-platform-design.md) とする。2026-09-11 現在は Proposed である。
+
 このドキュメントは、ドメイン設計から分離した自動処理の責務を定義する。
 
 具体的な実行主体（Collector / Predictor）とLLM利用方針は [00-system-architecture.md](00-system-architecture.md) を参照。

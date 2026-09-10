@@ -1,5 +1,7 @@
 # JRAスクレイピング層 実装指示書
 
+Resource 中心の次期収集基盤では、本書の Page/Parser/Navigator を Direct Collection と Discovery の双方から再利用する。URL は ResourceLocation 候補として扱い、取得後に expected resource type/provider/id を検証する。候補選択、location status、fallback、request/task state は [26-collection-platform-design.md](26-collection-platform-design.md) の責務であり、Parser/Navigator に永続ジョブ制御を持ち込まない。2026-09-11 現在は Proposed である。
+
 ## 1. 目的
 
 既存の `IWebBrowser` / `PlaywrightWebBrowser` の上に、JRAサイト専用のスクレイピング層を実装する。

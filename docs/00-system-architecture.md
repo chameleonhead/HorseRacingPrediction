@@ -9,6 +9,8 @@ Collector 側の詳細は [22-collector-design.md](22-collector-design.md)、Pre
 
 Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
 
+収集対象、収集定義、抽出 revision、状態、取得理由、task/attempt、URL 候補、Realtime/Backfill の優先制御を Resource 中心へ統一する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。段階移行案は未承認であり、現行動作はまだ変更していない。
+
 ## 方針転換の背景
 
 | # | 当初の前提 | 現在の前提 | 理由 |

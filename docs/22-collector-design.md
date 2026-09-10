@@ -1,5 +1,9 @@
 # Collector 設計
 
+## Resource 中心基盤への段階移行案
+
+収集対象と URL/JobType を分離し、Resource、CollectionDefinition/Revision、State、Request、Task/Attempt、Location、schedule policy を共通化する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存 lease、outbox/SQS、watchdog、hold/pause、JRA workflow、domain write は再利用し、definition ごとの compatibility adapter で段階移行する。2026-09-11 現在は Proposed のため未実装であり、以下の現行動作が引き続き有効である。
+
 ## 位置づけ
 
 > 2026-08-23: 収集タスクの永続化・照会 API・管理画面は Api 側へ移し、Collector はローカル常駐または `--once` で動く Worker に変更した。Lambda は `Dockerfile.collector-lambda` の同じ `--once` 経路を使用する。

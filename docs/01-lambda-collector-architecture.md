@@ -2,6 +2,8 @@
 
 > 2026-08-26 方針確定: ジョブコントローラーは Api が所有する。SQS は配送通知に限定し、タスク本文・状態・依存関係・リース・再試行の正本は Api のタスクストアとする。Collector は計画・ポーリング・一括取得を行わず、通知で指定された単一タスクを実行する Worker とする。
 
+Resource 中心の次期モデルでもこの配置境界は維持する。Resource/Definition/Revision/State/Request/Task/Attempt/Location の正本は Api が所有し、SQS は task ID と送出世代だけを通知する。詳細は [26-collection-platform-design.md](26-collection-platform-design.md) を参照する。2026-09-11 現在は Proposed であり現行 schema は未変更である。
+
 ## 確定する制御境界
 
 ### Api（Job Controller）
