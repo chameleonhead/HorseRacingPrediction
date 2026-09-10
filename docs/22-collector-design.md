@@ -2,7 +2,7 @@
 
 ## Resource 中心基盤への完全置換案
 
-収集対象と URL/JobType を分離し、Resource、CollectionDefinition/Revision、State、Request、Task/Attempt、Location、schedule policy を共通化する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存 Parser/Page/Navigator/workflow/domain write と、lease/outbox/SQS/watchdog 等の安全要件は再利用するが、旧 job store/runner/scheduler/API/UI 自体は拡張せず新実装へ完全置換する。一括 cutover の smoke test 後に旧 production code、旧 job data/key、旧 main SQS queue/DLQ を削除し、恒久 compatibility adapter は残さない。2026-09-11 現在は Proposed のため未実装であり、以下の現行動作が引き続き有効である。
+収集対象と URL/JobType を分離し、Resource、CollectionDefinition/Revision、State、Request、Task/Attempt、Location、schedule policy を共通化する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存 Parser/Page/Navigator/workflow/domain write と、lease/outbox/SQS/watchdog 等の安全要件は再利用するが、旧 job store/runner/scheduler/API/UI 自体は拡張せず新実装へ完全置換する。一括 cutover の smoke test 後に旧 production code、旧 job data/key、旧 main SQS queue/DLQ を削除し、恒久 compatibility adapter は残さない。2026-09-11 に承認され実装中であり、cutover 完了までは以下の現行動作が有効である。
 
 ## 位置づけ
 

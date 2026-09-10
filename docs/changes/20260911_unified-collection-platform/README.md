@@ -1,6 +1,6 @@
 # 競馬情報収集状態管理基盤
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-11
 - Updated: 2026-09-11
@@ -199,6 +199,7 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - 2026-09-11: production code は変更していない。本文書と canonical documentation のみ Proposed として作成・更新した。
 - 2026-09-11: 利用者指示により compatibility adapter を用いた段階移行案を撤回し、既存収集ジョブ実装の完全置換、予想ジョブ分離、意味的 migration、controlled cutover、rollback、旧コード削除を計画へ追加した。
 - 2026-09-11: 利用者指示により一括 cutover とし、旧収集ジョブデータ、旧 job ID/deduplication key、旧 main SQS queue、旧 DLQ を同じ切替作業内で削除する方針へ変更した。Domain Data、source citation、認証情報は削除対象外とした。
+- 2026-09-11: 利用者が「それでは実装をお願いします」と明示し、本記録を承認した。Status を Approved とし実装を開始する。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

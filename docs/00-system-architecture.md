@@ -9,7 +9,7 @@ Collector 側の詳細は [22-collector-design.md](22-collector-design.md)、Pre
 
 Collector のローカル/Lambda共通実行と、収集タスク・管理画面の Api 集約案は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
 
-収集対象、収集定義、抽出 revision、状態、取得理由、task/attempt、URL 候補、Realtime/Backfill の優先制御を Resource 中心へ統一する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存収集ジョブ実装は一括 cutover で置換し、smoke test 後に旧 job data/key と旧 main SQS queue/DLQ を同じ切替内で削除する。本案は未承認であり、現行動作はまだ変更していない。
+収集対象、収集定義、抽出 revision、状態、取得理由、task/attempt、URL 候補、Realtime/Backfill の優先制御を Resource 中心へ統一する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存収集ジョブ実装は一括 cutover で置換し、smoke test 後に旧 job data/key と旧 main SQS queue/DLQ を同じ切替内で削除する。本設計は2026-09-11に承認され、実装中である。cutover 完了までは以下の現行動作が有効である。
 
 ## 方針転換の背景
 
