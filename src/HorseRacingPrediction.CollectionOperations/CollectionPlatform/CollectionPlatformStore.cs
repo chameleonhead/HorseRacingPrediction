@@ -1,0 +1,324 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+
+public sealed class CollectionPlatformStore
+{
+    private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options)
+    {
+        var value = options.Value;
+        var directory = Path.GetFullPath(string.IsNullOrWhiteSpace(value.StateDirectory)
+            ? "collection-platform-state" : value.StateDirectory);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, string.IsNullOrWhiteSpace(value.DatabaseFileName)
+            ? "collection-platform.db" : value.DatabaseFileName);
+        _dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={path};Pooling=False").Options;
+        using var db = CreateDbContext();
+        db.Database.EnsureCreated();
+    }
+
+    internal CollectionPlatformStore(DbContextOptions<CollectionPlatformDbContext> dbOptions)
+    {
+        _dbOptions = dbOptions;
+        using var db = CreateDbContext();
+        db.Database.EnsureCreated();
+    }
+
+    public async Task RegisterDefinitionAsync(CollectionDefinitionId id, string name, ResourceType resourceType,
+        int currentRevision, string revisionDescription, bool mayRequireRecollection,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id.Value)) throw new ArgumentException("Definition id is required.", nameof(id));
+        if (currentRevision < 1) throw new ArgumentOutOfRangeException(nameof(currentRevision));
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var definition = await db.Definitions.SingleOrDefaultAsync(x => x.DefinitionId == id.Value, cancellationToken);
+            if (definition is null)
+            {
+                definition = new CollectionDefinitionEntity
+                {
+                    DefinitionId = id.Value, Name = name, ResourceType = resourceType,
+                    CurrentRevision = currentRevision, Enabled = true,
+                };
+                db.Definitions.Add(definition);
+            }
+            else
+            {
+                if (definition.ResourceType != resourceType)
+                    throw new InvalidOperationException($"Definition {id} is already registered for {definition.ResourceType}.");
+                definition.Name = name;
+                definition.CurrentRevision = Math.Max(definition.CurrentRevision, currentRevision);
+                definition.Enabled = true;
+            }
+
+            if (!await db.Revisions.AnyAsync(x => x.DefinitionId == id.Value && x.Revision == currentRevision, cancellationToken))
+                db.Revisions.Add(new CollectionRevisionEntity
+                {
+                    DefinitionId = id.Value, Revision = currentRevision, Description = revisionDescription,
+                    MayRequireRecollection = mayRequireRecollection, CreatedAt = DateTimeOffset.UtcNow,
+                });
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionRequestReceipt> RequestAsync(ResourceKey resource, CollectionDefinitionId definition,
+        int requestedRevision, CollectionReason reason, DateTimeOffset requestedAt,
+        CollectionLane lane = CollectionLane.Normal, int priority = (int)CollectionPriority.Normal,
+        Uri? explicitUrl = null, string? batchId = null, CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
+            throw new ArgumentException("Provider and resource id are required.", nameof(resource));
+        if (requestedRevision < 1) throw new ArgumentOutOfRangeException(nameof(requestedRevision));
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var definitionEntity = await db.Definitions.SingleOrDefaultAsync(x => x.DefinitionId == definition.Value, cancellationToken)
+                ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
+            if (!definitionEntity.Enabled || definitionEntity.ResourceType != resource.Type)
+                throw new InvalidOperationException($"Definition {definition} cannot collect {resource.Type}.");
+
+            var resourceEntity = await db.Resources.SingleOrDefaultAsync(x => x.Type == resource.Type
+                && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
+            if (resourceEntity is null)
+            {
+                resourceEntity = new CollectionResourceEntity
+                {
+                    Type = resource.Type, Provider = resource.Provider, ResourceId = resource.Id, CreatedAt = requestedAt,
+                };
+                db.Resources.Add(resourceEntity);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            var request = new CollectionRequestEntity
+            {
+                RequestId = Guid.NewGuid(), ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value,
+                RequestedRevision = requestedRevision, Reason = reason, RequestedAt = requestedAt,
+                ExplicitUrl = explicitUrl?.AbsoluteUri, BatchId = batchId,
+            };
+            db.Requests.Add(request);
+
+            var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+                && x.DefinitionId == definition.Value, cancellationToken);
+            if (active is not null)
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return new CollectionRequestReceipt(request.RequestId, active.TaskId, false);
+            }
+
+            var task = new CollectionTaskEntity
+            {
+                TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = resourceEntity.ResourcePk,
+                DefinitionId = definition.Value, RequestedRevision = requestedRevision,
+                Status = CollectionTaskStatus.Ready, Lane = lane, Priority = priority,
+                AvailableAt = requestedAt, CreatedAt = requestedAt, UpdatedAt = requestedAt,
+                DispatchGeneration = 1,
+            };
+            db.Tasks.Add(task);
+            db.ActiveTasks.Add(new CollectionActiveTaskEntity
+                { ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value, TaskId = task.TaskId });
+            db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+            {
+                OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
+                AvailableAt = requestedAt, CreatedAt = requestedAt,
+            });
+            var state = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+                && x.DefinitionId == definition.Value, cancellationToken);
+            if (state is null)
+                db.States.Add(new CollectionStateEntity
+                {
+                    ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value,
+                    RequiredRevision = requestedRevision, Status = CollectionStateStatus.Pending, UpdatedAt = requestedAt,
+                });
+            else
+            {
+                state.RequiredRevision = Math.Max(state.RequiredRevision, requestedRevision);
+                state.Status = CollectionStateStatus.Pending;
+                state.UpdatedAt = requestedAt;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new CollectionRequestReceipt(request.RequestId, task.TaskId, true);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
+        {
+            throw new InvalidOperationException("The resource already has an active collection task.", ex);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<LeasedCollectionTask?> AcquireAsync(Guid taskId, long dispatchGeneration,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await ReclaimExpiredAsync(db, now, cancellationToken).ConfigureAwait(false);
+            var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (task is null || task.Status != CollectionTaskStatus.Ready || task.AvailableAt > now
+                || task.DispatchGeneration != dispatchGeneration) return null;
+            var request = await db.Requests.SingleAsync(x => x.RequestId == task.RequestId, cancellationToken);
+            var resource = await db.Resources.SingleAsync(x => x.ResourcePk == task.ResourcePk, cancellationToken);
+            task.Status = CollectionTaskStatus.Running;
+            task.LeaseToken = Guid.NewGuid().ToString("N");
+            task.LeaseExpiresAt = now.Add(leaseDuration);
+            task.StartedAt ??= now;
+            task.UpdatedAt = now;
+            task.AttemptCount++;
+            db.Attempts.Add(new CollectionAttemptEntity
+            {
+                AttemptId = Guid.NewGuid(), TaskId = task.TaskId, AttemptNumber = task.AttemptCount,
+                StartedAt = now, Result = CollectionAttemptResult.Running,
+            });
+            var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                && x.DefinitionId == task.DefinitionId, cancellationToken);
+            state.Status = CollectionStateStatus.Collecting;
+            state.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new LeasedCollectionTask(task.TaskId, task.RequestId,
+                new ResourceKey(resource.Type, resource.Provider, resource.ResourceId),
+                new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
+                task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> CompleteAttemptAsync(Guid taskId, string leaseToken, DateTimeOffset now,
+        CollectionAttemptCompletion completion, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (task is null || task.Status != CollectionTaskStatus.Running
+                || !string.Equals(task.LeaseToken, leaseToken, StringComparison.Ordinal)) return false;
+            var attempt = await db.Attempts.SingleAsync(x => x.TaskId == taskId
+                && x.AttemptNumber == task.AttemptCount, cancellationToken);
+            attempt.Result = completion.Result;
+            attempt.FinishedAt = now;
+            attempt.ErrorCode = completion.ErrorCode;
+            attempt.ErrorMessage = completion.ErrorMessage;
+            attempt.RequestedUrl = completion.RequestedUrl?.AbsoluteUri;
+            attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
+            attempt.HttpStatusCode = completion.HttpStatusCode;
+            attempt.PageIdentification = completion.PageIdentification;
+            task.LeaseToken = null;
+            task.LeaseExpiresAt = null;
+            task.UpdatedAt = now;
+            var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                && x.DefinitionId == task.DefinitionId, cancellationToken);
+
+            if (completion.Result == CollectionAttemptResult.Succeeded)
+            {
+                task.Status = CollectionTaskStatus.Succeeded;
+                task.FinishedAt = now;
+                state.AppliedRevision = Math.Max(state.AppliedRevision, task.RequestedRevision);
+                state.LastCollectedAt = now;
+                state.NextCollectionAt = completion.NextCollectionAt;
+                state.Status = CollectionStateStatus.Current;
+                db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+            }
+            else if (completion.Result == CollectionAttemptResult.ResourceNotYetAvailable || completion.RetryAt.HasValue)
+            {
+                task.Status = CollectionTaskStatus.RetryWaiting;
+                task.AvailableAt = completion.RetryAt ?? now;
+                task.DispatchGeneration++;
+                state.NextCollectionAt = task.AvailableAt;
+                state.Status = CollectionStateStatus.Pending;
+                db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                {
+                    OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
+                    AvailableAt = task.AvailableAt, CreatedAt = now,
+                });
+                task.Status = CollectionTaskStatus.Ready;
+            }
+            else
+            {
+                task.Status = CollectionTaskStatus.Failed;
+                task.FinishedAt = now;
+                state.Status = completion.Result == CollectionAttemptResult.ResourceNotFound
+                    ? CollectionStateStatus.Unavailable : CollectionStateStatus.Failed;
+                db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+            }
+            state.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionStateSnapshot?> GetStateAsync(ResourceKey resource, CollectionDefinitionId definition,
+        CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await using var db = CreateDbContext();
+        var row = await (from state in db.States.AsNoTracking()
+            join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+            where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
+                && state.DefinitionId == definition.Value
+            select new { state, item }).SingleOrDefaultAsync(cancellationToken);
+        return row is null ? null : new CollectionStateSnapshot(
+            new ResourceKey(row.item.Type, row.item.Provider, row.item.ResourceId), definition,
+            row.state.AppliedRevision, row.state.RequiredRevision, row.state.LastCollectedAt,
+            row.state.NextCollectionAt, row.state.Status);
+    }
+
+    public async Task<IReadOnlyList<CollectionAttemptEntity>> GetAttemptsAsync(Guid taskId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        return await db.Attempts.AsNoTracking().Where(x => x.TaskId == taskId)
+            .OrderBy(x => x.AttemptNumber).ToListAsync(cancellationToken);
+    }
+
+    private async Task ReclaimExpiredAsync(CollectionPlatformDbContext db, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var running = await db.Tasks.Where(x => x.Status == CollectionTaskStatus.Running
+            && x.LeaseExpiresAt != null).ToListAsync(cancellationToken);
+        var expired = running.Where(x => x.LeaseExpiresAt <= now).ToList();
+        foreach (var task in expired)
+        {
+            var attempt = await db.Attempts.SingleAsync(x => x.TaskId == task.TaskId
+                && x.AttemptNumber == task.AttemptCount, cancellationToken);
+            attempt.Result = CollectionAttemptResult.TransientFailure;
+            attempt.ErrorCode = "LeaseExpired";
+            attempt.FinishedAt = now;
+            task.Status = CollectionTaskStatus.Ready;
+            task.AvailableAt = now;
+            task.LeaseToken = null;
+            task.LeaseExpiresAt = null;
+            task.DispatchGeneration++;
+            task.UpdatedAt = now;
+            db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+            {
+                OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
+                AvailableAt = now, CreatedAt = now,
+            });
+        }
+        if (expired.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private CollectionPlatformDbContext CreateDbContext() => new(_dbOptions);
+}
