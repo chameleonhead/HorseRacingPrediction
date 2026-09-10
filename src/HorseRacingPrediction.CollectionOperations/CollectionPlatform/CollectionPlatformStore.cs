@@ -205,7 +205,9 @@ public sealed class CollectionPlatformStore
             return new LeasedCollectionTask(task.TaskId, task.RequestId,
                 new ResourceKey(resource.Type, resource.Provider, resource.ResourceId),
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
-                task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value);
+                task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
+                resource.EffectiveDate,
+                JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? []);
         }
         finally { _gate.Release(); }
     }

@@ -209,6 +209,9 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - 2026-09-11: CollectionPlatformStoreテストを8件へ拡張し、revision非影響Resource、未登録条件拒否、一時障害、UnexpectedPage、再検証を含め全件成功した。
 - 2026-09-11: 新管理API `/api/admin/collection/requests|tasks|states` と新Worker API `/api/internal/collection/tasks/{taskId}/acquire|complete` を追加し、通知契約を `{taskId, dispatchGeneration}` とした。Api起動時に初期6 definition を登録する。
 - 2026-09-11: `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore` は警告0・エラー0で成功した。
+- 2026-09-11: `ICollectionDefinitionHandler` registry、共通task executor、Realtime優先と連続Realtime上限によるBackground最低処理を持つlane allocatorを実装した。重複definitionとResourceType不一致は起動/解決時に拒否する。
+- 2026-09-11: 新taskから既存 `JraRaceCardCollectionWorkflow` / `JraRaceResultCollectionWorkflow` を再利用するRaceCard/Result handlerを追加した。結果未確定は失敗確定せずRetry、domain write errorはValidationFailureに分類する。
+- 2026-09-11: `dotnet build src/HorseRacingPrediction.Collector/HorseRacingPrediction.Collector.csproj --no-restore` は警告0・エラー0、CollectionPlatform関連テストは12件成功・失敗0件だった。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up
