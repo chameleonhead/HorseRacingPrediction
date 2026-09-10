@@ -6,6 +6,8 @@ public sealed class CollectionResourceEntity
     public ResourceType Type { get; set; }
     public string Provider { get; set; } = string.Empty;
     public string ResourceId { get; set; } = string.Empty;
+    public DateOnly? EffectiveDate { get; set; }
+    public string AttributesJson { get; set; } = "{}";
     public DateTimeOffset CreatedAt { get; set; }
 }
 

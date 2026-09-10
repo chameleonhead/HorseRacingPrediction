@@ -102,6 +102,73 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual("LeaseExpired", attempts[0].ErrorCode);
     }
 
+    [TestMethod]
+    public async Task RevisionImpact_UpdatesOnlyMatchingResources()
+    {
+        var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
+        var store = await CreateStoreAsync();
+        var other = new ResourceKey(ResourceType.Horse, "JRA", "H999");
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2009, 1, 1), attributes: new Dictionary<string, string> { ["layout"] = "legacy" });
+        var second = await store.RequestAsync(other, HorseProfile, 7, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2020, 1, 1), attributes: new Dictionary<string, string> { ["layout"] = "current" });
+        await CompleteAsync(store, first, now);
+        await CompleteAsync(store, second, now);
+
+        var affected = await store.AddRevisionAndApplyImpactAsync(HorseProfile, 8, "Legacy layout fix",
+            new(RevisionImpactScopeType.NamedCondition, "horse-profile:legacy-layout"),
+            [new LegacyLayoutCondition()], now.AddDays(1));
+
+        Assert.AreEqual(1, affected);
+        var stale = await store.GetStateAsync(Horse, HorseProfile);
+        var current = await store.GetStateAsync(other, HorseProfile);
+        Assert.AreEqual(CollectionStateStatus.Stale, stale!.Status);
+        Assert.AreEqual(8, stale.RequiredRevision);
+        Assert.AreEqual(CollectionStateStatus.Current, current!.Status);
+        Assert.AreEqual(7, current.RequiredRevision);
+    }
+
+    [TestMethod]
+    public async Task RevisionImpact_RejectsUnknownNamedCondition()
+    {
+        var store = await CreateStoreAsync();
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.AddRevisionAndApplyImpactAsync(
+            HorseProfile, 8, "Unknown selector", new(RevisionImpactScopeType.NamedCondition, "unknown"),
+            [], DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
+    public async Task TransientLocationFailure_DoesNotInvalidateLocation()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var id = await store.UpsertLocationAsync(Horse, HorseProfile, new("https://example.test/horse/H123"),
+            ResourceLocationSource.Discovered, now);
+
+        await store.RecordLocationOutcomeAsync(id, CollectionAttemptResult.TransientFailure, now.AddMinutes(1), "Http503");
+
+        var locations = await store.ResolveLocationsAsync(Horse, HorseProfile);
+        Assert.HasCount(1, locations);
+        Assert.AreEqual(ResourceLocationStatus.Unknown, locations[0].Status);
+    }
+
+    [TestMethod]
+    public async Task UnexpectedPage_MarksLocationSuspectAndSuccessVerifiesIt()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var id = await store.UpsertLocationAsync(Horse, HorseProfile, new("https://example.test/horse/H123"),
+            ResourceLocationSource.Generated, now);
+
+        await store.RecordLocationOutcomeAsync(id, CollectionAttemptResult.UnexpectedPage, now.AddMinutes(1));
+        Assert.AreEqual(ResourceLocationStatus.Suspect, (await store.ResolveLocationsAsync(Horse, HorseProfile))[0].Status);
+        await store.RecordLocationOutcomeAsync(id, CollectionAttemptResult.Succeeded, now.AddMinutes(2));
+        Assert.AreEqual(ResourceLocationStatus.Active, (await store.ResolveLocationsAsync(Horse, HorseProfile))[0].Status);
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = CreateStore();
@@ -114,4 +181,20 @@ public sealed class CollectionPlatformStoreTests
     {
         StateDirectory = _directory,
     }));
+
+    private static async Task CompleteAsync(CollectionPlatformStore store, CollectionRequestReceipt receipt,
+        DateTimeOffset now)
+    {
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded)));
+    }
+
+    private sealed class LegacyLayoutCondition : INamedRevisionImpactCondition
+    {
+        public string Name => "horse-profile:legacy-layout";
+        public bool Matches(RevisionResourceCandidate candidate)
+            => candidate.Attributes.GetValueOrDefault("layout") == "legacy";
+    }
 }

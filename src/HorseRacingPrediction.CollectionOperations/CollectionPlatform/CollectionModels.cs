@@ -109,3 +109,17 @@ public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result,
     string? ErrorMessage = null, Uri? RequestedUrl = null, Uri? FinalUrl = null,
     int? HttpStatusCode = null, string? PageIdentification = null,
     DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null);
+
+public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string ScopePayload);
+
+public sealed record RevisionResourceCandidate(ResourceKey Resource, DateOnly? EffectiveDate,
+    IReadOnlyDictionary<string, string> Attributes);
+
+public interface INamedRevisionImpactCondition
+{
+    string Name { get; }
+    bool Matches(RevisionResourceCandidate candidate);
+}
+
+public sealed record ResourceLocationCandidate(long LocationId, Uri Url, ResourceLocationSource Source,
+    ResourceLocationStatus Status, DateTimeOffset? LastVerifiedAt);

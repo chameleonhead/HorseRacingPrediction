@@ -204,6 +204,9 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - 2026-09-11: 同一 Resource + Definition の active task 一意性、同 revision の再取得、理由別 request 履歴、lease token/dispatch generation、transient retry、lease expiry 復旧、attempt 証跡、再起動復元を実装した。
 - 2026-09-11: `dotnet build src/HorseRacingPrediction.CollectionOperations/HorseRacingPrediction.CollectionOperations.csproj --no-restore` は警告0・エラー0で成功した。
 - 2026-09-11: `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-restore --filter FullyQualifiedName~CollectionPlatformStoreTests` は4件成功・失敗0件だった。初回はSQLiteのDateTimeOffset比較変換制約で3件失敗し、Running候補の期限比較をメモリ側へ限定して修正後に再実行した。
+- 2026-09-11: Revision impact の `All` / `SpecificResources` / `DateRange` / application登録済み `NamedCondition` 評価と対象ResourceだけのRequiredRevision/Stale更新を実装した。未登録NamedConditionはrevisionを有効化しない。
+- 2026-09-11: ResourceLocation の複数候補、Active優先、LastVerifiedAt、transient failureでは無効化しない規則、NotFound/UnexpectedPage/ValidationFailureのSuspect化、成功時の再検証を実装した。
+- 2026-09-11: CollectionPlatformStoreテストを8件へ拡張し、revision非影響Resource、未登録条件拒否、一時障害、UnexpectedPage、再検証を含め全件成功した。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

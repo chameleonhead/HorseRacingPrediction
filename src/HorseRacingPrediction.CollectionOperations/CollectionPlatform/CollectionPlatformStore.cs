@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -75,7 +76,8 @@ public sealed class CollectionPlatformStore
     public async Task<CollectionRequestReceipt> RequestAsync(ResourceKey resource, CollectionDefinitionId definition,
         int requestedRevision, CollectionReason reason, DateTimeOffset requestedAt,
         CollectionLane lane = CollectionLane.Normal, int priority = (int)CollectionPriority.Normal,
-        Uri? explicitUrl = null, string? batchId = null, CancellationToken cancellationToken = default)
+        Uri? explicitUrl = null, string? batchId = null, DateOnly? effectiveDate = null,
+        IReadOnlyDictionary<string, string>? attributes = null, CancellationToken cancellationToken = default)
     {
         resource = resource.Normalize();
         if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
@@ -98,10 +100,17 @@ public sealed class CollectionPlatformStore
             {
                 resourceEntity = new CollectionResourceEntity
                 {
-                    Type = resource.Type, Provider = resource.Provider, ResourceId = resource.Id, CreatedAt = requestedAt,
+                    Type = resource.Type, Provider = resource.Provider, ResourceId = resource.Id,
+                    EffectiveDate = effectiveDate, AttributesJson = JsonSerializer.Serialize(attributes ?? new Dictionary<string, string>()),
+                    CreatedAt = requestedAt,
                 };
                 db.Resources.Add(resourceEntity);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                resourceEntity.EffectiveDate ??= effectiveDate;
+                if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
             }
 
             var request = new CollectionRequestEntity
@@ -291,6 +300,166 @@ public sealed class CollectionPlatformStore
         return await db.Attempts.AsNoTracking().Where(x => x.TaskId == taskId)
             .OrderBy(x => x.AttemptNumber).ToListAsync(cancellationToken);
     }
+
+    public async Task<int> AddRevisionAndApplyImpactAsync(CollectionDefinitionId definition, int revision,
+        string description, RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (revision < 1) throw new ArgumentOutOfRangeException(nameof(revision));
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var definitionEntity = await db.Definitions.SingleAsync(x => x.DefinitionId == definition.Value, cancellationToken);
+            if (await db.Revisions.AnyAsync(x => x.DefinitionId == definition.Value && x.Revision == revision, cancellationToken))
+                throw new InvalidOperationException($"Revision {definition}:{revision} already exists.");
+            ValidateImpact(impact, namedConditions);
+            definitionEntity.CurrentRevision = Math.Max(definitionEntity.CurrentRevision, revision);
+            db.Revisions.Add(new CollectionRevisionEntity
+            {
+                DefinitionId = definition.Value, Revision = revision, Description = description,
+                MayRequireRecollection = true, CreatedAt = now,
+            });
+            db.RevisionImpacts.Add(new CollectionRevisionImpactEntity
+            {
+                DefinitionId = definition.Value, Revision = revision,
+                ScopeType = impact.ScopeType, ScopePayload = impact.ScopePayload,
+            });
+
+            var candidates = await (from state in db.States
+                join resource in db.Resources on state.ResourcePk equals resource.ResourcePk
+                where state.DefinitionId == definition.Value
+                select new { state, resource }).ToListAsync(cancellationToken);
+            var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
+            var affected = 0;
+            foreach (var item in candidates)
+            {
+                var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(item.resource.AttributesJson) ?? [];
+                var candidate = new RevisionResourceCandidate(
+                    new ResourceKey(item.resource.Type, item.resource.Provider, item.resource.ResourceId),
+                    item.resource.EffectiveDate, attributes);
+                if (!MatchesImpact(candidate, impact, conditions)) continue;
+                item.state.RequiredRevision = Math.Max(item.state.RequiredRevision, revision);
+                if (item.state.AppliedRevision < item.state.RequiredRevision)
+                    item.state.Status = CollectionStateStatus.Stale;
+                item.state.UpdatedAt = now;
+                affected++;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return affected;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<long> UpsertLocationAsync(ResourceKey resource, CollectionDefinitionId definition, Uri url,
+        ResourceLocationSource source, DateTimeOffset discoveredAt, CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var item = await db.Resources.SingleAsync(x => x.Type == resource.Type && x.Provider == resource.Provider
+                && x.ResourceId == resource.Id, cancellationToken);
+            var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == item.ResourcePk
+                && x.DefinitionId == definition.Value && x.Url == url.AbsoluteUri, cancellationToken);
+            if (location is null)
+            {
+                location = new ResourceLocationEntity
+                {
+                    ResourcePk = item.ResourcePk, DefinitionId = definition.Value, Url = url.AbsoluteUri,
+                    Source = source, Status = ResourceLocationStatus.Unknown, DiscoveredAt = discoveredAt,
+                };
+                db.Locations.Add(location);
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return location.LocationId;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<ResourceLocationCandidate>> ResolveLocationsAsync(ResourceKey resource,
+        CollectionDefinitionId definition, CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await using var db = CreateDbContext();
+        var rows = await (from location in db.Locations.AsNoTracking()
+            join item in db.Resources.AsNoTracking() on location.ResourcePk equals item.ResourcePk
+            where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
+                && location.DefinitionId == definition.Value && location.Status != ResourceLocationStatus.Invalid
+            select location).ToListAsync(cancellationToken);
+        return rows.OrderBy(x => x.Status == ResourceLocationStatus.Active ? 0 : x.Status == ResourceLocationStatus.Unknown ? 1 : 2)
+            .ThenByDescending(x => x.LastVerifiedAt)
+            .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url), x.Source, x.Status, x.LastVerifiedAt))
+            .ToList();
+    }
+
+    public async Task RecordLocationOutcomeAsync(long locationId, CollectionAttemptResult result, DateTimeOffset now,
+        string? errorCode = null, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var location = await db.Locations.SingleAsync(x => x.LocationId == locationId, cancellationToken);
+            switch (result)
+            {
+                case CollectionAttemptResult.Succeeded:
+                    location.Status = ResourceLocationStatus.Active;
+                    location.LastVerifiedAt = now;
+                    location.LastFailureCode = null;
+                    break;
+                case CollectionAttemptResult.ResourceNotFound:
+                case CollectionAttemptResult.UnexpectedPage:
+                case CollectionAttemptResult.ValidationFailure:
+                    location.Status = ResourceLocationStatus.Suspect;
+                    location.LastFailedAt = now;
+                    location.LastFailureCode = errorCode ?? result.ToString();
+                    break;
+                default:
+                    location.LastFailedAt = now;
+                    location.LastFailureCode = errorCode ?? result.ToString();
+                    break;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
+    {
+        if (impact.ScopeType == RevisionImpactScopeType.NamedCondition
+            && !namedConditions.Any(x => string.Equals(x.Name, impact.ScopePayload, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"Named revision condition '{impact.ScopePayload}' is not registered.");
+        if (impact.ScopeType is RevisionImpactScopeType.SpecificResources or RevisionImpactScopeType.DateRange
+            && string.IsNullOrWhiteSpace(impact.ScopePayload))
+            throw new InvalidOperationException("Revision impact payload is required.");
+    }
+
+    private static bool MatchesImpact(RevisionResourceCandidate candidate, RevisionImpact impact,
+        IReadOnlyDictionary<string, INamedRevisionImpactCondition> conditions)
+        => impact.ScopeType switch
+        {
+            RevisionImpactScopeType.All => true,
+            RevisionImpactScopeType.SpecificResources =>
+                (JsonSerializer.Deserialize<string[]>(impact.ScopePayload) ?? [])
+                    .Contains(candidate.Resource.Id, StringComparer.Ordinal),
+            RevisionImpactScopeType.DateRange => MatchesDateRange(candidate.EffectiveDate, impact.ScopePayload),
+            RevisionImpactScopeType.NamedCondition => conditions[impact.ScopePayload].Matches(candidate),
+            _ => false,
+        };
+
+    private static bool MatchesDateRange(DateOnly? date, string payload)
+    {
+        if (date is null) return false;
+        var range = JsonSerializer.Deserialize<DateRangeImpact>(payload)
+            ?? throw new InvalidOperationException("Date range impact is invalid.");
+        return date >= range.From && date <= range.To;
+    }
+
+    private sealed record DateRangeImpact(DateOnly From, DateOnly To);
 
     private async Task ReclaimExpiredAsync(CollectionPlatformDbContext db, DateTimeOffset now,
         CancellationToken cancellationToken)
