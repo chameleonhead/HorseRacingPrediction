@@ -9,7 +9,7 @@
 
 現行基盤は Api が SQLite 上の永続ジョブを正本として保持し、outbox と SQS を配送通知に限定し、Collector が lease token を取得して単一タスクを実行する。レース、開催日、馬プロフィール、馬履歴等の個別状態・再取得・優先度制御は実装済みだが、収集対象の識別、収集定義、抽出仕様 revision、現在状態、取得理由、実行、試行、URL 候補が一つの共通モデルになっていない。
 
-本変更は既存 Parser / Page / Workflow と Api の domain write を維持しながら、収集制御を Resource 中心へ段階移行する。調査結果は [current-state.md](current-state.md)、要求との差分は [gap-analysis.md](gap-analysis.md) を参照する。
+本変更は既存 Parser / Page / Workflow と Api の domain write を維持しながら、既存収集ジョブ実装を廃止し、収集制御を Resource 中心の新基盤へ置換する。旧 job store/runner/scheduler/API/UI を新基盤の互換層として残さない。調査結果は [current-state.md](current-state.md)、要求との差分は [gap-analysis.md](gap-analysis.md)、完全置換で解決すべき事項は [decisions/full-job-replacement.md](decisions/full-job-replacement.md) を参照する。
 
 ## Goals
 
@@ -30,12 +30,13 @@
 - Backfill と Realtime を別の状態正本へ分割すること。
 - Phase 1 ですべての ResourceType、管理 UI、Odds 券種を同時に完成させること。
 - JRA アクセス頻度、安全停止、既存認証・lease mutation guard を弱めること。
+- 既存収集ジョブの履歴を無検証で削除すること、または旧 Pending/Running work を黙って失うこと。
 
 ## Experience and interaction design
 
 管理 API/UI は Resource と CollectionDefinition を起点に、最新状態、次回予定、適用/要求 revision、直近 request/task/attempt、利用 location を表示する。手動再取得は `ManualRefresh` request を通常経路へ追加する。一括再取得はプレビュー後に複数 request へ展開する。
 
-既存ジョブ画面は移行中も残し、task に legacy job reference を保持する。完全移行後の旧画面・旧テーブル削除は別 change record とする。UI モックは Phase 9 実装前に情報設計として追加する。
+新管理画面を実装してから cutover し、切替後は既存ジョブ画面を実行入口として残さない。旧 job ID と履歴は read-only migration report/archive から必要期間だけ参照可能にし、新 task に legacy identity を持ち込まない。UI モックは管理 UI 実装 Phase の前に追加する。
 
 ## Navigation and relationships
 
@@ -61,11 +62,12 @@ Resource ──▶ CollectionState ◀────┘
 ## Documentation updates
 
 - `docs/26-collection-platform-design.md`: Resource 中心収集基盤の正本設計を新設する。
-- `docs/00-system-architecture.md`: Collector 制御の正本リンクと段階移行方針を追加する。
+- `docs/00-system-architecture.md`: Collector 制御の正本リンクと完全置換・controlled cutover 方針を追加する。
 - `docs/01-lambda-collector-architecture.md`: SQS は通知のみ、Api が新モデルの状態正本という境界を追記する。
 - `docs/11-automation-design.md`: policy/lane/priority scheduling の正本リンクを追加する。
-- `docs/22-collector-design.md`: 既存ジョブからの段階移行と未実装状態を追加する。
+- `docs/22-collector-design.md`: 既存ジョブを恒久互換層にせず完全置換する方針と未実装状態を追加する。
 - `docs/23-jra-scraping-redesign.md`: Navigator/Parser/Page の再利用境界を追加する。
+- `docs/changes/20260911_unified-collection-platform/decisions/full-job-replacement.md`: 既存 job 実装を完全置換する際の依存分離、migration、cutover、rollback、削除条件を記録する。
 
 ## Technical impact
 
@@ -87,7 +89,7 @@ Api 所有 collection DB に resource、definition、revision、impact、state�
 - Attempt unique: `(task_id, attempt_number)`。requested/final URL、HTTP status、redirect、page identification、error category を保持する。
 - Location は Resource + Definition に複数許容し、Task は location ID を固定せず実行直前に解決する。
 
-既存 `jobs`, `job_attempts`, `race_data_collection_statuses`, `agent_acquisition_statuses`, `result_day_collection_statuses` は一括削除しない。compatibility adapter と migration、dual-read 比較後に新モデルを正本化する。
+新基盤は旧 `jobs`, `job_attempts` と用途別 status table を実行時に参照しない独立 schema として作る。cutover 前に旧状態を Resource/State/Location/Batch へ意味的に変換し、旧 DB は read-only archive として保全する。cutover 後、旧 store/schema/API/UI/runner/scheduler の production code は同じ変更セット内で削除する。旧 DB/queue 実体の削除は retention 後の破壊操作として別途承認を得る。
 
 ### State transitions
 
@@ -119,15 +121,16 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 
 ## Decisions
 
-- 採用: 既存 Api job controller を拡張し、別収集サービスを作らない。
+- 採用: Api が controller、Collector が worker、SQS が通知という配置は維持するが、既存 job controller 実装は拡張せず新モデルで置換する。
 - 採用: 履歴と最新状態 Projection を分ける。
 - 採用: revision impact は宣言的 scope + 名前付き selector とする。
 - 採用: active task のみ一意にし、terminal task の履歴重複を許容する。
 - 採用: lane quota + weighted fairness + aging。
-- 採用: Strangler migration で definition 単位に切り替える。
+- 採用: 検証環境で shadow migration/parity 確認後、本番は maintenance window で一回の controlled cutover を行う。新旧 scheduler/worker を本番で同時稼働させない。
 - 不採用: `AgentJobType` を ResourceType とみなす。対象、理由、集約、処理が混在するため。
 - 不採用: URL/`SourceIdentity` を canonical Resource ID にする。
 - 不採用: current revision 未満を一律 stale にする。
+- 不採用: 旧 job 実装を compatibility adapter で包んで恒久利用する。
 
 ## Acceptance criteria
 
@@ -161,25 +164,40 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - Resource/status、lane、priority、retry、definition/revision、batch、impact の進捗を照会できる。
 - site rate limit、Retry-After、pause/hold、mutation lease guard に回帰がない。
 
+### Replacement and cutover
+
+- `PredictionExecution` とその enqueue/acquire/complete/requeue が収集状態ストアから分離され、Predictor に回帰がない。
+- 旧成功状態、URL、日/batch進捗、Pending/Retryable work の migration report が件数・変換先・除外理由を示し、Running lease は drain または明示的 recovery request になる。
+- 新旧 notification version の混在を拒否し、Api/Collector/Lambda/SQS/DLQ/Terraform/local runner の契約が同時に切り替わる。
+- cutover 手順と rollback rehearsal が隔離環境で成功し、旧 planning/worker と新 planning/worker が同一 Resource を同時実行しない。
+- 新基盤で pause/hold/cancel、lease/heartbeat/expiry、watchdog、DLQ、failure notification、deadline、rate limit、mutation guard が検証される。
+- 旧 admin/internal endpoints と UI の全 caller が新 API/UI へ移行し、旧 endpoint は削除または明示的 `410 Gone` になる。
+- production code から旧 job classes/store/runner/scheduler/status tables の参照が消え、主要旧 symbol の CodeGraph caller がゼロになる。
+- 旧 DB/queue の物理削除は自動実行せず、backup、retention、正確な対象、別途承認を要求する。
+
 ## Delivery plan
 
-各 Phase は model/schema、compatibility、worker、tests、documentation を検証可能なコミットに分ける。
+各 Phase は model/schema、worker、tests、documentation を検証可能なコミットに分ける。完全置換の詳細ゲートは [full-job-replacement.md](decisions/full-job-replacement.md) に従う。
 
-1. Core model、永続化、状態遷移、revision registry、legacy mapping、read-only projection。既存実行経路は変えない。
-2. 単一 RaceCard/Result を adapter 経由で request/task/attempt/state に記録する。
-3. ResourceLocation、resolver、page identification、direct/fallback/discovery を Race に導入する。
-4. Horse/Jockey/Trainer と ResourceReference discovery を統合する。
-5. 日/月 batch を projection として新基盤へ移し、期間 discovery から Race request を展開する。
-6. schedule policy、lane、dynamic priority、fair allocation、aging を有効化する。
-7. RaceOdds parser/write model/snapshot と反復収集を実装する。
-8. revision impact、部分再取得、進捗 projection を実装する。
-9. 手動/一括再取得 API/UI と監視画面を実装する。
-10. definition ごとの比較合格後、新 state を正本化する。旧 table 削除は別変更とする。
+1. Boundary preparation: Predictor job を収集 store から分離し、新 CollectionOperations 契約/namespace と schema ownership を確定する。
+2. New core: Resource/Definition/Revision/State/Request/Task/Attempt、active guard、outbox、lease、安全制御を旧 store 非依存で実装する。
+3. Worker: handler registry と単一 RaceCard/Result handler を作り、既存 scraping workflow/domain write を新 task runner から呼ぶ。
+4. Location: ResourceLocation、resolver、page identification、direct/fallback/discovery を Race に導入する。
+5. Subjects: Horse/Jockey/Trainer と ResourceReference discovery を新 handler へ統合する。
+6. Backfill: 新 Batch/Discovery task で期間から Race request を展開し、穴と再開を検証する。
+7. Scheduling: due-state policy、lane、dynamic priority、fair allocation、aging を実装する。
+8. Odds: RaceOdds parser/write model/snapshot と反復収集を実装する。
+9. Revision/operations: impact、部分再取得、手動/一括 API/UI、監視 projection を実装する。
+10. Migration tooling: 旧 DB inventory/backup、意味的変換、未完了 work conversion、report、idempotent dry-run/execute を実装する。
+11. Cutover rehearsal: 隔離環境で旧停止、drain、migration、新契約切替、smoke、rollback を反復し全 gate を満たす。
+12. Production cutover: 明示承認された maintenance window で切り替え、新基盤の smoke/監視後に planning を有効化する。
+13. Removal: 旧 store/entities/job types/runner/scheduler/endpoints/UI/config/tests を repository から削除し、CodeGraph と build/test で参照ゼロを確認する。旧 DB/queue 実体は削除しない。
 
 ## Verification record
 
 - 2026-09-11: `.codegraph/` がないため `rg` と対象ファイルの直接確認で調査した。
 - 2026-09-11: production code は変更していない。本文書と canonical documentation のみ Proposed として作成・更新した。
+- 2026-09-11: 利用者指示により compatibility adapter を用いた段階移行案を撤回し、既存収集ジョブ実装の完全置換、予想ジョブ分離、意味的 migration、controlled cutover、rollback、旧コード削除を計画へ追加した。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

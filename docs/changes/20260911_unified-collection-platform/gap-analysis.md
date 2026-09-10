@@ -20,19 +20,20 @@
 | Manual/bulk | 個別 endpoint | 共通 preview/selector/expansion がない | 8-9 |
 | Monitoring | job/day/subject | Resource/revision/lane/batch projection がない | 1, 8-9 |
 
-## Migration risks and controls
+## Replacement risks and controls
 
-- 既存 job ID/API/UI を即時置換せず legacy reference と compatibility read を先に入れる。
+- 既存 job ID/API/UI の呼び出し元を inventory 化し、新 API/UI へ切替後に旧実装を削除する。旧 identity は新 task model に持ち込まず archive report に限定する。
 - `jobs` unique を外す前に Resource + Definition active guard を transactionally 保証する。
 - Race scraping/domain ID と name-based subject ID は一括統合せず provider identity alias を追加し、曖昧なものは unresolved にする。
 - domain write 成功前に state を Current にせず、write receipt/outbox と projection 更新順を規定する。
 - dynamic priority は Ready/RetryWaiting のみ更新し running lease を奪わない。
 - Odds は site-wide rate limit、jitter、Retry-After、kill switch、最大観測回数を release gate に含める。
 
-## Compatibility strategy
+## Full replacement strategy
 
-1. 新 table と read-only projection を追加し既存実行を変えない。
-2. legacy job 作成時に対応 request/task/state を同 transaction で記録する dual-record adapter を入れる。
-3. definition ごとに新 orchestrator を feature flag で有効化し、新旧件数/状態を比較する。
-4. parity、restart、duplicate、failure injection、site safety が合格した definition だけ新 state を正本化する。
-5. 旧 status table は compatibility projection から供給し、別変更で削除する。
+1. Predictor work を旧 collection store から分離する。
+2. 旧 store に依存しない新 schema/controller/worker/scheduler/API/UI を完成させる。
+3. 隔離環境で旧 DB の dry-run migration と shadow parity を行うが、新旧 worker は同じ Resource を実行しない。
+4. maintenance window で旧 planning を止め、lease drain、backup、未完了 work conversion、新 notification contract への切替を行う。
+5. smoke test 後に新 planning を有効化し、rollback window を経て旧 production code を同じ変更セット内で削除する。
+6. 旧 DB/queue は read-only retention 後、正確な対象と別途承認を得て削除する。
