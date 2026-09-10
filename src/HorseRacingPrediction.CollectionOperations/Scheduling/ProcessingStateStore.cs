@@ -404,6 +404,22 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task FailJobFromDeadLetterQueueAsync(
+        string jobType,
+        string deduplicationKey,
+        string? error,
+        CancellationToken cancellationToken = default)
+    {
+        await UpdateJobStatusAsync(
+            jobType,
+            deduplicationKey,
+            AgentJobStatus.Failed,
+            null,
+            error,
+            cancellationToken,
+            preserveTerminalState: true).ConfigureAwait(false);
+    }
+
     public Task<LeasedCollectionTask?> AcquireCollectionTaskAsync(
         string jobType,
         string deduplicationKey,
@@ -1805,7 +1821,8 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
         AgentJobStatus status,
         DateTimeOffset? availableAt,
         string? error,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool preserveTerminalState = false)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -1817,6 +1834,15 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
                     cancellationToken)
                 .ConfigureAwait(false);
             if (job is null || job.IsHeld)
+            {
+                return;
+            }
+
+            if (preserveTerminalState
+                && job.Status is AgentJobStatus.Succeeded
+                    or AgentJobStatus.Failed
+                    or AgentJobStatus.Cancelled
+                    or AgentJobStatus.DeadLetter)
             {
                 return;
             }

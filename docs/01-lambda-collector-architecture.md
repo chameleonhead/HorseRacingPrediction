@@ -150,6 +150,7 @@ public interface ICollectionWorker
 - reserved concurrency は当初 `1` とし、JRA への負荷と現行 `MaxConcurrentJobs = 1` を維持する
 - Lambda timeout は15分、Workerの内部deadlineは14分、現行タスクリースの既定値は30分とする
 - 内部deadlineとジョブ単位のタイムアウトは失敗として確定し、失敗試行・RequestIdと収集全体の停止を同時に保存する。自動再投入せず、Lambdaにも失敗を返す。明示的な全体再開まで後続の配送・新規リースを拒否する。個別保留は単一ジョブのキャンセル要求として扱い、失敗や全体停止と区別する。[設計と検証](changes/20260908_collection-timeout-hold/README.md)を参照。
+- Lambda が API へ具体的な失敗理由を報告できないまま異常終了し、通知が DLQ へ移った場合、API はジョブを失敗へ確定して「結果を記録できないまま異常終了した」こと、詳細確認先、原因解消後のリランを管理画面で案内する。SQS の DLQ メッセージは Lambda の例外本文を含まないため原因を推測せず、Collector が既に保存した具体的なエラーは汎用案内で上書きしない。表示仕様と検証結果は [Lambda 異常終了時のエラー案内を分かりやすくする](changes/20260910_clear-lambda-dlq-error/README.md) を参照する。
 - APIの5分ごとの監視は、対象ジョブのリース期限が存在し、現在時刻以下の場合だけ再送する。有効なリースと期限未設定のジョブは変更しない。リース不一致による状態更新拒否はAPIの警告ログへ記録する。
 - `/tmp` はブラウザーの一時ファイル専用とし、状態の正本にはしない
 - API キーなどは Secrets Manager または SSM Parameter Store から注入し、イメージや設定ファイルへ含めない

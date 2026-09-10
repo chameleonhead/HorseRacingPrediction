@@ -37,10 +37,56 @@ public sealed class CollectionDeadLetterQueueReconcilerTests
 
             var detail = await store.GetJobDetailAsync("RaceCardCollection:task-1");
             Assert.AreEqual(AgentJobStatus.Failed, detail!.Status);
+            Assert.AreEqual(
+                "収集処理が、結果を記録できないまま異常終了しました。原因の詳細は Lambda の実行ログで確認してください。原因を解消した後、このジョブをリランしてください。",
+                detail.LastError);
             CollectionAssert.AreEqual(new[] { "receipt-1" }, queue.DeletedReceiptHandles.ToArray());
             Assert.AreEqual(1, maintenance.DlqFailureCount);
             Assert.IsFalse(maintenance.IsActive);
             Assert.AreEqual(0, alertPublisher.Calls.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public async Task RunOnceAsync_PreservesConcreteErrorReportedByCollector()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "collection-dlq-reconciler-tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var processingOptions = Options.Create(new AgentProcessingOptions { StateDirectory = directory });
+            var store = new ProcessingStateStore(processingOptions, NullLogger<ProcessingStateStore>.Instance);
+            var now = DateTimeOffset.UtcNow;
+            await store.ScheduleJobAsync("RaceCardCollection", "task-with-error", "{}", now);
+            await store.FailJobAsync(
+                "RaceCardCollection",
+                "task-with-error",
+                "JRAページの解析に失敗しました。 RequestId=request-123");
+
+            var notification = new CollectionTaskNotification(
+                "RaceCardCollection:task-with-error",
+                "RaceCardCollection",
+                "task-with-error");
+            var queue = new FakeQueue([new DeadLetterQueueMessage("receipt-with-error", JsonSerializer.Serialize(notification))]);
+            var maintenance = new CollectionMaintenanceState();
+            var reconciler = new CollectionDeadLetterQueueReconciler(
+                store,
+                queue,
+                maintenance,
+                new FakeAlertPublisher(),
+                Options.Create(new CollectionDeadLetterQueueReconcilerOptions { ConsecutiveFailureThreshold = 3 }),
+                NullLogger<CollectionDeadLetterQueueReconciler>.Instance);
+
+            await reconciler.RunOnceAsync(CancellationToken.None);
+
+            var detail = await store.GetJobDetailAsync("RaceCardCollection:task-with-error");
+            Assert.AreEqual(AgentJobStatus.Failed, detail!.Status);
+            Assert.AreEqual("JRAページの解析に失敗しました。 RequestId=request-123", detail.LastError);
+            CollectionAssert.AreEqual(new[] { "receipt-with-error" }, queue.DeletedReceiptHandles.ToArray());
+            Assert.AreEqual(1, maintenance.DlqFailureCount);
         }
         finally
         {

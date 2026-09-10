@@ -91,10 +91,10 @@ public sealed class CollectionDeadLetterQueueReconciler : BackgroundService
                 var notification = JsonSerializer.Deserialize<CollectionTaskNotification>(message.Body, JsonOptions);
                 if (notification is not null)
                 {
-                    await _store.FailJobAsync(
+                    await _store.FailJobFromDeadLetterQueueAsync(
                         notification.JobType,
                         notification.DeduplicationKey,
-                        "Message moved to the collection dead-letter queue (Lambda execution failed).",
+                        "収集処理が、結果を記録できないまま異常終了しました。原因の詳細は Lambda の実行ログで確認してください。原因を解消した後、このジョブをリランしてください。",
                         cancellationToken).ConfigureAwait(false);
                     _maintenance.RecordDlqFailure();
                     failedCount++;
