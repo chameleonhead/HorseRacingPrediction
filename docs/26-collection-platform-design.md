@@ -33,4 +33,5 @@
 9. URL 一時障害は location の恒久無効を意味しない。
 10. domain write 成功前に applied revision と Current 状態を進めない。
 11. 旧 job store/runner/scheduler/API/UI を新基盤の恒久互換層として残さない。
-12. 旧状態は意味的に移行し、未完了 work と監査履歴を黙って破棄しない。
+12. 旧 job data/key は移行せず cutover 時に削除し、新状態と未完了 work は Domain Data と Discovery から再構築する。
+13. 旧 main SQS queue と旧 DLQ は新 queue の smoke test 後、同じ cutover 内で削除する。

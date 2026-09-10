@@ -22,7 +22,7 @@
 
 ## Replacement risks and controls
 
-- 既存 job ID/API/UI の呼び出し元を inventory 化し、新 API/UI へ切替後に旧実装を削除する。旧 identity は新 task model に持ち込まず archive report に限定する。
+- 既存 job ID/API/UI の呼び出し元を inventory 化し、新 API/UI へ切替後に旧実装を削除する。旧 job ID/deduplication key と履歴は新 task model に持ち込まず、切替時に削除する。
 - `jobs` unique を外す前に Resource + Definition active guard を transactionally 保証する。
 - Race scraping/domain ID と name-based subject ID は一括統合せず provider identity alias を追加し、曖昧なものは unresolved にする。
 - domain write 成功前に state を Current にせず、write receipt/outbox と projection 更新順を規定する。
@@ -33,7 +33,7 @@
 
 1. Predictor work を旧 collection store から分離する。
 2. 旧 store に依存しない新 schema/controller/worker/scheduler/API/UI を完成させる。
-3. 隔離環境で旧 DB の dry-run migration と shadow parity を行うが、新旧 worker は同じ Resource を実行しない。
-4. maintenance window で旧 planning を止め、lease drain、backup、未完了 work conversion、新 notification contract への切替を行う。
-5. smoke test 後に新 planning を有効化し、rollback window を経て旧 production code を同じ変更セット内で削除する。
-6. 旧 DB/queue は read-only retention 後、正確な対象と別途承認を得て削除する。
+3. 隔離環境で Domain Data から新初期状態を構築し、新旧 worker が同じ Resource を実行しないことを確認する。
+4. maintenance window で旧 planning を止め、Running lease を drain し、新 notification contract へ一括切替する。
+5. smoke test 成功後、同じ cutover 内で旧 job DB/table、旧 main queue、旧 DLQ、旧 job keys を削除する。
+6. 新 Scheduler/Discovery で不足 Resource と未完了範囲を新 request として再生成し、新 planning を有効化する。

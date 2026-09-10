@@ -30,13 +30,13 @@
 - Backfill と Realtime を別の状態正本へ分割すること。
 - Phase 1 ですべての ResourceType、管理 UI、Odds 券種を同時に完成させること。
 - JRA アクセス頻度、安全停止、既存認証・lease mutation guard を弱めること。
-- 既存収集ジョブの履歴を無検証で削除すること、または旧 Pending/Running work を黙って失うこと。
+- 競馬の Domain Data、source citation、認証情報を旧収集ジョブデータと一緒に削除すること。
 
 ## Experience and interaction design
 
 管理 API/UI は Resource と CollectionDefinition を起点に、最新状態、次回予定、適用/要求 revision、直近 request/task/attempt、利用 location を表示する。手動再取得は `ManualRefresh` request を通常経路へ追加する。一括再取得はプレビュー後に複数 request へ展開する。
 
-新管理画面を実装してから cutover し、切替後は既存ジョブ画面を実行入口として残さない。旧 job ID と履歴は read-only migration report/archive から必要期間だけ参照可能にし、新 task に legacy identity を持ち込まない。UI モックは管理 UI 実装 Phase の前に追加する。
+新管理画面を実装してから cutover し、切替後は既存ジョブ画面を残さない。旧 job ID、deduplication key、履歴は新 task に移行せず、旧 job data とともに切替作業内で削除する。UI モックは管理 UI 実装 Phase の前に追加する。
 
 ## Navigation and relationships
 
@@ -89,7 +89,7 @@ Api 所有 collection DB に resource、definition、revision、impact、state�
 - Attempt unique: `(task_id, attempt_number)`。requested/final URL、HTTP status、redirect、page identification、error category を保持する。
 - Location は Resource + Definition に複数許容し、Task は location ID を固定せず実行直前に解決する。
 
-新基盤は旧 `jobs`, `job_attempts` と用途別 status table を実行時に参照しない独立 schema として作る。cutover 前に旧状態を Resource/State/Location/Batch へ意味的に変換し、旧 DB は read-only archive として保全する。cutover 後、旧 store/schema/API/UI/runner/scheduler の production code は同じ変更セット内で削除する。旧 DB/queue 実体の削除は retention 後の破壊操作として別途承認を得る。
+新基盤は旧 `jobs`, `job_attempts` と用途別 status table を参照しない独立 schema とする。新しい初期 Resource/State/Location は既存 Domain Data と source citation から構築し、旧 job/attempt/status/outbox/audit/marker と job ID/deduplication key は移行しない。新基盤の smoke test 成功後、同じ cutover 内で旧 job DB/table、旧 main SQS queue、旧 DLQ を削除する。旧 store/schema/API/UI/runner/scheduler の production code も同じ変更セット内で削除する。
 
 ### State transitions
 
@@ -167,13 +167,13 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 ### Replacement and cutover
 
 - `PredictionExecution` とその enqueue/acquire/complete/requeue が収集状態ストアから分離され、Predictor に回帰がない。
-- 旧成功状態、URL、日/batch進捗、Pending/Retryable work の migration report が件数・変換先・除外理由を示し、Running lease は drain または明示的 recovery request になる。
+- 新初期状態が Domain Data/source citation から再構築され、旧 Pending/Retryable work は新 Scheduler/Discovery により新 request として再生成される。旧 Running lease は削除前に drain される。
 - 新旧 notification version の混在を拒否し、Api/Collector/Lambda/SQS/DLQ/Terraform/local runner の契約が同時に切り替わる。
-- cutover 手順と rollback rehearsal が隔離環境で成功し、旧 planning/worker と新 planning/worker が同一 Resource を同時実行しない。
+- cutover 手順と削除前までの rollback rehearsal が隔離環境で成功し、旧 planning/worker と新 planning/worker が同一 Resource を同時実行しない。
 - 新基盤で pause/hold/cancel、lease/heartbeat/expiry、watchdog、DLQ、failure notification、deadline、rate limit、mutation guard が検証される。
 - 旧 admin/internal endpoints と UI の全 caller が新 API/UI へ移行し、旧 endpoint は削除または明示的 `410 Gone` になる。
 - production code から旧 job classes/store/runner/scheduler/status tables の参照が消え、主要旧 symbol の CodeGraph caller がゼロになる。
-- 旧 DB/queue の物理削除は自動実行せず、backup、retention、正確な対象、別途承認を要求する。
+- smoke test 後に旧 job DB/table、旧 main queue、旧 DLQ、旧 job ID/deduplication key が同じ cutover 内で削除され、新 queue と Domain Data が保持される。
 
 ## Delivery plan
 
@@ -188,16 +188,17 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 7. Scheduling: due-state policy、lane、dynamic priority、fair allocation、aging を実装する。
 8. Odds: RaceOdds parser/write model/snapshot と反復収集を実装する。
 9. Revision/operations: impact、部分再取得、手動/一括 API/UI、監視 projection を実装する。
-10. Migration tooling: 旧 DB inventory/backup、意味的変換、未完了 work conversion、report、idempotent dry-run/execute を実装する。
-11. Cutover rehearsal: 隔離環境で旧停止、drain、migration、新契約切替、smoke、rollback を反復し全 gate を満たす。
-12. Production cutover: 明示承認された maintenance window で切り替え、新基盤の smoke/監視後に planning を有効化する。
-13. Removal: 旧 store/entities/job types/runner/scheduler/endpoints/UI/config/tests を repository から削除し、CodeGraph と build/test で参照ゼロを確認する。旧 DB/queue 実体は削除しない。
+10. Initialization tooling: Domain Data/source citation から新 Resource/State/Location を構築し、未完了範囲を新 request として再生成する idempotent dry-run/execute を実装する。
+11. Cutover rehearsal: 隔離環境で旧停止、drain、新初期化、新契約切替、smoke、旧データ/旧queue削除、削除前rollbackを反復し全 gate を満たす。
+12. Production cutover: 承認済み maintenance window で一括切替し、smoke 成功後に旧 job DB/table と旧 main queue/DLQ を削除してから新 planning を有効化する。
+13. Removal: 旧 store/entities/job types/runner/scheduler/endpoints/UI/config/tests を repository から削除し、CodeGraph、build/test、AWS/DB inventory で残存ゼロを確認する。
 
 ## Verification record
 
 - 2026-09-11: `.codegraph/` がないため `rg` と対象ファイルの直接確認で調査した。
 - 2026-09-11: production code は変更していない。本文書と canonical documentation のみ Proposed として作成・更新した。
 - 2026-09-11: 利用者指示により compatibility adapter を用いた段階移行案を撤回し、既存収集ジョブ実装の完全置換、予想ジョブ分離、意味的 migration、controlled cutover、rollback、旧コード削除を計画へ追加した。
+- 2026-09-11: 利用者指示により一括 cutover とし、旧収集ジョブデータ、旧 job ID/deduplication key、旧 main SQS queue、旧 DLQ を同じ切替作業内で削除する方針へ変更した。Domain Data、source citation、認証情報は削除対象外とした。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

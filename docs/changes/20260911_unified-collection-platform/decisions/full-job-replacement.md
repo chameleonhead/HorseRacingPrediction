@@ -20,13 +20,13 @@
 
 CollectionOperations に新しい domain-neutral collection contracts/store を置き、Api が永続化・計画・管理 API を、Collector が handler 実行を所有する。Api が Collector 実装を参照しない境界を維持し、現在 `HorseRacingPrediction.Collector.Scheduling` namespace にある共有契約を新 namespace へ移す。
 
-### 3. 旧データの意味的移行
+### 3. 新基盤の初期状態構築
 
-旧 job row を新 task row へ機械的に複製しない。domain data、source citation、race/subject/day status、成功 attempt を基に Resource、State、Location、Batch progress を再構築する。旧 Pending/Ready/Retryable/Running job は cutover 時に停止・lease expiry 確認後、理由付き CollectionRequest へ変換する。変換不能は件数と理由を migration report に残し、黙って破棄しない。
+旧 job row、attempt、outbox、用途別 status、job ID、deduplication key は新 task row へ移行しない。新基盤の Resource/State/Location は保存済み Domain Data と source citation から再構築し、不足分と未完了 work は新 Scheduler/Discovery が新しい CollectionRequest として再生成する。旧 Pending/Ready/Retryable job は引き継がず、Running job だけは cutover 前に drain または期限切れまで待機して書き込み競合を防ぐ。
 
-### 4. 履歴・監査の保全
+### 4. 旧ジョブデータの削除
 
-旧 DB は cutover 前に整合性確認とバックアップを行い、read-only archive として retention 期間を定める。新 UI/API から旧 job ID を実行対象として扱わず、必要な監査参照だけ archive report で可能にする。個人情報・認証情報・payload secret が archive にないことも確認する。
+cutover 前に旧 DB の状態別件数、Running lease、outbox、SQS/DLQ 件数を検証記録へ集計するが、旧 job row、attempt、audit、marker、outbox、failure notification、用途別 status、job ID、deduplication key を保持・archive・migration しない。新基盤の smoke test が成功した同じ maintenance window 内で旧 table または旧 job DB を削除する。競馬の Domain Data、source citation、認証情報は削除対象外とする。
 
 ### 5. Active task と冪等性
 
@@ -38,7 +38,7 @@ CollectionOperations に新しい domain-neutral collection contracts/store を�
 
 ### 7. Queue cutover
 
-maintenance mode で新規計画を停止し、旧 Running lease を drain する。旧 outbox/SQS/DLQ の件数を照合し、未完了 work を request に変換してから旧通知を隔離する。キュー purge は不可逆操作なので、実件数・変換結果・バックアップ・対象 ARN/URL を確認し、実施時に改めて利用者承認を得る。可能なら新 queue へ切り替えて旧 queue を retention 後に削除する。
+maintenance mode で新規計画を停止し、旧 Running lease を drain する。新 notification contract 専用の新 SQS/DLQ queue を先に作成し、Api/Collector/Lambda を新 queue へ切り替える。smoke test 成功後、同じ maintenance window 内で旧 main queue と旧 DLQ を purge ではなく queue 自体の削除により廃止する。実行前に Terraform state と AWS から旧/新 queue の ARN/URL を照合し、新 queue を誤削除しない。利用者は本 change record の承認により、旧収集ジョブデータと旧 queue のこの削除を明示的に承認する。
 
 ### 8. Scheduler と公平性の置換
 
@@ -62,11 +62,11 @@ pause/resume、per-task hold/cancel、lease heartbeat/expiry、dispatch generati
 
 ### 13. Cutover と rollback
 
-本番 cutover は `prepare -> stop old planning -> drain -> backup -> migrate -> verify -> switch Api/Worker/queue -> smoke test -> enable planning` の順とする。rollback は新規収集を停止して新 DB/queue を保存し、旧 image/DB/queue を再有効化できる時点までに限定する。新基盤で domain write が始まった後は、domain data を巻き戻さず、旧基盤へ再投入する request を生成する。
+本番 cutover は `prepare new DB/queue -> stop old planning -> drain running leases -> build initial state from Domain Data -> switch Api/Worker/Lambda -> smoke test -> delete old job data and old queues -> enable new planning` の順とする。rollback 可能なのは旧データ・旧queue削除前までである。削除後は旧基盤へ戻さず、新基盤を修正して Resource state から再開する。Domain Data は巻き戻さない。
 
 ### 14. 削除完了条件
 
-旧 job classes/tables/endpoints/UI/configuration/tests が production dependency graph と repository からなくなり、`AgentJobType`, `ProcessingStateStore`, `IProcessingStateStore`, `ProcessingJobEntity`, `CollectionExecutionService` の CodeGraph caller がゼロになることを確認する。旧 DB/queue の運用削除は retention と別途の破壊操作承認後に行う。
+旧 job classes/tables/endpoints/UI/configuration/tests が production dependency graph と repository からなくなり、`AgentJobType`, `ProcessingStateStore`, `IProcessingStateStore`, `ProcessingJobEntity`, `CollectionExecutionService` の CodeGraph caller がゼロになることを確認する。AWS 上に旧 main queue/DLQ が存在せず、旧 job DB/table と旧 job ID/deduplication key が残っていないことを確認する。
 
 ## Rejected alternative
 
