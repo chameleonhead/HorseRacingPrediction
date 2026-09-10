@@ -207,6 +207,8 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - 2026-09-11: Revision impact の `All` / `SpecificResources` / `DateRange` / application登録済み `NamedCondition` 評価と対象ResourceだけのRequiredRevision/Stale更新を実装した。未登録NamedConditionはrevisionを有効化しない。
 - 2026-09-11: ResourceLocation の複数候補、Active優先、LastVerifiedAt、transient failureでは無効化しない規則、NotFound/UnexpectedPage/ValidationFailureのSuspect化、成功時の再検証を実装した。
 - 2026-09-11: CollectionPlatformStoreテストを8件へ拡張し、revision非影響Resource、未登録条件拒否、一時障害、UnexpectedPage、再検証を含め全件成功した。
+- 2026-09-11: 新管理API `/api/admin/collection/requests|tasks|states` と新Worker API `/api/internal/collection/tasks/{taskId}/acquire|complete` を追加し、通知契約を `{taskId, dispatchGeneration}` とした。Api起動時に初期6 definition を登録する。
+- 2026-09-11: `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore` は警告0・エラー0で成功した。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

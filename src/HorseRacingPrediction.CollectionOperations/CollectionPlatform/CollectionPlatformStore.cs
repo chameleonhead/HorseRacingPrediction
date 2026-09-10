@@ -428,6 +428,47 @@ public sealed class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<PendingCollectionDispatch>> GetPendingDispatchesAsync(DateTimeOffset now, int maxCount,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var pending = await db.DispatchOutbox.AsNoTracking().Where(x => x.DispatchedAt == null)
+            .OrderBy(x => x.AvailableAt).ToListAsync(cancellationToken);
+        return pending.Where(x => x.AvailableAt <= now).Take(Math.Max(1, maxCount))
+            .Select(x => new PendingCollectionDispatch(x.OutboxId,
+                new CollectionTaskNotification(x.TaskId, x.DispatchGeneration))).ToList();
+    }
+
+    public async Task MarkDispatchedAsync(Guid outboxId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var row = await db.DispatchOutbox.SingleAsync(x => x.OutboxId == outboxId, cancellationToken);
+            row.DispatchedAt ??= now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<CollectionTaskSummary>> GetTasksAsync(CollectionTaskStatus? status = null,
+        int limit = 200, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var query = from task in db.Tasks.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+            select new { task, resource };
+        if (status.HasValue) query = query.Where(x => x.task.Status == status.Value);
+        var rows = await query.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.AvailableAt)
+            .Take(Math.Clamp(limit, 1, 1000)).ToListAsync(cancellationToken);
+        return rows.Select(x => new CollectionTaskSummary(x.task.TaskId,
+            new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+            new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
+            x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
+    }
+
     private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
     {
         if (impact.ScopeType == RevisionImpactScopeType.NamedCondition

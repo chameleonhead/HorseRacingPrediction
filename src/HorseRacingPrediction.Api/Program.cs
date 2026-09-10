@@ -11,6 +11,7 @@ using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Collector.Scheduling;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -103,6 +104,8 @@ builder.Services.AddSingleton<HorseRaceHistoryLocator>();
 builder.Services.AddSingleton<JockeyRaceHistoryLocator>();
 builder.Services.AddSingleton<JraSubjectProfileLocator>();
 builder.Services.AddRacePredictor();
+builder.Services.Configure<CollectionPlatformOptions>(builder.Configuration.GetSection(CollectionPlatformOptions.SectionName));
+builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
@@ -176,6 +179,14 @@ builder.Services.AddEventFlow(options =>
 });
 
 var app = builder.Build();
+
+var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore>();
+await collectionPlatform.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
@@ -286,5 +297,6 @@ app.MapRaceDayReacquisitionEndpoints();
 app.MapSubjectCollectionEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
+app.MapCollectionPlatformEndpoints();
 
 app.Run();
