@@ -22,15 +22,29 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
             completion = await handlers.Resolve(task.Definition, task.Resource.Type)
                 .CollectAsync(task, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await CompleteAsync(notification.TaskId, task.LeaseToken,
+                new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
+                    "Collector execution was cancelled or reached its deadline.",
+                    RetryAt: DateTimeOffset.UtcNow.AddMinutes(1)), report.Token).ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex)
         {
             completion = new(CollectionAttemptResult.PermanentFailure, ex.GetType().Name, ex.Message);
         }
 
+        await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task CompleteAsync(Guid taskId, string leaseToken, CollectionAttemptCompletion completion,
+        CancellationToken cancellationToken)
+    {
         using var completeResponse = await client.PostAsJsonAsync(
-            $"api/internal/collection/tasks/{notification.TaskId}/complete",
-            new CompleteRequest(task.LeaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
+            $"api/internal/collection/tasks/{taskId}/complete",
+            new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
                 completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt), cancellationToken)
             .ConfigureAwait(false);

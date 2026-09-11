@@ -177,6 +177,8 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 
 ## Delivery plan
 
+Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md). Checkpoint descriptions do not override that matrix or imply end-to-end completion.
+
 各 Phase は model/schema、worker、tests、documentation を検証可能なコミットに分ける。完全置換の詳細ゲートは [full-job-replacement.md](decisions/full-job-replacement.md) に従う。
 
 1. Boundary preparation: Predictor job を収集 store から分離し、新 CollectionOperations 契約/namespace と schema ownership を確定する。
@@ -222,6 +224,7 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - 2026-09-11: `dotnet build src/HorseRacingPrediction.Collector/HorseRacingPrediction.Collector.csproj --no-restore` は警告0・エラー0、CollectionPlatform関連テストは12件成功・失敗0件だった。
 - 2026-09-11: 新RaceCard/Result taskへeffective dateとcourse/number/domainRaceId属性を渡し、既存workflowを呼び出すhandlerを実装した。Collector単体buildは警告0・エラー0で成功した。
 - 2026-09-11: `dotnet test HorseRacingPrediction.sln --no-restore` を実行した。Contracts 38、Domain 96、MachineLearning 14、Application 56、Infrastructure 11、Agents 107、Collector 136、Api 123（skip 1）は成功した。Scrapingは210件中200件成功・10件失敗した。7件は固定日2026-09-05が実行日2026-09-11のRaceCardLookupPeriod外になった時刻依存、3件はJRA実サイトの現行RaceCardで馬主欠落/UnknownPageとなった外部サイト依存であり、今回変更した新CollectionPlatformコードを経由しない既存テストだった。新規CollectionPlatform 12件は別実行で全件成功している。
+- 2026-09-11: レビュー後の最初の修正として、Lambdaキャンセル時に独立20秒の報告猶予で新AttemptをTransientFailureとして完了し、1分後のretryを生成する経路へ変更した。APIの定期serviceは期限切れleaseを後続Acquireに依存せず回収する。Worker HTTP境界と再起動Storeを含む対象テスト10件が成功し、Api/Collector buildはいずれも警告0・エラー0だった。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

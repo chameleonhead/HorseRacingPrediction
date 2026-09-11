@@ -105,12 +105,8 @@ if (runOnce)
     }
     catch (Exception ex) when (ex is TimeoutException || (ex is OperationCanceledException && cts.IsCancellationRequested))
     {
-        // The shared runner has already failed the leased job and persisted the stop.
-        // This also covers a deadline reached before lease acquisition completed.
+        // CollectionPlatformWorkerClient reports a retryable attempt with an independent reporting deadline.
         var reason = ex is TimeoutException ? ex.Message : $"Collector execution timed out (14-minute internal deadline reached). RequestId={requestId}";
-        using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        try { await app.Services.GetRequiredService<IProcessingStateStore>().PauseCollectionAsync(reason, null, report.Token); }
-        catch (Exception pauseError) { Console.Error.WriteLine($"収集停止の報告に失敗しました: {pauseError.Message}"); }
         Console.Error.WriteLine(reason);
         try
         {

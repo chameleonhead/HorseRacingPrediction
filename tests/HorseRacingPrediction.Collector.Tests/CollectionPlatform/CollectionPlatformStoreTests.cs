@@ -94,7 +94,9 @@ public sealed class CollectionPlatformStoreTests
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now);
         Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(1)));
 
-        var recovered = await CreateStore().AcquireAsync(receipt.TaskId, 2, now.AddMinutes(2), TimeSpan.FromMinutes(1));
+        var restarted = CreateStore();
+        Assert.AreEqual(1, await restarted.ReclaimExpiredLeasesAsync(now.AddMinutes(2)));
+        var recovered = await restarted.AcquireAsync(receipt.TaskId, 2, now.AddMinutes(2), TimeSpan.FromMinutes(1));
 
         Assert.IsNotNull(recovered);
         var attempts = await store.GetAttemptsAsync(receipt.TaskId);

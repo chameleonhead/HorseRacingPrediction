@@ -311,6 +311,23 @@ public sealed class CollectionPlatformStore
                 x.state.NextCollectionAt, x.state.Status)).ToList();
     }
 
+    public async Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var before = await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
+            await ReclaimExpiredAsync(db, now, cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var after = await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
+            return before - after;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<CollectionAttemptEntity>> GetAttemptsAsync(Guid taskId,
         CancellationToken cancellationToken = default)
     {
