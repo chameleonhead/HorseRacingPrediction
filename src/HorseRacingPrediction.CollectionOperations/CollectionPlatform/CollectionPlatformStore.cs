@@ -1263,8 +1263,9 @@ public sealed class CollectionPlatformStore
         CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
-        var ids = await db.BackfillBatches.AsNoTracking().OrderByDescending(x => x.CreatedAt)
-            .Select(x => x.BatchId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var ids = (await db.BackfillBatches.AsNoTracking()
+                .Select(x => new { x.BatchId, x.CreatedAt }).ToListAsync(cancellationToken).ConfigureAwait(false))
+            .OrderByDescending(x => x.CreatedAt).Select(x => x.BatchId).ToList();
         var results = new List<BackfillBatchSnapshot>(ids.Count);
         foreach (var id in ids)
             if (await GetBackfillBatchAsync(id, cancellationToken).ConfigureAwait(false) is { } item) results.Add(item);

@@ -400,6 +400,22 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task BackfillList_OrdersBatchesWithoutSqliteDateTimeOffsetOrdering()
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            1, "Initial", false);
+        await store.CreateOrResumeBackfillBatchAsync("older", "jra", new(2026, 1, 1), new(2026, 1, 1),
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        await store.CreateOrResumeBackfillBatchAsync("newer", "jra", new(2026, 2, 1), new(2026, 2, 1),
+            new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
+
+        var batches = await store.GetBackfillBatchesAsync();
+
+        CollectionAssert.AreEqual(new[] { "newer", "older" }, batches.Select(x => x.BatchId).ToArray());
+    }
+
+    [TestMethod]
     public async Task Startup_ConcurrentStores_SerializeSchemaInitialization()
     {
         var stores = await Task.WhenAll(Enumerable.Range(0, 8)
