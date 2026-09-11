@@ -40,7 +40,8 @@
     <div class="filter-toolbar">
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集処理を検索" Placeholder="対象ID、収集内容、状態を検索" @bind-Value="query" /></div>
         <label class="filter-select">対象種別<select aria-label="対象種別" @bind="resourceFilter"><option value="">すべて</option>@foreach(var type in Enum.GetValues<ResourceType>()){<option value="@type">@ResourceTypeLabel(type)</option>}</select></label>
-        <label class="filter-select">処理状態<select aria-label="処理状態" @bind="statusFilter"><option value="">すべて</option>@foreach(var status in Enum.GetValues<CollectionTaskStatus>()){<option value="@status">@TaskStatusLabel(status)</option>}</select></label>
+        @if(view=="resources") { <label class="filter-select">収集状態<select aria-label="収集状態" @bind="statusFilter"><option value="">すべて</option>@foreach(var status in Enum.GetValues<CollectionStateStatus>()){<option value="@status">@StateStatusLabel(status)</option>}</select></label> }
+        else { <label class="filter-select">処理状態<select aria-label="処理状態" @bind="statusFilter"><option value="">すべて</option>@foreach(var status in Enum.GetValues<CollectionTaskStatus>()){<option value="@status">@TaskStatusLabel(status)</option>}</select></label> }
         <label class="filter-select">処理区分<select aria-label="処理区分" @bind="laneFilter"><option value="">すべて</option>@foreach(var lane in Enum.GetValues<CollectionLane>()){<option value="@lane">@LaneLabel(lane)</option>}</select></label>
         <div class="filter-field"><FluentTextField aria-label="提供元で絞り込み" Placeholder="提供元" @bind-Value="providerFilter" /></div>
         <div class="filter-field"><FluentTextField aria-label="エラーで絞り込み" Placeholder="エラーコード・内容" @bind-Value="errorFilter" /></div>
@@ -71,15 +72,22 @@
 {
     <UiState Kind="loading" Title="収集状況を読み込んでいます" />
 }
-else if (VisibleItems.Count == 0)
+else if ((view=="resources" ? visibleStates.Count : VisibleItems.Count) == 0)
 {
     <UiState Title="表示する収集処理はありません" Message="別の状態を選ぶか、検索条件を変更してください。" />
 }
 else
 {
-    <div class="section-title"><h2>@CurrentViewLabel</h2><span class="hint">@FilteredItems.Count 件</span></div>
+    <div class="section-title"><h2>@CurrentViewLabel</h2><span class="hint">@(view=="resources" ? statePage?.TotalCount ?? 0 : taskPage?.TotalCount ?? FilteredItems.Count) 件</span></div>
     <RaceOpsObjectList Label="収集処理一覧">
-        @foreach (var item in VisibleItems)
+        @if(view=="resources")
+        {
+            @foreach(var state in visibleStates)
+            {
+                <a class="object-list-item" href="@StateDetailHref(state)"><span class="object-list-main"><strong>@DefinitionLabel(state.Definition)</strong><span>@ResourceDescription(state.Resource)</span></span><RaceOpsStatusBadge Label="@StateStatusLabel(state.Status)" Tone="@StateStatusTone(state.Status)" /><span class="object-list-meta">抽出仕様 @state.AppliedRevision / @state.RequiredRevision ・ 最終取得 @Time(state.LastCollectedAt)</span><span class="object-list-affordance">詳細</span></a>
+            }
+        }
+        else @foreach (var item in VisibleItems)
         {
             <a class="object-list-item" href="@DetailHref(item)">
                 <span class="object-list-main"><strong>@DefinitionLabel(item.Definition)</strong><span>@ResourceDescription(item.Resource)</span></span>
@@ -176,6 +184,8 @@ else
     private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [], pauseErrors = [];
     private IReadOnlyList<CollectionTaskSummary> tasks = [];
     private CollectionTaskPage? taskPage;
+    private CollectionStatePage? statePage;
+    private IReadOnlyList<CollectionStateSnapshot> visibleStates = [];
     private IReadOnlyDictionary<string, int> serverViewCounts = new Dictionary<string, int>();
     private IReadOnlyList<PendingCollectionFailureNotification> failures = [];
     private CollectionProgressSnapshot? progress;
@@ -194,20 +204,21 @@ else
         ? FilteredItems.Skip((page - 1) * PageSize).Take(PageSize).ToList()
         : FilteredItems;
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(
-        (view == "resources" ? FilteredItems.Count : taskPage?.TotalCount ?? FilteredItems.Count) / (double)PageSize));
+        (view == "resources" ? statePage?.TotalCount ?? 0 : taskPage?.TotalCount ?? FilteredItems.Count) / (double)PageSize));
     private string CurrentViewLabel => views.First(x => x.Value == view).Label;
     private static readonly IReadOnlyList<CollectionKind> collectionKinds = [new("RaceCard", "race-card", "出馬表", "出走馬・騎手・調教師など"), new("RaceResult", "race-result", "レース結果", "着順・払戻・競走中の出来事など"), new("RaceOdds", "race-odds", "オッズ", "時系列で変化する各種オッズ"), new("Horse", "horse-profile", "競走馬", "プロフィール・血統など"), new("Jockey", "jockey-profile", "騎手", "プロフィール・所属など"), new("Trainer", "trainer-profile", "調教師", "プロフィール・所属など")];
 
     protected override async Task OnParametersSetAsync(){if(!initialized){view=views.Any(x=>x.Value==ViewQuery)?ViewQuery!:"attention";query=filter=SearchQuery??"";page=Math.Max(1,PageQuery??1);resourceFilter=ResourceFilterQuery??"";statusFilter=StatusFilterQuery??"";laneFilter=LaneFilterQuery??"";providerFilter=ProviderFilterQuery??"";errorFilter=ErrorFilterQuery??"";initialized=true;await LoadAsync();refreshCancellation=new();_ = RefreshLoopAsync(refreshCancellation.Token);}}
     private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=LoadViewCountsAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;failures=await d??[];serverViewCounts=await e;if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
-    private async Task LoadTaskPageAsync(){if(view=="resources"){tasks=await Api.GetCollectionTasksAsync(limit:1000)??[];taskPage=null;return;}taskPage=await Api.SearchCollectionTasksAsync(BuildTaskQuery(page,PageSize));tasks=taskPage?.Items??[];}
+    private async Task LoadTaskPageAsync(){if(view=="resources"){statePage=await Api.SearchCollectionStatesAsync(BuildStateQuery());visibleStates=statePage?.Items??[];tasks=[];taskPage=null;return;}taskPage=await Api.SearchCollectionTasksAsync(BuildTaskQuery(page,PageSize));tasks=taskPage?.Items??[];statePage=null;visibleStates=[];}
     private async Task<IReadOnlyDictionary<string,int>> LoadViewCountsAsync(){var values=new Dictionary<string,int>();foreach(var item in new[]{"attention","running","waiting","recent","all"}){var result=await Api.SearchCollectionTasksAsync(BuildTaskQuery(1,1,item));values[item]=result?.TotalCount??0;}return values;}
-    private CollectionTaskQuery BuildTaskQuery(int targetPage,int pageSize,string? targetView=null){var selectedView=targetView??view;IReadOnlyCollection<CollectionTaskStatus>? statuses=selectedView switch{"attention"=>[CollectionTaskStatus.Failed,CollectionTaskStatus.DeadLetter],"running"=>[CollectionTaskStatus.Running],"waiting"=>[CollectionTaskStatus.Pending,CollectionTaskStatus.Ready,CollectionTaskStatus.RetryWaiting,CollectionTaskStatus.WaitingDiscovery],"recent"=>[CollectionTaskStatus.Succeeded],_=>null};if(Enum.TryParse<CollectionTaskStatus>(statusFilter,out var status))statuses=[status];ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsedResource)?parsedResource:null;CollectionLane? lane=Enum.TryParse<CollectionLane>(laneFilter,out var parsedLane)?parsedLane:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,null,lane,string.IsNullOrWhiteSpace(filter)?null:filter,Page:targetPage,PageSize:pageSize);}
+    private CollectionTaskQuery BuildTaskQuery(int targetPage,int pageSize,string? targetView=null){var selectedView=targetView??view;IReadOnlyCollection<CollectionTaskStatus>? statuses=selectedView switch{"attention"=>[CollectionTaskStatus.Failed,CollectionTaskStatus.DeadLetter],"running"=>[CollectionTaskStatus.Running],"waiting"=>[CollectionTaskStatus.Pending,CollectionTaskStatus.Ready,CollectionTaskStatus.RetryWaiting,CollectionTaskStatus.WaitingDiscovery],"recent"=>[CollectionTaskStatus.Succeeded],_=>null};if(Enum.TryParse<CollectionTaskStatus>(statusFilter,out var status))statuses=[status];ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsedResource)?parsedResource:null;CollectionLane? lane=Enum.TryParse<CollectionLane>(laneFilter,out var parsedLane)?parsedLane:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,null,lane,string.IsNullOrWhiteSpace(filter)?null:filter,ErrorSearch:string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter,Page:targetPage,PageSize:pageSize);}
+    private CollectionStateQuery BuildStateQuery(){IReadOnlyCollection<CollectionStateStatus>? statuses=Enum.TryParse<CollectionStateStatus>(statusFilter,out var status)?[status]:null;ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsed)?parsed:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,Search:string.IsNullOrWhiteSpace(filter)?null:filter,Page:page,PageSize:PageSize);}
     private async Task RefreshLoopAsync(CancellationToken token){using var timer=new PeriodicTimer(TimeSpan.FromSeconds(15));try{while(await timer.WaitForNextTickAsync(token)){if(autoRefresh && !busy && (tasks.Any(x=>x.Status==CollectionTaskStatus.Running)||view is "running" or "waiting"))await InvokeAsync(LoadAsync);}}catch(OperationCanceledException){}}
     private bool MatchesView(CollectionTaskSummary x) => view switch { "attention" => x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter, "running" => x.Status == CollectionTaskStatus.Running, "waiting" => IsWaiting(x.Status), "recent" => x.Status == CollectionTaskStatus.Succeeded, _ => true };
     private bool MatchesFilter(CollectionTaskSummary x) => (string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(resourceFilter)||x.Resource.Type.ToString()==resourceFilter) && (string.IsNullOrEmpty(statusFilter)||x.Status.ToString()==statusFilter) && (string.IsNullOrEmpty(laneFilter)||x.Lane.ToString()==laneFilter) && (string.IsNullOrWhiteSpace(providerFilter)||x.Resource.Provider.Contains(providerFilter,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrWhiteSpace(errorFilter)||failures.Any(f=>f.TaskId==x.TaskId&&$"{f.ErrorCode} {f.ErrorMessage}".Contains(errorFilter,StringComparison.OrdinalIgnoreCase)));
     private static bool IsWaiting(CollectionTaskStatus x) => x is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
-    private async Task SetView(string value){view=value;page=1;PersistState();await LoadAsync();}
+    private async Task SetView(string value){if((view=="resources")!=(value=="resources"))statusFilter=string.Empty;view=value;page=1;PersistState();await LoadAsync();}
     private async Task PreviousPage(){if(page>1){page--;PersistState();await LoadAsync();}}
     private async Task NextPage(){if(page<TotalPages){page++;PersistState();await LoadAsync();}}
     private async Task ApplyFilter(){filter=query.Trim();page=1;PersistState();await LoadAsync();}
@@ -216,6 +227,7 @@ else
     private void PersistState(){var uri=Navigation.GetUriWithQueryParameters(new Dictionary<string,object?>{{"view",view=="attention"?null:view},{"q",string.IsNullOrWhiteSpace(filter)?null:filter},{"page",page<=1?null:page},{"type",string.IsNullOrEmpty(resourceFilter)?null:resourceFilter},{"status",string.IsNullOrEmpty(statusFilter)?null:statusFilter},{"lane",string.IsNullOrEmpty(laneFilter)?null:laneFilter},{"provider",string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter},{"error",string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter}});Navigation.NavigateTo(uri,replace:true);}
     private int ViewCount(string value)=>value=="resources"?progress?.ResourcesByType.Values.Sum()??UniqueResources.Count:serverViewCounts.TryGetValue(value,out var count)?count:0;
     private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
+    private string StateDetailHref(CollectionStateSnapshot item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
     private void ChooseCreate(CollectionKind kind){createType=kind.Type;createDefinition=kind.Definition;createResourceId="";createUrl="";createErrors=[];}
@@ -237,6 +249,9 @@ else
     private static string DefinitionLabel(CollectionDefinitionId v)=>v.Value switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>v.Value};
     private static string TaskStatusLabel(CollectionTaskStatus v)=>v switch{CollectionTaskStatus.Pending=>"登録待ち",CollectionTaskStatus.Ready=>"実行待ち",CollectionTaskStatus.Running=>"実行中",CollectionTaskStatus.RetryWaiting=>"再試行待ち",CollectionTaskStatus.WaitingDiscovery=>"取得先の探索待ち",CollectionTaskStatus.Succeeded=>"完了",CollectionTaskStatus.Failed=>"失敗",CollectionTaskStatus.Cancelled=>"中断",CollectionTaskStatus.DeadLetter=>"要対応",_=>v.ToString()};
     private static string TaskStatusTone(CollectionTaskStatus v)=>v switch{CollectionTaskStatus.Succeeded=>"success",CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter=>"danger",CollectionTaskStatus.Running=>"info",CollectionTaskStatus.Cancelled=>"neutral",_=>"warning"};
+    private static string StateStatusLabel(CollectionStateStatus v)=>v switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>v.ToString()};
+    private static string StateStatusTone(CollectionStateStatus v)=>v switch{CollectionStateStatus.Current=>"success",CollectionStateStatus.Failed or CollectionStateStatus.Stale=>"danger",CollectionStateStatus.Collecting=>"info",CollectionStateStatus.Unavailable=>"neutral",_=>"warning"};
+    private static string Time(DateTimeOffset? value)=>value?.ToLocalTime().ToString("yyyy/MM/dd HH:mm")??"—";
     private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
     private sealed record FilterOption(string Value,string Label);
     private sealed record CollectionKind(string Type,string Definition,string Label,string Description);

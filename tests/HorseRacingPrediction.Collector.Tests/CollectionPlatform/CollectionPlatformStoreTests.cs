@@ -485,6 +485,33 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual("Horse:JRA:H123", detail.Attempts[0].PageIdentification);
     }
 
+    [TestMethod]
+    public async Task StatePagingAndTaskErrorSearch_AreAppliedBeforePaging()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero);
+        for (var index = 0; index < 60; index++)
+        {
+            var resource = new ResourceKey(ResourceType.Horse, "JRA", $"H{index:D3}");
+            var receipt = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Initial, now);
+            if (index == 55)
+            {
+                var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+                Assert.IsNotNull(lease);
+                await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+                    new(CollectionAttemptResult.ParseFailure, "DistinctParserError", "grade parse failed"));
+            }
+        }
+
+        var states = await store.SearchStatesAsync(new(Page: 2, PageSize: 25));
+        var errors = await store.SearchTasksAsync(new(ErrorSearch: "DistinctParserError", Page: 1, PageSize: 1));
+
+        Assert.AreEqual(60, states.TotalCount);
+        Assert.HasCount(25, states.Items);
+        Assert.AreEqual(1, errors.TotalCount);
+        Assert.AreEqual("H055", errors.Items[0].Resource.Id);
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = CreateStore();

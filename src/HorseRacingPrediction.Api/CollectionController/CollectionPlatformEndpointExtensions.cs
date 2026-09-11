@@ -17,7 +17,7 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapGet("/tasks", async (CollectionTaskStatus? status, int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
         admin.MapGet("/tasks/search", async (string? statuses, ResourceType? resourceType, string? provider,
-            string? definitionId, CollectionLane? lane, string? search, DateTimeOffset? createdFrom,
+            string? definitionId, CollectionLane? lane, string? search, string? errorSearch, DateTimeOffset? createdFrom,
             DateTimeOffset? createdTo, int? page, int? pageSize, CollectionPlatformStore store,
             CancellationToken token) =>
         {
@@ -36,7 +36,26 @@ public static class CollectionPlatformEndpointExtensions
             if (createdFrom > createdTo)
                 return Results.BadRequest(new { message = "createdFrom must not be later than createdTo." });
             return Results.Ok(await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,
-                definitionId, lane, search, createdFrom, createdTo, page ?? 1, pageSize ?? 50), token));
+                definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1, pageSize ?? 50), token));
+        });
+        admin.MapGet("/states/search", async (string? statuses, ResourceType? resourceType, string? provider,
+            string? definitionId, string? search, int? page, int? pageSize, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            IReadOnlyCollection<CollectionStateStatus>? parsed = null;
+            if (!string.IsNullOrWhiteSpace(statuses))
+            {
+                var values = new List<CollectionStateStatus>();
+                foreach (var value in statuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!Enum.TryParse<CollectionStateStatus>(value, true, out var status))
+                        return Results.BadRequest(new { message = $"Unknown state status: {value}" });
+                    values.Add(status);
+                }
+                parsed = values;
+            }
+            return Results.Ok(await store.SearchStatesAsync(new(parsed, resourceType, provider, definitionId,
+                search, page ?? 1, pageSize ?? 50), token));
         });
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
@@ -86,8 +105,8 @@ public static class CollectionPlatformEndpointExtensions
             var selectedIds = request.NotificationIds.Distinct().ToHashSet();
             if (selectedIds.Count == 0)
                 return Results.BadRequest(new { message = "At least one notification is required." });
-            if (selectedIds.Count > 1000)
-                return Results.BadRequest(new { message = "At most 1000 notifications can be recovered at once." });
+            if (selectedIds.Count > 10000)
+                return Results.BadRequest(new { message = "At most 10000 notifications can be recovered at once." });
             var pending = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
             var selected = pending.Where(x => selectedIds.Contains(x.NotificationId)).ToList();
             if (selected.Count != selectedIds.Count)
@@ -174,7 +193,7 @@ public static class CollectionPlatformEndpointExtensions
             var impact = BuildImpact(request.Impact);
             var affected = await store.AddRevisionAndApplyImpactAsync(new(request.DefinitionId), request.Revision,
                 request.Description, impact, conditions, DateTimeOffset.UtcNow, token);
-            return Results.Ok(new { request.DefinitionId, request.Revision, Affected = affected });
+            return Results.Ok(new CollectionRevisionApplyResult(request.DefinitionId, request.Revision, affected));
         });
         admin.MapPost("/revisions/{definition}/{revision:int}/recollect", async (string definition, int revision,
             RevisionRecollectionRequest request, CollectionPlatformStore store,
@@ -204,6 +223,23 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapGet("/backfills/{batchId}", async (string batchId, CollectionPlatformStore store,
             CancellationToken token) => await store.GetBackfillBatchAsync(batchId, token) is { } batch
                 ? Results.Ok(batch) : Results.NotFound());
+        admin.MapPost("/backfills/{batchId}/recover-holes", async (string batchId, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            var batch = await store.GetBackfillBatchAsync(batchId, token);
+            if (batch is null) return Results.NotFound();
+            var created = 0;
+            foreach (var hole in batch.Holes)
+            {
+                var state = await store.GetStateAsync(hole.Resource, hole.Definition, token);
+                var receipt = await store.RequestAsync(hole.Resource, hole.Definition,
+                    Math.Max(1, state?.RequiredRevision ?? state?.AppliedRevision ?? 1), CollectionReason.Recovery,
+                    DateTimeOffset.UtcNow, CollectionLane.Background, (int)CollectionPriority.Background,
+                    batchId: $"recovery:{batchId}", cancellationToken: token);
+                if (receipt.CreatedTask) created++;
+            }
+            return Results.Accepted(value: new BackfillHoleRecoveryResult(batch.Holes.Count, created));
+        });
 
         var worker = endpoints.MapGroup("/api/internal/collection").WithTags("Collection Worker");
         worker.MapPost("/tasks/{taskId:guid}/acquire", async (Guid taskId, AcquireCollectionTaskRequest request,
@@ -326,6 +362,8 @@ public sealed record RevisionImpactRequest(RevisionImpactScopeType ScopeType,
 public sealed record RevisionImpactPreviewRequest(string DefinitionId, int Revision, RevisionImpactRequest Impact);
 public sealed record ApplyCollectionRevisionRequest(string DefinitionId, int Revision, string Description,
     RevisionImpactRequest Impact);
+public sealed record CollectionRevisionApplyResult(string DefinitionId, int Revision, int Affected);
+public sealed record BackfillHoleRecoveryResult(int Holes, int TasksCreated);
 public sealed record RevisionRecollectionRequest(CollectionLane Lane = CollectionLane.Background,
     int Priority = (int)CollectionPriority.Background);
 public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);

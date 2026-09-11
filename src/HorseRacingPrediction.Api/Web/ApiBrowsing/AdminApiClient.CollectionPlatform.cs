@@ -30,6 +30,14 @@ public sealed partial class AdminApiClient
         CancellationToken token = default)
         => GetJsonAsync<IReadOnlyList<BackfillBatchSnapshot>>($"{CollectionPlatformPath}/backfills", token);
 
+    public Task<BackfillBatchSnapshot?> GetBackfillBatchAsync(string batchId, CancellationToken token = default)
+        => GetJsonAsync<BackfillBatchSnapshot>($"{CollectionPlatformPath}/backfills/{Uri.EscapeDataString(batchId)}", token);
+
+    public Task<AdminApiResult<BackfillHoleRecoveryResult>> RecoverBackfillHolesAsync(string batchId,
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<BackfillHoleRecoveryResult>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/backfills/{Uri.EscapeDataString(batchId)}/recover-holes", new { }, token);
+
     public Task<IReadOnlyList<CollectionTaskSummary>?> GetCollectionTasksAsync(
         CollectionTaskStatus? status = null, int limit = 200, CancellationToken token = default)
         => GetJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
@@ -49,12 +57,29 @@ public sealed partial class AdminApiClient
             ["search"] = query.Search,
             ["createdFrom"] = query.CreatedFrom?.ToString("O"),
             ["createdTo"] = query.CreatedTo?.ToString("O"),
+            ["errorSearch"] = query.ErrorSearch,
             ["page"] = Math.Max(1, query.Page).ToString(),
             ["pageSize"] = Math.Clamp(query.PageSize, 1, 200).ToString(),
         };
         var queryString = string.Join('&', values.Where(x => !string.IsNullOrWhiteSpace(x.Value))
             .Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value!)}"));
         return GetJsonAsync<CollectionTaskPage>($"{CollectionPlatformPath}/tasks/search?{queryString}", token);
+    }
+
+    public Task<CollectionStatePage?> SearchCollectionStatesAsync(CollectionStateQuery query,
+        CancellationToken token = default)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["statuses"] = query.Statuses is null ? null : string.Join(',', query.Statuses),
+            ["resourceType"] = query.ResourceType?.ToString(), ["provider"] = query.Provider,
+            ["definitionId"] = query.DefinitionId, ["search"] = query.Search,
+            ["page"] = Math.Max(1, query.Page).ToString(),
+            ["pageSize"] = Math.Clamp(query.PageSize, 1, 200).ToString(),
+        };
+        var queryString = string.Join('&', values.Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value!)}"));
+        return GetJsonAsync<CollectionStatePage>($"{CollectionPlatformPath}/states/search?{queryString}", token);
     }
 
     public Task<IReadOnlyList<PendingCollectionFailureNotification>?> GetCollectionFailureNotificationsAsync(
@@ -81,6 +106,11 @@ public sealed partial class AdminApiClient
         RevisionImpactPreviewRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<RevisionImpactPreview>(HttpMethod.Post,
             $"{CollectionPlatformPath}/revisions/preview", request, token);
+
+    public Task<AdminApiResult<CollectionRevisionApplyResult>> ApplyRevisionAsync(
+        ApplyCollectionRevisionRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<CollectionRevisionApplyResult>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/revisions/apply", request, token);
 
     public Task<AdminApiResult<RevisionRecollectionExpansion>> RecollectRevisionAsync(
         string definitionId, int revision, RevisionRecollectionRequest request,

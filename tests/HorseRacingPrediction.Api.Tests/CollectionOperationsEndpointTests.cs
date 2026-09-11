@@ -75,6 +75,51 @@ public sealed class CollectionOperationsEndpointTests
         finally { Directory.Delete(directory, true); }
     }
 
+    [TestMethod]
+    public async Task FailureRecovery_AcceptsMoreThanOneThousandTargets()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+            var response = await client.PostAsJsonAsync("/api/admin/collection/failure-notifications/recover",
+                new RecoverCollectionFailuresRequest(Enumerable.Range(0, 1001).Select(_ => Guid.NewGuid()).ToArray()));
+            Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode,
+                "The request must pass the size guard and fail only because the synthetic notifications do not exist.");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task BackfillDetail_RecoversOnlyProjectedHoles()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "initial", false);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+            var batch = await store.CreateOrResumeBackfillBatchAsync("2026-09", "JRA", new(2026, 9, 1), new(2026, 9, 1), now);
+            var task = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260901");
+            Assert.IsTrue(await store.ReconcileDeadLetterAsync(task.TaskId, 1, now.AddSeconds(1), "failed"));
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            var detail = await client.GetFromJsonAsync<BackfillBatchSnapshot>("/api/admin/collection/backfills/2026-09");
+            Assert.IsNotNull(detail);
+            Assert.HasCount(1, detail.Holes);
+            var response = await client.PostAsJsonAsync("/api/admin/collection/backfills/2026-09/recover-holes", new { });
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            Assert.IsNotNull(result);
+            Assert.AreEqual(1, result.Holes);
+            Assert.AreEqual(1, result.TasksCreated);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     private static string CreateDirectory()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"collection-operations-api-{Guid.NewGuid():N}");

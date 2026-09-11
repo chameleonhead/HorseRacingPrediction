@@ -71,7 +71,7 @@ else
                         <PropertyColumn Property="@(x => x.Count)" Title="対象数" />
                         <TemplateColumn Title="最終発生">@Time(context.LastFailedAt)</TemplateColumn>
                         <TemplateColumn Title="対応">
-                            <FluentButton OnClick="@(() => RecoverFailureGroupAsync(context))" Disabled="busy">まとめて再取得</FluentButton>
+                            <FluentButton OnClick="@(() => ConfirmRecovery(context))" Disabled="busy">まとめて再取得</FluentButton>
                         </TemplateColumn>
                     </FluentDataGrid>
                 }
@@ -103,6 +103,7 @@ else
                         <PropertyColumn Property="@(x => x.Pending)" Title="待機" />
                         <PropertyColumn Property="@(x => x.Failed)" Title="失敗" />
                         <TemplateColumn Title="欠損">@context.Holes.Count 件</TemplateColumn>
+                        <TemplateColumn Title="詳細"><FluentButton Href="@($"/jobs/backfills/{Uri.EscapeDataString(context.BatchId)}")">確認</FluentButton></TemplateColumn>
                     </FluentDataGrid>
                 }
             </section>
@@ -110,13 +111,28 @@ else
 
         <FluentTab Label="抽出仕様の再取得" Id="revisions">
             <section class="detail-card detail-section">
-                <h2>影響範囲を確認</h2>
-                <p>適用済みの抽出仕様について、再取得対象と現在の進捗を確認します。</p>
+                <h2>新しい抽出仕様を登録</h2>
+                <p>影響範囲を先に確認し、表示された対象だけに新しい版を適用します。</p>
                 <div class="operations-form-row">
                     <FluentTextField Label="収集内容" Placeholder="例: race-result" @bind-Value="revisionDefinition" />
                     <FluentTextField Label="版" @bind-Value="revisionText" />
-                    <FluentButton OnClick="LoadRevisionProgressAsync" Disabled="busy">進捗を確認</FluentButton>
+                    <label class="filter-select">影響範囲<select aria-label="影響範囲" @bind="revisionScope" @bind:after="ResetRevisionPreview"><option value="All">すべて</option><option value="SpecificResources">対象IDを指定</option><option value="DateRange">日付範囲</option><option value="NamedCondition">定義済み条件</option></select></label>
                 </div>
+                @if (revisionScope == "SpecificResources") { <FluentTextArea Label="対象ID（改行またはカンマ区切り）" @bind-Value="revisionResourceIds" /> }
+                else if (revisionScope == "DateRange") { <div class="operations-form-row"><FluentTextField Label="開始日 (yyyy-MM-dd)" @bind-Value="revisionFrom" /><FluentTextField Label="終了日 (yyyy-MM-dd)" @bind-Value="revisionTo" /></div> }
+                else if (revisionScope == "NamedCondition") { <label class="filter-select">定義済み条件<select aria-label="定義済み条件" @bind="revisionNamedCondition" @bind:after="ResetRevisionPreview"><option value="race-result:dead-heat-before-rev5">同着を含む旧レース結果</option><option value="horse-profile:legacy-layout">旧レイアウトの競走馬情報</option></select></label> }
+                <FluentTextArea Label="変更内容" Placeholder="修正した抽出項目と理由" @bind-Value="revisionDescription" />
+                <div class="operations-form-row"><FluentButton OnClick="PreviewRevisionAsync" Disabled="busy">対象を確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ApplyRevisionAsync" Disabled="@(busy || revisionPreview is null)">この範囲に適用</FluentButton></div>
+                @if (revisionPreview is not null)
+                {
+                    <div class="operations-metrics"><div><span>候補</span><strong>@revisionPreview.TotalCandidates 件</strong></div><div><span>影響対象</span><strong>@revisionPreview.AffectedResources.Count 件</strong></div></div>
+                    <p class="hint">確認例: @string.Join("、", revisionPreview.AffectedResources.Take(5).Select(x => $"{x.Type}/{x.Id}"))</p>
+                }
+            </section>
+            <section class="entity-section detail-section">
+                <h2>適用済み仕様の再取得</h2>
+                <p>上で指定した収集内容と版について、進捗確認または未完了対象の再取得ができます。</p>
+                <FluentButton OnClick="LoadRevisionProgressAsync" Disabled="busy">進捗を確認</FluentButton>
                 @if (revisionProgress is not null)
                 {
                     <div class="operations-metrics" aria-label="抽出仕様の再取得進捗">
@@ -132,6 +148,12 @@ else
     </RaceOpsDetailTabs>
 }
 
+<FluentDialog Hidden="@(pendingRecovery is null)" HiddenChanged="@(hidden => { if(hidden) pendingRecovery=null; })" Modal="true" TrapFocus="true" AriaLabelledby="recovery-title" Style="width:min(520px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="recovery-title">障害対象をまとめて再取得</h2></FluentDialogHeader>
+    <FluentDialogBody>@if(pendingRecovery is not null){<p><strong>@pendingRecovery.Count 件</strong>の「@(pendingRecovery.ErrorCode??"原因未分類")」を通常のRecovery経路へ依頼します。既に実行中の対象は二重実行せず、既存タスクへまとめられます。</p><p class="hint">収集内容: @pendingRecovery.Definition.Value<br />最終発生: @Time(pendingRecovery.LastFailedAt)</p>}</FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => pendingRecovery=null)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ConfirmRecoveryAsync" Disabled="busy">再取得を依頼</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
 @code {
     private bool loading = true, busy;
     private CollectionProgressSnapshot? progress;
@@ -140,7 +162,11 @@ else
     private IReadOnlyList<string> loadErrors = [], operationErrors = [];
     private string backfillYear = DateTime.Today.Year.ToString(), backfillMonth = DateTime.Today.Month.ToString();
     private string revisionDefinition = "race-result", revisionText = "1", successMessage = string.Empty;
+    private string revisionScope = "All", revisionDescription = string.Empty, revisionResourceIds = string.Empty;
+    private string revisionFrom = string.Empty, revisionTo = string.Empty, revisionNamedCondition = "race-result:dead-heat-before-rev5";
+    private RevisionImpactPreview? revisionPreview;
     private RevisionRecollectionProgress? revisionProgress;
+    private CollectionFailureGroup? pendingRecovery;
 
     private IReadOnlyList<CollectionFailureGroup> FailureGroups => failures.OrderByDescending(x => x.Count).ToList();
 
@@ -190,6 +216,8 @@ else
             await LoadAsync();
         });
     }
+    private void ConfirmRecovery(CollectionFailureGroup group) => pendingRecovery = group;
+    private async Task ConfirmRecoveryAsync(){if(pendingRecovery is null)return;var group=pendingRecovery;pendingRecovery=null;await RecoverFailureGroupAsync(group);}
 
     private async Task LoadRevisionProgressAsync()
     {
@@ -197,6 +225,55 @@ else
         if (!int.TryParse(revisionText, out var revision) || revision < 1 || string.IsNullOrWhiteSpace(revisionDefinition))
         { operationErrors = ["収集内容と版を正しく入力してください。"]; return; }
         await RunAsync(async () => revisionProgress = await Api.GetRevisionRecollectionProgressAsync(revisionDefinition, revision));
+    }
+
+    private void ResetRevisionPreview() => revisionPreview = null;
+
+    private bool TryBuildRevisionRequest(out RevisionImpactPreviewRequest request)
+    {
+        request = default!;
+        if (!int.TryParse(revisionText, out var revision) || revision < 1 || string.IsNullOrWhiteSpace(revisionDefinition))
+        { operationErrors = ["収集内容と版を正しく入力してください。"]; return false; }
+        if (!Enum.TryParse<RevisionImpactScopeType>(revisionScope, out var scope)) return false;
+        IReadOnlyList<ResourceKey>? resources = null;
+        DateOnly? from = null, to = null;
+        if (scope == RevisionImpactScopeType.SpecificResources)
+        {
+            var type = revisionDefinition switch { "horse-profile" => ResourceType.Horse, "jockey-profile" => ResourceType.Jockey, "trainer-profile" => ResourceType.Trainer, "race-odds" => ResourceType.RaceOdds, "race-result" => ResourceType.RaceResult, _ => ResourceType.RaceCard };
+            resources = revisionResourceIds.Split([',', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().Select(id => new ResourceKey(type, "JRA", id)).ToList();
+            if (resources.Count == 0) { operationErrors = ["対象IDを1件以上入力してください。"]; return false; }
+        }
+        if (scope == RevisionImpactScopeType.DateRange)
+        {
+            if (!DateOnly.TryParse(revisionFrom, out var parsedFrom) || !DateOnly.TryParse(revisionTo, out var parsedTo) || parsedFrom > parsedTo)
+            { operationErrors = ["開始日と終了日を正しく入力してください。"]; return false; }
+            from = parsedFrom; to = parsedTo;
+        }
+        var impact = new RevisionImpactRequest(scope, resources, from, to, scope == RevisionImpactScopeType.NamedCondition ? revisionNamedCondition : null);
+        request = new(revisionDefinition.Trim(), revision, impact);
+        return true;
+    }
+
+    private async Task PreviewRevisionAsync()
+    {
+        operationErrors = []; successMessage = string.Empty; revisionPreview = null;
+        if (!TryBuildRevisionRequest(out var request)) return;
+        await RunAsync(async () => { var result = await Api.PreviewRevisionImpactAsync(request); if (!result.Success) operationErrors = result.Errors; else revisionPreview = result.Value; });
+    }
+
+    private async Task ApplyRevisionAsync()
+    {
+        operationErrors = []; successMessage = string.Empty;
+        if (revisionPreview is null || !TryBuildRevisionRequest(out var previewRequest)) return;
+        if (string.IsNullOrWhiteSpace(revisionDescription)) { operationErrors = ["変更内容を入力してください。"]; return; }
+        await RunAsync(async () =>
+        {
+            var result = await Api.ApplyRevisionAsync(new(previewRequest.DefinitionId, previewRequest.Revision, revisionDescription.Trim(), previewRequest.Impact));
+            if (!result.Success) { operationErrors = result.Errors; return; }
+            successMessage = $"抽出仕様 {previewRequest.DefinitionId} 版{previewRequest.Revision} を {result.Value!.Affected} 件へ適用しました。";
+            revisionProgress = await Api.GetRevisionRecollectionProgressAsync(previewRequest.DefinitionId, previewRequest.Revision);
+            revisionPreview = null;
+        });
     }
 
     private async Task RecollectRevisionAsync()

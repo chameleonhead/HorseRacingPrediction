@@ -1,0 +1,37 @@
+@page "/jobs/backfills/{BatchId}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<RaceOpsPageHeader Section="運用 / 過去データ収集" Title="過去データ収集の詳細" Description="期間全体の進捗と、後から再取得できる未収集箇所を確認します。">
+    <Actions><FluentButton Href="/jobs/operations">収集運用へ戻る</FluentButton><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton></Actions>
+</RaceOpsPageHeader>
+
+@if (loading) { <UiState Kind="loading" Title="進捗を読み込んでいます" /> }
+else if (batch is null) { <UiState Kind="error" Title="対象の収集期間が見つかりません" Message="一覧へ戻り、対象を選び直してください。" /> }
+else
+{
+    @if (!string.IsNullOrWhiteSpace(message)) { <FluentMessageBar Intent="@MessageIntent.Success" Title="@message" /> }
+    @if (errors.Count > 0) { <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", errors)" /> }
+    <section class="profile-facts"><div class="profile-fact"><span>対象期間</span><strong>@batch.From ～ @batch.To</strong></div><div class="profile-fact"><span>探索日</span><strong>@batch.RegisteredDiscoveryDays / @batch.ExpectedDiscoveryDays</strong></div><div class="profile-fact"><span>成功</span><strong>@batch.Succeeded</strong></div><div class="profile-fact"><span>未収集</span><strong>@batch.Holes.Count</strong></div></section>
+    <section class="entity-section detail-section">
+        <h2>未収集箇所</h2>
+        <p class="hint">失敗・隔離された対象だけを表示します。再取得しても成功済みの対象は作り直しません。</p>
+        @if (batch.Holes.Count == 0) { <UiState Title="未収集箇所はありません" Message="この期間で現在確認できる失敗はありません。" /> }
+        else
+        {
+            <FluentButton Appearance="@Appearance.Accent" OnClick="RecoverAsync" Disabled="busy">@batch.Holes.Count 件を再取得</FluentButton>
+            <FluentDataGrid Items="@batch.Holes.AsQueryable()" TGridItem="BackfillHole" aria-label="未収集箇所一覧">
+                <TemplateColumn Title="対象">@context.Resource.Type / @context.Resource.Id</TemplateColumn><TemplateColumn Title="収集内容">@context.Definition.Value</TemplateColumn><TemplateColumn Title="状態">@context.Status</TemplateColumn><TemplateColumn Title="原因">@(context.ErrorCode ?? "未分類")</TemplateColumn><TemplateColumn Title="詳細"><FluentButton Href="@DetailUrl(context)">開く</FluentButton></TemplateColumn>
+            </FluentDataGrid>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public string BatchId { get; set; } = string.Empty;
+    private bool loading = true, busy; private BackfillBatchSnapshot? batch; private IReadOnlyList<string> errors = []; private string message = string.Empty;
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    private async Task LoadAsync() { loading = batch is null; errors = []; try { batch = await Api.GetBackfillBatchAsync(BatchId); } catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { errors = ["収集APIへ接続できませんでした。"]; } finally { loading = false; } }
+    private async Task RecoverAsync() { busy = true; errors = []; message = string.Empty; try { var result = await Api.RecoverBackfillHolesAsync(BatchId); if (!result.Success) errors = result.Errors; else { message = $"{result.Value!.Holes}件を確認し、{result.Value.TasksCreated}件の再取得を登録しました。"; await LoadAsync(); } } catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { errors = ["再取得を依頼できませんでした。"]; } finally { busy = false; } }
+    private static string DetailUrl(BackfillHole hole) => $"/jobs/resources/{hole.Resource.Type}/{Uri.EscapeDataString(hole.Resource.Provider)}/{Uri.EscapeDataString(hole.Resource.Id)}/{Uri.EscapeDataString(hole.Definition.Value)}";
+}

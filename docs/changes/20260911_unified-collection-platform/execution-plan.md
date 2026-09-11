@@ -21,6 +21,15 @@ This is the durable continuation plan for the approved unified collection platfo
 | C1 | Implement idempotent dry-run/execute initialization from Domain Data/source citations | P1, B1 | initialization tooling | repeated execute changes nothing | Completed |
 | C2 | Rehearse new queue connection, initialization, smoke, rollback-before-delete, legacy DB/queue deletion | I1, X2, C1 | isolated deployment | recorded rehearsal evidence | Local tooling rehearsal completed; isolated Terraform rehearsal and production execution remain operational work |
 | V1 | Run solution tests and end-to-end production-path acceptance matrix | all | tests/docs | every locally verifiable matrix row Verified | Completed |
+| U2 | Add server-side CollectionState browsing and complete error-aware task paging/counts | U1 | Store/API/list UI/tests | >1,000 resources and cross-page error filter tests | Completed |
+| U3 | Make grouped failure recovery safe beyond 1,000 notifications with preview/confirmation | U2 | Store/API/operations UI/tests | 1,001-item grouped recovery without loss or duplicate active tasks | Completed |
+| U4 | Complete Revision registration workflow: scope input, preview, apply, recollect | R1 | API client/operations UI/tests | All four scope forms and preview-before-apply component/API tests | Completed |
+| U5 | Add Backfill batch detail, holes, links, and hole-only recovery | B1, U2 | Store/API/Backfill UI/tests | partial batch exposes and recovers concrete holes | Completed |
+| U6 | Page Request/Task/Attempt detail histories and expose safe domain links | U2 | Store/API/detail UI/tests | large repeated-Odds history and identity-mapped navigation tests | Dependent on U2 |
+| U7 | Consolidate collection dashboard counts, add lightweight operations auto-refresh, preserve tab state | U2 | projection/API/UI/tests | one refresh contract, no full loading replacement, URL restoration | Dependent on U2 |
+| U8 | Standardize local launch working directory and absolute data paths | — | local scripts/config/docs/tests | root/project launch resolve the same DB and queue paths | Implemented; launch verification remains in U9 |
+| U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Dependent on U3-U8 |
+| U10 | Execute isolated Terraform/cutover rehearsal, then production cutover and legacy deletion | C2, U9 | deployment/AWS/runbook | plan, smoke, rollback rehearsal, approved production deletion evidence | Externally blocked: AWS environment and production cutover window |
 
 ## Parallelization rules
 
@@ -28,3 +37,5 @@ This is the durable continuation plan for the approved unified collection platfo
 - The main agent owns integration, conflict resolution, acceptance-matrix updates, commits, and final verification.
 - A failed verification returns the row to Running; it does not stop unrelated runnable rows.
 - Destructive AWS/DB operations are limited to the approved cutover sequence and are not executed during implementation or rehearsal against production.
+- 2026-09-12: U2-U5 を実装した。State と task error filter は DB filtering 後に server-side paging し、1,001件の障害復旧要求を受理できる上限と確認Dialog、Revision の4 scope入力→preview→apply→recollect、Backfill独立詳細とhole-only recoveryを追加した。Store/API/component対象15件とAPI全115件（外部依存1件skip）が成功した。
+- 2026-09-12: U8 の相対SQLite/collection state pathをAPI content root基準の絶対pathへ正規化した。起動ディレクトリ差異の実ブラウザー確認はU9で行う。

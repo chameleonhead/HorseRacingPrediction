@@ -205,6 +205,9 @@ public sealed class CollectionAdministrationComponentTests
                 "/api/admin/collection/tasks/search" => new CollectionTaskPage(1, 1, 50,
                     [new CollectionTaskSummary(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Pending,
                         CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)]),
+                "/api/admin/collection/states/search" => new CollectionStatePage(1, 1, 50,
+                    [new CollectionStateSnapshot(Resource, Definition, 1, 1, DateTimeOffset.UtcNow, null,
+                        CollectionStateStatus.Current)]),
                 "/api/admin/collection/progress" => new CollectionProgressSnapshot(
                     new Dictionary<ResourceType, int> { [ResourceType.Horse] = 1 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },

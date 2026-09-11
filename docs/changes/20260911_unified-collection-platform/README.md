@@ -1,6 +1,6 @@
 # 競馬情報収集状態管理基盤
 
-- Status: Implemented (production cutover pending)
+- Status: Approved (operations completion in progress; production cutover pending)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-11
 - Updated: 2026-09-12
@@ -200,6 +200,8 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 ## Verification record
 
+- 2026-09-12: 利用者が残存実装の整理と順次実装を承認した。前回はレビューで列挙した全項目をclosure ledgerへ転記せず、主要UIの完了を全体完了と誤認した。再発防止として `learn-from-implementation-failures` に review-to-execution closure gate を追加し、全指摘を `execution-plan.md` の U2〜U10 へ登録した。
+
 - 2026-09-12: 利用者が現状レビューで提示した操作性・運用機能の改善案を承認した。障害の原因別集約と一括Recovery、詳細ページのrequest/task履歴と取消、一覧条件保持・絞り込み・自動更新、Backfill/Revision/queue監視の運用画面を追加実装範囲とした。実装前セルフレビューと採否理由は `admin-ui-implementation-note.md` に記録した。
 - 2026-09-12: 収集一覧を状態・Resource種別・Provider・Definition・Lane・検索語・期間対応のサーバー側検索/ページングへ接続し、原因別障害APIと通常CollectionRequestを使う一括Recoveryを追加した。一覧は条件とページをURLへ保持し、処理中は最終更新時刻を示して15秒間隔で更新する。詳細ページはrequest/task/attempt/locationを分離表示し、Active task取消、通常再取得、URL指定再取得、受付結果を提供する。独立した収集運用ページでlane/priority/retry、障害原因、月次Backfill、Revision再取得進捗を表示・操作可能にした。
 - 2026-09-12: 検証はApiテスト114件成功・1件skip、CollectionPlatform関連Collectorテスト66件成功、API build警告0・エラー0。追加した一覧・詳細・運用・endpointの対象テスト14件も成功した。実データでのブラウザー確認はAPI再起動後に認証画面まで到達したが、実行セッションへ認証情報を露出させず再入力する手段がなかったため、認証後画面の最終視覚確認は未実施とする。
@@ -253,6 +255,12 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 - 2026-09-11: `git diff --check` はエラーなし。旧主要symbol、`CollectionProcessing`、`collection-tasks.db`、旧job detail routeの`src`/deploy参照は0件である。
 
 ## Deviations and follow-up
+
+### 2026-09-12 review closure continuation
+
+レビュー指摘を実装台帳へ転記しないまま、主要画面の改善をもって作業全体を完了扱いしたことが中断の原因だった。以後は各指摘を Runnable / Dependent / Externally blocked / Rejected に分類し、個別の実装・検証証拠と原レビューへの照合が揃うまで完了応答しない。`learn-from-implementation-failures` skill にこの closure gate を追加し、validatorで妥当性を確認した。
+
+今回の継続では、サーバー側State/error paging、1,001件超の障害復旧確認、Revision登録操作、Backfill詳細・欠損復旧、起動場所に依存しないデータpath解決を実装した。残るローカル項目は詳細履歴paging、dashboard query集約/自動更新/tab URL復元、認証済みdesktop/narrow browser検証である。本番Terraform/cutoverと旧SQS削除はAWS環境とcutover windowを必要とするため外部blockerとして分離する。
 
 ### 2026-09-11 implementation review retrospective
 

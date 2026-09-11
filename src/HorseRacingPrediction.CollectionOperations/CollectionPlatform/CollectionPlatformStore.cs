@@ -967,6 +967,13 @@ public sealed class CollectionPlatformStore
                                      || x.resource.Provider.Contains(search)
                                      || x.task.DefinitionId.Contains(search));
         }
+        if (!string.IsNullOrWhiteSpace(request.ErrorSearch))
+        {
+            var error = request.ErrorSearch.Trim();
+            query = query.Where(x => db.Attempts.Any(a => a.TaskId == x.task.TaskId
+                && ((a.ErrorCode != null && a.ErrorCode.Contains(error))
+                    || (a.ErrorMessage != null && a.ErrorMessage.Contains(error)))));
+        }
         if (request.CreatedFrom.HasValue || request.CreatedTo.HasValue)
         {
             // The SQLite provider cannot translate DateTimeOffset comparisons. Apply only this optional
@@ -995,6 +1002,47 @@ public sealed class CollectionPlatformStore
             new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
             x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
         return new(totalCount, page, pageSize, items);
+    }
+
+    public async Task<CollectionStatePage> SearchStatesAsync(CollectionStateQuery request,
+        CancellationToken cancellationToken = default)
+    {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        await using var db = CreateDbContext();
+        var query = from state in db.States.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+            select new { state, resource };
+        if (request.Statuses is { Count: > 0 })
+        {
+            var statuses = request.Statuses.Distinct().ToArray();
+            query = query.Where(x => statuses.Contains(x.state.Status));
+        }
+        if (request.ResourceType.HasValue) query = query.Where(x => x.resource.Type == request.ResourceType.Value);
+        if (!string.IsNullOrWhiteSpace(request.Provider))
+        {
+            var provider = request.Provider.Trim().ToUpperInvariant();
+            query = query.Where(x => x.resource.Provider == provider);
+        }
+        if (!string.IsNullOrWhiteSpace(request.DefinitionId))
+        {
+            var definition = request.DefinitionId.Trim();
+            query = query.Where(x => x.state.DefinitionId == definition);
+        }
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => x.resource.ResourceId.Contains(search)
+                || x.resource.Provider.Contains(search) || x.state.DefinitionId.Contains(search));
+        }
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await query.OrderBy(x => x.resource.Type).ThenBy(x => x.resource.ResourceId)
+            .ThenBy(x => x.state.DefinitionId).Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return new(total, page, pageSize, rows.Select(x => new CollectionStateSnapshot(
+            new(x.resource.Type, x.resource.Provider, x.resource.ResourceId), new(x.state.DefinitionId),
+            x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
+            x.state.NextCollectionAt, x.state.Status)).ToList());
     }
 
     public async Task<CollectionReadinessSnapshot> GetReadinessAsync(string requestedByRaceId,

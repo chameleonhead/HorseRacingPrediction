@@ -158,11 +158,18 @@ public sealed record CollectionTaskQuery(
     string? Search = null,
     DateTimeOffset? CreatedFrom = null,
     DateTimeOffset? CreatedTo = null,
+    string? ErrorSearch = null,
     int Page = 1,
     int PageSize = 50);
 
 public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
     IReadOnlyList<CollectionTaskSummary> Items);
+
+public sealed record CollectionStateQuery(IReadOnlyCollection<CollectionStateStatus>? Statuses = null,
+    ResourceType? ResourceType = null, string? Provider = null, string? DefinitionId = null,
+    string? Search = null, int Page = 1, int PageSize = 50);
+public sealed record CollectionStatePage(int TotalCount, int Page, int PageSize,
+    IReadOnlyList<CollectionStateSnapshot> Items);
 
 public sealed record CollectionProgressSnapshot(
     IReadOnlyDictionary<ResourceType, int> ResourcesByType,

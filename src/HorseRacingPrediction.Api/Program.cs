@@ -19,6 +19,7 @@ using HorseRacingPrediction.PredictionScheduling;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.FluentUI.AspNetCore.Components;
+using Microsoft.Data.Sqlite;
 using Microsoft.OpenApi;
 using System.Net;
 
@@ -95,6 +96,12 @@ builder.Services.AddSwaggerGen(options =>
 
 var connectionString = builder.Configuration.GetConnectionString("EventStore")
     ?? "Data Source=eventstore.db";
+var sqlite = new SqliteConnectionStringBuilder(connectionString);
+if (!string.IsNullOrWhiteSpace(sqlite.DataSource) && sqlite.DataSource != ":memory:" && !Path.IsPathRooted(sqlite.DataSource))
+{
+    sqlite.DataSource = Path.GetFullPath(sqlite.DataSource, builder.Environment.ContentRootPath);
+    connectionString = sqlite.ConnectionString;
+}
 
 builder.Services.AddSqliteDbContextProvider(connectionString, builder.Configuration);
 
@@ -109,6 +116,11 @@ builder.Services.Configure<PredictionScheduleOptions>(builder.Configuration.GetS
 builder.Services.AddSingleton<PredictionScheduleStore>();
 builder.Services.AddSingleton<IPredictionSchedule>(services => services.GetRequiredService<PredictionScheduleStore>());
 builder.Services.Configure<CollectionPlatformOptions>(builder.Configuration.GetSection(CollectionPlatformOptions.SectionName));
+builder.Services.PostConfigure<CollectionPlatformOptions>(options =>
+{
+    var configured = string.IsNullOrWhiteSpace(options.StateDirectory) ? "collection-platform-state" : options.StateDirectory;
+    if (!Path.IsPathRooted(configured)) options.StateDirectory = Path.GetFullPath(configured, builder.Environment.ContentRootPath);
+});
 builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyLayoutRevisionCondition>();

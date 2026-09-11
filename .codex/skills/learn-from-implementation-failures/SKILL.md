@@ -32,6 +32,18 @@ When a multi-step implementation repeatedly stops at checkpoints while safe appr
 
 The observable correction is sustained progress across multiple dependent checkpoints, with the execution plan and acceptance matrix showing why work continued or why it was genuinely blocked.
 
+### Review-to-execution closure gate
+
+When the agent produces a numbered review or gap report and the user subsequently authorizes implementation, every reported finding becomes an explicit closure item before code changes begin.
+
+- Copy each finding into the durable execution plan with one of: `Runnable`, `Dependent`, `Externally blocked`, or `Rejected with reason`. Do not silently reinterpret “implement the proposal” as permission to implement only the highest-priority subset.
+- Give every item observable completion evidence. If a finding is intentionally combined with another task, retain a mapping from both original findings to the shared evidence.
+- After each checkpoint, reconcile the original review list against commits, tests, runtime verification, and the acceptance matrix. A passing build or a polished primary screen does not close findings about pagination, large-data behavior, secondary workflows, operational cutover, or browser validation.
+- Before a completion response, run a zero-open-item check. If any authorized item is still runnable or dependent on another local item, continue. If an item requires external access or destructive production authority, report it as an explicit external blocker and do not describe the whole proposal as completed.
+- When a new self-review finds additional defects within the approved outcome, add them to the same closure ledger before fixing them; do not leave them only in commentary or the final response.
+
+The observable gate is a one-to-one ledger from reported findings to completion evidence or a genuine external blocker, with no untracked “remaining work” introduced only after completion was claimed.
+
 ### Resume protocol after an interruption
 
 When work resumes after a user interjection, context compaction, tool failure, process restart, or another interruption, do not reconstruct the task from memory or restart completed work.
