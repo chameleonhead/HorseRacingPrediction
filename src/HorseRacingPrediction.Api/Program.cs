@@ -130,17 +130,14 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
     builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services =>
         (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
-    builder.Services.AddSingleton<CollectionTaskOutboxDispatcher>();
-    builder.Services.AddHostedService(services => services.GetRequiredService<CollectionTaskOutboxDispatcher>());
     builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CollectionPlatformOutboxDispatcher>());
-    builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
-        builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
-    builder.Services.AddHostedService<CollectionDeadLetterQueueReconciler>();
 }
 else
 {
-    builder.Services.AddSingleton<ICollectionTaskQueue, NullCollectionTaskQueue>();
+    builder.Services.AddSingleton<NullCollectionTaskQueue>();
+    builder.Services.AddSingleton<ICollectionTaskQueue>(services => services.GetRequiredService<NullCollectionTaskQueue>());
+    builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services => services.GetRequiredService<NullCollectionTaskQueue>());
 }
 builder.Services.AddSingleton<CollectionResetCoordinator>();
 var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
@@ -156,10 +153,6 @@ if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOp
     builder.Services.AddHostedService<JobFailureNotificationDispatcher>();
 }
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
-builder.Services.Configure<CollectionJobWatchdogOptions>(
-    builder.Configuration.GetSection(CollectionJobWatchdogOptions.SectionName));
-builder.Services.AddSingleton<CollectionJobWatchdogService>();
-builder.Services.AddHostedService(services => services.GetRequiredService<CollectionJobWatchdogService>());
 
 builder.Services.AddEventFlow(options =>
 {
@@ -251,10 +244,8 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
                 depth.VisibleCount,
                 depth.NotVisibleCount);
 
-            await app.Services.GetRequiredService<CollectionTaskOutboxDispatcher>()
+            await app.Services.GetRequiredService<CollectionPlatformOutboxDispatcher>()
                 .DispatchOnceAsync(CancellationToken.None).ConfigureAwait(false);
-            await app.Services.GetRequiredService<CollectionJobWatchdogService>()
-                .RunOnceAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
