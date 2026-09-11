@@ -634,7 +634,8 @@ public sealed class CollectionPlatformStore
     }
 
     public async Task<CollectionResourceDetail?> GetResourceDetailAsync(ResourceKey resource,
-        CollectionDefinitionId definition, CancellationToken cancellationToken = default)
+        CollectionDefinitionId definition, int historyPage = 1, int historyPageSize = 25,
+        CancellationToken cancellationToken = default)
     {
         resource = resource.Normalize();
         await using var db = CreateDbContext();
@@ -648,25 +649,31 @@ public sealed class CollectionPlatformStore
         var locations = locationRows.OrderByDescending(x => x.LastVerifiedAt ?? x.DiscoveredAt)
             .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url),
             x.Source, x.Status, x.LastVerifiedAt)).ToList();
+        historyPage = Math.Max(1, historyPage);
+        historyPageSize = Math.Clamp(historyPageSize, 1, 100);
         var requestRows = await db.Requests.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
                 && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
-        var requests = requestRows.OrderByDescending(x => x.RequestedAt).Select(x =>
+        var requests = requestRows.OrderByDescending(x => x.RequestedAt)
+            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x =>
             new CollectionRequestSummary(x.RequestId, x.RequestedRevision, x.Reason, x.RequestedAt,
                 x.ExplicitUrl, x.BatchId)).ToList();
         var taskRows = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
                 && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
-        var tasks = taskRows.OrderByDescending(x => x.CreatedAt).Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
+        var tasks = taskRows.OrderByDescending(x => x.CreatedAt)
+            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
             x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount)).ToList();
-        var taskIds = tasks.Select(x => x.TaskId).ToArray();
+        var taskIds = taskRows.Select(x => x.TaskId).ToArray();
         var attemptRows = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
             .ToListAsync(cancellationToken);
-        var attempts = attemptRows.OrderByDescending(x => x.StartedAt).Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
+        var attempts = attemptRows.OrderByDescending(x => x.StartedAt)
+            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
                 x.AttemptNumber, x.StartedAt, x.FinishedAt, x.Result, x.ErrorCode, x.ErrorMessage,
                 x.RequestedUrl, x.FinalUrl, x.HttpStatusCode, x.PageIdentification)).ToList();
         var state = stateEntity is null ? null : new CollectionStateSnapshot(resource, definition,
             stateEntity.AppliedRevision, stateEntity.RequiredRevision, stateEntity.LastCollectedAt,
             stateEntity.NextCollectionAt, stateEntity.Status);
-        return new(state, locations, requests, tasks, attempts);
+        return new(state, locations, requests, tasks, attempts, requestRows.Count, taskRows.Count,
+            attemptRows.Count, historyPage, historyPageSize);
     }
 
     public async Task<int> AddRevisionAndApplyImpactAsync(CollectionDefinitionId definition, int revision,

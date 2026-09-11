@@ -11,6 +11,9 @@ public sealed partial class AdminApiClient
     public Task<CollectionProgressSnapshot?> GetCollectionProgressAsync(CancellationToken token = default)
         => GetJsonAsync<CollectionProgressSnapshot>($"{CollectionPlatformPath}/progress", token);
 
+    public Task<CollectionOperationsDashboard?> GetCollectionOperationsDashboardAsync(CancellationToken token = default)
+        => GetJsonAsync<CollectionOperationsDashboard>($"{CollectionPlatformPath}/dashboard", token);
+
     public Task<CollectionPipelineState?> GetCollectionPipelineAsync(CancellationToken token = default)
         => GetJsonAsync<CollectionPipelineState>($"{CollectionPlatformPath}/pipeline", token);
 
@@ -21,10 +24,12 @@ public sealed partial class AdminApiClient
             $"/{Uri.EscapeDataString(resource.Id)}/{Uri.EscapeDataString(definition.Value)}", token);
 
     public Task<CollectionResourceDetail?> GetCollectionResourceDetailAsync(ResourceKey resource,
-        CollectionDefinitionId definition, CancellationToken token = default)
+        CollectionDefinitionId definition, int historyPage = 1, int historyPageSize = 25,
+        CancellationToken token = default)
         => GetJsonAsync<CollectionResourceDetail>(
             $"{CollectionPlatformPath}/resources/{resource.Type}/{Uri.EscapeDataString(resource.Provider)}" +
-            $"/{Uri.EscapeDataString(resource.Id)}/{Uri.EscapeDataString(definition.Value)}", token);
+            $"/{Uri.EscapeDataString(resource.Id)}/{Uri.EscapeDataString(definition.Value)}" +
+            $"?historyPage={Math.Max(1, historyPage)}&historyPageSize={Math.Clamp(historyPageSize, 1, 100)}", token);
 
     public Task<IReadOnlyList<BackfillBatchSnapshot>?> GetBackfillBatchesAsync(
         CancellationToken token = default)

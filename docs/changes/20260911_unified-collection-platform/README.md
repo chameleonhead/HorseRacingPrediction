@@ -262,6 +262,8 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 今回の継続では、サーバー側State/error paging、1,001件超の障害復旧確認、Revision登録操作、Backfill詳細・欠損復旧、起動場所に依存しないデータpath解決を実装した。残るローカル項目は詳細履歴paging、dashboard query集約/自動更新/tab URL復元、認証済みdesktop/narrow browser検証である。本番Terraform/cutoverと旧SQS削除はAWS環境とcutover windowを必要とするため外部blockerとして分離する。
 
+続くチェックポイントで詳細履歴paging、業務データlink、dashboard query集約、30秒自動更新、tab URL復元を実装した。認証済みdesktop browserでは通常・空状態、主要操作の発見性、Revision tabのURL復元、accessibility treeを確認した。ブラウザー自己レビューでRevision formのlabel/input整列不良を検出し、grid child wrapperを追加して修正した。狭幅viewportの実ブラウザー検証のみU9へ残す。
+
 ### 2026-09-11 implementation review retrospective
 
 The implementation checkpoint exposed a systemic traceability failure. New models and isolated policy tests were treated as evidence of connected capabilities without tracing the production path through discovery, location resolution, SQS dispatch, Lambda cancellation, retry recovery, and cutover. This allowed a new discovery handler to call a legacy job producer after the legacy dispatcher was disabled, left explicit URLs and ResourceLocation disconnected from workers, left the fairness allocator disconnected from the outbox dispatcher, and represented a destructive queue replacement as a Terraform rename rather than a smoke-gated cutover.

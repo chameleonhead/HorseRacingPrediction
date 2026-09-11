@@ -1,7 +1,9 @@
-<FluentTabs Class="raceops-detail-tabs" ShowActiveIndicator="true">
+<FluentTabs Class="raceops-detail-tabs" ShowActiveIndicator="true" ActiveTabId="@ActiveTabId" ActiveTabIdChanged="@ActiveTabIdChanged">
     @ChildContent
 </FluentTabs>
 
 @code {
     [Parameter, EditorRequired] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? ActiveTabId { get; set; }
+    [Parameter] public EventCallback<string> ActiveTabIdChanged { get; set; }
 }

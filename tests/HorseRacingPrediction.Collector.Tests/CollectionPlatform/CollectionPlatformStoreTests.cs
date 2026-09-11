@@ -548,6 +548,26 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(1, after.TotalPendingRequests);
     }
 
+    [TestMethod]
+    public async Task ResourceDetail_HistoriesArePagedBeforeReturning()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("horse-profile");
+        var resource = new ResourceKey(ResourceType.Horse, "JRA", "history-horse");
+        await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "Initial", false);
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        for (var index = 0; index < 30; index++)
+            await store.RequestAsync(resource, definition, 1, CollectionReason.ManualRefresh, now.AddSeconds(index));
+
+        var secondPage = await store.GetResourceDetailAsync(resource, definition, 2, 25);
+
+        Assert.IsNotNull(secondPage);
+        Assert.AreEqual(30, secondPage.RequestTotal);
+        Assert.HasCount(5, secondPage.Requests);
+        Assert.AreEqual(2, secondPage.HistoryPage);
+        Assert.AreEqual(25, secondPage.HistoryPageSize);
+    }
+
     private CollectionPlatformStore CreateStore() => new(Options.Create(new CollectionPlatformOptions
     {
         StateDirectory = _directory,

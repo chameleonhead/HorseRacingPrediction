@@ -204,7 +204,8 @@ public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int A
     string? PageIdentification = null);
 public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<ResourceLocationCandidate> Locations, IReadOnlyList<CollectionRequestSummary> Requests,
-    IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts);
+    IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts,
+    int RequestTotal = 0, int TaskTotal = 0, int AttemptTotal = 0, int HistoryPage = 1, int HistoryPageSize = 25);
 public sealed record CollectionWatchdogResult(int ReclaimedLeases, int RedispatchedTasks, int DeadLetteredTasks);
 public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOnly To,
     int ExpectedDiscoveryDays, int RegisteredDiscoveryDays, int Pending, int Running,

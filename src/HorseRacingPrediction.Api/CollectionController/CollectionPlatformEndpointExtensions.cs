@@ -59,6 +59,15 @@ public static class CollectionPlatformEndpointExtensions
         });
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
+        admin.MapGet("/dashboard", async (CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var progressTask = store.GetProgressAsync(token);
+            var notificationsTask = store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var backfillsTask = store.GetBackfillBatchesAsync(token);
+            await Task.WhenAll(progressTask, notificationsTask, backfillsTask);
+            return Results.Ok(new CollectionOperationsDashboard(await progressTask,
+                BuildFailureGroups(await notificationsTask), await backfillsTask, DateTimeOffset.UtcNow));
+        });
         admin.MapGet("/readiness/{raceId}", async (string raceId, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetReadinessAsync(raceId, token)));
         admin.MapGet("/pipeline", async (CollectionPlatformStore store, CancellationToken token) =>
@@ -85,19 +94,7 @@ public static class CollectionPlatformEndpointExtensions
         {
             var notifications = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow,
                 Math.Clamp(limit ?? 5000, 1, 10000), token);
-            var groups = notifications.GroupBy(x => new
-                {
-                    Definition = x.Definition.Value, x.Status, ErrorCode = x.ErrorCode ?? string.Empty,
-                })
-                .Select(x => new CollectionFailureGroup(
-                    CreateFailureGroupKey(x.Key.Definition, x.Key.Status, x.Key.ErrorCode),
-                    new(x.Key.Definition), x.Key.Status,
-                    string.IsNullOrEmpty(x.Key.ErrorCode) ? null : x.Key.ErrorCode,
-                    x.OrderByDescending(y => y.FailedAt).Select(y => y.ErrorMessage).FirstOrDefault(),
-                    x.Count(), x.Min(y => y.FailedAt), x.Max(y => y.FailedAt),
-                    x.Select(y => y.NotificationId).ToList(), x.Select(y => y.Resource).Distinct().Take(20).ToList()))
-                .OrderByDescending(x => x.LastFailedAt).ToList();
-            return Results.Ok(groups);
+            return Results.Ok(BuildFailureGroups(notifications));
         });
         admin.MapPost("/failure-notifications/recover", async (RecoverCollectionFailuresRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -145,8 +142,9 @@ public static class CollectionPlatformEndpointExtensions
         });
         admin.MapGet("/resources/{type}/{provider}/{resourceId}/{definition}", async (
             ResourceType type, string provider, string resourceId, string definition,
-            CollectionPlatformStore store, CancellationToken token) =>
-            await store.GetResourceDetailAsync(new(type, provider, resourceId), new(definition), token) is { } detail
+            int? historyPage, int? historyPageSize, CollectionPlatformStore store, CancellationToken token) =>
+            await store.GetResourceDetailAsync(new(type, provider, resourceId), new(definition),
+                historyPage ?? 1, historyPageSize ?? 25, token) is { } detail
                 ? Results.Ok(detail) : Results.NotFound());
         admin.MapPost("/requests", async (CreateCollectionRequest request, CollectionPlatformStore store,
             CancellationToken token) =>
@@ -288,6 +286,17 @@ public static class CollectionPlatformEndpointExtensions
         return Convert.ToHexString(bytes, 0, 8);
     }
 
+    private static IReadOnlyList<CollectionFailureGroup> BuildFailureGroups(
+        IReadOnlyList<PendingCollectionFailureNotification> notifications) => notifications.GroupBy(x => new
+        {
+            Definition = x.Definition.Value, x.Status, ErrorCode = x.ErrorCode ?? string.Empty,
+        }).Select(x => new CollectionFailureGroup(
+            CreateFailureGroupKey(x.Key.Definition, x.Key.Status, x.Key.ErrorCode), new(x.Key.Definition), x.Key.Status,
+            string.IsNullOrEmpty(x.Key.ErrorCode) ? null : x.Key.ErrorCode,
+            x.OrderByDescending(y => y.FailedAt).Select(y => y.ErrorMessage).FirstOrDefault(), x.Count(),
+            x.Min(y => y.FailedAt), x.Max(y => y.FailedAt), x.Select(y => y.NotificationId).ToList(),
+            x.Select(y => y.Resource).Distinct().Take(20).ToList())).OrderByDescending(x => x.LastFailedAt).ToList();
+
     private static async Task<IReadOnlyList<CollectionBulkTarget>> ResolveBulkTargetsAsync(
         BulkCollectionOperationRequest request, CollectionPlatformStore store,
         IDbContextProvider<EventStoreDbContext> domainProvider,
@@ -364,6 +373,9 @@ public sealed record ApplyCollectionRevisionRequest(string DefinitionId, int Rev
     RevisionImpactRequest Impact);
 public sealed record CollectionRevisionApplyResult(string DefinitionId, int Revision, int Affected);
 public sealed record BackfillHoleRecoveryResult(int Holes, int TasksCreated);
+public sealed record CollectionOperationsDashboard(CollectionProgressSnapshot Progress,
+    IReadOnlyList<CollectionFailureGroup> Failures, IReadOnlyList<BackfillBatchSnapshot> Backfills,
+    DateTimeOffset GeneratedAt);
 public sealed record RevisionRecollectionRequest(CollectionLane Lane = CollectionLane.Background,
     int Priority = (int)CollectionPriority.Background);
 public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);

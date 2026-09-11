@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using Bunit;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -70,6 +71,17 @@ public sealed class CollectionOperationsComponentTests
 
             object value = path switch
             {
+                "/api/admin/collection/dashboard" => new CollectionOperationsDashboard(
+                    new CollectionProgressSnapshot(new Dictionary<ResourceType, int> { [ResourceType.Race] = 10 },
+                        new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },
+                        new Dictionary<CollectionLane, int> { [CollectionLane.Realtime] = 3 },
+                        new Dictionary<int, int> { [100] = 3 }, new Dictionary<string, int>(), 2),
+                    [new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
+                        CollectionTaskStatus.Failed, "UnexpectedPage", "別ページ", 2,
+                        DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
+                        [Guid.NewGuid(), Guid.NewGuid()], [new(ResourceType.RaceResult, "JRA", "R1")])],
+                    [new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
+                        31, 31, 0, 0, 30, 1, [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow),
                 "/api/admin/collection/progress" => new CollectionProgressSnapshot(
                     new Dictionary<ResourceType, int> { [ResourceType.Race] = 10 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Failed] = 2 },

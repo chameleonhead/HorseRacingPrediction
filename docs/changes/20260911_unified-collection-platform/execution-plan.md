@@ -25,10 +25,10 @@ This is the durable continuation plan for the approved unified collection platfo
 | U3 | Make grouped failure recovery safe beyond 1,000 notifications with preview/confirmation | U2 | Store/API/operations UI/tests | 1,001-item grouped recovery without loss or duplicate active tasks | Completed |
 | U4 | Complete Revision registration workflow: scope input, preview, apply, recollect | R1 | API client/operations UI/tests | All four scope forms and preview-before-apply component/API tests | Completed |
 | U5 | Add Backfill batch detail, holes, links, and hole-only recovery | B1, U2 | Store/API/Backfill UI/tests | partial batch exposes and recovers concrete holes | Completed |
-| U6 | Page Request/Task/Attempt detail histories and expose safe domain links | U2 | Store/API/detail UI/tests | large repeated-Odds history and identity-mapped navigation tests | Dependent on U2 |
-| U7 | Consolidate collection dashboard counts, add lightweight operations auto-refresh, preserve tab state | U2 | projection/API/UI/tests | one refresh contract, no full loading replacement, URL restoration | Dependent on U2 |
+| U6 | Page Request/Task/Attempt detail histories and expose safe domain links | U2 | Store/API/detail UI/tests | large repeated-Odds history and identity-mapped navigation tests | Completed |
+| U7 | Consolidate collection dashboard counts, add lightweight operations auto-refresh, preserve tab state | U2 | projection/API/UI/tests | one refresh contract, no full loading replacement, URL restoration | Completed |
 | U8 | Standardize local launch working directory and absolute data paths | — | local scripts/config/docs/tests | root/project launch resolve the same DB and queue paths | Implemented; launch verification remains in U9 |
-| U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Dependent on U3-U8 |
+| U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Desktop/accessibility verified; narrow viewport pending |
 | U10 | Execute isolated Terraform/cutover rehearsal, then production cutover and legacy deletion | C2, U9 | deployment/AWS/runbook | plan, smoke, rollback rehearsal, approved production deletion evidence | Externally blocked: AWS environment and production cutover window |
 
 ## Parallelization rules
@@ -39,3 +39,5 @@ This is the durable continuation plan for the approved unified collection platfo
 - Destructive AWS/DB operations are limited to the approved cutover sequence and are not executed during implementation or rehearsal against production.
 - 2026-09-12: U2-U5 を実装した。State と task error filter は DB filtering 後に server-side paging し、1,001件の障害復旧要求を受理できる上限と確認Dialog、Revision の4 scope入力→preview→apply→recollect、Backfill独立詳細とhole-only recoveryを追加した。Store/API/component対象15件とAPI全115件（外部依存1件skip）が成功した。
 - 2026-09-12: U8 の相対SQLite/collection state pathをAPI content root基準の絶対pathへ正規化した。起動ディレクトリ差異の実ブラウザー確認はU9で行う。
+- 2026-09-12: U6 はResource詳細のRequest/Task/Attempt履歴を共通25件pageへ変更し、30件時のpage 2をStore testで検証した。Horse/Jockey/Trainerは収集詳細から安全な業務詳細routeへ遷移できる。
+- 2026-09-12: U7 はoperations dashboardを単一HTTP queryへ集約し、30秒の部分更新、`?tab=`によるtab復元を追加した。認証済みdesktop browserで一覧、運用画面、Revision tabとURL更新を確認した。Revision formのfield hostがgrid上で分離してlabel/inputがずれる問題を自己レビューで発見し、field wrapperで修正した。狭幅の実ブラウザー確認は継続する。

@@ -24,6 +24,10 @@ else if (detail is not null)
         <div class="profile-fact"><span>最終取得</span><strong>@Time(detail.State?.LastCollectedAt)</strong></div>
         <div class="profile-fact"><span>次回予定</span><strong>@Time(detail.State?.NextCollectionAt)</strong></div>
     </section>
+    @if (DomainUrl is not null)
+    {
+        <div class="action-row"><FluentButton Href="@DomainUrl">@ResourceTypeLabel の業務データを開く</FluentButton></div>
+    }
 
     <RaceOpsDetailTabs>
         <FluentTab Label="概要" Id="overview"><section class="detail-card detail-section"><h2>収集対象</h2><dl class="meta"><dt>種類</dt><dd>@ResourceTypeLabel</dd><dt>提供元</dt><dd>@Provider</dd><dt>対象ID</dt><dd><code>@ResourceId</code></dd><dt>収集内容</dt><dd>@DefinitionLabel</dd><dt>処理区分</dt><dd>@(LatestTask is null ? "—" : LaneLabel(LatestTask.Lane))</dd><dt>優先度</dt><dd>@(LatestTask?.Priority.ToString() ?? "—")</dd></dl></section></FluentTab>
@@ -33,6 +37,10 @@ else if (detail is not null)
         <FluentTab Label="@($"取得先 ({detail.Locations.Count})")" Id="locations"><section class="entity-section detail-section"><h2>取得先候補</h2>@if(detail.Locations.Count==0){<UiState Title="保存済みの取得先候補はありません" Message="実行時にURLの生成または探索を行います。" />}else{<FluentDataGrid Items="@detail.Locations.AsQueryable()" TGridItem="ResourceLocationCandidate" aria-label="取得先候補"><PropertyColumn Property="@(x=>x.Url)" Title="URL" /><TemplateColumn Title="発見方法">@LocationSourceLabel(context.Source)</TemplateColumn><TemplateColumn Title="状態">@LocationStatusLabel(context.Status)</TemplateColumn><TemplateColumn Title="最終確認">@Time(context.LastVerifiedAt)</TemplateColumn></FluentDataGrid>}</section></FluentTab>
         <FluentTab Label="管理" Id="management"><section class="detail-card detail-section"><h2>取得先を指定して再取得</h2><p>保存済みの取得先や自動探索を使わず、調査対象のURLを明示したい場合だけ使用します。通常の再取得はページ上部から依頼してください。</p><FluentTextField Label="取得先URL" Placeholder="https://..." @bind-Value="explicitUrl" /><div class="action-row"><FluentButton Appearance="@Appearance.Accent" OnClick="RequestWithExplicitUrlAsync" Disabled="@(busy || string.IsNullOrWhiteSpace(explicitUrl))">指定したURLで再取得</FluentButton></div>@if(requestErrors.Count>0){<UiState Kind="error" Title="再取得を依頼できません" Message="@string.Join(" ",requestErrors)" />}</section></FluentTab>
     </RaceOpsDetailTabs>
+    @if (HistoryPages > 1)
+    {
+        <nav class="pagination" aria-label="履歴ページ"><FluentButton OnClick="PreviousHistoryAsync" Disabled="@(busy || historyPage <= 1)">前の履歴</FluentButton><span>@historyPage / @HistoryPages ページ</span><FluentButton OnClick="NextHistoryAsync" Disabled="@(busy || historyPage >= HistoryPages)">次の履歴</FluentButton></nav>
+    }
 }
 
 @code {
@@ -41,17 +49,21 @@ else if (detail is not null)
     [Parameter] public string ResourceId { get; set; } = string.Empty;
     [Parameter] public string DefinitionId { get; set; } = string.Empty;
     [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
-    private bool loading, busy; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[];
+    private bool loading, busy; private int historyPage=1; private const int HistoryPageSize=25; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[];
     private ResourceType? Type=>Enum.TryParse<ResourceType>(ResourceTypeName,true,out var value)?value:null;
     private CollectionTaskSummary? LatestTask=>detail?.Tasks.OrderByDescending(x=>x.AvailableAt).FirstOrDefault();
     private string ResourceTypeLabel=>Type switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>ResourceTypeName};
     private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>DefinitionId};
     private string ResourceDescription=>$"{ResourceTypeLabel} ・ {Provider} ・ {ResourceId}";
+    private string? DomainUrl=>Type switch{ResourceType.Horse=>$"/horses/{Uri.EscapeDataString(ResourceId)}",ResourceType.Jockey=>$"/jockeys/{Uri.EscapeDataString(ResourceId)}",ResourceType.Trainer=>$"/trainers/{Uri.EscapeDataString(ResourceId)}",_=>null};
     private string BackHref=>!string.IsNullOrWhiteSpace(ReturnUrl)&&ReturnUrl.StartsWith("/jobs",StringComparison.Ordinal)&&!ReturnUrl.StartsWith("//",StringComparison.Ordinal)?ReturnUrl:"/jobs";
     private string StatusLabel=>detail?.State?.Status switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>LatestTask is null?"未確認":TaskStatusLabel(LatestTask.Status)};
     private string StatusTone=>detail?.State?.Status switch{CollectionStateStatus.Current=>"success",CollectionStateStatus.Failed or CollectionStateStatus.Stale=>"danger",CollectionStateStatus.Collecting=>"info",_=>"warning"};
+    private int HistoryPages=>detail is null?1:Math.Max(1,(int)Math.Ceiling(new[]{detail.RequestTotal,detail.TaskTotal,detail.AttemptTotal}.Max()/(double)HistoryPageSize));
     protected override Task OnParametersSetAsync()=>LoadAsync();
-    private async Task LoadAsync(){loading=true;errors=[];if(Type is null){errors=["収集対象の種類が正しくありません。"];loading=false;return;}try{detail=await Api.GetCollectionResourceDetailAsync(new(Type.Value,Provider,ResourceId),new(DefinitionId));if(detail is null)errors=["指定された収集対象は見つかりませんでした。"]; }catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。もう一度お試しください。"]; }finally{loading=false;}}
+    private async Task LoadAsync(){loading=true;errors=[];if(Type is null){errors=["収集対象の種類が正しくありません。"];loading=false;return;}try{detail=await Api.GetCollectionResourceDetailAsync(new(Type.Value,Provider,ResourceId),new(DefinitionId),historyPage,HistoryPageSize);if(detail is null)errors=["指定された収集対象は見つかりませんでした。"]; }catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。もう一度お試しください。"]; }finally{loading=false;}}
+    private async Task PreviousHistoryAsync(){if(historyPage<=1)return;historyPage--;await LoadAsync();}
+    private async Task NextHistoryAsync(){if(historyPage>=HistoryPages)return;historyPage++;await LoadAsync();}
     private Task RequestAsync()=>SubmitRequestAsync(null);
     private Task RequestWithExplicitUrlAsync()=>SubmitRequestAsync(explicitUrl?.Trim());
     private async Task SubmitRequestAsync(string? requestedUrl){if(Type is null||detail is null)return;requestErrors=[];operationErrors=[];operationMessage=null;busy=true;try{var task=LatestTask;var revision=Math.Max(task?.RequestedRevision??1,detail.State?.RequiredRevision??1);var result=await Api.RequestCollectionAsync(new(Type.Value,Provider,ResourceId,DefinitionId,revision,CollectionReason.ManualRefresh,task?.Lane??CollectionLane.Normal,task?.Priority??50,string.IsNullOrWhiteSpace(requestedUrl)?null:requestedUrl));if(result.Success&&result.Value is not null){explicitUrl=null;operationMessage=result.Value.CreatedTask?$"収集依頼を受け付けました。タスク {ShortId(result.Value.TaskId)} を作成しました。":$"収集依頼を受け付けました。実行中のタスク {ShortId(result.Value.TaskId)} にまとめました。";await LoadAsync();}else requestErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){requestErrors=["管理APIに接続できません。入力内容を保持しています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}

@@ -1,6 +1,8 @@
 @page "/jobs/operations"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <RaceOpsPageHeader Section="運用 / 収集管理" Title="収集運用" Description="障害への対応、過去データ収集、抽出仕様変更の進捗をまとめて管理します。">
     <Actions>
@@ -35,7 +37,7 @@ else
         <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", operationErrors)" />
     }
 
-    <RaceOpsDetailTabs>
+    <RaceOpsDetailTabs ActiveTabId="@activeTab" ActiveTabIdChanged="OnTabChanged">
         <FluentTab Label="運用状況" Id="monitoring">
             <section class="entity-section detail-section">
                 <h2>処理区分ごとの待機状況</h2>
@@ -83,8 +85,8 @@ else
                 <h2>月単位で収集を開始</h2>
                 <p>存在するレースを日ごとに探索します。途中で失敗しても、成功済みの範囲を保ったまま再開できます。</p>
                 <div class="operations-form-row">
-                    <FluentTextField Label="年" @bind-Value="backfillYear" />
-                    <FluentTextField Label="月" @bind-Value="backfillMonth" />
+                    <div class="operations-field"><FluentTextField Label="年" @bind-Value="backfillYear" /></div>
+                    <div class="operations-field"><FluentTextField Label="月" @bind-Value="backfillMonth" /></div>
                     <FluentButton Appearance="@Appearance.Accent" OnClick="CreateBackfillAsync" Disabled="busy">収集を開始</FluentButton>
                 </div>
             </section>
@@ -114,9 +116,9 @@ else
                 <h2>新しい抽出仕様を登録</h2>
                 <p>影響範囲を先に確認し、表示された対象だけに新しい版を適用します。</p>
                 <div class="operations-form-row">
-                    <FluentTextField Label="収集内容" Placeholder="例: race-result" @bind-Value="revisionDefinition" />
-                    <FluentTextField Label="版" @bind-Value="revisionText" />
-                    <label class="filter-select">影響範囲<select aria-label="影響範囲" @bind="revisionScope" @bind:after="ResetRevisionPreview"><option value="All">すべて</option><option value="SpecificResources">対象IDを指定</option><option value="DateRange">日付範囲</option><option value="NamedCondition">定義済み条件</option></select></label>
+                    <div class="operations-field"><FluentTextField Label="収集内容" Placeholder="例: race-result" @bind-Value="revisionDefinition" /></div>
+                    <div class="operations-field"><FluentTextField Label="版" @bind-Value="revisionText" /></div>
+                    <div class="operations-field"><label class="filter-select">影響範囲<select aria-label="影響範囲" @bind="revisionScope" @bind:after="ResetRevisionPreview"><option value="All">すべて</option><option value="SpecificResources">対象IDを指定</option><option value="DateRange">日付範囲</option><option value="NamedCondition">定義済み条件</option></select></label></div>
                 </div>
                 @if (revisionScope == "SpecificResources") { <FluentTextArea Label="対象ID（改行またはカンマ区切り）" @bind-Value="revisionResourceIds" /> }
                 else if (revisionScope == "DateRange") { <div class="operations-form-row"><FluentTextField Label="開始日 (yyyy-MM-dd)" @bind-Value="revisionFrom" /><FluentTextField Label="終了日 (yyyy-MM-dd)" @bind-Value="revisionTo" /></div> }
@@ -167,10 +169,35 @@ else
     private RevisionImpactPreview? revisionPreview;
     private RevisionRecollectionProgress? revisionProgress;
     private CollectionFailureGroup? pendingRecovery;
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    private string activeTab = "monitoring";
+    private readonly CancellationTokenSource refreshCancellation = new();
 
     private IReadOnlyList<CollectionFailureGroup> FailureGroups => failures.OrderByDescending(x => x.Count).ToList();
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        activeTab = Tab is "monitoring" or "failures" or "backfills" or "revisions" ? Tab : "monitoring";
+        await LoadAsync();
+        _ = RefreshLoopAsync(refreshCancellation.Token);
+    }
+
+    private Task OnTabChanged(string tab)
+    {
+        activeTab = tab;
+        var basePath = Navigation.Uri.Split('?', 2)[0];
+        Navigation.NavigateTo($"{basePath}?tab={Uri.EscapeDataString(tab)}", replace: true);
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        try { while (await timer.WaitForNextTickAsync(token)) if (!busy) await InvokeAsync(LoadAsync); }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose() { refreshCancellation.Cancel(); refreshCancellation.Dispose(); }
 
     private async Task LoadAsync()
     {
@@ -178,7 +205,10 @@ else
         loadErrors = [];
         try
         {
-            await Task.WhenAll(LoadProgressAsync(), LoadFailuresAsync(), LoadBackfillsAsync());
+            var dashboard = await Api.GetCollectionOperationsDashboardAsync();
+            progress = dashboard?.Progress ?? EmptyProgress();
+            failures = dashboard?.Failures ?? [];
+            backfills = dashboard?.Backfills ?? [];
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

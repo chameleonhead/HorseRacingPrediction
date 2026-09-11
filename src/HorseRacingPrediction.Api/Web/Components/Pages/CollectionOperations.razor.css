@@ -22,6 +22,9 @@
     align-items: end;
 }
 
+.operations-field { min-width: 0; }
+.operations-field fluent-text-field { width: 100%; }
+
 @media (max-width: 720px) {
     .operations-form-row { grid-template-columns: 1fr; }
 }
