@@ -126,7 +126,8 @@ public sealed record ResourceLocationCandidate(long LocationId, Uri Url, Resourc
     ResourceLocationStatus Status, DateTimeOffset? LastVerifiedAt);
 
 public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGeneration);
-public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification);
+public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification,
+    CollectionLane Lane, int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
     DateTimeOffset AvailableAt, int AttemptCount);

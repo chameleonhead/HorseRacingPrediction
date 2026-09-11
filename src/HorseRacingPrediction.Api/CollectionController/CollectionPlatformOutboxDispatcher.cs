@@ -15,6 +15,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
     ILogger<CollectionPlatformOutboxDispatcher> logger) : BackgroundService
 {
     private readonly CollectionQueueOptions _options = options.Value;
+    private readonly CollectionLaneAllocator _allocator = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,10 +30,16 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
-        var items = await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow,
-            Math.Max(1, _options.DispatchBatchSize), cancellationToken).ConfigureAwait(false);
-        foreach (var item in items)
+        var now = DateTimeOffset.UtcNow;
+        var remaining = (await store.GetPendingDispatchesAsync(now,
+            Math.Max(100, _options.DispatchBatchSize * 20), cancellationToken).ConfigureAwait(false)).ToList();
+        for (var sent = 0; sent < Math.Max(1, _options.DispatchBatchSize) && remaining.Count > 0; sent++)
         {
+            var selected = _allocator.Select(remaining.Select(x => new FairCollectionCandidate(
+                x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now);
+            if (selected is null) break;
+            var item = remaining.Single(x => x.Notification.TaskId == selected.TaskId);
+            remaining.Remove(item);
             try
             {
                 await queue.SendAsync(item.Notification, cancellationToken).ConfigureAwait(false);

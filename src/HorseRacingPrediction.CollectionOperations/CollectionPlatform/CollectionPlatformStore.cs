@@ -467,11 +467,15 @@ public sealed class CollectionPlatformStore
         CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
-        var pending = await db.DispatchOutbox.AsNoTracking().Where(x => x.DispatchedAt == null)
-            .OrderBy(x => x.AvailableAt).ToListAsync(cancellationToken);
-        return pending.Where(x => x.AvailableAt <= now).Take(Math.Max(1, maxCount))
-            .Select(x => new PendingCollectionDispatch(x.OutboxId,
-                new CollectionTaskNotification(x.TaskId, x.DispatchGeneration))).ToList();
+        var pending = await (from outbox in db.DispatchOutbox.AsNoTracking()
+            join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+            where outbox.DispatchedAt == null
+            select new { outbox, task }).ToListAsync(cancellationToken);
+        return pending.Where(x => x.outbox.AvailableAt <= now).OrderBy(x => x.outbox.AvailableAt)
+            .Take(Math.Max(1, maxCount))
+            .Select(x => new PendingCollectionDispatch(x.outbox.OutboxId,
+                new CollectionTaskNotification(x.outbox.TaskId, x.outbox.DispatchGeneration),
+                x.task.Lane, x.task.Priority, x.outbox.AvailableAt, x.outbox.CreatedAt)).ToList();
     }
 
     public async Task MarkDispatchedAsync(Guid outboxId, DateTimeOffset now,
@@ -496,9 +500,9 @@ public sealed class CollectionPlatformStore
             join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
             select new { task, resource };
         if (status.HasValue) query = query.Where(x => x.task.Status == status.Value);
-        var rows = await query.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.AvailableAt)
-            .Take(Math.Clamp(limit, 1, 1000)).ToListAsync(cancellationToken);
-        return rows.Select(x => new CollectionTaskSummary(x.task.TaskId,
+        var rows = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.AvailableAt)
+            .Take(Math.Clamp(limit, 1, 1000)).Select(x => new CollectionTaskSummary(x.task.TaskId,
             new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
             new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
             x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();

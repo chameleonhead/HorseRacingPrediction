@@ -13,7 +13,7 @@ Status meanings: **Not started** has no connected production path; **Connected**
 | Race discovery to RaceCard/Result requests | Not started | Current handler invokes the legacy job producer |
 | Horse/Jockey/Trainer discovery and refresh | Not started | Definitions only; handlers and reference expansion absent |
 | Backfill batch and hole recovery | Not started | Legacy implementation remains |
-| Dynamic schedule and repeated observations | Connected | Policy and due-state scheduler exist; actual dispatcher ordering and request-flood protection absent |
+| Dynamic schedule and repeated observations | Connected | Policy/due scheduler exist and the actual outbox dispatcher now enforces Realtime-first with a four-item starvation bound; request-flood protection remains |
 | RaceOdds snapshots | Not started | Definition only; parser/domain snapshot/handler absent |
 | Manual/bulk operations and projections | Connected | Basic APIs exist; preview, transactional expansion, condition selectors, UI absent |
 | Pause/cancel/watchdog/DLQ/failure notification | Not started | Runtime path still references or removed legacy services |
