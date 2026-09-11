@@ -6,6 +6,7 @@ using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -44,6 +45,7 @@ public sealed class CollectionAdministrationComponentTests
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "表示する収集処理はありません"));
         await ClickFluentButtonAsync(cut, "収集を依頼");
         await ClickButtonAsync(cut, "複数をまとめて再取得");
+        await SelectAsync(cut, "対象の選び方", "SpecificResources");
         cut.WaitForAssertion(() => Assert.IsTrue(cut.FindComponents<FluentButton>()
             .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
         StringAssert.Contains(cut.Markup, "確認後に対象が増えることはありません");
@@ -70,15 +72,16 @@ public sealed class CollectionAdministrationComponentTests
         var detailCut = context.Render<JobDetail>(parameters => parameters
             .Add(x => x.ResourceTypeName, "Horse").Add(x => x.Provider, "jra")
             .Add(x => x.ResourceId, "H001").Add(x => x.DefinitionId, "horse-profile"));
-        detailCut.WaitForAssertion(() => StringAssert.Contains(detailCut.Markup, "この情報を再取得"));
+        detailCut.WaitForAssertion(() => StringAssert.Contains(detailCut.Markup, "通常の方法で再取得"));
         StringAssert.Contains(detailCut.Markup, "収集処理の概要");
         StringAssert.Contains(detailCut.Markup, "保存済みの取得先候補はありません");
         StringAssert.Contains(detailCut.Markup, "実行履歴はまだありません");
         await detailCut.InvokeAsync(() => detailCut.FindComponents<FluentButton>()
-            .First(x => x.Markup.Contains("この情報を再取得</")).Instance.OnClick.InvokeAsync());
+            .First(x => x.Markup.Contains("通常の方法で再取得</")).Instance.OnClick.InvokeAsync());
         Assert.AreEqual(1, handler.ManualRequests);
         await ClickFluentButtonAsync(cut, "収集を依頼");
         await ClickButtonAsync(cut, "複数をまとめて再取得");
+        await SelectAsync(cut, "対象の選び方", "SpecificResources");
         var ids = cut.FindComponents<FluentTextField>()
             .Single(x => x.Instance.Label?.ToString() == "対象ID（カンマ区切り）");
         await cut.InvokeAsync(() => ids.Instance.ValueChanged.InvokeAsync("H001"));
@@ -140,11 +143,38 @@ public sealed class CollectionAdministrationComponentTests
         Assert.AreEqual("horse-profile", handler.LastManualRequest.DefinitionId);
     }
 
+    [TestMethod]
+    public async Task Filters_ArePersistedInUrlAndDetailReturnUrl()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new ResourceHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+        await ClickButtonAsync(cut, "待機中");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
+        await SelectAsync(cut, "対象種別", "Horse");
+        var provider = cut.FindComponents<FluentTextField>()
+            .Single(x => x.Instance.Placeholder?.ToString() == "提供元");
+        await cut.InvokeAsync(() => provider.Instance.ValueChanged.InvokeAsync("JRA"));
+        await ClickFluentButtonAsync(cut, "絞り込む");
+
+        StringAssert.Contains(context.Services.GetRequiredService<NavigationManager>().Uri, "view=waiting");
+        StringAssert.Contains(context.Services.GetRequiredService<NavigationManager>().Uri, "type=Horse");
+        var link = cut.FindAll("a").Single(x => x.TextContent.Contains("H001"));
+        StringAssert.Contains(link.GetAttribute("href"), "returnUrl=");
+    }
+
     private static Task ClickFluentButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
         cut.FindComponents<FluentButton>().First(x => x.Markup.Contains($">{text}</")).Instance.OnClick.InvokeAsync());
 
     private static Task ClickButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
         cut.FindAll("button").First(x => x.TextContent.Trim().StartsWith(text, StringComparison.Ordinal)).Click());
+
+    private static Task SelectAsync(IRenderedComponent<Jobs> cut, string label, string value) => cut.InvokeAsync(() =>
+        cut.Find($"select[aria-label='{label}']").Change(value));
 
     private sealed class ResourceHandler : HttpMessageHandler
     {

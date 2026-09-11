@@ -1,6 +1,8 @@
 @page "/jobs"
 @attribute [Authorize]
 @inject AdminApiClient Api
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
 
 <RaceOpsPageHeader Section="運用" Title="収集管理" Description="収集処理の進行状況を確認し、失敗から復旧します。">
     <Actions>
@@ -36,10 +38,33 @@
 <section class="filter-bar" aria-label="収集処理の絞り込み">
     <div class="filter-toolbar">
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集処理を検索" Placeholder="対象ID、収集内容、状態を検索" @bind-Value="query" /></div>
+        <label class="filter-select">対象種別<select aria-label="対象種別" @bind="resourceFilter"><option value="">すべて</option>@foreach(var type in Enum.GetValues<ResourceType>()){<option value="@type">@ResourceTypeLabel(type)</option>}</select></label>
+        <label class="filter-select">処理状態<select aria-label="処理状態" @bind="statusFilter"><option value="">すべて</option>@foreach(var status in Enum.GetValues<CollectionTaskStatus>()){<option value="@status">@TaskStatusLabel(status)</option>}</select></label>
+        <label class="filter-select">処理区分<select aria-label="処理区分" @bind="laneFilter"><option value="">すべて</option>@foreach(var lane in Enum.GetValues<CollectionLane>()){<option value="@lane">@LaneLabel(lane)</option>}</select></label>
+        <div class="filter-field"><FluentTextField aria-label="提供元で絞り込み" Placeholder="提供元" @bind-Value="providerFilter" /></div>
+        <div class="filter-field"><FluentTextField aria-label="エラーで絞り込み" Placeholder="エラーコード・内容" @bind-Value="errorFilter" /></div>
         <FluentButton Appearance="@Appearance.Accent" OnClick="ApplyFilter">絞り込む</FluentButton>
-        @if (!string.IsNullOrWhiteSpace(filter)) { <FluentButton OnClick="ClearFilter">条件をクリア</FluentButton> }
+        @if (HasFilters) { <FluentButton OnClick="ClearFilter">条件をクリア</FluentButton> }
     </div>
+    <div class="refresh-status"><span>最終更新: @(lastUpdatedAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—")</span><label><input type="checkbox" @bind="autoRefresh" /> 処理中は自動更新</label></div>
 </section>
+
+@if (!loading && view == "attention" && FailureGroups.Count > 0)
+{
+    <section class="failure-summary" aria-labelledby="failure-summary-title">
+        <div class="section-title"><h2 id="failure-summary-title">障害のまとまり</h2><span class="hint">同じ原因をまとめて確認できます</span></div>
+        <div class="failure-groups">
+            @foreach (var group in FailureGroups.Take(6))
+            {
+                <a class="failure-group" href="@DetailHref(group.First)">
+                    <span><strong>@(string.IsNullOrWhiteSpace(group.ErrorCode) ? "原因未分類" : group.ErrorCode)</strong><small>@DefinitionLabel(group.Definition)</small></span>
+                    <span class="failure-count">@group.Count 件</span>
+                    <span class="failure-message">@(string.IsNullOrWhiteSpace(group.Message) ? "詳細画面で実行履歴を確認してください。" : group.Message)</span>
+                </a>
+            }
+        </div>
+    </section>
+}
 
 @if (loading)
 {
@@ -100,22 +125,54 @@ else
 
 <FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h => showBulk = !h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader>
-    <FluentDialogBody><p>対象を確認してから実行します。確認後に対象が増えることはありません。</p><FluentTextField Label="対象種別" @bind-Value="bulkType" /><FluentTextField Label="提供元" @bind-Value="provider" /><FluentTextField Label="収集定義ID" @bind-Value="definition" /><FluentTextField Label="必要な抽出仕様の版" @bind-Value="revision" /><FluentTextField Label="対象ID（カンマ区切り）" @bind-Value="ids" />@if(preview is not null){<FluentMessageBar Intent="@MessageIntent.Info" Title="@($"対象は {preview.TargetCount} 件です")" />}@if(bulkErrors.Count>0){<UiState Kind="error" Title="まとめて再取得を実行できません" Message="@string.Join(" ",bulkErrors)" />}</FluentDialogBody>
+    <FluentDialogBody>
+        <p>対象の選び方を指定し、件数を確認してから実行します。確認後に対象が増えることはありません。</p>
+        <div class="collection-request-form">
+            <label class="filter-select">対象の選び方<select aria-label="対象の選び方" @bind="bulkSelection" @bind:after="ResetBulkPreview"><option value="Failed">失敗したデータ</option><option value="Stale">古くなったデータ</option><option value="LastCollectedBefore">最終取得日時より前</option><option value="HorsesRacedInDateRange">指定期間に出走した競走馬</option><option value="HorsesByTrainer">調教師に所属する競走馬</option><option value="SpecificResources">対象IDを指定</option></select></label>
+            <label class="filter-select">情報の種類<select aria-label="情報の種類" @bind="bulkType" @bind:after="BulkTypeChanged">@foreach(var kind in collectionKinds.Where(x => x.Type != "RaceCard" || bulkSelection == "SpecificResources")){<option value="@kind.Type">@kind.Label</option>}</select></label>
+            @if (bulkSelection == "SpecificResources") { <FluentTextField Label="対象ID（カンマ区切り）" @bind-Value="ids" /> }
+            @if (bulkSelection == "HorsesRacedInDateRange") { <div class="date-fields"><label>開始日<input type="date" @bind="bulkFrom" /></label><label>終了日<input type="date" @bind="bulkTo" /></label></div> }
+            @if (bulkSelection == "HorsesByTrainer") { <FluentTextField Label="調教師ID" @bind-Value="bulkTrainerId" /> }
+            @if (bulkSelection == "LastCollectedBefore") { <label>最終取得日時<input type="datetime-local" @bind="bulkLastCollectedBefore" /></label> }
+            <details><summary>詳細設定</summary><div class="advanced-fields"><FluentTextField Label="提供元" @bind-Value="provider" /><FluentTextField Label="収集定義ID" @bind-Value="definition" /><FluentTextField Label="必要な抽出仕様の版" @bind-Value="revision" /></div></details>
+        </div>
+        @if(preview is not null){<FluentMessageBar Intent="@MessageIntent.Info" Title="@($"対象は {preview.TargetCount} 件です")" />}
+        @if(bulkErrors.Count>0){<UiState Kind="error" Title="まとめて再取得を実行できません" Message="@string.Join(" ",bulkErrors)" />}
+    </FluentDialogBody>
     <FluentDialogFooter><FluentButton OnClick="@(() => showBulk = false)">キャンセル</FluentButton><FluentButton OnClick="PreviewAsync" Disabled="busy">対象を確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(busy || preview is null)">再取得を依頼</FluentButton></FluentDialogFooter>
 </FluentDialog>
 
 @code {
     private const int PageSize = 50;
     private static readonly IReadOnlyList<FilterOption> views = [new("attention", "要対応"), new("running", "処理中"), new("waiting", "待機中"), new("recent", "最近完了"), new("resources", "収集対象"), new("all", "直近の処理")];
-    private string view = "attention", query = "", filter = "", bulkType = "Horse", provider = "JRA", definition = "horse-profile", revision = "1", ids = "";
+    [SupplyParameterFromQuery(Name="view")] public string? ViewQuery { get; set; }
+    [SupplyParameterFromQuery(Name="q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name="page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name="type")] public string? ResourceFilterQuery { get; set; }
+    [SupplyParameterFromQuery(Name="status")] public string? StatusFilterQuery { get; set; }
+    [SupplyParameterFromQuery(Name="lane")] public string? LaneFilterQuery { get; set; }
+    [SupplyParameterFromQuery(Name="provider")] public string? ProviderFilterQuery { get; set; }
+    [SupplyParameterFromQuery(Name="error")] public string? ErrorFilterQuery { get; set; }
+    private string view = "attention", query = "", filter = "", resourceFilter = "", statusFilter = "", laneFilter = "", providerFilter = "", errorFilter = "", bulkType = "Horse", provider = "JRA", definition = "horse-profile", revision = "1", ids = "", bulkSelection = "Failed", bulkTrainerId = "";
     private string createType = "", createDefinition = "", createProvider = "JRA", createResourceId = "", createUrl = "";
+    private DateOnly? bulkFrom, bulkTo;
+    private DateTime? bulkLastCollectedBefore;
     private int page = 1;
-    private bool loading = true, busy, showCreate, showBulk;
+    private bool loading = true, busy, showCreate, showBulk, initialized, autoRefresh = true;
+    private DateTimeOffset? lastUpdatedAt;
+    private CancellationTokenSource? refreshCancellation;
     private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [];
     private IReadOnlyList<CollectionTaskSummary> tasks = [];
+    private IReadOnlyList<PendingCollectionFailureNotification> failures = [];
     private CollectionProgressSnapshot? progress;
     private CollectionPipelineState? pipeline;
     private CollectionBulkPreview? preview;
+
+    private IReadOnlyList<FailureGroup> FailureGroups => failures.GroupBy(x => new { x.Definition, x.ErrorCode })
+        .Select(g => new FailureGroup(g.Key.Definition, g.Key.ErrorCode, g.First().ErrorMessage, g.Count(),
+            tasks.FirstOrDefault(x => x.TaskId == g.First().TaskId) ?? new(g.First().TaskId, g.First().Resource,
+                g.First().Definition, g.First().Status, CollectionLane.Normal, 0, 1, g.First().FailedAt, g.First().AttemptCount)))
+        .OrderByDescending(x => x.Count).ToList();
 
     private IReadOnlyList<CollectionTaskSummary> UniqueResources => tasks.GroupBy(x => new { x.Resource, x.Definition }).Select(g => g.OrderByDescending(x => x.AvailableAt).First()).ToList();
     private IReadOnlyList<CollectionTaskSummary> FilteredItems => (view == "resources" ? UniqueResources : tasks).Where(MatchesView).Where(MatchesFilter).ToList();
@@ -124,18 +181,21 @@ else
     private string CurrentViewLabel => views.First(x => x.Value == view).Label;
     private static readonly IReadOnlyList<CollectionKind> collectionKinds = [new("RaceCard", "race-card", "出馬表", "出走馬・騎手・調教師など"), new("RaceResult", "race-result", "レース結果", "着順・払戻・競走中の出来事など"), new("RaceOdds", "race-odds", "オッズ", "時系列で変化する各種オッズ"), new("Horse", "horse-profile", "競走馬", "プロフィール・血統など"), new("Jockey", "jockey-profile", "騎手", "プロフィール・所属など"), new("Trainer", "trainer-profile", "調教師", "プロフィール・所属など")];
 
-    protected override Task OnInitializedAsync() => LoadAsync();
-    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:1000);await Task.WhenAll(a,b,c);progress=await a;pipeline=await b;tasks=await c??[];if(page>TotalPages)page=TotalPages;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    protected override async Task OnParametersSetAsync(){if(!initialized){view=views.Any(x=>x.Value==ViewQuery)?ViewQuery!:"attention";query=filter=SearchQuery??"";page=Math.Max(1,PageQuery??1);resourceFilter=ResourceFilterQuery??"";statusFilter=StatusFilterQuery??"";laneFilter=LaneFilterQuery??"";providerFilter=ProviderFilterQuery??"";errorFilter=ErrorFilterQuery??"";initialized=true;await LoadAsync();refreshCancellation=new();_ = RefreshLoopAsync(refreshCancellation.Token);}}
+    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:1000);var d=Api.GetCollectionFailureNotificationsAsync(1000);await Task.WhenAll(a,b,c,d);progress=await a;pipeline=await b;tasks=await c??[];failures=await d??[];if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    private async Task RefreshLoopAsync(CancellationToken token){using var timer=new PeriodicTimer(TimeSpan.FromSeconds(15));try{while(await timer.WaitForNextTickAsync(token)){if(autoRefresh && !busy && (tasks.Any(x=>x.Status==CollectionTaskStatus.Running)||view is "running" or "waiting"))await InvokeAsync(LoadAsync);}}catch(OperationCanceledException){}}
     private bool MatchesView(CollectionTaskSummary x) => view switch { "attention" => x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter, "running" => x.Status == CollectionTaskStatus.Running, "waiting" => IsWaiting(x.Status), "recent" => x.Status == CollectionTaskStatus.Succeeded, _ => true };
-    private bool MatchesFilter(CollectionTaskSummary x) => string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase);
+    private bool MatchesFilter(CollectionTaskSummary x) => (string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(resourceFilter)||x.Resource.Type.ToString()==resourceFilter) && (string.IsNullOrEmpty(statusFilter)||x.Status.ToString()==statusFilter) && (string.IsNullOrEmpty(laneFilter)||x.Lane.ToString()==laneFilter) && (string.IsNullOrWhiteSpace(providerFilter)||x.Resource.Provider.Contains(providerFilter,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrWhiteSpace(errorFilter)||failures.Any(f=>f.TaskId==x.TaskId&&$"{f.ErrorCode} {f.ErrorMessage}".Contains(errorFilter,StringComparison.OrdinalIgnoreCase)));
     private static bool IsWaiting(CollectionTaskStatus x) => x is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
-    private void SetView(string value){view=value;page=1;}
-    private void PreviousPage(){if(page>1)page--;}
-    private void NextPage(){if(page<TotalPages)page++;}
-    private void ApplyFilter(){filter=query.Trim();page=1;}
-    private void ClearFilter(){query="";filter="";page=1;}
+    private void SetView(string value){view=value;page=1;PersistState();}
+    private void PreviousPage(){if(page>1){page--;PersistState();}}
+    private void NextPage(){if(page<TotalPages){page++;PersistState();}}
+    private void ApplyFilter(){filter=query.Trim();page=1;PersistState();}
+    private void ClearFilter(){query="";filter="";resourceFilter=statusFilter=laneFilter=providerFilter=errorFilter="";page=1;PersistState();}
+    private bool HasFilters=>!string.IsNullOrWhiteSpace(filter)||!string.IsNullOrEmpty(resourceFilter)||!string.IsNullOrEmpty(statusFilter)||!string.IsNullOrEmpty(laneFilter)||!string.IsNullOrWhiteSpace(providerFilter)||!string.IsNullOrWhiteSpace(errorFilter);
+    private void PersistState(){var uri=Navigation.GetUriWithQueryParameters(new Dictionary<string,object?>{{"view",view=="attention"?null:view},{"q",string.IsNullOrWhiteSpace(filter)?null:filter},{"page",page<=1?null:page},{"type",string.IsNullOrEmpty(resourceFilter)?null:resourceFilter},{"status",string.IsNullOrEmpty(statusFilter)?null:statusFilter},{"lane",string.IsNullOrEmpty(laneFilter)?null:laneFilter},{"provider",string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter},{"error",string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter}});Navigation.NavigateTo(uri,replace:true);}
     private int ViewCount(string value)=>value switch{"attention"=>tasks.Count(x=>x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter),"running"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Running),"waiting"=>tasks.Count(x=>IsWaiting(x.Status)),"recent"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Succeeded),"resources"=>progress?.ResourcesByType.Values.Sum()??UniqueResources.Count,"all"=>tasks.Count,_=>0};
-    private static string DetailHref(CollectionTaskSummary item)=>$"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}";
+    private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
     private void ChooseCreate(CollectionKind kind){createType=kind.Type;createDefinition=kind.Definition;createResourceId="";createUrl="";createErrors=[];}
@@ -145,8 +205,10 @@ else
     private string CreateGuidance=>createType.StartsWith("Race",StringComparison.Ordinal)?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
     private string CreatePlaceholder=>createType.StartsWith("Race",StringComparison.Ordinal)?"例: 20260912:Nakayama:11":"一覧や詳細に表示されている対象ID";
     private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync("管理画面から一時停止"):await Api.ResumeCollectionPipelineAsync();if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
-    private void OpenBulk(){showBulk=true;preview=null;bulkErrors=[];}
-    private BulkCollectionOperationRequest? Bulk(IReadOnlyList<ResourceKey>? expected=null){if(!Enum.TryParse<ResourceType>(bulkType,true,out var type)||!int.TryParse(revision,out var rev)||rev<1){bulkErrors=["対象種別と抽出仕様の版を確認してください。"];return null;}var keys=ids.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct().Select(id=>new ResourceKey(type,provider.Trim(),id)).ToArray();if(keys.Length==0){bulkErrors=["対象IDを1件以上入力してください。"];return null;}return new(definition.Trim(),rev,CollectionReason.ManualRefresh,BulkCollectionSelection.SpecificResources,provider.Trim(),keys,ExpectedResources:expected);}
+    private void OpenBulk(){showBulk=true;bulkSelection="Failed";bulkType="Horse";BulkTypeChanged();preview=null;bulkErrors=[];}
+    private void ResetBulkPreview(){preview=null;bulkErrors=[];if(bulkSelection is "HorsesRacedInDateRange" or "HorsesByTrainer")bulkType="Horse";BulkTypeChanged();}
+    private void BulkTypeChanged(){var kind=collectionKinds.FirstOrDefault(x=>x.Type==bulkType);if(kind is not null)definition=kind.Definition;preview=null;}
+    private BulkCollectionOperationRequest? Bulk(IReadOnlyList<ResourceKey>? expected=null){if(!Enum.TryParse<ResourceType>(bulkType,true,out var type)||!Enum.TryParse<BulkCollectionSelection>(bulkSelection,out var selection)||!int.TryParse(revision,out var rev)||rev<1){bulkErrors=["情報の種類と抽出仕様の版を確認してください。"];return null;}IReadOnlyList<ResourceKey>? keys=null;if(selection==BulkCollectionSelection.SpecificResources){keys=ids.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct().Select(id=>new ResourceKey(type,provider.Trim(),id)).ToArray();if(keys.Count==0){bulkErrors=["対象IDを1件以上入力してください。"];return null;}}if(selection==BulkCollectionSelection.HorsesRacedInDateRange&&(!bulkFrom.HasValue||!bulkTo.HasValue||bulkFrom>bulkTo)){bulkErrors=["正しい開始日と終了日を入力してください。"];return null;}if(selection==BulkCollectionSelection.HorsesByTrainer&&string.IsNullOrWhiteSpace(bulkTrainerId)){bulkErrors=["調教師IDを入力してください。"];return null;}if(selection==BulkCollectionSelection.LastCollectedBefore&&!bulkLastCollectedBefore.HasValue){bulkErrors=["最終取得日時を入力してください。"];return null;}return new(definition.Trim(),rev,CollectionReason.ManualRefresh,selection,provider.Trim(),keys,bulkFrom,bulkTo,string.IsNullOrWhiteSpace(bulkTrainerId)?null:bulkTrainerId.Trim(),bulkLastCollectedBefore.HasValue?new DateTimeOffset(bulkLastCollectedBefore.Value):null,ExpectedResources:expected);}
     private async Task PreviewAsync(){preview=null;bulkErrors=[];var request=Bulk();if(request is null)return;busy=true;try{var result=await Api.PreviewBulkCollectionAsync(request);if(result.Success)preview=result.Value;else bulkErrors=result.Errors;}finally{busy=false;}}
     private async Task ExecuteAsync(){if(preview is null)return;var request=Bulk(preview.Resources);if(request is null)return;busy=true;try{var result=await Api.ExecuteBulkCollectionAsync(request);if(result.Success){showBulk=false;view="waiting";page=1;await LoadAsync();}else bulkErrors=result.Errors;}finally{busy=false;}}
     private static string ResourceDescription(ResourceKey value)=>$"{ResourceTypeLabel(value.Type)} ・ {value.Provider} ・ {value.Id}";
@@ -157,4 +219,6 @@ else
     private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
     private sealed record FilterOption(string Value,string Label);
     private sealed record CollectionKind(string Type,string Definition,string Label,string Description);
+    private sealed record FailureGroup(CollectionDefinitionId Definition,string? ErrorCode,string? Message,int Count,CollectionTaskSummary First);
+    public async ValueTask DisposeAsync(){if(refreshCancellation is not null){await refreshCancellation.CancelAsync();refreshCancellation.Dispose();}}
 }
