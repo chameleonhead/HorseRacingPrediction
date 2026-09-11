@@ -40,12 +40,12 @@ public sealed class CollectionAdministrationComponentTests
 
         var cut = context.Render<Jobs>();
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "Resourceはありません"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集対象はまだ登録されていません"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("一括再取得</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("まとめて再取得</")).Instance.OnClick.InvokeAsync());
         cut.WaitForAssertion(() => Assert.IsTrue(cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains(">実行</")).Instance.Disabled));
-        StringAssert.Contains(cut.Markup, "プレビューと同じ対象集合だけを実行します");
+            .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
+        StringAssert.Contains(cut.Markup, "確認後に対象が増えることはありません");
     }
 
     [TestMethod]
@@ -60,25 +60,51 @@ public sealed class CollectionAdministrationComponentTests
 
         var cut = context.Render<Jobs>();
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
+        StringAssert.Contains(cut.Markup, "競走馬プロフィール");
+        StringAssert.Contains(cut.Markup, "処理待ち");
+        StringAssert.Contains(cut.Markup, "収集対象");
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(x => x.Markup.Contains("H001</")).Instance.OnClick.InvokeAsync());
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "このResourceを再取得"));
-        StringAssert.Contains(cut.Markup, "Locationはありません");
-        StringAssert.Contains(cut.Markup, "Attemptはありません");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この対象を再取得"));
+        StringAssert.Contains(cut.Markup, "保存済みの取得先候補はありません");
+        StringAssert.Contains(cut.Markup, "実行履歴はまだありません");
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("このResourceを再取得</")).Instance.OnClick.InvokeAsync());
+            .First(x => x.Markup.Contains("再取得を依頼</")).Instance.OnClick.InvokeAsync());
         Assert.AreEqual(1, handler.ManualRequests);
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("一括再取得</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("まとめて再取得</")).Instance.OnClick.InvokeAsync());
         var ids = cut.FindComponents<FluentTextField>()
-            .Single(x => x.Instance.Label?.ToString()?.StartsWith("Resource IDs") == true);
+            .Single(x => x.Instance.Label?.ToString()?.StartsWith("対象ID") == true);
         await cut.InvokeAsync(() => ids.Instance.ValueChanged.InvokeAsync("H001"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains(">プレビュー</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("対象を確認</")).Instance.OnClick.InvokeAsync());
         cut.WaitForAssertion(() => Assert.IsFalse(cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains(">実行</")).Instance.Disabled));
+            .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
         Assert.AreEqual(1, handler.Previews);
+    }
+
+    [TestMethod]
+    public async Task Search_WithJapaneseResourceName_FiltersAndCanBeCleared()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new ResourceHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
+        var search = cut.FindComponents<FluentTextField>()
+            .Single(x => x.Instance.Placeholder?.ToString()?.Contains("対象ID") == true);
+        await cut.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("騎手"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">検索</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "検索条件に一致する収集対象はありません"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("検索条件をクリア</")).Instance.OnClick.InvokeAsync());
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
     }
 
     private sealed class ResourceHandler : HttpMessageHandler
