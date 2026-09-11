@@ -90,7 +90,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         CancellationToken cancellationToken)
     {
         var raceId = ParseRaceId(task);
-        var domainRaceId = task.Attributes.GetValueOrDefault("domainRaceId") ?? task.Resource.Id;
+        task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
         await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
         var workflow = workflows(session);
         RaceCardRaceOutcome? result = null;
@@ -113,9 +113,9 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
         if (requests is not null && result.Entries is not null)
-            await RequestReferencedSubjectsAsync(result.Entries, domainRaceId, requests, cancellationToken).ConfigureAwait(false);
+            await RequestReferencedSubjectsAsync(result.Entries, result.RaceId!, requests, cancellationToken).ConfigureAwait(false);
         if (predictionSchedule is not null)
-            await predictionSchedule.EnqueueAsync([domainRaceId], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            await predictionSchedule.EnqueueAsync([result.RaceId!], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
             FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}");
@@ -174,7 +174,7 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
         var raceId = JraRaceCardCollectionHandler.ParseRaceId(task);
         await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
         var workflow = workflows(session);
-        var domainRaceId = task.Attributes.GetValueOrDefault("domainRaceId") ?? task.Resource.Id;
+        task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
         RaceResultCollectionResult? result = null;
         Uri? successfulLocation = null;
         foreach (var location in task.Locations ?? [])

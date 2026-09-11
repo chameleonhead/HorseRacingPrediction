@@ -60,6 +60,8 @@ $runner = Start-Process -FilePath "pwsh" -ArgumentList @(
     "-MaxTasks", 80,
     "-StateDirectory", $stateDirectory,
     "-MetricsPath", $metricsPath,
+    "-ApiPid", $api.Id,
+    "-CollectorPid", $collector.Id,
     "-MonitorOnly"
 ) -WorkingDirectory (Get-Location) -RedirectStandardOutput $soakOutput -RedirectStandardError $soakError `
     -WindowStyle Hidden -PassThru

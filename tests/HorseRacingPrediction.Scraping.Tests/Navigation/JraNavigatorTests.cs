@@ -741,7 +741,8 @@ public sealed class JraNavigatorTests
                 ["2026年9月6日 中山"])]));
         browser.SetClickDestination(targetLink.Title, targetUrl);
         browser.SetSnapshot(targetUrl, BuildRaceCardSnapshot(targetUrl, "12R", "2026年9月6日 中山"));
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
+            today: () => new DateOnly(2026, 9, 6));
 
         var page = await navigator.ToRaceCardAsync(
             new RaceId(new DateOnly(2026, 9, 6), RaceCourse.Nakayama, 12));

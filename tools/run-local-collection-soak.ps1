@@ -5,6 +5,8 @@ param(
     [int]$MaxTasks = 40,
     [string]$StateDirectory = "$env:TEMP\hrp-soak-20260911",
     [string]$MetricsPath = "$env:TEMP\hrp-collection-soak-metrics.jsonl",
+    [int]$ApiPid = 0,
+    [int]$CollectorPid = 0,
     [switch]$MonitorOnly
 )
 
@@ -21,11 +23,17 @@ while ((Get-Date) -lt $deadline) {
     $cycleStarted = Get-Date
     try {
         $watch = [Diagnostics.Stopwatch]::StartNew()
+        $endpointWatch = [Diagnostics.Stopwatch]::StartNew()
         $tasks = @(Invoke-RestMethod "$ApiBaseUrl/api/admin/collection/tasks?limit=500" -Headers $headers |
             ForEach-Object { $_ })
+        $tasksLatencyMs = $endpointWatch.Elapsed.TotalMilliseconds
+        $endpointWatch.Restart()
         $progress = Invoke-RestMethod "$ApiBaseUrl/api/admin/collection/progress" -Headers $headers
+        $progressLatencyMs = $endpointWatch.Elapsed.TotalMilliseconds
+        $endpointWatch.Restart()
         $backfills = @(Invoke-RestMethod "$ApiBaseUrl/api/admin/collection/backfills" -Headers $headers |
             ForEach-Object { $_ })
+        $backfillsLatencyMs = $endpointWatch.Elapsed.TotalMilliseconds
         $watch.Stop()
         $latencies.Add($watch.Elapsed.TotalMilliseconds)
 
@@ -49,6 +57,9 @@ while ((Get-Date) -lt $deadline) {
             at = (Get-Date).ToString("o")
             elapsedMinutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 2)
             apiLatencyMs = [math]::Round($watch.Elapsed.TotalMilliseconds, 2)
+            tasksLatencyMs = [math]::Round($tasksLatencyMs, 2)
+            progressLatencyMs = [math]::Round($progressLatencyMs, 2)
+            backfillsLatencyMs = [math]::Round($backfillsLatencyMs, 2)
             taskCount = $tasks.Count
             processed = $processed.Count
             ready = @($tasks | Where-Object status -eq 1).Count
@@ -60,8 +71,8 @@ while ((Get-Date) -lt $deadline) {
             cancelled = @($tasks | Where-Object status -eq 7).Count
             backfillCount = $backfills.Count
             workerFailures = $failures
-            workingSetMb = [math]::Round(((Get-Process HorseRacingPrediction.Api -ErrorAction SilentlyContinue |
-                Measure-Object WorkingSet64 -Sum).Sum / 1MB), 2)
+            apiWorkingSetMb = if ($ApiPid -gt 0) { [math]::Round((Get-Process -Id $ApiPid -ErrorAction SilentlyContinue).WorkingSet64 / 1MB, 2) } else { 0 }
+            collectorWorkingSetMb = if ($CollectorPid -gt 0) { [math]::Round((Get-Process -Id $CollectorPid -ErrorAction SilentlyContinue).WorkingSet64 / 1MB, 2) } else { 0 }
             dbBytes = (Get-Item (Join-Path $StateDirectory "collection-platform.db") -ErrorAction SilentlyContinue).Length
         }
         $line = $sample | ConvertTo-Json -Compress

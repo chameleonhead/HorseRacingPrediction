@@ -8,10 +8,10 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// </summary>
 public interface IJraRaceCardCollectionWorkflow
 {
-    Task<RaceCardRaceOutcome> RefreshPageAsync(Pages.JraRaceCardPage page, string targetRaceId,
+    Task<RaceCardRaceOutcome> RefreshPageAsync(Pages.JraRaceCardPage page, string? targetRaceId,
         CancellationToken cancellationToken = default)
         => RefreshAsync(page.RaceId, targetRaceId, cancellationToken);
-    Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+    Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Single race refresh is not supported.");
 
     /// <summary>

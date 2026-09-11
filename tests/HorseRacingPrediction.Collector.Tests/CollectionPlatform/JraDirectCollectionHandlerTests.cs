@@ -37,6 +37,8 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(direct, result.RequestedUrl);
         Assert.HasCount(1, sessions.LastNavigator!.DirectUrlRequests);
         Assert.HasCount(1, workflow.RefreshRequests);
+        Assert.IsNull(workflow.RefreshRequests[0].Target,
+            "A discovered resource without a domainRaceId must use create/upsert semantics.");
     }
 
     [TestMethod]
@@ -137,6 +139,8 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(valid, result.RequestedUrl);
         CollectionAssert.AreEqual(new[] { wrongType, wrongRace, valid }, sessions.LastNavigator!.DirectUrlRequests);
         Assert.HasCount(1, workflow.RefreshPageRequests);
+        Assert.IsNull(workflow.RefreshPageRequests[0].Target,
+            "A discovered result without a domainRaceId must create the race instead of refreshing its resource key.");
         Assert.IsEmpty(workflow.Requests);
     }
 

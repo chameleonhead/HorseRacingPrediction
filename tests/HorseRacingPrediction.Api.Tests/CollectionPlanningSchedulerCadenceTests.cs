@@ -39,6 +39,15 @@ public sealed class CollectionPlanningSchedulerCadenceTests
                 var task = tasks[0];
                 Assert.AreEqual(new CollectionDefinitionId("race-discovery"), task.Definition);
                 Assert.AreEqual(CollectionLane.Realtime, task.Lane);
+
+                // A completed/failed task remains represented by CollectionState. Restarting the
+                // planner in the same three-hour bucket must not create another request.
+                await scheduler.StopAsync(CancellationToken.None);
+                scheduler.Dispose();
+                scheduler = new CollectionPlanningScheduler(store);
+                await scheduler.StartAsync(CancellationToken.None);
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                Assert.HasCount(1, await store.GetTasksAsync());
             }
             finally
             {

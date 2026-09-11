@@ -28,18 +28,18 @@ internal sealed class FakeJraScheduleCollectionWorkflow : IJraScheduleCollection
 internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollectionWorkflow
 {
     public Task<RaceCardRaceOutcome> RefreshPageAsync(HorseRacingPrediction.Scraping.Jra.Pages.JraRaceCardPage page,
-        string targetRaceId, CancellationToken cancellationToken = default)
+        string? targetRaceId, CancellationToken cancellationToken = default)
     {
         RefreshRequests.Add((page.RaceId, targetRaceId));
-        return Task.FromResult(new RaceCardRaceOutcome(page.RaceId.Number, targetRaceId,
+        return Task.FromResult(new RaceCardRaceOutcome(page.RaceId.Number, targetRaceId ?? "created-race",
             page.RaceName, page.Url, null, page.Entries));
     }
-    public List<(RaceId Race, string Target)> RefreshRequests { get; } = [];
-    public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+    public List<(RaceId Race, string? Target)> RefreshRequests { get; } = [];
+    public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken = default)
     {
         RefreshRequests.Add((raceId, targetRaceId));
         if (ThrowOnCollect is not null) throw ThrowOnCollect;
-        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId, "レース", "https://example.test/card", null));
+        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId ?? "created-race", "レース", "https://example.test/card", null));
     }
 
     public Func<DateOnly, RaceCourse, RaceCardCollectionResult>? ResultFactory { get; set; }
@@ -64,18 +64,18 @@ internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollection
 
 internal sealed class FakeJraRaceResultCollectionWorkflow : IJraRaceResultCollectionWorkflow
 {
-    public List<string> RefreshTargets { get; } = [];
-    public List<(RaceId Race, string Target)> RefreshPageRequests { get; } = [];
+    public List<string?> RefreshTargets { get; } = [];
+    public List<(RaceId Race, string? Target)> RefreshPageRequests { get; } = [];
     public Task<RaceResultCollectionResult> RefreshPageAsync(
-        HorseRacingPrediction.Scraping.Jra.Pages.JraRaceResultPage page, string targetRaceId,
+        HorseRacingPrediction.Scraping.Jra.Pages.JraRaceResultPage page, string? targetRaceId,
         string sourceHorseId, CancellationToken cancellationToken = default)
     {
         RefreshPageRequests.Add((page.RaceId, targetRaceId));
         return Task.FromResult(ResultFactory?.Invoke(page.RaceId)
-            ?? new RaceResultCollectionResult(page.RaceId, targetRaceId, [1], [], page.Url, true));
+            ?? new RaceResultCollectionResult(page.RaceId, targetRaceId ?? "created-race", [1], [], page.Url, true));
     }
 
-    public Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
+    public Task<RaceResultCollectionResult> RefreshAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken = default)
     {
         RefreshTargets.Add(targetRaceId);
         return CollectAsync(raceId, cancellationToken);
