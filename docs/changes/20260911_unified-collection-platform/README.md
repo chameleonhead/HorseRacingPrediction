@@ -177,7 +177,7 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 
 ## Delivery plan
 
-Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md). Checkpoint descriptions do not override that matrix or imply end-to-end completion.
+Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md), and dependency-ordered continuation is tracked in [execution-plan.md](execution-plan.md). Checkpoint descriptions do not override the matrix or imply end-to-end completion.
 
 各 Phase は model/schema、worker、tests、documentation を検証可能なコミットに分ける。完全置換の詳細ゲートは [full-job-replacement.md](decisions/full-job-replacement.md) に従う。
 

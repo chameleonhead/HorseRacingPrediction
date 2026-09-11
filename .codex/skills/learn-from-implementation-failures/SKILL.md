@@ -18,6 +18,19 @@ Turn observed failures into narrow, testable improvements to future decisions. D
 7. Validate every modified skill with the skill-creator validator. Inspect the final diff for generic platitudes, duplicated policy, unfinished placeholders, and unverifiable rules.
 8. Report the causes, changed skills, and the concrete behavior that will differ next time.
 
+## Repeated interruption and autonomy review
+
+When a multi-step implementation repeatedly stops at checkpoints while safe approved work remains, treat the interruption pattern itself as a delivery failure and analyze it before the next checkpoint.
+
+- Build a dependency graph for all remaining acceptance criteria. Mark tasks as runnable, blocked, or dependent; do not use a flat list that encourages stopping after the first item.
+- Execute the entire runnable frontier. When delegation is authorized and tasks have non-overlapping write scopes, assign independent frontier tasks in parallel while retaining integration, skill interpretation, and final verification in the main agent.
+- A commit, passing focused test, context compaction, or completed subtask is a checkpoint, not a stopping condition. Immediately select the next runnable task after recording it.
+- Maintain a durable execution plan containing task owner, dependency, write scope, verification command, and completion evidence so work can resume without rediscovery after compaction.
+- Before yielding, check whether any approved task is runnable with current authority and tools. If so, continue. Yield only when the requested outcome is complete or a permitted blocker genuinely requires user/external input.
+- If a task is too large for one slice, split it by independently verifiable production paths, not by layers that leave disconnected scaffolding.
+
+The observable correction is sustained progress across multiple dependent checkpoints, with the execution plan and acceptance matrix showing why work continued or why it was genuinely blocked.
+
 ## Quality bar
 
 A correction must change a future decision and have an observable completion condition. Prefer gates that trace a requirement through its production entry point and terminal side effect, exercise the real adapter or dispatcher, prove removed infrastructure has zero runtime callers, distinguish checkpoints from completion, or verify destructive cutover ordering.
