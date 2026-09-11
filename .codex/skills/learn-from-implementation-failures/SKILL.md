@@ -24,6 +24,7 @@ When a multi-step implementation repeatedly stops at checkpoints while safe appr
 
 - Build a dependency graph for all remaining acceptance criteria. Mark tasks as runnable, blocked, or dependent; do not use a flat list that encourages stopping after the first item.
 - Execute the entire runnable frontier. When delegation is authorized and tasks have non-overlapping write scopes, assign independent frontier tasks in parallel while retaining integration, skill interpretation, and final verification in the main agent.
+- In a shared worktree, non-overlapping ownership also means preserving a buildable integration surface. Add required types before their callers, avoid leaving uncompilable intermediate edits across waits, run a fast build immediately after cross-project contract changes, and notify other owners as soon as the shared build is restored. Treat repeated cross-agent compile blocking as evidence that task boundaries or edit order must be tightened.
 - A commit, passing focused test, context compaction, or completed subtask is a checkpoint, not a stopping condition. Immediately select the next runnable task after recording it.
 - Maintain a durable execution plan containing task owner, dependency, write scope, verification command, and completion evidence so work can resume without rediscovery after compaction.
 - Before yielding, check whether any approved task is runnable with current authority and tools. If so, continue. Yield only when the requested outcome is complete or a permitted blocker genuinely requires user/external input.
