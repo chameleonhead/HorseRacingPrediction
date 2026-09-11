@@ -32,6 +32,20 @@ The monitor's process-memory field reported zero because both child applications
 3. Monitoring endpoint latency remained near 6.2 seconds. This is tracked as an unresolved performance finding; endpoint-level timing must be measured after the correctness fixes under a fresh run.
 4. Some current-race navigation returned a page kind other than `RaceCard`. The type and race-identity validation worked, but availability/error classification needs to be assessed in the verification run.
 
+## Ten-minute corrective verification (2026-09-12)
+
+- Duration/samples: 10.02 minutes / 10
+- Stable task count after discovery expansion: 151
+- At the final sample: succeeded 47, failed 7, ready 96, running 1
+- Queue delivery/worker failures: 0
+- Previous `RaceResult` 404 / `DomainWriteRejected`: 0
+- API latency: 46.96 ms average, 139.24 ms p95 (first cold sample); steady-state 27-45 ms
+- Memory range observed: API 158-229 MB, Collector 35-142 MB
+
+The seven failures were all discovery attempts for the current/future dates included by the test's September 2026 batch, classified by navigation as unavailable/not published. They were not queue or domain-write failures. The soak launcher now selects the previous calendar month so subsequent backfill verification contains past dates only.
+
+The earlier 6.2-second measurement was caused by the monitor and Collector using `localhost` while the API listened only on IPv4. Each PowerShell request incurred an IPv6 fallback delay. The local verification tools now consistently use `127.0.0.1`; no collection-platform performance change was needed for that finding.
+
 ## Verification required
 
 - Run a fresh local queue verification and confirm first-time race writes no longer return 404.

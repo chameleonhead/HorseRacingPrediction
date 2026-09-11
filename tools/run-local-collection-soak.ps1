@@ -1,6 +1,6 @@
 param(
     [int]$DurationMinutes = 120,
-    [string]$ApiBaseUrl = "http://localhost:5177",
+    [string]$ApiBaseUrl = "http://127.0.0.1:5177",
     [string]$ApiKey = "dev-api-key",
     [int]$MaxTasks = 40,
     [string]$StateDirectory = "$env:TEMP\hrp-soak-20260911",

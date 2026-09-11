@@ -32,7 +32,7 @@ $healthy = $false
 for ($attempt = 0; $attempt -lt 30; $attempt++) {
     Start-Sleep -Seconds 1
     try {
-        if ((Invoke-WebRequest "http://localhost:5177/health" -SkipHttpErrorCheck).StatusCode -eq 200) {
+        if ((Invoke-WebRequest "http://127.0.0.1:5177/health" -SkipHttpErrorCheck).StatusCode -eq 200) {
             $healthy = $true
             break
         }
@@ -41,11 +41,12 @@ for ($attempt = 0; $attempt -lt 30; $attempt++) {
 if (!$healthy) { throw "Local API did not become healthy. See $apiError" }
 
 $headers = @{ "X-Api-Key" = "dev-api-key" }
-$body = @{ provider = "JRA"; year = 2026; month = 9; batchId = "soak:$runId" } | ConvertTo-Json
-Invoke-RestMethod "http://localhost:5177/api/admin/collection/backfills" -Method Post -Headers $headers `
+$backfillMonth = (Get-Date).AddMonths(-1)
+$body = @{ provider = "JRA"; year = $backfillMonth.Year; month = $backfillMonth.Month; batchId = "soak:$runId" } | ConvertTo-Json
+Invoke-RestMethod "http://127.0.0.1:5177/api/admin/collection/backfills" -Method Post -Headers $headers `
     -ContentType "application/json" -Body $body | Out-Null
 
-$env:ApiClient__BaseUrl = "http://localhost:5177"
+$env:ApiClient__BaseUrl = "http://127.0.0.1:5177"
 $env:ApiClient__ApiKey = "dev-api-key"
 $env:LocalQueue__DatabasePath = $queuePath
 $collector = Start-Process -FilePath "dotnet" -ArgumentList @(
