@@ -4,6 +4,8 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -14,6 +16,28 @@ public static class CollectionPlatformEndpointExtensions
         var admin = endpoints.MapGroup("/api/admin/collection").WithTags("Collection Platform");
         admin.MapGet("/tasks", async (CollectionTaskStatus? status, int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
+        admin.MapGet("/tasks/search", async (string? statuses, ResourceType? resourceType, string? provider,
+            string? definitionId, CollectionLane? lane, string? search, DateTimeOffset? createdFrom,
+            DateTimeOffset? createdTo, int? page, int? pageSize, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            IReadOnlyCollection<CollectionTaskStatus>? parsedStatuses = null;
+            if (!string.IsNullOrWhiteSpace(statuses))
+            {
+                var values = new List<CollectionTaskStatus>();
+                foreach (var value in statuses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!Enum.TryParse<CollectionTaskStatus>(value, true, out var parsed))
+                        return Results.BadRequest(new { message = $"Unknown task status: {value}" });
+                    values.Add(parsed);
+                }
+                parsedStatuses = values;
+            }
+            if (createdFrom > createdTo)
+                return Results.BadRequest(new { message = "createdFrom must not be later than createdTo." });
+            return Results.Ok(await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,
+                definitionId, lane, search, createdFrom, createdTo, page ?? 1, pageSize ?? 50), token));
+        });
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
         admin.MapGet("/readiness/{raceId}", async (string raceId, CollectionPlatformStore store,
@@ -37,6 +61,56 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetPendingFailureNotificationsAsync(
                 DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
+        admin.MapGet("/failure-notifications/groups", async (int? limit, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            var notifications = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow,
+                Math.Clamp(limit ?? 5000, 1, 10000), token);
+            var groups = notifications.GroupBy(x => new
+                {
+                    Definition = x.Definition.Value, x.Status, ErrorCode = x.ErrorCode ?? string.Empty,
+                })
+                .Select(x => new CollectionFailureGroup(
+                    CreateFailureGroupKey(x.Key.Definition, x.Key.Status, x.Key.ErrorCode),
+                    new(x.Key.Definition), x.Key.Status,
+                    string.IsNullOrEmpty(x.Key.ErrorCode) ? null : x.Key.ErrorCode,
+                    x.OrderByDescending(y => y.FailedAt).Select(y => y.ErrorMessage).FirstOrDefault(),
+                    x.Count(), x.Min(y => y.FailedAt), x.Max(y => y.FailedAt),
+                    x.Select(y => y.NotificationId).ToList(), x.Select(y => y.Resource).Distinct().Take(20).ToList()))
+                .OrderByDescending(x => x.LastFailedAt).ToList();
+            return Results.Ok(groups);
+        });
+        admin.MapPost("/failure-notifications/recover", async (RecoverCollectionFailuresRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var selectedIds = request.NotificationIds.Distinct().ToHashSet();
+            if (selectedIds.Count == 0)
+                return Results.BadRequest(new { message = "At least one notification is required." });
+            if (selectedIds.Count > 1000)
+                return Results.BadRequest(new { message = "At most 1000 notifications can be recovered at once." });
+            var pending = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var selected = pending.Where(x => selectedIds.Contains(x.NotificationId)).ToList();
+            if (selected.Count != selectedIds.Count)
+                return Results.Conflict(new { message = "Some failures are no longer pending. Refresh and try again." });
+
+            var taskIds = new List<Guid>(selected.Count);
+            var created = 0;
+            foreach (var failure in selected)
+            {
+                var state = await store.GetStateAsync(failure.Resource, failure.Definition, token);
+                var requestedRevision = request.RequestedRevision ?? state?.RequiredRevision
+                    ?? throw new InvalidOperationException("Collection state was not found for a pending failure.");
+                var receipt = await store.RequestAsync(failure.Resource, failure.Definition,
+                    requestedRevision, CollectionReason.Recovery,
+                    DateTimeOffset.UtcNow, request.Lane, request.Priority, cancellationToken: token);
+                if (receipt.CreatedTask) created++;
+                taskIds.Add(receipt.TaskId);
+                await store.MarkFailureNotificationPublishedAsync(failure.NotificationId,
+                    DateTimeOffset.UtcNow, token);
+            }
+            return Results.Accepted(value: new CollectionFailureRecoveryResult(selected.Count, created,
+                selected.Count - created, taskIds.Distinct().ToList()));
+        });
         admin.MapPost("/failure-notifications/{notificationId:guid}/published", async (Guid notificationId,
             CollectionPlatformStore store, CancellationToken token) =>
         {
@@ -171,6 +245,13 @@ public static class CollectionPlatformEndpointExtensions
         _ => throw new ArgumentException("Revision impact parameters are invalid."),
     };
 
+    private static string CreateFailureGroupKey(string definition, CollectionTaskStatus status, string errorCode)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{definition}\n{status}\n{errorCode}"));
+        return Convert.ToHexString(bytes, 0, 8);
+    }
+
     private static async Task<IReadOnlyList<CollectionBulkTarget>> ResolveBulkTargetsAsync(
         BulkCollectionOperationRequest request, CollectionPlatformStore store,
         IDbContextProvider<EventStoreDbContext> domainProvider,
@@ -222,6 +303,9 @@ public sealed record CreateCollectionRequest(ResourceType ResourceType, string P
 public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900);
 public sealed record HeartbeatCollectionTaskRequest(string LeaseToken, int LeaseSeconds = 900);
 public sealed record PauseCollectionPipelineRequest(string? Reason);
+public sealed record RecoverCollectionFailuresRequest(IReadOnlyList<Guid> NotificationIds,
+    int? RequestedRevision = null, CollectionLane Lane = CollectionLane.Normal,
+    int Priority = (int)CollectionPriority.Normal);
 
 public enum BulkCollectionSelection
 {

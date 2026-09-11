@@ -931,6 +931,72 @@ public sealed class CollectionPlatformStore
             x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
     }
 
+    public async Task<CollectionTaskPage> SearchTasksAsync(CollectionTaskQuery request,
+        CancellationToken cancellationToken = default)
+    {
+        var page = Math.Max(1, request.Page);
+        var pageSize = Math.Clamp(request.PageSize, 1, 200);
+        await using var db = CreateDbContext();
+        var query = from task in db.Tasks.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+            select new { task, resource };
+
+        if (request.Statuses is { Count: > 0 })
+        {
+            var statuses = request.Statuses.Distinct().ToArray();
+            query = query.Where(x => statuses.Contains(x.task.Status));
+        }
+        if (request.ResourceType.HasValue)
+            query = query.Where(x => x.resource.Type == request.ResourceType.Value);
+        if (!string.IsNullOrWhiteSpace(request.Provider))
+        {
+            var provider = request.Provider.Trim().ToUpperInvariant();
+            query = query.Where(x => x.resource.Provider == provider);
+        }
+        if (!string.IsNullOrWhiteSpace(request.DefinitionId))
+        {
+            var definition = request.DefinitionId.Trim();
+            query = query.Where(x => x.task.DefinitionId == definition);
+        }
+        if (request.Lane.HasValue)
+            query = query.Where(x => x.task.Lane == request.Lane.Value);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            query = query.Where(x => x.resource.ResourceId.Contains(search)
+                                     || x.resource.Provider.Contains(search)
+                                     || x.task.DefinitionId.Contains(search));
+        }
+        if (request.CreatedFrom.HasValue || request.CreatedTo.HasValue)
+        {
+            // The SQLite provider cannot translate DateTimeOffset comparisons. Apply only this optional
+            // administration filter in memory after all selective SQL predicates have run.
+            var candidates = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+            var filtered = candidates.Where(x => (!request.CreatedFrom.HasValue
+                                                   || x.task.CreatedAt >= request.CreatedFrom.Value)
+                                                  && (!request.CreatedTo.HasValue
+                                                      || x.task.CreatedAt <= request.CreatedTo.Value))
+                .OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.TaskId).ToList();
+            return new(filtered.Count, page, pageSize, filtered.Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(x => new CollectionTaskSummary(x.task.TaskId,
+                    new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+                    new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
+                    x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList());
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        // SQLite cannot order DateTimeOffset columns. TaskId is used as the stable tie-breaker;
+        // priority remains the primary operational ordering for the administration list.
+        var rows = await query.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.TaskId)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var items = rows.Select(x => new CollectionTaskSummary(x.task.TaskId,
+            new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+            new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
+            x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
+        return new(totalCount, page, pageSize, items);
+    }
+
     public async Task<CollectionReadinessSnapshot> GetReadinessAsync(string requestedByRaceId,
         CancellationToken cancellationToken = default)
     {

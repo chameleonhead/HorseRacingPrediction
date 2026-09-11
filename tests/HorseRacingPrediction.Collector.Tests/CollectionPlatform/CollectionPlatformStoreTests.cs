@@ -62,6 +62,34 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task SearchTasks_FiltersAndPagesWithAnExactTotalCount()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+            CollectionReason.Initial, now, CollectionLane.Background, 10);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+            CollectionReason.Initial, now.AddMinutes(1), CollectionLane.Normal, 50);
+        await store.RequestAsync(new(ResourceType.Horse, "NAR", "H003"), HorseProfile, 7,
+            CollectionReason.Initial, now.AddMinutes(2), CollectionLane.Normal, 50);
+
+        var firstPage = await store.SearchTasksAsync(new(ResourceType: ResourceType.Horse,
+            Provider: "jra", DefinitionId: "horse-profile", Page: 1, PageSize: 1));
+        var secondPage = await store.SearchTasksAsync(new(ResourceType: ResourceType.Horse,
+            Provider: "JRA", DefinitionId: "horse-profile", Page: 2, PageSize: 1));
+        var searched = await store.SearchTasksAsync(new(Search: "H002"));
+        var recent = await store.SearchTasksAsync(new(CreatedFrom: now.AddSeconds(30)));
+
+        Assert.AreEqual(2, firstPage.TotalCount);
+        Assert.HasCount(1, firstPage.Items);
+        Assert.AreEqual("H002", firstPage.Items[0].Resource.Id);
+        Assert.AreEqual("H001", secondPage.Items[0].Resource.Id);
+        Assert.AreEqual(1, searched.TotalCount);
+        Assert.AreEqual("H002", searched.Items.Single().Resource.Id);
+        Assert.AreEqual(2, recent.TotalCount);
+    }
+
+    [TestMethod]
     public async Task Request_RejectsRevisionNotRegisteredByDefinition()
     {
         var store = await CreateStoreAsync();

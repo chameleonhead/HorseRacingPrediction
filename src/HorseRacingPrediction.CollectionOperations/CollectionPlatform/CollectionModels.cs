@@ -149,6 +149,21 @@ public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, Co
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
     DateTimeOffset AvailableAt, int AttemptCount);
 
+public sealed record CollectionTaskQuery(
+    IReadOnlyCollection<CollectionTaskStatus>? Statuses = null,
+    ResourceType? ResourceType = null,
+    string? Provider = null,
+    string? DefinitionId = null,
+    CollectionLane? Lane = null,
+    string? Search = null,
+    DateTimeOffset? CreatedFrom = null,
+    DateTimeOffset? CreatedTo = null,
+    int Page = 1,
+    int PageSize = 50);
+
+public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
+    IReadOnlyList<CollectionTaskSummary> Items);
+
 public sealed record CollectionProgressSnapshot(
     IReadOnlyDictionary<ResourceType, int> ResourcesByType,
     IReadOnlyDictionary<CollectionStateStatus, int> StatesByStatus,
@@ -168,6 +183,12 @@ public sealed record CollectionPipelineState(bool IsPaused, string? Reason, Date
 public sealed record PendingCollectionFailureNotification(Guid NotificationId, Guid TaskId,
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
     string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt);
+public sealed record CollectionFailureGroup(string GroupKey, CollectionDefinitionId Definition,
+    CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage, int Count,
+    DateTimeOffset FirstFailedAt, DateTimeOffset LastFailedAt,
+    IReadOnlyList<Guid> NotificationIds, IReadOnlyList<ResourceKey> SampleResources);
+public sealed record CollectionFailureRecoveryResult(int SelectedCount, int CreatedTaskCount,
+    int ReusedTaskCount, IReadOnlyList<Guid> TaskIds);
 public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevision, CollectionReason Reason,
     DateTimeOffset RequestedAt, string? ExplicitUrl, string? BatchId);
 public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,
