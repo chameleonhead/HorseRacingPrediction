@@ -1,6 +1,6 @@
 # 競馬情報収集状態管理基盤
 
-- Status: Approved
+- Status: Implemented (production cutover pending)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-11
 - Updated: 2026-09-11
@@ -228,7 +228,12 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 - 2026-09-11: lane allocatorを実outbox dispatcherへ接続し、Realtimeを優先しつつ4件連続後にBackgroundを送出することをdispatcher/SQS abstraction境界で検証した。このテストにより管理task一覧のSQLite DateTimeOffset ORDER BY不具合も検出し、メモリ側sortへ修正した。
 - 2026-09-11: Request時にDefinitionへ登録されていないrevisionを拒否し、存在しないrevisionがApplied/RequiredRevisionへ混入する経路を閉じた。定期schedulerはactive taskを確認してからRequestを生成し、期限超過中に毎分Request履歴が増える問題を防止した。Store対象テスト10件とApi buildが成功した。
 - 2026-09-11: race-discovery handlerから旧ScrapingRegistrationService依存を削除した。Calendarで開催場を発見し、RaceList/ResultListに実在するRaceだけを新CollectionRequest APIへ展開する。Explicit/保存済みURL候補をleaseへ含め、RaceCard/Result handlerが直接navigate後にpage typeとRaceIdを検証して既存workflowへ渡し、成功URLをActive/LastVerifiedAtへ反映する経路を接続した。Collectorの旧planning/execution hosted service登録も削除した。対象21テストとCollector buildは成功した。
-- 実装検証は承認後に Phase ごとに追記する。
+- 2026-09-11: Resource/State/Task/Attempt/Location/Batch/Failureを操作する新管理UIへ置換し、手動再取得と一括preview/executeを通常CollectionRequest経路へ統合した。bUnitの管理画面テスト3件とStore詳細テスト1件が成功した。
+- 2026-09-11: 旧Collection scheduling store、entities、runner、scheduler、管理endpoint/UI/config/testsを削除した。Prediction readinessは新CollectionPlatform APIへ移し、Race収集中のdomain mutationは必須Store依存のendpoint filterで409にする。Workerの迂回はTask ID、lease token、有効期限、対象Raceの一致を検証し、単純な自己申告headerでは解除できない。旧主要5 symbolと旧DB/configのproduction参照は0件である。
+- 2026-09-11: 初期化ツールはDomain Data/source citationからdry-run/executeでき、dry-run時はDBを作成せず、反復executeは冪等である。旧DB削除ツールはsmoke task成功、明示execute、削除前backupを必須とし、対象を`collection-tasks.db`とsidecarだけに限定した。
+- 2026-09-11: SQS/Lambdaは新notification契約へ切替え、Terraform/static contract testで新main queue/DLQ、event source、旧queue削除gateを検証した。Terraform CLIがローカル環境にないため実planは未実施であり、本番AWSへの適用・smoke・旧queue/旧DB削除はmaintenance windowでrunbookに従って実行する。
+- 2026-09-11: 最終検証として `dotnet build HorseRacingPrediction.sln --no-restore` は警告0・エラー0、全solution testはContracts 38、Domain 96、Application 56、Infrastructure 11、MachineLearning 14、Agents 107、Collector 72、Api 103、Scraping 210件が成功し、失敗0件だった。外部サイトの期限切れ固定URLに依存するApi 1件とScraping 1件のみskipで、対応parser fixtureは継続して成功している。
+- 2026-09-11: `git diff --check` はエラーなし。旧主要symbol、`CollectionProcessing`、`collection-tasks.db`、旧job detail routeの`src`/deploy参照は0件である。
 
 ## Deviations and follow-up
 
