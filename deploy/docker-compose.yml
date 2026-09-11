@@ -13,8 +13,12 @@ services:
       DatabaseMigration__BackupRetentionCount: 7
       CollectionProcessing__StateDirectory: /data
       CollectionProcessing__JobStoreFileName: collection-tasks.db
+      CollectionPlatform__StateDirectory: /data
+      CollectionPlatform__DatabaseFileName: collection-platform.db
+      PredictionScheduling__StateDirectory: /data
+      PredictionScheduling__StoreFileName: prediction-executions.db
       CollectionQueue__Enabled: ${COLLECTION_QUEUE_ENABLED:-false}
-      CollectionQueue__QueueName: horse-racing-prediction-collector
+      CollectionQueue__QueueName: horse-racing-prediction-resource-collection
       JobFailureNotifications__Enabled: ${JOB_FAILURE_NOTIFICATIONS_ENABLED:-false}
       JobFailureNotifications__TopicArn: ${JOB_FAILURE_NOTIFICATIONS_TOPIC_ARN:-}
       JobFailureNotifications__AdminBaseUrl: https://${DOMAIN_NAME}
