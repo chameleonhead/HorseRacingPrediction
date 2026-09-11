@@ -1,4 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -215,6 +217,61 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(ResourceLocationStatus.Suspect, (await store.ResolveLocationsAsync(Horse, HorseProfile))[0].Status);
         await store.RecordLocationOutcomeAsync(id, CollectionAttemptResult.Succeeded, now.AddMinutes(2));
         Assert.AreEqual(ResourceLocationStatus.Active, (await store.ResolveLocationsAsync(Horse, HorseProfile))[0].Status);
+    }
+
+    [TestMethod]
+    public async Task Startup_BaselinesEnsureCreatedDatabaseWithoutLosingExistingData()
+    {
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={databasePath};Pooling=False").Options;
+        await using (var legacy = new CollectionPlatformDbContext(options))
+        {
+            await legacy.Database.EnsureCreatedAsync();
+            legacy.Definitions.Add(new CollectionDefinitionEntity
+            {
+                DefinitionId = HorseProfile.Value,
+                Name = "Existing definition",
+                ResourceType = ResourceType.Horse,
+                CurrentRevision = 7,
+                Enabled = true
+            });
+            legacy.Revisions.Add(new CollectionRevisionEntity
+            {
+                DefinitionId = HorseProfile.Value,
+                Revision = 7,
+                Description = "Existing revision",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await legacy.SaveChangesAsync();
+        }
+
+        _ = CreateStore();
+
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        await using var history = connection.CreateCommand();
+        history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
+        Assert.AreEqual(1L, (long)(await history.ExecuteScalarAsync())!);
+        await using var existing = connection.CreateCommand();
+        existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
+        Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
+    }
+
+    [TestMethod]
+    public async Task Startup_RejectsIncompleteUnversionedDatabase()
+    {
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE collection_resources (ResourcePk INTEGER PRIMARY KEY);";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => CreateStore());
+        StringAssert.Contains(error.Message, "incomplete schema");
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

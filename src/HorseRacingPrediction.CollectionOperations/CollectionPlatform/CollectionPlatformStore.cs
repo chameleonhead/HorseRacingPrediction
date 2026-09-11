@@ -21,14 +21,14 @@ public sealed class CollectionPlatformStore
         _dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
             .UseSqlite($"Data Source={path};Pooling=False").Options;
         using var db = CreateDbContext();
-        db.Database.EnsureCreated();
+        CollectionPlatformSchemaMigrator.Migrate(db);
     }
 
     internal CollectionPlatformStore(DbContextOptions<CollectionPlatformDbContext> dbOptions)
     {
         _dbOptions = dbOptions;
         using var db = CreateDbContext();
-        db.Database.EnsureCreated();
+        CollectionPlatformSchemaMigrator.Migrate(db);
     }
 
     public async Task RegisterDefinitionAsync(CollectionDefinitionId id, string name, ResourceType resourceType,
