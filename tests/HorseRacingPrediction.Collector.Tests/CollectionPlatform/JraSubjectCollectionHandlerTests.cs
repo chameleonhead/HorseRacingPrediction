@@ -128,6 +128,22 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.IsEmpty(requests.Requests);
     }
 
+    [TestMethod]
+    public async Task ProfileWrite_SubjectProjectionNotReady_IsRetried()
+    {
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日" }),
+            new NotFoundProfileSink());
+
+        var completion = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("SubjectProjectionNotReady", completion.ErrorCode);
+        Assert.IsNotNull(completion.RetryAt);
+    }
+
     private static FakeJraSessionFactory SubjectSessions(string name, IReadOnlyDictionary<string, string> fields) => new()
     {
         ConfigureNavigator = () => new FakeJraNavigator
@@ -177,4 +193,11 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     private sealed record Save(string SubjectType, string SubjectId, JraSubjectProfileDto Profile);
+
+    private sealed class NotFoundProfileSink : IJraSubjectProfileSink
+    {
+        public Task SaveAsync(string subjectType, string subjectId, JraSubjectProfileDto profile,
+            CancellationToken cancellationToken) => throw new HttpRequestException("not ready", null,
+            System.Net.HttpStatusCode.NotFound);
+    }
 }

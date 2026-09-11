@@ -75,8 +75,18 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         page ??= await session.Navigate.ToSubjectProfileAsync(identity, cancellationToken).ConfigureAwait(false);
         SubjectProfilePageParser.Validate(page, identity);
-        await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // EventFlow read models are eventually consistent. A subject discovered from a race can
+            // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
+                ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(1));
+        }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
             await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
