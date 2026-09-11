@@ -73,7 +73,17 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (Exception ex) when (ex is not OperationCanceledException) { }
         }
-        page ??= await session.Navigate.ToSubjectProfileAsync(identity, cancellationToken).ConfigureAwait(false);
+        if (page is null)
+        {
+            try
+            {
+                page = await session.Navigate.ToSubjectProfileAsync(identity, cancellationToken).ConfigureAwait(false);
+            }
+            catch (JraCollectionException ex) when (ex.Message.Contains("同定不能", StringComparison.Ordinal))
+            {
+                return new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", ex.Message);
+            }
+        }
         SubjectProfilePageParser.Validate(page, identity);
         try
         {

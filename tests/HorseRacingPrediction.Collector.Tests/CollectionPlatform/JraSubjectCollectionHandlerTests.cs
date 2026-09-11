@@ -2,6 +2,7 @@ using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -142,6 +143,26 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
         Assert.AreEqual("SubjectProjectionNotReady", completion.ErrorCode);
         Assert.IsNotNull(completion.RetryAt);
+    }
+
+    [TestMethod]
+    public async Task ProfileNavigation_SubjectCannotBeIdentified_IsUnavailable()
+    {
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                SubjectFactory = _ => throw new JraCollectionException("同定不能: 公開検索から対象を確認できませんでした。")
+            }
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink());
+
+        var completion = await handler.CollectAsync(SubjectTask("horse-missing", "missing", new Dictionary<string, string>()),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
     }
 
     private static FakeJraSessionFactory SubjectSessions(string name, IReadOnlyDictionary<string, string> fields) => new()

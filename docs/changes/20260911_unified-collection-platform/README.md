@@ -205,6 +205,7 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 - 2026-09-12: Workflowテストで GradeCode、本賞金、付加賞、StewardReportText が一括domain writeリクエストへ接続されることを検証した。
 - 2026-09-12: 耐久試験で当日RaceCardの未公開ページ4件がPermanentFailureになったため、当日以降の未取得はResourceNotYetAvailableとして30分後に再試行するよう修正した。
 - 2026-09-12: Raceから発見したJockey/Trainerのprofile writeがread model反映前に404となる競合を確認し、SubjectProjectionNotReadyとして1分後に再試行するよう修正した。
+- 2026-09-12: 過去Horse/TrainerがJRA公開検索・名簿で一意に同定できないケースをPermanentFailureではなくResourceNotFound（Unavailable）として記録するよう修正した。
 
 - The new outbox publishes the minimal `taskId` / `dispatchGeneration` notification to SQS.
 - The Lambda `--once` entry accepts only that new notification, acquires the task from the API, invokes the registered definition handler, and reports the attempt result to the API.
