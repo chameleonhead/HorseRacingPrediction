@@ -168,3 +168,8 @@ public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOn
     DateTimeOffset? ExpansionCompletedAt);
 public sealed record BackfillHole(ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage);
+public sealed record CollectionInitializationSeed(ResourceKey Resource, CollectionDefinitionId Definition,
+    int AppliedRevision, DateTimeOffset CollectedAt, DateOnly? EffectiveDate,
+    IReadOnlyDictionary<string, string> Attributes, Uri? SourceUrl = null);
+public sealed record CollectionInitializationReport(bool DryRun, int Examined, int ResourcesAdded,
+    int StatesAdded, int LocationsAdded, IReadOnlyList<string> BackfillMonths);

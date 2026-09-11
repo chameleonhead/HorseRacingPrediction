@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\tools\HorseRacingPrediction.CollectionInitializer\HorseRacingPrediction.CollectionInitializer.csproj" />
     <PackageReference Include="MSTest" Version="4.4.0" />
   </ItemGroup>
 

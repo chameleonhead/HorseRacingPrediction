@@ -1189,6 +1189,82 @@ public sealed class CollectionPlatformStore
         return incomplete.Count;
     }
 
+    public async Task<CollectionInitializationReport> InitializeFromDomainDataAsync(
+        IReadOnlyCollection<CollectionInitializationSeed> seeds, bool dryRun,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = seeds.Select(x => x with { Resource = x.Resource.Normalize() })
+            .GroupBy(x => new { x.Resource, x.Definition })
+            .Select(x => x.OrderByDescending(y => y.CollectedAt).First()).ToList();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var resourcesAdded = 0;
+            var statesAdded = 0;
+            var locationsAdded = 0;
+            foreach (var seed in normalized)
+            {
+                var definition = await db.Definitions.AsNoTracking().SingleOrDefaultAsync(
+                    x => x.DefinitionId == seed.Definition.Value, cancellationToken)
+                    ?? throw new InvalidOperationException($"Collection definition {seed.Definition} is not registered.");
+                if (definition.ResourceType != seed.Resource.Type || seed.AppliedRevision > definition.CurrentRevision)
+                    throw new InvalidOperationException($"Initialization seed is incompatible with {seed.Definition}.");
+                var resource = await db.Resources.SingleOrDefaultAsync(x => x.Type == seed.Resource.Type
+                    && x.Provider == seed.Resource.Provider && x.ResourceId == seed.Resource.Id, cancellationToken);
+                if (resource is null)
+                {
+                    resourcesAdded++;
+                    if (dryRun)
+                    {
+                        statesAdded++;
+                        if (seed.SourceUrl is not null) locationsAdded++;
+                        continue;
+                    }
+                    resource = new CollectionResourceEntity
+                    {
+                        Type = seed.Resource.Type, Provider = seed.Resource.Provider,
+                        ResourceId = seed.Resource.Id, EffectiveDate = seed.EffectiveDate,
+                        AttributesJson = JsonSerializer.Serialize(seed.Attributes), CreatedAt = seed.CollectedAt
+                    };
+                    db.Resources.Add(resource);
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+                if (!await db.States.AnyAsync(x => x.ResourcePk == resource.ResourcePk
+                    && x.DefinitionId == seed.Definition.Value, cancellationToken))
+                {
+                    statesAdded++;
+                    if (!dryRun) db.States.Add(new CollectionStateEntity
+                    {
+                        ResourcePk = resource.ResourcePk, DefinitionId = seed.Definition.Value,
+                        AppliedRevision = seed.AppliedRevision, RequiredRevision = seed.AppliedRevision,
+                        LastCollectedAt = seed.CollectedAt, Status = CollectionStateStatus.Current,
+                        UpdatedAt = seed.CollectedAt
+                    });
+                }
+                if (seed.SourceUrl is not null && !await db.Locations.AnyAsync(x => x.ResourcePk == resource.ResourcePk
+                    && x.DefinitionId == seed.Definition.Value && x.Url == seed.SourceUrl.AbsoluteUri, cancellationToken))
+                {
+                    locationsAdded++;
+                    if (!dryRun) db.Locations.Add(new ResourceLocationEntity
+                    {
+                        ResourcePk = resource.ResourcePk, DefinitionId = seed.Definition.Value,
+                        Url = seed.SourceUrl.AbsoluteUri, Source = ResourceLocationSource.Discovered,
+                        Status = ResourceLocationStatus.Active, DiscoveredAt = seed.CollectedAt,
+                        LastVerifiedAt = seed.CollectedAt
+                    });
+                }
+            }
+            if (!dryRun) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var months = normalized.Where(x => x.EffectiveDate.HasValue)
+                .Select(x => $"{x.EffectiveDate!.Value:yyyy-MM}").Distinct().Order().ToList();
+            return new(dryRun, normalized.Count, resourcesAdded, statesAdded, locationsAdded, months);
+        }
+        finally { _gate.Release(); }
+    }
+
     private static bool IsRetryable(CollectionAttemptResult result) => result is
         CollectionAttemptResult.TransientFailure or CollectionAttemptResult.ResourceNotYetAvailable
         or CollectionAttemptResult.AccessLimited;

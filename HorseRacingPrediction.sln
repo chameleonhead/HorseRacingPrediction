@@ -49,6 +49,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Colle
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Scraping.Tests", "tests\HorseRacingPrediction.Scraping.Tests\HorseRacingPrediction.Scraping.Tests.csproj", "{95767FE8-0D35-47E2-8AC9-1B5A6139522D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.CollectionInitializer", "tools\HorseRacingPrediction.CollectionInitializer\HorseRacingPrediction.CollectionInitializer.csproj", "{63092778-2EA1-46FF-A976-ADE838CB8064}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -311,6 +315,18 @@ Global
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D}.Release|x64.Build.0 = Release|Any CPU
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D}.Release|x86.ActiveCfg = Release|Any CPU
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D}.Release|x86.Build.0 = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|x64.Build.0 = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Debug|x86.Build.0 = Debug|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x64.ActiveCfg = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x64.Build.0 = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x86.ActiveCfg = Release|Any CPU
+		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -337,5 +353,6 @@ Global
 		{F2E18D37-61EC-4700-BFA3-AB5C8FFC94B3} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{EA4B9F07-C056-4390-89D5-9B53D733A539} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
+		{63092778-2EA1-46FF-A976-ADE838CB8064} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal
