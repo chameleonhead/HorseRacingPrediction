@@ -9,8 +9,8 @@ This is the durable continuation plan for the approved unified collection platfo
 | I1 | Create replacement SQS/DLQ alongside legacy resources and encode post-smoke deletion | — | Terraform/cutover artifacts | `terraform validate/plan` where available; static contract test | Completed (static validation; Terraform CLI unavailable) |
 | O1 | Implement new DLQ reconciliation, retry classification, pause/cancel/watchdog and failure notification | P1 | CollectionPlatform store/API | API→state failure/retry tests | Completed |
 | D1 | Complete Discovery API→outbox→SQS→Lambda→child Request integration test | L1, P1 | API/Collector integration tests | Full transport-boundary test | Completed |
-| S1 | Implement Horse/Jockey/Trainer handlers and RaceCard reference discovery | D1 | Collector/Scraping/API client | RaceCard→three Resource requests→profile write | Running |
-| S2 | Implement Horse→Trainer/sire/dam discovery with cycle and priority guards | S1 | Collector collection handlers | Cyclic graph test | Queued |
+| S1 | Implement Horse/Jockey/Trainer handlers and RaceCard reference discovery | D1 | Collector/Scraping/API client | RaceCard→three Resource requests→profile write | Completed |
+| S2 | Implement Horse→Trainer/sire/dam discovery with cycle and priority guards | S1 | Collector collection handlers | Cyclic graph test | Running |
 | B1 | Implement year/month Batch, staged result discovery, restart, and hole projection | D1, P1 | CollectionPlatform/API/Collector | Partial failure then later batch and hole query | Running |
 | A1 | Implement append-only OddsSnapshot domain write, parser, handler, and repeated schedule | D1, P1 | Domain/Application/Scraping/Collector | Multiple observed-at snapshots retained | Queued |
 | R1 | Finish revision impact preview/progress and recollection expansion | P1 | CollectionPlatform/API | affected/completed/pending/failed test | Running |

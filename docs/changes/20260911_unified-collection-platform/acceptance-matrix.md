@@ -11,7 +11,7 @@ Status meanings: **Not started** has no connected production path; **Connected**
 | Timeout, retry, lease expiry, duplicate delivery | Connected | Timeout reports retryable completion to the new API with an independent deadline; periodic expiry recovery and transport tests exist, but duplicate SQS delivery/DLQ remains unverified |
 | Direct URL and ResourceLocation fallback | Verified | Explicit/stored candidates reach the lease; handlers validate page type/Race ID, continue after wrong/failed candidates, preserve cancellation, fall back to Discovery, and report the successful URL for verification |
 | Race discovery to RaceCard/Result requests | Verified | Admin request, outbox, SQS JSON boundary, worker lease, real discovery handler, and RaceCard/Result child requests are covered by one production-path integration test |
-| Horse/Jockey/Trainer discovery and refresh | Not started | Definitions only; handlers and reference expansion absent |
+| Horse/Jockey/Trainer discovery and refresh | Connected | RaceCard expands all three Resource types through shared descriptors and handlers; Horse pedigree/trainer recursion and full Jockey profile history remain |
 | Backfill batch and hole recovery | Not started | Legacy implementation remains |
 | Dynamic schedule and repeated observations | Connected | Policy/due scheduler exist and the actual outbox dispatcher now enforces Realtime-first with a four-item starvation bound; request-flood protection remains |
 | RaceOdds snapshots | Not started | Definition only; parser/domain snapshot/handler absent |
