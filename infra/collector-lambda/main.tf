@@ -70,12 +70,12 @@ resource "aws_iam_role_policy_attachment" "logs" {
 }
 
 resource "aws_sqs_queue" "collector_dlq" {
-  name                      = "horse-racing-prediction-collector-dlq"
+  name                      = "horse-racing-prediction-resource-collection-dlq"
   message_retention_seconds = 1209600
 }
 
 resource "aws_sqs_queue" "collector" {
-  name                       = "horse-racing-prediction-collector"
+  name                       = "horse-racing-prediction-resource-collection"
   visibility_timeout_seconds = 5400
   message_retention_seconds  = 345600
   receive_wait_time_seconds  = 20

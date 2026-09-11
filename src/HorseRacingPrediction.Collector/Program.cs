@@ -26,6 +26,7 @@ builder.Services.Configure<AgentProcessingOptions>(
 builder.Services.AddJraScraping();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
+builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();

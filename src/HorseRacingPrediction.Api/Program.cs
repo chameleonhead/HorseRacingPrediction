@@ -186,6 +186,7 @@ var app = builder.Build();
 
 var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore>();
 await collectionPlatform.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false);

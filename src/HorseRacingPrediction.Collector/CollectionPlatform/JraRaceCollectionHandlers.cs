@@ -5,6 +5,22 @@ using HorseRacingPrediction.Scraping.Jra.Workflow;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
+public sealed class JraRaceDiscoveryCollectionHandler(
+    HorseRacingPrediction.Collector.Scheduling.ScrapingRegistrationService registration)
+    : ICollectionDefinitionHandler
+{
+    public CollectionDefinitionId DefinitionId => new("race-discovery");
+    public ResourceType ResourceType => ResourceType.Race;
+
+    public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
+        CancellationToken cancellationToken)
+    {
+        await registration.RunOneCycleAsync(cancellationToken).ConfigureAwait(false);
+        return new(CollectionAttemptResult.Succeeded,
+            PageIdentification: $"RaceDiscovery:JRA:{task.Resource.Id}");
+    }
+}
+
 public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
     JraRaceCardCollectionWorkflowFactory workflows) : ICollectionDefinitionHandler
 {
