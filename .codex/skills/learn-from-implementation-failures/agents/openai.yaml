@@ -1,0 +1,4 @@
+interface:
+  display_name: "Learn from implementation failures"
+  short_description: "Turn implementation mistakes into targeted skill improvements"
+  default_prompt: "Analyze the demonstrated implementation failure, identify its systemic cause, and update the smallest relevant skills to prevent recurrence."

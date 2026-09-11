@@ -20,6 +20,26 @@ Treat the document as the durable record of intent and the implementation as its
 9. Verify the acceptance criteria and relevant regressions. Record commands, results, intentional deviations, remaining work, and documentation updates in the change record.
 10. Set the status to `Implemented` only when the approved scope, required documentation updates, and required verification are complete.
 
+## Implementation Traceability Gate
+
+Before describing a slice as complete, trace each acceptance criterion through the real production path: trigger, persistence, dispatch, worker entry, domain side effect, failure recovery, and operator visibility as applicable. A model, policy, or adapter tested in isolation does not prove the feature is connected.
+
+- Maintain an acceptance-criterion matrix with `Not started`, `Connected`, and `Verified` states. A checkpoint may contain unfinished items; completion may not.
+- For replacement work, inventory old runtime registrations, entry points, callers, persisted data, configuration, infrastructure, UI, and tests. Completion requires evidence that prohibited legacy symbols have zero production callers and are not registered at runtime.
+- Test at least one end-to-end happy path and the critical failure/restart path through the actual transport and persistence boundary.
+- Verify operational invariants at the layer that enforces them. If priority is enforced by a dispatcher, test the dispatcher; if URL fallback is required, test the locator plus handler path.
+- Treat new code calling a component that creates legacy work as continued legacy usage, even when wrapped by a new handler.
+
+## Cutover Gate
+
+For destructive replacement, document and verify the executable order separately from the steady-state architecture: create replacement resources; connect new producers and consumers; prevent mixed messages and dual execution; initialize state and smoke test; preserve rollback until checks pass; then delete only the approved legacy targets.
+
+A resource rename or declarative replacement plan is not evidence of this order unless the deployment mechanism guarantees and tests every gate.
+
+## Review Before Handoff
+
+At each substantial checkpoint, review the diff against the acceptance-criterion matrix before reporting progress. For cross-process workflows, explicitly inspect cancellation, timeout, retry, lease expiry, duplicate delivery, multi-instance concurrency, and partial failure. Record blocking findings as unfinished work; do not present scaffolding, disconnected components, or passing isolated tests as an implemented capability.
+
 ## Commit Checkpoints
 
 - For large or long-running changes, commit at verified checkpoints instead of waiting for the entire change set to finish. Good checkpoint boundaries include document/design updates, API or state-model changes, UI slices, tests, and final documentation synchronization.

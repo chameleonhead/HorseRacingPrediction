@@ -226,6 +226,12 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 
 ## Deviations and follow-up
 
+### 2026-09-11 implementation review retrospective
+
+The implementation checkpoint exposed a systemic traceability failure. New models and isolated policy tests were treated as evidence of connected capabilities without tracing the production path through discovery, location resolution, SQS dispatch, Lambda cancellation, retry recovery, and cutover. This allowed a new discovery handler to call a legacy job producer after the legacy dispatcher was disabled, left explicit URLs and ResourceLocation disconnected from workers, left the fairness allocator disconnected from the outbox dispatcher, and represented a destructive queue replacement as a Terraform rename rather than a smoke-gated cutover.
+
+Contributing workflow errors were: no acceptance-criterion status matrix, no end-to-end transport test, no zero-caller proof for legacy symbols, no cross-process failure-mode review before checkpoint reporting, and progress language that did not clearly distinguish schema scaffolding from an operationally complete capability. The repository skills now require production-path traceability, real enforcement-layer tests, legacy caller/runtime-registration inventory, cross-process failure review, and an executable cutover sequence before completion claims.
+
 - Odds API は unavailable response のみで snapshot domain model/parser はないため Phase 7 は新規 domain capability を含む。
 - `20260909_autonomous-historical-race-backfill` の実装を否定せず、共通 Resource/Policy/Batch projection へ移管する。
 - Horse/Jockey/Trainer identity は alias mapping を導入し、既存 ID の一括変更や URL からの推測を行わない。
