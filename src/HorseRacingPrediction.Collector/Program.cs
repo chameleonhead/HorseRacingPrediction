@@ -28,7 +28,8 @@ foreach (var descriptor in JraSubjectCollectionDefinitions.All)
     builder.Services.AddSingleton<ICollectionDefinitionHandler>(services =>
         new JraSubjectProfileCollectionHandler(descriptor,
             services.GetRequiredService<IJraSessionFactory>(),
-            services.GetRequiredService<IJraSubjectProfileSink>()));
+            services.GetRequiredService<IJraSubjectProfileSink>(),
+            services.GetRequiredService<ICollectionRequestSink>()));
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>

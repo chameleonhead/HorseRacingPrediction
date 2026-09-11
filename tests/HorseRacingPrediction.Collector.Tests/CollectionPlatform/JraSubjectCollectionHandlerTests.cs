@@ -70,6 +70,86 @@ public sealed class JraSubjectCollectionHandlerTests
             profileSink.Saves.Select(x => x.SubjectId).ToArray());
     }
 
+    [TestMethod]
+    public async Task HorseProfile_DeduplicatesParentsAndRejectsSelfReference()
+    {
+        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var currentId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var requests = new RecordingRequestSink();
+        var sessions = SubjectSessions("A", new Dictionary<string, string>
+        {
+            ["生年月日"] = "2020年1月1日", ["父"] = "A", ["母"] = "B", ["母馬"] = "B（母の父：C）",
+            ["調教師"] = "T",
+        });
+        var handler = new JraSubjectProfileCollectionHandler(descriptor, sessions,
+            new RecordingProfileSink(), requests);
+
+        await handler.CollectAsync(SubjectTask(currentId, "A", new Dictionary<string, string>()), CancellationToken.None);
+
+        Assert.HasCount(2, requests.Requests);
+        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == ResourceType.Horse));
+        Assert.HasCount(1, requests.Requests.Where(x => x.Resource.Type == ResourceType.Trainer));
+        Assert.IsFalse(requests.Requests.Any(x => x.Resource.Id == currentId));
+        Assert.IsTrue(requests.Requests.All(x => x.Attributes["discoveryDepth"] == "1"));
+    }
+
+    [TestMethod]
+    public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
+    {
+        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var aId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var firstRequests = new RecordingRequestSink();
+        await new JraSubjectProfileCollectionHandler(descriptor,
+                SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),
+                new RecordingProfileSink(), firstRequests)
+            .CollectAsync(SubjectTask(aId, "A", new Dictionary<string, string>()), CancellationToken.None);
+        var b = firstRequests.Requests.Single();
+
+        var secondRequests = new RecordingRequestSink();
+        await new JraSubjectProfileCollectionHandler(descriptor,
+                SubjectSessions("B", new Dictionary<string, string> { ["生年月日"] = "2010年1月1日", ["父"] = "A" }),
+                new RecordingProfileSink(), secondRequests)
+            .CollectAsync(SubjectTask(b.Resource.Id, "B", b.Attributes), CancellationToken.None);
+
+        Assert.IsEmpty(secondRequests.Requests);
+    }
+
+    [TestMethod]
+    public async Task HorseProfile_MaximumDepthStopsFurtherExpansion()
+    {
+        var id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var requests = new RecordingRequestSink();
+        await new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+                SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),
+                new RecordingProfileSink(), requests)
+            .CollectAsync(SubjectTask(id, "A", new Dictionary<string, string> { ["discoveryDepth"] = "3" }),
+                CancellationToken.None);
+
+        Assert.IsEmpty(requests.Requests);
+    }
+
+    private static FakeJraSessionFactory SubjectSessions(string name, IReadOnlyDictionary<string, string> fields) => new()
+    {
+        ConfigureNavigator = () => new FakeJraNavigator
+        {
+            SubjectFactory = identity =>
+            {
+                var url = $"https://www.jra.go.jp/profile/{name}";
+                return new JraSubjectPage(new JraSubjectProfileDto("Horse", name, url, url, fields.ToDictionary(),
+                    DateTimeOffset.UtcNow), [], null);
+            },
+        },
+    };
+
+    private static LeasedCollectionTask SubjectTask(string id, string name,
+        IReadOnlyDictionary<string, string> inherited)
+    {
+        var attributes = new Dictionary<string, string>(inherited) { ["name"] = name };
+        return new(Guid.NewGuid(), Guid.NewGuid(), new(ResourceType.Horse, "JRA", id),
+            new("horse-profile"), 1, CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 12), attributes);
+    }
+
     private sealed class RecordingRequestSink : ICollectionRequestSink
     {
         public List<Request> Requests { get; } = [];

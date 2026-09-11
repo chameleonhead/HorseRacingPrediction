@@ -44,8 +44,10 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
 }
 
 public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinition descriptor,
-    IJraSessionFactory sessions, IJraSubjectProfileSink sink) : ICollectionDefinitionHandler
+    IJraSessionFactory sessions, IJraSubjectProfileSink sink, ICollectionRequestSink? requests = null)
+    : ICollectionDefinitionHandler
 {
+    private const int MaximumDiscoveryDepth = 3;
     public CollectionDefinitionId DefinitionId => descriptor.Definition;
     public ResourceType ResourceType => descriptor.ResourceType;
 
@@ -75,9 +77,54 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         SubjectProfilePageParser.Validate(page, identity);
         await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
             .ConfigureAwait(false);
+        if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
+            await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
             PageIdentification: $"{descriptor.SubjectType}Profile:JRA:{task.Resource.Id}");
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;
+
+    private static async Task DiscoverHorseReferencesAsync(LeasedCollectionTask task, JraSubjectProfileDto profile,
+        ICollectionRequestSink sink, CancellationToken cancellationToken)
+    {
+        var depth = int.TryParse(task.Attributes.GetValueOrDefault("discoveryDepth"), out var parsed) ? parsed : 0;
+        if (depth >= MaximumDiscoveryDepth) return;
+        var ancestors = (task.Attributes.GetValueOrDefault("discoveryAncestors") ?? string.Empty)
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Append(task.Resource.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        static string? Field(IReadOnlyDictionary<string, string> fields, params string[] names) =>
+            names.Select(fields.GetValueOrDefault).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim();
+        var references = new (ResourceType Type, string? Name)[]
+        {
+            (ResourceType.Trainer, Field(profile.Fields, "調教師", "調教師名")),
+            (ResourceType.Horse, Field(profile.Fields, "父", "父馬")),
+            (ResourceType.Horse, NormalizeDam(Field(profile.Fields, "母", "母馬"))),
+        };
+        foreach (var reference in references.Where(x => !string.IsNullOrWhiteSpace(x.Name))
+                     .Select(x => (x.Type, Name: x.Name!.Trim())).Distinct())
+        {
+            var child = JraSubjectCollectionDefinitions.For(reference.Type);
+            var childId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+                child.IdPrefix, reference.Name);
+            if (ancestors.Contains(childId)) continue;
+            await sink.RequestAsync(new(reference.Type, "JRA", childId), child.Definition,
+                CollectionReason.Discovery, CollectionLane.Background, Math.Max(10, task.Priority - 10), null,
+                task.EffectiveDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                new Dictionary<string, string>
+                {
+                    ["name"] = reference.Name,
+                    ["discoveryDepth"] = (depth + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["discoveryAncestors"] = string.Join('|', ancestors.Order()),
+                }, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string? NormalizeDam(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var marker = value.IndexOfAny(['(', '（']);
+        return (marker < 0 ? value : value[..marker]).Trim();
+    }
 }
