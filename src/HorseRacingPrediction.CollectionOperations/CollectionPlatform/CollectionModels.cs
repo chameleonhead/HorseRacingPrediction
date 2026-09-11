@@ -130,3 +130,11 @@ public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNoti
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
     DateTimeOffset AvailableAt, int AttemptCount);
+
+public sealed record CollectionProgressSnapshot(
+    IReadOnlyDictionary<ResourceType, int> ResourcesByType,
+    IReadOnlyDictionary<CollectionStateStatus, int> StatesByStatus,
+    IReadOnlyDictionary<CollectionLane, int> ActiveTasksByLane,
+    IReadOnlyDictionary<int, int> ActiveTasksByPriority,
+    IReadOnlyDictionary<string, int> StatesByDefinition,
+    int RetryWaiting);

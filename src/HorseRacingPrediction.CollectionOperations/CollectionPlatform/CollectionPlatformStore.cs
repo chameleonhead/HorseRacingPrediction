@@ -487,6 +487,24 @@ public sealed class CollectionPlatformStore
             x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
     }
 
+    public async Task<CollectionProgressSnapshot> GetProgressAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var resources = await db.Resources.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var states = await db.States.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var tasks = await db.Tasks.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var active = tasks.Where(x => x.Status is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready
+            or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery)
+            .ToList();
+        return new(
+            resources.GroupBy(x => x.Type).ToDictionary(x => x.Key, x => x.Count()),
+            states.GroupBy(x => x.Status).ToDictionary(x => x.Key, x => x.Count()),
+            active.GroupBy(x => x.Lane).ToDictionary(x => x.Key, x => x.Count()),
+            active.GroupBy(x => x.Priority).ToDictionary(x => x.Key, x => x.Count()),
+            states.GroupBy(x => x.DefinitionId).ToDictionary(x => x.Key, x => x.Count(), StringComparer.Ordinal),
+            tasks.Count(x => x.Status == CollectionTaskStatus.RetryWaiting));
+    }
+
     private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
     {
         if (impact.ScopeType == RevisionImpactScopeType.NamedCondition

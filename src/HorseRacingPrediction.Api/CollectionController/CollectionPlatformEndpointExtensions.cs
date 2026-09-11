@@ -9,6 +9,8 @@ public static class CollectionPlatformEndpointExtensions
         var admin = endpoints.MapGroup("/api/admin/collection").WithTags("Collection Platform");
         admin.MapGet("/tasks", async (CollectionTaskStatus? status, int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
+        admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
+            Results.Ok(await store.GetProgressAsync(token)));
         admin.MapGet("/states/{type}/{provider}/{resourceId}/{definition}", async (
             ResourceType type, string provider, string resourceId, string definition,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -26,6 +28,19 @@ public static class CollectionPlatformEndpointExtensions
                 request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
                 request.Attributes, token);
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
+        });
+        admin.MapPost("/requests/bulk", async (BulkCollectionRequest request, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            if (request.Resources.Count is < 1 or > 10_000)
+                return Results.BadRequest(new { message = "Resources must contain between 1 and 10000 items." });
+            var receipts = new List<CollectionRequestReceipt>(request.Resources.Count);
+            foreach (var resource in request.Resources.Distinct())
+                receipts.Add(await store.RequestAsync(new(resource.Type, resource.Provider, resource.Id),
+                    new(request.DefinitionId), request.RequestedRevision, request.Reason,
+                    DateTimeOffset.UtcNow, request.Lane, request.Priority, batchId: request.BatchId,
+                    cancellationToken: token));
+            return Results.Accepted(value: new { request.BatchId, Requests = receipts });
         });
 
         var worker = endpoints.MapGroup("/api/internal/collection").WithTags("Collection Worker");
@@ -57,6 +72,11 @@ public sealed record CreateCollectionRequest(ResourceType ResourceType, string P
     IReadOnlyDictionary<string, string>? Attributes = null);
 
 public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900);
+
+public sealed record BulkCollectionResource(ResourceType Type, string Provider, string Id);
+public sealed record BulkCollectionRequest(string DefinitionId, int RequestedRevision, CollectionReason Reason,
+    IReadOnlyList<BulkCollectionResource> Resources, string? BatchId = null,
+    CollectionLane Lane = CollectionLane.Background, int Priority = (int)CollectionPriority.Background);
 
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,

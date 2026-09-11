@@ -201,6 +201,7 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - Periodic race discovery is now represented as an ordinary `race-discovery` resource request instead of a legacy planning job.
 - Terraform provisions the replacement resource-collection queue and DLQ under new names; applying this change replaces and removes the old queue pair while retaining the Lambda/SQS topology.
 - A JRA schedule policy now computes dynamic lane, priority, and next observation time for RaceCard, RaceOdds, RaceResult, and subject profiles. A persisted due-state scheduler recreates normal ScheduledRefresh requests after restart.
+- The management API now exposes aggregate progress by resource type, state, lane, priority, and definition, and expands an explicit resource list (up to 10,000 items) into ordinary, batch-correlated collection requests.
 
 - 2026-09-11: `.codegraph/` がないため `rg` と対象ファイルの直接確認で調査した。
 - 2026-09-11: production code は変更していない。本文書と canonical documentation のみ Proposed として作成・更新した。
