@@ -32,6 +32,20 @@ When a multi-step implementation repeatedly stops at checkpoints while safe appr
 
 The observable correction is sustained progress across multiple dependent checkpoints, with the execution plan and acceptance matrix showing why work continued or why it was genuinely blocked.
 
+### Resume protocol after an interruption
+
+When work resumes after a user interjection, context compaction, tool failure, process restart, or another interruption, do not reconstruct the task from memory or restart completed work.
+
+1. Read the latest user request together with the active approved change record and durable execution plan.
+2. Inspect repository evidence (`git status`, the latest relevant commits, and focused diffs), runtime evidence (health/process state when applicable), and the most recent verification results.
+3. Classify each planned item as complete with evidence, currently modified, runnable next, or genuinely blocked. Preserve unrelated user changes.
+4. Continue from the first runnable unmet acceptance criterion. Re-run only the smallest verification needed to establish whether previously completed work is still valid.
+5. Before another possible interruption, record the exact next action, verification command, runtime identifiers, and files intentionally left uncommitted in the durable plan or change record.
+
+For open-ended quality requests such as “iterate until it looks good,” define an observable loop before editing: inspect the rendered result, name the largest remaining usability or visual defect, make one coherent adjustment, and render again. Stop only after a full pass finds no material defect in hierarchy, density, alignment, responsive behavior, interaction feedback, or accessibility—not merely after the first successful build.
+
+The recovery gate is that a new agent or compacted continuation can identify the next command and remaining acceptance gap from repository artifacts and current state in under one inspection pass.
+
 ## Quality bar
 
 A correction must change a future decision and have an observable completion condition. Prefer gates that trace a requirement through its production entry point and terminal side effect, exercise the real adapter or dispatcher, prove removed infrastructure has zero runtime callers, distinguish checkpoints from completion, or verify destructive cutover ordering.
