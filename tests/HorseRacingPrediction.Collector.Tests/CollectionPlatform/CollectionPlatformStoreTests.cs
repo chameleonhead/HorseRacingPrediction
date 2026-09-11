@@ -470,7 +470,8 @@ public sealed class CollectionPlatformStoreTests
         var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
-            new(CollectionAttemptResult.Succeeded, RequestedUrl: new("https://example.test/horse/H123"))));
+            new(CollectionAttemptResult.Succeeded, RequestedUrl: new("https://example.test/horse/H123"),
+                PageIdentification: "Horse:JRA:H123")));
 
         var detail = await store.GetResourceDetailAsync(Horse, HorseProfile);
 
@@ -481,6 +482,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.HasCount(1, detail.Tasks);
         Assert.HasCount(1, detail.Attempts);
         Assert.AreEqual(CollectionAttemptResult.Succeeded, detail.Attempts[0].Result);
+        Assert.AreEqual("Horse:JRA:H123", detail.Attempts[0].PageIdentification);
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

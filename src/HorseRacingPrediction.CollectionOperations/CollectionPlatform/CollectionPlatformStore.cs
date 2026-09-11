@@ -662,7 +662,7 @@ public sealed class CollectionPlatformStore
             .ToListAsync(cancellationToken);
         var attempts = attemptRows.OrderByDescending(x => x.StartedAt).Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
                 x.AttemptNumber, x.StartedAt, x.FinishedAt, x.Result, x.ErrorCode, x.ErrorMessage,
-                x.RequestedUrl, x.FinalUrl, x.HttpStatusCode)).ToList();
+                x.RequestedUrl, x.FinalUrl, x.HttpStatusCode, x.PageIdentification)).ToList();
         var state = stateEntity is null ? null : new CollectionStateSnapshot(resource, definition,
             stateEntity.AppliedRevision, stateEntity.RequiredRevision, stateEntity.LastCollectedAt,
             stateEntity.NextCollectionAt, stateEntity.Status);

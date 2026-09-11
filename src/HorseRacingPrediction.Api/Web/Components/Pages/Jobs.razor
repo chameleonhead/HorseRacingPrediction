@@ -15,7 +15,7 @@
         }
         else
         {
-            <FluentButton Appearance="@Appearance.Outline" OnClick="PauseAsync" Disabled="@(busy || pipeline is null)">すべて一時停止</FluentButton>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="OpenPause" Disabled="@(busy || pipeline is null)">すべて一時停止</FluentButton>
         }
     </Actions>
 </RaceOpsPageHeader>
@@ -124,6 +124,16 @@ else
     <FluentDialogFooter><FluentButton OnClick="@(() => showCreate = false)">キャンセル</FluentButton>@if(!string.IsNullOrEmpty(createType)){<FluentButton Appearance="@Appearance.Accent" OnClick="CreateRequestAsync" Disabled="busy">収集を依頼</FluentButton>}</FluentDialogFooter>
 </FluentDialog>
 
+<FluentDialog Hidden="@(!showPause)" HiddenChanged="@(h => showPause = !h)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="pause-title">収集全体を一時停止</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>新しいタスクの取得を止めます。実行中の処理は結果を報告でき、再開後は待機中の処理から続行します。</p>
+        <FluentTextField Label="停止理由" Placeholder="例: JRAサイトの画面変更を調査するため" @bind-Value="pauseReason" />
+        @if(pauseErrors.Count>0){<UiState Kind="error" Title="一時停止できません" Message="@string.Join(" ",pauseErrors)" />}
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showPause=false)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="PauseAsync" Disabled="@(busy || string.IsNullOrWhiteSpace(pauseReason))">収集を一時停止</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
 <FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h => showBulk = !h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader>
     <FluentDialogBody>
@@ -159,10 +169,11 @@ else
     private DateOnly? bulkFrom, bulkTo;
     private DateTime? bulkLastCollectedBefore;
     private int page = 1;
-    private bool loading = true, busy, showCreate, showBulk, initialized, autoRefresh = true;
+    private bool loading = true, busy, showCreate, showBulk, showPause, initialized, autoRefresh = true;
+    private string pauseReason = "";
     private DateTimeOffset? lastUpdatedAt;
     private CancellationTokenSource? refreshCancellation;
-    private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [];
+    private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [], pauseErrors = [];
     private IReadOnlyList<CollectionTaskSummary> tasks = [];
     private CollectionTaskPage? taskPage;
     private IReadOnlyDictionary<string, int> serverViewCounts = new Dictionary<string, int>();
@@ -213,7 +224,8 @@ else
     private string CreateTitle=>string.IsNullOrEmpty(createDefinition)?"収集を依頼":DefinitionLabel(new(createDefinition));
     private string CreateGuidance=>createType.StartsWith("Race",StringComparison.Ordinal)?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
     private string CreatePlaceholder=>createType.StartsWith("Race",StringComparison.Ordinal)?"例: 20260912:Nakayama:11":"一覧や詳細に表示されている対象ID";
-    private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync("管理画面から一時停止"):await Api.ResumeCollectionPipelineAsync();if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
+    private void OpenPause(){pauseReason="";pauseErrors=[];showPause=true;}
+    private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync(pauseReason.Trim()):await Api.ResumeCollectionPipelineAsync();if(!r.Success){if(pause)pauseErrors=r.Errors;else errors=r.Errors;}else{showPause=false;await LoadAsync();}}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){if(pause)pauseErrors=["管理APIに接続できません。入力した理由は保持されています。"];else errors=["管理APIに接続できません。もう一度お試しください。"];}finally{busy=false;}}
     private void OpenBulk(){showBulk=true;bulkSelection="Failed";bulkType="Horse";BulkTypeChanged();preview=null;bulkErrors=[];}
     private void ResetBulkPreview(){preview=null;bulkErrors=[];if(bulkSelection is "HorsesRacedInDateRange" or "HorsesByTrainer")bulkType="Horse";BulkTypeChanged();}
     private void BulkTypeChanged(){var kind=collectionKinds.FirstOrDefault(x=>x.Type==bulkType);if(kind is not null)definition=kind.Definition;preview=null;}

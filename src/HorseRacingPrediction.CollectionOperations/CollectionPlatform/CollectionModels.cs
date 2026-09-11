@@ -193,7 +193,8 @@ public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevis
     DateTimeOffset RequestedAt, string? ExplicitUrl, string? BatchId);
 public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,
     DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, CollectionAttemptResult Result,
-    string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode);
+    string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode,
+    string? PageIdentification = null);
 public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<ResourceLocationCandidate> Locations, IReadOnlyList<CollectionRequestSummary> Requests,
     IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts);
