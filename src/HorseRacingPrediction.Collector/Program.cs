@@ -7,6 +7,7 @@ using HorseRacingPrediction.Scraping.Jra;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using HorseRacingPrediction.PredictionScheduling;
 
 var builder = Host.CreateApplicationBuilder(args);
 var runOnce = args.Contains("--once", StringComparer.OrdinalIgnoreCase);
@@ -41,6 +42,13 @@ builder.Services.AddHttpClient<CollectionRequestApiClient>((services, client) =>
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<ICollectionRequestSink>(services =>
     services.GetRequiredService<CollectionRequestApiClient>());
+builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
+    {
+        var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl);
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    })
+    .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 var app = builder.Build();
 
 if (runOnce)

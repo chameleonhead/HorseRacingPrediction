@@ -6,6 +6,7 @@ using HorseRacingPrediction.Scraping.Jra.Workflow;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.PredictionScheduling;
 
 namespace HorseRacingPrediction.Collector.Scheduling;
 
@@ -47,6 +48,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<CollectionExecutionService> _logger;
     private readonly CollectionLeaseHttpContext _leaseHttpContext;
+    private readonly IPredictionSchedule? _predictionSchedule;
 
     public CollectionExecutionService(
         IOptions<AgentProcessingOptions> options,
@@ -60,7 +62,8 @@ public sealed partial class CollectionExecutionService : BackgroundService
         CollectionExecutionTrigger executionTrigger,
         IHttpClientFactory httpClientFactory,
         ILogger<CollectionExecutionService> logger,
-        CollectionLeaseHttpContext? leaseHttpContext = null)
+        CollectionLeaseHttpContext? leaseHttpContext = null,
+        IPredictionSchedule? predictionSchedule = null)
     {
         _options = options.Value;
         _stateStore = stateStore;
@@ -74,6 +77,7 @@ public sealed partial class CollectionExecutionService : BackgroundService
         _httpClientFactory = httpClientFactory;
         _leaseHttpContext = leaseHttpContext ?? new CollectionLeaseHttpContext();
         _logger = logger;
+        _predictionSchedule = predictionSchedule;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -520,7 +524,8 @@ public sealed partial class CollectionExecutionService : BackgroundService
                 }
             }
 
-            await _stateStore.EnqueuePredictionCandidatesAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
+            if (_predictionSchedule is not null)
+                await _predictionSchedule.EnqueueAsync(distinctRaceIds, now, cancellationToken).ConfigureAwait(false);
         }
 
         await _stateStore.CompleteCollectionTaskAsync(

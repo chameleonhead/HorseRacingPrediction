@@ -40,55 +40,6 @@ public sealed partial class ProcessingStateStore : IProcessingStateStore
         InitializeDatabase();
     }
 
-    public async Task EnqueuePredictionCandidatesAsync(
-        IEnumerable<string> raceIds,
-        DateTimeOffset now,
-        CancellationToken cancellationToken = default)
-    {
-        foreach (var raceId in raceIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
-        {
-            await ScheduleJobAsync(
-                AgentJobType.PredictionExecution,
-                raceId,
-                raceId,
-                now,
-                priority: 100,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    public async Task<IReadOnlyList<string>> TakeReadyPredictionCandidatesAsync(
-        DateTimeOffset now,
-        TimeSpan minAge,
-        int maxCount,
-        CancellationToken cancellationToken = default)
-    {
-        var leaseDuration = TimeSpan.FromMinutes(Math.Max(1, _options.PredictionLeaseMinutes));
-        var jobs = await AcquireReadyJobsAsync(
-            AgentJobType.PredictionExecution,
-            now,
-            minAge,
-            Math.Max(1, maxCount),
-            leaseDuration,
-            cancellationToken).ConfigureAwait(false);
-
-        return jobs.Select(x => x.Payload).Where(x => !string.IsNullOrWhiteSpace(x)).ToList()!;
-    }
-
-    public async Task MarkPredictionCompletedAsync(string raceId, CancellationToken cancellationToken = default)
-    {
-        await CompleteJobAsync(AgentJobType.PredictionExecution, raceId, cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task RequeuePredictionCandidateAsync(
-        string raceId,
-        DateTimeOffset now,
-        string error,
-        CancellationToken cancellationToken = default)
-    {
-        await RequeueJobAsync(AgentJobType.PredictionExecution, raceId, now, error, cancellationToken).ConfigureAwait(false);
-    }
-
     public async Task<bool> HasMarkerAsync(
         string markerType,
         string markerKey,

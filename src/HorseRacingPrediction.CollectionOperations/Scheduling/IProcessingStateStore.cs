@@ -12,10 +12,6 @@ public interface IProcessingStateStore
     Task<bool> FailAndPauseCollectionTaskAsync(string jobType, string deduplicationKey, string leaseToken, string error, CancellationToken cancellationToken = default);
     Task<bool> WaitForCollectionDependenciesAsync(string jobType, string deduplicationKey, string leaseToken, CancellationToken cancellationToken = default);
 
-    Task EnqueuePredictionCandidatesAsync(IEnumerable<string> raceIds, DateTimeOffset now, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<string>> TakeReadyPredictionCandidatesAsync(DateTimeOffset now, TimeSpan minAge, int maxCount, CancellationToken cancellationToken = default);
-    Task MarkPredictionCompletedAsync(string raceId, CancellationToken cancellationToken = default);
-    Task RequeuePredictionCandidateAsync(string raceId, DateTimeOffset now, string error, CancellationToken cancellationToken = default);
     Task<bool> HasMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task MarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);
     Task UnmarkMarkerAsync(string markerType, string markerKey, CancellationToken cancellationToken = default);

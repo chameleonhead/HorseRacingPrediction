@@ -6,6 +6,7 @@ using HorseRacingPrediction.Predictor.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.PredictionScheduling;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -20,8 +21,12 @@ builder.Services.AddHttpAgentServices();
 builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 
-builder.Services.AddSingleton<ProcessingStateStore>();
-builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
+builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+}).AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddTransient<HistoricalDataRequestTracker>();
 builder.Services.AddTransient<ApiOnlyPredictionWorkflow>();
 

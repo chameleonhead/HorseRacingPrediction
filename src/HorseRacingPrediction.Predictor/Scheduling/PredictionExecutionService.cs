@@ -2,6 +2,7 @@ using HorseRacingPrediction.Collector.Scheduling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.PredictionScheduling;
 
 namespace HorseRacingPrediction.Predictor.Scheduling;
 
@@ -11,7 +12,7 @@ public sealed class PredictionExecutionService : BackgroundService
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
     private readonly AgentProcessingOptions _options;
-    private readonly IProcessingStateStore _stateStore;
+    private readonly IPredictionSchedule _schedule;
     private readonly HistoricalDataRequestTracker _historicalDataRequestTracker;
     private readonly ApiOnlyPredictionWorkflow _predictionWorkflow;
     private readonly PostGenerationExecutionStep _postGenerationStep;
@@ -19,14 +20,14 @@ public sealed class PredictionExecutionService : BackgroundService
 
     public PredictionExecutionService(
         IOptions<AgentProcessingOptions> options,
-        IProcessingStateStore stateStore,
+        IPredictionSchedule schedule,
         HistoricalDataRequestTracker historicalDataRequestTracker,
         ApiOnlyPredictionWorkflow predictionWorkflow,
         PostGenerationExecutionStep postGenerationStep,
         ILogger<PredictionExecutionService> logger)
     {
         _options = options.Value;
-        _stateStore = stateStore;
+        _schedule = schedule;
         _historicalDataRequestTracker = historicalDataRequestTracker;
         _predictionWorkflow = predictionWorkflow;
         _postGenerationStep = postGenerationStep;
@@ -81,8 +82,9 @@ public sealed class PredictionExecutionService : BackgroundService
         var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
         var minAge = TimeSpan.FromMinutes(Math.Max(0, _options.PredictionMinAgeMinutes));
 
-        var candidates = await _stateStore
-            .TakeReadyPredictionCandidatesAsync(now, minAge, _options.PredictionBatchSize, cancellationToken)
+        var candidates = await _schedule
+            .AcquireAsync(now, minAge, _options.PredictionBatchSize,
+                TimeSpan.FromMinutes(Math.Max(1, _options.PredictionLeaseMinutes)), cancellationToken)
             .ConfigureAwait(false);
 
         if (candidates.Count == 0)
@@ -91,8 +93,9 @@ public sealed class PredictionExecutionService : BackgroundService
             return;
         }
 
-        foreach (var raceId in candidates)
+        foreach (var candidate in candidates)
         {
+            var raceId = candidate.RaceId;
             try
             {
                 if (_options.BlockPredictionWhileHistoricalRequestsPending)
@@ -109,8 +112,8 @@ public sealed class PredictionExecutionService : BackgroundService
                             summary.PendingJockeyRequests,
                             summary.PendingRaceResultRequests);
 
-                        await _stateStore.RequeuePredictionCandidateAsync(
-                            raceId,
+                        await _schedule.RequeueAsync(
+                            raceId, candidate.LeaseToken,
                             now.AddMinutes(Math.Max(1, _options.HistoricalRequestRetryDelayMinutes)),
                             "Historical data requests are still pending.",
                             cancellationToken).ConfigureAwait(false);
@@ -125,7 +128,8 @@ public sealed class PredictionExecutionService : BackgroundService
                     result.PredictionTicketId,
                     result.PredictionSummary.Length);
 
-                await _stateStore.MarkPredictionCompletedAsync(raceId, cancellationToken).ConfigureAwait(false);
+                if (!await _schedule.CompleteAsync(raceId, candidate.LeaseToken, cancellationToken).ConfigureAwait(false))
+                    throw new InvalidOperationException($"Prediction lease is no longer active: {raceId}");
 
                 await _postGenerationStep
                     .RunAsync(result.PredictionTicketId, raceId, cancellationToken)
@@ -134,8 +138,8 @@ public sealed class PredictionExecutionService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[予想-API_ONLY] 失敗。再キューへ戻します。RaceId={RaceId}", raceId);
-                await _stateStore
-                    .RequeuePredictionCandidateAsync(raceId, now, ex.Message, cancellationToken)
+                await _schedule
+                    .RequeueAsync(raceId, candidate.LeaseToken, now, ex.Message, cancellationToken)
                     .ConfigureAwait(false);
             }
         }
