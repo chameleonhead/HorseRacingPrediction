@@ -28,9 +28,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Api\HorseRacingPrediction.Api.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.CollectionOperations\HorseRacingPrediction.CollectionOperations.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Collector\HorseRacingPrediction.Collector.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Contracts\HorseRacingPrediction.Contracts.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.Infrastructure\HorseRacingPrediction.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\HorseRacingPrediction.MachineLearning\HorseRacingPrediction.MachineLearning.csproj" />
+    <ProjectReference Include="..\..\src\HorseRacingPrediction.Scraping\HorseRacingPrediction.Scraping.csproj" />
   </ItemGroup>
 
 </Project>
