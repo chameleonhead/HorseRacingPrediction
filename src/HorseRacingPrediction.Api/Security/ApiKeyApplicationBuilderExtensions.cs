@@ -48,8 +48,6 @@ public static class ApiKeyApplicationBuilderExtensions
         "owners",
         "predictions",
         "jobs",
-        "collection-tasks",
-        "acquisition-statuses",
     };
 
     private static bool IsAnonymousPath(PathString path)

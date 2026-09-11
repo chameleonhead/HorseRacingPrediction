@@ -9,7 +9,7 @@ using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.Pa
 namespace HorseRacingPrediction.Collector.Tests.TestSupport;
 
 /// <summary>
-/// <see cref="CollectionExecutionService"/>/<see cref="ScrapingRegistrationService"/> の
+/// CollectionPlatform の収集ハンドラーが利用する
 /// 統合テスト用。実際のPlaywright操作は一切行わず、<see cref="JraSession"/> を組み立てるためだけの
 /// 最小限のダミー実装。Navigate/Pagesは、テストでWorkflowファクトリを差し替えて使わない限り
 /// 呼ばれない想定であり、呼ばれた場合は明示的に失敗させる。
@@ -56,7 +56,7 @@ internal sealed class NoOpWebBrowser : IWebBrowser
 
 /// <summary>
 /// <see cref="IJraNavigator"/> のダミー実装。<see cref="RaceListResult"/> が設定されている場合のみ
-/// <see cref="ToRaceListAsync"/> がそれを返す（<see cref="CollectionExecutionService"/> の成績収集経路が
+/// <see cref="ToRaceListAsync"/> がそれを返す（CollectionPlatform の成績収集経路が
 /// レース一覧ページを直接参照するため）。他のメソッドは呼ばれたら失敗する。
 /// </summary>
 internal sealed class FakeJraNavigator : IJraNavigator

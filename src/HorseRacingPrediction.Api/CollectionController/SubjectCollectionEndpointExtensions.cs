@@ -10,7 +10,6 @@ using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain;
 using HorseRacingPrediction.Domain.Horses;
@@ -36,35 +35,6 @@ public static class SubjectCollectionEndpointExtensions
             var profile = await queries.ProcessAsync(new ReadModelByIdQuery<JraSubjectProfileReadModel>(subjectId), token);
             return profile is null || string.IsNullOrEmpty(profile.SubjectId) ? Results.NoContent() : Results.Ok(new JraSubjectProfileDto(kind,
                 profile.Name, profile.SourceIdentity, profile.SourceUrl, profile.Fields, profile.AcquiredAt));
-        });
-        group.MapGet("/collection/{operation}", async (string kind, string subjectId, string operation, IQueryProcessor queries, ProcessingStateStore store, CancellationToken token) =>
-        {
-            var jobType = JobType(kind, operation);
-            if (jobType is null) return Results.BadRequest();
-            if (await ResolveAsync(kind, subjectId, queries, token) is null) return Results.NotFound();
-            var status = await store.GetSubjectCollectionAsync(jobType, subjectId, token);
-            return status is null ? Results.NoContent() : Results.Ok(status);
-        });
-        group.MapPost("/collection/{operation}", async (string kind, string subjectId, string operation, IQueryProcessor queries, ProcessingStateStore store, HttpContext context, CancellationToken token) =>
-        {
-            var jobType = JobType(kind, operation);
-            if (jobType is null) return Results.BadRequest();
-            var subject = await ResolveAsync(kind, subjectId, queries, token);
-            if (subject is null) return Results.NotFound();
-            var id = await store.RequestSubjectCollectionAsync(jobType, subject, context.User.Identity?.Name ?? "Admin API", DateTimeOffset.UtcNow, token);
-            return Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(id), new { jobId = id });
-        });
-        group.MapPost("/collection/{operation}/retry", async (string kind, string subjectId, string operation, IQueryProcessor queries, ProcessingStateStore store, HttpContext context, CancellationToken token) =>
-        {
-            var type = JobType(kind, operation);
-            if (type is null) return Results.BadRequest();
-            if (await ResolveAsync(kind, subjectId, queries, token) is null) return Results.NotFound();
-            var status = await store.GetSubjectCollectionAsync(type, subjectId, token);
-            if (status is null) return Results.NotFound();
-            if (status.Job.Status is not (AgentJobStatus.Failed or AgentJobStatus.DeadLetter)) return Results.Conflict();
-            await store.RerunJobAsync(status.Job.JobId, status.Job.UpdatedAt, context.User.Identity?.Name ?? "Admin API",
-                "失敗分を再試行", DateTimeOffset.UtcNow, token);
-            return Results.Accepted();
         });
         group.MapPost("/profile", async (string kind, string subjectId, JraSubjectProfileDto request, IQueryProcessor queries, ICommandBus commands, CancellationToken token) =>
         {
@@ -104,11 +74,11 @@ public static class SubjectCollectionEndpointExtensions
         endpoints.MapPost("/api/admin/collection/horse-history/race", async (PrepareHorseHistoryRaceRequest request,
             IDbContextProvider<EventStoreDbContext> provider, ICommandBus commands, CancellationToken token) =>
         {
-            var course = RaceReacquisitionEndpointExtensions.ResolveCourse(request.Course);
+            var course = ResolveCourse(request.Course);
             if (course is null || request.RaceNumber is < 1 or > 12 || string.IsNullOrWhiteSpace(request.RaceName)) return Results.BadRequest();
             using var db = provider.CreateContext();
             var candidates = await db.RacePredictionContexts.AsNoTracking().Where(x => x.RaceDate == request.RaceDate && x.RaceNumber == request.RaceNumber).ToListAsync(token);
-            var matches = candidates.Where(x => RaceReacquisitionEndpointExtensions.ResolveCourse(x.RacecourseCode) == course).ToArray();
+            var matches = candidates.Where(x => ResolveCourse(x.RacecourseCode) == course).ToArray();
             if (matches.Length > 1) return Results.Conflict(new[] { "同一日・競馬場・レース番号の登録が複数あります。" });
             var id = matches.FirstOrDefault()?.RaceId ?? DeterministicIdGenerator.BuildRaceId(request.RaceDate, course, request.RaceNumber);
             if (matches.Length == 0)
@@ -120,9 +90,15 @@ public static class SubjectCollectionEndpointExtensions
         });
         return endpoints;
     }
-    private static string? JobType(string kind, string operation) => kind is not ("Horse" or "Trainer") ? null : operation switch
-    { "profile" => AgentJobType.SubjectProfileRefresh, "history" when kind == "Horse" => AgentJobType.HorseHistoryDiscovery, _ => null };
     private static string Normalize(string value) => Regex.Replace(value.Normalize(NormalizationForm.FormKC), @"\s+", "");
+    private static string? ResolveCourse(string? value) => value?.ToUpperInvariant() switch
+    {
+        "SAPPORO" or "札幌" => "札幌", "HAKODATE" or "函館" => "函館",
+        "FUKUSHIMA" or "福島" => "福島", "NIIGATA" or "新潟" => "新潟",
+        "TOKYO" or "東京" => "東京", "NAKAYAMA" or "中山" => "中山",
+        "CHUKYO" or "中京" => "中京", "KYOTO" or "京都" => "京都",
+        "HANSHIN" or "阪神" => "阪神", "KOKURA" or "小倉" => "小倉", _ => null
+    };
     private static async Task<SubjectCollectionPayload?> ResolveAsync(string kind, string id, IQueryProcessor queries, CancellationToken token)
     {
         var profile = await queries.ProcessAsync(new ReadModelByIdQuery<JraSubjectProfileReadModel>(id), token);
@@ -148,4 +124,7 @@ public static class SubjectCollectionEndpointExtensions
         }
         return null;
     }
+
+    private sealed record SubjectCollectionPayload(string SubjectId, string SubjectType, string Name,
+        DateOnly? BirthDate, string? SourceIdentity);
 }

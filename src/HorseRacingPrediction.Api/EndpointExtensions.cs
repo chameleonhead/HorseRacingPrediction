@@ -41,7 +41,7 @@ public static partial class EndpointExtensions
 
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<ApiKeyEndpointFilter>()
-            .AddEndpointFilter<RaceMutationLeaseEndpointFilter>();
+            .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]

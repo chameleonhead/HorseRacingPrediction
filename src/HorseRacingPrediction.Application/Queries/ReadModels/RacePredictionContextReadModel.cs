@@ -191,5 +191,7 @@ public class RacePredictionContextReadModel : IReadModel,
     }
 }
 
+[System.ComponentModel.DataAnnotations.Schema.NotMapped]
 public sealed record RaceOddsSnapshot(DateTimeOffset ObservedAt, IReadOnlyList<RaceOddsEntrySnapshot> Entries);
+[System.ComponentModel.DataAnnotations.Schema.NotMapped]
 public sealed record RaceOddsEntrySnapshot(int HorseNumber, decimal WinOdds, int? Popularity);

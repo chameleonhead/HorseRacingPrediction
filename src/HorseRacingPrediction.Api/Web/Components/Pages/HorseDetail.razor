@@ -4,7 +4,6 @@
 
 <RaceOpsObjectHeader BackHref="/horses" BackLabel="← 馬一覧に戻る" Title="@(horse?.RegisteredName ?? "馬詳細")" Section="データ / 馬">
     <Actions>
-        @if (horse is not null) { <SubjectCollectionAction SubjectType="Horse" SubjectId="@HorseId" SubjectName="@horse.RegisteredName" OnCompleted="RefreshCollectionAsync" /> }
         <FluentButton Appearance="@Appearance.Outline" Href="@($"/horses/{Uri.EscapeDataString(HorseId)}/edit")">編集</FluentButton>
     </Actions>
 </RaceOpsObjectHeader>
@@ -28,7 +27,6 @@ else
 
     <section class="detail-group" aria-label="履歴"><section class="entity-section detail-section">
         <h3>出走履歴</h3>
-        <SubjectCollectionAction SubjectType="Horse" SubjectId="@HorseId" SubjectName="@horse.RegisteredName" Operation="history" OnCompleted="RefreshCollectionAsync" />
         @if (historyEntries.Count == 0)
         {
             <p class="hint">出走履歴はありません。</p>

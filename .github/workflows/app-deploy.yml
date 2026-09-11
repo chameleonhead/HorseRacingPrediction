@@ -207,10 +207,6 @@ jobs:
               cp "$APP_DIRECTORY/data/eventstore.db" \
                 "$APP_DIRECTORY/data/backups/eventstore-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
             fi
-            if [ -f "$APP_DIRECTORY/data/collection-tasks.db" ]; then
-              cp "$APP_DIRECTORY/data/collection-tasks.db" \
-                "$APP_DIRECTORY/data/backups/collection-tasks-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
-            fi
             for state_db in collection-platform prediction-executions; do
               if [ -f "$APP_DIRECTORY/data/${state_db}.db" ]; then
                 cp "$APP_DIRECTORY/data/${state_db}.db" \

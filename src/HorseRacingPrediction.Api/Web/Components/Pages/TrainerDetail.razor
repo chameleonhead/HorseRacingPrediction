@@ -5,7 +5,6 @@
 
 <RaceOpsObjectHeader BackHref="/trainers" BackLabel="← 調教師一覧に戻る" Title="@(trainer?.DisplayName ?? "調教師詳細")" Section="データ / 調教師">
     <Actions>
-        @if (trainer is not null) { <SubjectCollectionAction SubjectType="Trainer" SubjectId="@TrainerId" SubjectName="@trainer.DisplayName" OnCompleted="RefreshCollectionAsync" /> }
         <FluentButton Appearance="@Appearance.Outline" Href="@($"/trainers/{Uri.EscapeDataString(TrainerId)}/edit")">編集</FluentButton>
     </Actions>
 </RaceOpsObjectHeader>

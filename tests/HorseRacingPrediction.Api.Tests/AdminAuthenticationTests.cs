@@ -60,8 +60,6 @@ public class AdminAuthenticationTests
     [TestMethod]
     [DataRow("/owners")]
     [DataRow("/jobs")]
-    [DataRow("/collection-tasks")]
-    [DataRow("/acquisition-statuses")]
     [DataRow("/_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css")]
     public async Task AdminUiRoutes_WithoutApiKey_AreNotBlockedByApiKeyProtection(string path)
     {

@@ -1,7 +1,6 @@
 using HorseRacingPrediction.Agents.ChatClients;
 using HorseRacingPrediction.Agents.Workflow;
 using HorseRacingPrediction.Collector.Http;
-using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.Predictor.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,8 +17,8 @@ builder.Services.AddOptions<ApiClientOptions>()
     .ValidateOnStart();
 builder.Services.AddHttpAgentServices();
 
-builder.Services.Configure<AgentProcessingOptions>(
-    builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
+builder.Services.Configure<PredictionExecutionOptions>(
+    builder.Configuration.GetSection(PredictionExecutionOptions.SectionName));
 
 builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
 {
@@ -27,7 +26,12 @@ builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((ser
     client.BaseAddress = new Uri(options.BaseUrl);
     client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
 }).AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
-builder.Services.AddTransient<HistoricalDataRequestTracker>();
+builder.Services.AddHttpClient<CollectionReadinessClient>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+}).AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddTransient<ApiOnlyPredictionWorkflow>();
 
 // フェーズ2: ストーリー仕立て SNS 投稿文生成（LLM 使用、予想票確定ごとに低頻度実行）

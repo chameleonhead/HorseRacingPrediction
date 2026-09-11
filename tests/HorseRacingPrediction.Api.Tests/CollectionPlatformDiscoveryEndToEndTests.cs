@@ -37,6 +37,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 1, "initial", false);
             await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult,
                 1, "initial", false);
+            await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds,
+                1, "initial", false);
 
             var builder = WebApplication.CreateBuilder();
             builder.WebHost.UseTestServer();
@@ -89,10 +91,13 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             Assert.AreEqual(CollectionTaskStatus.Succeeded, discovery.Status);
             var card = tasks.Single(x => x.Definition.Value == "race-card");
             var result = tasks.Single(x => x.Definition.Value == "race-result");
+            var odds = tasks.Single(x => x.Definition.Value == "race-odds");
             Assert.AreEqual(CollectionTaskStatus.Ready, card.Status);
             Assert.AreEqual(CollectionTaskStatus.Ready, result.Status);
+            Assert.AreEqual(CollectionTaskStatus.Ready, odds.Status);
             Assert.AreEqual($"{date:yyyyMMdd}:Tokyo:11", card.Resource.Id);
             Assert.AreEqual(card.Resource.Id, result.Resource.Id);
+            Assert.AreEqual(card.Resource.Id, odds.Resource.Id);
             Assert.AreEqual(15, schedule.RequestedDates.Count); // the approved ±7 day discovery window
             Assert.HasCount(1, sessions.Navigator.RaceListRequests);
         }

@@ -1,5 +1,4 @@
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Collector.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -7,7 +6,7 @@ namespace HorseRacingPrediction.Collector.Http;
 
 /// <summary>
 /// <see cref="HttpRaceQueryService"/>、<see cref="HttpPredictionWriteService"/>、
-/// <see cref="HttpDataCollectionWriteService"/> を DI コンテナに登録する拡張メソッドを提供する。
+/// 予測・参照用 HTTP クライアントを DI コンテナに登録する拡張メソッドを提供する。
 /// </summary>
 public static class AgentHttpServiceCollectionExtensions
 {
@@ -19,21 +18,16 @@ public static class AgentHttpServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddHttpAgentServices(this IServiceCollection services)
     {
-        services.AddSingleton<AgentAcquisitionStatusRecorder>();
-        services.AddSingleton<CollectionLeaseHttpContext>();
-        services.AddTransient<CollectionLeaseHeaderHandler>();
         services.AddTransient<TransientBadGatewayRetryHandler>();
+        services.AddSingleton<AgentAcquisitionStatusRecorder>();
         services.AddHttpClient<IRaceQueryService, HttpRaceQueryService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IPredictionWriteService, HttpPredictionWriteService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IDataCollectionWriteService, HttpDataCollectionWriteService>(ConfigureClient)
-            .AddHttpMessageHandler<CollectionLeaseHeaderHandler>()
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IMemoWriteService, HttpMemoWriteService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
-
-        services.AddTransient<DataCollectionWriteTools>();
 
         return services;
     }

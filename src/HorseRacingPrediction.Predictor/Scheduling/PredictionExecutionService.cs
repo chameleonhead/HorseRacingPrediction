@@ -1,4 +1,3 @@
-using HorseRacingPrediction.Collector.Scheduling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -11,24 +10,24 @@ public sealed class PredictionExecutionService : BackgroundService
     private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
         OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
 
-    private readonly AgentProcessingOptions _options;
+    private readonly PredictionExecutionOptions _options;
     private readonly IPredictionSchedule _schedule;
-    private readonly HistoricalDataRequestTracker _historicalDataRequestTracker;
+    private readonly CollectionReadinessClient _collectionReadiness;
     private readonly ApiOnlyPredictionWorkflow _predictionWorkflow;
     private readonly PostGenerationExecutionStep _postGenerationStep;
     private readonly ILogger<PredictionExecutionService> _logger;
 
     public PredictionExecutionService(
-        IOptions<AgentProcessingOptions> options,
+        IOptions<PredictionExecutionOptions> options,
         IPredictionSchedule schedule,
-        HistoricalDataRequestTracker historicalDataRequestTracker,
+        CollectionReadinessClient collectionReadiness,
         ApiOnlyPredictionWorkflow predictionWorkflow,
         PostGenerationExecutionStep postGenerationStep,
         ILogger<PredictionExecutionService> logger)
     {
         _options = options.Value;
         _schedule = schedule;
-        _historicalDataRequestTracker = historicalDataRequestTracker;
+        _collectionReadiness = collectionReadiness;
         _predictionWorkflow = predictionWorkflow;
         _postGenerationStep = postGenerationStep;
         _logger = logger;
@@ -100,8 +99,8 @@ public sealed class PredictionExecutionService : BackgroundService
             {
                 if (_options.BlockPredictionWhileHistoricalRequestsPending)
                 {
-                    var summary = await _historicalDataRequestTracker
-                        .GetOutstandingRequestsAsync(raceId, cancellationToken)
+                    var summary = await _collectionReadiness
+                        .GetAsync(raceId, cancellationToken)
                         .ConfigureAwait(false);
                     if (summary.TotalPendingRequests > 0)
                     {

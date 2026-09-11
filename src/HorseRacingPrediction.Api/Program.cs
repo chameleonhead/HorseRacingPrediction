@@ -10,7 +10,6 @@ using HorseRacingPrediction.Api.Web;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Collector.Scheduling;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure;
@@ -42,6 +41,7 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeysDirectory))
 }
 
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
+builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddAdminAuthentication();
@@ -115,11 +115,6 @@ builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyL
 builder.Services.AddSingleton<INamedRevisionImpactCondition, RaceResultDeadHeatBeforeRevisionFiveCondition>();
 builder.Services.AddHostedService<CollectionScheduleService>();
 builder.Services.AddHostedService<CollectionBackfillRecoveryService>();
-builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
-builder.Services.AddSingleton<ProcessingStateStore>();
-builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());
-builder.Services.AddSingleton<CollectionExecutionTrigger>();
-builder.Services.AddSingleton<CollectionMaintenanceState>();
 builder.Services.AddSingleton<CollectionQueueCircuitBreakerState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
@@ -154,7 +149,6 @@ else
     builder.Services.AddSingleton<ICollectionTaskQueue>(services => services.GetRequiredService<NullCollectionTaskQueue>());
     builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services => services.GetRequiredService<NullCollectionTaskQueue>());
 }
-builder.Services.AddSingleton<CollectionResetCoordinator>();
 var jobFailureNotificationSection = builder.Configuration.GetSection(JobFailureNotificationOptions.SectionName);
 builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotificationSection);
 // SNSクライアント自体とCollectionPipelineAlertPublisher（収集ジョブ全体停止アラート）は、
@@ -162,11 +156,6 @@ builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotification
 // 運用側で作成済みの前提で、アプリ側の設定トグルで送信有無を左右させないため。
 builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
 builder.Services.AddSingleton<ICollectionPipelineAlertPublisher, SnsCollectionPipelineAlertPublisher>();
-if (jobFailureNotificationSection.GetValue<bool>(nameof(JobFailureNotificationOptions.Enabled)))
-{
-    builder.Services.AddSingleton<IJobFailureNotificationPublisher, SnsJobFailureNotificationPublisher>();
-    builder.Services.AddHostedService<JobFailureNotificationDispatcher>();
-}
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>
@@ -202,25 +191,6 @@ await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey 
 await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
-app.Services.GetRequiredService<CollectionResetCoordinator>().ResumeIfNeeded();
-
-// CollectionMaintenanceStateはプロセス内メモリのみの状態のため、デプロイ/再起動の
-// たびに一時停止（/pause）が解除されてしまっていた（実運用で確認された事象）。
-// /pauseでDBに永続化したマーカーを起動時に確認し、一時停止中であれば復元する。
-{
-    var maintenanceState = app.Services.GetRequiredService<CollectionMaintenanceState>();
-    var stateStore = app.Services.GetRequiredService<ProcessingStateStore>();
-    if (await stateStore.HasMarkerAsync(
-            JobManagementEndpointExtensions.MaintenanceMarkerType,
-            JobManagementEndpointExtensions.MaintenanceMarkerKey))
-    {
-        // /pauseによる一時停止は常にCollector向けのみ（collectorOnly: true）。
-        maintenanceState.TryBegin(collectorOnly: true);
-        app.Services.GetRequiredService<ILogger<Program>>()
-            .LogWarning("再起動時に永続化された収集パイプラインの一時停止状態を復元しました。原因調査後、/api/admin/jobs/resume で再開してください。");
-    }
-}
-
 // 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、
 // 直前にクラッシュ復旧中の初期化（ResumeIfNeeded）がメンテナンス中の場合は、その完了を
 // 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）
@@ -237,19 +207,6 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
     _ = Task.Run(async () =>
     {
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
-        var maintenance = app.Services.GetRequiredService<CollectionMaintenanceState>();
-        var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
-        while (maintenance.IsActive && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        }
-
-        if (maintenance.IsActive)
-        {
-            logger.LogWarning("起動直後のジョブ実行確認: メンテナンスが完了しないため見送りました。");
-            return;
-        }
-
         try
         {
             var queue = app.Services.GetRequiredService<ICollectionTaskQueue>();
@@ -277,39 +234,13 @@ app.UseStaticFiles();
 app.UseApiKeyProtection();
 app.UseAuthentication();
 app.UseAuthorization();
-app.Use(async (context, next) =>
-{
-    var maintenance = context.RequestServices.GetRequiredService<CollectionMaintenanceState>();
-    var isMutation = !HttpMethods.IsGet(context.Request.Method)
-        && !HttpMethods.IsHead(context.Request.Method)
-        && !HttpMethods.IsOptions(context.Request.Method);
-    // Collection-only stop is enforced atomically at dispatch/lease acquisition in the store.
-    // Existing workers must still read hold requests and report completion/cancellation.
-    var isTargetPath = !maintenance.IsCollectorOnly;
-    if (maintenance.IsActive && isMutation && isTargetPath
-        && !context.Request.Path.StartsWithSegments("/api/collection/reset")
-        && !context.Request.Path.Equals("/api/admin/jobs/resume", StringComparison.OrdinalIgnoreCase))
-    {
-        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-        await context.Response.WriteAsJsonAsync(new { message = "収集データベースのメンテナンス中です。" });
-        return;
-    }
-    await next();
-});
 app.UseAntiforgery();
 
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
-app.MapAgentDashboardEndpoints();
-app.MapCollectionResetEndpoints();
-app.MapJobManagementEndpoints();
-app.MapRaceReacquisitionEndpoints();
-app.MapRaceDayReacquisitionEndpoints();
-app.MapSubjectCollectionEndpoints();
-app.MapAgentAcquisitionStatusEndpoints();
-app.MapProcessingStateRpcEndpoint();
 app.MapCollectionPlatformEndpoints();
 app.MapRaceOddsEndpoints();
+app.MapSubjectCollectionEndpoints();
 app.MapPredictionScheduleEndpoints();
 
 app.Run();

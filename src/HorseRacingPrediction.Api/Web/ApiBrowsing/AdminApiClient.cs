@@ -6,7 +6,6 @@ using System.Web;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using Microsoft.Extensions.Options;
-using HorseRacingPrediction.Collector.Scheduling;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 
@@ -44,28 +43,9 @@ public sealed partial class AdminApiClient
     public Task<PagedResponse<RaceSummaryResponse>?> SearchRacesAsync(SearchRacesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<RaceSummaryResponse>>($"/api/races?{BuildQueryString(request)}", cancellationToken);
 
-    public Task<AgentJobDetailReadModel?> GetRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", cancellationToken);
-
-    public Task<AdminApiResult> RequestRaceReacquisitionAsync(string raceId, CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/races/{Uri.EscapeDataString(raceId)}/reacquisition", new { }, cancellationToken);
-
-    public Task<AdminApiResult<string>> RequestRaceDayReacquisitionAsync(
-        DateOnly raceDate,
-        string? reason = null,
-        CancellationToken cancellationToken = default)
-        => SendForIdAsync<RaceDayReacquisitionIdResponse>(
-            HttpMethod.Post,
-            "/api/admin/race-days/reacquisition",
-            new { raceDate, reason },
-            x => x.JobId,
-            cancellationToken);
-
     public Task<RaceResponse?> GetRaceAsync(string raceId, CancellationToken cancellationToken = default)
         => GetJsonAsync<RaceResponse>($"/api/races/{Uri.EscapeDataString(raceId)}", cancellationToken);
 
-    public Task<RaceCollectionLeaseResponse?> GetRaceCollectionLeaseAsync(string raceId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<RaceCollectionLeaseResponse>($"/api/admin/races/{Uri.EscapeDataString(raceId)}/collection-lease", cancellationToken);
 
     public Task<PagedResponse<HorseSummaryResponse>?> SearchHorsesAsync(SearchHorsesRequest request, CancellationToken cancellationToken = default)
         => GetJsonAsync<PagedResponse<HorseSummaryResponse>>($"/api/horses?{BuildQueryString(request)}", cancellationToken);
@@ -125,45 +105,6 @@ public sealed partial class AdminApiClient
 
     public Task<PredictionTicketResponse?> GetPredictionAsync(string predictionTicketId, CancellationToken cancellationToken = default)
         => GetJsonAsync<PredictionTicketResponse>($"/api/predictions/{Uri.EscapeDataString(predictionTicketId)}", cancellationToken);
-
-    public Task<IReadOnlyList<AgentJobStatusReadModel>?> GetJobsAsync(string? jobType = null, AgentJobStatus? status = null, int limit = 100, CancellationToken cancellationToken = default)
-        => GetJsonAsync<IReadOnlyList<AgentJobStatusReadModel>>(AppendQueryString("/api/admin/jobs", new { jobType, status, limit }), cancellationToken);
-
-    public Task<AgentJobSearchResult?> SearchJobsAsync(string? view, string? query, string? targetDate, string? jobType, AgentJobStatus? status, int page, int pageSize, CancellationToken cancellationToken = default)
-        => GetJsonAsync<AgentJobSearchResult>(AppendQueryString("/api/admin/jobs/search", new { view, query, targetDate, jobType, status, page, pageSize }), cancellationToken);
-
-    public Task<AgentJobDetailReadModel?> GetJobAsync(string jobId, CancellationToken cancellationToken = default)
-        => GetJsonAsync<AgentJobDetailReadModel>($"/api/admin/jobs/detail?jobId={Uri.EscapeDataString(jobId)}", cancellationToken);
-
-    public Task<AdminApiResult> RerunJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/rerun?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt, reason }, cancellationToken);
-
-    public Task<AdminApiResult> SetJobHoldAsync(string jobId, bool hold, DateTimeOffset expectedUpdatedAt, CancellationToken token = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/{(hold ? "hold" : "release-hold")}?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt }, token);
-
-    public Task<AdminApiResult> ReacquireJobAsync(string jobId, DateTimeOffset expectedUpdatedAt, string? reason, CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, $"/api/admin/jobs/operations/reacquire?jobId={Uri.EscapeDataString(jobId)}", new { expectedUpdatedAt, reason }, cancellationToken);
-
-    public Task<AdminApiResult> PauseJobsAsync(CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, "/api/admin/jobs/pause", body: null, cancellationToken);
-
-    public Task<AdminApiResult> ResumeJobsAsync(CancellationToken cancellationToken = default)
-        => SendAsync(HttpMethod.Post, "/api/admin/jobs/resume", body: null, cancellationToken);
-
-    public Task<JobQueueStateResponse?> GetJobQueueStateAsync(CancellationToken cancellationToken = default)
-        => GetJsonAsync<JobQueueStateResponse>("/api/admin/jobs/queue-state", cancellationToken);
-
-    public Task<IReadOnlyList<AgentAcquisitionStatusReadModel>?> GetAcquisitionStatusesAsync(
-        DateOnly from, DateOnly to, AgentAcquisitionSubjectType? subjectType = null,
-        RaceDataCollectionState? status = null, CancellationToken cancellationToken = default)
-        => GetJsonAsync<IReadOnlyList<AgentAcquisitionStatusReadModel>>(
-            AppendQueryString("/api/collection/acquisitions", new { from, to, subjectType, status }), cancellationToken);
-
-    public Task<AgentAcquisitionStatusReadModel?> GetAcquisitionStatusAsync(string acquisitionKey, CancellationToken cancellationToken = default)
-        => GetJsonAsync<AgentAcquisitionStatusReadModel>($"/api/collection/acquisitions/{Uri.EscapeDataString(acquisitionKey)}", cancellationToken);
-
-    public Task<IReadOnlyList<AgentAcquisitionHistoryReadModel>?> GetAcquisitionHistoryAsync(string acquisitionKey, CancellationToken cancellationToken = default)
-        => GetJsonAsync<IReadOnlyList<AgentAcquisitionHistoryReadModel>>($"/api/collection/acquisitions/{Uri.EscapeDataString(acquisitionKey)}/history", cancellationToken);
 
     public async Task<IReadOnlyList<MemoResponse>> GetMemosBySubjectAsync(string subjectType, string subjectId, CancellationToken cancellationToken = default)
         => await GetJsonAsync<IReadOnlyList<MemoResponse>>(
@@ -351,7 +292,6 @@ public sealed partial class AdminApiClient
 }
 
 public sealed record JobQueueStateResponse(bool IsPaused, string? Reason = null, string? JobId = null, DateTimeOffset? StoppedAt = null);
-public sealed record RaceCollectionLeaseResponse(bool IsActive, string? JobId, DateTimeOffset? LeaseExpiresAt);
 
 public sealed record AdminApiResult(bool Success, IReadOnlyList<string> Errors)
 {

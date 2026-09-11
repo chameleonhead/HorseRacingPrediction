@@ -3,6 +3,7 @@ using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -66,7 +67,7 @@ public static class CollectionPlatformEndpointExtensions
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
         });
         admin.MapPost("/requests/bulk/preview", async (BulkCollectionOperationRequest request,
-            CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> domain,
+            CollectionPlatformStore store, [FromServices] IDbContextProvider<EventStoreDbContext> domain,
             IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
         {
             var targets = await ResolveBulkTargetsAsync(request, store, domain, conditions, token);
@@ -74,7 +75,7 @@ public static class CollectionPlatformEndpointExtensions
                 request.RequestedRevision, targets, token));
         });
         admin.MapPost("/requests/bulk", async (BulkCollectionOperationRequest request,
-            CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> domain,
+            CollectionPlatformStore store, [FromServices] IDbContextProvider<EventStoreDbContext> domain,
             IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
         {
             var targets = await ResolveBulkTargetsAsync(request, store, domain, conditions, token);

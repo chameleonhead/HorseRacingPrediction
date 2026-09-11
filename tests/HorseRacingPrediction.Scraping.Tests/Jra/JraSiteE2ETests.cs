@@ -130,8 +130,7 @@ public sealed class JraSiteE2ETests
             $"{race.Id} に母父を取得できない出走馬があります。");
         Assert.IsTrue(raceCard.Entries.All(entry => !string.IsNullOrWhiteSpace(entry.CoatColor)),
             $"{race.Id} に毛色を取得できない出走馬があります。");
-        Assert.IsTrue(raceCard.Entries.All(entry => entry.BodyWeight is > 0),
-            $"{race.Id} に馬体重を取得できない出走馬があります。");
+        // 馬体重は当日の発表前には空であるため、現在週の公開出馬表では必須としない。
         Assert.IsFalse(raceCard.Entries.Any(entry => decimal.TryParse(entry.OwnerName, out _)),
             $"{race.Id} で単勝オッズを馬主として誤取得しました。");
     }
@@ -155,6 +154,7 @@ public sealed class JraSiteE2ETests
     }
 
     [TestMethod]
+    [Ignore("固定URLはJRA側で過去ページへ移動するため、初出走時の馬体重はparser fixtureで検証する。")]
     public async Task 初出走RaceCard取得_馬体重を保持し増減をnullにする()
     {
         using var cts = new CancellationTokenSource(TestTimeout);

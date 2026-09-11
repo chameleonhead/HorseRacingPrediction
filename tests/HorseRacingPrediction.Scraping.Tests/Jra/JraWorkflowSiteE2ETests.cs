@@ -93,8 +93,7 @@ public sealed class JraWorkflowSiteE2ETests
         Assert.IsTrue(_writeService.UpsertRaceEntryCalls.Count > 0, "UpsertRaceEntryAsyncが1度も呼ばれませんでした。");
         Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => !string.IsNullOrWhiteSpace(entry.OwnerName)),
             "出走登録に馬主名が渡されていないエントリーがあります。");
-        Assert.IsTrue(_writeService.UpsertRaceEntryCalls.All(entry => entry.DeclaredWeight is > 0),
-            "出走登録に馬体重が渡されていないエントリーがあります。");
+        // 馬体重は当日の発表前には空であり得る。nullableの保存経路はfixture-based unit testで検証する。
 
         if (result.Errors.Count > 0)
         {

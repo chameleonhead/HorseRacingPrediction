@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.ApiClient;
-using HorseRacingPrediction.Collector.Scheduling;
 
 namespace HorseRacingPrediction.Collector.Http;
 
@@ -26,6 +25,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     public HttpDataCollectionWriteService(HttpClient httpClient, AgentAcquisitionStatusRecorder statusRecorder)
     {
         _httpClient = httpClient;
+        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Collection-Worker", "true");
         _statusRecorder = statusRecorder;
     }
 
@@ -1111,4 +1111,21 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     private sealed class HorseExistenceDto { public string HorseId { get; init; } = string.Empty; }
     private sealed class JockeyExistenceDto { public string JockeyId { get; init; } = string.Empty; }
     private sealed class TrainerExistenceDto { public string TrainerId { get; init; } = string.Empty; }
+}
+
+internal enum AgentAcquisitionSubjectType { Horse, Jockey, Trainer }
+internal enum AgentAcquisitionOperationType { EntityUpsert }
+internal enum RaceDataCollectionState { Succeeded, Failed }
+internal sealed record RaceDataCollectionError(string Code, string Reason);
+internal static class RaceDataCollectionErrorClassifier
+{
+    public static RaceDataCollectionError Classify(string message, Exception exception)
+        => new(exception.GetType().Name, message);
+}
+public sealed class AgentAcquisitionStatusRecorder
+{
+    internal Task RecordAsync(AgentAcquisitionSubjectType subjectType, AgentAcquisitionOperationType operationType,
+        string subjectName, RaceDataCollectionState status, string? providerType, string? subjectId,
+        string? relatedRaceId, string? sourceUrl, string? errorCode, string? errorReason,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

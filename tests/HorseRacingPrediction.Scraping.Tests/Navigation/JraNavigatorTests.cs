@@ -282,7 +282,7 @@ public sealed class JraNavigatorTests
             [new TestPageLink(raceCardUrl, "11R 出馬表")]);
         browser.SetSnapshot(raceCardUrl, BuildRaceCardSnapshot(raceCardUrl));
 
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var raceId = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
 
@@ -611,7 +611,7 @@ public sealed class JraNavigatorTests
         browser.SetSnapshot(raceCardUrl12, BuildRaceCardSnapshot(raceCardUrl12, "12R"));
         browser.SetClickDestination("12R", raceCardUrl12);
 
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var date = new DateOnly(2026, 9, 5);
         var race11 = new RaceId(date, RaceCourse.Nakayama, 11);
@@ -662,7 +662,7 @@ public sealed class JraNavigatorTests
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(url);
         browser.SetSnapshot(url, BuildRaceCardSnapshot(url));
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var page = await navigator.ToRaceCardAsync(
             new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11));
@@ -683,7 +683,7 @@ public sealed class JraNavigatorTests
         browser.SetSnapshot(listUrl, BuildRaceListSnapshot(listUrl, [link]));
         browser.SetClickDestination(link.Title, cardUrl);
         browser.SetSnapshot(cardUrl, BuildRaceCardSnapshot(cardUrl));
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var page = await navigator.ToRaceCardAsync(
             new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11));
@@ -711,7 +711,7 @@ public sealed class JraNavigatorTests
             links: [new TestPageLink(targetUrl, "12R")]));
         browser.SetClickDestination("12R", targetUrl);
         browser.SetSnapshot(targetUrl, BuildRaceCardSnapshot(targetUrl, "12R", "2026年9月5日 阪神"));
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var page = await navigator.ToRaceCardAsync(
             new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Hanshin, 12));
@@ -774,7 +774,7 @@ public sealed class JraNavigatorTests
         browser.SetSnapshot(listUrl, BuildRaceListSnapshotWithTwoRaces(listUrl));
         browser.SetLinks(listUrl, [targetLink]);
         browser.SetSnapshot(targetUrl, BuildRaceCardSnapshot(targetUrl, "12R"));
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var page = await navigator.ToRaceCardAsync(
             new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 12));
@@ -839,7 +839,7 @@ public sealed class JraNavigatorTests
             [new TestPageLink(raceCardUrlHanshin1, "1R 出馬表")]);
         browser.SetSnapshot(raceCardUrlHanshin1, BuildRaceCardSnapshot(raceCardUrlHanshin1, "1R"));
 
-        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 
         var race11 = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
         var raceHanshin1 = new RaceId(new DateOnly(2026, 9, 6), RaceCourse.Hanshin, 1);

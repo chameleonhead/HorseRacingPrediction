@@ -557,6 +557,21 @@ public sealed class CollectionPlatformStore
             select active).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> HasActiveRaceMutationAsync(string raceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(raceId)) return false;
+        await using var db = CreateDbContext();
+        var resources = await (from active in db.ActiveTasks.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
+            select new { resource.ResourceId, resource.AttributesJson }).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return resources.Any(x => string.Equals(x.ResourceId, raceId, StringComparison.Ordinal)
+            || (JsonSerializer.Deserialize<Dictionary<string, string>>(x.AttributesJson) is { } attributes
+                && attributes.TryGetValue("domainRaceId", out var domainRaceId)
+                && string.Equals(domainRaceId, raceId, StringComparison.Ordinal)));
+    }
+
     public async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesAsync(DateTimeOffset now, int limit = 500,
         CancellationToken cancellationToken = default)
     {

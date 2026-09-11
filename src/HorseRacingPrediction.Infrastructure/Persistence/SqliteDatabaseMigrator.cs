@@ -120,19 +120,22 @@ public sealed class SqliteDatabaseMigrator
                     AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='SireName')
                     AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='DamName'),
                     EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='DamsireName')
-                    AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='CoatColor');
+                    AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='CoatColor'),
+                    EXISTS(SELECT 1 FROM pragma_table_info('RacePredictionContexts') WHERE name='OddsSnapshots');
                 """;
             await using var reader = await columnCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
             var hasRaceMetadata = reader.GetBoolean(0);
             var hasHorsePedigree = reader.GetBoolean(1);
             var hasHorseDamsireAndCoatColor = reader.GetBoolean(2);
+            var hasOddsSnapshots = reader.GetBoolean(3);
             baselineMigrations = migrations.Where(m => m.EndsWith("_InitialEventStore", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)
                 || (hasRaceMetadata && m.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal))
                 || (hasHorsePedigree && m.EndsWith("_AddHorseBreederAndPedigree", StringComparison.Ordinal))
-                || (hasHorseDamsireAndCoatColor && m.EndsWith("_AddHorseDamsireAndCoatColor", StringComparison.Ordinal))).ToList();
+                || (hasHorseDamsireAndCoatColor && m.EndsWith("_AddHorseDamsireAndCoatColor", StringComparison.Ordinal))
+                || (hasOddsSnapshots && m.EndsWith("_AddRaceOddsSnapshots", StringComparison.Ordinal))).ToList();
         }
         foreach (var migration in baselineMigrations)
         {

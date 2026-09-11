@@ -447,6 +447,34 @@ public sealed class CollectionPlatformStoreTests
         return store;
     }
 
+    [TestMethod]
+    public async Task Readiness_CountsOnlyActiveRequestsForRequestedRace()
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse, 1, "Initial", false);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey", ResourceType.Jockey, 1, "Initial", false);
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer", ResourceType.Trainer, 1, "Initial", false);
+        var now = DateTimeOffset.UtcNow;
+        var attributes = new Dictionary<string, string> { ["requestedByRaceId"] = "race-1" };
+        var horse = await store.RequestAsync(new(ResourceType.Horse, "JRA", "h1"), new("horse-profile"),
+            1, CollectionReason.Discovery, now, attributes: attributes);
+        await store.RequestAsync(new(ResourceType.Jockey, "JRA", "j1"), new("jockey-profile"),
+            1, CollectionReason.Discovery, now, attributes: attributes);
+        await store.RequestAsync(new(ResourceType.Trainer, "JRA", "t2"), new("trainer-profile"),
+            1, CollectionReason.Discovery, now, attributes: new Dictionary<string, string> { ["requestedByRaceId"] = "race-2" });
+
+        var before = await store.GetReadinessAsync("race-1");
+        Assert.AreEqual(1, before.PendingHorseRequests);
+        Assert.AreEqual(1, before.PendingJockeyRequests);
+        Assert.AreEqual(0, before.PendingTrainerRequests);
+        Assert.AreEqual(2, before.TotalPendingRequests);
+
+        await CompleteAsync(store, horse, now);
+        var after = await store.GetReadinessAsync("race-1");
+        Assert.AreEqual(0, after.PendingHorseRequests);
+        Assert.AreEqual(1, after.TotalPendingRequests);
+    }
+
     private CollectionPlatformStore CreateStore() => new(Options.Create(new CollectionPlatformOptions
     {
         StateDirectory = _directory,

@@ -11,8 +11,6 @@ services:
       ForwardedHeaders__KnownNetworks__0: 172.16.0.0/12
       DatabaseMigration__BackupDirectory: /data/backups
       DatabaseMigration__BackupRetentionCount: 7
-      CollectionProcessing__StateDirectory: /data
-      CollectionProcessing__JobStoreFileName: collection-tasks.db
       CollectionPlatform__StateDirectory: /data
       CollectionPlatform__DatabaseFileName: collection-platform.db
       PredictionScheduling__StateDirectory: /data

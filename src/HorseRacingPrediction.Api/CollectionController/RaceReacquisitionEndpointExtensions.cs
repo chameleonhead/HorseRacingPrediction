@@ -1,44 +1,9 @@
-using EventFlow.Queries;
-using HorseRacingPrediction.Application.Queries.ReadModels;
-using HorseRacingPrediction.Collector.Scheduling;
-
 namespace HorseRacingPrediction.Api.CollectionController;
 
+// Kept temporarily as the shared JRA course normalizer used by domain-write validation and
+// the existing UI. The legacy reacquisition endpoints themselves have been removed.
 public static class RaceReacquisitionEndpointExtensions
 {
-    public static IEndpointRouteBuilder MapRaceReacquisitionEndpoints(this IEndpointRouteBuilder endpoints)
-    {
-        endpoints.MapGet("/api/admin/races/{raceId}/collection-lease", async (
-            string raceId, IQueryProcessor queries, ProcessingStateStore store, CancellationToken token) =>
-        {
-            var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
-            if (race is null || string.IsNullOrEmpty(race.RaceId)) return Results.NotFound();
-            var decision = await store.ValidateRaceMutationLeaseAsync(raceId, race.RaceDate, null, null, token);
-            return Results.Ok(new RaceCollectionLeaseResponse(
-                decision.HasActiveLease, decision.ActiveJobId, decision.LeaseExpiresAt));
-        });
-        var group = endpoints.MapGroup("/api/admin/races/{raceId}/reacquisition");
-        group.MapGet("", async (string raceId, ProcessingStateStore store, CancellationToken token) =>
-        {
-            var job = await store.GetRaceReacquisitionAsync(raceId, token);
-            return job is null ? Results.NoContent() : Results.Ok(job);
-        });
-        group.MapPost("", async (string raceId, IQueryProcessor queries, ProcessingStateStore store,
-            HttpContext context, CancellationToken token) =>
-        {
-            var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
-            if (race is null || string.IsNullOrEmpty(race.RaceId)) return Results.NotFound();
-            var course = ResolveCourse(race.RacecourseCode);
-            if (race.RaceDate is null || race.RaceNumber is not (>= 1 and <= 12) || course is null)
-                return Results.BadRequest(new[] { "JRAの開催日・競馬場・レース番号を確認できません。" });
-            var id = await store.RequestRaceReacquisitionAsync(new(raceId, race.RaceDate.Value,
-                course, race.RaceNumber.Value),
-                context.User.Identity?.Name ?? "Admin API", DateTimeOffset.UtcNow, token);
-            return Results.Accepted(HorseRacingPrediction.Api.Web.JobNavigation.DetailUrl(id), new { jobId = id });
-        });
-        return endpoints;
-    }
-
     internal static string? ResolveCourse(string? value) => value?.ToUpperInvariant() switch
     {
         "SAPPORO" or "札幌" => "札幌",
@@ -54,5 +19,3 @@ public static class RaceReacquisitionEndpointExtensions
         _ => null
     };
 }
-
-public sealed record RaceCollectionLeaseResponse(bool IsActive, string? JobId, DateTimeOffset? LeaseExpiresAt);

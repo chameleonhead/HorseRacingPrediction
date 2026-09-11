@@ -113,7 +113,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
         if (requests is not null && result.Entries is not null)
-            await RequestReferencedSubjectsAsync(result.Entries, requests, cancellationToken).ConfigureAwait(false);
+            await RequestReferencedSubjectsAsync(result.Entries, domainRaceId, requests, cancellationToken).ConfigureAwait(false);
         if (predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([domainRaceId], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
@@ -133,7 +133,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         return new(task.EffectiveDate.Value, RaceCourseNames.Parse(course), number);
     }
 
-    private static async Task RequestReferencedSubjectsAsync(IReadOnlyList<RaceEntry> entries,
+    private static async Task RequestReferencedSubjectsAsync(IReadOnlyList<RaceEntry> entries, string requestedByRaceId,
         ICollectionRequestSink sink, CancellationToken cancellationToken)
     {
         var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name)[]
@@ -152,7 +152,11 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
                 CollectionReason.Discovery, CollectionLane.Normal, (int)CollectionPriority.Low, null,
                 DateOnly.FromDateTime(DateTime.UtcNow),
-                new Dictionary<string, string> { ["name"] = subject.Name }, cancellationToken)
+                new Dictionary<string, string>
+                {
+                    ["name"] = subject.Name,
+                    ["requestedByRaceId"] = requestedByRaceId,
+                }, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
