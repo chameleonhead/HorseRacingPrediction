@@ -75,6 +75,29 @@ The configuration rejects legacy deletion while the replacement is inactive. Rev
 
 Apply the plan. Separately run the approved old job-data cleanup after its backup/dry-run checks. Do not delete domain data, citations, IAM users, or access keys.
 
+旧 job DB は専用ツールで削除する。既定動作は dry-run であり、削除候補は指定した state directory 直下の
+`collection-tasks.db`、`collection-tasks.db-wal`、`collection-tasks.db-shm` だけである。
+
+```powershell
+dotnet run --project tools/HorseRacingPrediction.CollectionCutover -- --state-dir <state-directory>
+```
+
+候補を確認後、Gate 3 で成功した新 CollectionPlatform の task ID を指定して実行する。ツールは
+`collection-platform.db` 内で当該 task が `Succeeded` であることを確認し、削除対象を
+`<state-directory>/cutover-backups/<timestamp>/` へ先にコピーしてから削除する。
+
+```powershell
+dotnet run --project tools/HorseRacingPrediction.CollectionCutover -- `
+  --state-dir <state-directory> `
+  --execute `
+  --confirm-delete-legacy-job-db `
+  --smoke-task-id <task-id>
+```
+
+再実行は成功し、追加の削除・空のバックアップ作成を行わない。`eventstore.db`、
+`collection-platform.db`、`prediction-executions.db`、source citation、および上記3ファイル以外の
+sidecarは対象外である。このツールはAWSへ接続せず、旧SQS/DLQ削除はTerraform helperだけで行う。
+
 The helper refuses to plan this stage without the successful smoke task ID:
 
 ```powershell

@@ -53,6 +53,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.CollectionInitializer", "tools\HorseRacingPrediction.CollectionInitializer\HorseRacingPrediction.CollectionInitializer.csproj", "{63092778-2EA1-46FF-A976-ADE838CB8064}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.CollectionCutover", "tools\HorseRacingPrediction.CollectionCutover\HorseRacingPrediction.CollectionCutover.csproj", "{EA0290D2-A8CD-453C-A7DB-56E53D047590}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -327,6 +329,18 @@ Global
 		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x64.Build.0 = Release|Any CPU
 		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x86.ActiveCfg = Release|Any CPU
 		{63092778-2EA1-46FF-A976-ADE838CB8064}.Release|x86.Build.0 = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|x64.Build.0 = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Debug|x86.Build.0 = Debug|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x64.ActiveCfg = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x64.Build.0 = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x86.ActiveCfg = Release|Any CPU
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -354,5 +368,6 @@ Global
 		{EA4B9F07-C056-4390-89D5-9B53D733A539} = {01FEC711-9F75-4D0C-8675-19927808A35D}
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{63092778-2EA1-46FF-A976-ADE838CB8064} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{EA0290D2-A8CD-453C-A7DB-56E53D047590} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

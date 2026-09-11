@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\tools\HorseRacingPrediction.CollectionInitializer\HorseRacingPrediction.CollectionInitializer.csproj" />
+    <ProjectReference Include="..\..\tools\HorseRacingPrediction.CollectionCutover\HorseRacingPrediction.CollectionCutover.csproj" />
     <PackageReference Include="MSTest" Version="4.4.0" />
   </ItemGroup>
 
