@@ -11,6 +11,7 @@ using HorseRacingPrediction.PredictionScheduling;
 
 var builder = Host.CreateApplicationBuilder(args);
 var runOnce = args.Contains("--once", StringComparer.OrdinalIgnoreCase);
+var runLocalQueue = args.Contains("--local-queue", StringComparer.OrdinalIgnoreCase);
 
 builder.Services.Configure<ApiClientOptions>(
     builder.Configuration.GetSection(ApiClientOptions.SectionName));
@@ -75,7 +76,29 @@ builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((ser
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 var app = builder.Build();
 
-if (runOnce)
+if (runLocalQueue)
+{
+    var queuePath = builder.Configuration["LocalQueue:DatabasePath"]
+        ?? "collection-platform-state/local-collection-queue.db";
+    var queue = new LocalCollectionQueue(queuePath);
+    while (true)
+    {
+        var message = await queue.ReceiveAsync(TimeSpan.FromMinutes(15), CancellationToken.None);
+        if (message is null) { await Task.Delay(TimeSpan.FromSeconds(1)); continue; }
+        try
+        {
+            await app.Services.GetRequiredService<CollectionPlatformWorkerClient>()
+                .ExecuteAsync(message.Notification, CancellationToken.None).ConfigureAwait(false);
+            await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Local queue delivery failed: {ex.Message}");
+            await queue.ReleaseAsync(message.ReceiptHandle).ConfigureAwait(false);
+        }
+    }
+}
+else if (runOnce)
 {
     // Lambda（SQS event source mapping）から1回呼ばれる経路。常駐BackgroundServiceの
     // ExecuteAsyncループは開始せず、1メッセージ=1ジョブの原則で、このLambda呼び出しを

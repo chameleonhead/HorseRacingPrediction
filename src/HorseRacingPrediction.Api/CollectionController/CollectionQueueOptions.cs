@@ -4,6 +4,8 @@ public sealed class CollectionQueueOptions
 {
     public const string SectionName = "CollectionQueue";
     public bool Enabled { get; set; }
+    public string Provider { get; set; } = "Sqs";
+    public string LocalDatabasePath { get; set; } = "collection-platform-state/local-collection-queue.db";
     public string ServiceUrl { get; set; } = string.Empty;
     public string QueueUrl { get; set; } = string.Empty;
     public string QueueName { get; set; } = "horse-racing-prediction-collector";

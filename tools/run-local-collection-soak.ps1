@@ -4,7 +4,8 @@ param(
     [string]$ApiKey = "dev-api-key",
     [int]$MaxTasks = 40,
     [string]$StateDirectory = "$env:TEMP\hrp-soak-20260911",
-    [string]$MetricsPath = "$env:TEMP\hrp-collection-soak-metrics.jsonl"
+    [string]$MetricsPath = "$env:TEMP\hrp-collection-soak-metrics.jsonl",
+    [switch]$MonitorOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +34,7 @@ while ((Get-Date) -lt $deadline) {
         } | Sort-Object @{Expression = "lane"; Ascending = $true},
             @{Expression = "priority"; Descending = $true}, availableAt | Select-Object -First 1
 
-        if ($null -ne $candidate -and $processed.Count -lt $MaxTasks) {
+        if (!$MonitorOnly -and $null -ne $candidate -and $processed.Count -lt $MaxTasks) {
             $body = @{ taskId = $candidate.taskId; dispatchGeneration = 1 } | ConvertTo-Json -Compress
             @{ Records = @(@{ body = $body }) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $eventPath
             $env:COLLECTOR_EVENT_PATH = $eventPath

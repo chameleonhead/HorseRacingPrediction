@@ -125,20 +125,31 @@ builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
 builder.Services.AddHostedService<CollectionPlatformWatchdogService>();
 if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
 {
-    builder.Services.AddSingleton<IAmazonSQS>(_ =>
+    if (string.Equals(collectionQueueSection[nameof(CollectionQueueOptions.Provider)], "Local", StringComparison.OrdinalIgnoreCase))
     {
-        var serviceUrl = collectionQueueSection[nameof(CollectionQueueOptions.ServiceUrl)];
-        if (string.IsNullOrWhiteSpace(serviceUrl)) return new AmazonSQSClient();
-
-        return new AmazonSQSClient(new AmazonSQSConfig
+        builder.Services.AddSingleton(_ => new LocalCollectionQueue(
+            collectionQueueSection[nameof(CollectionQueueOptions.LocalDatabasePath)]
+            ?? "collection-platform-state/local-collection-queue.db"));
+        builder.Services.AddSingleton<LocalCollectionTaskQueue>();
+        builder.Services.AddSingleton<ICollectionTaskQueue>(services => services.GetRequiredService<LocalCollectionTaskQueue>());
+        builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services => services.GetRequiredService<LocalCollectionTaskQueue>());
+    }
+    else
+    {
+        builder.Services.AddSingleton<IAmazonSQS>(_ =>
         {
-            ServiceURL = serviceUrl,
-            AuthenticationRegion = builder.Configuration["AWS_REGION"] ?? "ap-northeast-1"
+            var serviceUrl = collectionQueueSection[nameof(CollectionQueueOptions.ServiceUrl)];
+            if (string.IsNullOrWhiteSpace(serviceUrl)) return new AmazonSQSClient();
+            return new AmazonSQSClient(new AmazonSQSConfig
+            {
+                ServiceURL = serviceUrl,
+                AuthenticationRegion = builder.Configuration["AWS_REGION"] ?? "ap-northeast-1"
+            });
         });
-    });
-    builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
-    builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services =>
-        (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
+        builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
+        builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services =>
+            (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
+    }
     builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CollectionPlatformOutboxDispatcher>());
     builder.Services.AddHostedService<CollectionPlatformDeadLetterReconciler>();
