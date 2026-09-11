@@ -14,8 +14,8 @@ Status meanings: **Not started** has no connected production path; **Connected**
 | Horse/Jockey/Trainer discovery and refresh | Verified | RaceCard expands all three types; Horse profile expands trainer/sire/dam with depth, ancestry, duplicate and priority guards; profile handlers use the normal request path |
 | Backfill batch and hole recovery | Verified | Persisted year/month batches expand date Discovery without pre-enumerating races, resume after restart, allow later batches after partial failure, and project concrete holes |
 | Dynamic schedule and repeated observations | Connected | Policy/due scheduler exist and the actual outbox dispatcher now enforces Realtime-first with a four-item starvation bound; request-flood protection remains |
-| RaceOdds snapshots | Not started | Definition only; parser/domain snapshot/handler absent |
-| Manual/bulk operations and projections | Connected | Basic APIs exist; preview, transactional expansion, condition selectors, UI absent |
+| RaceOdds snapshots | Verified | Parser, direct/fallback handler, configurable near-start schedule, domain event and append-only read model preserve repeated observed-at snapshots |
+| Manual/bulk operations and projections | Connected | Seven typed selectors, read-only preview, expected-set drift rejection, transactional execution and validation rollback are tested; UI remains |
 | Pause/cancel/watchdog/DLQ/failure notification | Verified | New store persists controls and notifications; API services test generation-safe DLQ reconciliation, retry/backoff, cancellation, heartbeat, stalled dispatch and expired lease recovery |
 | Legacy collector removal and Predictor separation | Connected | PredictionExecution now uses a dedicated API-owned SQLite schedule with token leases and restart recovery; legacy collection API/UI/source removal remains |
 | New queue cutover and old queue/data deletion | Connected | Terraform keeps old/new SQS and DLQ side by side, gates activation and legacy deletion, and provides a smoke/rollback runbook; an isolated Terraform plan and rehearsal remain |
