@@ -274,6 +274,21 @@ public sealed class CollectionPlatformStoreTests
         StringAssert.Contains(error.Message, "incomplete schema");
     }
 
+    [TestMethod]
+    public async Task Startup_ConcurrentStores_SerializeSchemaInitialization()
+    {
+        var stores = await Task.WhenAll(Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(CreateStore)));
+
+        Assert.HasCount(8, stores);
+        await using var connection = new SqliteConnection(
+            $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 1;";
+        Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = CreateStore();
