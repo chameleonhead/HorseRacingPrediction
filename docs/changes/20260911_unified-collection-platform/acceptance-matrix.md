@@ -16,8 +16,8 @@ Status meanings: **Not started** has no connected production path; **Connected**
 | Dynamic schedule and repeated observations | Connected | Policy/due scheduler exist and the actual outbox dispatcher now enforces Realtime-first with a four-item starvation bound; request-flood protection remains |
 | RaceOdds snapshots | Not started | Definition only; parser/domain snapshot/handler absent |
 | Manual/bulk operations and projections | Connected | Basic APIs exist; preview, transactional expansion, condition selectors, UI absent |
-| Pause/cancel/watchdog/DLQ/failure notification | Not started | Runtime path still references or removed legacy services |
-| Legacy collector removal and Predictor separation | Not started | Collector runtime no longer registers legacy planning/execution services, but API/UI and shared old source remain; Predictor separation remains |
+| Pause/cancel/watchdog/DLQ/failure notification | Verified | New store persists controls and notifications; API services test generation-safe DLQ reconciliation, retry/backoff, cancellation, heartbeat, stalled dispatch and expired lease recovery |
+| Legacy collector removal and Predictor separation | Connected | PredictionExecution now uses a dedicated API-owned SQLite schedule with token leases and restart recovery; legacy collection API/UI/source removal remains |
 | New queue cutover and old queue/data deletion | Connected | Terraform keeps old/new SQS and DLQ side by side, gates activation and legacy deletion, and provides a smoke/rollback runbook; an isolated Terraform plan and rehearsal remain |
 
 No capability is marked **Verified** until the real enforcement layer and at least one failure/restart path are exercised. This matrix is updated at every implementation checkpoint.
