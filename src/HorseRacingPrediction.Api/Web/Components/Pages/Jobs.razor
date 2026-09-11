@@ -2,47 +2,213 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<RaceOpsPageHeader Section="運用" Title="収集管理" Description="レースや競走馬などの収集状況を確認し、再取得や収集処理の停止・再開を行います。">
- <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">最新の状態に更新</FluentButton>@if(pipeline?.IsPaused==true){<FluentButton Appearance="@Appearance.Accent" OnClick="ResumeAsync" Disabled="busy">収集を再開</FluentButton>}else{<FluentButton OnClick="PauseAsync" Disabled="@(busy||pipeline is null)">収集を一時停止</FluentButton>}</Actions>
+<RaceOpsPageHeader Section="運用" Title="収集管理" Description="収集処理の進行状況を確認し、失敗から復旧します。">
+    <Actions>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => OpenCreate("RaceCard", "race-card"))" Disabled="busy">収集を依頼</FluentButton>
+        <FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>
+        @if (pipeline?.IsPaused == true)
+        {
+            <FluentButton Appearance="@Appearance.Accent" OnClick="ResumeAsync" Disabled="busy">収集を再開</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="@Appearance.Outline" OnClick="PauseAsync" Disabled="@(busy || pipeline is null)">すべて一時停止</FluentButton>
+        }
+    </Actions>
 </RaceOpsPageHeader>
-@if(pipeline?.IsPaused==true){<FluentMessageBar Intent="@MessageIntent.Warning" Title="収集処理を一時停止しています">@(pipeline.Reason??"管理者が収集処理を停止しました。")</FluentMessageBar>}
-@if(errors.Count>0){<UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ",errors)"/>}
-@if(progress is not null){<section class="entity-section" aria-label="収集状況の概要"><div class="detail-facts"><div><span class="object-label">収集対象</span>@progress.ResourcesByType.Values.Sum() 件</div><div><span class="object-label">収集済み</span>@Count(CollectionStateStatus.Current) 件</div><div><span class="object-label">処理待ち</span>@Count(CollectionStateStatus.Pending) 件</div><div><span class="object-label">収集中</span>@Count(CollectionStateStatus.Collecting) 件</div><div><span class="object-label">更新待ち</span>@Count(CollectionStateStatus.RefreshDue) 件</div><div><span class="object-label">要再取得</span>@Count(CollectionStateStatus.Stale) 件</div><div><span class="object-label">失敗</span>@Count(CollectionStateStatus.Failed) 件</div><div><span class="object-label">取得不可</span>@Count(CollectionStateStatus.Unavailable) 件</div><div><span class="object-label">再試行待ち</span>@progress.RetryWaiting 件</div></div></section>}
-<nav class="view-tabs" aria-label="収集管理の表示切り替え">@foreach(var t in tabs){<button type="button" class="@(tab==t.Key?"active":null)" aria-current="@(tab==t.Key?"page":null)" @onclick="()=>tab=t.Key">@t.Value</button>}</nav>
-@if(loading){<UiState Kind="loading" Title="収集状況を読み込んでいます"/>}
-else if(tab=="resources"){
- <section class="filter-bar" aria-label="収集対象の絞り込み"><div class="filter-toolbar"><FluentTextField aria-label="収集対象を検索" Placeholder="対象ID、提供元、収集内容で検索" @bind-Value="query"/><FluentButton Appearance="@Appearance.Accent" OnClick="ApplyFilter">検索</FluentButton>@if(!string.IsNullOrWhiteSpace(filter)){<FluentButton OnClick="ClearFilter">検索条件をクリア</FluentButton>}<FluentButton OnClick="OpenBulk">まとめて再取得</FluentButton></div></section>
- @if(Resources.Count==0){<UiState Title="@(string.IsNullOrWhiteSpace(filter)?"収集対象はまだ登録されていません":"検索条件に一致する収集対象はありません")" Message="@(string.IsNullOrWhiteSpace(filter)?"収集処理を開始すると、発見した対象がここに表示されます。":"対象ID、提供元、収集内容を変えて検索してください。")"/>}else{<p>@Resources.Count 件を表示しています。</p><FluentDataGrid Items="@Resources.AsQueryable()" TGridItem="CollectionTaskSummary" GridTemplateColumns="1fr 1.5fr 1.2fr .8fr" aria-label="収集対象一覧"><TemplateColumn Title="対象種別">@ResourceTypeLabel(context.Resource.Type)</TemplateColumn><TemplateColumn Title="提供元 / 対象ID"><FluentButton Appearance="@Appearance.Stealth" OnClick="@(()=>SelectAsync(context))">@context.Resource.Provider / @context.Resource.Id</FluentButton></TemplateColumn><TemplateColumn Title="収集内容">@DefinitionLabel(context.Definition)</TemplateColumn><TemplateColumn Title="直近の処理">@TaskStatusLabel(context.Status)</TemplateColumn></FluentDataGrid>}
- @if(selected is not null){<FluentCard class="detail-card detail-section"><h2>@ResourceTypeLabel(selected.Resource.Type) / @selected.Resource.Id</h2><p>@DefinitionLabel(selected.Definition)（@selected.Definition.Value）</p>@if(detailLoading){<UiState Kind="loading" Title="収集対象の詳細を読み込んでいます"/>}else if(detail is null){<UiState Kind="error" Title="収集対象の詳細を取得できませんでした"/>}else if(state is null){<UiState Title="収集状態はまだ登録されていません"/>}else{<div class="detail-facts"><div><span class="object-label">収集状態</span>@StateStatusLabel(state.Status)</div><div><span class="object-label">抽出仕様</span>適用 @state.AppliedRevision / 必要 @state.RequiredRevision</div><div><span class="object-label">最終取得</span>@Time(state.LastCollectedAt)</div><div><span class="object-label">次回取得予定</span>@Time(state.NextCollectionAt)</div></div>}<h3>この対象を再取得</h3><p>通常はURLを空欄のまま実行してください。調査時に取得先を指定する場合だけ入力します。</p><FluentTextField Label="取得先URL（任意）" Placeholder="https://..." @bind-Value="explicitUrl"/><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="busy">再取得を依頼</FluentButton>@if(detail is not null){<h3>取得先候補</h3>@if(detail.Locations.Count==0){<UiState Title="保存済みの取得先候補はありません" Message="実行時にURLの生成または探索を行います。"/>}else{<FluentDataGrid Items="@detail.Locations.AsQueryable()" TGridItem="ResourceLocationCandidate" aria-label="取得先候補一覧"><PropertyColumn Property="@(x=>x.Url)" Title="URL"/><TemplateColumn Title="見つけた方法">@LocationSourceLabel(context.Source)</TemplateColumn><TemplateColumn Title="利用状態">@LocationStatusLabel(context.Status)</TemplateColumn><TemplateColumn Title="最終確認">@Time(context.LastVerifiedAt)</TemplateColumn></FluentDataGrid>}<h3>収集履歴</h3><p>依頼 @detail.Requests.Count 件 ・ 処理 @detail.Tasks.Count 件 ・ 試行 @detail.Attempts.Count 件</p>@if(detail.Attempts.Count==0){<UiState Title="実行履歴はまだありません"/>}else{<FluentDataGrid Items="@detail.Attempts.AsQueryable()" TGridItem="CollectionAttemptSummary" aria-label="収集の試行履歴"><PropertyColumn Property="@(x=>x.AttemptNumber)" Title="試行回数"/><TemplateColumn Title="結果">@AttemptResultLabel(context.Result)</TemplateColumn><TemplateColumn Title="開始日時">@Time(context.StartedAt)</TemplateColumn><TemplateColumn Title="エラー">@(context.ErrorCode??"—") @context.ErrorMessage</TemplateColumn></FluentDataGrid>}}</FluentCard>}
-}else if(tab=="tasks"){
- @if(tasks.Count==0){<UiState Title="収集処理はありません"/>}else{<FluentDataGrid Items="@tasks.AsQueryable()" TGridItem="CollectionTaskSummary" GridTemplateColumns="1.2fr 1.5fr 1fr .8fr .8fr" aria-label="収集処理一覧"><PropertyColumn Property="@(x=>x.TaskId)" Title="処理ID"/><TemplateColumn Title="収集対象">@ResourceTypeLabel(context.Resource.Type) / @context.Resource.Id</TemplateColumn><TemplateColumn Title="処理状態">@TaskStatusLabel(context.Status)</TemplateColumn><TemplateColumn Title="処理区分">@LaneLabel(context.Lane)</TemplateColumn><PropertyColumn Property="@(x=>x.Priority)" Title="優先度"/></FluentDataGrid>}
-}else if(tab=="batches"){
- @if(batches.Count==0){<UiState Title="過去データの一括収集はありません"/>}else{<FluentDataGrid Items="@batches.AsQueryable()" TGridItem="BackfillBatchSnapshot" GridTemplateColumns="1.4fr 1fr .7fr .7fr .7fr .7fr" aria-label="過去データ一括収集一覧"><PropertyColumn Property="@(x=>x.BatchId)" Title="一括収集ID"/><TemplateColumn Title="対象期間">@context.From ～ @context.To</TemplateColumn><PropertyColumn Property="@(x=>x.Pending)" Title="待機中"/><PropertyColumn Property="@(x=>x.Running)" Title="実行中"/><PropertyColumn Property="@(x=>x.Succeeded)" Title="完了"/><PropertyColumn Property="@(x=>x.Failed)" Title="失敗"/></FluentDataGrid>}
-}else{
- @if(failures.Count==0){<UiState Title="確認が必要な収集失敗はありません"/>}else{<FluentDataGrid Items="@failures.AsQueryable()" TGridItem="PendingCollectionFailureNotification" GridTemplateColumns="1.5fr 1fr .8fr 2fr" aria-label="確認が必要な収集失敗一覧"><TemplateColumn Title="収集対象">@ResourceTypeLabel(context.Resource.Type) / @context.Resource.Id</TemplateColumn><TemplateColumn Title="収集内容">@DefinitionLabel(context.Definition)</TemplateColumn><TemplateColumn Title="処理状態">@TaskStatusLabel(context.Status)</TemplateColumn><TemplateColumn Title="エラー内容">@(context.ErrorCode??"—") @context.ErrorMessage</TemplateColumn></FluentDataGrid>}
-}
-<FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h=>showBulk=!h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));"><FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader><FluentDialogBody><p>対象を確認してから実行します。確認後に対象が増えることはありません。</p><FluentTextField Label="対象種別" @bind-Value="bulkType"/><FluentTextField Label="提供元" @bind-Value="provider"/><FluentTextField Label="収集定義ID" @bind-Value="definition"/><FluentTextField Label="必要な抽出仕様の版" @bind-Value="revision"/><FluentTextField Label="対象ID（カンマ区切り）" @bind-Value="ids"/>@if(preview is not null){<FluentMessageBar Intent="@MessageIntent.Info" Title="@($"対象は {preview.TargetCount} 件です")"/>}@if(bulkErrors.Count>0){<UiState Kind="error" Title="まとめて再取得を実行できません" Message="@string.Join(" ",bulkErrors)"/>}</FluentDialogBody><FluentDialogFooter><FluentButton OnClick="@(()=>showBulk=false)">キャンセル</FluentButton><FluentButton OnClick="PreviewAsync" Disabled="busy">対象を確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(busy||preview is null)">再取得を依頼</FluentButton></FluentDialogFooter></FluentDialog>
 
-@code{
- private readonly Dictionary<string,string> tabs=new(){{"resources","収集対象"},{"tasks","処理状況"},{"batches","過去データ収集"},{"failures","要確認"}}; private string tab="resources",query="",filter="",bulkType="Horse",provider="JRA",definition="horse-profile",revision="1",ids=""; private string? explicitUrl; private bool loading=true,busy,detailLoading,showBulk; private IReadOnlyList<string> errors=[],bulkErrors=[]; private IReadOnlyList<CollectionTaskSummary> tasks=[]; private IReadOnlyList<BackfillBatchSnapshot> batches=[]; private IReadOnlyList<PendingCollectionFailureNotification> failures=[]; private CollectionProgressSnapshot? progress; private HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState? pipeline; private CollectionTaskSummary? selected; private CollectionStateSnapshot? state; private CollectionResourceDetail? detail; private CollectionBulkPreview? preview;
- private IReadOnlyList<CollectionTaskSummary> Resources=>tasks.Where(x=>string.IsNullOrWhiteSpace(filter)||$"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)}".Contains(filter,StringComparison.OrdinalIgnoreCase)).GroupBy(x=>new{x.Resource,x.Definition}).Select(g=>g.OrderByDescending(x=>x.AvailableAt).First()).ToList();
- protected override Task OnInitializedAsync()=>LoadAsync();
- private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:500);var d=Api.GetCollectionFailureNotificationsAsync();var e=Api.GetBackfillBatchesAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;tasks=await c??[];failures=await d??[];batches=await e??[];}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"];}finally{loading=false;}}
- private void ApplyFilter()=>filter=query.Trim(); private void ClearFilter(){query="";filter="";} private int Count(CollectionStateStatus s)=>progress?.StatesByStatus.TryGetValue(s,out var n)==true?n:0;
- private async Task SelectAsync(CollectionTaskSummary x){selected=x;state=null;detail=null;detailLoading=true;try{detail=await Api.GetCollectionResourceDetailAsync(x.Resource,x.Definition);state=detail?.State;}finally{detailLoading=false;}}
- private async Task RequestAsync(){if(selected is null)return;busy=true;try{var r=await Api.RequestCollectionAsync(new(selected.Resource.Type,selected.Resource.Provider,selected.Resource.Id,selected.Definition.Value,Math.Max(selected.RequestedRevision,state?.RequiredRevision??0),CollectionReason.ManualRefresh,selected.Lane,selected.Priority,string.IsNullOrWhiteSpace(explicitUrl)?null:explicitUrl));if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
- private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync("管理画面から一時停止"):await Api.ResumeCollectionPipelineAsync();if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
- private void OpenBulk(){showBulk=true;preview=null;bulkErrors=[];}
- private BulkCollectionOperationRequest? Bulk(IReadOnlyList<ResourceKey>? expected=null){if(!Enum.TryParse<ResourceType>(bulkType,true,out var t)||!int.TryParse(revision,out var rev)||rev<1){bulkErrors=["対象種別と抽出仕様の版を確認してください。"];return null;}var keys=ids.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct().Select(id=>new ResourceKey(t,provider.Trim(),id)).ToArray();if(keys.Length==0){bulkErrors=["対象IDを1件以上入力してください。"];return null;}return new(definition.Trim(),rev,CollectionReason.ManualRefresh,BulkCollectionSelection.SpecificResources,provider.Trim(),keys,ExpectedResources:expected);}
- private async Task PreviewAsync(){preview=null;bulkErrors=[];var q=Bulk();if(q is null)return;busy=true;try{var r=await Api.PreviewBulkCollectionAsync(q);if(r.Success)preview=r.Value;else bulkErrors=r.Errors;}finally{busy=false;}}
- private async Task ExecuteAsync(){if(preview is null)return;var q=Bulk(preview.Resources);if(q is null)return;busy=true;try{var r=await Api.ExecuteBulkCollectionAsync(q);if(r.Success){showBulk=false;await LoadAsync();}else bulkErrors=r.Errors;}finally{busy=false;}}
- private static string ResourceTypeLabel(ResourceType v)=>v switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>v.ToString()};
- private static string DefinitionLabel(CollectionDefinitionId v)=>v.Value switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表","race-odds"=>"オッズ","race-result"=>"レース結果","horse-profile"=>"競走馬プロフィール","jockey-profile"=>"騎手プロフィール","trainer-profile"=>"調教師プロフィール",_=>v.Value};
- private static string StateStatusLabel(CollectionStateStatus v)=>v switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>v.ToString()};
- private static string TaskStatusLabel(CollectionTaskStatus v)=>v switch{CollectionTaskStatus.Pending=>"登録待ち",CollectionTaskStatus.Ready=>"実行待ち",CollectionTaskStatus.Running=>"実行中",CollectionTaskStatus.RetryWaiting=>"再試行待ち",CollectionTaskStatus.WaitingDiscovery=>"取得先の探索待ち",CollectionTaskStatus.Succeeded=>"完了",CollectionTaskStatus.Failed=>"失敗",CollectionTaskStatus.Cancelled=>"取消済み",CollectionTaskStatus.DeadLetter=>"要手動対応",_=>v.ToString()};
- private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
- private static string LocationSourceLabel(ResourceLocationSource v)=>v switch{ResourceLocationSource.Explicit=>"手動指定",ResourceLocationSource.Generated=>"規則から生成",ResourceLocationSource.Discovered=>"探索で発見",ResourceLocationSource.Redirected=>"転送先",ResourceLocationSource.Manual=>"管理者登録",_=>v.ToString()};
- private static string LocationStatusLabel(ResourceLocationStatus v)=>v switch{ResourceLocationStatus.Unknown=>"未確認",ResourceLocationStatus.Active=>"利用可能",ResourceLocationStatus.Suspect=>"要再確認",ResourceLocationStatus.Invalid=>"利用不可",_=>v.ToString()};
- private static string AttemptResultLabel(CollectionAttemptResult v)=>v switch{CollectionAttemptResult.Running=>"実行中",CollectionAttemptResult.Succeeded=>"成功",CollectionAttemptResult.TransientFailure=>"一時的な失敗",CollectionAttemptResult.PermanentFailure=>"恒久的な失敗",CollectionAttemptResult.ResourceNotFound=>"対象なし",CollectionAttemptResult.ResourceNotYetAvailable=>"公開待ち",CollectionAttemptResult.ParseFailure=>"読み取り失敗",CollectionAttemptResult.ValidationFailure=>"内容検証失敗",CollectionAttemptResult.UnexpectedPage=>"別ページを検出",CollectionAttemptResult.AccessLimited=>"アクセス制限",CollectionAttemptResult.Cancelled=>"取消済み",_=>v.ToString()};
- private static string Time(DateTimeOffset? x)=>x?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"—";
+@if (pipeline?.IsPaused == true)
+{
+    <FluentMessageBar Intent="@MessageIntent.Warning" Title="収集全体を停止中">@(pipeline.Reason ?? "管理者が収集処理を停止しました。")</FluentMessageBar>
+}
+@if (errors.Count > 0)
+{
+    <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", errors)" />
+}
+
+@if (progress is not null)
+{
+    <section class="entity-section" aria-labelledby="collection-summary-heading">
+        <div class="section-title"><h2 id="collection-summary-heading">現在の収集状況</h2><span class="hint">収集対象 @progress.ResourcesByType.Values.Sum() 件</span></div>
+        <div class="day-summary">
+            @foreach (var item in SummaryItems)
+            {
+                <button type="button" class="day-item" @onclick="() => SetView(item.View)">
+                    <strong>@item.Label</strong><small>@item.Description</small>
+                    <span class="day-progress"><span>@item.Count 件</span><RaceOpsStatusBadge Label="@item.Badge" Tone="@item.Tone" /></span>
+                </button>
+            }
+        </div>
+    </section>
+}
+
+<section class="entity-section" aria-labelledby="collection-start-heading">
+    <div class="section-title"><h2 id="collection-start-heading">情報を収集する</h2><span class="hint">対象IDが分かる場合は直接依頼できます</span></div>
+    <div class="filter-toolbar">
+        <FluentButton OnClick="@(() => OpenCreate("RaceCard", "race-card"))">出馬表</FluentButton>
+        <FluentButton OnClick="@(() => OpenCreate("RaceResult", "race-result"))">レース結果</FluentButton>
+        <FluentButton OnClick="@(() => OpenCreate("RaceOdds", "race-odds"))">オッズ</FluentButton>
+        <FluentButton OnClick="@(() => OpenCreate("Horse", "horse-profile"))">競走馬</FluentButton>
+        <FluentButton OnClick="@(() => OpenCreate("Jockey", "jockey-profile"))">騎手</FluentButton>
+        <FluentButton OnClick="@(() => OpenCreate("Trainer", "trainer-profile"))">調教師</FluentButton>
+        <FluentButton OnClick="OpenBulk">複数をまとめて再取得</FluentButton>
+    </div>
+</section>
+
+<nav class="view-tabs" aria-label="収集処理の表示">
+    @foreach (var option in views)
+    {
+        <button type="button" class="@(view == option.Value ? "active" : null)" aria-current="@(view == option.Value ? "page" : null)" @onclick="() => SetView(option.Value)">@option.Label</button>
+    }
+</nav>
+<section class="filter-bar" aria-label="収集処理の絞り込み">
+    <div class="filter-toolbar">
+        <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集処理を検索" Placeholder="対象ID、収集内容、状態を検索" @bind-Value="query" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ApplyFilter">絞り込む</FluentButton>
+        @if (!string.IsNullOrWhiteSpace(filter)) { <FluentButton OnClick="ClearFilter">条件をクリア</FluentButton> }
+    </div>
+</section>
+
+@if (loading)
+{
+    <UiState Kind="loading" Title="収集状況を読み込んでいます" />
+}
+else if (VisibleItems.Count == 0)
+{
+    <UiState Title="表示する収集処理はありません" Message="別の状態を選ぶか、検索条件を変更してください。" />
+}
+else
+{
+    <div class="section-title"><h2>@CurrentViewLabel</h2><span class="hint">@FilteredItems.Count 件</span></div>
+    <RaceOpsObjectList Label="収集処理一覧">
+        @foreach (var item in VisibleItems)
+        {
+            <button type="button" class="object-list-item" @onclick="() => SelectAsync(item)">
+                <span class="object-list-main"><strong>@DefinitionLabel(item.Definition)</strong><span>@ResourceDescription(item.Resource)</span></span>
+                <RaceOpsStatusBadge Label="@TaskStatusLabel(item.Status)" Tone="@TaskStatusTone(item.Status)" />
+                <span class="object-list-meta">@LaneLabel(item.Lane) ・ 優先度 @item.Priority ・ 試行 @item.AttemptCount 回</span>
+                <span class="object-list-affordance">詳細</span>
+            </button>
+        }
+    </RaceOpsObjectList>
+    @if (TotalPages > 1)
+    {
+        <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="PreviousPage">前へ</FluentButton><span>@(page) / @TotalPages</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= TotalPages)" OnClick="NextPage">次へ</FluentButton></div>
+    }
+}
+
+<FluentDialog Hidden="@(!showDetail)" HiddenChanged="@(h => showDetail = !h)" Modal="true" TrapFocus="true" AriaLabelledby="detail-title" Style="width:min(920px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="detail-title">@(selected is null ? "収集処理の詳細" : DefinitionLabel(selected.Definition))</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        @if (showDetail && selected is not null)
+        {
+            <p>@ResourceDescription(selected.Resource)</p>
+            <div class="detail-facts"><div><span class="object-label">直近の処理</span>@TaskStatusLabel(selected.Status)</div><div><span class="object-label">処理区分</span>@LaneLabel(selected.Lane)</div><div><span class="object-label">優先度</span>@selected.Priority</div><div><span class="object-label">試行回数</span>@selected.AttemptCount 回</div></div>
+        }
+        @if (showDetail && detailLoading) { <UiState Kind="loading" Title="詳細を読み込んでいます" /> }
+        else if (showDetail && detail is null) { <UiState Kind="error" Title="詳細を取得できませんでした" Message="画面を閉じて、もう一度お試しください。" /> }
+        else if (showDetail && detail is not null)
+        {
+            @if (detail.State is { } currentState)
+            {
+                <h3>収集状態</h3><div class="detail-facts"><div><span class="object-label">現在</span>@StateStatusLabel(currentState.Status)</div><div><span class="object-label">抽出仕様</span>適用 @currentState.AppliedRevision / 必要 @currentState.RequiredRevision</div><div><span class="object-label">最終取得</span>@Time(currentState.LastCollectedAt)</div><div><span class="object-label">次回予定</span>@Time(currentState.NextCollectionAt)</div></div>
+            }
+            <h3>失敗・試行履歴</h3>
+            @if (detail.Attempts.Count == 0) { <UiState Title="実行履歴はまだありません" /> }
+            else
+            {
+                <FluentDataGrid Items="@detail.Attempts.OrderByDescending(x => x.StartedAt).AsQueryable()" TGridItem="CollectionAttemptSummary" aria-label="試行履歴">
+                    <PropertyColumn Property="@(x => x.AttemptNumber)" Title="回" />
+                    <TemplateColumn Title="結果">@AttemptResultLabel(context.Result)</TemplateColumn>
+                    <TemplateColumn Title="開始">@Time(context.StartedAt)</TemplateColumn>
+                    <TemplateColumn Title="HTTP">@(context.HttpStatusCode?.ToString() ?? "—")</TemplateColumn>
+                    <TemplateColumn Title="エラー内容">@(context.ErrorCode ?? "—") @context.ErrorMessage</TemplateColumn>
+                </FluentDataGrid>
+            }
+            <h3>取得先候補</h3>
+            @if (detail.Locations.Count == 0) { <UiState Title="保存済みの取得先候補はありません" Message="実行時にURLの生成または探索を行います。" /> }
+            else
+            {
+                <FluentDataGrid Items="@detail.Locations.AsQueryable()" TGridItem="ResourceLocationCandidate" aria-label="取得先候補">
+                    <PropertyColumn Property="@(x => x.Url)" Title="URL" /><TemplateColumn Title="発見方法">@LocationSourceLabel(context.Source)</TemplateColumn><TemplateColumn Title="状態">@LocationStatusLabel(context.Status)</TemplateColumn><TemplateColumn Title="最終確認">@Time(context.LastVerifiedAt)</TemplateColumn>
+                </FluentDataGrid>
+            }
+            <details><summary>依頼・処理の技術情報</summary><p>依頼 @detail.Requests.Count 件 ・ 処理 @detail.Tasks.Count 件 ・ 試行 @detail.Attempts.Count 件</p>@if(selected is not null){<p>処理ID: @selected.TaskId<br />収集定義ID: @selected.Definition.Value<br />要求版: @selected.RequestedRevision</p>}</details>
+            <h3>再取得</h3><p>通常はURLを空欄のまま実行してください。取得先を指定するのは調査時だけです。</p><FluentTextField Label="取得先URL（任意）" @bind-Value="explicitUrl" />
+        }
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showDetail = false)">閉じる</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="@(busy || selected is null)">この情報を再取得</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!showCreate)" HiddenChanged="@(h => showCreate = !h)" Modal="true" TrapFocus="true" AriaLabelledby="create-title" Style="width:min(620px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="create-title">@CreateTitle</h2></FluentDialogHeader>
+    <FluentDialogBody><p>@CreateGuidance</p><FluentTextField Label="対象ID" Placeholder="@CreatePlaceholder" Required="true" @bind-Value="createResourceId" /><FluentTextField Label="提供元" @bind-Value="createProvider" /><FluentTextField Label="取得先URL（任意）" Placeholder="通常は空欄のままにします" @bind-Value="createUrl" />@if(createErrors.Count>0){<UiState Kind="error" Title="収集を依頼できません" Message="@string.Join(" ", createErrors)" />}</FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showCreate = false)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="CreateRequestAsync" Disabled="busy">収集を依頼</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h => showBulk = !h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader>
+    <FluentDialogBody><p>対象を確認してから実行します。確認後に対象が増えることはありません。</p><FluentTextField Label="対象種別" @bind-Value="bulkType" /><FluentTextField Label="提供元" @bind-Value="provider" /><FluentTextField Label="収集定義ID" @bind-Value="definition" /><FluentTextField Label="必要な抽出仕様の版" @bind-Value="revision" /><FluentTextField Label="対象ID（カンマ区切り）" @bind-Value="ids" />@if(preview is not null){<FluentMessageBar Intent="@MessageIntent.Info" Title="@($"対象は {preview.TargetCount} 件です")" />}@if(bulkErrors.Count>0){<UiState Kind="error" Title="まとめて再取得を実行できません" Message="@string.Join(" ",bulkErrors)" />}</FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showBulk = false)">キャンセル</FluentButton><FluentButton OnClick="PreviewAsync" Disabled="busy">対象を確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(busy || preview is null)">再取得を依頼</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    private const int PageSize = 50;
+    private static readonly IReadOnlyList<FilterOption> views = [new("attention", "要対応"), new("running", "処理中"), new("waiting", "待機中"), new("recent", "最近完了"), new("resources", "収集対象"), new("all", "すべて")];
+    private string view = "attention", query = "", filter = "", bulkType = "Horse", provider = "JRA", definition = "horse-profile", revision = "1", ids = "";
+    private string createType = "RaceCard", createDefinition = "race-card", createProvider = "JRA", createResourceId = "", createUrl = "";
+    private string? explicitUrl;
+    private int page = 1;
+    private bool loading = true, busy, detailLoading, showDetail, showCreate, showBulk;
+    private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [];
+    private IReadOnlyList<CollectionTaskSummary> tasks = [];
+    private CollectionProgressSnapshot? progress;
+    private CollectionPipelineState? pipeline;
+    private CollectionTaskSummary? selected;
+    private CollectionResourceDetail? detail;
+    private CollectionBulkPreview? preview;
+
+    private IReadOnlyList<CollectionTaskSummary> UniqueResources => tasks.GroupBy(x => new { x.Resource, x.Definition }).Select(g => g.OrderByDescending(x => x.AvailableAt).First()).ToList();
+    private IReadOnlyList<CollectionTaskSummary> FilteredItems => (view == "resources" ? UniqueResources : tasks).Where(MatchesView).Where(MatchesFilter).ToList();
+    private IReadOnlyList<CollectionTaskSummary> VisibleItems => FilteredItems.Skip((page - 1) * PageSize).Take(PageSize).ToList();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
+    private string CurrentViewLabel => views.First(x => x.Value == view).Label;
+    private IReadOnlyList<SummaryItem> SummaryItems => [new("要対応", "原因を確認して復旧", tasks.Count(x => x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter), "attention", "確認", "danger"), new("処理中", "現在実行している処理", tasks.Count(x => x.Status == CollectionTaskStatus.Running), "running", "稼働", "info"), new("待機中", "実行・再試行・探索待ち", tasks.Count(x => IsWaiting(x.Status)), "waiting", "待機", "warning"), new("収集済み", "最新仕様で取得済み", Count(CollectionStateStatus.Current), "resources", "正常", "success")];
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:1000);await Task.WhenAll(a,b,c);progress=await a;pipeline=await b;tasks=await c??[];if(page>TotalPages)page=TotalPages;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    private bool MatchesView(CollectionTaskSummary x) => view switch { "attention" => x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter, "running" => x.Status == CollectionTaskStatus.Running, "waiting" => IsWaiting(x.Status), "recent" => x.Status == CollectionTaskStatus.Succeeded, _ => true };
+    private bool MatchesFilter(CollectionTaskSummary x) => string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase);
+    private static bool IsWaiting(CollectionTaskStatus x) => x is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
+    private void SetView(string value){view=value;page=1;}
+    private void PreviousPage(){if(page>1)page--;}
+    private void NextPage(){if(page<TotalPages)page++;}
+    private void ApplyFilter(){filter=query.Trim();page=1;}
+    private void ClearFilter(){query="";filter="";page=1;}
+    private int Count(CollectionStateStatus s)=>progress?.StatesByStatus.TryGetValue(s,out var n)==true?n:0;
+    private async Task SelectAsync(CollectionTaskSummary item){selected=item;detail=null;detailLoading=true;showDetail=true;explicitUrl=null;try{detail=await Api.GetCollectionResourceDetailAsync(item.Resource,item.Definition);}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){detail=null;}finally{detailLoading=false;}}
+    private async Task RequestAsync(){if(selected is null)return;busy=true;try{var revisionToRequest=Math.Max(selected.RequestedRevision,detail?.State?.RequiredRevision??1);var r=await Api.RequestCollectionAsync(new(selected.Resource.Type,selected.Resource.Provider,selected.Resource.Id,selected.Definition.Value,revisionToRequest,CollectionReason.ManualRefresh,selected.Lane,selected.Priority,string.IsNullOrWhiteSpace(explicitUrl)?null:explicitUrl));if(!r.Success)errors=r.Errors;else{showDetail=false;await LoadAsync();}}finally{busy=false;}}
+    private void OpenCreate(string type,string definitionId){createType=type;createDefinition=definitionId;createProvider="JRA";createResourceId="";createUrl="";createErrors=[];showCreate=true;}
+    private async Task CreateRequestAsync(){createErrors=[];if(!Enum.TryParse<ResourceType>(createType,out var type)||string.IsNullOrWhiteSpace(createResourceId)){createErrors=["対象IDを入力してください。"];return;}if(!string.IsNullOrWhiteSpace(createUrl)&&!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["取得先URLを正しい形式で入力してください。"];return;}var lane=type is ResourceType.RaceCard or ResourceType.RaceOdds or ResourceType.RaceResult?CollectionLane.Realtime:CollectionLane.Normal;var priority=type switch{ResourceType.RaceOdds=>90,ResourceType.RaceResult=>100,ResourceType.RaceCard=>80,_=>50};busy=true;try{var r=await Api.RequestCollectionAsync(new(type,createProvider.Trim(),createResourceId.Trim(),createDefinition,1,CollectionReason.ManualRefresh,lane,priority,string.IsNullOrWhiteSpace(createUrl)?null:createUrl.Trim()));if(r.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=r.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。処理一覧を更新して確認してください。"]; }finally{busy=false;}}
+    private string CreateTitle=>DefinitionLabel(new(createDefinition));
+    private string CreateGuidance=>createType.StartsWith("Race",StringComparison.Ordinal)?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
+    private string CreatePlaceholder=>createType.StartsWith("Race",StringComparison.Ordinal)?"例: 20260912:Nakayama:11":"一覧や詳細に表示されている対象ID";
+    private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync("管理画面から一時停止"):await Api.ResumeCollectionPipelineAsync();if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
+    private void OpenBulk(){showBulk=true;preview=null;bulkErrors=[];}
+    private BulkCollectionOperationRequest? Bulk(IReadOnlyList<ResourceKey>? expected=null){if(!Enum.TryParse<ResourceType>(bulkType,true,out var type)||!int.TryParse(revision,out var rev)||rev<1){bulkErrors=["対象種別と抽出仕様の版を確認してください。"];return null;}var keys=ids.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct().Select(id=>new ResourceKey(type,provider.Trim(),id)).ToArray();if(keys.Length==0){bulkErrors=["対象IDを1件以上入力してください。"];return null;}return new(definition.Trim(),rev,CollectionReason.ManualRefresh,BulkCollectionSelection.SpecificResources,provider.Trim(),keys,ExpectedResources:expected);}
+    private async Task PreviewAsync(){preview=null;bulkErrors=[];var request=Bulk();if(request is null)return;busy=true;try{var result=await Api.PreviewBulkCollectionAsync(request);if(result.Success)preview=result.Value;else bulkErrors=result.Errors;}finally{busy=false;}}
+    private async Task ExecuteAsync(){if(preview is null)return;var request=Bulk(preview.Resources);if(request is null)return;busy=true;try{var result=await Api.ExecuteBulkCollectionAsync(request);if(result.Success){showBulk=false;view="waiting";page=1;await LoadAsync();}else bulkErrors=result.Errors;}finally{busy=false;}}
+    private static string ResourceDescription(ResourceKey value)=>$"{ResourceTypeLabel(value.Type)} ・ {value.Provider} ・ {value.Id}";
+    private static string ResourceTypeLabel(ResourceType v)=>v switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>v.ToString()};
+    private static string DefinitionLabel(CollectionDefinitionId v)=>v.Value switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>v.Value};
+    private static string StateStatusLabel(CollectionStateStatus v)=>v switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>v.ToString()};
+    private static string TaskStatusLabel(CollectionTaskStatus v)=>v switch{CollectionTaskStatus.Pending=>"登録待ち",CollectionTaskStatus.Ready=>"実行待ち",CollectionTaskStatus.Running=>"実行中",CollectionTaskStatus.RetryWaiting=>"再試行待ち",CollectionTaskStatus.WaitingDiscovery=>"取得先の探索待ち",CollectionTaskStatus.Succeeded=>"完了",CollectionTaskStatus.Failed=>"失敗",CollectionTaskStatus.Cancelled=>"中断",CollectionTaskStatus.DeadLetter=>"要対応",_=>v.ToString()};
+    private static string TaskStatusTone(CollectionTaskStatus v)=>v switch{CollectionTaskStatus.Succeeded=>"success",CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter=>"danger",CollectionTaskStatus.Running=>"info",CollectionTaskStatus.Cancelled=>"neutral",_=>"warning"};
+    private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
+    private static string LocationSourceLabel(ResourceLocationSource v)=>v switch{ResourceLocationSource.Explicit=>"手動指定",ResourceLocationSource.Generated=>"規則から生成",ResourceLocationSource.Discovered=>"探索で発見",ResourceLocationSource.Redirected=>"転送先",ResourceLocationSource.Manual=>"管理者登録",_=>v.ToString()};
+    private static string LocationStatusLabel(ResourceLocationStatus v)=>v switch{ResourceLocationStatus.Unknown=>"未確認",ResourceLocationStatus.Active=>"利用可能",ResourceLocationStatus.Suspect=>"要再確認",ResourceLocationStatus.Invalid=>"利用不可",_=>v.ToString()};
+    private static string AttemptResultLabel(CollectionAttemptResult v)=>v switch{CollectionAttemptResult.Running=>"実行中",CollectionAttemptResult.Succeeded=>"成功",CollectionAttemptResult.TransientFailure=>"一時的な失敗",CollectionAttemptResult.PermanentFailure=>"恒久的な失敗",CollectionAttemptResult.ResourceNotFound=>"対象なし",CollectionAttemptResult.ResourceNotYetAvailable=>"公開待ち",CollectionAttemptResult.ParseFailure=>"読み取り失敗",CollectionAttemptResult.ValidationFailure=>"内容検証失敗",CollectionAttemptResult.UnexpectedPage=>"別ページを検出",CollectionAttemptResult.AccessLimited=>"アクセス制限",CollectionAttemptResult.Cancelled=>"中断",_=>v.ToString()};
+    private static string Time(DateTimeOffset? x)=>x?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"—";
+    private sealed record FilterOption(string Value,string Label);
+    private sealed record SummaryItem(string Label,string Description,int Count,string View,string Badge,string Tone);
 }

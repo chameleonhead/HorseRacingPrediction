@@ -11,33 +11,35 @@ The primary action is **Request collection**. Bulk recollection is a preview-fir
 ```text
 Collection administration
 ├─ Pipeline status + Pause/Resume
-├─ Summary: Current | Due | Stale | Pending | Running | Failed | Unavailable
-├─ Tabs
-│  ├─ Resources  [type] [definition] [status] [search]  DataGrid
-│  ├─ Tasks      [lane] [priority] [status]             DataGrid
-│  ├─ Batches    [month] [status]                       DataGrid
-│  └─ Failures   retry waiting + failure notifications  DataGrid
-└─ Selected resource detail
+├─ Status summary: Action needed | Running | Waiting | Collected
+├─ Quick collection: Race card | Result | Odds | Horse | Jockey | Trainer | Bulk
+├─ Status views: Action needed | Running | Waiting | Recent | Resources | All
+├─ Search + paged object list
+└─ Resource detail dialog
    ├─ State and revisions
    ├─ Locations and verification state
    ├─ Recent requests/tasks/attempts
    └─ Request collection
 ```
 
-Use `FluentDataGrid` for every tabular view. Put lightweight filters immediately above the related grid. Keep only the most frequent row action visible and place secondary actions in a menu where supported by the installed Fluent UI version.
+The visual composition reuses the earlier administration mock's strong hierarchy: compact summary cards, clear status views, and a dense object list. Each list row is a keyboard-operable detail action. `FluentDataGrid` is reserved for structured attempt and location history inside the detail dialog, where column comparison is valuable.
+
+The main list requests at most 1,000 recent tasks and paginates them by 50 in the client. The Resources view projects the latest task for each Resource + CollectionDefinition pair; the other views preserve individual task history.
 
 ## States and interaction
 
 - Loading keeps the page heading and filters visible and shows an explicit progress state.
-- Empty explains whether no resources exist or filters produced no matches.
+- Empty explains that the selected state or search has no matching collection work.
 - Error shows a recoverable message and a retry action without exposing exception text.
 - Request and pause/resume buttons are disabled while their request is in flight.
 - Bulk collection shows selector validation and affected-count preview before execute; execute never silently broadens the previewed target set.
 - Narrow layouts stack filters and preserve Resource identity, status, and the primary action.
+- The detail dialog exposes state/revision, HTTP result, error code/message, attempt history, candidate locations, and an optional explicit URL for recovery.
+- Quick collection actions submit ordinary `ManualRefresh` requests to the same collection platform. Race card/result/odds use the Realtime lane; Horse/Jockey/Trainer use the Normal lane.
 
 ## Verification
 
-- Component tests cover loading, empty, error, filtering, pause/resume, manual request, and preview-before-bulk-execute.
+- Component tests cover empty/error states, Japanese filtering, detail/manual recollection, quick resource collection, and preview-before-bulk-execute.
 - Browser verification covers page navigation, keyboard access to the primary controls, grid overflow, and narrow viewport reflow.
 
 ## Japanese terminology and task-oriented wording

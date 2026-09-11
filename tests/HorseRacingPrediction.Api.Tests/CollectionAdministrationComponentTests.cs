@@ -1,5 +1,6 @@
 using Bunit;
 using System.Net.Http.Json;
+using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
@@ -40,9 +41,9 @@ public sealed class CollectionAdministrationComponentTests
 
         var cut = context.Render<Jobs>();
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集対象はまだ登録されていません"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "表示する収集処理はありません"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("まとめて再取得</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("複数をまとめて再取得</")).Instance.OnClick.InvokeAsync());
         cut.WaitForAssertion(() => Assert.IsTrue(cut.FindComponents<FluentButton>()
             .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
         StringAssert.Contains(cut.Markup, "確認後に対象が増えることはありません");
@@ -59,23 +60,23 @@ public sealed class CollectionAdministrationComponentTests
         await using var context = CreateContext(app.Services, http);
 
         var cut = context.Render<Jobs>();
+        await ClickButtonAsync(cut, "待機中");
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
-        StringAssert.Contains(cut.Markup, "競走馬プロフィール");
-        StringAssert.Contains(cut.Markup, "処理待ち");
-        StringAssert.Contains(cut.Markup, "収集対象");
-        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("H001</")).Instance.OnClick.InvokeAsync());
+        StringAssert.Contains(cut.Markup, "競走馬情報の収集");
+        StringAssert.Contains(cut.Markup, "登録待ち");
+        await cut.InvokeAsync(() => cut.FindAll("button").Single(x => x.TextContent.Contains("H001")).Click());
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この対象を再取得"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "この情報を再取得"));
+        StringAssert.Contains(cut.Markup, "収集状態");
         StringAssert.Contains(cut.Markup, "保存済みの取得先候補はありません");
         StringAssert.Contains(cut.Markup, "実行履歴はまだありません");
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .First(x => x.Markup.Contains("再取得を依頼</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("この情報を再取得</")).Instance.OnClick.InvokeAsync());
         Assert.AreEqual(1, handler.ManualRequests);
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("まとめて再取得</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("複数をまとめて再取得</")).Instance.OnClick.InvokeAsync());
         var ids = cut.FindComponents<FluentTextField>()
-            .Single(x => x.Instance.Label?.ToString()?.StartsWith("対象ID") == true);
+            .Single(x => x.Instance.Label?.ToString() == "対象ID（カンマ区切り）");
         await cut.InvokeAsync(() => ids.Instance.ValueChanged.InvokeAsync("H001"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(x => x.Markup.Contains("対象を確認</")).Instance.OnClick.InvokeAsync());
@@ -94,18 +95,51 @@ public sealed class CollectionAdministrationComponentTests
         await using var context = CreateContext(app.Services, http);
 
         var cut = context.Render<Jobs>();
+        await ClickButtonAsync(cut, "待機中");
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
         var search = cut.FindComponents<FluentTextField>()
             .Single(x => x.Instance.Placeholder?.ToString()?.Contains("対象ID") == true);
         await cut.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("騎手"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains(">検索</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("絞り込む</")).Instance.OnClick.InvokeAsync());
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "検索条件に一致する収集対象はありません"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "表示する収集処理はありません"));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("検索条件をクリア</")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("条件をクリア</")).Instance.OnClick.InvokeAsync());
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
     }
+
+    [TestMethod]
+    public async Task QuickAction_CreatesHorseCollectionRequest()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "情報を収集する"));
+        await ClickFluentButtonAsync(cut, "競走馬");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "競走馬情報の収集"));
+        var target = cut.FindComponents<FluentTextField>().Single(x => x.Instance.Label?.ToString() == "対象ID");
+        await cut.InvokeAsync(() => target.Instance.ValueChanged.InvokeAsync("H002"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Last(x => x.Markup.Contains("収集を依頼</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.ManualRequests));
+        Assert.IsNotNull(handler.LastManualRequest);
+        Assert.AreEqual(ResourceType.Horse, handler.LastManualRequest.ResourceType);
+        Assert.AreEqual("H002", handler.LastManualRequest.ResourceId);
+        Assert.AreEqual("horse-profile", handler.LastManualRequest.DefinitionId);
+    }
+
+    private static Task ClickFluentButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
+        cut.FindComponents<FluentButton>().First(x => x.Markup.Contains($">{text}</")).Instance.OnClick.InvokeAsync());
+
+    private static Task ClickButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
+        cut.FindAll("button").First(x => x.TextContent.Trim() == text).Click());
 
     private sealed class ResourceHandler : HttpMessageHandler
     {
@@ -113,18 +147,20 @@ public sealed class CollectionAdministrationComponentTests
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        public CreateCollectionRequest? LastManualRequest { get; private set; }
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests/bulk/preview"))
             {
                 Previews++;
-                return Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
+                return await Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests"))
             {
                 ManualRequests++;
-                return Ok(new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true));
+                LastManualRequest = await request.Content!.ReadFromJsonAsync<CreateCollectionRequest>(cancellationToken);
+                return await Ok(new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true));
             }
             object value = request.RequestUri!.AbsolutePath switch
             {
@@ -144,7 +180,7 @@ public sealed class CollectionAdministrationComponentTests
                         CollectionStateStatus.Pending), [], [], [], []),
                 _ => Array.Empty<object>(),
             };
-            return Ok(value);
+            return await Ok(value);
         }
 
         private static Task<HttpResponseMessage> Ok(object value) => Task.FromResult(

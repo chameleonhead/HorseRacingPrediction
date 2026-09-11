@@ -1,0 +1,49 @@
+.day-item,
+.object-list-item {
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.day-item {
+    background: var(--neutral-layer-1);
+}
+
+.object-list-item {
+    background: transparent;
+    width: 100%;
+}
+
+.day-item:focus-visible,
+.object-list-item:focus-visible {
+    outline: 2px solid var(--accent-fill-rest);
+    outline-offset: -2px;
+}
+
+.detail-facts {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    margin-block: 12px 20px;
+}
+
+.detail-facts > div {
+    display: grid;
+    gap: 4px;
+}
+
+.list-pagination {
+    align-items: center;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+@media (max-width: 720px) {
+    .detail-facts {
+        grid-template-columns: 1fr 1fr;
+    }
+}
