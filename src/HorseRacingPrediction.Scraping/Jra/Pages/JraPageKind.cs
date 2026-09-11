@@ -18,5 +18,6 @@ public enum JraPageKind
 
     HistoricalRaceSearch,
     HorseProfile,
-    TrainerProfile
+    TrainerProfile,
+    JockeyProfile
 }

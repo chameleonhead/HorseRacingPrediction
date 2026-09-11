@@ -44,6 +44,6 @@ public sealed partial class JraRaceCardCollectionWorkflow
             StartTime: card.StartTime, CourseLayout: card.CourseSpec?.RawLayout,
             Entries: entries, TargetRaceId: targetRaceId, RefreshExistingData: true, IsRaceCard: true), cancellationToken);
         return new(raceId.Number, targetRaceId, card.RaceName, card.Url,
-            saved.Errors.Count == 0 ? null : string.Join("; ", saved.Errors));
+            saved.Errors.Count == 0 ? null : string.Join("; ", saved.Errors), card.Entries);
     }
 }

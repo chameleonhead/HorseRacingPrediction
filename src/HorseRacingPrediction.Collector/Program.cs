@@ -24,6 +24,11 @@ builder.Services.AddJraScraping();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();
+foreach (var descriptor in JraSubjectCollectionDefinitions.All)
+    builder.Services.AddSingleton<ICollectionDefinitionHandler>(services =>
+        new JraSubjectProfileCollectionHandler(descriptor,
+            services.GetRequiredService<IJraSessionFactory>(),
+            services.GetRequiredService<IJraSubjectProfileSink>()));
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>
@@ -42,6 +47,15 @@ builder.Services.AddHttpClient<CollectionRequestApiClient>((services, client) =>
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<ICollectionRequestSink>(services =>
     services.GetRequiredService<CollectionRequestApiClient>());
+builder.Services.AddHttpClient<JraSubjectProfileApiClient>((services, client) =>
+    {
+        var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl);
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    })
+    .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
+builder.Services.AddSingleton<IJraSubjectProfileSink>(services =>
+    services.GetRequiredService<JraSubjectProfileApiClient>());
 builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;

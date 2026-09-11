@@ -7,6 +7,7 @@ using EventFlow.EntityFramework;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Trainers;
+using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Collector.Scheduling;
@@ -14,11 +15,13 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Domain;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Trainers;
+using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using HorseReadModel = HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel;
 using TrainerReadModel = HorseRacingPrediction.Application.Queries.ReadModels.TrainerReadModel;
+using JockeyReadModel = HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -90,7 +93,12 @@ public static class SubjectCollectionEndpointExtensions
                     damsireName: string.IsNullOrWhiteSpace(damsire) ? null : damsire,
                     coatColor: Field(request.Fields, "毛色")), token);
             }
-            else await commands.PublishAsync(new CollectTrainerProfileCommand(new TrainerId(subjectId), data), token);
+            else if (kind == "Trainer")
+                await commands.PublishAsync(new CollectTrainerProfileCommand(new TrainerId(subjectId), data), token);
+            else
+                await commands.PublishAsync(new UpdateJockeyProfileCommand(new JockeyId(subjectId),
+                    displayName: request.Name, normalizedName: Normalize(request.Name),
+                    affiliationCode: request.Fields.GetValueOrDefault("所属")), token);
             return Results.Ok();
         });
         endpoints.MapPost("/api/admin/collection/horse-history/race", async (PrepareHorseHistoryRaceRequest request,
@@ -129,6 +137,14 @@ public static class SubjectCollectionEndpointExtensions
             var trainer = await queries.ProcessAsync(new ReadModelByIdQuery<TrainerReadModel>(id), token);
             DateOnly? birth = DateOnly.TryParseExact(profile?.Fields.GetValueOrDefault("生年月日"), "yyyy年M月d日", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
             return trainer is null || string.IsNullOrEmpty(trainer.TrainerId) ? null : new(id, kind, trainer.DisplayName, birth, sourceIdentity);
+        }
+        if (kind == "Jockey")
+        {
+            var jockey = await queries.ProcessAsync(new ReadModelByIdQuery<JockeyReadModel>(id), token);
+            DateOnly? birth = DateOnly.TryParseExact(profile?.Fields.GetValueOrDefault("生年月日"),
+                "yyyy年M月d日", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+            return jockey is null || string.IsNullOrEmpty(jockey.JockeyId)
+                ? null : new(id, kind, jockey.DisplayName, birth, sourceIdentity);
         }
         return null;
     }

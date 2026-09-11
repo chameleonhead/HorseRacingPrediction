@@ -15,7 +15,7 @@ public static class SubjectProfilePageParser
     public static JraSubjectPage Parse(SemanticPageSnapshot source, string subjectType)
     {
         var snapshot = JraSnapshotView.Create(source);
-        var prefix = subjectType == "Horse" ? "競走馬情報" : "調教師情報";
+        var prefix = subjectType switch { "Horse" => "競走馬情報", "Jockey" => "騎手情報", _ => "調教師情報" };
         var heading = snapshot.Headings.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.Ordinal));
         if (heading is null) throw new JraCollectionException(prefix + "の見出しを確認できません。");
         var name = Regex.Split(heading[prefix.Length..].Trim(), subjectType == "Horse" ? "[A-Za-z（(]" : "[（(]")[0].Trim();
@@ -30,7 +30,7 @@ public static class SubjectProfilePageParser
         if (!fields.TryGetValue("生年月日", out var birthText) || !TryDate(birthText, out var birth))
             throw new JraCollectionException("同定に必要な生年月日を取得できません。");
         // 馬は実在リンクの公開URLを識別子として保持。POSTのみの調教師ページは氏名・生年月日の複合キー。
-        var sourceIdentity = subjectType == "Horse" ? snapshot.Url : $"Trainer:{Normalize(name)}:{birth:yyyy-MM-dd}";
+        var sourceIdentity = subjectType == "Horse" ? snapshot.Url : $"{subjectType}:{Normalize(name)}:{birth:yyyy-MM-dd}";
         var races = new List<HorseHistoryRaceLink>();
         foreach (var table in snapshot.Tables.Where(t => t.Headers.Contains("年月日") && t.Headers.Contains("レース名")))
         {

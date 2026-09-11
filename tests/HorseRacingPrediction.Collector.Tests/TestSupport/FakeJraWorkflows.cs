@@ -32,7 +32,7 @@ internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollection
     {
         RefreshRequests.Add((page.RaceId, targetRaceId));
         return Task.FromResult(new RaceCardRaceOutcome(page.RaceId.Number, targetRaceId,
-            page.RaceName, page.Url, null));
+            page.RaceName, page.Url, null, page.Entries));
     }
     public List<(RaceId Race, string Target)> RefreshRequests { get; } = [];
     public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)

@@ -3,6 +3,8 @@ using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.PredictionScheduling;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -20,7 +22,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             ?? throw new InvalidOperationException("Discovery effective date is required.");
         await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
         var schedule = schedules(session);
-        for (var offset = -7; offset <= 7; offset++)
+        var firstOffset = task.Reason == CollectionReason.Backfill ? 0 : -7;
+        var lastOffset = task.Reason == CollectionReason.Backfill ? 0 : 7;
+        for (var offset = firstOffset; offset <= lastOffset; offset++)
         {
             var date = referenceDate.AddDays(offset);
             var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
@@ -43,6 +47,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         ["course"] = RaceCourseNames.GetJraName(course),
                         ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     };
+                    if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
                     if (offset >= 0)
                         await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
                             CollectionReason.Discovery, CollectionLane.Realtime, 80, ToUri(race.RaceCardUrl), date,
@@ -63,7 +68,8 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
 }
 
 public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
-    JraRaceCardCollectionWorkflowFactory workflows) : ICollectionDefinitionHandler
+    JraRaceCardCollectionWorkflowFactory workflows, IPredictionSchedule? predictionSchedule = null,
+    ICollectionRequestSink? requests = null) : ICollectionDefinitionHandler
 {
     public CollectionDefinitionId DefinitionId => new("race-card");
     public ResourceType ResourceType => ResourceType.RaceCard;
@@ -94,6 +100,10 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             }
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+        if (requests is not null && result.Entries is not null)
+            await RequestReferencedSubjectsAsync(result.Entries, requests, cancellationToken).ConfigureAwait(false);
+        if (predictionSchedule is not null)
+            await predictionSchedule.EnqueueAsync([domainRaceId], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
             FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}");
@@ -109,6 +119,30 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             || !int.TryParse(numberText, out var number))
             throw new InvalidOperationException("Race course and number attributes are required.");
         return new(task.EffectiveDate.Value, RaceCourseNames.Parse(course), number);
+    }
+
+    private static async Task RequestReferencedSubjectsAsync(IReadOnlyList<RaceEntry> entries,
+        ICollectionRequestSink sink, CancellationToken cancellationToken)
+    {
+        var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name)[]
+            {
+                (ResourceType.Horse, entry.HorseName),
+                (ResourceType.Jockey, entry.JockeyName),
+                (ResourceType.Trainer, entry.TrainerName),
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+            .Select(x => (x.Type, Name: x.Name!.Trim()))
+            .Distinct();
+        foreach (var subject in subjects)
+        {
+            var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
+            var id = DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix, subject.Name);
+            await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
+                CollectionReason.Discovery, CollectionLane.Normal, (int)CollectionPriority.Low, null,
+                DateOnly.FromDateTime(DateTime.UtcNow),
+                new Dictionary<string, string> { ["name"] = subject.Name }, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 }
 

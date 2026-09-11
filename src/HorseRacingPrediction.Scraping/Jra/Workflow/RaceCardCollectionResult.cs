@@ -38,4 +38,5 @@ public sealed record RaceCardRaceOutcome(
     string? RaceId,
     string? RaceName,
     string? SourceUrl,
-    string? Error);
+    string? Error,
+    IReadOnlyList<RaceEntry>? Entries = null);

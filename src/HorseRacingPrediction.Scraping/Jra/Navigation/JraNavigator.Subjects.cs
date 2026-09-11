@@ -11,12 +11,15 @@ public sealed partial class JraNavigator
     public async Task<JraSubjectPage> ToSubjectProfileAsync(JraSubjectIdentity subject, CancellationToken cancellationToken = default)
     {
         if (subject.SubjectType == "Horse") return await FindHorseAsync(subject, cancellationToken);
-        if (subject.SubjectType != "Trainer") throw new ArgumentException("対象の種別が不正です。");
+        if (subject.SubjectType is not ("Trainer" or "Jockey")) throw new ArgumentException("対象の種別が不正です。");
+        var isJockey = subject.SubjectType == "Jockey";
+        var label = isJockey ? "騎手" : "調教師";
         await ToKeibaTopAsync(cancellationToken);
         await _browser.ClickAsync("騎手・調教師", cancellationToken);
         var directoryLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
-        var profileLink = directoryLinks.FirstOrDefault(l => HasPath(l.Url, "/datafile/meikan/trainer.html"))
-            ?? throw new JraCollectionException("調教師プロフィールの公開リンクが見つかりません。");
+        var profileLink = directoryLinks.FirstOrDefault(l => HasPath(l.Url,
+            isJockey ? "/datafile/meikan/jockey.html" : "/datafile/meikan/trainer.html"))
+            ?? throw new JraCollectionException($"{label}プロフィールの公開リンクが見つかりません。");
         await _browser.ClickLinkAsync(profileLink, cancellationToken);
         foreach (var initial in new[] { "あ行", "か行", "さ行", "た行", "な行", "は行", "ま行", "や行", "ら行", "わ行" })
         {
@@ -26,22 +29,22 @@ public sealed partial class JraNavigator
             var links = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
             var matches = links.Where(l => SubjectProfilePageParser.Normalize(Regex.Replace(l.Title, "^(美浦|栗東)\\s*", ""))
                 == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
-            if (matches.Length > 1) throw new JraCollectionException("同定不能: 同名の調教師が複数見つかりました。");
+            if (matches.Length > 1) throw new JraCollectionException($"同定不能: 同名の{label}が複数見つかりました。");
             if (matches.Length == 0) continue;
             await _browser.ClickLinkAsync(matches[0], cancellationToken);
-            var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), "Trainer");
+            var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
             SubjectProfilePageParser.Validate(page, subject);
             return page;
         }
         // 引退者も公開一覧から探す。現役一覧にないことを取得成功として扱わない。
         await ToKeibaTopAsync(cancellationToken);
         await _browser.ClickAsync("騎手・調教師", cancellationToken);
-        await _browser.ClickAsync("引退調教師一覧", cancellationToken);
+        await _browser.ClickAsync(isJockey ? "引退騎手一覧" : "引退調教師一覧", cancellationToken);
         var retiredLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
         var retiredMatches = retiredLinks.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
-        if (retiredMatches.Length != 1) throw new JraCollectionException("同定不能: 公開名簿から調教師を一意に確認できませんでした。");
+        if (retiredMatches.Length != 1) throw new JraCollectionException($"同定不能: 公開名簿から{label}を一意に確認できませんでした。");
         await _browser.ClickLinkAsync(retiredMatches[0], cancellationToken);
-        var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), "Trainer");
+        var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
         SubjectProfilePageParser.Validate(result, subject);
         return result;
     }

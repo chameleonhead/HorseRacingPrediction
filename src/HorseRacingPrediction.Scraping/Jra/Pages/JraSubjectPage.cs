@@ -7,5 +7,10 @@ public sealed record JraSubjectPage(JraSubjectProfileDto Profile, IReadOnlyList<
     PageLinkSnapshot? NextPage) : IJraPage
 {
     public string Url => Profile.SourceUrl;
-    public JraPageKind Kind => Profile.SubjectType == "Horse" ? JraPageKind.HorseProfile : JraPageKind.TrainerProfile;
+    public JraPageKind Kind => Profile.SubjectType switch
+    {
+        "Horse" => JraPageKind.HorseProfile,
+        "Jockey" => JraPageKind.JockeyProfile,
+        _ => JraPageKind.TrainerProfile,
+    };
 }

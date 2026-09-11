@@ -114,9 +114,9 @@ public sealed partial class JraRaceCardCollectionWorkflow
 
             try
             {
-                var (raceId, raceName, sourceUrl) = await CollectAndSaveRaceAsync(race, date, racecourseName, cancellationToken);
+                var (raceId, raceName, sourceUrl, cardEntries) = await CollectAndSaveRaceAsync(race, date, racecourseName, cancellationToken);
                 raceIds.Add(raceId);
-                outcomes.Add(new RaceCardRaceOutcome(race.Number, raceId, raceName, sourceUrl, null));
+                outcomes.Add(new RaceCardRaceOutcome(race.Number, raceId, raceName, sourceUrl, null, cardEntries));
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))
             {
@@ -129,7 +129,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
         return new RaceCardCollectionResult(date, course, raceIds, errors, outcomes, allRacesClosed);
     }
 
-    private async Task<(string RaceId, string RaceName, string SourceUrl)> CollectAndSaveRaceAsync(
+    private async Task<(string RaceId, string RaceName, string SourceUrl, IReadOnlyList<RaceEntry> Entries)> CollectAndSaveRaceAsync(
         RaceSummary race,
         DateOnly date,
         string racecourseName,
@@ -217,7 +217,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 cancellationToken: cancellationToken);
         }
 
-        return (raceId, raceName, card.Url);
+        return (raceId, raceName, card.Url, card.Entries);
     }
 
     private static string ToSurfaceCode(CourseSurface surface) =>
