@@ -1,4 +1,3 @@
-.day-item,
 .object-list-item {
     border: 0;
     color: inherit;
@@ -7,19 +6,82 @@
     text-align: left;
 }
 
-.day-item {
-    background: var(--neutral-layer-1);
-}
-
 .object-list-item {
     background: transparent;
     width: 100%;
 }
 
-.day-item:focus-visible,
 .object-list-item:focus-visible {
     outline: 2px solid var(--accent-fill-rest);
     outline-offset: -2px;
+}
+
+.collection-status-heading {
+    align-items: baseline;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.collection-status-tabs {
+    margin-bottom: 16px;
+}
+
+.tab-count {
+    background: var(--neutral-fill-secondary-rest);
+    border-radius: 999px;
+    display: inline-block;
+    font-size: var(--type-ramp-minus-1-font-size);
+    margin-left: 4px;
+    min-width: 20px;
+    padding: 1px 6px;
+    text-align: center;
+}
+
+.collection-kind-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+}
+
+.collection-kind {
+    background: var(--neutral-layer-1);
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 6px;
+    color: inherit;
+    cursor: pointer;
+    display: grid;
+    font: inherit;
+    gap: 4px;
+    min-height: 76px;
+    padding: 12px 14px;
+    text-align: left;
+}
+
+.collection-kind:hover,
+.collection-kind:focus-visible {
+    background: var(--neutral-layer-2);
+    border-color: var(--accent-fill-rest);
+}
+
+.collection-kind:focus-visible {
+    outline: 2px solid var(--focus-stroke-outer);
+    outline-offset: 2px;
+}
+
+.collection-kind span {
+    color: var(--neutral-foreground-hint);
+    font-size: var(--type-ramp-minus-1-font-size);
+}
+
+.collection-kind-secondary {
+    grid-column: 1 / -1;
+}
+
+.collection-request-form {
+    display: grid;
+    gap: 14px;
 }
 
 .detail-facts {
@@ -45,5 +107,13 @@
 @media (max-width: 720px) {
     .detail-facts {
         grid-template-columns: 1fr 1fr;
+    }
+
+    .collection-kind-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .collection-kind-secondary {
+        grid-column: auto;
     }
 }

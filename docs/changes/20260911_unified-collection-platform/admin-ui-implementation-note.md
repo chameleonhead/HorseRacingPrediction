@@ -11,18 +11,27 @@ The primary action is **Request collection**. Bulk recollection is a preview-fir
 ```text
 Collection administration
 ├─ Pipeline status + Pause/Resume
-├─ Status summary: Action needed | Running | Waiting | Collected
-├─ Quick collection: Race card | Result | Odds | Horse | Jockey | Trainer | Bulk
-├─ Status views: Action needed | Running | Waiting | Recent | Resources | All
+├─ Status tabs with counts: Action needed | Running | Waiting | Recent | Resources | All
+├─ Request collection dialog
+│  ├─ Select type: Race card | Result | Odds | Horse | Jockey | Trainer
+│  ├─ Type-specific target form
+│  └─ Bulk recollection entry
 ├─ Search + paged object list
-└─ Resource detail dialog
+└─ Link to independent Resource + CollectionDefinition detail page
+   ├─ Object header + status facts
+   ├─ Overview
+   ├─ Attempts
+   ├─ Locations
+   └─ Management / recollection
    ├─ State and revisions
    ├─ Locations and verification state
    ├─ Recent requests/tasks/attempts
    └─ Request collection
 ```
 
-The visual composition reuses the earlier administration mock's strong hierarchy: compact summary cards, clear status views, and a dense object list. Each list row is a keyboard-operable detail action. `FluentDataGrid` is reserved for structured attempt and location history inside the detail dialog, where column comparison is valuable.
+The visual composition reuses the earlier administration mock's strong hierarchy while keeping the list page compact. Collection status is a single horizontally scrollable tab row with per-view counts. Collection types do not occupy permanent page space: the primary `収集を依頼` action opens a dialog, first asks for the information type, and then reveals the corresponding target form.
+
+Each list row is a keyboard-operable link to an independent detail page, following the same object-header and detail-tab pattern as Race detail. `FluentDataGrid` is reserved for structured attempt and location history, where column comparison is valuable.
 
 The main list requests at most 1,000 recent tasks and paginates them by 50 in the client. The Resources view projects the latest task for each Resource + CollectionDefinition pair; the other views preserve individual task history.
 
@@ -34,7 +43,7 @@ The main list requests at most 1,000 recent tasks and paginates them by 50 in th
 - Request and pause/resume buttons are disabled while their request is in flight.
 - Bulk collection shows selector validation and affected-count preview before execute; execute never silently broadens the previewed target set.
 - Narrow layouts stack filters and preserve Resource identity, status, and the primary action.
-- The detail dialog exposes state/revision, HTTP result, error code/message, attempt history, candidate locations, and an optional explicit URL for recovery.
+- The detail page exposes state/revision, HTTP result, error code/message, attempt history, candidate locations, and an optional explicit URL for recovery. Its stable URL can be bookmarked and shared within the local administration environment.
 - Quick collection actions submit ordinary `ManualRefresh` requests to the same collection platform. Race card/result/odds use the Realtime lane; Horse/Jockey/Trainer use the Normal lane.
 
 ## Verification
