@@ -39,9 +39,11 @@ public partial class RaceAggregate
         }
 
         if (data.WinningHorseName is not null && (_state.WinningHorseName != data.WinningHorseName
-            || _state.WinningHorseId != data.WinningHorseId || _state.Status < RaceStatus.ResultDeclared))
+            || _state.WinningHorseId != data.WinningHorseId
+            || (data.StewardReportText is not null && data.StewardReportText != _state.StewardReportText)
+            || _state.Status < RaceStatus.ResultDeclared))
             Emit(new RaceResultDeclared(data.WinningHorseName, _state.ResultDeclaredAt ?? DateTimeOffset.UtcNow,
-                data.WinningHorseId, _state.StewardReportText));
+                data.WinningHorseId, data.StewardReportText ?? _state.StewardReportText));
 
         if (data.Results is not null)
         {
@@ -57,6 +59,7 @@ public partial class RaceAggregate
                     MarginText = incoming.MarginText ?? old?.MarginText,
                     LastThreeFurlongTime = incoming.LastThreeFurlongTime ?? old?.LastThreeFurlongTime,
                     PrizeMoney = incoming.PrizeMoney ?? old?.PrizeMoney,
+                    AdditionalPrizeMoney = incoming.AdditionalPrizeMoney ?? old?.AdditionalPrizeMoney,
                     CornerPositions = incoming.CornerPositions ?? old?.CornerPositions,
                     Popularity = incoming.Popularity ?? old?.Popularity,
                     OriginalFinishPosition = incoming.OriginalFinishPosition ?? old?.OriginalFinishPosition,
@@ -66,7 +69,8 @@ public partial class RaceAggregate
                 // 履歴への再投影も必要なため、再取得した結果は自己完結した識別情報を含める。
                 Emit(new EntryResultDeclared(result.EntryId, result.FinishPosition, result.OfficialTime,
                     result.MarginText, result.LastThreeFurlongTime, result.AbnormalResultCode, result.PrizeMoney,
-                    result.CornerPositions, result.Popularity, result.OriginalFinishPosition, result.IsDeadHeat, result.Average1F, entry.HorseId, entry.JockeyId));
+                    result.CornerPositions, result.Popularity, result.OriginalFinishPosition, result.IsDeadHeat, result.Average1F, entry.HorseId, entry.JockeyId,
+                    result.AdditionalPrizeMoney));
             }
         }
 

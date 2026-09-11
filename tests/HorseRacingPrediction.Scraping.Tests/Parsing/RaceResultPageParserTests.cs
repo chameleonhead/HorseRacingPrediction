@@ -450,6 +450,28 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_LiveResultMetadata_CapturesGradePrizesAndStewardReport()
+    {
+        var original = BuildSnapshot();
+        var section = new TestPageSection("レース結果",
+            "第71回京成杯オータムハンデキャップ GⅢ 本賞金（万円） 1着4,100 2着1,600 3着1,000 4着620 5着410 " +
+            "付加賞（万円） 1着56.7 2着16.2 3着8.1 競走中の出来事等 " +
+            "ダイチマイスター号は、枠内駐立不良。 ノアヴェルテ号の騎手は過怠金10,000円。 開催選択へ戻る",
+            [], [], original.Tables,
+            ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "第71回京成杯オータムハンデキャップ"]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(
+            new TestPageSnapshot(Url, "レース結果 JRA", [section]));
+
+        Assert.AreEqual("G3", page.GradeCode);
+        Assert.AreEqual(41_000_000m, page.PrizeMoneyByPosition![1]);
+        Assert.AreEqual(567_000m, page.AdditionalPrizeMoneyByPosition![1]);
+        Assert.AreEqual(162_000m, page.AdditionalPrizeMoneyByPosition[2]);
+        StringAssert.Contains(page.StewardReportText, "枠内駐立不良");
+        StringAssert.Contains(page.StewardReportText, "過怠金10,000円");
+    }
+
+    [TestMethod]
     public void Parse_コース表記_芝直を直線方向として分解できる()
     {
         var page = ParseWithMainText("天候 晴 芝 良 1,000メートル（芝・直）");

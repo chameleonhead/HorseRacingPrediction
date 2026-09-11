@@ -29,7 +29,7 @@ public sealed record DeclareRaceResultBulkRequest(
     DeclarePayoutResultRequest? Payouts = null,
     string? TargetRaceId = null, bool RefreshExistingData = false, bool IsRaceCard = false,
     TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null,
-    string? SourceHorseId = null);
+    string? SourceHorseId = null, string? StewardReportText = null);
 
 /// <summary>
 /// 出走馬1頭分の成績情報。
@@ -61,4 +61,4 @@ public sealed record RaceResultEntryBulkDto(
     int? OriginalFinishPosition = null,
     bool IsDeadHeat = false, string? OwnerName = null, string? CornerPositions = null, decimal? Average1F = null,
     string? BreederName = null, string? SireName = null, string? DamName = null,
-    string? DamsireName = null, string? CoatColor = null);
+    string? DamsireName = null, string? CoatColor = null, decimal? AdditionalPrizeMoney = null);

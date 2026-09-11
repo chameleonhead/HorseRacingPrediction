@@ -3,7 +3,7 @@
 - Status: Implemented (production cutover pending)
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-11
-- Updated: 2026-09-11
+- Updated: 2026-09-12
 
 ## Context
 
@@ -21,6 +21,7 @@
 - Realtime / Normal / Background lane と動的 priority を同じ基盤で処理し、双方の starvation を防ぐ。
 - 過去全件、開催週・当日、主体情報の定期更新、RaceOdds の反復観測を同じ scheduling 規則で扱う。
 - Resource、Definition/Revision、lane、priority、batch、retry、revision impact ごとの進捗 Projection を提供する。
+- RaceResultからグレード、本賞金、付加賞、競走中の出来事等を欠落なく抽出し、通常のdomain write経路で永続化する。
 
 ## Non-goals
 
@@ -151,6 +152,8 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 - HTTP 200 でも別 Resource なら domain data/state を成功更新しない。
 - redirect は identity 検証後だけ active location になる。
 - explicit URL は通常 request に変換され、同定不能は匿名 task にならない。
+- JRA RaceResult本文・画像代替テキストからグレードを取得し、本賞金と付加賞を着順別・円単位で分離して保存する。
+- 「競走中の出来事等」が存在する場合は全文をレース概況として保存し、再取得時にも更新できる。
 
 ### Scheduling, restart, discovery, operations
 
@@ -196,6 +199,10 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 13. Removal: 旧 store/entities/job types/runner/scheduler/endpoints/UI/config/tests を repository から削除し、CodeGraph、build/test、AWS/DB inventory で残存ゼロを確認する。
 
 ## Verification record
+
+- 2026-09-12: 指定JRA 11Rページで `GⅢ`、本賞金4,100/1,600/1,000/620/410万円、付加賞56.7/16.2/8.1万円を確認し、指定6Rページで競走中の出来事2件を確認した。
+- 2026-09-12: Parserテストで `GⅢ -> G3`、本賞金4,100万円 -> 41,000,000円、付加賞56.7万円 -> 567,000円、出来事本文の抽出を検証した。
+- 2026-09-12: Workflowテストで GradeCode、本賞金、付加賞、StewardReportText が一括domain writeリクエストへ接続されることを検証した。
 
 - The new outbox publishes the minimal `taskId` / `dispatchGeneration` notification to SQS.
 - The Lambda `--once` entry accepts only that new notification, acquires the task from the API, invokes the registered definition handler, and reports the attempt result to the API.

@@ -9,7 +9,7 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
         int? finishPosition = null, string? officialTime = null,
         string? marginText = null, string? lastThreeFurlongTime = null,
         string? abnormalResultCode = null, decimal? prizeMoney = null,
-        string? cornerPositions = null)
+        string? cornerPositions = null, decimal? additionalPrizeMoney = null)
         : base(aggregateId)
     {
         EntryId = entryId;
@@ -20,6 +20,7 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
         AbnormalResultCode = abnormalResultCode;
         PrizeMoney = prizeMoney;
         CornerPositions = cornerPositions;
+        AdditionalPrizeMoney = additionalPrizeMoney;
     }
 
     public string EntryId { get; }
@@ -30,4 +31,5 @@ public sealed class DeclareEntryResultCommand : Command<RaceAggregate, RaceId>
     public string? AbnormalResultCode { get; }
     public decimal? PrizeMoney { get; }
     public string? CornerPositions { get; }
+    public decimal? AdditionalPrizeMoney { get; }
 }

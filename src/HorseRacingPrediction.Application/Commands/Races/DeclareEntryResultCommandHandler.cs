@@ -9,7 +9,7 @@ public sealed class DeclareEntryResultCommandHandler : CommandHandler<RaceAggreg
     {
         aggregate.DeclareEntryResult(command.EntryId, command.FinishPosition, command.OfficialTime,
             command.MarginText, command.LastThreeFurlongTime, command.AbnormalResultCode, command.PrizeMoney,
-            command.CornerPositions);
+            command.CornerPositions, command.AdditionalPrizeMoney);
         return Task.CompletedTask;
     }
 }

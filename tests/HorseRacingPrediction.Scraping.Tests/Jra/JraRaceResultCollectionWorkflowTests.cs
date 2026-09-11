@@ -47,6 +47,10 @@ public sealed class JraRaceResultCollectionWorkflowTests
         {
             CourseSpec = new RaceCourseSpec(
                 1000, RaceType.Flat, [CourseSurface.Turf], CourseDirection.Straight, null, "芝・直"),
+            GradeCode = "G3",
+            PrizeMoneyByPosition = new Dictionary<int, decimal> { [1] = 41_000_000m },
+            AdditionalPrizeMoneyByPosition = new Dictionary<int, decimal> { [1] = 567_000m },
+            StewardReportText = "枠内駐立不良。",
         };
 
         var (session, navigator, writeService) = CreateContext(
@@ -67,6 +71,10 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.AreEqual(expectedRaceId, writeService.DeclareRaceResultCalls[0].RaceId);
         Assert.AreEqual("テストホースA", writeService.DeclareRaceResultCalls[0].WinningHorseName);
         Assert.AreEqual("直", writeService.DeclareRaceResultBulkCalls.Single().DirectionCode);
+        Assert.AreEqual("G3", writeService.DeclareRaceResultBulkCalls.Single().GradeCode);
+        Assert.AreEqual(41_000_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].PrizeMoney);
+        Assert.AreEqual(567_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].AdditionalPrizeMoney);
+        Assert.AreEqual("枠内駐立不良。", writeService.DeclareRaceResultBulkCalls.Single().StewardReportText);
 
         Assert.HasCount(3, writeService.DeclareRaceEntryResultCalls);
 

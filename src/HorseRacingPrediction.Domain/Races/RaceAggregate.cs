@@ -162,7 +162,7 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         int? finishPosition = null, string? officialTime = null,
         string? marginText = null, string? lastThreeFurlongTime = null,
         string? abnormalResultCode = null, decimal? prizeMoney = null,
-        string? cornerPositions = null)
+        string? cornerPositions = null, decimal? additionalPrizeMoney = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -171,7 +171,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             throw new InvalidOperationException("Entry result can only be declared after race result.");
 
         Emit(new EntryResultDeclared(entryId, finishPosition, officialTime,
-            marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney, cornerPositions));
+            marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney, cornerPositions,
+            additionalPrizeMoney: additionalPrizeMoney));
     }
 
     public void DeclarePayoutResult(DateTimeOffset declaredAt,

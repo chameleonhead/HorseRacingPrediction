@@ -7,4 +7,5 @@ public sealed record CollectedRaceData(
     string? WinningHorseName = null, string? WinningHorseId = null,
     PayoutResultDetails? Payouts = null, WeatherObservationDetails? Weather = null,
     TrackConditionObservationDetails? TrackCondition = null,
-    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null);
+    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null,
+    string? StewardReportText = null);

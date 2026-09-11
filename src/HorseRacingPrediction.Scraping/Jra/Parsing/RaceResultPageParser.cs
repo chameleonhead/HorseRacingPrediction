@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -170,7 +171,9 @@ public sealed class RaceResultPageParser
             ParseOverallPaceText(snapshot);
 
         var prizeMoneyByPosition =
-            ParsePrizeMoney(snapshot);
+            ParsePrizeMoney(snapshot, "本賞金", "PrizeMoneyByPosition");
+        var additionalPrizeMoneyByPosition =
+            ParsePrizeMoney(snapshot, "付加賞", "AdditionalPrizeMoneyByPosition");
 
         return new JraRaceResultPage(
             snapshot.Url,
@@ -189,7 +192,9 @@ public sealed class RaceResultPageParser
             ParseMeetingNumber(snapshot),
             ParseMeetingDay(snapshot),
             ParseRaceConditions(snapshot),
-            ParseSectionalTimes(snapshot));
+            ParseSectionalTimes(snapshot),
+            additionalPrizeMoneyByPosition,
+            ParseStewardReport(snapshot));
     }
 
     private static readonly Regex MeetingRegex = new(
@@ -482,18 +487,15 @@ public sealed class RaceResultPageParser
     // 着順ラベルと万円単位の金額が繰り返し現れる。円単位に変換して保持する
     // （既存のPayoutLine.Amountとの単位整合を優先）。「本賞金」欄自体が存在
     // しない場合は正常（null）。存在するのに1件も解析できない場合はエラー。
-    private static readonly Regex PrizeMoneySectionRegex =
-        new(@"本賞金[^\d]*", RegexOptions.Compiled);
-
     private static readonly Regex PrizeMoneyEntryRegex =
-        new(@"(?<position>\d{1,2})着\s*(?<amount>[\d,]+)", RegexOptions.Compiled);
+        new(@"(?<position>\d{1,2})着\s*(?<amount>[\d,.]+)", RegexOptions.Compiled);
 
     private static IReadOnlyDictionary<int, decimal>? ParsePrizeMoney(
-        JraSnapshotView snapshot)
+        JraSnapshotView snapshot, string sectionName, string fieldName)
     {
         var searchText = $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
 
-        var sectionMatch = PrizeMoneySectionRegex.Match(searchText);
+        var sectionMatch = Regex.Match(searchText, Regex.Escape(sectionName) + @"[^\d]*");
 
         if (!sectionMatch.Success)
         {
@@ -502,6 +504,10 @@ public sealed class RaceResultPageParser
         }
 
         var tail = searchText[(sectionMatch.Index + sectionMatch.Length)..];
+        var boundary = Regex.Match(tail, sectionName == "本賞金"
+            ? @"付加賞|レース映像|着順"
+            : @"レース映像|着順|タイム|払戻金|競走中の出来事");
+        if (boundary.Success) tail = tail[..boundary.Index];
 
         // 「本賞金」ラベル自体は見つかったが、その直後にラベル+金額の並びが
         // 1件も解析できない場合はParser異常（依頼書27節）。
@@ -514,7 +520,7 @@ public sealed class RaceResultPageParser
             throw new JraValueParseException(
                 JraPageKind.RaceResult,
                 snapshot.Url,
-                "PrizeMoneyByPosition",
+                fieldName,
                 truncated);
         }
 
@@ -530,7 +536,7 @@ public sealed class RaceResultPageParser
                 throw new JraValueParseException(
                     JraPageKind.RaceResult,
                     snapshot.Url,
-                    "PrizeMoneyByPosition",
+                    fieldName,
                     entry.Value);
             }
 
@@ -539,6 +545,17 @@ public sealed class RaceResultPageParser
         }
 
         return result;
+    }
+
+    private static string? ParseStewardReport(JraSnapshotView snapshot)
+    {
+        var text = snapshot.MainText.Normalize(NormalizationForm.FormKC);
+        var match = Regex.Match(text,
+            @"競走中の出来事等\s*(?<report>.*?)(?:開催選択へ戻る|レース選択へ戻る|ページトップへ戻る|$)",
+            RegexOptions.Singleline);
+        if (!match.Success) return null;
+        var report = Regex.Replace(match.Groups["report"].Value, @"\s+", " ").Trim(' ', '・');
+        return string.IsNullOrWhiteSpace(report) ? null : report;
     }
 
     // Phase8: レース全体の「タイム」欄（上り集計）。フォーマット解析難易度が

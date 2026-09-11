@@ -175,7 +175,12 @@ public sealed class JraRaceResultCollectionWorkflow
                 OriginalFinishPosition: entry.OriginalFinishPosition,
                 IsDeadHeat: entry.IsDeadHeat,
                 CornerPositions: entry.CornerOrders is null ? null : string.Join(" ", entry.CornerOrders),
-                Average1F: entry.Average1F))
+                Average1F: entry.Average1F,
+                AdditionalPrizeMoney: entry.FinishPosition is { } additionalFinishPosition &&
+                    resultPage.AdditionalPrizeMoneyByPosition is { } additionalPrizes &&
+                    additionalPrizes.TryGetValue(additionalFinishPosition, out var additionalPrize)
+                        ? additionalPrize
+                        : null))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
@@ -228,7 +233,8 @@ public sealed class JraRaceResultCollectionWorkflow
             Payouts: payouts, TargetRaceId: targetRaceId, RefreshExistingData: targetRaceId is not null,
             OverallPaceText: resultPage.OverallPaceText,
             CornerPassagesText: resultPage.CornerPassages is null ? null : string.Join("\n", resultPage.CornerPassages.Select(x => $"{x.CornerNumber}: {x.OrderRaw}")),
-            CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId, StartTime: resultPage.StartTime);
+            CourseLayout: resultPage.CourseSpec?.RawLayout, SourceHorseId: sourceHorseId, StartTime: resultPage.StartTime,
+            StewardReportText: resultPage.StewardReportText);
 
         DeclareRaceResultBulkResponse outcome;
         try

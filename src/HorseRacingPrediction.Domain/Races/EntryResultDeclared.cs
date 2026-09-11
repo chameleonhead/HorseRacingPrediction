@@ -9,7 +9,8 @@ public sealed class EntryResultDeclared : AggregateEvent<RaceAggregate, RaceId>
         string? marginText = null, string? lastThreeFurlongTime = null,
         string? abnormalResultCode = null, decimal? prizeMoney = null,
         string? cornerPositions = null,
-        int? popularity = null, int? originalFinishPosition = null, bool isDeadHeat = false, decimal? average1F = null, string? horseId = null, string? jockeyId = null)
+        int? popularity = null, int? originalFinishPosition = null, bool isDeadHeat = false, decimal? average1F = null, string? horseId = null, string? jockeyId = null,
+        decimal? additionalPrizeMoney = null)
     {
         Popularity = popularity; OriginalFinishPosition = originalFinishPosition; IsDeadHeat = isDeadHeat; Average1F = average1F;
         HorseId = horseId; JockeyId = jockeyId;
@@ -20,6 +21,7 @@ public sealed class EntryResultDeclared : AggregateEvent<RaceAggregate, RaceId>
         LastThreeFurlongTime = lastThreeFurlongTime;
         AbnormalResultCode = abnormalResultCode;
         PrizeMoney = prizeMoney;
+        AdditionalPrizeMoney = additionalPrizeMoney;
         CornerPositions = cornerPositions;
     }
 
@@ -36,5 +38,6 @@ public sealed class EntryResultDeclared : AggregateEvent<RaceAggregate, RaceId>
     public string? LastThreeFurlongTime { get; }
     public string? AbnormalResultCode { get; }
     public decimal? PrizeMoney { get; }
+    public decimal? AdditionalPrizeMoney { get; }
     public string? CornerPositions { get; }
 }

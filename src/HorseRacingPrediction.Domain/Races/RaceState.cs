@@ -136,7 +136,8 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
         _entryResults.Add(new EntryResultDetails(
             e.EntryId, e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F,
+            e.AdditionalPrizeMoney));
     }
 
     public void Apply(PayoutResultDeclared e)

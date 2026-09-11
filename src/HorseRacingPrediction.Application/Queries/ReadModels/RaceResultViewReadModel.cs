@@ -112,7 +112,8 @@ public class RaceResultViewReadModel : IReadModel,
             entryInfo?.HorseNumber ?? 0,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
-            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F));
+            e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F,
+            e.AdditionalPrizeMoney));
         return Task.CompletedTask;
     }
 

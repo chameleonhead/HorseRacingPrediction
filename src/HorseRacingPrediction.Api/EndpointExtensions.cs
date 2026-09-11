@@ -857,7 +857,8 @@ public static partial class EndpointExtensions
                     try
                     {
                         var resultCommand = new DeclareRaceResultCommand(
-                            raceId, request.WinningHorseName, request.DeclaredAt ?? DateTimeOffset.UtcNow);
+                            raceId, request.WinningHorseName, request.DeclaredAt ?? DateTimeOffset.UtcNow,
+                            stewardReportText: request.StewardReportText);
                         await commandBus.PublishAsync(resultCommand, cancellationToken).ConfigureAwait(false);
                     }
                     catch (InvalidOperationException ex)
@@ -931,7 +932,8 @@ public static partial class EndpointExtensions
                         {
                             var entryCommand = new DeclareEntryResultCommand(
                                 raceId, entryId, entry.FinishPosition, entry.OfficialTime, entry.MarginText,
-                                entry.LastThreeFurlongTime, entry.AbnormalResultCode, entry.PrizeMoney);
+                                entry.LastThreeFurlongTime, entry.AbnormalResultCode, entry.PrizeMoney,
+                                additionalPrizeMoney: entry.AdditionalPrizeMoney);
                             await commandBus.PublishAsync(entryCommand, cancellationToken).ConfigureAwait(false);
                         }
                         catch (InvalidOperationException ex)
@@ -2610,7 +2612,8 @@ public static partial class EndpointExtensions
             entryResult.LastThreeFurlongTime,
             entryResult.AbnormalResultCode,
             entryResult.PrizeMoney,
-            entryResult.CornerPositions, entryResult.Popularity, entryResult.OriginalFinishPosition, entryResult.IsDeadHeat, entryResult.Average1F);
+            entryResult.CornerPositions, entryResult.Popularity, entryResult.OriginalFinishPosition, entryResult.IsDeadHeat, entryResult.Average1F,
+            entryResult.AdditionalPrizeMoney);
 
     private static string? ResolveHorseId(IReadOnlyDictionary<string, string> entryHorseIdsByEntryId, string entryId, string? horseId)
         => !string.IsNullOrWhiteSpace(horseId)

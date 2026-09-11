@@ -80,7 +80,8 @@ public static partial class EndpointExtensions
                 source.BodyWeightChange, null, source.OwnerName));
             results.Add(new(entryId, source.FinishPosition, source.OfficialTime, source.MarginText,
                 source.LastThreeFurlongTime, source.AbnormalResultCode, source.PrizeMoney, source.CornerPositions,
-                source.Popularity, source.OriginalFinishPosition, source.IsDeadHeat, source.Average1F));
+                source.Popularity, source.OriginalFinishPosition, source.IsDeadHeat, source.Average1F,
+                source.AdditionalPrizeMoney));
         }
         static IReadOnlyList<PayoutEntry> Payouts(IReadOnlyList<Shared.PayoutEntryDto>? values) =>
             values?.Select(x => new PayoutEntry(x.Combination, x.Amount)).ToArray() ?? [];
@@ -98,7 +99,8 @@ public static partial class EndpointExtensions
             w is null ? null : new(w.ObservationTime, w.WeatherCode, w.WeatherText, w.TemperatureCelsius,
                 w.HumidityPercent, w.WindDirectionCode, w.WindSpeedMeterPerSecond),
             t is null ? null : new(t.ObservationTime, t.TurfConditionCode, t.DirtConditionCode, t.GoingDescriptionText),
-            request.StartTime, request.OverallPaceText, request.CornerPassagesText, request.CourseLayout);
+            request.StartTime, request.OverallPaceText, request.CornerPassagesText, request.CourseLayout,
+            request.StewardReportText);
         var outcome = await commands.PublishAsync(new RefreshCollectedRaceCommand(new RaceId(id), data), token);
         return outcome.IsSuccess ? Results.Ok(new Shared.DeclareRaceResultBulkResponse(id, []))
             : Results.BadRequest(new[] { "再取得情報の保存に失敗しました。" });
