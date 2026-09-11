@@ -1,6 +1,7 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 
@@ -110,6 +111,25 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(new Uri("https://example.test/card"), result.RequestedUrl);
         Assert.HasCount(1, workflow.RefreshRequests);
+    }
+
+    [TestMethod]
+    public async Task RaceCard_CurrentDateNotPublished_IsRetryableAvailabilityState()
+    {
+        var date = DateOnly.FromDateTime(DateTime.Today);
+        var sessions = new FakeJraSessionFactory();
+        var workflow = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraCollectionException("出馬表を取得できませんでした。")
+        };
+        var task = CreateTask(ResourceType.RaceCard, "race-card", date);
+
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, result.Result);
+        Assert.AreEqual("RaceCardNotYetAvailable", result.ErrorCode);
+        Assert.IsNotNull(result.RetryAt);
     }
 
     [TestMethod]

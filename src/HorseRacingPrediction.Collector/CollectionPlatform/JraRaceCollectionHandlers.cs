@@ -111,7 +111,18 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
                 // failure must not prevent trying the remaining candidates or the normal discovery route.
             }
         }
-        result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+        {
+            try
+            {
+                result = await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (JraCollectionException ex) when (IsCurrentOrFuture(task.EffectiveDate))
+            {
+                return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
+                    ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(30));
+            }
+        }
         if (requests is not null && result.Entries is not null)
             await RequestReferencedSubjectsAsync(result.Entries, result.RaceId!, requests, cancellationToken).ConfigureAwait(false);
         if (predictionSchedule is not null)
@@ -122,6 +133,14 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
     }
 
     private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
+
+    private static bool IsCurrentOrFuture(DateOnly? date)
+    {
+        if (date is null) return false;
+        var jst = TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).DateTime);
+        return date >= today;
+    }
 
     internal static RaceId ParseRaceId(LeasedCollectionTask task)
     {

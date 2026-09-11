@@ -203,6 +203,7 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 - 2026-09-12: 指定JRA 11Rページで `GⅢ`、本賞金4,100/1,600/1,000/620/410万円、付加賞56.7/16.2/8.1万円を確認し、指定6Rページで競走中の出来事2件を確認した。
 - 2026-09-12: Parserテストで `GⅢ -> G3`、本賞金4,100万円 -> 41,000,000円、付加賞56.7万円 -> 567,000円、出来事本文の抽出を検証した。
 - 2026-09-12: Workflowテストで GradeCode、本賞金、付加賞、StewardReportText が一括domain writeリクエストへ接続されることを検証した。
+- 2026-09-12: 耐久試験で当日RaceCardの未公開ページ4件がPermanentFailureになったため、当日以降の未取得はResourceNotYetAvailableとして30分後に再試行するよう修正した。
 
 - The new outbox publishes the minimal `taskId` / `dispatchGeneration` notification to SQS.
 - The Lambda `--once` entry accepts only that new notification, acquires the task from the API, invokes the registered definition handler, and reports the attempt result to the API.
