@@ -106,6 +106,8 @@ builder.Services.AddSingleton<JraSubjectProfileLocator>();
 builder.Services.AddRacePredictor();
 builder.Services.Configure<CollectionPlatformOptions>(builder.Configuration.GetSection(CollectionPlatformOptions.SectionName));
 builder.Services.AddSingleton<CollectionPlatformStore>();
+builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
+builder.Services.AddHostedService<CollectionScheduleService>();
 builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());

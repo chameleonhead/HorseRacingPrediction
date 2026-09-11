@@ -295,6 +295,22 @@ public sealed class CollectionPlatformStore
             row.state.NextCollectionAt, row.state.Status);
     }
 
+    public async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesAsync(DateTimeOffset now, int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var rows = await (from state in db.States.AsNoTracking()
+            join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+            where state.Status != CollectionStateStatus.Collecting
+            select new { state, item }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Where(x => x.state.NextCollectionAt is not null && x.state.NextCollectionAt <= now)
+            .OrderBy(x => x.state.NextCollectionAt).Take(Math.Max(1, limit))
+            .Select(x => new CollectionStateSnapshot(
+                new(x.item.Type, x.item.Provider, x.item.ResourceId), new(x.state.DefinitionId),
+                x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
+                x.state.NextCollectionAt, x.state.Status)).ToList();
+    }
+
     public async Task<IReadOnlyList<CollectionAttemptEntity>> GetAttemptsAsync(Guid taskId,
         CancellationToken cancellationToken = default)
     {

@@ -155,6 +155,24 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task SuccessfulRepeatedObservation_BecomesDueAtNextCollectionTime()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var next = now.AddMinutes(10);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded, NextCollectionAt: next)));
+
+        Assert.IsEmpty(await store.GetDueStatesAsync(next.AddTicks(-1)));
+        var due = await store.GetDueStatesAsync(next);
+        Assert.HasCount(1, due);
+        Assert.AreEqual(Horse.Normalize(), due[0].Resource);
+    }
+
+    [TestMethod]
     public async Task UnexpectedPage_MarksLocationSuspectAndSuccessVerifiesIt()
     {
         var store = await CreateStoreAsync();
