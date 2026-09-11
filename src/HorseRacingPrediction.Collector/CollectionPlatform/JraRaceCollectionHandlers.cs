@@ -76,15 +76,26 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
         var workflow = workflows(session);
         RaceCardRaceOutcome? result = null;
+        Uri? successfulLocation = null;
         foreach (var location in task.Locations ?? [])
         {
-            var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-            if (page is not JraRaceCardPage card || card.RaceId != raceId) continue;
-            result = await workflow.RefreshPageAsync(card, domainRaceId, cancellationToken).ConfigureAwait(false);
-            break;
+            try
+            {
+                var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
+                if (page is not JraRaceCardPage card || card.RaceId != raceId) continue;
+                result = await workflow.RefreshPageAsync(card, domainRaceId, cancellationToken).ConfigureAwait(false);
+                successfulLocation = location.Url;
+                break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A location is only a candidate. A stale URL, parse failure, or transient navigation
+                // failure must not prevent trying the remaining candidates or the normal discovery route.
+            }
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
-        return new(CollectionAttemptResult.Succeeded, RequestedUrl: ToUri(result.SourceUrl),
+        var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
+        return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
             FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}");
     }
 
@@ -115,13 +126,22 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
         var workflow = workflows(session);
         var domainRaceId = task.Attributes.GetValueOrDefault("domainRaceId") ?? task.Resource.Id;
         RaceResultCollectionResult? result = null;
+        Uri? successfulLocation = null;
         foreach (var location in task.Locations ?? [])
         {
-            var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-            if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId) continue;
-            result = await workflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty, cancellationToken)
-                .ConfigureAwait(false);
-            break;
+            try
+            {
+                var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
+                if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId) continue;
+                result = await workflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty, cancellationToken)
+                    .ConfigureAwait(false);
+                successfulLocation = location.Url;
+                break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Continue through candidate locations before invoking the normal discovery navigation.
+            }
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
         if (result.Errors.Count > 0)
@@ -131,7 +151,7 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
                 "Race result is not officially confirmed.", RequestedUrl: ToUri(result.SourceUrl),
                 RetryAt: DateTimeOffset.UtcNow.AddMinutes(10));
-        return new(CollectionAttemptResult.Succeeded, RequestedUrl: ToUri(result.SourceUrl),
+        return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl),
                 FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceResult:JRA:{task.Resource.Id}")
             ;
     }
