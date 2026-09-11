@@ -195,6 +195,10 @@ RaceOdds は append-only `OddsSnapshot` とし、race、observed-at、provider�
 
 ## Verification record
 
+- The new outbox publishes the minimal `taskId` / `dispatchGeneration` notification to SQS.
+- The Lambda `--once` entry accepts only that new notification, acquires the task from the API, invokes the registered definition handler, and reports the attempt result to the API.
+- Race-card and race-result handlers are registered in the Collector; the Lambda entry no longer dispatches by the legacy job type and deduplication key.
+
 - 2026-09-11: `.codegraph/` がないため `rg` と対象ファイルの直接確認で調査した。
 - 2026-09-11: production code は変更していない。本文書と canonical documentation のみ Proposed として作成・更新した。
 - 2026-09-11: 利用者指示により compatibility adapter を用いた段階移行案を撤回し、既存収集ジョブ実装の完全置換、予想ジョブ分離、意味的 migration、controlled cutover、rollback、旧コード削除を計画へ追加した。

@@ -1,7 +1,9 @@
 using System.Linq;
 using System.Text.Json;
 using HorseRacingPrediction.Collector.Http;
+using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Scheduling;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Scraping.Jra;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
@@ -22,10 +24,20 @@ builder.Services.Configure<AgentProcessingOptions>(
     builder.Configuration.GetSection(AgentProcessingOptions.SectionName));
 
 builder.Services.AddJraScraping();
+builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
+builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
+builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddSingleton<CollectionExecutionTrigger>();
 // TransientBadGatewayRetryHandler は AddHttpAgentServices() 内で既に登録済み。
 builder.Services.AddHttpClient("ProcessingState", (services, client) =>
+    {
+        var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl);
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    })
+    .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
+builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
@@ -86,27 +98,9 @@ if (runOnce)
     {
         var notification = TryReadTriggeringNotification();
         if (notification is null)
-        {
-            // トリガーとなったSQSメッセージを読み取れない場合（ローカル実行等）は、
-            // 従来通り登録サイクル＋その時点のReadyジョブ全件処理にフォールバックする。
-            var registrationService = app.Services.GetRequiredService<ScrapingRegistrationService>();
-            await registrationService.RunScheduledCycleAsync(true, requestId, cts.Token);
-
-            var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
-            await executionService.RunOneCycleAsync(cts.Token);
-        }
-        else if (notification.JobType is AgentJobType.CollectionPlanning or AgentJobType.AcquisitionPlanReview)
-        {
-            // CollectionPlanningジョブは「新規開催日の登録」処理そのものを表すジョブ。
-            // 1ジョブ=1Lambda実行の原則に合わせ、このジョブ自体をリースしてから
-            // 登録サイクルを1回だけ実行する。
-            await RunCollectionPlanningTaskAsync(app.Services, notification, requestId, cts.Token);
-        }
-        else
-        {
-            var executionService = app.Services.GetRequiredService<CollectionExecutionService>();
-            await executionService.RunSingleTaskAsync(notification, requestId, cts.Token);
-        }
+            throw new InvalidOperationException("A valid resource collection SQS notification is required.");
+        await app.Services.GetRequiredService<CollectionPlatformWorkerClient>()
+            .ExecuteAsync(notification, cts.Token).ConfigureAwait(false);
     }
     catch (Exception ex) when (ex is TimeoutException || (ex is OperationCanceledException && cts.IsCancellationRequested))
     {
@@ -135,41 +129,6 @@ else
 }
 
 /// <summary>
-/// CollectionPlanningジョブ（新規開催日の登録処理そのもの）をリースし、
-/// <see cref="ScrapingRegistrationService.RunOneCycleAsync"/>を1回実行してから、
-/// 成功/タイムアウト/失敗に応じてリースの状態を報告する。
-/// </summary>
-static async Task RunCollectionPlanningTaskAsync(
-    IServiceProvider services,
-    CollectionTaskNotification notification,
-    string requestId,
-    CancellationToken cancellationToken)
-{
-    var stateStore = services.GetRequiredService<IProcessingStateStore>();
-    var now = DateTimeOffset.UtcNow;
-    var task = await stateStore.AcquireCollectionTaskAsync(
-        notification.JobType,
-        notification.DeduplicationKey,
-        notification.DispatchGeneration,
-        now,
-        TimeSpan.FromMinutes(30),
-        cancellationToken).ConfigureAwait(false);
-
-    if (task is null)
-    {
-        // 既に処理済み/実行中/送出世代が古い。何もせず終了してよい。
-        return;
-    }
-
-    await CollectionTaskRunner.RunAsync(stateStore, task, async token =>
-    {
-        await services.GetRequiredService<ScrapingRegistrationService>().RunOneCycleAsync(token);
-        await stateStore.CompleteCollectionTaskAsync(task.JobType, task.DeduplicationKey, task.LeaseToken, token);
-    }, TimeSpan.FromMinutes(14), true, requestId, cancellationToken);
-
-}
-
-/// <summary>
 /// bootstrapがLambdaランタイムAPIから受け取り、環境変数 COLLECTOR_EVENT_PATH の指す
 /// ファイルへ書き出しておいたSQSイベント（Records[0].body に <see cref="CollectionTaskNotification"/>
 /// のJSONが入っている）から、このLambda呼び出しを起こした通知を読み取る。
@@ -177,7 +136,7 @@ static async Task RunCollectionPlanningTaskAsync(
 /// イベントが存在しない/解析できない場合はnullを返す（呼び出し元は従来の全件処理に
 /// フォールバックする）。
 /// </summary>
-static CollectionTaskNotification? TryReadTriggeringNotification()
+static HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification? TryReadTriggeringNotification()
 {
     var eventPath = Environment.GetEnvironmentVariable("COLLECTOR_EVENT_PATH");
     if (string.IsNullOrWhiteSpace(eventPath) || !File.Exists(eventPath))
@@ -203,7 +162,8 @@ static CollectionTaskNotification? TryReadTriggeringNotification()
         }
 
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        return JsonSerializer.Deserialize<CollectionTaskNotification>(bodyElement.GetString()!, jsonOptions);
+        return JsonSerializer.Deserialize<HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification>(
+            bodyElement.GetString()!, jsonOptions);
     }
     catch (Exception ex)
     {

@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
-public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
+public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue, ICollectionPlatformTaskQueue
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IAmazonSQS _sqs;
@@ -27,6 +27,22 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue
         if (string.IsNullOrWhiteSpace(queueUrl))
             queueUrl = (await _sqs.GetQueueUrlAsync(_options.QueueName, cancellationToken).ConfigureAwait(false)).QueueUrl;
 
+        await _sqs.SendMessageAsync(new SendMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MessageBody = JsonSerializer.Serialize(notification, JsonOptions)
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    async Task ICollectionPlatformTaskQueue.SendAsync(
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification notification,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled || (string.IsNullOrWhiteSpace(_options.QueueUrl) && string.IsNullOrWhiteSpace(_options.QueueName)))
+            throw new InvalidOperationException("CollectionQueue is not configured.");
+        var queueUrl = _options.QueueUrl;
+        if (string.IsNullOrWhiteSpace(queueUrl))
+            queueUrl = (await _sqs.GetQueueUrlAsync(_options.QueueName, cancellationToken).ConfigureAwait(false)).QueueUrl;
         await _sqs.SendMessageAsync(new SendMessageRequest
         {
             QueueUrl = queueUrl,

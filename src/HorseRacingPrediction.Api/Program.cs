@@ -128,8 +128,12 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
         });
     });
     builder.Services.AddSingleton<ICollectionTaskQueue, SqsCollectionTaskQueue>();
+    builder.Services.AddSingleton<ICollectionPlatformTaskQueue>(services =>
+        (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
     builder.Services.AddSingleton<CollectionTaskOutboxDispatcher>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CollectionTaskOutboxDispatcher>());
+    builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<CollectionPlatformOutboxDispatcher>());
     builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
         builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
     builder.Services.AddHostedService<CollectionDeadLetterQueueReconciler>();
