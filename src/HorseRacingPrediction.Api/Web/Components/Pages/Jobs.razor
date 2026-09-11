@@ -104,7 +104,7 @@ else
 }
 
 <FluentDialog Hidden="@(!showCreate)" HiddenChanged="@(h => showCreate = !h)" Modal="true" TrapFocus="true" AriaLabelledby="create-title" Style="width:min(620px,calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="true"><h2 id="create-title">@CreateTitle</h2></FluentDialogHeader>
+    <FluentDialogHeader ShowDismiss="true" ShowDismissTooltip="true"><h2 id="create-title">@CreateTitle</h2></FluentDialogHeader>
     <FluentDialogBody>
         @if (string.IsNullOrEmpty(createType))
         {
@@ -133,7 +133,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(!showPause)" HiddenChanged="@(h => showPause = !h)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px,calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="true"><h2 id="pause-title">収集全体を一時停止</h2></FluentDialogHeader>
+    <FluentDialogHeader ShowDismiss="true" ShowDismissTooltip="true"><h2 id="pause-title">収集全体を一時停止</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p>新しいタスクの取得を止めます。実行中の処理は結果を報告でき、再開後は待機中の処理から続行します。</p>
         <FluentTextField Label="停止理由" Placeholder="例: JRAサイトの画面変更を調査するため" @bind-Value="pauseReason" />
@@ -143,7 +143,7 @@ else
 </FluentDialog>
 
 <FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h => showBulk = !h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader>
+    <FluentDialogHeader ShowDismiss="true" ShowDismissTooltip="true"><h2 id="bulk-title">複数の収集対象をまとめて再取得</h2></FluentDialogHeader>
     <FluentDialogBody>
         <p>対象の選び方を指定し、件数を確認してから実行します。確認後に対象が増えることはありません。</p>
         <div class="collection-request-form">

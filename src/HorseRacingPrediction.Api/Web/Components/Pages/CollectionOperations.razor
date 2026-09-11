@@ -151,7 +151,7 @@ else
 }
 
 <FluentDialog Hidden="@(pendingRecovery is null)" HiddenChanged="@(hidden => { if(hidden) pendingRecovery=null; })" Modal="true" TrapFocus="true" AriaLabelledby="recovery-title" Style="width:min(520px,calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="true"><h2 id="recovery-title">障害対象をまとめて再取得</h2></FluentDialogHeader>
+    <FluentDialogHeader ShowDismiss="true" ShowDismissTooltip="true"><h2 id="recovery-title">障害対象をまとめて再取得</h2></FluentDialogHeader>
     <FluentDialogBody>@if(pendingRecovery is not null){<p><strong>@pendingRecovery.Count 件</strong>の「@(pendingRecovery.ErrorCode??"原因未分類")」を通常のRecovery経路へ依頼します。既に実行中の対象は二重実行せず、既存タスクへまとめられます。</p><p class="hint">収集内容: @pendingRecovery.Definition.Value<br />最終発生: @Time(pendingRecovery.LastFailedAt)</p>}</FluentDialogBody>
     <FluentDialogFooter><FluentButton OnClick="@(() => pendingRecovery=null)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ConfirmRecoveryAsync" Disabled="busy">再取得を依頼</FluentButton></FluentDialogFooter>
 </FluentDialog>

@@ -28,7 +28,7 @@ This is the durable continuation plan for the approved unified collection platfo
 | U6 | Page Request/Task/Attempt detail histories and expose safe domain links | U2 | Store/API/detail UI/tests | large repeated-Odds history and identity-mapped navigation tests | Completed |
 | U7 | Consolidate collection dashboard counts, add lightweight operations auto-refresh, preserve tab state | U2 | projection/API/UI/tests | one refresh contract, no full loading replacement, URL restoration | Completed |
 | U8 | Standardize local launch working directory and absolute data paths | — | local scripts/config/docs/tests | root/project launch resolve the same DB and queue paths | Implemented; launch verification remains in U9 |
-| U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Desktop/accessibility verified; narrow viewport pending |
+| U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Completed |
 | U10 | Execute isolated Terraform/cutover rehearsal, then production cutover and legacy deletion | C2, U9 | deployment/AWS/runbook | plan, smoke, rollback rehearsal, approved production deletion evidence | Externally blocked: AWS environment and production cutover window |
 
 ## Parallelization rules
@@ -41,3 +41,4 @@ This is the durable continuation plan for the approved unified collection platfo
 - 2026-09-12: U8 の相対SQLite/collection state pathをAPI content root基準の絶対pathへ正規化した。起動ディレクトリ差異の実ブラウザー確認はU9で行う。
 - 2026-09-12: U6 はResource詳細のRequest/Task/Attempt履歴を共通25件pageへ変更し、30件時のpage 2をStore testで検証した。Horse/Jockey/Trainerは収集詳細から安全な業務詳細routeへ遷移できる。
 - 2026-09-12: U7 はoperations dashboardを単一HTTP queryへ集約し、30秒の部分更新、`?tab=`によるtab復元を追加した。認証済みdesktop browserで一覧、運用画面、Revision tabとURL更新を確認した。Revision formのfield hostがgrid上で分離してlabel/inputがずれる問題を自己レビューで発見し、field wrapperで修正した。狭幅の実ブラウザー確認は継続する。
+- 2026-09-12: U9 は認証済み390x844 viewportで収集一覧、収集依頼Dialog、運用Revision formを確認した。主要actionとfilterは縦積みされ、情報は欠落しない。初回観察でtabのmin-contentによりpage全体へ横scrollが発生したため、共通detail tabsのoverflowを局所化して再確認し、page横scrollが消えたことを確認した。Dialog dismissにはtooltipを追加した。viewport overrideは検証後に解除した。

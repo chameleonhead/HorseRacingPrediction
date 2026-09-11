@@ -1,0 +1,11 @@
+.raceops-detail-tabs {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+@media (max-width: 720px) {
+    .raceops-detail-tabs { width: 100%; }
+}
