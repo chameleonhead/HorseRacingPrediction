@@ -36,6 +36,8 @@ public interface IJraNavigator
     Task<IJraPage> ToRaceResultAsync(
         RaceId race,
         CancellationToken cancellationToken = default);
+    Task<IJraPage> ToRaceOddsAsync(RaceId race, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Odds navigation is not supported.");
 
     /// <summary>
     /// 対象日・競馬場の「レース結果 レース選択」ページ（またはそれに相当するページ）を

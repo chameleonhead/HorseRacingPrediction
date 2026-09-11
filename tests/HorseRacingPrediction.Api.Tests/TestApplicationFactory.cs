@@ -128,6 +128,7 @@ internal static class TestApplicationFactory
         app.MapRaceDayReacquisitionEndpoints();
         app.MapSubjectCollectionEndpoints();
         app.MapAgentAcquisitionStatusEndpoints();
+        app.MapRaceOddsEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

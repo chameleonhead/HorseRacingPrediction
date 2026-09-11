@@ -24,6 +24,8 @@ builder.Services.AddJraScraping();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();
+builder.Services.Configure<RaceOddsCollectionOptions>(builder.Configuration.GetSection("RaceOddsCollection"));
+builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceOddsCollectionHandler>();
 foreach (var descriptor in JraSubjectCollectionDefinitions.All)
     builder.Services.AddSingleton<ICollectionDefinitionHandler>(services =>
         new JraSubjectProfileCollectionHandler(descriptor,
@@ -57,6 +59,13 @@ builder.Services.AddHttpClient<JraSubjectProfileApiClient>((services, client) =>
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IJraSubjectProfileSink>(services =>
     services.GetRequiredService<JraSubjectProfileApiClient>());
+builder.Services.AddHttpClient<RaceOddsSnapshotApiClient>((services, client) =>
+    {
+        var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl);
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    }).AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
+builder.Services.AddSingleton<IRaceOddsSnapshotSink>(services => services.GetRequiredService<RaceOddsSnapshotApiClient>());
 builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;

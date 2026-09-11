@@ -15,6 +15,7 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     IEmit<EntryResultDeclared>,
     IEmit<PayoutResultDeclared>,
     IEmit<RaceDataCorrected>,
+    IEmit<RaceOddsSnapshotRecorded>,
     IEmit<RaceClosed>
 {
     private readonly RaceState _state = new();
@@ -190,6 +191,16 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             quinellaPayouts, exactaPayouts, trifectaPayouts));
     }
 
+    public void RecordOddsSnapshot(DateTimeOffset observedAt, IReadOnlyList<RaceOddsEntry> entries)
+    {
+        if (!_state.IsCreated) throw new InvalidOperationException("Race is not created.");
+        if (entries.Count == 0 || entries.Any(x => x.HorseNumber <= 0 || x.WinOdds <= 0))
+            throw new ArgumentException("Odds snapshot requires positive horse numbers and win odds.", nameof(entries));
+        if (entries.Select(x => x.HorseNumber).Distinct().Count() != entries.Count)
+            throw new ArgumentException("Horse numbers must be unique in an odds snapshot.", nameof(entries));
+        Emit(new RaceOddsSnapshotRecorded(observedAt, entries));
+    }
+
     public void CloseRaceLifecycle()
     {
         if (!_state.IsCreated)
@@ -252,5 +263,6 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     public void Apply(EntryResultDeclared e) { }
     public void Apply(PayoutResultDeclared e) { }
     public void Apply(RaceDataCorrected e) { }
+    public void Apply(RaceOddsSnapshotRecorded e) { }
     public void Apply(RaceClosed e) { }
 }

@@ -309,6 +309,7 @@ app.MapSubjectCollectionEndpoints();
 app.MapAgentAcquisitionStatusEndpoints();
 app.MapProcessingStateRpcEndpoint();
 app.MapCollectionPlatformEndpoints();
+app.MapRaceOddsEndpoints();
 app.MapPredictionScheduleEndpoints();
 
 app.Run();

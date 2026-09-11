@@ -48,6 +48,7 @@ public static class JraScrapingServiceCollectionExtensions
         services.AddSingleton<IJraPageParser, RaceListPageParser>();
         services.AddSingleton<IJraPageParser, RaceCardPageParser>();
         services.AddSingleton<IJraPageParser, RaceResultPageParser>();
+        services.AddSingleton<IJraPageParser, RaceOddsPageParser>();
 
         // JraSessionFactory の依存(IWebBrowserSessionFactory/IJraPageParser/ILoggerFactory)は
         // いずれもSingletonであり、JraSessionFactory自身も呼び出しごとの状態を持たないためSingletonとする。

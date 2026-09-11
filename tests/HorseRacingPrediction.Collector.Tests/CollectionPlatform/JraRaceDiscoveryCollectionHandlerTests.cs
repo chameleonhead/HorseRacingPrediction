@@ -36,9 +36,10 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var result = await handler.CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
-        Assert.HasCount(2, sink.Requests);
+        Assert.HasCount(3, sink.Requests);
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceCard));
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceResult));
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceOdds));
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id == "20260912:Tokyo:11"));
     }
 

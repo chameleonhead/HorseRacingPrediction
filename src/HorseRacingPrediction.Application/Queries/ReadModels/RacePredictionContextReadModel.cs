@@ -16,6 +16,7 @@ public class RacePredictionContextReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, PayoutResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
+    IAmReadModelFor<RaceAggregate, RaceId, RaceOddsSnapshotRecorded>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
     public string RaceId { get; private set; } = string.Empty;
@@ -37,6 +38,7 @@ public class RacePredictionContextReadModel : IReadModel,
     public WeatherObservationSnapshot? LatestWeather => WeatherObservations.LastOrDefault();
     public List<TrackConditionSnapshot> TrackConditionObservations { get; private set; } = [];
     public TrackConditionSnapshot? LatestTrackCondition => TrackConditionObservations.LastOrDefault();
+    public List<RaceOddsSnapshot> OddsSnapshots { get; private set; } = [];
 
     public Task ApplyAsync(IReadModelContext context,
         IDomainEvent<RaceAggregate, RaceId, RaceCreated> domainEvent,
@@ -177,4 +179,17 @@ public class RacePredictionContextReadModel : IReadModel,
         Status = RaceStatus.Closed;
         return Task.CompletedTask;
     }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, RaceOddsSnapshotRecorded> domainEvent,
+        CancellationToken cancellationToken)
+    {
+        var e = domainEvent.AggregateEvent;
+        OddsSnapshots.Add(new RaceOddsSnapshot(e.ObservedAt,
+            e.Entries.Select(x => new RaceOddsEntrySnapshot(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray()));
+        return Task.CompletedTask;
+    }
 }
+
+public sealed record RaceOddsSnapshot(DateTimeOffset ObservedAt, IReadOnlyList<RaceOddsEntrySnapshot> Entries);
+public sealed record RaceOddsEntrySnapshot(int HorseNumber, decimal WinOdds, int? Popularity);

@@ -50,9 +50,19 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     };
                     if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
                     if (!historical)
+                    {
                         await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
                             CollectionReason.Discovery, CollectionLane.Realtime, 80, ToUri(race.RaceCardUrl), date,
                             attributes, cancellationToken).ConfigureAwait(false);
+                        if (race.StartTime is { } start)
+                        {
+                            var oddsAttributes = new Dictionary<string, string>(attributes)
+                            { ["startTime"] = start.ToString("HH:mm") };
+                            await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"),
+                                CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
+                                oddsAttributes, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
                     if (historical || !string.IsNullOrWhiteSpace(race.ResultUrl))
                         await requests.RequestAsync(new(ResourceType.RaceResult, "JRA", id), new("race-result"),
                             task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,

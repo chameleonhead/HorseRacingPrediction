@@ -87,6 +87,7 @@ public class EventStoreDbContext : DbContext
             ConfigureJsonProperty(entity, x => x.Entries);
             ConfigureJsonProperty(entity, x => x.WeatherObservations);
             ConfigureJsonProperty(entity, x => x.TrackConditionObservations);
+            ConfigureJsonProperty(entity, x => x.OddsSnapshots);
         });
 
         modelBuilder.Entity<RaceResultViewReadModel>(entity =>

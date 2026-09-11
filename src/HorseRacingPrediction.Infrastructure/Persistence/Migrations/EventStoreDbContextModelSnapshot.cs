@@ -416,6 +416,10 @@ namespace HorseRacingPrediction.Infrastructure.Persistence.Migrations
                     b.Property<string>("OverallPaceText")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OddsSnapshots")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateOnly?>("RaceDate")
                         .HasColumnType("TEXT");
 
