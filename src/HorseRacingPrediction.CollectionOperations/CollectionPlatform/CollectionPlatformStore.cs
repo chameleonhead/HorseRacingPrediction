@@ -572,6 +572,26 @@ public sealed class CollectionPlatformStore
                 && string.Equals(domainRaceId, raceId, StringComparison.Ordinal)));
     }
 
+    public async Task<bool> IsValidActiveRaceLeaseAsync(Guid taskId, string leaseToken, string raceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (taskId == Guid.Empty || string.IsNullOrWhiteSpace(leaseToken) || string.IsNullOrWhiteSpace(raceId))
+            return false;
+        await using var db = CreateDbContext();
+        var row = await (from active in db.ActiveTasks.AsNoTracking()
+            join task in db.Tasks.AsNoTracking() on active.TaskId equals task.TaskId
+            join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
+            where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
+                && task.LeaseToken == leaseToken
+            select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= DateTimeOffset.UtcNow) return false;
+        var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(row.AttributesJson);
+        return string.Equals(row.ResourceId, raceId, StringComparison.Ordinal)
+            || (attributes?.TryGetValue("domainRaceId", out var domainRaceId) == true
+                && string.Equals(domainRaceId, raceId, StringComparison.Ordinal));
+    }
+
     public async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesAsync(DateTimeOffset now, int limit = 500,
         CancellationToken cancellationToken = default)
     {

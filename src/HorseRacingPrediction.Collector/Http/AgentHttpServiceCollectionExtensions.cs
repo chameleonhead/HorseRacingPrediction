@@ -19,12 +19,14 @@ public static class AgentHttpServiceCollectionExtensions
     public static IServiceCollection AddHttpAgentServices(this IServiceCollection services)
     {
         services.AddTransient<TransientBadGatewayRetryHandler>();
+        services.AddTransient<CollectionWorkerLeaseHandler>();
         services.AddSingleton<AgentAcquisitionStatusRecorder>();
         services.AddHttpClient<IRaceQueryService, HttpRaceQueryService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IPredictionWriteService, HttpPredictionWriteService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IDataCollectionWriteService, HttpDataCollectionWriteService>(ConfigureClient)
+            .AddHttpMessageHandler<CollectionWorkerLeaseHandler>()
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
         services.AddHttpClient<IMemoWriteService, HttpMemoWriteService>(ConfigureClient)
             .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();

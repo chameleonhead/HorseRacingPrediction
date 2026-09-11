@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Collector.Http;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -19,6 +20,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         CollectionAttemptCompletion completion;
         try
         {
+            using var leaseScope = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken);
             completion = await handlers.Resolve(task.Definition, task.Resource.Type)
                 .CollectAsync(task, cancellationToken).ConfigureAwait(false);
         }

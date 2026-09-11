@@ -25,7 +25,6 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     public HttpDataCollectionWriteService(HttpClient httpClient, AgentAcquisitionStatusRecorder statusRecorder)
     {
         _httpClient = httpClient;
-        _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Collection-Worker", "true");
         _statusRecorder = statusRecorder;
     }
 
