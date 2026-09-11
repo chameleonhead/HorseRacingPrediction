@@ -35,6 +35,27 @@ Each list row is a keyboard-operable link to an independent detail page, followi
 
 The main list requests at most 1,000 recent tasks and paginates them by 50 in the client. The Resources view projects the latest task for each Resource + CollectionDefinition pair; the other views preserve individual task history.
 
+## 2026-09-12 usability review extension
+
+The operator journey is split into four explicit responsibilities instead of placing every control in the task list:
+
+1. **Find work requiring attention**: filter and group failures by definition/error, then recover the selected group through previewed ordinary requests.
+2. **Investigate one collection target**: use the stable Resource + Definition detail page to inspect request, task, attempt, URL, and revision history, then retry or cancel where applicable.
+3. **Run historical collection**: create/resume a month batch and inspect discovery coverage, successes, failures, and concrete holes.
+4. **Operate extractor revisions**: inspect affected/completed/pending/failed counts before expanding recollection.
+
+The list preserves its selected view, query, filter, and page in the URL when navigating to details. Frequently used domain filters are labelled selections; provider, definition, and revision identifiers are not required for the default single-target workflow. Auto-refresh is limited to active operational views and always shows the last refresh time.
+
+Failure rows are not the primary incident representation once many resources fail for the same reason. The operations view groups pending failure notifications by definition and error classification, shows affected count and last occurrence, and provides preview-backed bulk recovery. This grouping does not replace the underlying per-Resource state or attempt history.
+
+### Pre-implementation self-review
+
+- Adopted: a separate operations page for monitoring, failure recovery, Backfill, and revision work because these are multi-section workflows with durable URLs and are not short dialog tasks.
+- Adopted: keep the compact request dialog on the list because a normal single-Resource request remains a short contextual action.
+- Rejected: adding Backfill, revision, queue metrics, and failures as permanent cards above the task list; it would push the most frequently scanned list below low-frequency controls.
+- Rejected: requiring raw enum values for common bulk recovery; the user first selects the business condition and only the relevant fields are shown.
+- Recovery design: API failure keeps the current selection/input and gives a retryable Japanese message; successful requests show a receipt-oriented confirmation.
+
 Visual QA iterations made the status tabs a compact elevated segment, kept search and its action on one desktop row, and collapsed them safely on narrow screens. Collection type cards use a two-column desktop layout, a single-column narrow layout, and visible hover/focus feedback. The independent detail page gives the state facts a contained summary surface while keeping attempts and locations in comparison-friendly tabs. The `直近の処理` label explicitly communicates the 1,000-task read limit; the `収集対象` count comes from the platform-wide progress projection rather than that limited list.
 
 ## States and interaction
@@ -52,6 +73,7 @@ Visual QA iterations made the status tabs a compact elevated segment, kept searc
 
 - Component tests cover empty/error states, Japanese filtering, detail/manual recollection, quick resource collection, and preview-before-bulk-execute.
 - Browser verification covers page navigation, keyboard access to the primary controls, grid overflow, and narrow viewport reflow.
+- Scenario verification covers grouped failure recovery, month Backfill creation, revision progress lookup/recollection, detail retry/cancel, list context restoration, and large-result filtering.
 
 ## Japanese terminology and task-oriented wording
 

@@ -7,6 +7,7 @@
 <RaceOpsPageHeader Section="運用" Title="収集管理" Description="収集処理の進行状況を確認し、失敗から復旧します。">
     <Actions>
         <FluentButton Appearance="@Appearance.Accent" OnClick="OpenCreate" Disabled="busy">収集を依頼</FluentButton>
+        <FluentButton Href="/jobs/operations">収集運用</FluentButton>
         <FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>
         @if (pipeline?.IsPaused == true)
         {
@@ -163,6 +164,8 @@ else
     private CancellationTokenSource? refreshCancellation;
     private IReadOnlyList<string> errors = [], createErrors = [], bulkErrors = [];
     private IReadOnlyList<CollectionTaskSummary> tasks = [];
+    private CollectionTaskPage? taskPage;
+    private IReadOnlyDictionary<string, int> serverViewCounts = new Dictionary<string, int>();
     private IReadOnlyList<PendingCollectionFailureNotification> failures = [];
     private CollectionProgressSnapshot? progress;
     private CollectionPipelineState? pipeline;
@@ -176,25 +179,31 @@ else
 
     private IReadOnlyList<CollectionTaskSummary> UniqueResources => tasks.GroupBy(x => new { x.Resource, x.Definition }).Select(g => g.OrderByDescending(x => x.AvailableAt).First()).ToList();
     private IReadOnlyList<CollectionTaskSummary> FilteredItems => (view == "resources" ? UniqueResources : tasks).Where(MatchesView).Where(MatchesFilter).ToList();
-    private IReadOnlyList<CollectionTaskSummary> VisibleItems => FilteredItems.Skip((page - 1) * PageSize).Take(PageSize).ToList();
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredItems.Count / (double)PageSize));
+    private IReadOnlyList<CollectionTaskSummary> VisibleItems => view == "resources"
+        ? FilteredItems.Skip((page - 1) * PageSize).Take(PageSize).ToList()
+        : FilteredItems;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(
+        (view == "resources" ? FilteredItems.Count : taskPage?.TotalCount ?? FilteredItems.Count) / (double)PageSize));
     private string CurrentViewLabel => views.First(x => x.Value == view).Label;
     private static readonly IReadOnlyList<CollectionKind> collectionKinds = [new("RaceCard", "race-card", "出馬表", "出走馬・騎手・調教師など"), new("RaceResult", "race-result", "レース結果", "着順・払戻・競走中の出来事など"), new("RaceOdds", "race-odds", "オッズ", "時系列で変化する各種オッズ"), new("Horse", "horse-profile", "競走馬", "プロフィール・血統など"), new("Jockey", "jockey-profile", "騎手", "プロフィール・所属など"), new("Trainer", "trainer-profile", "調教師", "プロフィール・所属など")];
 
     protected override async Task OnParametersSetAsync(){if(!initialized){view=views.Any(x=>x.Value==ViewQuery)?ViewQuery!:"attention";query=filter=SearchQuery??"";page=Math.Max(1,PageQuery??1);resourceFilter=ResourceFilterQuery??"";statusFilter=StatusFilterQuery??"";laneFilter=LaneFilterQuery??"";providerFilter=ProviderFilterQuery??"";errorFilter=ErrorFilterQuery??"";initialized=true;await LoadAsync();refreshCancellation=new();_ = RefreshLoopAsync(refreshCancellation.Token);}}
-    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:1000);var d=Api.GetCollectionFailureNotificationsAsync(1000);await Task.WhenAll(a,b,c,d);progress=await a;pipeline=await b;tasks=await c??[];failures=await d??[];if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=LoadViewCountsAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;failures=await d??[];serverViewCounts=await e;if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    private async Task LoadTaskPageAsync(){if(view=="resources"){tasks=await Api.GetCollectionTasksAsync(limit:1000)??[];taskPage=null;return;}taskPage=await Api.SearchCollectionTasksAsync(BuildTaskQuery(page,PageSize));tasks=taskPage?.Items??[];}
+    private async Task<IReadOnlyDictionary<string,int>> LoadViewCountsAsync(){var values=new Dictionary<string,int>();foreach(var item in new[]{"attention","running","waiting","recent","all"}){var result=await Api.SearchCollectionTasksAsync(BuildTaskQuery(1,1,item));values[item]=result?.TotalCount??0;}return values;}
+    private CollectionTaskQuery BuildTaskQuery(int targetPage,int pageSize,string? targetView=null){var selectedView=targetView??view;IReadOnlyCollection<CollectionTaskStatus>? statuses=selectedView switch{"attention"=>[CollectionTaskStatus.Failed,CollectionTaskStatus.DeadLetter],"running"=>[CollectionTaskStatus.Running],"waiting"=>[CollectionTaskStatus.Pending,CollectionTaskStatus.Ready,CollectionTaskStatus.RetryWaiting,CollectionTaskStatus.WaitingDiscovery],"recent"=>[CollectionTaskStatus.Succeeded],_=>null};if(Enum.TryParse<CollectionTaskStatus>(statusFilter,out var status))statuses=[status];ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsedResource)?parsedResource:null;CollectionLane? lane=Enum.TryParse<CollectionLane>(laneFilter,out var parsedLane)?parsedLane:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,null,lane,string.IsNullOrWhiteSpace(filter)?null:filter,Page:targetPage,PageSize:pageSize);}
     private async Task RefreshLoopAsync(CancellationToken token){using var timer=new PeriodicTimer(TimeSpan.FromSeconds(15));try{while(await timer.WaitForNextTickAsync(token)){if(autoRefresh && !busy && (tasks.Any(x=>x.Status==CollectionTaskStatus.Running)||view is "running" or "waiting"))await InvokeAsync(LoadAsync);}}catch(OperationCanceledException){}}
     private bool MatchesView(CollectionTaskSummary x) => view switch { "attention" => x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter, "running" => x.Status == CollectionTaskStatus.Running, "waiting" => IsWaiting(x.Status), "recent" => x.Status == CollectionTaskStatus.Succeeded, _ => true };
     private bool MatchesFilter(CollectionTaskSummary x) => (string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(resourceFilter)||x.Resource.Type.ToString()==resourceFilter) && (string.IsNullOrEmpty(statusFilter)||x.Status.ToString()==statusFilter) && (string.IsNullOrEmpty(laneFilter)||x.Lane.ToString()==laneFilter) && (string.IsNullOrWhiteSpace(providerFilter)||x.Resource.Provider.Contains(providerFilter,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrWhiteSpace(errorFilter)||failures.Any(f=>f.TaskId==x.TaskId&&$"{f.ErrorCode} {f.ErrorMessage}".Contains(errorFilter,StringComparison.OrdinalIgnoreCase)));
     private static bool IsWaiting(CollectionTaskStatus x) => x is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
-    private void SetView(string value){view=value;page=1;PersistState();}
-    private void PreviousPage(){if(page>1){page--;PersistState();}}
-    private void NextPage(){if(page<TotalPages){page++;PersistState();}}
-    private void ApplyFilter(){filter=query.Trim();page=1;PersistState();}
-    private void ClearFilter(){query="";filter="";resourceFilter=statusFilter=laneFilter=providerFilter=errorFilter="";page=1;PersistState();}
+    private async Task SetView(string value){view=value;page=1;PersistState();await LoadAsync();}
+    private async Task PreviousPage(){if(page>1){page--;PersistState();await LoadAsync();}}
+    private async Task NextPage(){if(page<TotalPages){page++;PersistState();await LoadAsync();}}
+    private async Task ApplyFilter(){filter=query.Trim();page=1;PersistState();await LoadAsync();}
+    private async Task ClearFilter(){query="";filter="";resourceFilter=statusFilter=laneFilter=providerFilter=errorFilter="";page=1;PersistState();await LoadAsync();}
     private bool HasFilters=>!string.IsNullOrWhiteSpace(filter)||!string.IsNullOrEmpty(resourceFilter)||!string.IsNullOrEmpty(statusFilter)||!string.IsNullOrEmpty(laneFilter)||!string.IsNullOrWhiteSpace(providerFilter)||!string.IsNullOrWhiteSpace(errorFilter);
     private void PersistState(){var uri=Navigation.GetUriWithQueryParameters(new Dictionary<string,object?>{{"view",view=="attention"?null:view},{"q",string.IsNullOrWhiteSpace(filter)?null:filter},{"page",page<=1?null:page},{"type",string.IsNullOrEmpty(resourceFilter)?null:resourceFilter},{"status",string.IsNullOrEmpty(statusFilter)?null:statusFilter},{"lane",string.IsNullOrEmpty(laneFilter)?null:laneFilter},{"provider",string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter},{"error",string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter}});Navigation.NavigateTo(uri,replace:true);}
-    private int ViewCount(string value)=>value switch{"attention"=>tasks.Count(x=>x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter),"running"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Running),"waiting"=>tasks.Count(x=>IsWaiting(x.Status)),"recent"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Succeeded),"resources"=>progress?.ResourcesByType.Values.Sum()??UniqueResources.Count,"all"=>tasks.Count,_=>0};
+    private int ViewCount(string value)=>value=="resources"?progress?.ResourcesByType.Values.Sum()??UniqueResources.Count:serverViewCounts.TryGetValue(value,out var count)?count:0;
     private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}

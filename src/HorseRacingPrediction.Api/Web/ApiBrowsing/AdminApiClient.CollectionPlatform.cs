@@ -36,10 +36,63 @@ public sealed partial class AdminApiClient
             $"{CollectionPlatformPath}/tasks?limit={Math.Clamp(limit, 1, 1000)}" +
             (status is null ? string.Empty : $"&status={status}"), token);
 
+    public Task<CollectionTaskPage?> SearchCollectionTasksAsync(CollectionTaskQuery query,
+        CancellationToken token = default)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["statuses"] = query.Statuses is null ? null : string.Join(',', query.Statuses),
+            ["resourceType"] = query.ResourceType?.ToString(),
+            ["provider"] = query.Provider,
+            ["definitionId"] = query.DefinitionId,
+            ["lane"] = query.Lane?.ToString(),
+            ["search"] = query.Search,
+            ["createdFrom"] = query.CreatedFrom?.ToString("O"),
+            ["createdTo"] = query.CreatedTo?.ToString("O"),
+            ["page"] = Math.Max(1, query.Page).ToString(),
+            ["pageSize"] = Math.Clamp(query.PageSize, 1, 200).ToString(),
+        };
+        var queryString = string.Join('&', values.Where(x => !string.IsNullOrWhiteSpace(x.Value))
+            .Select(x => $"{x.Key}={Uri.EscapeDataString(x.Value!)}"));
+        return GetJsonAsync<CollectionTaskPage>($"{CollectionPlatformPath}/tasks/search?{queryString}", token);
+    }
+
     public Task<IReadOnlyList<PendingCollectionFailureNotification>?> GetCollectionFailureNotificationsAsync(
         int limit = 100, CancellationToken token = default)
         => GetJsonAsync<IReadOnlyList<PendingCollectionFailureNotification>>(
             $"{CollectionPlatformPath}/failure-notifications?limit={Math.Clamp(limit, 1, 1000)}", token);
+
+    public Task<IReadOnlyList<CollectionFailureGroup>?> GetCollectionFailureGroupsAsync(
+        int limit = 5000, CancellationToken token = default)
+        => GetJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
+            $"{CollectionPlatformPath}/failure-notifications/groups?limit={Math.Clamp(limit, 1, 10000)}", token);
+
+    public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailuresAsync(
+        RecoverCollectionFailuresRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/failure-notifications/recover", request, token);
+
+    public Task<AdminApiResult<BackfillBatchSnapshot>> CreateBackfillBatchAsync(
+        CreateBackfillBatchRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<BackfillBatchSnapshot>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/backfills", request, token);
+
+    public Task<AdminApiResult<RevisionImpactPreview>> PreviewRevisionImpactAsync(
+        RevisionImpactPreviewRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<RevisionImpactPreview>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/revisions/preview", request, token);
+
+    public Task<AdminApiResult<RevisionRecollectionExpansion>> RecollectRevisionAsync(
+        string definitionId, int revision, RevisionRecollectionRequest request,
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<RevisionRecollectionExpansion>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/revisions/{Uri.EscapeDataString(definitionId)}/{revision}/recollect",
+            request, token);
+
+    public Task<RevisionRecollectionProgress?> GetRevisionRecollectionProgressAsync(
+        string definitionId, int revision, CancellationToken token = default)
+        => GetJsonAsync<RevisionRecollectionProgress>(
+            $"{CollectionPlatformPath}/revisions/{Uri.EscapeDataString(definitionId)}/{revision}/progress", token);
 
     public Task<AdminApiResult> PauseCollectionPipelineAsync(string? reason,
         CancellationToken token = default)

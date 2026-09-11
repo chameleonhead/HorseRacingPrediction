@@ -200,6 +200,10 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 ## Verification record
 
+- 2026-09-12: 利用者が現状レビューで提示した操作性・運用機能の改善案を承認した。障害の原因別集約と一括Recovery、詳細ページのrequest/task履歴と取消、一覧条件保持・絞り込み・自動更新、Backfill/Revision/queue監視の運用画面を追加実装範囲とした。実装前セルフレビューと採否理由は `admin-ui-implementation-note.md` に記録した。
+- 2026-09-12: 収集一覧を状態・Resource種別・Provider・Definition・Lane・検索語・期間対応のサーバー側検索/ページングへ接続し、原因別障害APIと通常CollectionRequestを使う一括Recoveryを追加した。一覧は条件とページをURLへ保持し、処理中は最終更新時刻を示して15秒間隔で更新する。詳細ページはrequest/task/attempt/locationを分離表示し、Active task取消、通常再取得、URL指定再取得、受付結果を提供する。独立した収集運用ページでlane/priority/retry、障害原因、月次Backfill、Revision再取得進捗を表示・操作可能にした。
+- 2026-09-12: 検証はApiテスト114件成功・1件skip、CollectionPlatform関連Collectorテスト66件成功、API build警告0・エラー0。追加した一覧・詳細・運用・endpointの対象テスト14件も成功した。実データでのブラウザー確認はAPI再起動後に認証画面まで到達したが、実行セッションへ認証情報を露出させず再入力する手段がなかったため、認証後画面の最終視覚確認は未実施とする。
+
 - 2026-09-12: 収集管理画面の内部英語用語・列挙値を日本語の業務用語へ置き換え、状態別サマリー、検索結果件数、日本語名検索、検索解除、説明付き空状態、再取得操作の案内を追加した。bUnit で日本語表示、手動再取得、一括再取得の事前確認、日本語検索と解除を検証した。
 
 - 2026-09-12: 指定JRA 11Rページで `GⅢ`、本賞金4,100/1,600/1,000/620/410万円、付加賞56.7/16.2/8.1万円を確認し、指定6Rページで競走中の出来事2件を確認した。

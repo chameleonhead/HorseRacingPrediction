@@ -1,0 +1,229 @@
+@page "/jobs/operations"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<RaceOpsPageHeader Section="運用 / 収集管理" Title="収集運用" Description="障害への対応、過去データ収集、抽出仕様変更の進捗をまとめて管理します。">
+    <Actions>
+        <FluentButton Href="/jobs">収集状況へ戻る</FluentButton>
+        <FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>
+    </Actions>
+</RaceOpsPageHeader>
+
+@if (loading)
+{
+    <UiState Kind="loading" Title="収集運用の情報を読み込んでいます" />
+}
+else if (loadErrors.Count > 0)
+{
+    <UiState Kind="error" Title="収集運用の情報を表示できません" Message="APIの稼働状況を確認して、もう一度更新してください。" />
+}
+else
+{
+    <section class="profile-facts" aria-label="収集処理の概要">
+        <div class="profile-fact"><span>要対応の対象</span><strong>@failures.Sum(x => x.Count)</strong></div>
+        <div class="profile-fact"><span>再試行待ち</span><strong>@progress!.RetryWaiting</strong></div>
+        <div class="profile-fact"><span>実行中・待機中</span><strong>@progress.ActiveTasksByLane.Values.Sum()</strong></div>
+        <div class="profile-fact"><span>過去データ収集</span><strong>@backfills.Count</strong></div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <FluentMessageBar Intent="@MessageIntent.Success" Title="@successMessage" />
+    }
+    @if (operationErrors.Count > 0)
+    {
+        <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", operationErrors)" />
+    }
+
+    <RaceOpsDetailTabs>
+        <FluentTab Label="運用状況" Id="monitoring">
+            <section class="entity-section detail-section">
+                <h2>処理区分ごとの待機状況</h2>
+                <div class="operations-metrics">
+                    @foreach (var lane in Enum.GetValues<CollectionLane>())
+                    {
+                        <div><span>@LaneLabel(lane)</span><strong>@Value(progress.ActiveTasksByLane, lane) 件</strong></div>
+                    }
+                </div>
+                <h2>優先度ごとの待機状況</h2>
+                <div class="operations-metrics">
+                    @foreach (var item in progress.ActiveTasksByPriority.OrderByDescending(x => x.Key))
+                    {
+                        <div><span>@PriorityLabel(item.Key)</span><strong>@item.Value 件</strong></div>
+                    }
+                </div>
+            </section>
+        </FluentTab>
+
+        <FluentTab Label="@($"障害対応 ({failures.Count}原因)")" Id="failures">
+            <section class="entity-section detail-section">
+                <h2>原因別の障害</h2>
+                <p class="hint">同じ収集内容とエラーをまとめています。件数の多い原因から確認してください。</p>
+                @if (FailureGroups.Count == 0)
+                {
+                    <UiState Title="未確認の障害通知はありません" Message="新しい障害が発生すると、原因ごとにここへ表示されます。" />
+                }
+                else
+                {
+                    <FluentDataGrid Items="@FailureGroups.AsQueryable()" TGridItem="CollectionFailureGroup" aria-label="原因別の障害一覧">
+                        <PropertyColumn Property="@(x => x.Definition)" Title="収集内容" />
+                        <PropertyColumn Property="@(x => x.ErrorCode)" Title="エラー分類" />
+                        <PropertyColumn Property="@(x => x.Count)" Title="対象数" />
+                        <TemplateColumn Title="最終発生">@Time(context.LastFailedAt)</TemplateColumn>
+                        <TemplateColumn Title="対応">
+                            <FluentButton OnClick="@(() => RecoverFailureGroupAsync(context))" Disabled="busy">まとめて再取得</FluentButton>
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                }
+            </section>
+        </FluentTab>
+
+        <FluentTab Label="@($"過去データ収集 ({backfills.Count})")" Id="backfills">
+            <section class="detail-card detail-section">
+                <h2>月単位で収集を開始</h2>
+                <p>存在するレースを日ごとに探索します。途中で失敗しても、成功済みの範囲を保ったまま再開できます。</p>
+                <div class="operations-form-row">
+                    <FluentTextField Label="年" @bind-Value="backfillYear" />
+                    <FluentTextField Label="月" @bind-Value="backfillMonth" />
+                    <FluentButton Appearance="@Appearance.Accent" OnClick="CreateBackfillAsync" Disabled="busy">収集を開始</FluentButton>
+                </div>
+            </section>
+            <section class="entity-section detail-section">
+                <h2>進捗と未収集箇所</h2>
+                @if (backfills.Count == 0)
+                {
+                    <UiState Title="過去データ収集はまだありません" Message="対象の年と月を指定して開始してください。" />
+                }
+                else
+                {
+                    <FluentDataGrid Items="@backfills.OrderByDescending(x => x.CreatedAt).AsQueryable()" TGridItem="BackfillBatchSnapshot" aria-label="過去データ収集の進捗">
+                        <PropertyColumn Property="@(x => x.BatchId)" Title="対象期間" />
+                        <TemplateColumn Title="探索日">@context.RegisteredDiscoveryDays / @context.ExpectedDiscoveryDays</TemplateColumn>
+                        <PropertyColumn Property="@(x => x.Succeeded)" Title="成功" />
+                        <PropertyColumn Property="@(x => x.Pending)" Title="待機" />
+                        <PropertyColumn Property="@(x => x.Failed)" Title="失敗" />
+                        <TemplateColumn Title="欠損">@context.Holes.Count 件</TemplateColumn>
+                    </FluentDataGrid>
+                }
+            </section>
+        </FluentTab>
+
+        <FluentTab Label="抽出仕様の再取得" Id="revisions">
+            <section class="detail-card detail-section">
+                <h2>影響範囲を確認</h2>
+                <p>適用済みの抽出仕様について、再取得対象と現在の進捗を確認します。</p>
+                <div class="operations-form-row">
+                    <FluentTextField Label="収集内容" Placeholder="例: race-result" @bind-Value="revisionDefinition" />
+                    <FluentTextField Label="版" @bind-Value="revisionText" />
+                    <FluentButton OnClick="LoadRevisionProgressAsync" Disabled="busy">進捗を確認</FluentButton>
+                </div>
+                @if (revisionProgress is not null)
+                {
+                    <div class="operations-metrics" aria-label="抽出仕様の再取得進捗">
+                        <div><span>影響対象</span><strong>@revisionProgress.Affected 件</strong></div>
+                        <div><span>完了</span><strong>@revisionProgress.Completed 件</strong></div>
+                        <div><span>待機</span><strong>@revisionProgress.Pending 件</strong></div>
+                        <div><span>失敗</span><strong>@revisionProgress.Failed 件</strong></div>
+                    </div>
+                    <FluentButton Appearance="@Appearance.Accent" OnClick="RecollectRevisionAsync" Disabled="busy">未完了の対象を再取得</FluentButton>
+                }
+            </section>
+        </FluentTab>
+    </RaceOpsDetailTabs>
+}
+
+@code {
+    private bool loading = true, busy;
+    private CollectionProgressSnapshot? progress;
+    private IReadOnlyList<CollectionFailureGroup> failures = [];
+    private IReadOnlyList<BackfillBatchSnapshot> backfills = [];
+    private IReadOnlyList<string> loadErrors = [], operationErrors = [];
+    private string backfillYear = DateTime.Today.Year.ToString(), backfillMonth = DateTime.Today.Month.ToString();
+    private string revisionDefinition = "race-result", revisionText = "1", successMessage = string.Empty;
+    private RevisionRecollectionProgress? revisionProgress;
+
+    private IReadOnlyList<CollectionFailureGroup> FailureGroups => failures.OrderByDescending(x => x.Count).ToList();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = progress is null;
+        loadErrors = [];
+        try
+        {
+            await Task.WhenAll(LoadProgressAsync(), LoadFailuresAsync(), LoadBackfillsAsync());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            loadErrors = ["収集APIへ接続できませんでした。"];
+        }
+        finally { loading = false; }
+    }
+
+    private async Task LoadProgressAsync() => progress = await Api.GetCollectionProgressAsync() ?? EmptyProgress();
+    private async Task LoadFailuresAsync() => failures = await Api.GetCollectionFailureGroupsAsync() ?? [];
+    private async Task LoadBackfillsAsync() => backfills = await Api.GetBackfillBatchesAsync() ?? [];
+
+    private async Task CreateBackfillAsync()
+    {
+        operationErrors = []; successMessage = string.Empty;
+        if (!int.TryParse(backfillYear, out var year) || !int.TryParse(backfillMonth, out var month) || month is < 1 or > 12)
+        { operationErrors = ["正しい年と月を入力してください。"]; return; }
+        await RunAsync(async () =>
+        {
+            var result = await Api.CreateBackfillBatchAsync(new(year, month));
+            if (!result.Success) { operationErrors = result.Errors; return; }
+            successMessage = $"{year}年{month}月の過去データ収集を受け付けました。";
+            await LoadBackfillsAsync();
+        });
+    }
+
+    private async Task RecoverFailureGroupAsync(CollectionFailureGroup group)
+    {
+        operationErrors = []; successMessage = string.Empty;
+        await RunAsync(async () =>
+        {
+            var result = await Api.RecoverCollectionFailuresAsync(new(group.NotificationIds));
+            if (!result.Success) { operationErrors = result.Errors; return; }
+            successMessage = $"{group.Count}件の再取得を依頼しました。";
+            await LoadAsync();
+        });
+    }
+
+    private async Task LoadRevisionProgressAsync()
+    {
+        operationErrors = []; successMessage = string.Empty;
+        if (!int.TryParse(revisionText, out var revision) || revision < 1 || string.IsNullOrWhiteSpace(revisionDefinition))
+        { operationErrors = ["収集内容と版を正しく入力してください。"]; return; }
+        await RunAsync(async () => revisionProgress = await Api.GetRevisionRecollectionProgressAsync(revisionDefinition, revision));
+    }
+
+    private async Task RecollectRevisionAsync()
+    {
+        if (!int.TryParse(revisionText, out var revision)) return;
+        await RunAsync(async () =>
+        {
+            var result = await Api.RecollectRevisionAsync(revisionDefinition, revision, new());
+            if (!result.Success) { operationErrors = result.Errors; return; }
+            successMessage = $"抽出仕様 {revisionDefinition} 版{revision} の再取得を受け付けました。";
+            revisionProgress = await Api.GetRevisionRecollectionProgressAsync(revisionDefinition, revision);
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        busy = true;
+        try { await action(); }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        { operationErrors = ["収集APIへ接続できませんでした。時間をおいて再試行してください。"]; }
+        finally { busy = false; }
+    }
+
+    private static int Value<TKey>(IReadOnlyDictionary<TKey, int> values, TKey key) where TKey : notnull
+        => values.TryGetValue(key, out var value) ? value : 0;
+    private static string LaneLabel(CollectionLane lane) => lane switch { CollectionLane.Realtime => "リアルタイム", CollectionLane.Normal => "通常", _ => "バックグラウンド" };
+    private static string PriorityLabel(int value) => value >= 90 ? $"緊急 ({value})" : value >= 70 ? $"高 ({value})" : value <= 20 ? $"低 ({value})" : $"通常 ({value})";
+    private static string Time(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+    private static CollectionProgressSnapshot EmptyProgress() => new(new Dictionary<ResourceType,int>(), new Dictionary<CollectionStateStatus,int>(), new Dictionary<CollectionLane,int>(), new Dictionary<int,int>(), new Dictionary<string,int>(), 0);
+}
