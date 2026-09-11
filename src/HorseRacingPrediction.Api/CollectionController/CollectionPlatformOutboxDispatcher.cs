@@ -6,7 +6,12 @@ namespace HorseRacingPrediction.Api.CollectionController;
 public interface ICollectionPlatformTaskQueue
 {
     Task SendAsync(CollectionTaskNotification notification, CancellationToken cancellationToken);
+    Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ReceiveDeadLetterMessagesAsync(int maxMessages,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<CollectionPlatformDeadLetterMessage>>([]);
+    Task DeleteDeadLetterMessageAsync(string receiptHandle, CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
+public sealed record CollectionPlatformDeadLetterMessage(string ReceiptHandle, string Body);
 
 public sealed class CollectionPlatformOutboxDispatcher(
     CollectionPlatformStore store,

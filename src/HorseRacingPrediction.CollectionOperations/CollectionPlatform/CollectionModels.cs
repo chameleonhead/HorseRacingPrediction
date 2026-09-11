@@ -140,3 +140,9 @@ public sealed record CollectionProgressSnapshot(
     IReadOnlyDictionary<int, int> ActiveTasksByPriority,
     IReadOnlyDictionary<string, int> StatesByDefinition,
     int RetryWaiting);
+
+public sealed record CollectionPipelineState(bool IsPaused, string? Reason, DateTimeOffset? UpdatedAt);
+public sealed record PendingCollectionFailureNotification(Guid NotificationId, Guid TaskId,
+    ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
+    string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt);
+public sealed record CollectionWatchdogResult(int ReclaimedLeases, int RedispatchedTasks, int DeadLetteredTasks);

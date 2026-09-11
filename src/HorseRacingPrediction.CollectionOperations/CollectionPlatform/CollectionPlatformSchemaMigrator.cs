@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 1;
+    internal const int CurrentVersion = 2;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -54,6 +54,11 @@ internal static class CollectionPlatformSchemaMigrator
             {
                 await db.GetService<IRelationalDatabaseCreator>().CreateTablesAsync(cancellationToken)
                     .ConfigureAwait(false);
+                await ExecuteAsync(connection,
+                    $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
+                    cancellationToken, transaction, ("$version", (object)CurrentVersion),
+                    ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                version = CurrentVersion;
             }
             else
             {
@@ -62,12 +67,47 @@ internal static class CollectionPlatformSchemaMigrator
                     throw new InvalidOperationException(
                         "Existing collection platform database has an incomplete schema. Missing tables: "
                         + string.Join(", ", missing));
+                var baselineVersion = existing.Contains("collection_platform_controls")
+                    && existing.Contains("collection_failure_notifications") ? CurrentVersion : 1;
+                await ExecuteAsync(connection,
+                    $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
+                    cancellationToken, transaction, ("$version", (object)baselineVersion),
+                    ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O")))
+                    .ConfigureAwait(false);
+                version = baselineVersion;
             }
+        }
 
-            await ExecuteAsync(connection,
-                $"INSERT INTO {HistoryTable} (version, applied_at) VALUES (1, $appliedAt);",
-                cancellationToken, transaction, ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O")))
-                .ConfigureAwait(false);
+        if (version < 2)
+        {
+            await ExecuteAsync(connection, """
+                ALTER TABLE collection_tasks ADD COLUMN CancellationRequestedAt TEXT NULL;
+                CREATE TABLE collection_platform_controls (
+                    ControlId TEXT NOT NULL CONSTRAINT PK_collection_platform_controls PRIMARY KEY,
+                    IsPaused INTEGER NOT NULL,
+                    Reason TEXT NULL,
+                    UpdatedAt TEXT NOT NULL
+                );
+                CREATE TABLE collection_failure_notifications (
+                    NotificationId TEXT NOT NULL CONSTRAINT PK_collection_failure_notifications PRIMARY KEY,
+                    TaskId TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    ErrorCode TEXT NULL,
+                    ErrorMessage TEXT NULL,
+                    AttemptCount INTEGER NOT NULL,
+                    FailedAt TEXT NOT NULL,
+                    AvailableAt TEXT NOT NULL,
+                    PublishedAt TEXT NULL,
+                    PublishAttemptCount INTEGER NOT NULL,
+                    LastPublishError TEXT NULL
+                );
+                CREATE INDEX IX_collection_failure_notifications_PublishedAt_AvailableAt
+                    ON collection_failure_notifications (PublishedAt, AvailableAt);
+                CREATE INDEX IX_collection_failure_notifications_TaskId
+                    ON collection_failure_notifications (TaskId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (2, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

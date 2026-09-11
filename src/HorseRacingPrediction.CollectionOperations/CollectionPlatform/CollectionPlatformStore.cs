@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -8,7 +9,8 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 public sealed class CollectionPlatformStore
 {
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _gate;
 
     public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options)
     {
@@ -19,7 +21,8 @@ public sealed class CollectionPlatformStore
         var path = Path.Combine(directory, string.IsNullOrWhiteSpace(value.DatabaseFileName)
             ? "collection-platform.db" : value.DatabaseFileName);
         _dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
-            .UseSqlite($"Data Source={path};Pooling=False").Options;
+            .UseSqlite($"Data Source={path};Pooling=False;Default Timeout=30").Options;
+        _gate = Gates.GetOrAdd(path, static _ => new SemaphoreSlim(1, 1));
         using var db = CreateDbContext();
         CollectionPlatformSchemaMigrator.Migrate(db);
     }
@@ -27,6 +30,11 @@ public sealed class CollectionPlatformStore
     internal CollectionPlatformStore(DbContextOptions<CollectionPlatformDbContext> dbOptions)
     {
         _dbOptions = dbOptions;
+        using (var context = new CollectionPlatformDbContext(dbOptions))
+        {
+            var key = context.Database.GetConnectionString() ?? Guid.NewGuid().ToString("N");
+            _gate = Gates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        }
         using var db = CreateDbContext();
         CollectionPlatformSchemaMigrator.Migrate(db);
     }
@@ -184,6 +192,8 @@ public sealed class CollectionPlatformStore
         {
             await using var db = CreateDbContext();
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+                return null;
             await ReclaimExpiredAsync(db, now, cancellationToken).ConfigureAwait(false);
             var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
             if (task is null || task.Status != CollectionTaskStatus.Ready || task.AvailableAt > now
@@ -297,7 +307,14 @@ public sealed class CollectionPlatformStore
             var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
                 && x.DefinitionId == task.DefinitionId, cancellationToken);
 
-            if (completion.Result == CollectionAttemptResult.Succeeded)
+            if (task.CancellationRequestedAt.HasValue || completion.Result == CollectionAttemptResult.Cancelled)
+            {
+                task.Status = CollectionTaskStatus.Cancelled;
+                task.FinishedAt = now;
+                state.Status = CollectionStateStatus.Unknown;
+                db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+            }
+            else if (completion.Result == CollectionAttemptResult.Succeeded)
             {
                 task.Status = CollectionTaskStatus.Succeeded;
                 task.FinishedAt = now;
@@ -307,10 +324,10 @@ public sealed class CollectionPlatformStore
                 state.Status = CollectionStateStatus.Current;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
             }
-            else if (completion.Result == CollectionAttemptResult.ResourceNotYetAvailable || completion.RetryAt.HasValue)
+            else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
             {
                 task.Status = CollectionTaskStatus.RetryWaiting;
-                task.AvailableAt = completion.RetryAt ?? now;
+                task.AvailableAt = completion.RetryAt ?? now.Add(DefaultRetryDelay(completion.Result, task.AttemptCount));
                 task.DispatchGeneration++;
                 state.NextCollectionAt = task.AvailableAt;
                 state.Status = CollectionStateStatus.Pending;
@@ -328,6 +345,7 @@ public sealed class CollectionPlatformStore
                 state.Status = completion.Result == CollectionAttemptResult.ResourceNotFound
                     ? CollectionStateStatus.Unavailable : CollectionStateStatus.Failed;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+                QueueFailureNotification(db, task, completion.ErrorCode, completion.ErrorMessage, now);
             }
             state.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -537,6 +555,8 @@ public sealed class CollectionPlatformStore
         CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
+        if (await db.Controls.AsNoTracking().AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+            return [];
         var pending = await (from outbox in db.DispatchOutbox.AsNoTracking()
             join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
             where outbox.DispatchedAt == null
@@ -596,6 +616,229 @@ public sealed class CollectionPlatformStore
             tasks.Count(x => x.Status == CollectionTaskStatus.RetryWaiting));
     }
 
+    public async Task<CollectionPipelineState> GetPipelineStateAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var control = await db.Controls.AsNoTracking().SingleOrDefaultAsync(x => x.ControlId == "pipeline", cancellationToken);
+        return control is null ? new(false, null, null) : new(control.IsPaused, control.Reason, control.UpdatedAt);
+    }
+
+    public async Task SetPausedAsync(bool paused, string? reason, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var control = await db.Controls.SingleOrDefaultAsync(x => x.ControlId == "pipeline", cancellationToken);
+            if (control is null)
+            {
+                control = new CollectionPlatformControlEntity { ControlId = "pipeline" };
+                db.Controls.Add(control);
+            }
+            control.IsPaused = paused;
+            control.Reason = paused ? reason : null;
+            control.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> CancelTaskAsync(Guid taskId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (task is null || task.Status is CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
+                or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter) return false;
+            task.CancellationRequestedAt = now;
+            task.UpdatedAt = now;
+            if (task.Status != CollectionTaskStatus.Running)
+            {
+                task.Status = CollectionTaskStatus.Cancelled;
+                task.FinishedAt = now;
+                var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+                if (active is not null) db.ActiveTasks.Remove(active);
+                var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                    && x.DefinitionId == task.DefinitionId, cancellationToken);
+                state.Status = CollectionStateStatus.Unknown;
+                state.UpdatedAt = now;
+                var pending = await db.DispatchOutbox.Where(x => x.TaskId == taskId && x.DispatchedAt == null)
+                    .ToListAsync(cancellationToken);
+                foreach (var item in pending) item.DispatchedAt = now;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> HeartbeatAsync(Guid taskId, string leaseToken, DateTimeOffset now,
+        TimeSpan extension, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (task is null || task.Status != CollectionTaskStatus.Running || task.CancellationRequestedAt.HasValue
+                || !string.Equals(task.LeaseToken, leaseToken, StringComparison.Ordinal)) return false;
+            task.LeaseExpiresAt = now.Add(extension);
+            task.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> ReconcileDeadLetterAsync(Guid taskId, long dispatchGeneration, DateTimeOffset now,
+        string? errorMessage = null, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var task = await db.Tasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (task is null || task.DispatchGeneration != dispatchGeneration
+                || task.Status is CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
+                    or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter) return false;
+            if (task.Status == CollectionTaskStatus.Running)
+            {
+                var attempt = await db.Attempts.SingleAsync(x => x.TaskId == taskId
+                    && x.AttemptNumber == task.AttemptCount, cancellationToken);
+                attempt.Result = CollectionAttemptResult.PermanentFailure;
+                attempt.ErrorCode = "DeadLetterQueue";
+                attempt.ErrorMessage = errorMessage;
+                attempt.FinishedAt = now;
+            }
+            task.Status = CollectionTaskStatus.DeadLetter;
+            task.FinishedAt = now;
+            task.LeaseToken = null;
+            task.LeaseExpiresAt = null;
+            task.UpdatedAt = now;
+            var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                && x.DefinitionId == task.DefinitionId, cancellationToken);
+            state.Status = CollectionStateStatus.Failed;
+            state.UpdatedAt = now;
+            var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
+            if (active is not null) db.ActiveTasks.Remove(active);
+            QueueFailureNotification(db, task, "DeadLetterQueue", errorMessage, now);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionWatchdogResult> RunWatchdogAsync(DateTimeOffset now, int maxDispatchAttempts,
+        TimeSpan dispatchGrace, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var runningBefore = await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
+            await ReclaimExpiredAsync(db, now, cancellationToken).ConfigureAwait(false);
+            var reclaimed = runningBefore - await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
+            var tasks = await db.Tasks.Where(x => x.Status == CollectionTaskStatus.Ready).ToListAsync(cancellationToken);
+            var redispatched = 0;
+            var deadLettered = 0;
+            foreach (var task in tasks.Where(x => x.UpdatedAt <= now.Subtract(dispatchGrace)))
+            {
+                if (await db.DispatchOutbox.AnyAsync(x => x.TaskId == task.TaskId && x.DispatchedAt == null, cancellationToken))
+                    continue;
+                if (task.DispatchGeneration >= maxDispatchAttempts)
+                {
+                    task.Status = CollectionTaskStatus.DeadLetter;
+                    task.FinishedAt = now;
+                    var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == task.TaskId, cancellationToken);
+                    if (active is not null) db.ActiveTasks.Remove(active);
+                    var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                        && x.DefinitionId == task.DefinitionId, cancellationToken);
+                    state.Status = CollectionStateStatus.Failed;
+                    state.UpdatedAt = now;
+                    QueueFailureNotification(db, task, "DispatchAttemptsExceeded", null, now);
+                    deadLettered++;
+                }
+                else
+                {
+                    task.DispatchGeneration++;
+                    task.UpdatedAt = now;
+                    db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                    {
+                        OutboxId = Guid.NewGuid(), TaskId = task.TaskId,
+                        DispatchGeneration = task.DispatchGeneration, AvailableAt = now, CreatedAt = now
+                    });
+                    redispatched++;
+                }
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(reclaimed, redispatched, deadLettered);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<PendingCollectionFailureNotification>> GetPendingFailureNotificationsAsync(
+        DateTimeOffset now, int maxCount, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var rows = await (from notification in db.FailureNotifications.AsNoTracking()
+            join task in db.Tasks.AsNoTracking() on notification.TaskId equals task.TaskId
+            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+            where notification.PublishedAt == null
+            select new { notification, task, resource }).ToListAsync(cancellationToken);
+        return rows.Where(x => x.notification.AvailableAt <= now).OrderBy(x => x.notification.AvailableAt)
+            .Take(Math.Max(1, maxCount)).Select(x => new PendingCollectionFailureNotification(
+                x.notification.NotificationId, x.task.TaskId,
+                new(x.resource.Type, x.resource.Provider, x.resource.ResourceId), new(x.task.DefinitionId),
+                Enum.Parse<CollectionTaskStatus>(x.notification.Status), x.notification.ErrorCode,
+                x.notification.ErrorMessage, x.notification.AttemptCount, x.notification.FailedAt)).ToList();
+    }
+
+    public async Task MarkFailureNotificationPublishedAsync(Guid notificationId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var item = await db.FailureNotifications.SingleAsync(x => x.NotificationId == notificationId, cancellationToken);
+            item.PublishedAt = now;
+            item.PublishAttemptCount++;
+            item.LastPublishError = null;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static bool IsRetryable(CollectionAttemptResult result) => result is
+        CollectionAttemptResult.TransientFailure or CollectionAttemptResult.ResourceNotYetAvailable
+        or CollectionAttemptResult.AccessLimited;
+
+    private static TimeSpan DefaultRetryDelay(CollectionAttemptResult result, int attemptCount)
+    {
+        var seconds = Math.Min(900, 15 * Math.Pow(2, Math.Clamp(attemptCount - 1, 0, 6)));
+        return result == CollectionAttemptResult.AccessLimited
+            ? TimeSpan.FromSeconds(Math.Max(60, seconds)) : TimeSpan.FromSeconds(seconds);
+    }
+
+    private static void QueueFailureNotification(CollectionPlatformDbContext db, CollectionTaskEntity task,
+        string? errorCode, string? errorMessage, DateTimeOffset now)
+        => db.FailureNotifications.Add(new CollectionFailureNotificationEntity
+        {
+            NotificationId = Guid.NewGuid(), TaskId = task.TaskId, Status = task.Status.ToString(),
+            ErrorCode = errorCode, ErrorMessage = errorMessage, AttemptCount = task.AttemptCount,
+            FailedAt = now, AvailableAt = now
+        });
+
     private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
     {
         if (impact.ScopeType == RevisionImpactScopeType.NamedCondition
@@ -642,6 +885,23 @@ public sealed class CollectionPlatformStore
             attempt.Result = CollectionAttemptResult.TransientFailure;
             attempt.ErrorCode = "LeaseExpired";
             attempt.FinishedAt = now;
+            if (task.CancellationRequestedAt.HasValue)
+            {
+                attempt.Result = CollectionAttemptResult.Cancelled;
+                attempt.ErrorCode = "CancellationRequested";
+                task.Status = CollectionTaskStatus.Cancelled;
+                task.FinishedAt = now;
+                task.LeaseToken = null;
+                task.LeaseExpiresAt = null;
+                task.UpdatedAt = now;
+                var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == task.TaskId, cancellationToken);
+                if (active is not null) db.ActiveTasks.Remove(active);
+                var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
+                    && x.DefinitionId == task.DefinitionId, cancellationToken);
+                state.Status = CollectionStateStatus.Unknown;
+                state.UpdatedAt = now;
+                continue;
+            }
             task.Status = CollectionTaskStatus.Ready;
             task.AvailableAt = now;
             task.LeaseToken = null;

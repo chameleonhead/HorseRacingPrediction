@@ -50,6 +50,16 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue, ICollectionPl
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    async Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ICollectionPlatformTaskQueue.ReceiveDeadLetterMessagesAsync(
+        int maxMessages, CancellationToken cancellationToken)
+    {
+        var messages = await ReceiveDeadLetterMessagesAsync(maxMessages, cancellationToken).ConfigureAwait(false);
+        return messages.Select(x => new CollectionPlatformDeadLetterMessage(x.ReceiptHandle, x.Body)).ToList();
+    }
+
+    Task ICollectionPlatformTaskQueue.DeleteDeadLetterMessageAsync(string receiptHandle,
+        CancellationToken cancellationToken) => DeleteDeadLetterMessageAsync(receiptHandle, cancellationToken);
+
     public async Task<long> GetDeadLetterQueueDepthAsync(CancellationToken cancellationToken)
     {
         if (!_options.Enabled) return 0;

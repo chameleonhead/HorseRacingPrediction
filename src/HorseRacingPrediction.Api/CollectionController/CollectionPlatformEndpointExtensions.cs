@@ -11,6 +11,31 @@ public static class CollectionPlatformEndpointExtensions
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
+        admin.MapGet("/pipeline", async (CollectionPlatformStore store, CancellationToken token) =>
+            Results.Ok(await store.GetPipelineStateAsync(token)));
+        admin.MapPost("/pipeline/pause", async (PauseCollectionPipelineRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            await store.SetPausedAsync(true, request.Reason, DateTimeOffset.UtcNow, token);
+            return Results.NoContent();
+        });
+        admin.MapPost("/pipeline/resume", async (CollectionPlatformStore store, CancellationToken token) =>
+        {
+            await store.SetPausedAsync(false, null, DateTimeOffset.UtcNow, token);
+            return Results.NoContent();
+        });
+        admin.MapPost("/tasks/{taskId:guid}/cancel", async (Guid taskId, CollectionPlatformStore store,
+            CancellationToken token) => await store.CancelTaskAsync(taskId, DateTimeOffset.UtcNow, token)
+                ? Results.NoContent() : Results.Conflict());
+        admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
+            CancellationToken token) => Results.Ok(await store.GetPendingFailureNotificationsAsync(
+                DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
+        admin.MapPost("/failure-notifications/{notificationId:guid}/published", async (Guid notificationId,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            await store.MarkFailureNotificationPublishedAsync(notificationId, DateTimeOffset.UtcNow, token);
+            return Results.NoContent();
+        });
         admin.MapGet("/states/{type}/{provider}/{resourceId}/{definition}", async (
             ResourceType type, string provider, string resourceId, string definition,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -61,6 +86,11 @@ public static class CollectionPlatformEndpointExtensions
                     request.HttpStatusCode, request.PageIdentification, request.RetryAt, request.NextCollectionAt), token);
             return accepted ? Results.NoContent() : Results.Conflict();
         });
+        worker.MapPost("/tasks/{taskId:guid}/heartbeat", async (Guid taskId,
+            HeartbeatCollectionTaskRequest request, CollectionPlatformStore store, CancellationToken token) =>
+            await store.HeartbeatAsync(taskId, request.LeaseToken, DateTimeOffset.UtcNow,
+                TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), token)
+                ? Results.NoContent() : Results.Conflict());
         return endpoints;
     }
 }
@@ -72,6 +102,8 @@ public sealed record CreateCollectionRequest(ResourceType ResourceType, string P
     IReadOnlyDictionary<string, string>? Attributes = null);
 
 public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900);
+public sealed record HeartbeatCollectionTaskRequest(string LeaseToken, int LeaseSeconds = 900);
+public sealed record PauseCollectionPipelineRequest(string? Reason);
 
 public sealed record BulkCollectionResource(ResourceType Type, string Provider, string Id);
 public sealed record BulkCollectionRequest(string DefinitionId, int RequestedRevision, CollectionReason Reason,

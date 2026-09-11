@@ -15,6 +15,8 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionAttemptEntity> Attempts => Set<CollectionAttemptEntity>();
     public DbSet<ResourceLocationEntity> Locations => Set<ResourceLocationEntity>();
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
+    public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
+    public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +81,16 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_task_outbox"); e.HasKey(x => x.OutboxId);
             e.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
+        });
+        modelBuilder.Entity<CollectionPlatformControlEntity>(e =>
+        {
+            e.ToTable("collection_platform_controls"); e.HasKey(x => x.ControlId);
+        });
+        modelBuilder.Entity<CollectionFailureNotificationEntity>(e =>
+        {
+            e.ToTable("collection_failure_notifications"); e.HasKey(x => x.NotificationId);
+            e.HasIndex(x => new { x.PublishedAt, x.AvailableAt });
+            e.HasIndex(x => x.TaskId);
         });
     }
 }

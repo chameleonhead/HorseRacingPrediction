@@ -81,6 +81,30 @@ public sealed class CollectionTaskEntity
     public DateTimeOffset? LeaseExpiresAt { get; set; }
     public long DispatchGeneration { get; set; }
     public int AttemptCount { get; set; }
+    public DateTimeOffset? CancellationRequestedAt { get; set; }
+}
+
+public sealed class CollectionPlatformControlEntity
+{
+    public string ControlId { get; set; } = string.Empty;
+    public bool IsPaused { get; set; }
+    public string? Reason { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class CollectionFailureNotificationEntity
+{
+    public Guid NotificationId { get; set; }
+    public Guid TaskId { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int AttemptCount { get; set; }
+    public DateTimeOffset FailedAt { get; set; }
+    public DateTimeOffset AvailableAt { get; set; }
+    public DateTimeOffset? PublishedAt { get; set; }
+    public int PublishAttemptCount { get; set; }
+    public string? LastPublishError { get; set; }
 }
 
 public sealed class CollectionActiveTaskEntity

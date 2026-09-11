@@ -120,6 +120,11 @@ builder.Services.AddSingleton<CollectionMaintenanceState>();
 builder.Services.AddSingleton<CollectionQueueCircuitBreakerState>();
 var collectionQueueSection = builder.Configuration.GetSection(CollectionQueueOptions.SectionName);
 builder.Services.Configure<CollectionQueueOptions>(collectionQueueSection);
+builder.Services.Configure<CollectionJobWatchdogOptions>(
+    builder.Configuration.GetSection(CollectionJobWatchdogOptions.SectionName));
+builder.Services.Configure<CollectionDeadLetterQueueReconcilerOptions>(
+    builder.Configuration.GetSection(CollectionDeadLetterQueueReconcilerOptions.SectionName));
+builder.Services.AddHostedService<CollectionPlatformWatchdogService>();
 if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)))
 {
     builder.Services.AddSingleton<IAmazonSQS>(_ =>
@@ -138,6 +143,7 @@ if (collectionQueueSection.GetValue<bool>(nameof(CollectionQueueOptions.Enabled)
         (SqsCollectionTaskQueue)services.GetRequiredService<ICollectionTaskQueue>());
     builder.Services.AddSingleton<CollectionPlatformOutboxDispatcher>();
     builder.Services.AddHostedService(services => services.GetRequiredService<CollectionPlatformOutboxDispatcher>());
+    builder.Services.AddHostedService<CollectionPlatformDeadLetterReconciler>();
 }
 else
 {

@@ -252,7 +252,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(1L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(2L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -275,6 +275,91 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task TransientFailure_WithoutExplicitRetryAt_UsesDefaultBackoff()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now,
+            new(CollectionAttemptResult.TransientFailure, "Http503")));
+
+        var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+        Assert.AreEqual(CollectionTaskStatus.Ready, task.Status);
+        Assert.IsTrue(task.AvailableAt > now);
+    }
+
+    [TestMethod]
+    public async Task Pause_PersistsAcrossRestartAndBlocksAcquisitionUntilResume()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        await store.SetPausedAsync(true, "maintenance", now);
+
+        var restarted = CreateStore();
+        Assert.IsTrue((await restarted.GetPipelineStateAsync()).IsPaused);
+        Assert.IsNull(await restarted.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5)));
+
+        await restarted.SetPausedAsync(false, null, now.AddMinutes(1));
+        Assert.IsNotNull(await restarted.AcquireAsync(receipt.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
+    }
+
+    [TestMethod]
+    public async Task CancelPendingTask_RemovesActiveGuardAndSuppressesOutbox()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+
+        Assert.IsTrue(await store.CancelTaskAsync(receipt.TaskId, now.AddSeconds(1)));
+
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        Assert.IsFalse(await store.HasActiveTaskAsync(Horse, HorseProfile));
+        Assert.IsEmpty(await store.GetPendingDispatchesAsync(now.AddMinutes(1), 10));
+    }
+
+    [TestMethod]
+    public async Task DeadLetter_CurrentGenerationFailsTaskAndQueuesNotification()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+
+        Assert.IsFalse(await store.ReconcileDeadLetterAsync(receipt.TaskId, 0, now));
+        Assert.IsTrue(await store.ReconcileDeadLetterAsync(receipt.TaskId, 1, now, "lambda failed"));
+
+        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        var notifications = await store.GetPendingFailureNotificationsAsync(now.AddSeconds(1), 10);
+        Assert.HasCount(1, notifications);
+        Assert.AreEqual("DeadLetterQueue", notifications[0].ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task Watchdog_RedispatchesStalledReadyTaskThenDeadLettersAtLimit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var firstOutbox = (await store.GetPendingDispatchesAsync(now, 10)).Single();
+        await store.MarkDispatchedAsync(firstOutbox.OutboxId, now);
+
+        var recovered = await store.RunWatchdogAsync(now.AddMinutes(2), 2, TimeSpan.FromMinutes(1));
+        Assert.AreEqual(1, recovered.RedispatchedTasks);
+        var secondOutbox = (await store.GetPendingDispatchesAsync(now.AddMinutes(2), 10)).Single();
+        await store.MarkDispatchedAsync(secondOutbox.OutboxId, now.AddMinutes(2));
+
+        var exhausted = await store.RunWatchdogAsync(now.AddMinutes(4), 2, TimeSpan.FromMinutes(1));
+        Assert.AreEqual(1, exhausted.DeadLetteredTasks);
+        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+    }
+
+    [TestMethod]
     public async Task Startup_ConcurrentStores_SerializeSchemaInitialization()
     {
         var stores = await Task.WhenAll(Enumerable.Range(0, 8)
@@ -285,7 +370,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 1;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 2;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
