@@ -1,0 +1,34 @@
+.profile-facts {
+    background: linear-gradient(135deg, var(--neutral-layer-1), var(--neutral-fill-secondary-rest));
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.detail-card,
+.entity-section {
+    border-radius: 8px;
+}
+
+.detail-card h2,
+.entity-section h2 {
+    margin-top: 0;
+}
+
+.action-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+code {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+    .action-row,
+    .action-row fluent-button {
+        width: 100%;
+    }
+}

@@ -21,11 +21,33 @@
     display: flex;
     gap: 12px;
     justify-content: space-between;
-    margin-top: 8px;
+    margin-top: 6px;
+    padding-inline: 2px;
 }
 
 .collection-status-tabs {
-    margin-bottom: 16px;
+    background: var(--neutral-fill-secondary-rest);
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 8px;
+    gap: 2px;
+    margin: 6px 0 14px;
+    padding: 4px;
+}
+
+.collection-status-tabs button {
+    border-bottom: 0;
+    border-radius: 5px;
+    min-height: 36px;
+    padding-block: 7px;
+}
+
+.collection-status-tabs button.active {
+    background: var(--neutral-layer-floating);
+    box-shadow: var(--elevation-shadow-card-rest);
+}
+
+.collection-status-tabs button:first-child .tab-count {
+    color: var(--status-danger-foreground-1);
 }
 
 .tab-count {
@@ -37,6 +59,19 @@
     min-width: 20px;
     padding: 1px 6px;
     text-align: center;
+}
+
+.filter-bar {
+    padding-bottom: 10px;
+}
+
+.filter-bar .filter-toolbar {
+    grid-template-columns: minmax(260px, 1fr) max-content;
+}
+
+.filter-bar .filter-toolbar > fluent-button {
+    grid-column: 2;
+    margin-top: 0;
 }
 
 .collection-kind-grid {
@@ -54,8 +89,8 @@
     display: grid;
     font: inherit;
     gap: 4px;
-    min-height: 76px;
-    padding: 12px 14px;
+    min-height: 82px;
+    padding: 14px 16px;
     text-align: left;
 }
 
@@ -63,6 +98,8 @@
 .collection-kind:focus-visible {
     background: var(--neutral-layer-2);
     border-color: var(--accent-fill-rest);
+    box-shadow: var(--elevation-shadow-card-rest);
+    transform: translateY(-1px);
 }
 
 .collection-kind:focus-visible {
@@ -73,6 +110,11 @@
 .collection-kind span {
     color: var(--neutral-foreground-hint);
     font-size: var(--type-ramp-minus-1-font-size);
+}
+
+.collection-kind strong {
+    color: var(--neutral-foreground-rest);
+    font-size: var(--type-ramp-base-font-size);
 }
 
 .collection-kind-secondary {
@@ -115,5 +157,14 @@
 
     .collection-kind-secondary {
         grid-column: auto;
+    }
+
+    .filter-bar .filter-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .filter-bar .filter-toolbar > fluent-button {
+        grid-column: 1;
+        width: 100%;
     }
 }

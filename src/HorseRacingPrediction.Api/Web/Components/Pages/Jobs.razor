@@ -106,7 +106,7 @@ else
 
 @code {
     private const int PageSize = 50;
-    private static readonly IReadOnlyList<FilterOption> views = [new("attention", "要対応"), new("running", "処理中"), new("waiting", "待機中"), new("recent", "最近完了"), new("resources", "収集対象"), new("all", "すべて")];
+    private static readonly IReadOnlyList<FilterOption> views = [new("attention", "要対応"), new("running", "処理中"), new("waiting", "待機中"), new("recent", "最近完了"), new("resources", "収集対象"), new("all", "直近の処理")];
     private string view = "attention", query = "", filter = "", bulkType = "Horse", provider = "JRA", definition = "horse-profile", revision = "1", ids = "";
     private string createType = "", createDefinition = "", createProvider = "JRA", createResourceId = "", createUrl = "";
     private int page = 1;
@@ -134,7 +134,7 @@ else
     private void NextPage(){if(page<TotalPages)page++;}
     private void ApplyFilter(){filter=query.Trim();page=1;}
     private void ClearFilter(){query="";filter="";page=1;}
-    private int ViewCount(string value)=>value switch{"attention"=>tasks.Count(x=>x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter),"running"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Running),"waiting"=>tasks.Count(x=>IsWaiting(x.Status)),"recent"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Succeeded),"resources"=>UniqueResources.Count,"all"=>tasks.Count,_=>0};
+    private int ViewCount(string value)=>value switch{"attention"=>tasks.Count(x=>x.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter),"running"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Running),"waiting"=>tasks.Count(x=>IsWaiting(x.Status)),"recent"=>tasks.Count(x=>x.Status==CollectionTaskStatus.Succeeded),"resources"=>progress?.ResourcesByType.Values.Sum()??UniqueResources.Count,"all"=>tasks.Count,_=>0};
     private static string DetailHref(CollectionTaskSummary item)=>$"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}";
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}

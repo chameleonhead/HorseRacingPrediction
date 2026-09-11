@@ -35,6 +35,8 @@ Each list row is a keyboard-operable link to an independent detail page, followi
 
 The main list requests at most 1,000 recent tasks and paginates them by 50 in the client. The Resources view projects the latest task for each Resource + CollectionDefinition pair; the other views preserve individual task history.
 
+Visual QA iterations made the status tabs a compact elevated segment, kept search and its action on one desktop row, and collapsed them safely on narrow screens. Collection type cards use a two-column desktop layout, a single-column narrow layout, and visible hover/focus feedback. The independent detail page gives the state facts a contained summary surface while keeping attempts and locations in comparison-friendly tabs. The `直近の処理` label explicitly communicates the 1,000-task read limit; the `収集対象` count comes from the platform-wide progress projection rather than that limited list.
+
 ## States and interaction
 
 - Loading keeps the page heading and filters visible and shows an explicit progress state.
