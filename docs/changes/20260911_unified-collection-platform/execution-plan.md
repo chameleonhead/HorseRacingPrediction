@@ -8,8 +8,8 @@ This is the durable continuation plan for the approved unified collection platfo
 | L1 | Complete candidate-by-candidate URL fallback and page identity validation | — | Collector/Scraping handlers | Direct invalid→next candidate→discovery tests | Completed |
 | I1 | Create replacement SQS/DLQ alongside legacy resources and encode post-smoke deletion | — | Terraform/cutover artifacts | `terraform validate/plan` where available; static contract test | Completed (static validation; Terraform CLI unavailable) |
 | O1 | Implement new DLQ reconciliation, retry classification, pause/cancel/watchdog and failure notification | P1 | CollectionPlatform store/API | API→state failure/retry tests | Running |
-| D1 | Complete Discovery API→outbox→SQS→Lambda→child Request integration test | L1, P1 | API/Collector integration tests | Full transport-boundary test | Running |
-| S1 | Implement Horse/Jockey/Trainer handlers and RaceCard reference discovery | D1 | Collector/Scraping/API client | RaceCard→three Resource requests→profile write | Queued |
+| D1 | Complete Discovery API→outbox→SQS→Lambda→child Request integration test | L1, P1 | API/Collector integration tests | Full transport-boundary test | Completed |
+| S1 | Implement Horse/Jockey/Trainer handlers and RaceCard reference discovery | D1 | Collector/Scraping/API client | RaceCard→three Resource requests→profile write | Running |
 | S2 | Implement Horse→Trainer/sire/dam discovery with cycle and priority guards | S1 | Collector collection handlers | Cyclic graph test | Queued |
 | B1 | Implement year/month Batch, staged result discovery, restart, and hole projection | D1, P1 | CollectionPlatform/API/Collector | Partial failure then later batch and hole query | Queued |
 | A1 | Implement append-only OddsSnapshot domain write, parser, handler, and repeated schedule | D1, P1 | Domain/Application/Scraping/Collector | Multiple observed-at snapshots retained | Queued |
