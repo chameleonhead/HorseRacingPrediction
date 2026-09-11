@@ -190,6 +190,15 @@ public sealed class CollectionPlatformStore
                 || task.DispatchGeneration != dispatchGeneration) return null;
             var request = await db.Requests.SingleAsync(x => x.RequestId == task.RequestId, cancellationToken);
             var resource = await db.Resources.SingleAsync(x => x.ResourcePk == task.ResourcePk, cancellationToken);
+            var locations = await db.Locations.AsNoTracking().Where(x => x.ResourcePk == task.ResourcePk
+                && x.DefinitionId == task.DefinitionId && x.Status != ResourceLocationStatus.Invalid)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            var candidates = locations.OrderByDescending(x => x.Status == ResourceLocationStatus.Active)
+                .ThenByDescending(x => x.LastVerifiedAt).Select(x => new ResourceLocationCandidate(
+                    x.LocationId, new Uri(x.Url), x.Source, x.Status, x.LastVerifiedAt)).ToList();
+            if (Uri.TryCreate(request.ExplicitUrl, UriKind.Absolute, out var explicitUrl))
+                candidates.Insert(0, new(0, explicitUrl, ResourceLocationSource.Explicit,
+                    ResourceLocationStatus.Unknown, null));
             task.Status = CollectionTaskStatus.Running;
             task.LeaseToken = Guid.NewGuid().ToString("N");
             task.LeaseExpiresAt = now.Add(leaseDuration);
@@ -212,7 +221,7 @@ public sealed class CollectionPlatformStore
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
                 task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
                 resource.EffectiveDate,
-                JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? []);
+                JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? [], candidates);
         }
         finally { _gate.Release(); }
     }
@@ -238,6 +247,50 @@ public sealed class CollectionPlatformStore
             attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
             attempt.HttpStatusCode = completion.HttpStatusCode;
             attempt.PageIdentification = completion.PageIdentification;
+            if (completion.RequestedUrl is not null)
+            {
+                var requested = completion.RequestedUrl.AbsoluteUri;
+                var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
+                    && x.DefinitionId == task.DefinitionId && x.Url == requested, cancellationToken);
+                if (location is null)
+                {
+                    location = new ResourceLocationEntity
+                    {
+                        ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, Url = requested,
+                        Source = ResourceLocationSource.Explicit, Status = ResourceLocationStatus.Unknown,
+                        DiscoveredAt = now,
+                    };
+                    db.Locations.Add(location);
+                }
+                if (completion.Result == CollectionAttemptResult.Succeeded)
+                {
+                    location.Status = ResourceLocationStatus.Active;
+                    location.LastVerifiedAt = now;
+                    location.LastFailureCode = null;
+                }
+                else if (completion.Result is CollectionAttemptResult.ResourceNotFound
+                         or CollectionAttemptResult.UnexpectedPage or CollectionAttemptResult.ValidationFailure)
+                {
+                    location.Status = ResourceLocationStatus.Suspect;
+                    location.LastFailedAt = now;
+                    location.LastFailureCode = completion.ErrorCode ?? completion.Result.ToString();
+                }
+            }
+            if (completion.Result == CollectionAttemptResult.Succeeded && completion.FinalUrl is not null
+                && completion.FinalUrl != completion.RequestedUrl)
+            {
+                var redirected = completion.FinalUrl.AbsoluteUri;
+                var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
+                    && x.DefinitionId == task.DefinitionId && x.Url == redirected, cancellationToken);
+                if (location is null)
+                    db.Locations.Add(new ResourceLocationEntity
+                    {
+                        ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, Url = redirected,
+                        Source = ResourceLocationSource.Redirected, Status = ResourceLocationStatus.Active,
+                        DiscoveredAt = now, LastVerifiedAt = now,
+                    });
+                else { location.Status = ResourceLocationStatus.Active; location.LastVerifiedAt = now; }
+            }
             task.LeaseToken = null;
             task.LeaseExpiresAt = null;
             task.UpdatedAt = now;

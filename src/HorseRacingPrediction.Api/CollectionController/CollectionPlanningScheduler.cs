@@ -22,6 +22,7 @@ public sealed class CollectionPlanningScheduler : BackgroundService
             await _store.RequestAsync(new(ResourceType.Race, "JRA", $"discovery:{bucket:yyyyMMddHH}"),
                 new("race-discovery"), 1, CollectionReason.Discovery, now,
                 CollectionLane.Realtime, (int)CollectionPriority.High,
+                effectiveDate: DateOnly.FromDateTime(now.UtcDateTime),
                 cancellationToken: stoppingToken).ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken).ConfigureAwait(false);
         }

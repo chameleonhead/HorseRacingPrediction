@@ -11,6 +11,13 @@ public sealed partial class JraRaceCardCollectionWorkflow
     {
         var page = await _session.Navigate.ToRaceCardAsync(raceId, cancellationToken);
         if (page is not JraRaceCardPage card) throw new JraCollectionException("出馬表を取得できませんでした。");
+        return await RefreshPageAsync(card, targetRaceId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<RaceCardRaceOutcome> RefreshPageAsync(JraRaceCardPage card, string targetRaceId,
+        CancellationToken cancellationToken = default)
+    {
+        var raceId = card.RaceId;
         if (card.RaceId != raceId)
             throw new JraRaceIdentityMismatchException(JraPageKind.RaceCard, card.Url, raceId.ToString(), card.RaceId.ToString());
         if (string.IsNullOrWhiteSpace(card.RaceName) || card.Entries.Count == 0)

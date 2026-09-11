@@ -227,6 +227,7 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 - 2026-09-11: レビュー後の最初の修正として、Lambdaキャンセル時に独立20秒の報告猶予で新AttemptをTransientFailureとして完了し、1分後のretryを生成する経路へ変更した。APIの定期serviceは期限切れleaseを後続Acquireに依存せず回収する。Worker HTTP境界と再起動Storeを含む対象テスト10件が成功し、Api/Collector buildはいずれも警告0・エラー0だった。
 - 2026-09-11: lane allocatorを実outbox dispatcherへ接続し、Realtimeを優先しつつ4件連続後にBackgroundを送出することをdispatcher/SQS abstraction境界で検証した。このテストにより管理task一覧のSQLite DateTimeOffset ORDER BY不具合も検出し、メモリ側sortへ修正した。
 - 2026-09-11: Request時にDefinitionへ登録されていないrevisionを拒否し、存在しないrevisionがApplied/RequiredRevisionへ混入する経路を閉じた。定期schedulerはactive taskを確認してからRequestを生成し、期限超過中に毎分Request履歴が増える問題を防止した。Store対象テスト10件とApi buildが成功した。
+- 2026-09-11: race-discovery handlerから旧ScrapingRegistrationService依存を削除した。Calendarで開催場を発見し、RaceList/ResultListに実在するRaceだけを新CollectionRequest APIへ展開する。Explicit/保存済みURL候補をleaseへ含め、RaceCard/Result handlerが直接navigate後にpage typeとRaceIdを検証して既存workflowへ渡し、成功URLをActive/LastVerifiedAtへ反映する経路を接続した。Collectorの旧planning/execution hosted service登録も削除した。対象21テストとCollector buildは成功した。
 - 実装検証は承認後に Phase ごとに追記する。
 
 ## Deviations and follow-up

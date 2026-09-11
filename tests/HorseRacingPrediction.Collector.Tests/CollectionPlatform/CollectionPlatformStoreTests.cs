@@ -183,6 +183,26 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task SuccessfulExplicitUrl_IsPromotedToVerifiedResourceLocation()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var url = new Uri("https://example.test/horse/H123");
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now,
+            explicitUrl: url);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual(url, lease.Locations![0].Url);
+        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, RequestedUrl: url, FinalUrl: url));
+
+        var locations = await store.ResolveLocationsAsync(Horse, HorseProfile);
+        Assert.HasCount(1, locations);
+        Assert.AreEqual(ResourceLocationStatus.Active, locations[0].Status);
+        Assert.IsNotNull(locations[0].LastVerifiedAt);
+    }
+
+    [TestMethod]
     public async Task UnexpectedPage_MarksLocationSuspectAndSuccessVerifiesIt()
     {
         var store = await CreateStoreAsync();

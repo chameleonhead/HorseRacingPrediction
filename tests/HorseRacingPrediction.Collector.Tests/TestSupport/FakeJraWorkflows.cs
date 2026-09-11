@@ -27,6 +27,13 @@ internal sealed class FakeJraScheduleCollectionWorkflow : IJraScheduleCollection
 
 internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollectionWorkflow
 {
+    public Task<RaceCardRaceOutcome> RefreshPageAsync(HorseRacingPrediction.Scraping.Jra.Pages.JraRaceCardPage page,
+        string targetRaceId, CancellationToken cancellationToken = default)
+    {
+        RefreshRequests.Add((page.RaceId, targetRaceId));
+        return Task.FromResult(new RaceCardRaceOutcome(page.RaceId.Number, targetRaceId,
+            page.RaceName, page.Url, null));
+    }
     public List<(RaceId Race, string Target)> RefreshRequests { get; } = [];
     public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string targetRaceId, CancellationToken cancellationToken = default)
     {

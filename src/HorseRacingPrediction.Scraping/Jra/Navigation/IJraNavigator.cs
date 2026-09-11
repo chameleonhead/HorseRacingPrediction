@@ -9,6 +9,8 @@ namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 /// </summary>
 public interface IJraNavigator
 {
+    Task<IJraPage> ToUrlAsync(Uri url, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Direct URL navigation is not supported.");
     Task<JraSubjectPage> ToSubjectProfileAsync(JraSubjectIdentity subject, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
     Task<JraSubjectPage?> NextHorseHistoryPageAsync(JraSubjectPage current, CancellationToken cancellationToken = default)

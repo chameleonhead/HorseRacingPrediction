@@ -104,7 +104,8 @@ public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool 
 public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, string LeaseToken, DateTimeOffset LeaseExpiresAt,
-    DateOnly? EffectiveDate, IReadOnlyDictionary<string, string> Attributes);
+    DateOnly? EffectiveDate, IReadOnlyDictionary<string, string> Attributes,
+    IReadOnlyList<ResourceLocationCandidate>? Locations = null);
 
 public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result, string? ErrorCode = null,
     string? ErrorMessage = null, Uri? RequestedUrl = null, Uri? FinalUrl = null,

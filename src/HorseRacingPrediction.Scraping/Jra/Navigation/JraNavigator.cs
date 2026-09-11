@@ -17,6 +17,12 @@ namespace HorseRacingPrediction.Scraping.Jra.Navigation;
 public sealed partial class JraNavigator
     : IJraNavigator
 {
+    public async Task<IJraPage> ToUrlAsync(Uri url, CancellationToken cancellationToken = default)
+    {
+        if (url.Scheme is not ("http" or "https")) throw new ArgumentException("HTTP(S) URL is required.", nameof(url));
+        await _browser.NavigateAsync(url.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+        return await _pageReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+    }
     private readonly IWebBrowser _browser;
     private readonly JraPageReader _pageReader;
     private readonly ILogger<JraNavigator> _logger;
