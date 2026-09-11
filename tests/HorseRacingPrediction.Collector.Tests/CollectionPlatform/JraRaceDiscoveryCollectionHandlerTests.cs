@@ -42,14 +42,49 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id == "20260912:Tokyo:11"));
     }
 
+    [TestMethod]
+    public async Task BackfillDiscovery_VisitsOnlyItsDayAndPropagatesBatchId()
+    {
+        var date = new DateOnly(2020, 1, 5);
+        var visited = new List<DateOnly>();
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceResultListFactory = (target, course) => new JraRaceResultPage(
+                    "https://example.test/result/1", new(target, course, 1), "race", []),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = target =>
+            {
+                visited.Add(target);
+                return target == date ? [RaceCourse.Tokyo] : [];
+            },
+        };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "backfill:20200105"), new("race-discovery"), 1,
+            CollectionReason.Backfill, CollectionLane.Background, 10, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
+            date, new Dictionary<string, string> { ["batchId"] = "jra:2020-01" });
+
+        await handler.CollectAsync(task, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { date }, visited);
+        Assert.IsTrue(sink.Requests.All(x => x.Attributes.GetValueOrDefault("batchId") == "jra:2020-01"));
+    }
+
     private sealed class RecordingSink : ICollectionRequestSink
     {
-        public List<(ResourceKey Resource, CollectionDefinitionId Definition)> Requests { get; } = [];
+        public List<(ResourceKey Resource, CollectionDefinitionId Definition,
+            IReadOnlyDictionary<string, string> Attributes)> Requests { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add((resource, definition));
+            Requests.Add((resource, definition, attributes));
             return Task.CompletedTask;
         }
     }

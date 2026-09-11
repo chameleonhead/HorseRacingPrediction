@@ -86,3 +86,24 @@ public sealed class CollectionPlatformDeadLetterReconciler(
         return reconciled;
     }
 }
+
+public sealed class CollectionBackfillRecoveryService(
+    CollectionPlatformStore store,
+    ILogger<CollectionBackfillRecoveryService> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var resumed = await store.ResumeIncompleteBackfillBatchesAsync(DateTimeOffset.UtcNow, stoppingToken)
+                    .ConfigureAwait(false);
+                if (resumed > 0) logger.LogWarning("Resumed {Count} incomplete backfill batch expansions.", resumed);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception ex) { logger.LogError(ex, "Incomplete backfill recovery failed."); }
+            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken).ConfigureAwait(false);
+        }
+    }
+}

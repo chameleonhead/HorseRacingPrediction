@@ -67,6 +67,47 @@ public static class CollectionPlatformEndpointExtensions
                     cancellationToken: token));
             return Results.Accepted(value: new { request.BatchId, Requests = receipts });
         });
+        admin.MapPost("/revisions/preview", async (RevisionImpactPreviewRequest request,
+            CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions,
+            CancellationToken token) => Results.Ok(await store.PreviewRevisionImpactAsync(
+                new(request.DefinitionId), request.Revision, BuildImpact(request.Impact), conditions, token)));
+        admin.MapPost("/revisions/apply", async (ApplyCollectionRevisionRequest request,
+            CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions,
+            CancellationToken token) =>
+        {
+            var impact = BuildImpact(request.Impact);
+            var affected = await store.AddRevisionAndApplyImpactAsync(new(request.DefinitionId), request.Revision,
+                request.Description, impact, conditions, DateTimeOffset.UtcNow, token);
+            return Results.Ok(new { request.DefinitionId, request.Revision, Affected = affected });
+        });
+        admin.MapPost("/revisions/{definition}/{revision:int}/recollect", async (string definition, int revision,
+            RevisionRecollectionRequest request, CollectionPlatformStore store,
+            IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) => Results.Accepted(
+            value: await store.ExpandRevisionRecollectionAsync(new(definition), revision, conditions,
+                DateTimeOffset.UtcNow, request.Lane, request.Priority, token)));
+        admin.MapGet("/revisions/{definition}/{revision:int}/progress", async (string definition, int revision,
+            CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions,
+            CancellationToken token) => Results.Ok(await store.GetRevisionRecollectionProgressAsync(
+                new(definition), revision, conditions, token)));
+        admin.MapPost("/backfills", async (CreateBackfillBatchRequest request, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            if (request.Month is < 1 or > 12 || request.Year is < 1900 or > 2200)
+                return Results.BadRequest(new { message = "Year and month are invalid." });
+            var from = new DateOnly(request.Year, request.Month, 1);
+            var to = from.AddMonths(1).AddDays(-1);
+            var batchId = string.IsNullOrWhiteSpace(request.BatchId)
+                ? $"{request.Provider.Trim().ToLowerInvariant()}:{request.Year:D4}-{request.Month:D2}"
+                : request.BatchId;
+            var batch = await store.CreateOrResumeBackfillBatchAsync(batchId, request.Provider,
+                from, to, DateTimeOffset.UtcNow, token);
+            return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", batch);
+        });
+        admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
+            Results.Ok(await store.GetBackfillBatchesAsync(token)));
+        admin.MapGet("/backfills/{batchId}", async (string batchId, CollectionPlatformStore store,
+            CancellationToken token) => await store.GetBackfillBatchAsync(batchId, token) is { } batch
+                ? Results.Ok(batch) : Results.NotFound());
 
         var worker = endpoints.MapGroup("/api/internal/collection").WithTags("Collection Worker");
         worker.MapPost("/tasks/{taskId:guid}/acquire", async (Guid taskId, AcquireCollectionTaskRequest request,
@@ -93,6 +134,20 @@ public static class CollectionPlatformEndpointExtensions
                 ? Results.NoContent() : Results.Conflict());
         return endpoints;
     }
+
+    private static RevisionImpact BuildImpact(RevisionImpactRequest request) => request.ScopeType switch
+    {
+        RevisionImpactScopeType.All => new(request.ScopeType, string.Empty),
+        RevisionImpactScopeType.SpecificResources when request.Resources is { Count: > 0 } =>
+            new(request.ScopeType, System.Text.Json.JsonSerializer.Serialize(request.Resources)),
+        RevisionImpactScopeType.DateRange when request.From is not null && request.To is not null
+                                               && request.From <= request.To =>
+            new(request.ScopeType, System.Text.Json.JsonSerializer.Serialize(new
+                { From = request.From.Value, To = request.To.Value })),
+        RevisionImpactScopeType.NamedCondition when !string.IsNullOrWhiteSpace(request.NamedCondition) =>
+            new(request.ScopeType, request.NamedCondition),
+        _ => throw new ArgumentException("Revision impact parameters are invalid."),
+    };
 }
 
 public sealed record CreateCollectionRequest(ResourceType ResourceType, string Provider, string ResourceId,
@@ -109,6 +164,16 @@ public sealed record BulkCollectionResource(ResourceType Type, string Provider, 
 public sealed record BulkCollectionRequest(string DefinitionId, int RequestedRevision, CollectionReason Reason,
     IReadOnlyList<BulkCollectionResource> Resources, string? BatchId = null,
     CollectionLane Lane = CollectionLane.Background, int Priority = (int)CollectionPriority.Background);
+
+public sealed record RevisionImpactRequest(RevisionImpactScopeType ScopeType,
+    IReadOnlyList<ResourceKey>? Resources = null, DateOnly? From = null, DateOnly? To = null,
+    string? NamedCondition = null);
+public sealed record RevisionImpactPreviewRequest(string DefinitionId, int Revision, RevisionImpactRequest Impact);
+public sealed record ApplyCollectionRevisionRequest(string DefinitionId, int Revision, string Description,
+    RevisionImpactRequest Impact);
+public sealed record RevisionRecollectionRequest(CollectionLane Lane = CollectionLane.Background,
+    int Priority = (int)CollectionPriority.Background);
+public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);
 
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,

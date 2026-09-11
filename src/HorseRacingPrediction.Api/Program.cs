@@ -111,7 +111,10 @@ builder.Services.AddSingleton<IPredictionSchedule>(services => services.GetRequi
 builder.Services.Configure<CollectionPlatformOptions>(builder.Configuration.GetSection(CollectionPlatformOptions.SectionName));
 builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
+builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyLayoutRevisionCondition>();
+builder.Services.AddSingleton<INamedRevisionImpactCondition, RaceResultDeadHeatBeforeRevisionFiveCondition>();
 builder.Services.AddHostedService<CollectionScheduleService>();
+builder.Services.AddHostedService<CollectionBackfillRecoveryService>();
 builder.Services.Configure<AgentProcessingOptions>(builder.Configuration.GetSection("CollectionProcessing"));
 builder.Services.AddSingleton<ProcessingStateStore>();
 builder.Services.AddSingleton<IProcessingStateStore>(services => services.GetRequiredService<ProcessingStateStore>());

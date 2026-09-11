@@ -117,6 +117,15 @@ public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string Sc
 public sealed record RevisionResourceCandidate(ResourceKey Resource, DateOnly? EffectiveDate,
     IReadOnlyDictionary<string, string> Attributes);
 
+public sealed record RevisionImpactPreview(CollectionDefinitionId Definition, int Revision,
+    RevisionImpact Impact, int TotalCandidates, IReadOnlyList<ResourceKey> AffectedResources);
+
+public sealed record RevisionRecollectionExpansion(CollectionDefinitionId Definition, int Revision,
+    string BatchId, int Affected, int RequestsCreated, int ExistingRequests);
+
+public sealed record RevisionRecollectionProgress(CollectionDefinitionId Definition, int Revision,
+    int Affected, int Completed, int Pending, int Failed);
+
 public interface INamedRevisionImpactCondition
 {
     string Name { get; }
@@ -146,3 +155,9 @@ public sealed record PendingCollectionFailureNotification(Guid NotificationId, G
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
     string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt);
 public sealed record CollectionWatchdogResult(int ReclaimedLeases, int RedispatchedTasks, int DeadLetteredTasks);
+public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOnly To,
+    int ExpectedDiscoveryDays, int RegisteredDiscoveryDays, int Pending, int Running,
+    int Succeeded, int Failed, IReadOnlyList<BackfillHole> Holes, DateTimeOffset CreatedAt,
+    DateTimeOffset? ExpansionCompletedAt);
+public sealed record BackfillHole(ResourceKey Resource, CollectionDefinitionId Definition,
+    CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage);

@@ -21,7 +21,7 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
             ResourceType = resource.Type, resource.Provider, ResourceId = resource.Id,
             DefinitionId = definition.Value, RequestedRevision = 1, Reason = reason, Lane = lane,
             Priority = priority, ExplicitUrl = explicitUrl?.AbsoluteUri, EffectiveDate = effectiveDate,
-            Attributes = attributes,
+            Attributes = attributes, BatchId = attributes.GetValueOrDefault("batchId"),
         }, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }

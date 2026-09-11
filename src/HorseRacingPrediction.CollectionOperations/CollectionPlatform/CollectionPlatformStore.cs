@@ -126,6 +126,25 @@ public sealed class CollectionPlatformStore
                 if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
             }
 
+            if (!string.IsNullOrWhiteSpace(batchId))
+            {
+                var existingRequest = await db.Requests.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value
+                    && x.BatchId == batchId, cancellationToken).ConfigureAwait(false);
+                if (existingRequest is not null)
+                {
+                    var existingTask = await db.Tasks.AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.RequestId == existingRequest.RequestId, cancellationToken)
+                        .ConfigureAwait(false);
+                    var existingActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
+                        x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value,
+                        cancellationToken).ConfigureAwait(false);
+                    await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return new(existingRequest.RequestId,
+                        existingTask?.TaskId ?? existingActive?.TaskId ?? Guid.Empty, false);
+                }
+            }
+
             var request = new CollectionRequestEntity
             {
                 RequestId = Guid.NewGuid(), ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value,
@@ -321,8 +340,37 @@ public sealed class CollectionPlatformStore
                 state.AppliedRevision = Math.Max(state.AppliedRevision, task.RequestedRevision);
                 state.LastCollectedAt = now;
                 state.NextCollectionAt = completion.NextCollectionAt;
-                state.Status = CollectionStateStatus.Current;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+                state.Status = state.AppliedRevision >= state.RequiredRevision
+                    ? CollectionStateStatus.Current : CollectionStateStatus.Stale;
+                if (state.AppliedRevision < state.RequiredRevision)
+                {
+                    var followUpRequests = await db.Requests
+                        .Where(x => x.ResourcePk == task.ResourcePk && x.DefinitionId == task.DefinitionId
+                                    && x.RequestedRevision >= state.RequiredRevision)
+                        .ToListAsync(cancellationToken).ConfigureAwait(false);
+                    var followUpRequest = followUpRequests.OrderByDescending(x => x.RequestedAt).FirstOrDefault();
+                    if (followUpRequest is not null)
+                    {
+                        var followUp = new CollectionTaskEntity
+                        {
+                            TaskId = Guid.NewGuid(), RequestId = followUpRequest.RequestId,
+                            ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId,
+                            RequestedRevision = state.RequiredRevision, Status = CollectionTaskStatus.Ready,
+                            Lane = task.Lane, Priority = task.Priority, AvailableAt = now,
+                            CreatedAt = now, UpdatedAt = now, DispatchGeneration = 1,
+                        };
+                        db.Tasks.Add(followUp);
+                        db.ActiveTasks.Add(new CollectionActiveTaskEntity
+                            { ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, TaskId = followUp.TaskId });
+                        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                        {
+                            OutboxId = Guid.NewGuid(), TaskId = followUp.TaskId, DispatchGeneration = 1,
+                            AvailableAt = now, CreatedAt = now,
+                        });
+                        state.Status = CollectionStateStatus.Pending;
+                    }
+                }
             }
             else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
             {
@@ -474,6 +522,78 @@ public sealed class CollectionPlatformStore
             return affected;
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task<RevisionImpactPreview> PreviewRevisionImpactAsync(CollectionDefinitionId definition,
+        int revision, RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions,
+        CancellationToken cancellationToken = default)
+    {
+        if (revision < 1) throw new ArgumentOutOfRangeException(nameof(revision));
+        var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
+        ValidateImpact(impact, conditions.Values);
+        await using var db = CreateDbContext();
+        var definitionEntity = await db.Definitions.AsNoTracking()
+            .SingleAsync(x => x.DefinitionId == definition.Value, cancellationToken).ConfigureAwait(false);
+        if (await db.Revisions.AsNoTracking().AnyAsync(x => x.DefinitionId == definition.Value
+                && x.Revision == revision, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException($"Revision {definition}:{revision} already exists.");
+        var candidates = await LoadRevisionCandidatesAsync(db, definitionEntity.DefinitionId, cancellationToken)
+            .ConfigureAwait(false);
+        var affected = candidates.Where(x => MatchesImpact(x, impact, conditions)).Select(x => x.Resource).ToList();
+        return new(definition, revision, impact, candidates.Count, affected);
+    }
+
+    public async Task<RevisionRecollectionExpansion> ExpandRevisionRecollectionAsync(
+        CollectionDefinitionId definition, int revision,
+        IEnumerable<INamedRevisionImpactCondition> namedConditions, DateTimeOffset now,
+        CollectionLane lane = CollectionLane.Background, int priority = (int)CollectionPriority.Background,
+        CancellationToken cancellationToken = default)
+    {
+        RevisionImpact impact;
+        List<RevisionResourceCandidate> candidates;
+        await using (var db = CreateDbContext())
+        {
+            var row = await db.RevisionImpacts.AsNoTracking().SingleAsync(x =>
+                x.DefinitionId == definition.Value && x.Revision == revision, cancellationToken).ConfigureAwait(false);
+            impact = new(row.ScopeType, row.ScopePayload);
+            candidates = await LoadRevisionCandidatesAsync(db, definition.Value, cancellationToken).ConfigureAwait(false);
+        }
+        var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
+        ValidateImpact(impact, conditions.Values);
+        var affected = candidates.Where(x => MatchesImpact(x, impact, conditions)).ToList();
+        var batchId = $"revision:{definition.Value}:{revision}";
+        var created = 0;
+        foreach (var candidate in affected)
+        {
+            var receipt = await RequestAsync(candidate.Resource, definition, revision,
+                CollectionReason.DefinitionChanged, now, lane, priority, batchId: batchId,
+                effectiveDate: candidate.EffectiveDate, attributes: candidate.Attributes,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (receipt.CreatedTask) created++;
+        }
+        return new(definition, revision, batchId, affected.Count, created, affected.Count - created);
+    }
+
+    public async Task<RevisionRecollectionProgress> GetRevisionRecollectionProgressAsync(
+        CollectionDefinitionId definition, int revision,
+        IEnumerable<INamedRevisionImpactCondition> namedConditions,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var impactRow = await db.RevisionImpacts.AsNoTracking().SingleAsync(x =>
+            x.DefinitionId == definition.Value && x.Revision == revision, cancellationToken).ConfigureAwait(false);
+        var impact = new RevisionImpact(impactRow.ScopeType, impactRow.ScopePayload);
+        var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
+        ValidateImpact(impact, conditions.Values);
+        var rows = await (from state in db.States.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+            where state.DefinitionId == definition.Value
+            select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var affected = rows.Where(x => MatchesImpact(ToRevisionCandidate(x.resource), impact, conditions)).ToList();
+        var completed = affected.Count(x => x.state.AppliedRevision >= revision);
+        var failed = affected.Count(x => x.state.AppliedRevision < revision
+                                         && x.state.Status == CollectionStateStatus.Failed);
+        return new(definition, revision, affected.Count, completed, affected.Count - completed - failed, failed);
     }
 
     public async Task<long> UpsertLocationAsync(ResourceKey resource, CollectionDefinitionId definition, Uri url,
@@ -819,6 +939,114 @@ public sealed class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<BackfillBatchSnapshot> CreateOrResumeBackfillBatchAsync(string batchId, string provider,
+        DateOnly from, DateOnly to, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) throw new ArgumentException("Batch id is required.", nameof(batchId));
+        if (from > to) throw new ArgumentException("Backfill start date must be on or before end date.", nameof(from));
+        provider = provider.Trim().ToUpperInvariant();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var batch = await db.BackfillBatches.SingleOrDefaultAsync(x => x.BatchId == batchId, cancellationToken);
+            if (batch is null)
+            {
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                {
+                    BatchId = batchId, Provider = provider, From = from, To = to, CreatedAt = now
+                });
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else if (batch.Provider != provider || batch.From != from || batch.To != to)
+                throw new InvalidOperationException($"Backfill batch '{batchId}' already exists with another range.");
+        }
+        finally { _gate.Release(); }
+
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var resource = new ResourceKey(ResourceType.Race, provider, $"backfill:{date:yyyyMMdd}");
+            if (await GetStateAsync(resource, new("race-discovery"), cancellationToken).ConfigureAwait(false) is not null)
+                continue;
+            await RequestAsync(resource, new("race-discovery"), 1, CollectionReason.Backfill, now,
+                CollectionLane.Background, (int)CollectionPriority.Background, batchId: batchId,
+                effectiveDate: date, attributes: new Dictionary<string, string>
+                {
+                    ["batchId"] = batchId,
+                    ["backfillDate"] = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var batch = await db.BackfillBatches.SingleAsync(x => x.BatchId == batchId, cancellationToken);
+            batch.ExpansionCompletedAt ??= now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+        return (await GetBackfillBatchAsync(batchId, cancellationToken).ConfigureAwait(false))!;
+    }
+
+    public async Task<BackfillBatchSnapshot?> GetBackfillBatchAsync(string batchId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var batch = await db.BackfillBatches.AsNoTracking().SingleOrDefaultAsync(x => x.BatchId == batchId,
+            cancellationToken).ConfigureAwait(false);
+        if (batch is null) return null;
+        var rows = await (from request in db.Requests.AsNoTracking()
+            join task in db.Tasks.AsNoTracking() on request.RequestId equals task.RequestId
+            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+            where request.BatchId == batchId
+            select new { task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var taskIds = rows.Select(x => x.task.TaskId).ToArray();
+        var attempts = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var holes = rows.Where(x => x.task.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter)
+            .Select(x =>
+            {
+                var attempt = attempts.Where(a => a.TaskId == x.task.TaskId)
+                    .OrderByDescending(a => a.AttemptNumber).FirstOrDefault();
+                return new BackfillHole(new(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+                    new(x.task.DefinitionId), x.task.Status, attempt?.ErrorCode, attempt?.ErrorMessage);
+            }).ToList();
+        var expected = batch.To.DayNumber - batch.From.DayNumber + 1;
+        var discoveryDays = rows.Count(x => x.task.DefinitionId == "race-discovery");
+        return new(batch.BatchId, batch.From, batch.To, expected, discoveryDays,
+            rows.Count(x => x.task.Status is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready
+                or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery),
+            rows.Count(x => x.task.Status == CollectionTaskStatus.Running),
+            rows.Count(x => x.task.Status == CollectionTaskStatus.Succeeded),
+            holes.Count, holes, batch.CreatedAt, batch.ExpansionCompletedAt);
+    }
+
+    public async Task<IReadOnlyList<BackfillBatchSnapshot>> GetBackfillBatchesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var ids = await db.BackfillBatches.AsNoTracking().OrderByDescending(x => x.CreatedAt)
+            .Select(x => x.BatchId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var results = new List<BackfillBatchSnapshot>(ids.Count);
+        foreach (var id in ids)
+            if (await GetBackfillBatchAsync(id, cancellationToken).ConfigureAwait(false) is { } item) results.Add(item);
+        return results;
+    }
+
+    public async Task<int> ResumeIncompleteBackfillBatchesAsync(DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var incomplete = await db.BackfillBatches.AsNoTracking().Where(x => x.ExpansionCompletedAt == null)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var batch in incomplete)
+            await CreateOrResumeBackfillBatchAsync(batch.BatchId, batch.Provider, batch.From, batch.To, now,
+                cancellationToken).ConfigureAwait(false);
+        return incomplete.Count;
+    }
+
     private static bool IsRetryable(CollectionAttemptResult result) => result is
         CollectionAttemptResult.TransientFailure or CollectionAttemptResult.ResourceNotYetAvailable
         or CollectionAttemptResult.AccessLimited;
@@ -854,13 +1082,40 @@ public sealed class CollectionPlatformStore
         => impact.ScopeType switch
         {
             RevisionImpactScopeType.All => true,
-            RevisionImpactScopeType.SpecificResources =>
-                (JsonSerializer.Deserialize<string[]>(impact.ScopePayload) ?? [])
-                    .Contains(candidate.Resource.Id, StringComparer.Ordinal),
+            RevisionImpactScopeType.SpecificResources => MatchesSpecificResource(candidate.Resource, impact.ScopePayload),
             RevisionImpactScopeType.DateRange => MatchesDateRange(candidate.EffectiveDate, impact.ScopePayload),
             RevisionImpactScopeType.NamedCondition => conditions[impact.ScopePayload].Matches(candidate),
             _ => false,
         };
+
+    private static bool MatchesSpecificResource(ResourceKey resource, string payload)
+    {
+        try
+        {
+            var keys = JsonSerializer.Deserialize<ResourceKey[]>(payload);
+            if (keys is not null)
+                return keys.Select(x => x.Normalize()).Contains(resource.Normalize());
+        }
+        catch (JsonException)
+        {
+            // Older revision impacts stored resource ids only. Keep them readable during migration.
+        }
+        return (JsonSerializer.Deserialize<string[]>(payload) ?? []).Contains(resource.Id, StringComparer.Ordinal);
+    }
+
+    private static RevisionResourceCandidate ToRevisionCandidate(CollectionResourceEntity resource)
+        => new(new(resource.Type, resource.Provider, resource.ResourceId), resource.EffectiveDate,
+            JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? []);
+
+    private static async Task<List<RevisionResourceCandidate>> LoadRevisionCandidatesAsync(
+        CollectionPlatformDbContext db, string definitionId, CancellationToken cancellationToken)
+    {
+        var resources = await (from state in db.States.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+            where state.DefinitionId == definitionId
+            select resource).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return resources.Select(ToRevisionCandidate).ToList();
+    }
 
     private static bool MatchesDateRange(DateOnly? date, string payload)
     {

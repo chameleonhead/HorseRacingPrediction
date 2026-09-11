@@ -252,7 +252,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(2L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(3L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -360,6 +360,46 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task Backfill_RestartsWithoutDuplicateTasksAndProjectsHolesWhileLaterBatchContinues()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+            1, "initial", false);
+        var first = await store.CreateOrResumeBackfillBatchAsync("jra:2026-01", "jra",
+            new(2026, 1, 1), new(2026, 1, 3), now);
+        Assert.AreEqual(3, first.RegisteredDiscoveryDays);
+
+        var tasks = await store.GetTasksAsync();
+        var day1 = tasks.Single(x => x.Resource.Id == "backfill:20260101");
+        var failedLease = await store.AcquireAsync(day1.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(failedLease);
+        await store.CompleteAttemptAsync(day1.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "BrokenDay", "fixture failure"));
+        var day2 = tasks.Single(x => x.Resource.Id == "backfill:20260102");
+        var successLease = await store.AcquireAsync(day2.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(successLease);
+        await store.CompleteAttemptAsync(day2.TaskId, successLease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded));
+
+        var restarted = CreateStore();
+        var resumed = await restarted.CreateOrResumeBackfillBatchAsync("jra:2026-01", "jra",
+            new(2026, 1, 1), new(2026, 1, 3), now.AddMinutes(1));
+        Assert.AreEqual(3, resumed.RegisteredDiscoveryDays);
+        Assert.AreEqual(1, resumed.Failed);
+        Assert.AreEqual(1, resumed.Succeeded);
+        Assert.AreEqual(1, resumed.Pending);
+        Assert.HasCount(1, resumed.Holes);
+        Assert.AreEqual("backfill:20260101", resumed.Holes[0].Resource.Id);
+        Assert.AreEqual("BrokenDay", resumed.Holes[0].ErrorCode);
+
+        var later = await restarted.CreateOrResumeBackfillBatchAsync("jra:2026-02", "jra",
+            new(2026, 2, 1), new(2026, 2, 2), now.AddMinutes(2));
+        Assert.AreEqual(2, later.RegisteredDiscoveryDays);
+        Assert.AreEqual(2, later.Pending);
+    }
+
+    [TestMethod]
     public async Task Startup_ConcurrentStores_SerializeSchemaInitialization()
     {
         var stores = await Task.WhenAll(Enumerable.Range(0, 8)
@@ -370,7 +410,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 2;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 3;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 

@@ -17,6 +17,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
     public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
+    public DbSet<BackfillBatchEntity> BackfillBatches => Set<BackfillBatchEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,6 +92,11 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_failure_notifications"); e.HasKey(x => x.NotificationId);
             e.HasIndex(x => new { x.PublishedAt, x.AvailableAt });
             e.HasIndex(x => x.TaskId);
+        });
+        modelBuilder.Entity<BackfillBatchEntity>(e =>
+        {
+            e.ToTable("collection_backfill_batches"); e.HasKey(x => x.BatchId);
+            e.HasIndex(x => new { x.Provider, x.From, x.To });
         });
     }
 }

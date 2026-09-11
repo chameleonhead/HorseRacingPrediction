@@ -107,6 +107,16 @@ public sealed class CollectionFailureNotificationEntity
     public string? LastPublishError { get; set; }
 }
 
+public sealed class BackfillBatchEntity
+{
+    public string BatchId { get; set; } = string.Empty;
+    public string Provider { get; set; } = string.Empty;
+    public DateOnly From { get; set; }
+    public DateOnly To { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ExpansionCompletedAt { get; set; }
+}
+
 public sealed class CollectionActiveTaskEntity
 {
     public long ResourcePk { get; set; }

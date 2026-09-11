@@ -30,9 +30,10 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
             foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
             {
-                var page = offset >= 0
-                    ? await session.Navigate.ToRaceListAsync(date, course, cancellationToken).ConfigureAwait(false)
-                    : await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken).ConfigureAwait(false);
+                var historical = task.Reason == CollectionReason.Backfill || offset < 0;
+                var page = historical
+                    ? await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken).ConfigureAwait(false)
+                    : await session.Navigate.ToRaceListAsync(date, course, cancellationToken).ConfigureAwait(false);
                 var races = page switch
                 {
                     JraRaceListPage list => list.Races,
@@ -48,14 +49,15 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     };
                     if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
-                    if (offset >= 0)
+                    if (!historical)
                         await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
                             CollectionReason.Discovery, CollectionLane.Realtime, 80, ToUri(race.RaceCardUrl), date,
                             attributes, cancellationToken).ConfigureAwait(false);
-                    if (offset < 0 || !string.IsNullOrWhiteSpace(race.ResultUrl))
+                    if (historical || !string.IsNullOrWhiteSpace(race.ResultUrl))
                         await requests.RequestAsync(new(ResourceType.RaceResult, "JRA", id), new("race-result"),
-                            CollectionReason.Discovery, offset >= 0 ? CollectionLane.Realtime : CollectionLane.Background,
-                            offset >= 0 ? 100 : 10, ToUri(race.ResultUrl), date, attributes, cancellationToken)
+                            task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
+                            historical ? CollectionLane.Background : CollectionLane.Realtime,
+                            historical ? 10 : 100, ToUri(race.ResultUrl), date, attributes, cancellationToken)
                             .ConfigureAwait(false);
                 }
             }

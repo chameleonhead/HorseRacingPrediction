@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -68,7 +68,9 @@ internal static class CollectionPlatformSchemaMigrator
                         "Existing collection platform database has an incomplete schema. Missing tables: "
                         + string.Join(", ", missing));
                 var baselineVersion = existing.Contains("collection_platform_controls")
-                    && existing.Contains("collection_failure_notifications") ? CurrentVersion : 1;
+                    && existing.Contains("collection_failure_notifications")
+                    ? existing.Contains("collection_backfill_batches") ? CurrentVersion : 2
+                    : 1;
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
                     cancellationToken, transaction, ("$version", (object)baselineVersion),
@@ -106,6 +108,25 @@ internal static class CollectionPlatformSchemaMigrator
                 CREATE INDEX IX_collection_failure_notifications_TaskId
                     ON collection_failure_notifications (TaskId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (2, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+            version = 2;
+        }
+
+        if (version < 3)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE collection_backfill_batches (
+                    BatchId TEXT NOT NULL CONSTRAINT PK_collection_backfill_batches PRIMARY KEY,
+                    Provider TEXT NOT NULL,
+                    "From" TEXT NOT NULL,
+                    "To" TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    ExpansionCompletedAt TEXT NULL
+                );
+                CREATE INDEX IX_collection_backfill_batches_Provider_From_To
+                    ON collection_backfill_batches (Provider, "From", "To");
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (3, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
         }
