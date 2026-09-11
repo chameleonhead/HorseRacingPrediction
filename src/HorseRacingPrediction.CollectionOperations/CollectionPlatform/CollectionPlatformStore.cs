@@ -598,6 +598,42 @@ public sealed class CollectionPlatformStore
             .OrderBy(x => x.AttemptNumber).ToListAsync(cancellationToken);
     }
 
+    public async Task<CollectionResourceDetail?> GetResourceDetailAsync(ResourceKey resource,
+        CollectionDefinitionId definition, CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await using var db = CreateDbContext();
+        var item = await db.Resources.AsNoTracking().SingleOrDefaultAsync(x => x.Type == resource.Type
+            && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
+        if (item is null) return null;
+        var stateEntity = await db.States.AsNoTracking().SingleOrDefaultAsync(x => x.ResourcePk == item.ResourcePk
+            && x.DefinitionId == definition.Value, cancellationToken);
+        var locationRows = await db.Locations.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
+                && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
+        var locations = locationRows.OrderByDescending(x => x.LastVerifiedAt ?? x.DiscoveredAt)
+            .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url),
+            x.Source, x.Status, x.LastVerifiedAt)).ToList();
+        var requestRows = await db.Requests.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
+                && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
+        var requests = requestRows.OrderByDescending(x => x.RequestedAt).Select(x =>
+            new CollectionRequestSummary(x.RequestId, x.RequestedRevision, x.Reason, x.RequestedAt,
+                x.ExplicitUrl, x.BatchId)).ToList();
+        var taskRows = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
+                && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
+        var tasks = taskRows.OrderByDescending(x => x.CreatedAt).Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
+            x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount)).ToList();
+        var taskIds = tasks.Select(x => x.TaskId).ToArray();
+        var attemptRows = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
+            .ToListAsync(cancellationToken);
+        var attempts = attemptRows.OrderByDescending(x => x.StartedAt).Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
+                x.AttemptNumber, x.StartedAt, x.FinishedAt, x.Result, x.ErrorCode, x.ErrorMessage,
+                x.RequestedUrl, x.FinalUrl, x.HttpStatusCode)).ToList();
+        var state = stateEntity is null ? null : new CollectionStateSnapshot(resource, definition,
+            stateEntity.AppliedRevision, stateEntity.RequiredRevision, stateEntity.LastCollectedAt,
+            stateEntity.NextCollectionAt, stateEntity.Status);
+        return new(state, locations, requests, tasks, attempts);
+    }
+
     public async Task<int> AddRevisionAndApplyImpactAsync(CollectionDefinitionId definition, int revision,
         string description, RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions,
         DateTimeOffset now, CancellationToken cancellationToken = default)
@@ -858,6 +894,29 @@ public sealed class CollectionPlatformStore
             new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
             new CollectionDefinitionId(x.task.DefinitionId), x.task.Status, x.task.Lane, x.task.Priority,
             x.task.RequestedRevision, x.task.AvailableAt, x.task.AttemptCount)).ToList();
+    }
+
+    public async Task<CollectionReadinessSnapshot> GetReadinessAsync(string requestedByRaceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(requestedByRaceId))
+            throw new ArgumentException("Race id is required.", nameof(requestedByRaceId));
+        await using var db = CreateDbContext();
+        var active = await (from guard in db.ActiveTasks.AsNoTracking()
+            join task in db.Tasks.AsNoTracking() on guard.TaskId equals task.TaskId
+            join resource in db.Resources.AsNoTracking() on guard.ResourcePk equals resource.ResourcePk
+            select new { task.DefinitionId, resource.AttributesJson }).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var definitions = active.Where(x =>
+        {
+            var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(x.AttributesJson) ?? [];
+            return attributes.TryGetValue("requestedByRaceId", out var value)
+                && string.Equals(value, requestedByRaceId, StringComparison.Ordinal);
+        }).Select(x => x.DefinitionId).ToArray();
+        return new(definitions.Count(x => x == "horse-profile"),
+            definitions.Count(x => x == "jockey-profile"),
+            definitions.Count(x => x == "race-result"),
+            definitions.Count(x => x == "trainer-profile"));
     }
 
     public async Task<CollectionProgressSnapshot> GetProgressAsync(CancellationToken cancellationToken = default)

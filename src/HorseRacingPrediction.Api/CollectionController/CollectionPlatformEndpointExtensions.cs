@@ -15,6 +15,8 @@ public static class CollectionPlatformEndpointExtensions
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
+        admin.MapGet("/readiness/{raceId}", async (string raceId, CollectionPlatformStore store,
+            CancellationToken token) => Results.Ok(await store.GetReadinessAsync(raceId, token)));
         admin.MapGet("/pipeline", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetPipelineStateAsync(token)));
         admin.MapPost("/pipeline/pause", async (PauseCollectionPipelineRequest request,
@@ -47,6 +49,11 @@ public static class CollectionPlatformEndpointExtensions
             var state = await store.GetStateAsync(new(type, provider, resourceId), new(definition), token);
             return state is null ? Results.NotFound() : Results.Ok(state);
         });
+        admin.MapGet("/resources/{type}/{provider}/{resourceId}/{definition}", async (
+            ResourceType type, string provider, string resourceId, string definition,
+            CollectionPlatformStore store, CancellationToken token) =>
+            await store.GetResourceDetailAsync(new(type, provider, resourceId), new(definition), token) is { } detail
+                ? Results.Ok(detail) : Results.NotFound());
         admin.MapPost("/requests", async (CreateCollectionRequest request, CollectionPlatformStore store,
             CancellationToken token) =>
         {

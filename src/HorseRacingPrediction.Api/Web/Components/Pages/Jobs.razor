@@ -1,349 +1,40 @@
-@implements IAsyncDisposable
 @page "/jobs"
 @attribute [Authorize]
 @inject AdminApiClient Api
-@inject NavigationManager Navigation
 
-<RaceOpsPageHeader Section="運用" Title="収集ジョブ" Description="収集処理の進行状況を対象日から絞り込み、失敗から復旧します。">
-    <Actions>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@OpenRaceDayDialog" Disabled="@operating">開催日を再取得</FluentButton>
-        @if (queuePaused)
-        {
-            <FluentButton Appearance="@Appearance.Accent" OnClick="@ResumeAsync" Disabled="@(operating || !queueStateKnown)">再開</FluentButton>
-        }
-        else
-        {
-            <FluentButton Appearance="@Appearance.Outline" OnClick="@OpenPauseDialog" Disabled="@(operating || !queueStateKnown)">すべてのジョブを一時停止</FluentButton>
-        }
-    </Actions>
+<RaceOpsPageHeader Section="運用" Title="収集管理" Description="Resourceを中心に、収集状態、Task、失敗、Backfillを管理します。">
+ <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton>@if(pipeline?.IsPaused==true){<FluentButton Appearance="@Appearance.Accent" OnClick="ResumeAsync" Disabled="busy">再開</FluentButton>}else{<FluentButton OnClick="PauseAsync" Disabled="@(busy||pipeline is null)">一時停止</FluentButton>}</Actions>
 </RaceOpsPageHeader>
-
-@if (queuePaused)
-{
-    <section role="status" aria-live="polite"><h2>収集全体を停止中</h2><p>@queueState?.Reason</p>
-        @if (queueState?.StoppedAt is { } stopped) { <p>@stopped.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")</p> }
-        @if (queueState?.JobId is { } cause) { <a href="@JobUrl(cause)">原因のジョブを見る</a> }
-        <p>明示的に再開するまで新しいジョブは実行しません。失敗したジョブのリランと個別保留の解除は別に行います。</p>
-    </section>
+@if(pipeline?.IsPaused==true){<FluentMessageBar Intent="@MessageIntent.Warning" Title="収集パイプラインは一時停止中です">@(pipeline.Reason??"管理者により停止されています。")</FluentMessageBar>}
+@if(errors.Count>0){<UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ",errors)"/>}
+@if(progress is not null){<section class="entity-section" aria-label="収集状態サマリー"><div class="detail-facts"><div><span class="object-label">Resources</span>@progress.ResourcesByType.Values.Sum()</div><div><span class="object-label">Active Tasks</span>@progress.ActiveTasksByLane.Values.Sum()</div><div><span class="object-label">Retry待ち</span>@progress.RetryWaiting</div><div><span class="object-label">Failed</span>@Count(CollectionStateStatus.Failed)</div></div></section>}
+<nav class="view-tabs" aria-label="収集管理の表示">@foreach(var t in tabs){<button type="button" class="@(tab==t.Key?"active":null)" aria-current="@(tab==t.Key?"page":null)" @onclick="()=>tab=t.Key">@t.Value</button>}</nav>
+@if(loading){<UiState Kind="loading" Title="収集管理情報を読み込んでいます"/>}
+else if(tab=="resources"){
+ <section class="filter-bar" aria-label="Resourceの絞り込み"><div class="filter-toolbar"><FluentTextField aria-label="Resource検索" Placeholder="ID、Provider、Definition" @bind-Value="query"/><FluentButton Appearance="@Appearance.Accent" OnClick="@(()=>filter=query.Trim())">絞り込む</FluentButton><FluentButton OnClick="OpenBulk">一括再取得</FluentButton></div></section>
+ @if(Resources.Count==0){<UiState Title="Resourceはありません"/>}else{<FluentDataGrid Items="@Resources.AsQueryable()" TGridItem="CollectionTaskSummary" GridTemplateColumns="1fr 1.5fr 1.2fr .8fr" aria-label="Resource一覧"><PropertyColumn Property="@(x=>x.Resource.Type)" Title="Type" Sortable="true"/><TemplateColumn Title="Resource"><FluentButton Appearance="@Appearance.Stealth" OnClick="@(()=>SelectAsync(context))">@context.Resource.Provider / @context.Resource.Id</FluentButton></TemplateColumn><PropertyColumn Property="@(x=>x.Definition.Value)" Title="Definition"/><PropertyColumn Property="@(x=>x.Status)" Title="Task状態"/></FluentDataGrid>}
+ @if(selected is not null){<FluentCard class="detail-card detail-section"><h2>@selected.Resource.Type / @selected.Resource.Id</h2>@if(detailLoading){<UiState Kind="loading" Title="Resource詳細を読み込んでいます"/>}else if(detail is null){<UiState Kind="error" Title="Resource詳細を取得できませんでした"/>}else if(state is null){<UiState Title="CollectionStateは未登録です"/>}else{<div class="detail-facts"><div><span class="object-label">状態</span>@state.Status</div><div><span class="object-label">Revision</span>@state.AppliedRevision / @state.RequiredRevision</div><div><span class="object-label">最終取得</span>@Time(state.LastCollectedAt)</div><div><span class="object-label">次回取得</span>@Time(state.NextCollectionAt)</div></div>}<h3>手動再取得</h3><FluentTextField Label="Explicit URL（任意）" @bind-Value="explicitUrl"/><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="busy">このResourceを再取得</FluentButton>@if(detail is not null){<h3>Locations</h3>@if(detail.Locations.Count==0){<UiState Title="Locationはありません"/>}else{<FluentDataGrid Items="@detail.Locations.AsQueryable()" TGridItem="ResourceLocationCandidate" aria-label="ResourceLocation一覧"><PropertyColumn Property="@(x=>x.Url)" Title="URL"/><PropertyColumn Property="@(x=>x.Source)" Title="Source"/><PropertyColumn Property="@(x=>x.Status)" Title="状態"/><PropertyColumn Property="@(x=>x.LastVerifiedAt)" Title="最終確認"/></FluentDataGrid>}<h3>Requests / Tasks / Attempts</h3><p>@detail.Requests.Count requests ・ @detail.Tasks.Count tasks ・ @detail.Attempts.Count attempts</p>@if(detail.Attempts.Count==0){<UiState Title="Attemptはありません"/>}else{<FluentDataGrid Items="@detail.Attempts.AsQueryable()" TGridItem="CollectionAttemptSummary" aria-label="CollectionAttempt一覧"><PropertyColumn Property="@(x=>x.AttemptNumber)" Title="Attempt"/><PropertyColumn Property="@(x=>x.Result)" Title="結果"/><PropertyColumn Property="@(x=>x.StartedAt)" Title="開始"/><TemplateColumn Title="エラー">@(context.ErrorCode??"—") @context.ErrorMessage</TemplateColumn></FluentDataGrid>}}</FluentCard>}
+}else if(tab=="tasks"){
+ @if(tasks.Count==0){<UiState Title="Taskはありません"/>}else{<FluentDataGrid Items="@tasks.AsQueryable()" TGridItem="CollectionTaskSummary" GridTemplateColumns="1fr 1.5fr 1fr .8fr .8fr" aria-label="CollectionTask一覧"><PropertyColumn Property="@(x=>x.TaskId)" Title="Task"/><TemplateColumn Title="Resource">@context.Resource.Type / @context.Resource.Id</TemplateColumn><PropertyColumn Property="@(x=>x.Status)" Title="状態" Sortable="true"/><PropertyColumn Property="@(x=>x.Lane)" Title="Lane"/><PropertyColumn Property="@(x=>x.Priority)" Title="Priority"/></FluentDataGrid>}
+}else if(tab=="batches"){
+ @if(batches.Count==0){<UiState Title="Backfill Batchはありません"/>}else{<FluentDataGrid Items="@batches.AsQueryable()" TGridItem="BackfillBatchSnapshot" GridTemplateColumns="1.4fr 1fr .7fr .7fr .7fr .7fr" aria-label="Backfill Batch一覧"><PropertyColumn Property="@(x=>x.BatchId)" Title="Batch"/><TemplateColumn Title="期間">@context.From ～ @context.To</TemplateColumn><PropertyColumn Property="@(x=>x.Pending)" Title="Pending"/><PropertyColumn Property="@(x=>x.Running)" Title="Running"/><PropertyColumn Property="@(x=>x.Succeeded)" Title="Success"/><PropertyColumn Property="@(x=>x.Failed)" Title="Failed"/></FluentDataGrid>}
+}else{
+ @if(failures.Count==0){<UiState Title="未対応の失敗はありません"/>}else{<FluentDataGrid Items="@failures.AsQueryable()" TGridItem="PendingCollectionFailureNotification" GridTemplateColumns="1.5fr 1fr .8fr 2fr" aria-label="収集失敗一覧"><TemplateColumn Title="Resource">@context.Resource.Type / @context.Resource.Id</TemplateColumn><PropertyColumn Property="@(x=>x.Definition.Value)" Title="Definition"/><PropertyColumn Property="@(x=>x.Status)" Title="状態"/><TemplateColumn Title="エラー">@(context.ErrorCode??"—") @context.ErrorMessage</TemplateColumn></FluentDataGrid>}
 }
-@if (operationErrors.Count > 0 && !showPauseDialog) { <UiState Kind="error" Title="操作を完了できませんでした" Message="@string.Join(" ", operationErrors)" /> }
+<FluentDialog Hidden="@(!showBulk)" HiddenChanged="@(h=>showBulk=!h)" Modal="true" TrapFocus="true" AriaLabelledby="bulk-title" Style="width:min(680px,calc(100vw - 32px));"><FluentDialogHeader ShowDismiss="true"><h2 id="bulk-title">Resourceを一括再取得</h2></FluentDialogHeader><FluentDialogBody><p>プレビューと同じ対象集合だけを実行します。</p><FluentTextField Label="Resource Type" @bind-Value="bulkType"/><FluentTextField Label="Provider" @bind-Value="provider"/><FluentTextField Label="Definition" @bind-Value="definition"/><FluentTextField Label="Revision" @bind-Value="revision"/><FluentTextField Label="Resource IDs（カンマ区切り）" @bind-Value="ids"/>@if(preview is not null){<FluentMessageBar Intent="@MessageIntent.Info" Title="@($"プレビュー: {preview.TargetCount} 件")"/>}@if(bulkErrors.Count>0){<UiState Kind="error" Title="一括操作を実行できません" Message="@string.Join(" ",bulkErrors)"/>}</FluentDialogBody><FluentDialogFooter><FluentButton OnClick="@(()=>showBulk=false)">閉じる</FluentButton><FluentButton OnClick="PreviewAsync" Disabled="busy">プレビュー</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteAsync" Disabled="@(busy||preview is null)">実行</FluentButton></FluentDialogFooter></FluentDialog>
 
-<nav class="view-tabs" aria-label="収集ジョブの表示">
-    @foreach (var option in views)
-    {
-        <button type="button" class="@(view == option.Value ? "active" : null)" aria-current="@(view == option.Value ? "page" : null)" @onclick="() => SetViewAsync(option.Value)">@option.Label</button>
-    }
-</nav>
-<section class="filter-bar" aria-label="収集ジョブの絞り込み">
-    <div class="filter-toolbar">
-        <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集ジョブ検索" Placeholder="対象、処理名、レースを検索" @bind-Value="keyword" /></div>
-        <div class="filter-field filter-field-compact"><FluentTextField aria-label="処理種別" Placeholder="処理種別" @bind-Value="jobType" /></div>
-        <div class="filter-field filter-field-compact"><FluentTextField aria-label="対象日" Placeholder="yyyy-MM-dd" @bind-Value="targetDateText" /></div>
-        <div class="filter-field filter-field-compact"><FluentSelect TOption="FilterOption" aria-label="状態" Items="@statusFilters" OptionText="@(item => item.Label)" OptionValue="@(item => item.Value)" @bind-Value="statusText" /></div>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@SearchAsync">絞り込む</FluentButton>
-    </div>
-    <RaceOpsFilterSummary Chips="@BuildFilterChips()" OnClearAll="@ClearFiltersAsync" />
-</section>
-
-@if (DaySummaries.Count > 0)
-{
-    <section class="entity-section" aria-labelledby="job-day-summary-heading">
-        <div class="section-title"><h2 id="job-day-summary-heading">日別の収集状況</h2><span class="hint">対象日を選択して絞り込み</span></div>
-        <div class="day-summary">
-            @foreach (var summary in DaySummaries)
-            {
-                <a class="day-item" href="@JobsByDateUrl(summary.Date)" @onclick="() => SelectDayAsync(summary.Date)" @onclick:preventDefault>
-                    <strong>@DisplayDate(summary.Date)</strong>
-                    <small>@summary.Count 件の収集ジョブ</small>
-                    <span class="day-progress"><span>@DayProgress(summary)</span><RaceOpsStatusBadge Label="@DayStatus(summary)" Tone="@DayStatusTone(summary)" /></span>
-                </a>
-            }
-        </div>
-    </section>
-}
-
-@if (loading) { <UiState Kind="loading" Title="収集ジョブを読み込んでいます" /> }
-else if (jobs.Count == 0) { <UiState Title="該当する収集ジョブはありません" Message="条件を変更してお試しください。" /> }
-else
-{
-    <RaceOpsObjectList Label="収集ジョブ一覧">
-        @foreach (var job in jobs)
-        {
-            <RaceOpsObjectListItem Href="@JobUrl(job.JobId)" Title="@DisplayJobType(job.JobType)" Description="@DisplayTarget(job)" Status="@(job.IsHeld ? (job.Status == AgentJobStatus.Running ? "中断待ち" : "保留中") : StatusLabel(job.Status))" StatusTone="@StatusTone(job.Status)" Metadata="@DisplayMetadata(job)" />
-        }
-    </RaceOpsObjectList>
-    @if (totalPages > 1) { <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="@(() => GoPageAsync(page - 1))">前へ</FluentButton><span>@($"{page} / {totalPages}")</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= totalPages)" OnClick="@(() => GoPageAsync(page + 1))">次へ</FluentButton></div> }
-}
-
-<FluentDialog Hidden="@(!showPauseDialog)" HiddenChanged="@(hidden => showPauseDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px, calc(100vw - 32px));">
-        <FluentDialogHeader ShowDismiss="true"><h2 id="pause-title">すべてのジョブを一時停止しますか</h2></FluentDialogHeader>
-        <FluentDialogBody>
-            <p>新しいジョブの実行を停止します。開始済みの処理は結果を保存します。待機中のジョブと個別保留は維持されます。</p>
-            @if (operationErrors.Count > 0) { <UiState Kind="error" Title="一時停止できませんでした" Message="@string.Join(' ', operationErrors)" /> }
-        </FluentDialogBody>
-        <FluentDialogFooter>
-                <FluentButton OnClick="@ClosePauseDialog">キャンセル</FluentButton>
-                <FluentButton Appearance="@Appearance.Accent" OnClick="@PauseAsync" Disabled="@(operating || !queueStateKnown)">一時停止</FluentButton>
-        </FluentDialogFooter>
-</FluentDialog>
-
-<FluentDialog Hidden="@(!showRaceDayDialog)" HiddenChanged="@(hidden => showRaceDayDialog = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="race-day-reacquisition-title" Style="width:min(560px, calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="true"><h2 id="race-day-reacquisition-title">開催日の全レースを再取得</h2></FluentDialogHeader>
-    <FluentDialogBody>
-        <p>JRA公式情報から指定日の全レースを探し直します。出馬表は公式掲載期間内の日だけ、結果・払戻は当日以前だけ取得します。</p>
-        <p>出馬表を取得できる場合は、馬主を含む出走情報も更新します。</p>
-        <p>取得できなかった項目で既存値は消しません。レース単位のジョブへ分割するため、完了まで時間がかかる場合があります。</p>
-        <FluentTextField Label="開催日（JST）" Placeholder="yyyy-MM-dd" Required="true" @bind-Value="raceDayText" />
-        @if (raceDayErrors.Count > 0) { <UiState Kind="error" Title="再取得を開始できませんでした" Message="@string.Join(' ', raceDayErrors)" /> }
-    </FluentDialogBody>
-    <FluentDialogFooter>
-        <FluentButton OnClick="@CloseRaceDayDialog">キャンセル</FluentButton>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="@RequestRaceDayAsync" Disabled="@operating">再取得を依頼</FluentButton>
-    </FluentDialogFooter>
-</FluentDialog>
-
-@code {
-    private IReadOnlyList<AgentJobStatusReadModel> jobs = [];
-    private IReadOnlyList<AgentJobDaySummary> daySummaries = [];
-    private string? keyword;
-    private string? jobType;
-    private string? targetDateText;
-    private string statusText = string.Empty;
-    private string view = "action";
-    private static readonly IReadOnlyList<FilterOption> views = [
-        new("action", "要対応"), new("running", "処理中"), new("ready", "待機中"), new("held", "保留中"), new("recent", "最近完了"), new("all", "すべて")];
-    private static readonly IReadOnlyList<FilterOption> statusFilters = [
-        new("", "すべて"), .. Enum.GetValues<AgentJobStatus>().Select(x => new FilterOption(x.ToString(), StatusLabel(x)))];
-    private int page = 1;
-    private const int pageSize = 50;
-    private int totalPages;
-    private bool loading;
-    private bool operating;
-    private bool queuePaused;
-    private bool queueStateKnown;
-    private readonly CancellationTokenSource refreshStop = new();
-    private Task? refreshTask;
-    private JobQueueStateResponse? queueState;
-    private bool showPauseDialog;
-    private bool showRaceDayDialog;
-    private string? raceDayText;
-    private IReadOnlyList<string> raceDayErrors = [];
-    private IReadOnlyList<string> operationErrors = [];
-
-    private string? lastSyncedQuery;
-    private bool isFirstQuerySync = true;
-
-    // Blazor はルートの再解決だけでは OnInitializedAsync を再実行しない（同一コンポーネント
-    // インスタンスが再利用されるため）。日別サマリーのリンクなど、同じ /jobs 内でクエリ
-    // 文字列だけが変わるナビゲーションでも絞り込み条件を反映できるよう、毎回のパラメーター
-    // 設定時に呼ばれる OnParametersSetAsync で URL を読み直す。自分自身の UpdateUrl による
-    // NavigateTo で二重にロードしないよう、直前に同期済みの URL と比較してから処理する。
-    protected override async Task OnParametersSetAsync()
-    {
-        var currentQuery = Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery;
-        if (currentQuery == lastSyncedQuery)
-        {
-            return;
-        }
-
-        lastSyncedQuery = currentQuery;
-
-        var q = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(Navigation.ToAbsoluteUri(Navigation.Uri).Query);
-
-        // クエリ文字列が全く無い初回アクセスに限り、フィールド宣言時の既定値（view=action）
-        // を維持する。以降のナビゲーションで view が未指定の場合は「すべて」を表示する
-        // （対象日リンクなどは他の条件を引き継がず、その日の全ジョブを見せる想定のため）。
-        var useDeclaredDefaults = isFirstQuerySync && q.Count == 0;
-        isFirstQuerySync = false;
-
-        view = q.TryGetValue("view", out var v) && !string.IsNullOrWhiteSpace(v)
-            ? v!
-            : (useDeclaredDefaults ? view : "all");
-        page = q.TryGetValue("page", out var p) && int.TryParse(p, out var n) && n > 0 ? n : 1;
-        jobType = q.TryGetValue("jobType", out var t) ? t.ToString() : null;
-        keyword = q.TryGetValue("query", out var query) ? query.ToString() : null;
-        targetDateText = q.TryGetValue("targetDate", out var d) ? d.ToString() : null;
-        statusText = q.TryGetValue("status", out var s) ? s.ToString() : string.Empty;
-        await LoadAsync();
-    }
-    private async Task SearchAsync()
-    {
-        page = 1;
-        await LoadAsync();
-    }
-
-    // 日別サマリーのリンクは href も持たせているため中クリック等での別タブ表示は
-    // 通常のナビゲーションで機能するが、通常クリックはここで直接フィルター状態を
-    // 更新してから読み込む。href 経由の再ナビゲーションだけに頼ると、同一コンポー
-    // ネントインスタンスの再利用や自身の UpdateUrl による置換ナビゲーションと絡み、
-    // 対象日フィルターの表示が即座に切り替わらないことがあるため。
-    private async Task SelectDayAsync(string date)
-    {
-        keyword = null;
-        jobType = null;
-        statusText = string.Empty;
-        view = "all";
-        targetDateText = date;
-        page = 1;
-        await LoadAsync();
-    }
-
-    private async Task LoadAsync()
-    {
-        loading = true;
-        try {
-            queueState = await Api.GetJobQueueStateAsync();
-            queueStateKnown = queueState is not null;
-            queuePaused = queueState?.IsPaused ?? false;
-            var result = await Api.SearchJobsAsync(view, keyword, targetDateText, jobType, Enum.TryParse<AgentJobStatus>(statusText, out var status) ? status : null, page, pageSize);
-            jobs = result?.Items ?? [];
-            daySummaries = result?.DaySummaries ?? [];
-            totalPages = Math.Max(1, (int)Math.Ceiling((result?.TotalCount ?? 0) / (double)pageSize));
-            if (page > totalPages) { page = totalPages; await LoadAsync(); return; }
-            UpdateUrl();
-            refreshTask ??= RefreshAsync();
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        { queueStateKnown = false; operationErrors = ["収集状態を取得できませんでした。再読み込みしてください。"]; }
-        finally { loading = false; }
-    }
-    private void OpenPauseDialog() { operationErrors = []; showPauseDialog = true; }
-    private void ClosePauseDialog() => showPauseDialog = false;
-    private void OpenRaceDayDialog()
-    {
-        raceDayErrors = [];
-        raceDayText = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
-        showRaceDayDialog = true;
-    }
-    private void CloseRaceDayDialog() => showRaceDayDialog = false;
-    private async Task RequestRaceDayAsync()
-    {
-        if (operating) return;
-        if (!DateOnly.TryParseExact(raceDayText, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var raceDate))
-        {
-            raceDayErrors = ["開催日は yyyy-MM-dd 形式で入力してください。"];
-            return;
-        }
-
-        operating = true;
-        raceDayErrors = [];
-        try
-        {
-            var result = await Api.RequestRaceDayReacquisitionAsync(raceDate, "収集ジョブ画面から開催日単位で再取得", refreshStop.Token);
-            if (result.Success && !string.IsNullOrWhiteSpace(result.Value))
-            {
-                showRaceDayDialog = false;
-                Navigation.NavigateTo(JobUrl(result.Value));
-            }
-            else raceDayErrors = result.Errors;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            raceDayErrors = ["再取得依頼の結果を確認できませんでした。最新のジョブ一覧を確認してください。"];
-        }
-        finally { operating = false; }
-    }
-    private Task PauseAsync() => ChangePipelineAsync(true);
-    private Task ResumeAsync() => ChangePipelineAsync(false);
-    private async Task ChangePipelineAsync(bool pause)
-    {
-        if (operating) return;
-        operating = true; operationErrors = [];
-        try
-        {
-            var result = pause ? await Api.PauseJobsAsync(refreshStop.Token) : await Api.ResumeJobsAsync(refreshStop.Token);
-            if (result.Success) { showPauseDialog = false; await LoadAsync(); }
-            else operationErrors = result.Errors;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        { operationErrors = ["操作結果を確認できませんでした。最新の状態を確認してください。"]; }
-        finally { operating = false; }
-    }
-    private async Task RefreshAsync()
-    {
-        try
-        {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-            while (await timer.WaitForNextTickAsync(refreshStop.Token))
-                await InvokeAsync(async () =>
-                {
-                    if (loading || operating) return;
-                    try
-                    {
-                        var state = await Api.GetJobQueueStateAsync(refreshStop.Token);
-                        if (operating) return;
-                        queueState = state; queueStateKnown = state is not null; queuePaused = state?.IsPaused ?? false;
-                    }
-                    catch (OperationCanceledException) when (refreshStop.IsCancellationRequested) { }
-                    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-                    { queueStateKnown = false; operationErrors = ["最新の収集状態を確認できません。次の更新で再確認します。"]; }
-                    StateHasChanged();
-                });
-        }
-        catch (OperationCanceledException) when (refreshStop.IsCancellationRequested) { }
-    }
-    public async ValueTask DisposeAsync()
-    {
-        await refreshStop.CancelAsync();
-        if (refreshTask is not null) await refreshTask;
-        refreshStop.Dispose();
-    }
-    private async Task GoPageAsync(int p) { page = p; await LoadAsync(); }
-    private async Task SetViewAsync(string value) { view = value; page = 1; await LoadAsync(); }
-    private static string JobUrl(string id) => JobNavigation.DetailUrl(id);
-    private static string DisplayJobType(string value) => value switch { "CollectionPlanning" => "収集対象の確認", "RaceDayReacquisition" => "開催日の全レース再取得", "RaceReacquisition" => "レース情報の再取得", "RaceCardCollection" => "出馬表の収集", "RaceResultCollection" => "レース結果の収集", "ResultMonthDiscoveryRequest" => "月次レース結果の確認", "RaceResultCollectionRequest" => "レース結果の収集", "RaceCardCollectionRequest" => "出走表の収集", _ => value };
-    private static string DisplayTarget(AgentJobStatusReadModel job) => ExtractTargetDate(job.DeduplicationKey) is { } targetDate ? $"対象日 {targetDate}" : "対象は詳細で確認";
-    private static string DisplayMetadata(AgentJobStatusReadModel job) => $"更新 {job.UpdatedAt.ToLocalTime():yyyy/MM/dd HH:mm} ・ 試行 {job.AttemptCount} 回";
-    private static string StatusTone(AgentJobStatus status) => status switch { AgentJobStatus.Succeeded => "success", AgentJobStatus.Failed or AgentJobStatus.DeadLetter => "danger", AgentJobStatus.Running => "info", _ => "warning" };
-    private static string StatusLabel(AgentJobStatus status) => status switch { AgentJobStatus.Cancelled => "中断", AgentJobStatus.Succeeded => "完了", AgentJobStatus.Failed => "失敗", AgentJobStatus.DeadLetter => "要対応", AgentJobStatus.Running => "実行中", AgentJobStatus.Ready => "待機中", AgentJobStatus.WaitingDependency => "依存待ち", _ => status.ToString() };
-    private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/jobs", new Dictionary<string, string?> { ["view"] = view, ["page"] = page.ToString(), ["query"] = keyword, ["jobType"] = jobType, ["targetDate"] = targetDateText, ["status"] = statusText }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
-    private void NavigateIfChanged(string uri)
-    {
-        if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;
-        Navigation.NavigateTo(uri, replace: true);
-    }
-    private static string? ExtractTargetDate(string value)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d{4}-\d{2}-\d{2}");
-        return match.Success ? match.Value : null;
-    }
-
-    private IReadOnlyList<AgentJobDaySummary> DaySummaries => daySummaries;
-    private static string JobsByDateUrl(string date) => $"/jobs?targetDate={Uri.EscapeDataString(date)}";
-
-    private sealed record FilterOption(string Value, string Label);
-    private static string DisplayDate(string value) => DateOnly.TryParse(value, out var date) ? date.ToString("yyyy年M月d日") : value;
-    private static string DayProgress(AgentJobDaySummary value)
-    {
-        var parts = new List<string>();
-        if (value.CompletedCount > 0) parts.Add($"{value.CompletedCount}件完了");
-        if (value.WaitingCount > 0) parts.Add($"{value.WaitingCount}件待機");
-        if (value.AttentionCount > 0) parts.Add($"{value.AttentionCount}件要対応");
-        return parts.Count == 0 ? $"{value.Count}件" : string.Join("・", parts);
-    }
-    private static string DayStatus(AgentJobDaySummary value) => value.AttentionCount > 0 ? "要対応" : value.WaitingCount > 0 ? "一部待機" : "完了";
-    private static string DayStatusTone(AgentJobDaySummary value) => value.AttentionCount > 0 ? "danger" : value.WaitingCount > 0 ? "warning" : "success";
-    private async Task ClearFiltersAsync() { keyword = null; jobType = null; targetDateText = null; statusText = string.Empty; page = 1; await LoadAsync(); }
-    private List<RaceOpsFilterChip> BuildFilterChips()
-    {
-        var chips = new List<RaceOpsFilterChip>();
-        if (!string.IsNullOrWhiteSpace(keyword))
-        {
-            chips.Add(new($"検索 {keyword}", async () => { keyword = null; page = 1; await LoadAsync(); }));
-        }
-        if (!string.IsNullOrWhiteSpace(jobType))
-        {
-            chips.Add(new($"処理種別 {jobType}", async () => { jobType = null; page = 1; await LoadAsync(); }));
-        }
-        if (!string.IsNullOrWhiteSpace(targetDateText))
-        {
-            chips.Add(new($"対象日 {targetDateText}", async () => { targetDateText = null; page = 1; await LoadAsync(); }));
-        }
-        if (!string.IsNullOrWhiteSpace(statusText))
-        {
-            chips.Add(new($"状態 {StatusLabel((AgentJobStatus)Enum.Parse(typeof(AgentJobStatus), statusText))}", async () => { statusText = string.Empty; page = 1; await LoadAsync(); }));
-        }
-        return chips;
-    }
+@code{
+ private readonly Dictionary<string,string> tabs=new(){{"resources","Resources / States"},{"tasks","Tasks"},{"batches","Batches"},{"failures","Failures"}}; private string tab="resources",query="",filter="",bulkType="Horse",provider="JRA",definition="horse-profile",revision="1",ids=""; private string? explicitUrl; private bool loading=true,busy,detailLoading,showBulk; private IReadOnlyList<string> errors=[],bulkErrors=[]; private IReadOnlyList<CollectionTaskSummary> tasks=[]; private IReadOnlyList<BackfillBatchSnapshot> batches=[]; private IReadOnlyList<PendingCollectionFailureNotification> failures=[]; private CollectionProgressSnapshot? progress; private HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState? pipeline; private CollectionTaskSummary? selected; private CollectionStateSnapshot? state; private CollectionResourceDetail? detail; private CollectionBulkPreview? preview;
+ private IReadOnlyList<CollectionTaskSummary> Resources=>tasks.Where(x=>string.IsNullOrWhiteSpace(filter)||$"{x.Resource.Type} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value}".Contains(filter,StringComparison.OrdinalIgnoreCase)).GroupBy(x=>new{x.Resource,x.Definition}).Select(g=>g.OrderByDescending(x=>x.AvailableAt).First()).ToList();
+ protected override Task OnInitializedAsync()=>LoadAsync();
+ private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=Api.GetCollectionTasksAsync(limit:500);var d=Api.GetCollectionFailureNotificationsAsync();var e=Api.GetBackfillBatchesAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;tasks=await c??[];failures=await d??[];batches=await e??[];}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["APIへの接続を確認してください。"];}finally{loading=false;}}
+ private int Count(CollectionStateStatus s)=>progress?.StatesByStatus.TryGetValue(s,out var n)==true?n:0;
+ private async Task SelectAsync(CollectionTaskSummary x){selected=x;state=null;detail=null;detailLoading=true;try{detail=await Api.GetCollectionResourceDetailAsync(x.Resource,x.Definition);state=detail?.State;}finally{detailLoading=false;}}
+ private async Task RequestAsync(){if(selected is null)return;busy=true;try{var r=await Api.RequestCollectionAsync(new(selected.Resource.Type,selected.Resource.Provider,selected.Resource.Id,selected.Definition.Value,Math.Max(selected.RequestedRevision,state?.RequiredRevision??0),CollectionReason.ManualRefresh,selected.Lane,selected.Priority,string.IsNullOrWhiteSpace(explicitUrl)?null:explicitUrl));if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
+ private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync("管理画面から一時停止"):await Api.ResumeCollectionPipelineAsync();if(!r.Success)errors=r.Errors;else await LoadAsync();}finally{busy=false;}}
+ private void OpenBulk(){showBulk=true;preview=null;bulkErrors=[];}
+ private BulkCollectionOperationRequest? Bulk(IReadOnlyList<ResourceKey>? expected=null){if(!Enum.TryParse<ResourceType>(bulkType,true,out var t)||!int.TryParse(revision,out var rev)||rev<1){bulkErrors=["TypeとRevisionを確認してください。"];return null;}var keys=ids.Split(',',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct().Select(id=>new ResourceKey(t,provider.Trim(),id)).ToArray();if(keys.Length==0){bulkErrors=["Resource IDを入力してください。"];return null;}return new(definition.Trim(),rev,CollectionReason.ManualRefresh,BulkCollectionSelection.SpecificResources,provider.Trim(),keys,ExpectedResources:expected);}
+ private async Task PreviewAsync(){preview=null;bulkErrors=[];var q=Bulk();if(q is null)return;busy=true;try{var r=await Api.PreviewBulkCollectionAsync(q);if(r.Success)preview=r.Value;else bulkErrors=r.Errors;}finally{busy=false;}}
+ private async Task ExecuteAsync(){if(preview is null)return;var q=Bulk(preview.Resources);if(q is null)return;busy=true;try{var r=await Api.ExecuteBulkCollectionAsync(q);if(r.Success){showBulk=false;await LoadAsync();}else bulkErrors=r.Errors;}finally{busy=false;}}
+ private static string Time(DateTimeOffset? x)=>x?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"—";
 }

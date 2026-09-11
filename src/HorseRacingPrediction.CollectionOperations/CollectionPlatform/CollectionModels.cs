@@ -157,10 +157,25 @@ public sealed record CollectionProgressSnapshot(
     IReadOnlyDictionary<string, int> StatesByDefinition,
     int RetryWaiting);
 
+public sealed record CollectionReadinessSnapshot(int PendingHorseRequests, int PendingJockeyRequests,
+    int PendingRaceResultRequests, int PendingTrainerRequests)
+{
+    public int TotalPendingRequests => PendingHorseRequests + PendingJockeyRequests
+        + PendingRaceResultRequests + PendingTrainerRequests;
+}
+
 public sealed record CollectionPipelineState(bool IsPaused, string? Reason, DateTimeOffset? UpdatedAt);
 public sealed record PendingCollectionFailureNotification(Guid NotificationId, Guid TaskId,
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
     string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt);
+public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevision, CollectionReason Reason,
+    DateTimeOffset RequestedAt, string? ExplicitUrl, string? BatchId);
+public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,
+    DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, CollectionAttemptResult Result,
+    string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode);
+public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
+    IReadOnlyList<ResourceLocationCandidate> Locations, IReadOnlyList<CollectionRequestSummary> Requests,
+    IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts);
 public sealed record CollectionWatchdogResult(int ReclaimedLeases, int RedispatchedTasks, int DeadLetteredTasks);
 public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOnly To,
     int ExpectedDiscoveryDays, int RegisteredDiscoveryDays, int Pending, int Running,

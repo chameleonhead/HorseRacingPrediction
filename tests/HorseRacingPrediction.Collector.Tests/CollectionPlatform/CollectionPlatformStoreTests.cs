@@ -414,6 +414,31 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
+    [TestMethod]
+    public async Task ResourceDetail_ReturnsStateLocationsRequestsTasksAndAttempts()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 11, 1, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now,
+            explicitUrl: new Uri("https://example.test/horse/H123"));
+        await store.UpsertLocationAsync(Horse, HorseProfile, new Uri("https://example.test/horse/H123"),
+            ResourceLocationSource.Manual, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded, RequestedUrl: new("https://example.test/horse/H123"))));
+
+        var detail = await store.GetResourceDetailAsync(Horse, HorseProfile);
+
+        Assert.IsNotNull(detail);
+        Assert.IsNotNull(detail.State);
+        Assert.HasCount(1, detail.Locations);
+        Assert.HasCount(1, detail.Requests);
+        Assert.HasCount(1, detail.Tasks);
+        Assert.HasCount(1, detail.Attempts);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, detail.Attempts[0].Result);
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = CreateStore();
