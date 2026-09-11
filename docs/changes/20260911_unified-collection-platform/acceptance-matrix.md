@@ -6,13 +6,13 @@ Status meanings: **Not started** has no connected production path; **Connected**
 |---|---|---|
 | Resource/Definition/Revision/State/Request/Task/Attempt persistence | Connected | Versioned schema migration, legacy-schema baseline, newer/incomplete-schema rejection, WAL and serialized startup are tested; deployment rehearsal remains |
 | Active duplicate prevention and repeated same-revision collection | Connected | Store tests pass, including concurrent store initialization; multi-process task contention remains part of final E2E verification |
-| Revision impact scopes | Connected | Store tests pass; progress/operation path incomplete |
+| Revision impact scopes | Verified | Typed preview/apply/expand/progress covers all four scopes, preserves non-affected states, queues follow-up after an older active revision, and rejects arbitrary executable selectors |
 | SQS notification and Lambda acquire/complete | Verified | Production API/outbox JSON contract and worker acquire/complete endpoints are exercised through the real dispatcher and worker client |
 | Timeout, retry, lease expiry, duplicate delivery | Connected | Timeout reports retryable completion to the new API with an independent deadline; periodic expiry recovery and transport tests exist, but duplicate SQS delivery/DLQ remains unverified |
 | Direct URL and ResourceLocation fallback | Verified | Explicit/stored candidates reach the lease; handlers validate page type/Race ID, continue after wrong/failed candidates, preserve cancellation, fall back to Discovery, and report the successful URL for verification |
 | Race discovery to RaceCard/Result requests | Verified | Admin request, outbox, SQS JSON boundary, worker lease, real discovery handler, and RaceCard/Result child requests are covered by one production-path integration test |
-| Horse/Jockey/Trainer discovery and refresh | Connected | RaceCard expands all three Resource types through shared descriptors and handlers; Horse pedigree/trainer recursion and full Jockey profile history remain |
-| Backfill batch and hole recovery | Not started | Legacy implementation remains |
+| Horse/Jockey/Trainer discovery and refresh | Verified | RaceCard expands all three types; Horse profile expands trainer/sire/dam with depth, ancestry, duplicate and priority guards; profile handlers use the normal request path |
+| Backfill batch and hole recovery | Verified | Persisted year/month batches expand date Discovery without pre-enumerating races, resume after restart, allow later batches after partial failure, and project concrete holes |
 | Dynamic schedule and repeated observations | Connected | Policy/due scheduler exist and the actual outbox dispatcher now enforces Realtime-first with a four-item starvation bound; request-flood protection remains |
 | RaceOdds snapshots | Not started | Definition only; parser/domain snapshot/handler absent |
 | Manual/bulk operations and projections | Connected | Basic APIs exist; preview, transactional expansion, condition selectors, UI absent |
