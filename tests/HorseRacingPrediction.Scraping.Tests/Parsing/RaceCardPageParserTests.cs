@@ -120,7 +120,9 @@ public sealed class RaceCardPageParserTests
     // 馬名セルはブロック要素ごとの改行を保持した複数行テキストとして取得される
     // （馬名／オッズ(人気)／馬体重(増減)／馬主名／生産者名／調教師名(所属)／血統の順）。
     // 騎手列も同様に「性齢/毛色」「負担重量」「騎手名」が改行区切りで結合されている。
-    private static TestPageSnapshot BuildRealSiteSnapshot(string weightText = "488kg(-2)")
+    private static TestPageSnapshot BuildRealSiteSnapshot(
+        string weightText = "488kg(-2)",
+        string jockeyName = "小牧 加矢太")
     {
         var table = new TestPageTable(
             Headers: [
@@ -135,7 +137,7 @@ public sealed class RaceCardPageParserTests
                     "",
                     "1",
                     $"バニーラビット\n10.7(4番人気)\n{weightText}\n藤田 晋\nノーザンファーム\n武 幸四郎(栗東)\n父：アドマイヤマーズ\n母：トレジャリング(母の父：Havana Gold)",
-                    "牡4/栗\n60.0kg\n小牧 加矢太",
+                    $"牡4/栗\n60.0kg\n{jockeyName}",
                 ],
             ]);
 
@@ -184,6 +186,22 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual(60.0m, entry.AssignedWeight);
         Assert.AreEqual(488, entry.BodyWeight);
         Assert.AreEqual(-2, entry.BodyWeightChange);
+    }
+
+    [TestMethod]
+    [DataRow("▲森田 誠也")]
+    [DataRow("△ 森田 誠也")]
+    [DataRow("☆森田 誠也")]
+    [DataRow("★森田 誠也")]
+    [DataRow("◇森田 誠也")]
+    [DataRow("▽森田 誠也")]
+    [DataRow("▲ △ 森田 誠也")]
+    public void Parse_減量記号付き騎手名_記号を除去する(string markedName)
+    {
+        var page = (JraRaceCardPage)new RaceCardPageParser().Parse(
+            BuildRealSiteSnapshot(jockeyName: markedName));
+
+        Assert.AreEqual("森田 誠也", page.Entries.Single().JockeyName);
     }
 
     [TestMethod]

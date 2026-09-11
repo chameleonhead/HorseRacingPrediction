@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using HorseRacingPrediction.ApiClient;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -475,7 +476,7 @@ public sealed class RaceCardPageParser
                 ? cell[(kgIndex + 2)..]
                 : cell;
 
-        rest = rest.Trim().TrimStart('△', '▲', '☆', '★', '◇', '▽').Trim();
+        rest = JockeyNameNormalizer.Normalize(rest);
 
         return string.IsNullOrWhiteSpace(rest) ? null : rest;
     }

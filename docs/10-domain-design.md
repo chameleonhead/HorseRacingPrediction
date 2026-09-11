@@ -334,6 +334,7 @@ PredictionTicket
 
 2. 表記ゆれ吸収
 - 馬名、騎手名、調教師名、競馬場名に NormalizedName を持つ
+- JRA 出馬表で騎手名の先頭に付く減量記号（`▲`、`△`、`☆`、`★`、`◇`、`▽`）は、騎手の氏名ではないため DisplayName、NormalizedName、ID 生成キーに含めない
 
 3. 単位統一
 - 距離: meter

@@ -265,12 +265,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         string? affiliationCode,
         CancellationToken cancellationToken = default)
     {
-        var cleanedDisplayName = StripJockeyAllowanceMark(displayName);
+        var cleanedDisplayName = JockeyNameNormalizer.Normalize(displayName);
         ValidateRequiredText(cleanedDisplayName, nameof(displayName));
 
         try
         {
-            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? cleanedDisplayName);
+            var cleanedNormalizedName = JockeyNameNormalizer.Normalize(normalizedName ?? cleanedDisplayName);
+            var normalized = DeterministicIdGenerator.NormalizeDisplayName(cleanedNormalizedName);
             var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
 
             var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
@@ -454,7 +455,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         var cleanedJockeyName = string.IsNullOrWhiteSpace(jockeyName)
             ? null
-            : StripJockeyAllowanceMark(jockeyName);
+            : JockeyNameNormalizer.Normalize(jockeyName);
 
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
         var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
@@ -890,7 +891,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
         var resolvedName = string.IsNullOrWhiteSpace(jockeyName)
             ? jockeyId
-            : StripJockeyAllowanceMark(jockeyName);
+            : JockeyNameNormalizer.Normalize(jockeyName);
         var normalizedName = DeterministicIdGenerator.NormalizeDisplayName(resolvedName);
 
         if (existing is null)
@@ -1084,23 +1085,6 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         {
             throw new ArgumentException($"{paramName} is required.", paramName);
         }
-    }
-
-    private static string StripJockeyAllowanceMark(string value)
-    {
-        var trimmed = value.Trim();
-        if (trimmed.Length == 0)
-        {
-            return trimmed;
-        }
-
-        var first = trimmed[0];
-        if (first is '▲' or '△' or '☆' or '★' or '◇')
-        {
-            return trimmed.Substring(1).TrimStart();
-        }
-
-        return trimmed;
     }
 
     // ------------------------------------------------------------------ //
