@@ -1,4 +1,8 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using EventFlow.EntityFramework;
+using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -54,18 +58,28 @@ public static class CollectionPlatformEndpointExtensions
                 request.Attributes, token);
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
         });
-        admin.MapPost("/requests/bulk", async (BulkCollectionRequest request, CollectionPlatformStore store,
-            CancellationToken token) =>
+        admin.MapPost("/requests/bulk/preview", async (BulkCollectionOperationRequest request,
+            CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> domain,
+            IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
         {
-            if (request.Resources.Count is < 1 or > 10_000)
-                return Results.BadRequest(new { message = "Resources must contain between 1 and 10000 items." });
-            var receipts = new List<CollectionRequestReceipt>(request.Resources.Count);
-            foreach (var resource in request.Resources.Distinct())
-                receipts.Add(await store.RequestAsync(new(resource.Type, resource.Provider, resource.Id),
-                    new(request.DefinitionId), request.RequestedRevision, request.Reason,
-                    DateTimeOffset.UtcNow, request.Lane, request.Priority, batchId: request.BatchId,
-                    cancellationToken: token));
-            return Results.Accepted(value: new { request.BatchId, Requests = receipts });
+            var targets = await ResolveBulkTargetsAsync(request, store, domain, conditions, token);
+            return Results.Ok(await store.PreviewBulkRequestAsync(new(request.DefinitionId),
+                request.RequestedRevision, targets, token));
+        });
+        admin.MapPost("/requests/bulk", async (BulkCollectionOperationRequest request,
+            CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> domain,
+            IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) =>
+        {
+            var targets = await ResolveBulkTargetsAsync(request, store, domain, conditions, token);
+            var actual = targets.Select(x => x.Resource.Normalize()).Distinct().OrderBy(x => x.ToString()).ToArray();
+            var expected = (request.ExpectedResources ?? []).Select(x => x.Normalize()).Distinct()
+                .OrderBy(x => x.ToString()).ToArray();
+            if (expected.Length == 0 || !actual.SequenceEqual(expected))
+                return Results.Conflict(new { message = "Selection changed after preview; preview again before executing." });
+            var batchId = string.IsNullOrWhiteSpace(request.BatchId) ? $"manual:{Guid.NewGuid():N}" : request.BatchId;
+            return Results.Accepted(value: await store.ExecuteBulkRequestAsync(new(request.DefinitionId),
+                request.RequestedRevision, request.Reason, targets, DateTimeOffset.UtcNow, batchId,
+                request.Lane, request.Priority, token));
         });
         admin.MapPost("/revisions/preview", async (RevisionImpactPreviewRequest request,
             CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions,
@@ -148,6 +162,47 @@ public static class CollectionPlatformEndpointExtensions
             new(request.ScopeType, request.NamedCondition),
         _ => throw new ArgumentException("Revision impact parameters are invalid."),
     };
+
+    private static async Task<IReadOnlyList<CollectionBulkTarget>> ResolveBulkTargetsAsync(
+        BulkCollectionOperationRequest request, CollectionPlatformStore store,
+        IDbContextProvider<EventStoreDbContext> domainProvider,
+        IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token)
+    {
+        if (request.Selection == BulkCollectionSelection.SpecificResources)
+            return (request.Resources ?? []).Select(x => new CollectionBulkTarget(x)).ToList();
+        if (request.Selection == BulkCollectionSelection.LastCollectedBefore)
+            return await store.SelectBulkTargetsAsync(new(request.DefinitionId), request.LastCollectedBefore,
+                cancellationToken: token);
+        if (request.Selection is BulkCollectionSelection.Failed or BulkCollectionSelection.Stale)
+            return await store.SelectBulkTargetsAsync(new(request.DefinitionId), status:
+                request.Selection == BulkCollectionSelection.Failed ? CollectionStateStatus.Failed : CollectionStateStatus.Stale,
+                cancellationToken: token);
+        if (request.Selection == BulkCollectionSelection.RevisionImpact)
+            return await store.GetRevisionImpactTargetsAsync(new(request.DefinitionId),
+                request.ImpactRevision ?? throw new ArgumentException("ImpactRevision is required."), conditions, token);
+
+        await using var db = domainProvider.CreateContext();
+        var contexts = await db.RacePredictionContexts.AsNoTracking().ToListAsync(token).ConfigureAwait(false);
+        IEnumerable<RacePredictionContextReadModel> selected = contexts;
+        if (request.Selection == BulkCollectionSelection.HorsesRacedInDateRange)
+        {
+            if (request.From is null || request.To is null || request.From > request.To)
+                throw new ArgumentException("A valid From/To range is required.");
+            selected = contexts.Where(x => x.RaceDate >= request.From && x.RaceDate <= request.To);
+        }
+        else if (request.Selection == BulkCollectionSelection.HorsesByTrainer)
+        {
+            if (string.IsNullOrWhiteSpace(request.TrainerId)) throw new ArgumentException("TrainerId is required.");
+            selected = contexts.Where(x => x.Entries.Any(e => string.Equals(e.TrainerId, request.TrainerId,
+                StringComparison.Ordinal)));
+        }
+        else throw new ArgumentOutOfRangeException(nameof(request.Selection));
+        return selected.SelectMany(x => x.Entries)
+            .Where(x => request.Selection != BulkCollectionSelection.HorsesByTrainer
+                        || string.Equals(x.TrainerId, request.TrainerId, StringComparison.Ordinal))
+            .Select(x => x.HorseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)
+            .Select(x => new CollectionBulkTarget(new(ResourceType.Horse, request.Provider, x))).ToList();
+    }
 }
 
 public sealed record CreateCollectionRequest(ResourceType ResourceType, string Provider, string ResourceId,
@@ -160,9 +215,17 @@ public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int L
 public sealed record HeartbeatCollectionTaskRequest(string LeaseToken, int LeaseSeconds = 900);
 public sealed record PauseCollectionPipelineRequest(string? Reason);
 
-public sealed record BulkCollectionResource(ResourceType Type, string Provider, string Id);
-public sealed record BulkCollectionRequest(string DefinitionId, int RequestedRevision, CollectionReason Reason,
-    IReadOnlyList<BulkCollectionResource> Resources, string? BatchId = null,
+public enum BulkCollectionSelection
+{
+    SpecificResources, HorsesRacedInDateRange, HorsesByTrainer, LastCollectedBefore,
+    RevisionImpact, Failed, Stale,
+}
+
+public sealed record BulkCollectionOperationRequest(string DefinitionId, int RequestedRevision,
+    CollectionReason Reason, BulkCollectionSelection Selection, string Provider = "JRA",
+    IReadOnlyList<ResourceKey>? Resources = null, DateOnly? From = null, DateOnly? To = null,
+    string? TrainerId = null, DateTimeOffset? LastCollectedBefore = null, int? ImpactRevision = null,
+    IReadOnlyList<ResourceKey>? ExpectedResources = null, string? BatchId = null,
     CollectionLane Lane = CollectionLane.Background, int Priority = (int)CollectionPriority.Background);
 
 public sealed record RevisionImpactRequest(RevisionImpactScopeType ScopeType,

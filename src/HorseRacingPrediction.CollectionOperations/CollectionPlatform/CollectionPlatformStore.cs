@@ -203,6 +203,132 @@ public sealed class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<CollectionBulkPreview> PreviewBulkRequestAsync(CollectionDefinitionId definition,
+        int requestedRevision, IEnumerable<CollectionBulkTarget> targets,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeBulkTargets(targets);
+        await using var db = CreateDbContext();
+        await ValidateBulkRequestAsync(db, definition, requestedRevision, normalized, cancellationToken)
+            .ConfigureAwait(false);
+        return new(definition, requestedRevision, normalized.Count, normalized.Select(x => x.Resource).ToList());
+    }
+
+    public async Task<CollectionBulkExecution> ExecuteBulkRequestAsync(CollectionDefinitionId definition,
+        int requestedRevision, CollectionReason reason, IEnumerable<CollectionBulkTarget> targets,
+        DateTimeOffset requestedAt, string batchId, CollectionLane lane, int priority,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) throw new ArgumentException("Batch id is required.", nameof(batchId));
+        var normalized = NormalizeBulkTargets(targets);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await ValidateBulkRequestAsync(db, definition, requestedRevision, normalized, cancellationToken)
+                .ConfigureAwait(false);
+            var receipts = new List<CollectionRequestReceipt>(normalized.Count);
+            var created = 0;
+            foreach (var target in normalized)
+            {
+                var resource = await db.Resources.SingleOrDefaultAsync(x => x.Type == target.Resource.Type
+                    && x.Provider == target.Resource.Provider && x.ResourceId == target.Resource.Id, cancellationToken);
+                if (resource is null)
+                {
+                    resource = new CollectionResourceEntity
+                    {
+                        Type = target.Resource.Type, Provider = target.Resource.Provider,
+                        ResourceId = target.Resource.Id, EffectiveDate = target.EffectiveDate,
+                        AttributesJson = JsonSerializer.Serialize(target.Attributes ?? new Dictionary<string, string>()),
+                        CreatedAt = requestedAt,
+                    };
+                    db.Resources.Add(resource);
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+                var duplicate = await db.Requests.FirstOrDefaultAsync(x => x.ResourcePk == resource.ResourcePk
+                    && x.DefinitionId == definition.Value && x.BatchId == batchId, cancellationToken);
+                if (duplicate is not null)
+                {
+                    var duplicateTask = await db.Tasks.FirstOrDefaultAsync(x => x.RequestId == duplicate.RequestId,
+                        cancellationToken);
+                    receipts.Add(new(duplicate.RequestId, duplicateTask?.TaskId ?? Guid.Empty, false));
+                    continue;
+                }
+                var request = new CollectionRequestEntity
+                {
+                    RequestId = Guid.NewGuid(), ResourcePk = resource.ResourcePk, DefinitionId = definition.Value,
+                    RequestedRevision = requestedRevision, Reason = reason, RequestedAt = requestedAt, BatchId = batchId,
+                };
+                db.Requests.Add(request);
+                var active = await db.ActiveTasks.FirstOrDefaultAsync(x => x.ResourcePk == resource.ResourcePk
+                    && x.DefinitionId == definition.Value, cancellationToken);
+                Guid taskId;
+                var createdTask = active is null;
+                if (active is null)
+                {
+                    var task = new CollectionTaskEntity
+                    {
+                        TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = resource.ResourcePk,
+                        DefinitionId = definition.Value, RequestedRevision = requestedRevision,
+                        Status = CollectionTaskStatus.Ready, Lane = lane, Priority = priority,
+                        AvailableAt = requestedAt, CreatedAt = requestedAt, UpdatedAt = requestedAt,
+                        DispatchGeneration = 1,
+                    };
+                    taskId = task.TaskId;
+                    db.Tasks.Add(task);
+                    db.ActiveTasks.Add(new CollectionActiveTaskEntity
+                        { ResourcePk = resource.ResourcePk, DefinitionId = definition.Value, TaskId = taskId });
+                    db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                    {
+                        OutboxId = Guid.NewGuid(), TaskId = taskId, DispatchGeneration = 1,
+                        AvailableAt = requestedAt, CreatedAt = requestedAt,
+                    });
+                    created++;
+                }
+                else taskId = active.TaskId;
+                var state = await db.States.FirstOrDefaultAsync(x => x.ResourcePk == resource.ResourcePk
+                    && x.DefinitionId == definition.Value, cancellationToken);
+                if (state is null)
+                    db.States.Add(new CollectionStateEntity
+                    {
+                        ResourcePk = resource.ResourcePk, DefinitionId = definition.Value,
+                        RequiredRevision = requestedRevision, Status = CollectionStateStatus.Pending,
+                        UpdatedAt = requestedAt,
+                    });
+                else
+                {
+                    state.RequiredRevision = Math.Max(state.RequiredRevision, requestedRevision);
+                    if (createdTask) state.Status = CollectionStateStatus.Pending;
+                    state.UpdatedAt = requestedAt;
+                }
+                receipts.Add(new(request.RequestId, taskId, createdTask));
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(batchId, normalized.Count, created, receipts);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<CollectionBulkTarget>> SelectBulkTargetsAsync(CollectionDefinitionId definition,
+        DateTimeOffset? lastCollectedBefore = null, CollectionStateStatus? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var rows = await (from state in db.States.AsNoTracking()
+            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+            where state.DefinitionId == definition.Value
+            select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Where(x => (!lastCollectedBefore.HasValue || x.state.LastCollectedAt <= lastCollectedBefore
+                                || x.state.LastCollectedAt == null)
+                               && (!status.HasValue || x.state.Status == status))
+            .Select(x => new CollectionBulkTarget(new(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+                x.resource.EffectiveDate,
+                JsonSerializer.Deserialize<Dictionary<string, string>>(x.resource.AttributesJson) ?? []))
+            .ToList();
+    }
+
     public async Task<LeasedCollectionTask?> AcquireAsync(Guid taskId, long dispatchGeneration,
         DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
@@ -594,6 +720,22 @@ public sealed class CollectionPlatformStore
         var failed = affected.Count(x => x.state.AppliedRevision < revision
                                          && x.state.Status == CollectionStateStatus.Failed);
         return new(definition, revision, affected.Count, completed, affected.Count - completed - failed, failed);
+    }
+
+    public async Task<IReadOnlyList<CollectionBulkTarget>> GetRevisionImpactTargetsAsync(
+        CollectionDefinitionId definition, int revision,
+        IEnumerable<INamedRevisionImpactCondition> namedConditions,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var row = await db.RevisionImpacts.AsNoTracking().SingleAsync(x =>
+            x.DefinitionId == definition.Value && x.Revision == revision, cancellationToken).ConfigureAwait(false);
+        var impact = new RevisionImpact(row.ScopeType, row.ScopePayload);
+        var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
+        ValidateImpact(impact, conditions.Values);
+        var candidates = await LoadRevisionCandidatesAsync(db, definition.Value, cancellationToken).ConfigureAwait(false);
+        return candidates.Where(x => MatchesImpact(x, impact, conditions))
+            .Select(x => new CollectionBulkTarget(x.Resource, x.EffectiveDate, x.Attributes)).ToList();
     }
 
     public async Task<long> UpsertLocationAsync(ResourceKey resource, CollectionDefinitionId definition, Uri url,
@@ -1115,6 +1257,33 @@ public sealed class CollectionPlatformStore
             where state.DefinitionId == definitionId
             select resource).ToListAsync(cancellationToken).ConfigureAwait(false);
         return resources.Select(ToRevisionCandidate).ToList();
+    }
+
+    private static List<CollectionBulkTarget> NormalizeBulkTargets(IEnumerable<CollectionBulkTarget> targets)
+    {
+        var normalized = targets.Select(x => x with { Resource = x.Resource.Normalize() })
+            .GroupBy(x => x.Resource).Select(x => x.First()).ToList();
+        if (normalized.Count is < 1 or > 10_000)
+            throw new ArgumentException("Bulk request must contain between 1 and 10000 distinct resources.", nameof(targets));
+        if (normalized.Any(x => string.IsNullOrWhiteSpace(x.Resource.Provider)
+                                || string.IsNullOrWhiteSpace(x.Resource.Id)))
+            throw new ArgumentException("Every bulk resource requires provider and id.", nameof(targets));
+        return normalized;
+    }
+
+    private static async Task ValidateBulkRequestAsync(CollectionPlatformDbContext db,
+        CollectionDefinitionId definition, int requestedRevision, IReadOnlyCollection<CollectionBulkTarget> targets,
+        CancellationToken cancellationToken)
+    {
+        var definitionEntity = await db.Definitions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.DefinitionId == definition.Value, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
+        if (!definitionEntity.Enabled || targets.Any(x => x.Resource.Type != definitionEntity.ResourceType))
+            throw new InvalidOperationException($"Every resource must match definition {definitionEntity.ResourceType}.");
+        if (requestedRevision < 1 || requestedRevision > definitionEntity.CurrentRevision
+            || !await db.Revisions.AsNoTracking().AnyAsync(x => x.DefinitionId == definition.Value
+                && x.Revision == requestedRevision, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException($"Revision {requestedRevision} is not registered for {definition}.");
     }
 
     private static bool MatchesDateRange(DateOnly? date, string payload)

@@ -126,6 +126,13 @@ public sealed record RevisionRecollectionExpansion(CollectionDefinitionId Defini
 public sealed record RevisionRecollectionProgress(CollectionDefinitionId Definition, int Revision,
     int Affected, int Completed, int Pending, int Failed);
 
+public sealed record CollectionBulkTarget(ResourceKey Resource, DateOnly? EffectiveDate = null,
+    IReadOnlyDictionary<string, string>? Attributes = null);
+public sealed record CollectionBulkPreview(CollectionDefinitionId Definition, int Revision,
+    int TargetCount, IReadOnlyList<ResourceKey> Resources);
+public sealed record CollectionBulkExecution(string BatchId, int TargetCount, int TasksCreated,
+    IReadOnlyList<CollectionRequestReceipt> Requests);
+
 public interface INamedRevisionImpactCondition
 {
     string Name { get; }
