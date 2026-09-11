@@ -19,6 +19,8 @@ public sealed class CollectionScheduleService(CollectionPlatformStore store,
             {
                 var schedule = _policy.Evaluate(state.Resource, state, now);
                 if (!schedule.ShouldCollect) continue;
+                if (await store.HasActiveTaskAsync(state.Resource, state.Definition, stoppingToken).ConfigureAwait(false))
+                    continue;
                 try
                 {
                     await store.RequestAsync(state.Resource, state.Definition, state.RequiredRevision,

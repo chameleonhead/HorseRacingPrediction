@@ -60,6 +60,14 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task Request_RejectsRevisionNotRegisteredByDefinition()
+    {
+        var store = await CreateStoreAsync();
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.RequestAsync(
+            Horse, HorseProfile, 999, CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
     public async Task TransientFailure_RetriesSameTaskAndPreservesAttemptHistoryAcrossRestart()
     {
         var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);

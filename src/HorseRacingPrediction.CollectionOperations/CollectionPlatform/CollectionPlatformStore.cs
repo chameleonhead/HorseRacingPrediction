@@ -93,6 +93,11 @@ public sealed class CollectionPlatformStore
                 ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
             if (!definitionEntity.Enabled || definitionEntity.ResourceType != resource.Type)
                 throw new InvalidOperationException($"Definition {definition} cannot collect {resource.Type}.");
+            if (requestedRevision > definitionEntity.CurrentRevision
+                || !await db.Revisions.AnyAsync(x => x.DefinitionId == definition.Value
+                    && x.Revision == requestedRevision, cancellationToken))
+                throw new InvalidOperationException(
+                    $"Revision {requestedRevision} is not registered for definition {definition}.");
 
             var resourceEntity = await db.Resources.SingleOrDefaultAsync(x => x.Type == resource.Type
                 && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
@@ -293,6 +298,18 @@ public sealed class CollectionPlatformStore
             new ResourceKey(row.item.Type, row.item.Provider, row.item.ResourceId), definition,
             row.state.AppliedRevision, row.state.RequiredRevision, row.state.LastCollectedAt,
             row.state.NextCollectionAt, row.state.Status);
+    }
+
+    public async Task<bool> HasActiveTaskAsync(ResourceKey resource, CollectionDefinitionId definition,
+        CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await using var db = CreateDbContext();
+        return await (from active in db.ActiveTasks.AsNoTracking()
+            join item in db.Resources.AsNoTracking() on active.ResourcePk equals item.ResourcePk
+            where item.Type == resource.Type && item.Provider == resource.Provider
+                && item.ResourceId == resource.Id && active.DefinitionId == definition.Value
+            select active).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesAsync(DateTimeOffset now, int limit = 500,
