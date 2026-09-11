@@ -22,6 +22,11 @@
     margin-top: 16px;
 }
 
+.section-description {
+    color: var(--neutral-foreground-hint);
+    margin-top: -4px;
+}
+
 code {
     overflow-wrap: anywhere;
 }
