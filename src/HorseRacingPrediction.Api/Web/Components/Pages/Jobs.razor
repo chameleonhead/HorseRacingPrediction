@@ -63,10 +63,10 @@
         <div class="failure-groups">
             @foreach (var group in FailureGroups.Take(6))
             {
-                <a class="failure-group" href="@DetailHref(group.First)">
+                <a class="failure-group" href="@FailureGroupHref(group)">
                     <span><strong>@(string.IsNullOrWhiteSpace(group.ErrorCode) ? "原因未分類" : group.ErrorCode)</strong><small>@DefinitionLabel(group.Definition)</small></span>
                     <span class="failure-count">@group.Count 件</span>
-                    <span class="failure-message">@(string.IsNullOrWhiteSpace(group.Message) ? "詳細画面で実行履歴を確認してください。" : group.Message)</span>
+                    <span class="failure-message">@(string.IsNullOrWhiteSpace(group.ErrorMessage) ? "詳細画面で実行履歴を確認してください。" : group.ErrorMessage)</span>
                 </a>
             }
         </div>
@@ -205,15 +205,12 @@ else
     private IReadOnlyList<CollectionStateSnapshot> visibleStates = [];
     private IReadOnlyDictionary<string, int> serverViewCounts = new Dictionary<string, int>();
     private IReadOnlyList<PendingCollectionFailureNotification> failures = [];
+    private IReadOnlyList<CollectionFailureGroup> failureGroups = [];
     private CollectionProgressSnapshot? progress;
     private CollectionPipelineState? pipeline;
     private CollectionBulkPreview? preview;
 
-    private IReadOnlyList<FailureGroup> FailureGroups => failures.GroupBy(x => new { x.Definition, x.ErrorCode })
-        .Select(g => new FailureGroup(g.Key.Definition, g.Key.ErrorCode, g.First().ErrorMessage, g.Count(),
-            tasks.FirstOrDefault(x => x.TaskId == g.First().TaskId) ?? new(g.First().TaskId, g.First().Resource,
-                g.First().Definition, g.First().Status, CollectionLane.Normal, 0, 1, g.First().FailedAt, g.First().AttemptCount)))
-        .OrderByDescending(x => x.Count).ToList();
+    private IReadOnlyList<CollectionFailureGroup> FailureGroups => failureGroups.OrderByDescending(x => x.Count).ToList();
 
     private IReadOnlyList<CollectionTaskSummary> UniqueResources => tasks.GroupBy(x => new { x.Resource, x.Definition }).Select(g => g.OrderByDescending(x => x.AvailableAt).First()).ToList();
     private IReadOnlyList<CollectionTaskSummary> FilteredItems => (view == "resources" ? UniqueResources : tasks).Where(MatchesView).Where(MatchesFilter).ToList();
@@ -226,7 +223,7 @@ else
     private static readonly IReadOnlyList<CollectionKind> collectionKinds = [new("RaceCard", "race-card", "出馬表", "出走馬・騎手・調教師など"), new("RaceResult", "race-result", "レース結果", "着順・払戻・競走中の出来事など"), new("RaceOdds", "race-odds", "オッズ", "時系列で変化する各種オッズ"), new("Horse", "horse-profile", "競走馬", "プロフィール・血統など"), new("Jockey", "jockey-profile", "騎手", "プロフィール・所属など"), new("Trainer", "trainer-profile", "調教師", "プロフィール・所属など")];
 
     protected override async Task OnParametersSetAsync(){if(!initialized){view=views.Any(x=>x.Value==ViewQuery)?ViewQuery!:"attention";query=filter=SearchQuery??"";page=Math.Max(1,PageQuery??1);resourceFilter=ResourceFilterQuery??"";statusFilter=StatusFilterQuery??"";laneFilter=LaneFilterQuery??"";providerFilter=ProviderFilterQuery??"";errorFilter=ErrorFilterQuery??"";initialized=true;await LoadAsync();refreshCancellation=new();_ = RefreshLoopAsync(refreshCancellation.Token);}}
-    private async Task LoadAsync(){var initial=progress is null;loading=initial;refreshing=!initial;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=Api.GetCollectionTaskViewCountsAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;failures=await d??[];serverViewCounts=(await e)?.Counts??new Dictionary<string,int>();if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;refreshing=false;}}
+    private async Task LoadAsync(){var initial=progress is null;loading=initial;refreshing=!initial;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=Api.GetCollectionTaskViewCountsAsync();var f=Api.GetCollectionFailureGroupsAsync();await Task.WhenAll(a,b,c,d,e,f);progress=await a;pipeline=await b;failures=await d??[];failureGroups=await f??[];serverViewCounts=(await e)?.Counts??new Dictionary<string,int>();if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;refreshing=false;}}
     private async Task LoadTaskPageAsync(){if(view=="resources"){statePage=await Api.SearchCollectionStatesAsync(BuildStateQuery());visibleStates=statePage?.Items??[];tasks=[];taskPage=null;return;}taskPage=await Api.SearchCollectionTasksAsync(BuildTaskQuery(page,PageSize));tasks=taskPage?.Items??[];statePage=null;visibleStates=[];}
     private CollectionTaskQuery BuildTaskQuery(int targetPage,int pageSize,string? targetView=null){var selectedView=targetView??view;IReadOnlyCollection<CollectionTaskStatus>? statuses=selectedView switch{"attention"=>[CollectionTaskStatus.Failed,CollectionTaskStatus.DeadLetter],"running"=>[CollectionTaskStatus.Running],"waiting"=>[CollectionTaskStatus.Pending,CollectionTaskStatus.Ready,CollectionTaskStatus.RetryWaiting,CollectionTaskStatus.WaitingDiscovery],"recent"=>[CollectionTaskStatus.Succeeded],_=>null};if(Enum.TryParse<CollectionTaskStatus>(statusFilter,out var status))statuses=[status];ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsedResource)?parsedResource:null;CollectionLane? lane=Enum.TryParse<CollectionLane>(laneFilter,out var parsedLane)?parsedLane:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,null,lane,string.IsNullOrWhiteSpace(filter)?null:filter,ErrorSearch:string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter,Page:targetPage,PageSize:pageSize,ActionableOnly:selectedView=="attention");}
     private CollectionStateQuery BuildStateQuery(){IReadOnlyCollection<CollectionStateStatus>? statuses=Enum.TryParse<CollectionStateStatus>(statusFilter,out var status)?[status]:null;ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsed)?parsed:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,Search:string.IsNullOrWhiteSpace(filter)?null:filter,Page:page,PageSize:PageSize);}
@@ -245,6 +242,7 @@ else
     private int ViewCount(string value)=>value=="resources"?progress?.ResourcesByType.Values.Sum()??UniqueResources.Count:serverViewCounts.TryGetValue(value,out var count)?count:0;
     private string StatusTabLabel(FilterOption option)=>$"{option.Label}  {ViewCount(option.Value)}";
     private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
+    private string FailureGroupHref(CollectionFailureGroup item){var back="/"+Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/failures/{Uri.EscapeDataString(item.GroupKey)}?returnUrl={Uri.EscapeDataString(back)}";}
     private string StateDetailHref(CollectionStateSnapshot item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
@@ -275,6 +273,5 @@ else
     private static string LaneLabel(CollectionLane v)=>v switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>v.ToString()};
     private sealed record FilterOption(string Value,string Label);
     private sealed record CollectionKind(string Type,string Definition,string Label,string Description);
-    private sealed record FailureGroup(CollectionDefinitionId Definition,string? ErrorCode,string? Message,int Count,CollectionTaskSummary First);
     public async ValueTask DisposeAsync(){if(refreshCancellation is not null){await refreshCancellation.CancelAsync();refreshCancellation.Dispose();}}
 }

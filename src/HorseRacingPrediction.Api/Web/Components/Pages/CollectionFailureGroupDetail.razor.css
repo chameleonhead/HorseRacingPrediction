@@ -1,0 +1,13 @@
+.cause-card { background: color-mix(in srgb, var(--status-danger-background-1) 40%, var(--neutral-layer-1)); border: 1px solid var(--status-danger-foreground-1); border-left-width: 4px; border-radius: 8px; margin-bottom: 20px; padding: 20px; }
+.cause-card h2 { margin: 3px 0 8px; }
+.eyebrow { color: var(--status-danger-foreground-1); font-size: var(--type-ramp-minus-1-font-size); font-weight: 600; }
+.suggested-action { background: var(--neutral-layer-1); border-radius: 5px; display: grid; gap: 4px; margin: 14px 0; padding: 12px; }
+.cause-card dl { display: grid; gap: 8px 16px; grid-template-columns: max-content minmax(0,1fr); }
+.cause-card dt { color: var(--neutral-foreground-hint); }.cause-card dd { margin:0; min-width:0; }.cause-card pre { margin:0; overflow:auto; white-space:pre-wrap; }
+.list-heading,.failure-toolbar,.selection-bar { align-items:center; display:flex; gap:10px; justify-content:space-between; }
+.failure-toolbar { justify-content:flex-start; margin:14px 0; }.failure-toolbar fluent-text-field { flex:1; max-width:560px; }
+.selection-bar { background:var(--neutral-layer-2); border-radius:5px; margin-bottom:10px; padding:9px 12px; }.selection-bar label { align-items:center; display:flex; gap:7px; }
+.target-url { display:block; max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.error-preview { display:block; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+fluent-data-grid small { color:var(--neutral-foreground-hint); display:block; }.pagination { align-items:center; display:flex; gap:12px; justify-content:center; margin-top:18px; }
+.row-details { display:grid; gap:5px 10px; grid-template-columns:max-content minmax(0,1fr); min-width:22rem; }.row-details dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:720px){.list-heading,.failure-toolbar,.selection-bar{align-items:stretch;flex-direction:column}.failure-toolbar fluent-text-field{max-width:none}.cause-card dl,.row-details{grid-template-columns:1fr}.row-details{min-width:0}.target-url,.error-preview{max-width:180px}}

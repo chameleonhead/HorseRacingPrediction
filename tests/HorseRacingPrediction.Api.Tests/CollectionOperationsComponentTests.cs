@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
 using CollectionOperationsPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionOperations;
+using FailureGroupPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionFailureGroupDetail;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -54,6 +55,24 @@ public sealed class CollectionOperationsComponentTests
         Assert.AreEqual(0, handler.BackfillRequests);
     }
 
+    [TestMethod]
+    public async Task FailureGroupPage_ShowsCauseUrlAndBulkRecoveryAction()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new OperationsHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<FailureGroupPage>(parameters => parameters
+            .Add(x => x.GroupKey, "race-result|Failed|UnexpectedPage"));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "想定と異なるページを検出しました"));
+        StringAssert.Contains(cut.Markup, "https://www.jra.go.jp/JRADB/result/R1");
+        StringAssert.Contains(cut.Markup, "対象をまとめて再取得");
+        StringAssert.Contains(cut.Markup, "レース結果 ・ JRA");
+    }
+
     private sealed class OperationsHandler : HttpMessageHandler
     {
         public int BackfillRequests { get; private set; }
@@ -94,6 +113,8 @@ public sealed class CollectionOperationsComponentTests
                         DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow,
                         [Guid.NewGuid(), Guid.NewGuid()], [new(ResourceType.RaceResult, "JRA", "R1")]),
                 },
+                "/api/admin/collection/failure-notifications/groups/race-result%7CFailed%7CUnexpectedPage" =>
+                    FailurePage(),
                 "/api/admin/collection/backfills" => new[]
                 {
                     new BackfillBatchSnapshot("jra:2026-08", new(2026, 8, 1), new(2026, 8, 31),
@@ -102,6 +123,19 @@ public sealed class CollectionOperationsComponentTests
                 _ => Array.Empty<object>(),
             };
             return Ok(value);
+        }
+
+        private static CollectionFailureGroupPage FailurePage()
+        {
+            var notificationId = Guid.NewGuid();
+            var resource = new ResourceKey(ResourceType.RaceResult, "JRA", "R1");
+            var group = new CollectionFailureGroup("race-result|Failed|UnexpectedPage", new("race-result"),
+                CollectionTaskStatus.Failed, "UnexpectedPage", "別のレースページを検出", 1,
+                DateTimeOffset.UtcNow.AddMinutes(-2), DateTimeOffset.UtcNow, [notificationId], [resource]);
+            return new(group, 1, 1, 50, null,
+                [new(notificationId, Guid.NewGuid(), resource, new("race-result"), CollectionTaskStatus.Failed,
+                    "UnexpectedPage", "別のレースページを検出", 3, DateTimeOffset.UtcNow,
+                    "https://www.jra.go.jp/JRADB/result/R1", null, 200, "RaceResult:R2", Guid.NewGuid(), "lambda-1")]);
         }
 
         private static Task<HttpResponseMessage> Ok(object value) => Task.FromResult(

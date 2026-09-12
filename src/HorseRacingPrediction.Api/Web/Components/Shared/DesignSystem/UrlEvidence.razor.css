@@ -1,0 +1,3 @@
+.url-evidence-item { align-items:flex-start; display:grid; gap:4px; grid-template-columns:90px minmax(0,1fr) max-content; }
+.url-evidence-item a { overflow-wrap:anywhere; }
+@media(max-width:720px){.url-evidence-item{grid-template-columns:1fr}}

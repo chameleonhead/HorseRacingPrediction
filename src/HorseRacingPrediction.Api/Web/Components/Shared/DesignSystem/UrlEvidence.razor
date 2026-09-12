@@ -1,0 +1,9 @@
+@inject IJSRuntime JS
+
+<div class="url-evidence-item"><strong>@Label</strong>@if(string.IsNullOrWhiteSpace(Value)){<span>記録なし</span>}else{<a href="@Value" target="_blank" rel="noopener noreferrer">@Value</a><FluentButton Appearance="@Appearance.Stealth" OnClick="CopyAsync">コピー</FluentButton>}</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Value { get; set; }
+    private async Task CopyAsync(){if(!string.IsNullOrWhiteSpace(Value))try{await JS.InvokeVoidAsync("navigator.clipboard.writeText",Value);}catch(JSException){}}
+}

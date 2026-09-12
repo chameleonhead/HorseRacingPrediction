@@ -1,0 +1,75 @@
+@page "/jobs/failures/{GroupKey}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+
+<RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集管理に戻る" Title="@Title" Section="運用 / 収集管理 / 障害" Description="同じ原因で失敗した収集対象を確認し、必要な範囲をまとめて再取得します。" Status="@StatusLabel" StatusTone="danger">
+    <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="@(() => ConfirmRecovery(false))" Disabled="@(busy || pageData is null || pageData.TotalCount == 0)">対象をまとめて再取得</FluentButton></Actions>
+</RaceOpsObjectHeader>
+
+@if (loading) { <UiState Kind="loading" Title="障害の詳細を読み込んでいます" /> }
+else if (errors.Count > 0) { <UiState Kind="error" Title="障害の詳細を表示できません" Message="@string.Join(" ", errors)" /> }
+else if (pageData is not null)
+{
+    var advice = CollectionErrorPresentation.Describe(pageData.Group.ErrorCode, pageData.Group.ErrorMessage);
+    @if (!string.IsNullOrWhiteSpace(operationMessage)) { <FluentMessageBar Intent="@MessageIntent.Success" Title="@operationMessage" /> }
+    <section class="cause-card" aria-labelledby="cause-title">
+        <span class="eyebrow">考えられる原因</span><h2 id="cause-title">@advice.Title</h2><p>@advice.Explanation</p>
+        <div class="suggested-action"><strong>推奨する対応</strong><span>@advice.SuggestedAction</span></div>
+        <details><summary>共通の技術情報を表示</summary><dl><dt>収集内容</dt><dd>@DefinitionLabel(pageData.Group.Definition)</dd><dt>エラー分類</dt><dd><code>@(pageData.Group.ErrorCode ?? "未分類")</code></dd><dt>最新の詳細</dt><dd><pre>@(pageData.Group.ErrorMessage ?? "—")</pre></dd><dt>発生期間</dt><dd>@Time(pageData.Group.FirstFailedAt) ～ @Time(pageData.Group.LastFailedAt)</dd></dl></details>
+    </section>
+
+    <section class="entity-section detail-section">
+        <div class="list-heading"><div><h2>対象一覧</h2><p class="hint">要対応のまま残っている対象だけを表示します。選択はページを移動しても保持されます。</p></div><strong>@pageData.TotalCount 件</strong></div>
+        <div class="failure-toolbar"><FluentTextField aria-label="障害対象を検索" Placeholder="対象ID、URL、エラー内容を検索" @bind-Value="query" /><FluentButton OnClick="SearchAsync" Disabled="busy">検索</FluentButton>@if(!string.IsNullOrWhiteSpace(search)){<FluentButton Appearance="@Appearance.Stealth" OnClick="ClearSearchAsync" Disabled="busy">検索を解除</FluentButton>}</div>
+        @if (pageData.Items.Count == 0) { <UiState Title="該当する要対応の対象はありません" Message="すでに再取得が開始されたか、検索条件に一致しませんでした。" /> }
+        else
+        {
+            <div class="selection-bar"><label><input type="checkbox" checked="@CurrentPageSelected" @onchange="ToggleCurrentPage" /> このページをすべて選択</label><span>@selected.Count 件選択中</span><FluentButton OnClick="@(() => ConfirmRecovery(true))" Disabled="@(busy || selected.Count == 0)">選択した対象を再取得</FluentButton></div>
+            <FluentDataGrid Items="@pageData.Items.AsQueryable()" TGridItem="CollectionFailureTarget" aria-label="障害対象一覧">
+                <TemplateColumn Title="選択"><input type="checkbox" aria-label="@($"{context.Resource.Id}を選択")" checked="@selected.Contains(context.NotificationId)" @onchange="e => Toggle(context.NotificationId, (bool)(e.Value ?? false))" /></TemplateColumn>
+                <TemplateColumn Title="収集対象"><a href="@ResourceHref(context)">@ResourceLabel(context.Resource)</a><small>@context.Resource.Id</small></TemplateColumn>
+                <TemplateColumn Title="発生日時">@Time(context.FailedAt)</TemplateColumn>
+                <TemplateColumn Title="試行">@context.AttemptCount 回</TemplateColumn>
+                <TemplateColumn Title="取得先">@if(!string.IsNullOrWhiteSpace(TargetUrl(context))){<a class="target-url" href="@TargetUrl(context)" target="_blank" rel="noopener noreferrer">@TargetUrl(context)</a>}else{<span>—</span>}</TemplateColumn>
+                <TemplateColumn Title="概要"><span class="error-preview" title="@context.ErrorMessage">@(context.ErrorMessage ?? context.ErrorCode ?? "—")</span></TemplateColumn>
+                <TemplateColumn Title="詳細"><details><summary>技術情報</summary><dl class="row-details"><dt>要求URL</dt><dd>@(context.RequestedUrl??"記録なし")</dd><dt>最終URL</dt><dd>@(context.FinalUrl??"記録なし")</dd><dt>HTTP</dt><dd>@(context.HttpStatusCode?.ToString()??"記録なし")</dd><dt>ページ判定</dt><dd>@(context.PageIdentification??"記録なし")</dd><dt>Lambda request</dt><dd>@(context.LambdaRequestId??"記録なし")</dd><dt>実行バッチ</dt><dd>@if(context.ExecutionBatchId is { } batchId){<a href="@BatchHref(batchId)">@batchId</a>}else{<span>記録なし</span>}</dd></dl></details><FluentButton Href="@ResourceHref(context)" Appearance="@Appearance.Stealth">対象の詳細</FluentButton></TemplateColumn>
+            </FluentDataGrid>
+            @if (TotalPages > 1) { <nav class="pagination" aria-label="障害対象ページ"><FluentButton OnClick="PreviousAsync" Disabled="@(busy || page <= 1)">前へ</FluentButton><span>@(page) / @TotalPages ページ</span><FluentButton OnClick="NextAsync" Disabled="@(busy || page >= TotalPages)">次へ</FluentButton></nav> }
+        }
+    </section>
+}
+
+<FluentDialog Hidden="@(!showConfirm)" HiddenChanged="@(hidden => showConfirm = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="recovery-title" Style="width:min(520px,calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="true"><h2 id="recovery-title">まとめて再取得しますか</h2></FluentDialogHeader>
+    <FluentDialogBody><p>@(recoverSelected ? $"選択した {selected.Count} 件を再取得します。" : $"現在この原因に該当する {pageData?.TotalCount ?? 0} 件を再取得します。")</p><p class="hint">実行時点ですでに対応中・解決済みの対象は除外されます。</p></FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showConfirm=false)">キャンセル</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="RecoverAsync" Disabled="busy">再取得を依頼</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    [Parameter] public string GroupKey { get; set; } = string.Empty;
+    [SupplyParameterFromQuery(Name="returnUrl")] public string? ReturnUrl { get; set; }
+    private const int PageSize=50; private bool loading=true,busy,showConfirm,recoverSelected; private int page=1; private string query="",search=""; private string? operationMessage; private IReadOnlyList<string> errors=[]; private CollectionFailureGroupPage? pageData; private readonly HashSet<Guid> selected=[];
+    private string BackHref=>!string.IsNullOrWhiteSpace(ReturnUrl)&&ReturnUrl.StartsWith("/jobs",StringComparison.Ordinal)&&!ReturnUrl.StartsWith("//",StringComparison.Ordinal)?ReturnUrl:"/jobs?view=attention";
+    private string Title=>pageData is null?"障害の詳細":$"{DefinitionLabel(pageData.Group.Definition)}の障害";
+    private string StatusLabel=>pageData is null?"読み込み中":$"要対応 {pageData.TotalCount} 件";
+    private int TotalPages=>Math.Max(1,(int)Math.Ceiling((pageData?.TotalCount??0)/(double)PageSize));
+    private bool CurrentPageSelected=>pageData?.Items.Count>0&&pageData.Items.All(x=>selected.Contains(x.NotificationId));
+    protected override Task OnParametersSetAsync()=>LoadAsync();
+    private async Task LoadAsync(){loading=pageData is null;busy=true;errors=[];try{pageData=await Api.GetCollectionFailureGroupAsync(GroupKey,search,page,PageSize);if(pageData is null)errors=["指定された障害は見つかりませんでした。再取得が開始され、要対応ではなくなった可能性があります。"];else if(page>TotalPages){page=TotalPages;await LoadAsync();}}catch(HttpRequestException ex)when(ex.StatusCode==System.Net.HttpStatusCode.Conflict){errors=["同じ識別子の障害が複数見つかりました。画面を更新しても解決しない場合は管理者へ連絡してください。"];}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。もう一度お試しください。"]; }finally{loading=false;busy=false;}}
+    private async Task SearchAsync(){search=query.Trim();page=1;await LoadAsync();}
+    private async Task ClearSearchAsync(){query=search="";page=1;await LoadAsync();}
+    private async Task PreviousAsync(){if(page>1){page--;await LoadAsync();}}
+    private async Task NextAsync(){if(page<TotalPages){page++;await LoadAsync();}}
+    private void Toggle(Guid id,bool value){if(value)selected.Add(id);else selected.Remove(id);}
+    private void ToggleCurrentPage(ChangeEventArgs e){var value=(bool)(e.Value??false);foreach(var item in pageData?.Items??[])Toggle(item.NotificationId,value);}
+    private void ConfirmRecovery(bool onlySelected){recoverSelected=onlySelected;showConfirm=true;operationMessage=null;}
+    private async Task RecoverAsync(){if(pageData is null)return;busy=true;errors=[];showConfirm=false;try{AdminApiResult<CollectionFailureRecoveryResult> result=recoverSelected?await Api.RecoverCollectionFailuresAsync(new(selected.ToArray())):await Api.RecoverCollectionFailureGroupAsync(GroupKey,new());if(result.Success&&result.Value is { } value){operationMessage=$"{value.SelectedCount} 件を再取得対象として確認し、新しいタスク {value.CreatedTaskCount} 件を作成しました。既存タスクへの統合は {value.ReusedTaskCount} 件です。";selected.Clear();page=1;await LoadAsync();}else errors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["再取得の結果を確認できませんでした。更新して処理状態を確認してください。"]; }finally{busy=false;}}
+    private string ResourceHref(CollectionFailureTarget item){var here=$"/jobs/failures/{Uri.EscapeDataString(GroupKey)}";return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString(here)}";}
+    private string BatchHref(Guid id)=>$"/jobs/execution-batches/{id:D}?returnUrl={Uri.EscapeDataString($"/jobs/failures/{GroupKey}")}";
+    private static string? TargetUrl(CollectionFailureTarget value)=>value.FinalUrl??value.RequestedUrl;
+    private static string ResourceLabel(ResourceKey value)=>$"{ResourceTypeLabel(value.Type)} ・ {value.Provider}";
+    private static string ResourceTypeLabel(ResourceType v)=>v switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>v.ToString()};
+    private static string DefinitionLabel(CollectionDefinitionId v)=>v.Value switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>v.Value};
+    private static string Time(DateTimeOffset value)=>value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+}
