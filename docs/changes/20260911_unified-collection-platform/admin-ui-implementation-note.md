@@ -96,6 +96,8 @@ Resource types, state/task/attempt statuses, lanes, location sources, and locati
 ## 障害対応状態
 
 - 「要対応」と「障害のまとまり」はOpenの障害だけを同じActionable queryから表示する。
+- 障害のまとまりは代表Resourceへ直接遷移させず、原因、推奨対応、未解決対象一覧、ページング、全件・選択Recoveryを備えた独立した障害グループ詳細ページへ遷移させる。全件Recoveryは表示ページではなくサーバー側のOpenグループ条件を正とする。
+- Resource詳細が要対応の場合は、最新障害の日本語要約、発生情報、推奨対応、Requested URL、Final URLをタブより前に表示する。Explicit URLは依頼履歴で完全な値を開く・コピーできるようにし、技術的な例外原文と相関IDは展開領域へ置く。URLがない場合は推測せず「記録なし」と表示する。
 - 再取得受付後はRecoveryInProgressとなり通常の障害一覧から外れるが、Resource詳細の「障害履歴」で追跡できる。
 - ResolvedとSupersededは件数へ含めず、発生、対応開始、解決時刻とともにResource詳細へ残す。
 - SNS等への通知済み状態は運用対応状態を変更しない。
