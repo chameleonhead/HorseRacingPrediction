@@ -39,8 +39,11 @@ public sealed class PredictionScheduleStore : IPredictionSchedule
                 {
                     db.Candidates.Add(new PredictionCandidateEntity
                     {
-                        RaceId = raceId, Status = PredictionCandidateStatus.Ready,
-                        FirstQueuedAt = now, AvailableAt = now, UpdatedAt = now,
+                        RaceId = raceId,
+                        Status = PredictionCandidateStatus.Ready,
+                        FirstQueuedAt = now,
+                        AvailableAt = now,
+                        UpdatedAt = now,
                     });
                 }
                 else if (entity.Status != PredictionCandidateStatus.Running)

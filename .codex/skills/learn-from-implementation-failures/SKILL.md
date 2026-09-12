@@ -64,6 +64,18 @@ A correction must change a future decision and have an observable completion con
 
 Do not add reminders such as "be careful" or "test thoroughly." Replace them with a specific artifact, query, test, or invariant.
 
+## CI parity and push closure
+
+When a pushed change fails continuous integration after local verification, treat the mismatch between the local gate and the repository workflow as the demonstrated delivery failure.
+
+- Read the failing workflow step and its raw log before changing code or the skill. Record the exact command, runner OS, failure location, and whether the local verification omitted or changed any of them.
+- Before a later push, inspect the repository workflows and run their required formatting, build, and test commands exactly, including configuration, filters, restore behavior, and generated-file checks. A broader-looking command is not a substitute when its flags or prerequisites differ.
+- If the failure touches paths, casing, line endings, locale, time zones, process behavior, or other platform-sensitive APIs, add an OS-neutral invariant test. Use framework path APIs instead of string normalization assumptions. When a matching runner or container is available, execute the affected test there; otherwise state that cross-OS parity remains unverified.
+- Treat a successful `git push` as dispatch, not completion, when the requested outcome includes a healthy GitHub Actions run. Watch the new commit's required workflows to a terminal state, inspect every failure, fix it, rerun the exact local gates, and push again until they pass or an external blocker is established.
+- Add the repository's exact pre-push commands to the durable change record or contributor guidance when they were previously absent, so the next agent does not have to rediscover the CI contract from a failed run.
+
+The observable correction is that the same commit passes the locally reproduced workflow commands and the remote required workflows, with any platform-sensitive fix covered by a test that executes on the CI runner OS.
+
 ## Boundaries
 
 - Do not rewrite a skill solely to rationalize an isolated typo or unpredictable external failure.

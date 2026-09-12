@@ -254,7 +254,7 @@ public sealed class CollectionOperationsEndpointTests
     private static async Task<CollectionPlatformStore> CreateStoreAsync(string directory)
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-            { StateDirectory = directory }));
+        { StateDirectory = directory }));
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
             1, "initial", false);
         return store;

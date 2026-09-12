@@ -84,8 +84,10 @@ public sealed partial class AdminApiClient
         var values = new Dictionary<string, string?>
         {
             ["statuses"] = query.Statuses is null ? null : string.Join(',', query.Statuses),
-            ["resourceType"] = query.ResourceType?.ToString(), ["provider"] = query.Provider,
-            ["definitionId"] = query.DefinitionId, ["search"] = query.Search,
+            ["resourceType"] = query.ResourceType?.ToString(),
+            ["provider"] = query.Provider,
+            ["definitionId"] = query.DefinitionId,
+            ["search"] = query.Search,
             ["page"] = Math.Max(1, query.Page).ToString(),
             ["pageSize"] = Math.Clamp(query.PageSize, 1, 200).ToString(),
         };
@@ -161,7 +163,7 @@ public sealed partial class AdminApiClient
         string url, CancellationToken token = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{CollectionPlatformPath}/requests/by-url")
-            { Content = JsonContent.Create(new CreateExplicitUrlCollectionRequest(url), options: JsonOptions) };
+        { Content = JsonContent.Create(new CreateExplicitUrlCollectionRequest(url), options: JsonOptions) };
         using var response = await _httpClient.SendAsync(request, token).ConfigureAwait(false);
         var value = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>(JsonOptions, token)
             .ConfigureAwait(false);

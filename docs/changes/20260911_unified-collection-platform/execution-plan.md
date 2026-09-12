@@ -39,6 +39,7 @@ This is the durable continuation plan for the approved unified collection platfo
 | U17 | Harden production SQS/Lambda transport failures and deployment invariants | U16,I1 | Lambda/Terraform/runbook/tests | duplicate delivery remains idempotent; unsupported messages execute no work; transport failures retry before DLQ; timeout/redrive/alarms are contract-tested | Completed (static/local; AWS apply remains U10) |
 | U18 | Complete collection status tab accessibility, aggregate counts, and non-destructive refresh | U17 | Store/API/Blazor/tests | real results are inside the selected Fluent tab panel; one count request; refresh preserves content with status; narrow direct-link selection remains operable | Completed |
 | U19 | Unify race and collection list navigation with standard Fluent tabs | U18 | Blazor/CSS/component tests/browser | both pages use the same FluentTabs active indicator and shared host class; custom race periods remain truthfully represented; URL and panel selection stay synchronized | Completed |
+| U20 | Restore GitHub Actions parity and strengthen the pre-push gate | U19 | formatting/cross-platform test/retrospective skill | exact CI formatting and filtered test commands pass; Unix state paths are accepted while filesystem roots remain rejected; pushed workflows finish successfully | In progress |
 
 ## Parallelization rules
 

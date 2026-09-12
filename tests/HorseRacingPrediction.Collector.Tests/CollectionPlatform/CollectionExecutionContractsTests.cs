@@ -51,7 +51,7 @@ public sealed class CollectionExecutionContractsTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-                { StateDirectory = directory }));
+            { StateDirectory = directory }));
             var definition = new CollectionDefinitionId("horse-profile");
             var resource = new ResourceKey(ResourceType.Horse, "JRA", "H-CANCEL");
             await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "initial", false);

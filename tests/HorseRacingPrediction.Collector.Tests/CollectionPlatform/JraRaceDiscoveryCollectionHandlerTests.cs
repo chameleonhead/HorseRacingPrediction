@@ -80,7 +80,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     private sealed class RecordingSink : ICollectionRequestSink
     {
         public List<(ResourceKey Resource, CollectionDefinitionId Definition,
-            IReadOnlyDictionary<string, string> Attributes)> Requests { get; } = [];
+            IReadOnlyDictionary<string, string> Attributes)> Requests
+        { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)

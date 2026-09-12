@@ -291,8 +291,14 @@ public sealed class CollectionAdministrationComponentTests
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
                     new Dictionary<string, int>(), 0),
                 "/api/admin/collection/task-view-counts" => new CollectionTaskViewCounts(
-                    new Dictionary<string, int> { ["attention"] = 0, ["running"] = 0,
-                        ["waiting"] = 1, ["recent"] = 0, ["all"] = 1 }),
+                    new Dictionary<string, int>
+                    {
+                        ["attention"] = 0,
+                        ["running"] = 0,
+                        ["waiting"] = 1,
+                        ["recent"] = 0,
+                        ["all"] = 1
+                    }),
                 "/api/admin/collection/pipeline" => new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState(false, null, DateTimeOffset.UtcNow),
                 "/api/admin/collection/failure-notifications" => Array.Empty<PendingCollectionFailureNotification>(),
                 "/api/admin/collection/backfills" => Array.Empty<BackfillBatchSnapshot>(),

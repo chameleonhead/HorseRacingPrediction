@@ -11,11 +11,16 @@ internal static partial class JraExplicitUrlResolver
     private static readonly IReadOnlyDictionary<string, (string Name, string ResourceName)> Courses =
         new Dictionary<string, (string, string)>(StringComparer.Ordinal)
         {
-            ["01"] = ("札幌", "Sapporo"), ["02"] = ("函館", "Hakodate"),
-            ["03"] = ("福島", "Fukushima"), ["04"] = ("新潟", "Niigata"),
-            ["05"] = ("東京", "Tokyo"), ["06"] = ("中山", "Nakayama"),
-            ["07"] = ("中京", "Chukyo"), ["08"] = ("京都", "Kyoto"),
-            ["09"] = ("阪神", "Hanshin"), ["10"] = ("小倉", "Kokura"),
+            ["01"] = ("札幌", "Sapporo"),
+            ["02"] = ("函館", "Hakodate"),
+            ["03"] = ("福島", "Fukushima"),
+            ["04"] = ("新潟", "Niigata"),
+            ["05"] = ("東京", "Tokyo"),
+            ["06"] = ("中山", "Nakayama"),
+            ["07"] = ("中京", "Chukyo"),
+            ["08"] = ("京都", "Kyoto"),
+            ["09"] = ("阪神", "Hanshin"),
+            ["10"] = ("小倉", "Kokura"),
         };
 
     public static ExplicitUrlCollectionResult Resolve(string? url)

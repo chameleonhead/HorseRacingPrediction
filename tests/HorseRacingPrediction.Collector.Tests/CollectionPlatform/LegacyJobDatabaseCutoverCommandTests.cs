@@ -78,6 +78,14 @@ public sealed class LegacyJobDatabaseCutoverCommandTests
         Assert.AreEqual("legacy-data", await File.ReadAllTextAsync(legacy));
     }
 
+    [TestMethod]
+    public async Task FilesystemRoot_IsRejectedOnTheCurrentOperatingSystem()
+    {
+        var root = Path.GetPathRoot(Path.GetFullPath(_directory));
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => RunAsync(["--state-dir", root!]));
+    }
+
     private static async Task<int> RunAsync(string[] args) => await LegacyJobDatabaseCutoverCommand.RunAsync(
         args, new StringWriter(), new StringWriter());
 

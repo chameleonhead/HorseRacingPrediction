@@ -18,10 +18,18 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
     {
         using var response = await client.PostAsJsonAsync("api/admin/collection/requests", new
         {
-            ResourceType = resource.Type, resource.Provider, ResourceId = resource.Id,
-            DefinitionId = definition.Value, RequestedRevision = 1, Reason = reason, Lane = lane,
-            Priority = priority, ExplicitUrl = explicitUrl?.AbsoluteUri, EffectiveDate = effectiveDate,
-            Attributes = attributes, BatchId = attributes.GetValueOrDefault("batchId"),
+            ResourceType = resource.Type,
+            resource.Provider,
+            ResourceId = resource.Id,
+            DefinitionId = definition.Value,
+            RequestedRevision = 1,
+            Reason = reason,
+            Lane = lane,
+            Priority = priority,
+            ExplicitUrl = explicitUrl?.AbsoluteUri,
+            EffectiveDate = effectiveDate,
+            Attributes = attributes,
+            BatchId = attributes.GetValueOrDefault("batchId"),
         }, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }

@@ -69,10 +69,10 @@ public static class LegacyJobDatabaseCutoverCommand
 
     private static void EnsureSafeRoot(string root)
     {
-        var volume = Path.GetPathRoot(root)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (string.IsNullOrWhiteSpace(volume)
-            || string.Equals(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), volume,
-                StringComparison.OrdinalIgnoreCase))
+        // Directory.GetParent handles both Windows volume roots (C:\) and the Unix root (/).
+        // Trimming '/' first turns the Unix root into an empty string and incorrectly rejects
+        // every absolute Unix path because its path root also trims to empty.
+        if (Directory.GetParent(root) is null)
             throw new InvalidOperationException("State directory must not be a filesystem root.");
     }
 

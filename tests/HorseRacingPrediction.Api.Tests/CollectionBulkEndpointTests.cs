@@ -22,7 +22,7 @@ public sealed class CollectionBulkEndpointTests
         try
         {
             var collection = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-                { StateDirectory = Path.Combine(directory, "collection") }));
+            { StateDirectory = Path.Combine(directory, "collection") }));
             await collection.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
                 1, "initial", false);
             using var domain = new SqliteDbContextProvider($"Data Source={Path.Combine(directory, "domain.db")}");

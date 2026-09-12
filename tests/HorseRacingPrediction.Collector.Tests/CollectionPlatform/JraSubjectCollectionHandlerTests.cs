@@ -79,7 +79,10 @@ public sealed class JraSubjectCollectionHandlerTests
         var requests = new RecordingRequestSink();
         var sessions = SubjectSessions("A", new Dictionary<string, string>
         {
-            ["生年月日"] = "2020年1月1日", ["父"] = "A", ["母"] = "B", ["母馬"] = "B（母の父：C）",
+            ["生年月日"] = "2020年1月1日",
+            ["父"] = "A",
+            ["母"] = "B",
+            ["母馬"] = "B（母の父：C）",
             ["調教師"] = "T",
         });
         var handler = new JraSubjectProfileCollectionHandler(descriptor, sessions,

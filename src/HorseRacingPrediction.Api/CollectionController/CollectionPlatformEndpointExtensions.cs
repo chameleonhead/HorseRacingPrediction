@@ -305,7 +305,7 @@ public static class CollectionPlatformEndpointExtensions
         RevisionImpactScopeType.DateRange when request.From is not null && request.To is not null
                                                && request.From <= request.To =>
             new(request.ScopeType, System.Text.Json.JsonSerializer.Serialize(new
-                { From = request.From.Value, To = request.To.Value })),
+            { From = request.From.Value, To = request.To.Value })),
         RevisionImpactScopeType.NamedCondition when !string.IsNullOrWhiteSpace(request.NamedCondition) =>
             new(request.ScopeType, request.NamedCondition),
         _ => throw new ArgumentException("Revision impact parameters are invalid."),
@@ -321,7 +321,9 @@ public static class CollectionPlatformEndpointExtensions
     private static IReadOnlyList<CollectionFailureGroup> BuildFailureGroups(
         IReadOnlyList<PendingCollectionFailureNotification> notifications) => notifications.GroupBy(x => new
         {
-            Definition = x.Definition.Value, x.Status, ErrorCode = x.ErrorCode ?? string.Empty,
+            Definition = x.Definition.Value,
+            x.Status,
+            ErrorCode = x.ErrorCode ?? string.Empty,
         }).Select(x => new CollectionFailureGroup(
             CreateFailureGroupKey(x.Key.Definition, x.Key.Status, x.Key.ErrorCode), new(x.Key.Definition), x.Key.Status,
             string.IsNullOrEmpty(x.Key.ErrorCode) ? null : x.Key.ErrorCode,

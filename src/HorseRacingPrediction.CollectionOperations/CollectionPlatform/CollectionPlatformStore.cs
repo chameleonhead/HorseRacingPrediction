@@ -56,8 +56,11 @@ public sealed class CollectionPlatformStore
             {
                 definition = new CollectionDefinitionEntity
                 {
-                    DefinitionId = id.Value, Name = name, ResourceType = resourceType,
-                    CurrentRevision = currentRevision, Enabled = true,
+                    DefinitionId = id.Value,
+                    Name = name,
+                    ResourceType = resourceType,
+                    CurrentRevision = currentRevision,
+                    Enabled = true,
                 };
                 db.Definitions.Add(definition);
             }
@@ -73,8 +76,11 @@ public sealed class CollectionPlatformStore
             if (!await db.Revisions.AnyAsync(x => x.DefinitionId == id.Value && x.Revision == currentRevision, cancellationToken))
                 db.Revisions.Add(new CollectionRevisionEntity
                 {
-                    DefinitionId = id.Value, Revision = currentRevision, Description = revisionDescription,
-                    MayRequireRecollection = mayRequireRecollection, CreatedAt = DateTimeOffset.UtcNow,
+                    DefinitionId = id.Value,
+                    Revision = currentRevision,
+                    Description = revisionDescription,
+                    MayRequireRecollection = mayRequireRecollection,
+                    CreatedAt = DateTimeOffset.UtcNow,
                 });
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -125,8 +131,11 @@ public sealed class CollectionPlatformStore
             {
                 resourceEntity = new CollectionResourceEntity
                 {
-                    Type = resource.Type, Provider = resource.Provider, ResourceId = resource.Id,
-                    EffectiveDate = effectiveDate, AttributesJson = JsonSerializer.Serialize(attributes ?? new Dictionary<string, string>()),
+                    Type = resource.Type,
+                    Provider = resource.Provider,
+                    ResourceId = resource.Id,
+                    EffectiveDate = effectiveDate,
+                    AttributesJson = JsonSerializer.Serialize(attributes ?? new Dictionary<string, string>()),
                     CreatedAt = requestedAt,
                 };
                 db.Resources.Add(resourceEntity);
@@ -159,9 +168,14 @@ public sealed class CollectionPlatformStore
 
             var request = new CollectionRequestEntity
             {
-                RequestId = Guid.NewGuid(), ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value,
-                RequestedRevision = requestedRevision, Reason = reason, RequestedAt = requestedAt,
-                ExplicitUrl = explicitUrl?.AbsoluteUri, BatchId = batchId,
+                RequestId = Guid.NewGuid(),
+                ResourcePk = resourceEntity.ResourcePk,
+                DefinitionId = definition.Value,
+                RequestedRevision = requestedRevision,
+                Reason = reason,
+                RequestedAt = requestedAt,
+                ExplicitUrl = explicitUrl?.AbsoluteUri,
+                BatchId = batchId,
             };
             db.Requests.Add(request);
 
@@ -176,27 +190,40 @@ public sealed class CollectionPlatformStore
 
             var task = new CollectionTaskEntity
             {
-                TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = resourceEntity.ResourcePk,
-                DefinitionId = definition.Value, RequestedRevision = requestedRevision,
-                Status = CollectionTaskStatus.Ready, Lane = lane, Priority = priority,
-                AvailableAt = requestedAt, CreatedAt = requestedAt, UpdatedAt = requestedAt,
+                TaskId = Guid.NewGuid(),
+                RequestId = request.RequestId,
+                ResourcePk = resourceEntity.ResourcePk,
+                DefinitionId = definition.Value,
+                RequestedRevision = requestedRevision,
+                Status = CollectionTaskStatus.Ready,
+                Lane = lane,
+                Priority = priority,
+                AvailableAt = requestedAt,
+                CreatedAt = requestedAt,
+                UpdatedAt = requestedAt,
                 DispatchGeneration = 1,
             };
             db.Tasks.Add(task);
             db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                { ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value, TaskId = task.TaskId });
+            { ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value, TaskId = task.TaskId });
             db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
             {
-                OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
-                AvailableAt = requestedAt, CreatedAt = requestedAt,
+                OutboxId = Guid.NewGuid(),
+                TaskId = task.TaskId,
+                DispatchGeneration = task.DispatchGeneration,
+                AvailableAt = requestedAt,
+                CreatedAt = requestedAt,
             });
             var state = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
                 && x.DefinitionId == definition.Value, cancellationToken);
             if (state is null)
                 db.States.Add(new CollectionStateEntity
                 {
-                    ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value,
-                    RequiredRevision = requestedRevision, Status = CollectionStateStatus.Pending, UpdatedAt = requestedAt,
+                    ResourcePk = resourceEntity.ResourcePk,
+                    DefinitionId = definition.Value,
+                    RequiredRevision = requestedRevision,
+                    Status = CollectionStateStatus.Pending,
+                    UpdatedAt = requestedAt,
                 });
             else
             {
@@ -250,8 +277,10 @@ public sealed class CollectionPlatformStore
                 {
                     resource = new CollectionResourceEntity
                     {
-                        Type = target.Resource.Type, Provider = target.Resource.Provider,
-                        ResourceId = target.Resource.Id, EffectiveDate = target.EffectiveDate,
+                        Type = target.Resource.Type,
+                        Provider = target.Resource.Provider,
+                        ResourceId = target.Resource.Id,
+                        EffectiveDate = target.EffectiveDate,
                         AttributesJson = JsonSerializer.Serialize(target.Attributes ?? new Dictionary<string, string>()),
                         CreatedAt = requestedAt,
                     };
@@ -269,8 +298,13 @@ public sealed class CollectionPlatformStore
                 }
                 var request = new CollectionRequestEntity
                 {
-                    RequestId = Guid.NewGuid(), ResourcePk = resource.ResourcePk, DefinitionId = definition.Value,
-                    RequestedRevision = requestedRevision, Reason = reason, RequestedAt = requestedAt, BatchId = batchId,
+                    RequestId = Guid.NewGuid(),
+                    ResourcePk = resource.ResourcePk,
+                    DefinitionId = definition.Value,
+                    RequestedRevision = requestedRevision,
+                    Reason = reason,
+                    RequestedAt = requestedAt,
+                    BatchId = batchId,
                 };
                 db.Requests.Add(request);
                 var active = await db.ActiveTasks.FirstOrDefaultAsync(x => x.ResourcePk == resource.ResourcePk
@@ -281,20 +315,30 @@ public sealed class CollectionPlatformStore
                 {
                     var task = new CollectionTaskEntity
                     {
-                        TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = resource.ResourcePk,
-                        DefinitionId = definition.Value, RequestedRevision = requestedRevision,
-                        Status = CollectionTaskStatus.Ready, Lane = lane, Priority = priority,
-                        AvailableAt = requestedAt, CreatedAt = requestedAt, UpdatedAt = requestedAt,
+                        TaskId = Guid.NewGuid(),
+                        RequestId = request.RequestId,
+                        ResourcePk = resource.ResourcePk,
+                        DefinitionId = definition.Value,
+                        RequestedRevision = requestedRevision,
+                        Status = CollectionTaskStatus.Ready,
+                        Lane = lane,
+                        Priority = priority,
+                        AvailableAt = requestedAt,
+                        CreatedAt = requestedAt,
+                        UpdatedAt = requestedAt,
                         DispatchGeneration = 1,
                     };
                     taskId = task.TaskId;
                     db.Tasks.Add(task);
                     db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                        { ResourcePk = resource.ResourcePk, DefinitionId = definition.Value, TaskId = taskId });
+                    { ResourcePk = resource.ResourcePk, DefinitionId = definition.Value, TaskId = taskId });
                     db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                     {
-                        OutboxId = Guid.NewGuid(), TaskId = taskId, DispatchGeneration = 1,
-                        AvailableAt = requestedAt, CreatedAt = requestedAt,
+                        OutboxId = Guid.NewGuid(),
+                        TaskId = taskId,
+                        DispatchGeneration = 1,
+                        AvailableAt = requestedAt,
+                        CreatedAt = requestedAt,
                     });
                     created++;
                 }
@@ -304,8 +348,10 @@ public sealed class CollectionPlatformStore
                 if (state is null)
                     db.States.Add(new CollectionStateEntity
                     {
-                        ResourcePk = resource.ResourcePk, DefinitionId = definition.Value,
-                        RequiredRevision = requestedRevision, Status = CollectionStateStatus.Pending,
+                        ResourcePk = resource.ResourcePk,
+                        DefinitionId = definition.Value,
+                        RequiredRevision = requestedRevision,
+                        Status = CollectionStateStatus.Pending,
                         UpdatedAt = requestedAt,
                     });
                 else
@@ -329,9 +375,9 @@ public sealed class CollectionPlatformStore
     {
         await using var db = CreateDbContext();
         var rows = await (from state in db.States.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
-            where state.DefinitionId == definition.Value
-            select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+                          join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+                          where state.DefinitionId == definition.Value
+                          select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.Where(x => (!lastCollectedBefore.HasValue || x.state.LastCollectedAt <= lastCollectedBefore
                                 || x.state.LastCollectedAt == null)
                                && (!status.HasValue || x.state.Status == status))
@@ -374,8 +420,11 @@ public sealed class CollectionPlatformStore
             task.AttemptCount++;
             db.Attempts.Add(new CollectionAttemptEntity
             {
-                AttemptId = Guid.NewGuid(), TaskId = task.TaskId, AttemptNumber = task.AttemptCount,
-                StartedAt = now, Result = CollectionAttemptResult.Running,
+                AttemptId = Guid.NewGuid(),
+                TaskId = task.TaskId,
+                AttemptNumber = task.AttemptCount,
+                StartedAt = now,
+                Result = CollectionAttemptResult.Running,
             });
             var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
                 && x.DefinitionId == task.DefinitionId, cancellationToken);
@@ -432,8 +481,11 @@ public sealed class CollectionPlatformStore
                 {
                     location = new ResourceLocationEntity
                     {
-                        ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, Url = requested,
-                        Source = ResourceLocationSource.Explicit, Status = ResourceLocationStatus.Unknown,
+                        ResourcePk = task.ResourcePk,
+                        DefinitionId = task.DefinitionId,
+                        Url = requested,
+                        Source = ResourceLocationSource.Explicit,
+                        Status = ResourceLocationStatus.Unknown,
                         DiscoveredAt = now,
                     };
                     db.Locations.Add(location);
@@ -461,9 +513,13 @@ public sealed class CollectionPlatformStore
                 if (location is null)
                     db.Locations.Add(new ResourceLocationEntity
                     {
-                        ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, Url = redirected,
-                        Source = ResourceLocationSource.Redirected, Status = ResourceLocationStatus.Active,
-                        DiscoveredAt = now, LastVerifiedAt = now,
+                        ResourcePk = task.ResourcePk,
+                        DefinitionId = task.DefinitionId,
+                        Url = redirected,
+                        Source = ResourceLocationSource.Redirected,
+                        Status = ResourceLocationStatus.Active,
+                        DiscoveredAt = now,
+                        LastVerifiedAt = now,
                     });
                 else { location.Status = ResourceLocationStatus.Active; location.LastVerifiedAt = now; }
             }
@@ -501,19 +557,29 @@ public sealed class CollectionPlatformStore
                     {
                         var followUp = new CollectionTaskEntity
                         {
-                            TaskId = Guid.NewGuid(), RequestId = followUpRequest.RequestId,
-                            ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId,
-                            RequestedRevision = state.RequiredRevision, Status = CollectionTaskStatus.Ready,
-                            Lane = task.Lane, Priority = task.Priority, AvailableAt = now,
-                            CreatedAt = now, UpdatedAt = now, DispatchGeneration = 1,
+                            TaskId = Guid.NewGuid(),
+                            RequestId = followUpRequest.RequestId,
+                            ResourcePk = task.ResourcePk,
+                            DefinitionId = task.DefinitionId,
+                            RequestedRevision = state.RequiredRevision,
+                            Status = CollectionTaskStatus.Ready,
+                            Lane = task.Lane,
+                            Priority = task.Priority,
+                            AvailableAt = now,
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            DispatchGeneration = 1,
                         };
                         db.Tasks.Add(followUp);
                         db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                            { ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, TaskId = followUp.TaskId });
+                        { ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, TaskId = followUp.TaskId });
                         db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                         {
-                            OutboxId = Guid.NewGuid(), TaskId = followUp.TaskId, DispatchGeneration = 1,
-                            AvailableAt = now, CreatedAt = now,
+                            OutboxId = Guid.NewGuid(),
+                            TaskId = followUp.TaskId,
+                            DispatchGeneration = 1,
+                            AvailableAt = now,
+                            CreatedAt = now,
                         });
                         state.Status = CollectionStateStatus.Pending;
                     }
@@ -528,8 +594,11 @@ public sealed class CollectionPlatformStore
                 state.Status = CollectionStateStatus.Pending;
                 db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                 {
-                    OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
-                    AvailableAt = task.AvailableAt, CreatedAt = now,
+                    OutboxId = Guid.NewGuid(),
+                    TaskId = task.TaskId,
+                    DispatchGeneration = task.DispatchGeneration,
+                    AvailableAt = task.AvailableAt,
+                    CreatedAt = now,
                 });
                 task.Status = CollectionTaskStatus.Ready;
             }
@@ -580,10 +649,10 @@ public sealed class CollectionPlatformStore
         resource = resource.Normalize();
         await using var db = CreateDbContext();
         var row = await (from state in db.States.AsNoTracking()
-            join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
-            where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
-                && state.DefinitionId == definition.Value
-            select new { state, item }).SingleOrDefaultAsync(cancellationToken);
+                         join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+                         where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
+                             && state.DefinitionId == definition.Value
+                         select new { state, item }).SingleOrDefaultAsync(cancellationToken);
         return row is null ? null : new CollectionStateSnapshot(
             new ResourceKey(row.item.Type, row.item.Provider, row.item.ResourceId), definition,
             row.state.AppliedRevision, row.state.RequiredRevision, row.state.LastCollectedAt,
@@ -596,10 +665,10 @@ public sealed class CollectionPlatformStore
         resource = resource.Normalize();
         await using var db = CreateDbContext();
         return await (from active in db.ActiveTasks.AsNoTracking()
-            join item in db.Resources.AsNoTracking() on active.ResourcePk equals item.ResourcePk
-            where item.Type == resource.Type && item.Provider == resource.Provider
-                && item.ResourceId == resource.Id && active.DefinitionId == definition.Value
-            select active).AnyAsync(cancellationToken).ConfigureAwait(false);
+                      join item in db.Resources.AsNoTracking() on active.ResourcePk equals item.ResourcePk
+                      where item.Type == resource.Type && item.Provider == resource.Provider
+                          && item.ResourceId == resource.Id && active.DefinitionId == definition.Value
+                      select active).AnyAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> HasActiveRaceMutationAsync(string raceId,
@@ -608,8 +677,8 @@ public sealed class CollectionPlatformStore
         if (string.IsNullOrWhiteSpace(raceId)) return false;
         await using var db = CreateDbContext();
         var resources = await (from active in db.ActiveTasks.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
-            select new { resource.ResourceId, resource.AttributesJson }).ToListAsync(cancellationToken)
+                               join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
+                               select new { resource.ResourceId, resource.AttributesJson }).ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         return resources.Any(x => string.Equals(x.ResourceId, raceId, StringComparison.Ordinal)
             || (JsonSerializer.Deserialize<Dictionary<string, string>>(x.AttributesJson) is { } attributes
@@ -624,11 +693,11 @@ public sealed class CollectionPlatformStore
             return false;
         await using var db = CreateDbContext();
         var row = await (from active in db.ActiveTasks.AsNoTracking()
-            join task in db.Tasks.AsNoTracking() on active.TaskId equals task.TaskId
-            join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
-            where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
-                && task.LeaseToken == leaseToken
-            select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
+                         join task in db.Tasks.AsNoTracking() on active.TaskId equals task.TaskId
+                         join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
+                         where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
+                             && task.LeaseToken == leaseToken
+                         select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= DateTimeOffset.UtcNow) return false;
         var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(row.AttributesJson);
@@ -642,9 +711,9 @@ public sealed class CollectionPlatformStore
     {
         await using var db = CreateDbContext();
         var rows = await (from state in db.States.AsNoTracking()
-            join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
-            where state.Status != CollectionStateStatus.Collecting
-            select new { state, item }).ToListAsync(cancellationToken).ConfigureAwait(false);
+                          join item in db.Resources.AsNoTracking() on state.ResourcePk equals item.ResourcePk
+                          where state.Status != CollectionStateStatus.Collecting
+                          select new { state, item }).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.Where(x => x.state.NextCollectionAt is not null && x.state.NextCollectionAt <= now)
             .OrderBy(x => x.state.NextCollectionAt).Take(Math.Max(1, limit))
             .Select(x => new CollectionStateSnapshot(
@@ -762,19 +831,24 @@ public sealed class CollectionPlatformStore
             definitionEntity.CurrentRevision = Math.Max(definitionEntity.CurrentRevision, revision);
             db.Revisions.Add(new CollectionRevisionEntity
             {
-                DefinitionId = definition.Value, Revision = revision, Description = description,
-                MayRequireRecollection = true, CreatedAt = now,
+                DefinitionId = definition.Value,
+                Revision = revision,
+                Description = description,
+                MayRequireRecollection = true,
+                CreatedAt = now,
             });
             db.RevisionImpacts.Add(new CollectionRevisionImpactEntity
             {
-                DefinitionId = definition.Value, Revision = revision,
-                ScopeType = impact.ScopeType, ScopePayload = impact.ScopePayload,
+                DefinitionId = definition.Value,
+                Revision = revision,
+                ScopeType = impact.ScopeType,
+                ScopePayload = impact.ScopePayload,
             });
 
             var candidates = await (from state in db.States
-                join resource in db.Resources on state.ResourcePk equals resource.ResourcePk
-                where state.DefinitionId == definition.Value
-                select new { state, resource }).ToListAsync(cancellationToken);
+                                    join resource in db.Resources on state.ResourcePk equals resource.ResourcePk
+                                    where state.DefinitionId == definition.Value
+                                    select new { state, resource }).ToListAsync(cancellationToken);
             var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
             var affected = 0;
             foreach (var item in candidates)
@@ -859,9 +933,9 @@ public sealed class CollectionPlatformStore
         var conditions = namedConditions.ToDictionary(x => x.Name, StringComparer.Ordinal);
         ValidateImpact(impact, conditions.Values);
         var rows = await (from state in db.States.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
-            where state.DefinitionId == definition.Value
-            select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+                          join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+                          where state.DefinitionId == definition.Value
+                          select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
         var affected = rows.Where(x => MatchesImpact(ToRevisionCandidate(x.resource), impact, conditions)).ToList();
         var completed = affected.Count(x => x.state.AppliedRevision >= revision);
         var failed = affected.Count(x => x.state.AppliedRevision < revision
@@ -901,8 +975,12 @@ public sealed class CollectionPlatformStore
             {
                 location = new ResourceLocationEntity
                 {
-                    ResourcePk = item.ResourcePk, DefinitionId = definition.Value, Url = url.AbsoluteUri,
-                    Source = source, Status = ResourceLocationStatus.Unknown, DiscoveredAt = discoveredAt,
+                    ResourcePk = item.ResourcePk,
+                    DefinitionId = definition.Value,
+                    Url = url.AbsoluteUri,
+                    Source = source,
+                    Status = ResourceLocationStatus.Unknown,
+                    DiscoveredAt = discoveredAt,
                 };
                 db.Locations.Add(location);
             }
@@ -918,10 +996,10 @@ public sealed class CollectionPlatformStore
         resource = resource.Normalize();
         await using var db = CreateDbContext();
         var rows = await (from location in db.Locations.AsNoTracking()
-            join item in db.Resources.AsNoTracking() on location.ResourcePk equals item.ResourcePk
-            where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
-                && location.DefinitionId == definition.Value && location.Status != ResourceLocationStatus.Invalid
-            select location).ToListAsync(cancellationToken);
+                          join item in db.Resources.AsNoTracking() on location.ResourcePk equals item.ResourcePk
+                          where item.Type == resource.Type && item.Provider == resource.Provider && item.ResourceId == resource.Id
+                              && location.DefinitionId == definition.Value && location.Status != ResourceLocationStatus.Invalid
+                          select location).ToListAsync(cancellationToken);
         return rows.OrderBy(x => x.Status == ResourceLocationStatus.Active ? 0 : x.Status == ResourceLocationStatus.Unknown ? 1 : 2)
             .ThenByDescending(x => x.LastVerifiedAt)
             .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url), x.Source, x.Status, x.LastVerifiedAt))
@@ -973,9 +1051,9 @@ public sealed class CollectionPlatformStore
         if (await db.Controls.AsNoTracking().AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
             return [];
         var pending = await (from outbox in db.DispatchOutbox.AsNoTracking()
-            join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
-            where outbox.DispatchedAt == null
-            select new { outbox, task }).ToListAsync(cancellationToken);
+                             join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                             where outbox.DispatchedAt == null
+                             select new { outbox, task }).ToListAsync(cancellationToken);
         return pending.Where(x => x.outbox.AvailableAt <= now).OrderBy(x => x.outbox.AvailableAt)
             .Take(Math.Max(1, maxCount))
             .Select(x => new PendingCollectionDispatch(x.outbox.OutboxId,
@@ -1002,8 +1080,8 @@ public sealed class CollectionPlatformStore
     {
         await using var db = CreateDbContext();
         var query = from task in db.Tasks.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-            select new { task, resource };
+                    join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                    select new { task, resource };
         if (status.HasValue) query = query.Where(x => x.task.Status == status.Value);
         var rows = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.AvailableAt)
@@ -1020,8 +1098,8 @@ public sealed class CollectionPlatformStore
         var pageSize = Math.Clamp(request.PageSize, 1, 200);
         await using var db = CreateDbContext();
         var query = from task in db.Tasks.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-            select new { task, resource };
+                    join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                    select new { task, resource };
 
         if (request.Statuses is { Count: > 0 })
         {
@@ -1112,8 +1190,8 @@ public sealed class CollectionPlatformStore
         var pageSize = Math.Clamp(request.PageSize, 1, 200);
         await using var db = CreateDbContext();
         var query = from state in db.States.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
-            select new { state, resource };
+                    join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+                    select new { state, resource };
         if (request.Statuses is { Count: > 0 })
         {
             var statuses = request.Statuses.Distinct().ToArray();
@@ -1153,9 +1231,9 @@ public sealed class CollectionPlatformStore
             throw new ArgumentException("Race id is required.", nameof(requestedByRaceId));
         await using var db = CreateDbContext();
         var active = await (from guard in db.ActiveTasks.AsNoTracking()
-            join task in db.Tasks.AsNoTracking() on guard.TaskId equals task.TaskId
-            join resource in db.Resources.AsNoTracking() on guard.ResourcePk equals resource.ResourcePk
-            select new { task.DefinitionId, resource.AttributesJson }).ToListAsync(cancellationToken)
+                            join task in db.Tasks.AsNoTracking() on guard.TaskId equals task.TaskId
+                            join resource in db.Resources.AsNoTracking() on guard.ResourcePk equals resource.ResourcePk
+                            select new { task.DefinitionId, resource.AttributesJson }).ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var definitions = active.Where(x =>
         {
@@ -1344,8 +1422,11 @@ public sealed class CollectionPlatformStore
                     task.UpdatedAt = now;
                     db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                     {
-                        OutboxId = Guid.NewGuid(), TaskId = task.TaskId,
-                        DispatchGeneration = task.DispatchGeneration, AvailableAt = now, CreatedAt = now
+                        OutboxId = Guid.NewGuid(),
+                        TaskId = task.TaskId,
+                        DispatchGeneration = task.DispatchGeneration,
+                        AvailableAt = now,
+                        CreatedAt = now
                     });
                     redispatched++;
                 }
@@ -1362,10 +1443,10 @@ public sealed class CollectionPlatformStore
     {
         await using var db = CreateDbContext();
         var rows = await (from notification in db.FailureNotifications.AsNoTracking()
-            join task in db.Tasks.AsNoTracking() on notification.TaskId equals task.TaskId
-            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-            where notification.PublishedAt == null
-            select new { notification, task, resource }).ToListAsync(cancellationToken);
+                          join task in db.Tasks.AsNoTracking() on notification.TaskId equals task.TaskId
+                          join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                          where notification.PublishedAt == null
+                          select new { notification, task, resource }).ToListAsync(cancellationToken);
         return rows.Where(x => x.notification.AvailableAt <= now).OrderBy(x => x.notification.AvailableAt)
             .Take(Math.Max(1, maxCount)).Select(x => new PendingCollectionFailureNotification(
                 x.notification.NotificationId, x.task.TaskId,
@@ -1405,7 +1486,11 @@ public sealed class CollectionPlatformStore
             {
                 db.BackfillBatches.Add(new BackfillBatchEntity
                 {
-                    BatchId = batchId, Provider = provider, From = from, To = to, CreatedAt = now
+                    BatchId = batchId,
+                    Provider = provider,
+                    From = from,
+                    To = to,
+                    CreatedAt = now
                 });
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -1449,10 +1534,10 @@ public sealed class CollectionPlatformStore
             cancellationToken).ConfigureAwait(false);
         if (batch is null) return null;
         var rows = await (from request in db.Requests.AsNoTracking()
-            join task in db.Tasks.AsNoTracking() on request.RequestId equals task.RequestId
-            join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-            where request.BatchId == batchId
-            select new { task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+                          join task in db.Tasks.AsNoTracking() on request.RequestId equals task.RequestId
+                          join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                          where request.BatchId == batchId
+                          select new { task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
         var taskIds = rows.Select(x => x.task.TaskId).ToArray();
         var attempts = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1462,10 +1547,10 @@ public sealed class CollectionPlatformStore
         var earliestFailure = failedRows.Count == 0 ? DateTimeOffset.MaxValue
             : failedRows.Min(x => x.task.CreatedAt);
         var laterSuccesses = await (from task in db.Tasks.AsNoTracking()
-            join request in db.Requests.AsNoTracking() on task.RequestId equals request.RequestId
-            where task.Status == CollectionTaskStatus.Succeeded && failedResourcePks.Contains(task.ResourcePk)
-                && task.CreatedAt >= earliestFailure
-            select new { task.ResourcePk, task.DefinitionId, task.CreatedAt, request.Reason })
+                                    join request in db.Requests.AsNoTracking() on task.RequestId equals request.RequestId
+                                    where task.Status == CollectionTaskStatus.Succeeded && failedResourcePks.Contains(task.ResourcePk)
+                                        && task.CreatedAt >= earliestFailure
+                                    select new { task.ResourcePk, task.DefinitionId, task.CreatedAt, request.Reason })
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var holes = failedRows
             .Where(x => !laterSuccesses.Any(success => success.ResourcePk == x.task.ResourcePk
@@ -1549,9 +1634,12 @@ public sealed class CollectionPlatformStore
                     }
                     resource = new CollectionResourceEntity
                     {
-                        Type = seed.Resource.Type, Provider = seed.Resource.Provider,
-                        ResourceId = seed.Resource.Id, EffectiveDate = seed.EffectiveDate,
-                        AttributesJson = JsonSerializer.Serialize(seed.Attributes), CreatedAt = seed.CollectedAt
+                        Type = seed.Resource.Type,
+                        Provider = seed.Resource.Provider,
+                        ResourceId = seed.Resource.Id,
+                        EffectiveDate = seed.EffectiveDate,
+                        AttributesJson = JsonSerializer.Serialize(seed.Attributes),
+                        CreatedAt = seed.CollectedAt
                     };
                     db.Resources.Add(resource);
                     await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -1562,9 +1650,12 @@ public sealed class CollectionPlatformStore
                     statesAdded++;
                     if (!dryRun) db.States.Add(new CollectionStateEntity
                     {
-                        ResourcePk = resource.ResourcePk, DefinitionId = seed.Definition.Value,
-                        AppliedRevision = seed.AppliedRevision, RequiredRevision = seed.AppliedRevision,
-                        LastCollectedAt = seed.CollectedAt, Status = CollectionStateStatus.Current,
+                        ResourcePk = resource.ResourcePk,
+                        DefinitionId = seed.Definition.Value,
+                        AppliedRevision = seed.AppliedRevision,
+                        RequiredRevision = seed.AppliedRevision,
+                        LastCollectedAt = seed.CollectedAt,
+                        Status = CollectionStateStatus.Current,
                         UpdatedAt = seed.CollectedAt
                     });
                 }
@@ -1574,9 +1665,12 @@ public sealed class CollectionPlatformStore
                     locationsAdded++;
                     if (!dryRun) db.Locations.Add(new ResourceLocationEntity
                     {
-                        ResourcePk = resource.ResourcePk, DefinitionId = seed.Definition.Value,
-                        Url = seed.SourceUrl.AbsoluteUri, Source = ResourceLocationSource.Discovered,
-                        Status = ResourceLocationStatus.Active, DiscoveredAt = seed.CollectedAt,
+                        ResourcePk = resource.ResourcePk,
+                        DefinitionId = seed.Definition.Value,
+                        Url = seed.SourceUrl.AbsoluteUri,
+                        Source = ResourceLocationSource.Discovered,
+                        Status = ResourceLocationStatus.Active,
+                        DiscoveredAt = seed.CollectedAt,
                         LastVerifiedAt = seed.CollectedAt
                     });
                 }
@@ -1605,9 +1699,14 @@ public sealed class CollectionPlatformStore
         string? errorCode, string? errorMessage, DateTimeOffset now)
         => db.FailureNotifications.Add(new CollectionFailureNotificationEntity
         {
-            NotificationId = Guid.NewGuid(), TaskId = task.TaskId, Status = task.Status.ToString(),
-            ErrorCode = errorCode, ErrorMessage = errorMessage, AttemptCount = task.AttemptCount,
-            FailedAt = now, AvailableAt = now
+            NotificationId = Guid.NewGuid(),
+            TaskId = task.TaskId,
+            Status = task.Status.ToString(),
+            ErrorCode = errorCode,
+            ErrorMessage = errorMessage,
+            AttemptCount = task.AttemptCount,
+            FailedAt = now,
+            AvailableAt = now
         });
 
     private static void ValidateImpact(RevisionImpact impact, IEnumerable<INamedRevisionImpactCondition> namedConditions)
@@ -1654,9 +1753,9 @@ public sealed class CollectionPlatformStore
         CollectionPlatformDbContext db, string definitionId, CancellationToken cancellationToken)
     {
         var resources = await (from state in db.States.AsNoTracking()
-            join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
-            where state.DefinitionId == definitionId
-            select resource).ToListAsync(cancellationToken).ConfigureAwait(false);
+                               join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
+                               where state.DefinitionId == definitionId
+                               select resource).ToListAsync(cancellationToken).ConfigureAwait(false);
         return resources.Select(ToRevisionCandidate).ToList();
     }
 
@@ -1735,8 +1834,11 @@ public sealed class CollectionPlatformStore
             task.UpdatedAt = now;
             db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
             {
-                OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = task.DispatchGeneration,
-                AvailableAt = now, CreatedAt = now,
+                OutboxId = Guid.NewGuid(),
+                TaskId = task.TaskId,
+                DispatchGeneration = task.DispatchGeneration,
+                AvailableAt = now,
+                CreatedAt = now,
             });
         }
         if (expired.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

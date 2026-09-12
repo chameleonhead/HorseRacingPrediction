@@ -46,7 +46,8 @@ public static class PredictionScheduleEndpointExtensions
     {
         var group = endpoints.MapGroup("/api/internal/prediction-schedule");
         group.MapPost("/enqueue", async (EnqueuePredictionCandidatesRequest request, IPredictionSchedule schedule,
-            CancellationToken token) => { await schedule.EnqueueAsync(request.RaceIds, request.Now, token); return Results.Accepted(); });
+            CancellationToken token) =>
+        { await schedule.EnqueueAsync(request.RaceIds, request.Now, token); return Results.Accepted(); });
         group.MapPost("/acquire", (AcquirePredictionCandidatesRequest request, IPredictionSchedule schedule,
             CancellationToken token) => schedule.AcquireAsync(request.Now, request.MinAge, request.MaxCount, request.LeaseDuration, token));
         group.MapPost("/complete", (CompletePredictionCandidateRequest request, IPredictionSchedule schedule,

@@ -192,7 +192,7 @@ public sealed class JraExplicitUrlCollectionTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"explicit-url-api-{Guid.NewGuid():N}");
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-            { StateDirectory = directory }));
+        { StateDirectory = directory }));
         await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult,
             1, "initial", false);
         await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult,

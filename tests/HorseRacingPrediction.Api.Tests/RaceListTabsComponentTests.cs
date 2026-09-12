@@ -74,11 +74,11 @@ public sealed class RaceListTabsComponentTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-        {
-            Content = JsonContent.Create(new PagedResponse<RaceSummaryResponse>(
+            {
+                Content = JsonContent.Create(new PagedResponse<RaceSummaryResponse>(
                 [new("R001", DateOnly.FromDateTime(DateTime.Today), "06", 1, "テストレース",
                     HorseRacingPrediction.Contracts.RaceStatus.ResultDeclared, 16, "テストホース", DateTimeOffset.UtcNow)],
                 1, 50, 1, 1))
-        });
+            });
     }
 }
