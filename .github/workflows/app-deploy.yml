@@ -280,6 +280,8 @@ jobs:
           terraform apply -input=false -auto-approve \
             -target=aws_ecr_repository.collector \
             -target=aws_ecr_lifecycle_policy.collector \
+            -target=aws_sqs_queue.collector \
+            -target=aws_sqs_queue.collector_dlq \
             -var="aws_region=${{ secrets.AWS_REGION }}" \
             -var="api_base_url=${{ steps.api-url.outputs.value }}"
 

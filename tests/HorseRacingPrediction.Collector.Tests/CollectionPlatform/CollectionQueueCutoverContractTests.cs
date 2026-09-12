@@ -9,6 +9,7 @@ public sealed class CollectionQueueCutoverContractTests
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
     private static string Variables => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "variables.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
+    private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
 
     [TestMethod]
     public void Terraform_DefinesDistinctLegacyAndReplacementQueuePairs()
@@ -42,6 +43,15 @@ public sealed class CollectionQueueCutoverContractTests
             "active_queue_url\\s*=\\s*var\\.activate_resource_collection_queue \\? aws_sqs_queue\\.resource_collection\\.url : aws_sqs_queue\\.collector\\[0\\]\\.url"));
         StringAssert.Contains(Outputs, "value = local.active_queue_url");
         StringAssert.Contains(Outputs, "value = local.active_queue_arn");
+    }
+
+    [TestMethod]
+    public void EcrBootstrap_IncludesResourcesWithPendingStateAddressMoves()
+    {
+        StringAssert.Contains(DeployWorkflow, "-target=aws_ecr_repository.collector");
+        StringAssert.Contains(DeployWorkflow, "-target=aws_ecr_lifecycle_policy.collector");
+        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.collector");
+        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.collector_dlq");
     }
 
     [TestMethod]
