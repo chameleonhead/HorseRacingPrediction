@@ -36,10 +36,10 @@ public sealed class CollectionQueueCutoverContractTests
             "variable \\\"activate_resource_collection_queue\\\"[\\s\\S]*?default\\s*=\\s*false"));
         StringAssert.Matches(Variables, new Regex(
             "variable \\\"retain_legacy_collection_queues\\\"[\\s\\S]*?default\\s*=\\s*true"));
-        StringAssert.Contains(Main,
-            "active_queue_arn  = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.arn : aws_sqs_queue.collector[0].arn");
-        StringAssert.Contains(Main,
-            "active_queue_url  = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.url : aws_sqs_queue.collector[0].url");
+        StringAssert.Matches(Main, new Regex(
+            "active_queue_arn\\s*=\\s*var\\.activate_resource_collection_queue \\? aws_sqs_queue\\.resource_collection\\.arn : aws_sqs_queue\\.collector\\[0\\]\\.arn"));
+        StringAssert.Matches(Main, new Regex(
+            "active_queue_url\\s*=\\s*var\\.activate_resource_collection_queue \\? aws_sqs_queue\\.resource_collection\\.url : aws_sqs_queue\\.collector\\[0\\]\\.url"));
         StringAssert.Contains(Outputs, "value = local.active_queue_url");
         StringAssert.Contains(Outputs, "value = local.active_queue_arn");
     }
