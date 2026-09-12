@@ -1240,6 +1240,10 @@ public sealed class CollectionPlatformStore
             var statuses = request.Statuses.Distinct().ToArray();
             query = query.Where(x => statuses.Contains(x.task.Status));
         }
+        if (request.ActionableOnly)
+            query = query.Where(x => db.FailureNotifications.Any(notification =>
+                notification.TaskId == x.task.TaskId
+                && notification.ResolutionStatus == CollectionFailureResolutionStatus.Open));
         if (request.ResourceType.HasValue)
             query = query.Where(x => x.resource.Type == request.ResourceType.Value);
         if (!string.IsNullOrWhiteSpace(request.Provider))
@@ -1306,9 +1310,14 @@ public sealed class CollectionPlatformStore
             .Select(x => new { Status = x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken).ConfigureAwait(false);
         int Count(params CollectionTaskStatus[] statuses) => statuses.Sum(x => counts.GetValueOrDefault(x));
+        var actionableCount = await db.Tasks.AsNoTracking().CountAsync(task =>
+            (task.Status == CollectionTaskStatus.Failed || task.Status == CollectionTaskStatus.DeadLetter)
+            && db.FailureNotifications.Any(notification => notification.TaskId == task.TaskId
+                && notification.ResolutionStatus == CollectionFailureResolutionStatus.Open), cancellationToken)
+            .ConfigureAwait(false);
         return new(new Dictionary<string, int>(StringComparer.Ordinal)
         {
-            ["attention"] = Count(CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter),
+            ["attention"] = actionableCount,
             ["running"] = Count(CollectionTaskStatus.Running),
             ["waiting"] = Count(CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
                 CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.WaitingDiscovery),

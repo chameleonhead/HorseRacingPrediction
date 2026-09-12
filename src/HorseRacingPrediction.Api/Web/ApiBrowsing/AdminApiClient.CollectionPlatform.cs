@@ -75,6 +75,7 @@ public sealed partial class AdminApiClient
             ["createdFrom"] = query.CreatedFrom?.ToString("O"),
             ["createdTo"] = query.CreatedTo?.ToString("O"),
             ["errorSearch"] = query.ErrorSearch,
+            ["actionableOnly"] = query.ActionableOnly ? "true" : null,
             ["page"] = Math.Max(1, query.Page).ToString(),
             ["pageSize"] = Math.Clamp(query.PageSize, 1, 200).ToString(),
         };

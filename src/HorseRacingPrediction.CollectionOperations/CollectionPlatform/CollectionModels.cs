@@ -207,7 +207,8 @@ public sealed record CollectionTaskQuery(
     DateTimeOffset? CreatedTo = null,
     string? ErrorSearch = null,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    bool ActionableOnly = false);
 
 public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
     IReadOnlyList<CollectionTaskSummary> Items);

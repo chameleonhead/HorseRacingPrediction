@@ -3,7 +3,7 @@
 - Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-12
-- Updated: 2026-09-12
+- Updated: 2026-09-13
 
 ## Context
 
@@ -86,3 +86,4 @@
 - 2026-09-12: 外部通知用Unpublished queryと管理用Actionable queryを分離し、dashboard、Jobs、障害group、Recovery選択をActionableへ統一した。Resource詳細には全対応状態の障害履歴を追加した。
 - 2026-09-12: Store project単体のRelease buildは警告0・エラー0。Store/API/UIのライフサイクルテストを追加した。共有作業中のmicrobatch契約変更によりsolution buildは`CollectionPlatformStore.cs`の`PendingCollectionDispatch`引数不足で停止しており、統合後の全テスト実行とStatus=Implemented更新を残す。
 - 2026-09-13: microbatch契約との統合後にRelease solution build（警告0・エラー0）、Collector 142件、API 170件（既存skip 1件）を含む関連テストを完走した。通知配信済みでもOpen障害は要対応に残り、Recovery開始後は対応中、Current到達時は解決済み、再失敗時は最新障害だけがOpenになることを確認し、StatusをImplementedへ更新した。
+- 2026-09-13: 本番確認で、障害groupはRecovery開始後に消える一方、Jobsの「要対応」がTaskのFailed/DeadLetter状態だけを参照して旧失敗を表示し続ける不整合を検出した。Task検索へ`ActionableOnly`を追加し、要対応一覧と件数をOpenなFailure notificationへ統一した。旧Failed Taskは履歴検索には残る。Store回帰テスト、Collector 142件、API 170件（既存skip 1件）、Release solution build、format検証を完走した。

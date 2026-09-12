@@ -944,10 +944,19 @@ public sealed class CollectionPlatformStoreTests
         await store.MarkFailureNotificationPublishedAsync(open.NotificationId, now.AddMinutes(1));
         Assert.IsEmpty(await store.GetUnpublishedFailureNotificationsAsync(now.AddMinutes(2), 10));
         Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(now.AddMinutes(2), 10));
+        Assert.AreEqual(1, (await store.SearchTasksAsync(new(
+            Statuses: [CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter], ActionableOnly: true))).TotalCount);
+        Assert.AreEqual(1, (await store.GetTaskViewCountsAsync()).Counts["attention"]);
 
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh,
             now.AddMinutes(2));
         Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(2), 10));
+        Assert.AreEqual(0, (await store.SearchTasksAsync(new(
+            Statuses: [CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter], ActionableOnly: true))).TotalCount);
+        Assert.AreEqual(1, (await store.SearchTasksAsync(new(
+            Statuses: [CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter]))).TotalCount,
+            "The original failed task remains available as history.");
+        Assert.AreEqual(0, (await store.GetTaskViewCountsAsync()).Counts["attention"]);
         var during = await store.GetResourceDetailAsync(Horse, HorseProfile);
         var duringFailure = during!.Failures!.Single();
         Assert.AreEqual(CollectionFailureResolutionStatus.RecoveryInProgress,
