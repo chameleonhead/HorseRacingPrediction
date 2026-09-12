@@ -1,7 +1,7 @@
 locals {
   function_enabled = var.image_uri != ""
-  active_queue_arn  = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.arn : aws_sqs_queue.collector[0].arn
-  active_queue_url  = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.url : aws_sqs_queue.collector[0].url
+  active_queue_arn = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.arn : aws_sqs_queue.collector[0].arn
+  active_queue_url = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.url : aws_sqs_queue.collector[0].url
 }
 
 check "legacy_queues_removed_only_after_activation" {
@@ -92,7 +92,7 @@ resource "aws_sqs_queue" "collector" {
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.collector_dlq[0].arn
-    maxReceiveCount = 3
+    maxReceiveCount     = 3
   })
 }
 
@@ -213,8 +213,8 @@ resource "aws_iam_policy" "api_queue_sender" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
+        Effect = "Allow"
+        Action = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
         Resource = concat(
           [aws_sqs_queue.resource_collection.arn],
           var.retain_legacy_collection_queues ? [aws_sqs_queue.collector[0].arn] : []
