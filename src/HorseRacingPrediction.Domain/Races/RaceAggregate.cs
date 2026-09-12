@@ -192,14 +192,23 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             quinellaPayouts, exactaPayouts, trifectaPayouts));
     }
 
-    public void RecordOddsSnapshot(DateTimeOffset observedAt, IReadOnlyList<RaceOddsEntry> entries)
+    public void RecordOddsSnapshot(DateTimeOffset observedAt, IReadOnlyList<RaceOddsEntry> entries,
+        IReadOnlyList<RaceOddsObservation>? observations = null)
     {
         if (!_state.IsCreated) throw new InvalidOperationException("Race is not created.");
-        if (entries.Count == 0 || entries.Any(x => x.HorseNumber <= 0 || x.WinOdds <= 0))
-            throw new ArgumentException("Odds snapshot requires positive horse numbers and win odds.", nameof(entries));
+        observations ??= entries.Select(x => new RaceOddsObservation("Win", x.HorseNumber.ToString(),
+            x.WinOdds, x.Popularity)).ToArray();
+        if (observations.Count == 0 || observations.Any(x => string.IsNullOrWhiteSpace(x.Market)
+            || string.IsNullOrWhiteSpace(x.Selection) || x.Value <= 0))
+            throw new ArgumentException("Odds snapshot requires a market, selection, and positive value.", nameof(observations));
+        if (entries.Any(x => x.HorseNumber <= 0 || x.WinOdds <= 0))
+            throw new ArgumentException("Win odds require positive horse numbers and values.", nameof(entries));
         if (entries.Select(x => x.HorseNumber).Distinct().Count() != entries.Count)
             throw new ArgumentException("Horse numbers must be unique in an odds snapshot.", nameof(entries));
-        Emit(new RaceOddsSnapshotRecorded(observedAt, entries));
+        if (observations.Select(x => $"{x.Market.Trim().ToUpperInvariant()}\u001f{x.Selection.Trim().ToUpperInvariant()}")
+            .Distinct(StringComparer.Ordinal).Count() != observations.Count)
+            throw new ArgumentException("Market and selection must be unique in an odds snapshot.", nameof(observations));
+        Emit(new RaceOddsSnapshotRecorded(observedAt, entries, observations));
     }
 
     public void CloseRaceLifecycle()

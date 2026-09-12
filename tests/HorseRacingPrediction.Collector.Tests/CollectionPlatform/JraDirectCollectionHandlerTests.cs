@@ -63,6 +63,9 @@ public sealed class JraDirectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(valid, result.RequestedUrl);
+        Assert.IsNotNull(result.LocationOutcomes);
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.LocationOutcomes[0].Result);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.LocationOutcomes[1].Result);
         CollectionAssert.AreEqual(new[] { wrong, valid }, sessions.LastNavigator!.DirectUrlRequests);
         Assert.HasCount(1, workflow.RefreshRequests);
     }
@@ -89,6 +92,9 @@ public sealed class JraDirectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(second, result.RequestedUrl);
+        Assert.IsNotNull(result.LocationOutcomes);
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, result.LocationOutcomes[0].Result);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.LocationOutcomes[1].Result);
         CollectionAssert.AreEqual(new[] { first, second }, sessions.LastNavigator!.DirectUrlRequests);
     }
 
@@ -110,6 +116,8 @@ public sealed class JraDirectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.AreEqual(new Uri("https://example.test/card"), result.RequestedUrl);
+        Assert.IsNotNull(result.LocationOutcomes);
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.LocationOutcomes.Single().Result);
         Assert.HasCount(1, workflow.RefreshRequests);
     }
 

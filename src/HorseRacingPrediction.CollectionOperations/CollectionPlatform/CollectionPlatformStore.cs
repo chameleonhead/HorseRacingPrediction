@@ -81,6 +81,17 @@ public sealed class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<int> GetCurrentRevisionAsync(CollectionDefinitionId definition,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        return await db.Definitions.AsNoTracking()
+            .Where(x => x.DefinitionId == definition.Value && x.Enabled)
+            .Select(x => (int?)x.CurrentRevision)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
+    }
+
     public async Task<CollectionRequestReceipt> RequestAsync(ResourceKey resource, CollectionDefinitionId definition,
         int requestedRevision, CollectionReason reason, DateTimeOffset requestedAt,
         CollectionLane lane = CollectionLane.Normal, int priority = (int)CollectionPriority.Normal,
@@ -402,6 +413,13 @@ public sealed class CollectionPlatformStore
             attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
             attempt.HttpStatusCode = completion.HttpStatusCode;
             attempt.PageIdentification = completion.PageIdentification;
+            foreach (var outcome in completion.LocationOutcomes ?? [])
+            {
+                var candidate = await db.Locations.SingleOrDefaultAsync(x => x.LocationId == outcome.LocationId
+                    && x.ResourcePk == task.ResourcePk && x.DefinitionId == task.DefinitionId, cancellationToken);
+                if (candidate is null) continue;
+                ApplyLocationOutcome(candidate, outcome.Result, now, outcome.ErrorCode);
+            }
             if (completion.RequestedUrl is not null)
             {
                 var requested = completion.RequestedUrl.AbsoluteUri;
@@ -636,6 +654,12 @@ public sealed class CollectionPlatformStore
     public async Task<CollectionResourceDetail?> GetResourceDetailAsync(ResourceKey resource,
         CollectionDefinitionId definition, int historyPage = 1, int historyPageSize = 25,
         CancellationToken cancellationToken = default)
+        => await GetResourceDetailPagedAsync(resource, definition, historyPage, historyPage, historyPage,
+            historyPageSize, cancellationToken).ConfigureAwait(false);
+
+    public async Task<CollectionResourceDetail?> GetResourceDetailPagedAsync(ResourceKey resource,
+        CollectionDefinitionId definition, int requestHistoryPage = 1, int taskHistoryPage = 1,
+        int attemptHistoryPage = 1, int historyPageSize = 25, CancellationToken cancellationToken = default)
     {
         resource = resource.Normalize();
         await using var db = CreateDbContext();
@@ -649,31 +673,42 @@ public sealed class CollectionPlatformStore
         var locations = locationRows.OrderByDescending(x => x.LastVerifiedAt ?? x.DiscoveredAt)
             .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url),
             x.Source, x.Status, x.LastVerifiedAt)).ToList();
-        historyPage = Math.Max(1, historyPage);
+        requestHistoryPage = Math.Max(1, requestHistoryPage);
+        taskHistoryPage = Math.Max(1, taskHistoryPage);
+        attemptHistoryPage = Math.Max(1, attemptHistoryPage);
         historyPageSize = Math.Clamp(historyPageSize, 1, 100);
-        var requestRows = await db.Requests.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
-                && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
-        var requests = requestRows.OrderByDescending(x => x.RequestedAt)
-            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x =>
+        var requestQuery = db.Requests.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
+            && x.DefinitionId == definition.Value);
+        var requestTotal = await requestQuery.CountAsync(cancellationToken);
+        var requestRows = await requestQuery.OrderByDescending(x => x.RequestedAt)
+            .Skip((requestHistoryPage - 1) * historyPageSize).Take(historyPageSize).ToListAsync(cancellationToken);
+        var requests = requestRows.Select(x =>
             new CollectionRequestSummary(x.RequestId, x.RequestedRevision, x.Reason, x.RequestedAt,
                 x.ExplicitUrl, x.BatchId)).ToList();
-        var taskRows = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
-                && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
-        var tasks = taskRows.OrderByDescending(x => x.CreatedAt)
-            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
+        var taskQuery = db.Tasks.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk
+            && x.DefinitionId == definition.Value);
+        var taskTotal = await taskQuery.CountAsync(cancellationToken);
+        var latestTaskRow = await taskQuery.OrderByDescending(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+        var taskRows = await taskQuery.OrderByDescending(x => x.CreatedAt)
+            .Skip((taskHistoryPage - 1) * historyPageSize).Take(historyPageSize).ToListAsync(cancellationToken);
+        var tasks = taskRows.Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
             x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount)).ToList();
-        var taskIds = taskRows.Select(x => x.TaskId).ToArray();
-        var attemptRows = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
-            .ToListAsync(cancellationToken);
-        var attempts = attemptRows.OrderByDescending(x => x.StartedAt)
-            .Skip((historyPage - 1) * historyPageSize).Take(historyPageSize).Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
+        var taskIds = taskQuery.Select(x => x.TaskId);
+        var attemptQuery = db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId));
+        var attemptTotal = await attemptQuery.CountAsync(cancellationToken);
+        var attemptRows = await attemptQuery.OrderByDescending(x => x.StartedAt)
+            .Skip((attemptHistoryPage - 1) * historyPageSize).Take(historyPageSize).ToListAsync(cancellationToken);
+        var attempts = attemptRows.Select(x => new CollectionAttemptSummary(x.AttemptId, x.TaskId,
                 x.AttemptNumber, x.StartedAt, x.FinishedAt, x.Result, x.ErrorCode, x.ErrorMessage,
                 x.RequestedUrl, x.FinalUrl, x.HttpStatusCode, x.PageIdentification)).ToList();
         var state = stateEntity is null ? null : new CollectionStateSnapshot(resource, definition,
             stateEntity.AppliedRevision, stateEntity.RequiredRevision, stateEntity.LastCollectedAt,
             stateEntity.NextCollectionAt, stateEntity.Status);
-        return new(state, locations, requests, tasks, attempts, requestRows.Count, taskRows.Count,
-            attemptRows.Count, historyPage, historyPageSize);
+        var latestTask = latestTaskRow is null ? null : new CollectionTaskSummary(latestTaskRow.TaskId,
+            resource, definition, latestTaskRow.Status, latestTaskRow.Lane, latestTaskRow.Priority,
+            latestTaskRow.RequestedRevision, latestTaskRow.AvailableAt, latestTaskRow.AttemptCount);
+        return new(state, locations, requests, tasks, attempts, requestTotal, taskTotal,
+            attemptTotal, requestHistoryPage, historyPageSize, latestTask, taskHistoryPage, attemptHistoryPage);
     }
 
     public async Task<int> AddRevisionAndApplyImpactAsync(CollectionDefinitionId definition, int revision,
@@ -867,28 +902,34 @@ public sealed class CollectionPlatformStore
         {
             await using var db = CreateDbContext();
             var location = await db.Locations.SingleAsync(x => x.LocationId == locationId, cancellationToken);
-            switch (result)
-            {
-                case CollectionAttemptResult.Succeeded:
-                    location.Status = ResourceLocationStatus.Active;
-                    location.LastVerifiedAt = now;
-                    location.LastFailureCode = null;
-                    break;
-                case CollectionAttemptResult.ResourceNotFound:
-                case CollectionAttemptResult.UnexpectedPage:
-                case CollectionAttemptResult.ValidationFailure:
-                    location.Status = ResourceLocationStatus.Suspect;
-                    location.LastFailedAt = now;
-                    location.LastFailureCode = errorCode ?? result.ToString();
-                    break;
-                default:
-                    location.LastFailedAt = now;
-                    location.LastFailureCode = errorCode ?? result.ToString();
-                    break;
-            }
+            ApplyLocationOutcome(location, result, now, errorCode);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
+    }
+
+    private static void ApplyLocationOutcome(ResourceLocationEntity location, CollectionAttemptResult result,
+        DateTimeOffset now, string? errorCode)
+    {
+        switch (result)
+        {
+            case CollectionAttemptResult.Succeeded:
+                location.Status = ResourceLocationStatus.Active;
+                location.LastVerifiedAt = now;
+                location.LastFailureCode = null;
+                break;
+            case CollectionAttemptResult.ResourceNotFound:
+            case CollectionAttemptResult.UnexpectedPage:
+            case CollectionAttemptResult.ValidationFailure:
+                location.Status = ResourceLocationStatus.Suspect;
+                location.LastFailedAt = now;
+                location.LastFailureCode = errorCode ?? result.ToString();
+                break;
+            default:
+                location.LastFailedAt = now;
+                location.LastFailureCode = errorCode ?? result.ToString();
+                break;
+        }
     }
 
     public async Task<IReadOnlyList<PendingCollectionDispatch>> GetPendingDispatchesAsync(DateTimeOffset now, int maxCount,
@@ -1362,7 +1403,18 @@ public sealed class CollectionPlatformStore
         var taskIds = rows.Select(x => x.task.TaskId).ToArray();
         var attempts = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var holes = rows.Where(x => x.task.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter)
+        var failedRows = rows.Where(x => x.task.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter)
+            .ToList();
+        var failedResourcePks = failedRows.Select(x => x.task.ResourcePk).Distinct().ToArray();
+        var earliestFailure = failedRows.Count == 0 ? DateTimeOffset.MaxValue
+            : failedRows.Min(x => x.task.CreatedAt);
+        var laterSuccesses = await db.Tasks.AsNoTracking().Where(x => x.Status == CollectionTaskStatus.Succeeded
+                && x.CreatedAt > earliestFailure && failedResourcePks.Contains(x.ResourcePk))
+            .Select(x => new { x.ResourcePk, x.DefinitionId, x.CreatedAt })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var holes = failedRows
+            .Where(x => !laterSuccesses.Any(success => success.ResourcePk == x.task.ResourcePk
+                && success.DefinitionId == x.task.DefinitionId && success.CreatedAt > x.task.CreatedAt))
             .Select(x =>
             {
                 var attempt = attempts.Where(a => a.TaskId == x.task.TaskId)

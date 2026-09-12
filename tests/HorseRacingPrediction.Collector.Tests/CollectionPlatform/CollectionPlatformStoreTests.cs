@@ -248,6 +248,38 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task CompleteAttempt_RecordsEveryCandidateOutcomeAtomically()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1,
+            "Initial", false);
+        var resource = new ResourceKey(ResourceType.RaceCard, "JRA", "R1");
+        var receipt = await store.RequestAsync(resource, new("race-card"), 1, CollectionReason.Initial, now,
+            CollectionLane.Realtime, 80);
+        var first = await store.UpsertLocationAsync(resource, new("race-card"),
+            new Uri("https://example.test/wrong"), ResourceLocationSource.Discovered, now);
+        var second = await store.UpsertLocationAsync(resource, new("race-card"),
+            new Uri("https://example.test/card"), ResourceLocationSource.Discovered, now);
+        var transient = await store.UpsertLocationAsync(resource, new("race-card"),
+            new Uri("https://example.test/temporarily-unavailable"), ResourceLocationSource.Discovered, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [
+                new(first, CollectionAttemptResult.UnexpectedPage, "RaceIdMismatch"),
+                new(transient, CollectionAttemptResult.TransientFailure, "Http503"),
+                new(second, CollectionAttemptResult.Succeeded),
+            ])));
+
+        var locations = await store.ResolveLocationsAsync(resource, new("race-card"));
+        Assert.AreEqual(ResourceLocationStatus.Active, locations.Single(x => x.LocationId == second).Status);
+        Assert.AreEqual(ResourceLocationStatus.Suspect, locations.Single(x => x.LocationId == first).Status);
+        Assert.AreEqual(ResourceLocationStatus.Unknown, locations.Single(x => x.LocationId == transient).Status);
+    }
+
+    [TestMethod]
     public async Task Startup_BaselinesEnsureCreatedDatabaseWithoutLosingExistingData()
     {
         var databasePath = Path.Combine(_directory, "collection-platform.db");
@@ -428,6 +460,34 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task Backfill_ResolvedRecoveryIsRemovedFromProjectedHoles()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var discovery = new CollectionDefinitionId("race-discovery");
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+            1, "initial", false);
+        await store.CreateOrResumeBackfillBatchAsync("jra:recovery", "jra",
+            new(2026, 1, 1), new(2026, 1, 1), now);
+        var failedTask = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260101");
+        var failedLease = await store.AcquireAsync(failedTask.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(failedLease);
+        await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+        Assert.HasCount(1, (await store.GetBackfillBatchAsync("jra:recovery"))!.Holes);
+
+        var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
+            now.AddMinutes(1), CollectionLane.Background, (int)CollectionPriority.Background,
+            batchId: "recovery:jra:recovery");
+        await CompleteAsync(store, recovery, now.AddMinutes(1));
+
+        var recovered = await store.GetBackfillBatchAsync("jra:recovery");
+        Assert.IsNotNull(recovered);
+        Assert.AreEqual(0, recovered.Failed);
+        Assert.IsEmpty(recovered.Holes);
+    }
+
+    [TestMethod]
     public async Task BackfillList_OrdersBatchesWithoutSqliteDateTimeOffsetOrdering()
     {
         var store = CreateStore();
@@ -559,13 +619,52 @@ public sealed class CollectionPlatformStoreTests
         for (var index = 0; index < 30; index++)
             await store.RequestAsync(resource, definition, 1, CollectionReason.ManualRefresh, now.AddSeconds(index));
 
-        var secondPage = await store.GetResourceDetailAsync(resource, definition, 2, 25);
+        var secondPage = await store.GetResourceDetailPagedAsync(resource, definition, 2, 1, 1, 25);
 
         Assert.IsNotNull(secondPage);
         Assert.AreEqual(30, secondPage.RequestTotal);
         Assert.HasCount(5, secondPage.Requests);
         Assert.AreEqual(2, secondPage.HistoryPage);
         Assert.AreEqual(25, secondPage.HistoryPageSize);
+        Assert.IsNotNull(secondPage.LatestTask);
+        Assert.AreEqual(1, secondPage.EffectiveTaskHistoryPage);
+        Assert.AreEqual(1, secondPage.EffectiveAttemptHistoryPage);
+    }
+
+    [TestMethod]
+    public async Task ResourceDetail_PagesEachHistoryIndependently_AndAlwaysReturnsLatestTask()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("horse-profile");
+        var resource = new ResourceKey(ResourceType.Horse, "JRA", "independent-history-horse");
+        await store.RegisterDefinitionAsync(definition, "Horse", ResourceType.Horse, 1, "Initial", false);
+        var now = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var receipts = new List<CollectionRequestReceipt>();
+        for (var index = 0; index < 3; index++)
+        {
+            var requestedAt = now.AddMinutes(index * 2);
+            var receipt = await store.RequestAsync(resource, definition, 1,
+                CollectionReason.ManualRefresh, requestedAt);
+            receipts.Add(receipt);
+            await CompleteAsync(store, receipt, requestedAt);
+        }
+
+        var detail = await store.GetResourceDetailPagedAsync(resource, definition,
+            requestHistoryPage: 2, taskHistoryPage: 3, attemptHistoryPage: 2, historyPageSize: 1);
+
+        Assert.IsNotNull(detail);
+        Assert.AreEqual(3, detail.RequestTotal);
+        Assert.AreEqual(3, detail.TaskTotal);
+        Assert.AreEqual(3, detail.AttemptTotal);
+        Assert.HasCount(1, detail.Requests);
+        Assert.HasCount(1, detail.Tasks);
+        Assert.HasCount(1, detail.Attempts);
+        Assert.AreEqual(receipts[0].TaskId, detail.Tasks[0].TaskId);
+        Assert.AreEqual(receipts[1].TaskId, detail.Attempts[0].TaskId);
+        Assert.AreEqual(receipts[2].TaskId, detail.LatestTask?.TaskId);
+        Assert.AreEqual(2, detail.RequestHistoryPage);
+        Assert.AreEqual(3, detail.EffectiveTaskHistoryPage);
+        Assert.AreEqual(2, detail.EffectiveAttemptHistoryPage);
     }
 
     private CollectionPlatformStore CreateStore() => new(Options.Create(new CollectionPlatformOptions

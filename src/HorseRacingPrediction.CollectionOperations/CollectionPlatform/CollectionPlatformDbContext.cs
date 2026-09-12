@@ -52,12 +52,14 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_requests"); e.HasKey(x => x.RequestId);
             e.Property(x => x.Reason).HasConversion<string>();
+            e.Property(x => x.RequestedAt).HasConversion<string>();
             e.HasIndex(x => new { x.ResourcePk, x.DefinitionId, x.RequestedAt });
         });
         modelBuilder.Entity<CollectionTaskEntity>(e =>
         {
             e.ToTable("collection_tasks"); e.HasKey(x => x.TaskId);
             e.Property(x => x.Status).HasConversion<string>(); e.Property(x => x.Lane).HasConversion<string>();
+            e.Property(x => x.CreatedAt).HasConversion<string>();
             e.HasIndex(x => new { x.Status, x.AvailableAt, x.Lane, x.Priority });
             e.HasIndex(x => x.RequestId);
         });
@@ -70,6 +72,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_attempts"); e.HasKey(x => x.AttemptId);
             e.Property(x => x.Result).HasConversion<string>();
+            e.Property(x => x.StartedAt).HasConversion<string>();
             e.HasIndex(x => new { x.TaskId, x.AttemptNumber }).IsUnique();
         });
         modelBuilder.Entity<ResourceLocationEntity>(e =>

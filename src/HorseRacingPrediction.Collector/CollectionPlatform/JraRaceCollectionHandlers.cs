@@ -95,20 +95,25 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         var workflow = workflows(session);
         RaceCardRaceOutcome? result = null;
         Uri? successfulLocation = null;
+        var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
             try
             {
                 var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-                if (page is not JraRaceCardPage card || card.RaceId != raceId) continue;
+                if (page is not JraRaceCardPage card || card.RaceId != raceId)
+                {
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceCardIdentityMismatch"));
+                    continue;
+                }
                 result = await workflow.RefreshPageAsync(card, domainRaceId, cancellationToken).ConfigureAwait(false);
                 successfulLocation = location.Url;
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
                 break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // A location is only a candidate. A stale URL, parse failure, or transient navigation
-                // failure must not prevent trying the remaining candidates or the normal discovery route.
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
             }
         }
         if (result is null)
@@ -120,7 +125,8 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             catch (JraCollectionException ex) when (IsCurrentOrFuture(task.EffectiveDate))
             {
                 return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
-                    ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(30));
+                    ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(30),
+                    LocationOutcomes: locationOutcomes);
             }
         }
         if (requests is not null && result.Entries is not null)
@@ -129,7 +135,8 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             await predictionSchedule.EnqueueAsync([result.RaceId!], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
-            FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}");
+            FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}",
+            LocationOutcomes: locationOutcomes);
     }
 
     private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
@@ -196,32 +203,40 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
         task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
         RaceResultCollectionResult? result = null;
         Uri? successfulLocation = null;
+        var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
             try
             {
                 var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-                if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId) continue;
+                if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId)
+                {
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch"));
+                    continue;
+                }
                 result = await workflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty, cancellationToken)
                     .ConfigureAwait(false);
                 successfulLocation = location.Url;
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
                 break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Continue through candidate locations before invoking the normal discovery navigation.
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
             }
         }
         result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
         if (result.Errors.Count > 0)
             return new(CollectionAttemptResult.ValidationFailure, "DomainWriteRejected",
-                string.Join("; ", result.Errors), RequestedUrl: ToUri(result.SourceUrl));
+                string.Join("; ", result.Errors), RequestedUrl: ToUri(result.SourceUrl),
+                LocationOutcomes: locationOutcomes);
         if (!result.IsOfficiallyConfirmed)
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
                 "Race result is not officially confirmed.", RequestedUrl: ToUri(result.SourceUrl),
-                RetryAt: DateTimeOffset.UtcNow.AddMinutes(10));
+                RetryAt: DateTimeOffset.UtcNow.AddMinutes(10), LocationOutcomes: locationOutcomes);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl),
-                FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceResult:JRA:{task.Resource.Id}")
+                FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceResult:JRA:{task.Resource.Id}",
+                LocationOutcomes: locationOutcomes)
             ;
     }
 

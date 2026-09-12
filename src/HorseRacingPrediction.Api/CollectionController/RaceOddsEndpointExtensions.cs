@@ -16,7 +16,9 @@ public static class RaceOddsEndpointExtensions
             RecordRaceOddsSnapshotRequest request, ICommandBus commands, CancellationToken token) =>
         {
             await commands.PublishAsync(new RecordRaceOddsSnapshotCommand(new RaceId(raceId), request.ObservedAt,
-                request.Entries.Select(x => new RaceOddsEntry(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray()), token);
+                request.Entries.Select(x => new RaceOddsEntry(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
+                request.Observations?.Select(x => new RaceOddsObservation(x.Market, x.Selection, x.Value,
+                    x.Popularity)).ToArray()), token);
             return Results.Accepted();
         });
         endpoints.MapGet("/api/admin/races/{raceId}/odds-snapshots", async (string raceId,

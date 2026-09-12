@@ -24,12 +24,16 @@ public sealed partial class AdminApiClient
             $"/{Uri.EscapeDataString(resource.Id)}/{Uri.EscapeDataString(definition.Value)}", token);
 
     public Task<CollectionResourceDetail?> GetCollectionResourceDetailAsync(ResourceKey resource,
-        CollectionDefinitionId definition, int historyPage = 1, int historyPageSize = 25,
+        CollectionDefinitionId definition, int requestHistoryPage = 1, int taskHistoryPage = 1,
+        int attemptHistoryPage = 1, int historyPageSize = 25,
         CancellationToken token = default)
         => GetJsonAsync<CollectionResourceDetail>(
             $"{CollectionPlatformPath}/resources/{resource.Type}/{Uri.EscapeDataString(resource.Provider)}" +
             $"/{Uri.EscapeDataString(resource.Id)}/{Uri.EscapeDataString(definition.Value)}" +
-            $"?historyPage={Math.Max(1, historyPage)}&historyPageSize={Math.Clamp(historyPageSize, 1, 100)}", token);
+            $"?requestHistoryPage={Math.Max(1, requestHistoryPage)}" +
+            $"&taskHistoryPage={Math.Max(1, taskHistoryPage)}" +
+            $"&attemptHistoryPage={Math.Max(1, attemptHistoryPage)}" +
+            $"&historyPageSize={Math.Clamp(historyPageSize, 1, 100)}", token);
 
     public Task<IReadOnlyList<BackfillBatchSnapshot>?> GetBackfillBatchesAsync(
         CancellationToken token = default)
@@ -149,6 +153,22 @@ public sealed partial class AdminApiClient
         CreateCollectionRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionRequestReceipt>(HttpMethod.Post,
             $"{CollectionPlatformPath}/requests", request, token);
+
+    public async Task<AdminApiResult<ExplicitUrlCollectionResult>> RequestCollectionByUrlAsync(
+        string url, CancellationToken token = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{CollectionPlatformPath}/requests/by-url")
+            { Content = JsonContent.Create(new CreateExplicitUrlCollectionRequest(url), options: JsonOptions) };
+        using var response = await _httpClient.SendAsync(request, token).ConfigureAwait(false);
+        var value = await response.Content.ReadFromJsonAsync<ExplicitUrlCollectionResult>(JsonOptions, token)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            return AdminApiResult<ExplicitUrlCollectionResult>.Fail(
+                [value?.ErrorMessage ?? "URLから収集対象を識別できませんでした。"]);
+        return value is null
+            ? AdminApiResult<ExplicitUrlCollectionResult>.Fail(["応答の解析に失敗しました。"])
+            : AdminApiResult<ExplicitUrlCollectionResult>.Ok(value);
+    }
 
     public Task<AdminApiResult<CollectionBulkPreview>> PreviewBulkCollectionAsync(
         BulkCollectionOperationRequest request, CancellationToken token = default)

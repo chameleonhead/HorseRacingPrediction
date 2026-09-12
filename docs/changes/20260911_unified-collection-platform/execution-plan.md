@@ -30,6 +30,11 @@ This is the durable continuation plan for the approved unified collection platfo
 | U8 | Standardize local launch working directory and absolute data paths | — | local scripts/config/docs/tests | root/project launch resolve the same DB and queue paths | Implemented; launch verification remains in U9 |
 | U9 | Complete authenticated desktop/narrow browser scenario and accessibility verification | U3-U8 | browser tests/change record | recorded normal/empty/error/large viewport evidence | Completed |
 | U10 | Execute isolated Terraform/cutover rehearsal, then production cutover and legacy deletion | C2, U9 | deployment/AWS/runbook | plan, smoke, rollback rehearsal, approved production deletion evidence | Externally blocked: AWS environment and production cutover window |
+| U11 | Persist candidate-by-candidate ResourceLocation outcomes through the production worker path | L1, O1 | Collector/API/CollectionPlatform/tests | stale candidate becomes Suspect, transient failure remains usable, successful fallback becomes Active | Completed |
+| U12 | Make Backfill hole recovery converge on the latest Resource/Definition outcome | U5 | CollectionPlatform/API/tests | failed hole disappears after successful recovery and remains visible after failed recovery | Completed |
+| U13 | Move detail histories to database paging and make latest-task metadata page independent | U6 | CollectionPlatform/API/detail UI/tests | large histories do not materialize fully; totals, tabs and actions remain correct on later pages | Completed |
+| U14 | Add URL-only identification entry and reject unidentified URLs without anonymous tasks | L1, U1 | Scraping/API/admin UI/tests | known page creates a normal request; unknown page creates no Resource/Task and returns an actionable result | Completed |
+| U15 | Generalize append-only OddsSnapshot from win-only entries to market/selection/value observations | A1 | Domain/Application/Scraping/API/Collector/tests | multiple markets and repeated equal values are retained with source-compatible reads | Completed; JRA parser currently emits the available Win market |
 
 ## Parallelization rules
 
@@ -42,3 +47,6 @@ This is the durable continuation plan for the approved unified collection platfo
 - 2026-09-12: U6 はResource詳細のRequest/Task/Attempt履歴を共通25件pageへ変更し、30件時のpage 2をStore testで検証した。Horse/Jockey/Trainerは収集詳細から安全な業務詳細routeへ遷移できる。
 - 2026-09-12: U7 はoperations dashboardを単一HTTP queryへ集約し、30秒の部分更新、`?tab=`によるtab復元を追加した。認証済みdesktop browserで一覧、運用画面、Revision tabとURL更新を確認した。Revision formのfield hostがgrid上で分離してlabel/inputがずれる問題を自己レビューで発見し、field wrapperで修正した。狭幅の実ブラウザー確認は継続する。
 - 2026-09-12: U9 は認証済み390x844 viewportで収集一覧、収集依頼Dialog、運用Revision formを確認した。主要actionとfilterは縦積みされ、情報は欠落しない。初回観察でtabのmin-contentによりpage全体へ横scrollが発生したため、共通detail tabsのoverflowを局所化して再確認し、page横scrollが消えたことを確認した。Dialog dismissにはtooltipを追加した。viewport overrideは検証後に解除した。
+- 2026-09-12: 完了後レビューで U11〜U15 を検出した。各項目は失敗再現テストを先に追加し、Store単体だけでなく実際のCollector/API/UI経路を検証する。U10はAWS認証と本番切替時間帯を要するため引き続き外部blockerとし、ローカルで実行可能なU11〜U15を並列実装する。
+- 2026-09-12: U11〜U15を実装した。候補URL outcomeはCollectorから完了API/Storeへ同一transactionで伝搬し、恒久不整合だけをSuspect、一時障害を状態維持、成功をActiveとして記録する。Backfill holeは失敗後の同一Resource+Definition成功で解消する。詳細履歴は3種類をDB側で独立page化し、総件数とLatestTaskをpage外metadataにした。URL単独入口はJRA出馬表/結果URLを通常requestへ同定し、同定不能を422で拒否する。Odds snapshotはmarket/selection/value観測を後方互換で保持し、JRA単勝も同形式へ写像する。
+- 2026-09-12: Release全体buildは警告0・エラー0。solution testはContracts 38、Domain 96、MachineLearning 14、Infrastructure 11、Agents 107、Application 56、Collector 95、Api 124、Scraping 218が成功し、外部依存2件のみskip、失敗0だった。追加修正後の対象API/UI 21件、Store/Worker/handler 37件も成功した。認証済みブラウザーで収集依頼DialogのURL入口、未入力error、一覧から独立詳細page、履歴tabの総件数表示を確認した。

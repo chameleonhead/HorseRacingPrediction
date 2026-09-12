@@ -110,7 +110,8 @@ public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceK
 public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result, string? ErrorCode = null,
     string? ErrorMessage = null, Uri? RequestedUrl = null, Uri? FinalUrl = null,
     int? HttpStatusCode = null, string? PageIdentification = null,
-    DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null);
+    DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null,
+    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null);
 
 public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string ScopePayload);
 
@@ -141,6 +142,9 @@ public interface INamedRevisionImpactCondition
 
 public sealed record ResourceLocationCandidate(long LocationId, Uri Url, ResourceLocationSource Source,
     ResourceLocationStatus Status, DateTimeOffset? LastVerifiedAt);
+
+public sealed record ResourceLocationOutcome(long LocationId, CollectionAttemptResult Result,
+    string? ErrorCode = null);
 
 public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGeneration);
 public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification,
@@ -205,7 +209,13 @@ public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int A
 public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<ResourceLocationCandidate> Locations, IReadOnlyList<CollectionRequestSummary> Requests,
     IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts,
-    int RequestTotal = 0, int TaskTotal = 0, int AttemptTotal = 0, int HistoryPage = 1, int HistoryPageSize = 25);
+    int RequestTotal = 0, int TaskTotal = 0, int AttemptTotal = 0, int HistoryPage = 1, int HistoryPageSize = 25,
+    CollectionTaskSummary? LatestTask = null, int? TaskHistoryPage = null, int? AttemptHistoryPage = null)
+{
+    public int RequestHistoryPage => HistoryPage;
+    public int EffectiveTaskHistoryPage => TaskHistoryPage ?? HistoryPage;
+    public int EffectiveAttemptHistoryPage => AttemptHistoryPage ?? HistoryPage;
+}
 public sealed record CollectionWatchdogResult(int ReclaimedLeases, int RedispatchedTasks, int DeadLetteredTasks);
 public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOnly To,
     int ExpectedDiscoveryDays, int RegisteredDiscoveryDays, int Pending, int Running,

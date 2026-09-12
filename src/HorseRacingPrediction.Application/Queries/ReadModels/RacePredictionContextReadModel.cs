@@ -185,13 +185,21 @@ public class RacePredictionContextReadModel : IReadModel,
         CancellationToken cancellationToken)
     {
         var e = domainEvent.AggregateEvent;
+        var observations = e.Observations ?? e.Entries.Select(x => new RaceOddsObservation(
+            "Win", x.HorseNumber.ToString(), x.WinOdds, x.Popularity)).ToArray();
         OddsSnapshots.Add(new RaceOddsSnapshot(e.ObservedAt,
-            e.Entries.Select(x => new RaceOddsEntrySnapshot(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray()));
+            e.Entries.Select(x => new RaceOddsEntrySnapshot(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
+            observations.Select(x => new RaceOddsObservationSnapshot(x.Market, x.Selection, x.Value,
+                x.Popularity)).ToArray()));
         return Task.CompletedTask;
     }
 }
 
 [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-public sealed record RaceOddsSnapshot(DateTimeOffset ObservedAt, IReadOnlyList<RaceOddsEntrySnapshot> Entries);
+public sealed record RaceOddsSnapshot(DateTimeOffset ObservedAt, IReadOnlyList<RaceOddsEntrySnapshot> Entries,
+    IReadOnlyList<RaceOddsObservationSnapshot>? Observations = null);
 [System.ComponentModel.DataAnnotations.Schema.NotMapped]
 public sealed record RaceOddsEntrySnapshot(int HorseNumber, decimal WinOdds, int? Popularity);
+[System.ComponentModel.DataAnnotations.Schema.NotMapped]
+public sealed record RaceOddsObservationSnapshot(string Market, string Selection, decimal Value,
+    int? Popularity = null);

@@ -61,17 +61,26 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             task.Attributes.GetValueOrDefault("sourceIdentity"));
         await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
         JraSubjectPage? page = null;
+        var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
             try
             {
                 var candidate = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-                if (candidate is not JraSubjectPage subjectPage) continue;
+                if (candidate is not JraSubjectPage subjectPage)
+                {
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "SubjectPageTypeMismatch"));
+                    continue;
+                }
                 SubjectProfilePageParser.Validate(subjectPage, identity);
                 page = subjectPage;
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
                 break;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException) { }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
+            }
         }
         if (page is null)
         {
@@ -81,7 +90,8 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (JraCollectionException ex) when (ex.Message.Contains("同定不能", StringComparison.Ordinal))
             {
-                return new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", ex.Message);
+                return new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", ex.Message,
+                    LocationOutcomes: locationOutcomes);
             }
         }
         SubjectProfilePageParser.Validate(page, identity);
@@ -95,12 +105,14 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             // EventFlow read models are eventually consistent. A subject discovered from a race can
             // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
-                ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(1));
+                ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(1),
+                LocationOutcomes: locationOutcomes);
         }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
             await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
-            PageIdentification: $"{descriptor.SubjectType}Profile:JRA:{task.Resource.Id}");
+            PageIdentification: $"{descriptor.SubjectType}Profile:JRA:{task.Resource.Id}",
+            LocationOutcomes: locationOutcomes);
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;

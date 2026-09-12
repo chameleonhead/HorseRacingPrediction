@@ -26,7 +26,7 @@ public sealed class JobDetailComponentTests
 
         var cut = RenderDetail(context);
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "依頼履歴 (1)"));
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "依頼履歴 (30)"));
         StringAssert.Contains(cut.Markup, "過去データ収集");
         StringAssert.Contains(cut.Markup, "タスク履歴 (2)");
         StringAssert.Contains(cut.Markup, "実行タスクの履歴");
@@ -38,6 +38,28 @@ public sealed class JobDetailComponentTests
 
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "を取り消しました"));
         Assert.AreEqual(1, handler.CancelRequests);
+    }
+
+    [TestMethod]
+    public async Task RequestHistory_PagesIndependently_AndKeepsLatestTaskSummary()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new JobDetailHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = RenderDetail(context);
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "1 / 2 ページ"));
+
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">次へ</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "2 / 2 ページ"));
+        Assert.AreEqual(2, handler.RequestHistoryPage);
+        Assert.AreEqual(1, handler.TaskHistoryPage);
+        StringAssert.Contains(cut.Markup, "リアルタイム");
+        StringAssert.Contains(cut.Markup, "90");
     }
 
     [TestMethod]
@@ -119,6 +141,8 @@ public sealed class JobDetailComponentTests
         public bool FailManualRequest { get; init; }
         public int ManualRequests { get; private set; }
         public int CancelRequests { get; private set; }
+        public int RequestHistoryPage { get; private set; } = 1;
+        public int TaskHistoryPage { get; private set; } = 1;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -136,6 +160,11 @@ public sealed class JobDetailComponentTests
             }
 
             var now = DateTimeOffset.UtcNow;
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(request.RequestUri!.Query);
+            RequestHistoryPage = int.TryParse(query["requestHistoryPage"], out var requestPage) ? requestPage : 1;
+            TaskHistoryPage = int.TryParse(query["taskHistoryPage"], out var taskPage) ? taskPage : 1;
+            var latestTask = new CollectionTaskSummary(ActiveTaskId, Resource, Definition,
+                CollectionTaskStatus.Pending, CollectionLane.Realtime, 90, 1, now, 0);
             var detail = new CollectionResourceDetail(
                 new(Resource, Definition, 1, 1, now.AddHours(-1), null, CollectionStateStatus.Pending),
                 [],
@@ -146,7 +175,8 @@ public sealed class JobDetailComponentTests
                     new(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Succeeded,
                         CollectionLane.Normal, 50, 1, now.AddDays(-1), 1),
                 ],
-                []);
+                [], RequestTotal: 30, TaskTotal: 2, AttemptTotal: 0, LatestTask: latestTask,
+                TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1);
             return await Ok(detail);
         }
 

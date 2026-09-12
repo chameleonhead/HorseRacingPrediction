@@ -25,7 +25,9 @@ public sealed class RaceOddsSnapshotApiClient(HttpClient client) : IRaceOddsSnap
     {
         using var response = await client.PostAsJsonAsync($"api/admin/races/{Uri.EscapeDataString(raceId)}/odds-snapshots",
             new RecordRaceOddsSnapshotRequest(page.ObservedAt,
-                page.Entries.Select(x => new RaceOddsEntryRequest(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray()),
+                page.Entries.Select(x => new RaceOddsEntryRequest(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
+                page.Entries.Select(x => new RaceOddsObservationRequest("Win", x.HorseNumber.ToString(),
+                    x.WinOdds, x.Popularity)).ToArray()),
             cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
@@ -42,14 +44,24 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
         var race = JraRaceCardCollectionHandler.ParseRaceId(task);
         await using var session = await sessions.CreateAsync(token).ConfigureAwait(false);
         JraRaceOddsPage? page = null;
+        var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
             try
             {
                 var candidate = await session.Navigate.ToUrlAsync(location.Url, token).ConfigureAwait(false);
-                if (candidate is JraRaceOddsPage odds && odds.RaceId == race) { page = odds; break; }
+                if (candidate is JraRaceOddsPage odds && odds.RaceId == race)
+                {
+                    page = odds;
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
+                    break;
+                }
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceOddsIdentityMismatch"));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException) { }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
+            }
         }
         page ??= await session.Navigate.ToRaceOddsAsync(race, token).ConfigureAwait(false) as JraRaceOddsPage
             ?? throw new JraCollectionException("単勝オッズページを取得できませんでした。");
@@ -58,7 +70,8 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
             .ConfigureAwait(false);
         var next = Next(task, page.ObservedAt);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
-            PageIdentification: $"RaceOdds:JRA:{task.Resource.Id}", NextCollectionAt: next);
+            PageIdentification: $"RaceOdds:JRA:{task.Resource.Id}", NextCollectionAt: next,
+            LocationOutcomes: locationOutcomes);
     }
 
     private DateTimeOffset? Next(LeasedCollectionTask task, DateTimeOffset observedAt)

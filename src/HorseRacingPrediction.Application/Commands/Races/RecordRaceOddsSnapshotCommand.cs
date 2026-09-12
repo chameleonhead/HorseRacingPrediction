@@ -4,10 +4,11 @@ using HorseRacingPrediction.Domain.Races;
 namespace HorseRacingPrediction.Application.Commands.Races;
 
 public sealed class RecordRaceOddsSnapshotCommand(RaceId id, DateTimeOffset observedAt,
-    IReadOnlyList<RaceOddsEntry> entries) : Command<RaceAggregate, RaceId>(id)
+    IReadOnlyList<RaceOddsEntry> entries, IReadOnlyList<RaceOddsObservation>? observations = null) : Command<RaceAggregate, RaceId>(id)
 {
     public DateTimeOffset ObservedAt { get; } = observedAt;
     public IReadOnlyList<RaceOddsEntry> Entries { get; } = entries;
+    public IReadOnlyList<RaceOddsObservation>? Observations { get; } = observations;
 }
 
 public sealed class RecordRaceOddsSnapshotCommandHandler
@@ -16,7 +17,7 @@ public sealed class RecordRaceOddsSnapshotCommandHandler
     public override Task ExecuteAsync(RaceAggregate aggregate, RecordRaceOddsSnapshotCommand command,
         CancellationToken cancellationToken)
     {
-        aggregate.RecordOddsSnapshot(command.ObservedAt, command.Entries);
+        aggregate.RecordOddsSnapshot(command.ObservedAt, command.Entries, command.Observations);
         return Task.CompletedTask;
     }
 }

@@ -266,6 +266,10 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 U9では390x844の認証済みブラウザーで一覧、依頼Dialog、Revision formを検証した。タブがpage全体へ横overflowを発生させる問題を修正し、再観察で横scrollがタブ内部へ限定されたことを確認した。これによりローカルで実行可能なレビュー残件は完了した。本番Terraform/cutoverと旧SQS削除のみ、AWS環境とcutover windowを必要とするU10として残る。
 
+完了後の再監査で、候補URL結果の未接続、Backfill holeの収束、履歴の実DB paging、URL単独入口、Oddsの汎用観測契約をU11〜U15として再登録した。失敗再現テストを先に追加し、Collector→完了API→Store、復旧後Projection、独立履歴page、URL同定→通常Request、market/selection/valueのappend-only保存まで接続した。JRA adapterが現在抽出するmarketは単勝だが、保存契約は複勝・馬連等を同一snapshotへ追加できる。
+
+検証はRelease全体build（警告0・エラー0）、全solution test（成功759、外部依存skip 2、失敗0）、追加修正後の対象API/UI 21件とStore/Worker/handler 37件で行った。認証済み実ブラウザーでもURL収集導線、入力error、独立詳細page、履歴tab総件数を確認した。ローカルで実行可能なU11〜U15は完了し、外部blockerはU10の本番Terraform/cutoverと旧SQS/DLQ・旧DB削除だけである。
+
 ### 2026-09-11 implementation review retrospective
 
 The implementation checkpoint exposed a systemic traceability failure. New models and isolated policy tests were treated as evidence of connected capabilities without tracing the production path through discovery, location resolution, SQS dispatch, Lambda cancellation, retry recovery, and cutover. This allowed a new discovery handler to call a legacy job producer after the legacy dispatcher was disabled, left explicit URLs and ResourceLocation disconnected from workers, left the fairness allocator disconnected from the outbox dispatcher, and represented a destructive queue replacement as a Terraform rename rather than a smoke-gated cutover.

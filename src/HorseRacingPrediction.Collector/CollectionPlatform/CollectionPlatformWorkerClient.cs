@@ -48,7 +48,8 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
             $"api/internal/collection/tasks/{taskId}/complete",
             new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
-                completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt), cancellationToken)
+                completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt,
+                completion.LocationOutcomes), cancellationToken)
             .ConfigureAwait(false);
         completeResponse.EnsureSuccessStatusCode();
     }
@@ -56,5 +57,5 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
     private sealed record CompleteRequest(string LeaseToken, CollectionAttemptResult Result,
         string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl,
         int? HttpStatusCode, string? PageIdentification, DateTimeOffset? RetryAt,
-        DateTimeOffset? NextCollectionAt);
+        DateTimeOffset? NextCollectionAt, IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes);
 }

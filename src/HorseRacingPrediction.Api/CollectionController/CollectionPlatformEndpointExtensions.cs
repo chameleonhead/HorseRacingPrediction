@@ -142,9 +142,13 @@ public static class CollectionPlatformEndpointExtensions
         });
         admin.MapGet("/resources/{type}/{provider}/{resourceId}/{definition}", async (
             ResourceType type, string provider, string resourceId, string definition,
-            int? historyPage, int? historyPageSize, CollectionPlatformStore store, CancellationToken token) =>
-            await store.GetResourceDetailAsync(new(type, provider, resourceId), new(definition),
-                historyPage ?? 1, historyPageSize ?? 25, token) is { } detail
+            int? historyPage, int? requestHistoryPage, int? taskHistoryPage, int? attemptHistoryPage,
+            int? historyPageSize,
+            CollectionPlatformStore store, CancellationToken token) =>
+            await store.GetResourceDetailPagedAsync(new(type, provider, resourceId), new(definition),
+                requestHistoryPage ?? historyPage ?? 1, taskHistoryPage ?? historyPage ?? 1,
+                attemptHistoryPage ?? historyPage ?? 1,
+                historyPageSize ?? 25, token) is { } detail
                 ? Results.Ok(detail) : Results.NotFound());
         admin.MapPost("/requests", async (CreateCollectionRequest request, CollectionPlatformStore store,
             CancellationToken token) =>
@@ -156,6 +160,30 @@ public static class CollectionPlatformEndpointExtensions
                 request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
                 request.Attributes, token);
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
+        });
+        admin.MapPost("/requests/by-url", async (CreateExplicitUrlCollectionRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var identified = JraExplicitUrlResolver.Resolve(request.Url);
+            if (!identified.Identified || identified.Resource is null || identified.Definition is null
+                || identified.EffectiveDate is null || identified.ExplicitUrl is null)
+                return Results.Json(identified, statusCode: StatusCodes.Status422UnprocessableEntity);
+            var explicitUrl = new Uri(identified.ExplicitUrl);
+            var resource = identified.Resource.Value;
+            var definition = identified.Definition.Value;
+            var lane = CollectionLane.Realtime;
+            var priority = resource.Type switch
+            {
+                ResourceType.RaceOdds => (int)CollectionPriority.High,
+                ResourceType.RaceResult => (int)CollectionPriority.Critical,
+                ResourceType.RaceCard => 80,
+                _ => (int)CollectionPriority.Normal,
+            };
+            var currentRevision = await store.GetCurrentRevisionAsync(definition, token);
+            var receipt = await store.RequestAsync(resource, definition, currentRevision, CollectionReason.ManualRefresh,
+                DateTimeOffset.UtcNow, lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
+                attributes: identified.Attributes, cancellationToken: token);
+            return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", identified with { Receipt = receipt });
         });
         admin.MapPost("/requests/bulk/preview", async (BulkCollectionOperationRequest request,
             CollectionPlatformStore store, [FromServices] IDbContextProvider<EventStoreDbContext> domain,
@@ -254,7 +282,8 @@ public static class CollectionPlatformEndpointExtensions
             Uri.TryCreate(request.FinalUrl, UriKind.Absolute, out var finalUrl);
             var accepted = await store.CompleteAttemptAsync(taskId, request.LeaseToken, DateTimeOffset.UtcNow,
                 new(request.Result, request.ErrorCode, request.ErrorMessage, requestedUrl, finalUrl,
-                    request.HttpStatusCode, request.PageIdentification, request.RetryAt, request.NextCollectionAt), token);
+                    request.HttpStatusCode, request.PageIdentification, request.RetryAt, request.NextCollectionAt,
+                    request.LocationOutcomes), token);
             return accepted ? Results.NoContent() : Results.Conflict();
         });
         worker.MapPost("/tasks/{taskId:guid}/heartbeat", async (Guid taskId,
@@ -383,4 +412,5 @@ public sealed record CreateBackfillBatchRequest(int Year, int Month, string Prov
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,
     string? FinalUrl = null, int? HttpStatusCode = null, string? PageIdentification = null,
-    DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null);
+    DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null,
+    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null);

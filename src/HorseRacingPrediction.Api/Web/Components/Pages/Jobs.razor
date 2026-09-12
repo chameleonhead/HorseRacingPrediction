@@ -114,6 +114,7 @@ else
                 {
                     <button type="button" class="collection-kind" @onclick="() => ChooseCreate(kind)"><strong>@kind.Label</strong><span>@kind.Description</span></button>
                 }
+                <button type="button" class="collection-kind collection-kind-secondary" @onclick="ChooseExplicitUrl"><strong>URLから収集</strong><span>JRAページを識別し、対応する収集対象を自動で登録します</span></button>
                 <button type="button" class="collection-kind collection-kind-secondary" @onclick="OpenBulkFromCreate"><strong>複数をまとめて再取得</strong><span>対象IDをまとめて指定し、確認後に依頼します</span></button>
             </div>
         }
@@ -122,9 +123,16 @@ else
             <FluentButton Appearance="@Appearance.Stealth" OnClick="ResetCreateType">← 種類を変更</FluentButton>
             <p>@CreateGuidance</p>
             <div class="collection-request-form">
-                <FluentTextField Label="対象ID" Placeholder="@CreatePlaceholder" Required="true" @bind-Value="createResourceId" />
-                <FluentTextField Label="提供元" @bind-Value="createProvider" />
-                <FluentTextField Label="取得先URL（任意）" Placeholder="通常は空欄のままにします" @bind-Value="createUrl" />
+                @if(createType == "ExplicitUrl")
+                {
+                    <FluentTextField Label="JRAページのURL" Placeholder="https://www.jra.go.jp/JRADB/..." Required="true" @bind-Value="createUrl" />
+                }
+                else
+                {
+                    <FluentTextField Label="対象ID" Placeholder="@CreatePlaceholder" Required="true" @bind-Value="createResourceId" />
+                    <FluentTextField Label="提供元" @bind-Value="createProvider" />
+                    <FluentTextField Label="取得先URL（任意）" Placeholder="通常は空欄のままにします" @bind-Value="createUrl" />
+                }
             </div>
             @if(createErrors.Count>0){<UiState Kind="error" Title="収集を依頼できません" Message="@string.Join(" ", createErrors)" />}
         }
@@ -231,10 +239,12 @@ else
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
     private void ChooseCreate(CollectionKind kind){createType=kind.Type;createDefinition=kind.Definition;createResourceId="";createUrl="";createErrors=[];}
+    private void ChooseExplicitUrl(){createType="ExplicitUrl";createDefinition="explicit-url";createResourceId="";createUrl="";createErrors=[];}
     private void OpenBulkFromCreate(){showCreate=false;OpenBulk();}
-    private async Task CreateRequestAsync(){createErrors=[];if(!Enum.TryParse<ResourceType>(createType,out var type)||string.IsNullOrWhiteSpace(createResourceId)){createErrors=["対象IDを入力してください。"];return;}if(!string.IsNullOrWhiteSpace(createUrl)&&!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["取得先URLを正しい形式で入力してください。"];return;}var lane=type is ResourceType.RaceCard or ResourceType.RaceOdds or ResourceType.RaceResult?CollectionLane.Realtime:CollectionLane.Normal;var priority=type switch{ResourceType.RaceOdds=>90,ResourceType.RaceResult=>100,ResourceType.RaceCard=>80,_=>50};busy=true;try{var r=await Api.RequestCollectionAsync(new(type,createProvider.Trim(),createResourceId.Trim(),createDefinition,1,CollectionReason.ManualRefresh,lane,priority,string.IsNullOrWhiteSpace(createUrl)?null:createUrl.Trim()));if(r.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=r.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。処理一覧を更新して確認してください。"]; }finally{busy=false;}}
-    private string CreateTitle=>string.IsNullOrEmpty(createDefinition)?"収集を依頼":DefinitionLabel(new(createDefinition));
-    private string CreateGuidance=>createType.StartsWith("Race",StringComparison.Ordinal)?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
+    private async Task CreateRequestAsync(){createErrors=[];if(createType=="ExplicitUrl"){await CreateExplicitUrlRequestAsync();return;}if(!Enum.TryParse<ResourceType>(createType,out var type)||string.IsNullOrWhiteSpace(createResourceId)){createErrors=["対象IDを入力してください。"];return;}if(!string.IsNullOrWhiteSpace(createUrl)&&!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["取得先URLを正しい形式で入力してください。"];return;}var lane=type is ResourceType.RaceCard or ResourceType.RaceOdds or ResourceType.RaceResult?CollectionLane.Realtime:CollectionLane.Normal;var priority=type switch{ResourceType.RaceOdds=>90,ResourceType.RaceResult=>100,ResourceType.RaceCard=>80,_=>50};busy=true;try{var r=await Api.RequestCollectionAsync(new(type,createProvider.Trim(),createResourceId.Trim(),createDefinition,1,CollectionReason.ManualRefresh,lane,priority,string.IsNullOrWhiteSpace(createUrl)?null:createUrl.Trim()));if(r.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=r.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。処理一覧を更新して確認してください。"]; }finally{busy=false;}}
+    private async Task CreateExplicitUrlRequestAsync(){if(!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["JRAページのURLを正しい形式で入力してください。"];return;}busy=true;try{var result=await Api.RequestCollectionByUrlAsync(createUrl.Trim());if(result.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。入力したURLを保持しています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}
+    private string CreateTitle=>createType=="ExplicitUrl"?"URLから収集":string.IsNullOrEmpty(createDefinition)?"収集を依頼":DefinitionLabel(new(createDefinition));
+    private string CreateGuidance=>createType=="ExplicitUrl"?"JRAの出馬表またはレース結果ページのURLを貼り付けてください。対象のレースと収集内容を自動で識別します。":createType.StartsWith("Race",StringComparison.Ordinal)?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
     private string CreatePlaceholder=>createType.StartsWith("Race",StringComparison.Ordinal)?"例: 20260912:Nakayama:11":"一覧や詳細に表示されている対象ID";
     private void OpenPause(){pauseReason="";pauseErrors=[];showPause=true;}
     private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync(pauseReason.Trim()):await Api.ResumeCollectionPipelineAsync();if(!r.Success){if(pause)pauseErrors=r.Errors;else errors=r.Errors;}else{showPause=false;await LoadAsync();}}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){if(pause)pauseErrors=["管理APIに接続できません。入力した理由は保持されています。"];else errors=["管理APIに接続できません。もう一度お試しください。"];}finally{busy=false;}}

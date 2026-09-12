@@ -144,6 +144,32 @@ public sealed class CollectionAdministrationComponentTests
     }
 
     [TestMethod]
+    public async Task ExplicitUrlAction_RequiresOnlyUrlAndUsesIdentificationEndpoint()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集状況"));
+
+        await ClickFluentButtonAsync(cut, "収集を依頼");
+        await ClickButtonAsync(cut, "URLから収集");
+        var url = cut.FindComponents<FluentTextField>()
+            .Single(x => x.Instance.Label?.ToString() == "JRAページのURL");
+        await cut.InvokeAsync(() => url.Instance.ValueChanged.InvokeAsync(
+            "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Last(x => x.Markup.Contains("収集を依頼</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.ExplicitUrlRequests));
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604011120260905/2F",
+            handler.LastExplicitUrlRequest?.Url);
+    }
+
+    [TestMethod]
     public async Task Filters_ArePersistedInUrlAndDetailReturnUrl()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -182,7 +208,9 @@ public sealed class CollectionAdministrationComponentTests
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
+        public int ExplicitUrlRequests { get; private set; }
         public CreateCollectionRequest? LastManualRequest { get; private set; }
+        public CreateExplicitUrlCollectionRequest? LastExplicitUrlRequest { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -190,6 +218,14 @@ public sealed class CollectionAdministrationComponentTests
             {
                 Previews++;
                 return await Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests/by-url"))
+            {
+                ExplicitUrlRequests++;
+                LastExplicitUrlRequest = await request.Content!.ReadFromJsonAsync<CreateExplicitUrlCollectionRequest>(cancellationToken);
+                return await Ok(new ExplicitUrlCollectionResult(true, Resource, Definition, DateOnly.FromDateTime(DateTime.Today),
+                    new Dictionary<string, string>(), LastExplicitUrlRequest!.Url, null, null,
+                    new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true)));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests"))
             {
