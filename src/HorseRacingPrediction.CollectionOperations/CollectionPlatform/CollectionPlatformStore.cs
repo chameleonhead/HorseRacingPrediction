@@ -1616,6 +1616,84 @@ public sealed class CollectionPlatformStore
             .Take(Math.Max(1, maxCount)).Select(ToFailure).ToList();
     }
 
+    public async Task<CollectionFailureGroupMatch> GetActionableFailureGroupAsync(string groupKey,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(groupKey))
+            return new(0, []);
+        var notifications = await GetActionableFailureNotificationsAsync(now, int.MaxValue, cancellationToken)
+            .ConfigureAwait(false);
+        var matchingGroups = notifications.GroupBy(x => new
+            {
+                Definition = x.Definition.Value,
+                x.Status,
+                ErrorCode = x.ErrorCode ?? string.Empty,
+            })
+            .Where(x => string.Equals(CollectionFailureGrouping.CreateKey(
+                x.Key.Definition, x.Key.Status, x.Key.ErrorCode), groupKey, StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.ToList())
+            .ToList();
+        return new(matchingGroups.Count, matchingGroups.Count == 1 ? matchingGroups[0] : []);
+    }
+
+    public async Task<CollectionFailureGroupPage?> GetActionableFailureGroupPageAsync(string groupKey,
+        DateTimeOffset now, string? search = null, int page = 1, int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var match = await GetActionableFailureGroupAsync(groupKey, now, cancellationToken).ConfigureAwait(false);
+        if (match.MatchingGroupCount == 0) return null;
+        if (match.MatchingGroupCount > 1)
+            throw new InvalidOperationException("The failure group key matches multiple groups.");
+
+        await using var db = CreateDbContext();
+        var taskIds = match.Notifications.Select(x => x.TaskId).ToArray();
+        var attemptRows = await db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
+            .OrderByDescending(x => x.StartedAt).ThenByDescending(x => x.AttemptId)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var latestAttempts = attemptRows.GroupBy(x => x.TaskId).ToDictionary(x => x.Key, x => x.First());
+        var requestIds = await db.Tasks.AsNoTracking().Where(x => taskIds.Contains(x.TaskId))
+            .Select(x => new { x.TaskId, x.RequestId }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var requestIdByTask = requestIds.ToDictionary(x => x.TaskId, x => x.RequestId);
+        var ids = requestIds.Select(x => x.RequestId).Distinct().ToArray();
+        var explicitUrls = await db.Requests.AsNoTracking().Where(x => ids.Contains(x.RequestId))
+            .Select(x => new { x.RequestId, x.ExplicitUrl }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var explicitUrlByRequest = explicitUrls.ToDictionary(x => x.RequestId, x => x.ExplicitUrl);
+
+        var targets = match.Notifications.Select(notification =>
+        {
+            latestAttempts.TryGetValue(notification.TaskId, out var attempt);
+            string? explicitUrl = null;
+            if (requestIdByTask.TryGetValue(notification.TaskId, out var requestId))
+                explicitUrlByRequest.TryGetValue(requestId, out explicitUrl);
+            return new CollectionFailureTarget(notification.NotificationId, notification.TaskId,
+                notification.Resource, notification.Definition, notification.Status, notification.ErrorCode,
+                notification.ErrorMessage, notification.AttemptCount, notification.FailedAt,
+                attempt?.RequestedUrl ?? explicitUrl, attempt?.FinalUrl, attempt?.HttpStatusCode,
+                attempt?.PageIdentification, attempt?.ExecutionBatchId, attempt?.LambdaRequestId);
+        }).ToList();
+
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (search is not null)
+            targets = targets.Where(x => Contains(x.Resource.Type.ToString(), search)
+                || Contains(x.Resource.Provider, search) || Contains(x.Resource.Id, search)
+                || Contains(x.ErrorCode, search) || Contains(x.ErrorMessage, search)
+                || Contains(x.RequestedUrl, search) || Contains(x.FinalUrl, search)).ToList();
+        targets = targets.OrderByDescending(x => x.FailedAt).ThenBy(x => x.Resource.Type)
+            .ThenBy(x => x.Resource.Provider).ThenBy(x => x.Resource.Id).ToList();
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var offset = Math.Min((long)(page - 1) * pageSize, int.MaxValue);
+        var group = CollectionFailureGrouping.Build(match.Notifications).Single() with
+        {
+            NotificationIds = [],
+        };
+        return new(group, targets.Count, page, pageSize, search,
+            targets.Skip((int)offset).Take(pageSize).ToList());
+
+        static bool Contains(string? value, string query) =>
+            value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
     public async Task MarkFailureNotificationPublishedAsync(Guid notificationId, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {

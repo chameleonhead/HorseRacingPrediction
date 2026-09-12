@@ -112,10 +112,26 @@ public sealed partial class AdminApiClient
         => GetJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
             $"{CollectionPlatformPath}/failure-notifications/groups?limit={Math.Clamp(limit, 1, 10000)}", token);
 
+    public Task<CollectionFailureGroupPage?> GetCollectionFailureGroupAsync(string groupKey,
+        string? search = null, int page = 1, int pageSize = 50, CancellationToken token = default)
+    {
+        var query = $"page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 100)}";
+        if (!string.IsNullOrWhiteSpace(search))
+            query += $"&search={Uri.EscapeDataString(search.Trim())}";
+        return GetJsonAsync<CollectionFailureGroupPage>(
+            $"{CollectionPlatformPath}/failure-notifications/groups/{Uri.EscapeDataString(groupKey)}?{query}", token);
+    }
+
     public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailuresAsync(
         RecoverCollectionFailuresRequest request, CancellationToken token = default)
         => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
             $"{CollectionPlatformPath}/failure-notifications/recover", request, token);
+
+    public Task<AdminApiResult<CollectionFailureRecoveryResult>> RecoverCollectionFailureGroupAsync(
+        string groupKey, RecoverCollectionFailureGroupRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<CollectionFailureRecoveryResult>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/failure-notifications/groups/{Uri.EscapeDataString(groupKey)}/recover",
+            request, token);
 
     public Task<AdminApiResult<BackfillBatchSnapshot>> CreateBackfillBatchAsync(
         CreateBackfillBatchRequest request, CancellationToken token = default)

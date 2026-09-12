@@ -246,6 +246,14 @@ public sealed record CollectionFailureGroup(string GroupKey, CollectionDefinitio
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage, int Count,
     DateTimeOffset FirstFailedAt, DateTimeOffset LastFailedAt,
     IReadOnlyList<Guid> NotificationIds, IReadOnlyList<ResourceKey> SampleResources);
+public sealed record CollectionFailureTarget(Guid NotificationId, Guid TaskId, ResourceKey Resource,
+    CollectionDefinitionId Definition, CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage,
+    int AttemptCount, DateTimeOffset FailedAt, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode,
+    string? PageIdentification, Guid? ExecutionBatchId, string? LambdaRequestId);
+public sealed record CollectionFailureGroupPage(CollectionFailureGroup Group, int TotalCount, int Page,
+    int PageSize, string? Search, IReadOnlyList<CollectionFailureTarget> Items);
+public sealed record CollectionFailureGroupMatch(int MatchingGroupCount,
+    IReadOnlyList<PendingCollectionFailureNotification> Notifications);
 public sealed record CollectionFailureRecoveryResult(int SelectedCount, int CreatedTaskCount,
     int ReusedTaskCount, IReadOnlyList<Guid> TaskIds);
 public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevision, CollectionReason Reason,

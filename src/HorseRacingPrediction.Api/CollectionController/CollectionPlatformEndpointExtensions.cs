@@ -4,8 +4,6 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -73,7 +71,7 @@ public static class CollectionPlatformEndpointExtensions
             var backfillsTask = store.GetBackfillBatchesAsync(token);
             await Task.WhenAll(progressTask, notificationsTask, backfillsTask);
             return Results.Ok(new CollectionOperationsDashboard(await progressTask,
-                BuildFailureGroups(await notificationsTask), await backfillsTask, DateTimeOffset.UtcNow));
+                CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, DateTimeOffset.UtcNow));
         });
         admin.MapGet("/readiness/{raceId}", async (string raceId, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetReadinessAsync(raceId, token)));
@@ -104,7 +102,21 @@ public static class CollectionPlatformEndpointExtensions
         {
             var notifications = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow,
                 Math.Clamp(limit ?? 5000, 1, 10000), token);
-            return Results.Ok(BuildFailureGroups(notifications));
+            return Results.Ok(CollectionFailureGrouping.Build(notifications));
+        });
+        admin.MapGet("/failure-notifications/groups/{groupKey}", async (string groupKey, string? search,
+            int? page, int? pageSize, CollectionPlatformStore store, CancellationToken token) =>
+        {
+            try
+            {
+                var result = await store.GetActionableFailureGroupPageAsync(groupKey, DateTimeOffset.UtcNow,
+                    search, page ?? 1, pageSize ?? 50, token);
+                return result is null ? Results.NotFound() : Results.Ok(result);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { message = exception.Message });
+            }
         });
         admin.MapPost("/failure-notifications/recover", async (RecoverCollectionFailuresRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -118,22 +130,20 @@ public static class CollectionPlatformEndpointExtensions
             var selected = pending.Where(x => selectedIds.Contains(x.NotificationId)).ToList();
             if (selected.Count != selectedIds.Count)
                 return Results.Conflict(new { message = "Some failures are no longer pending. Refresh and try again." });
-
-            var taskIds = new List<Guid>(selected.Count);
-            var created = 0;
-            foreach (var failure in selected)
-            {
-                var state = await store.GetStateAsync(failure.Resource, failure.Definition, token);
-                var requestedRevision = request.RequestedRevision ?? state?.RequiredRevision
-                    ?? throw new InvalidOperationException("Collection state was not found for a pending failure.");
-                var receipt = await store.RequestAsync(failure.Resource, failure.Definition,
-                    requestedRevision, CollectionReason.Recovery,
-                    DateTimeOffset.UtcNow, request.Lane, request.Priority, cancellationToken: token);
-                if (receipt.CreatedTask) created++;
-                taskIds.Add(receipt.TaskId);
-            }
-            return Results.Accepted(value: new CollectionFailureRecoveryResult(selected.Count, created,
-                selected.Count - created, taskIds.Distinct().ToList()));
+            return await RecoverFailuresAsync(selected, request.RequestedRevision, request.Lane,
+                request.Priority, store, token);
+        });
+        admin.MapPost("/failure-notifications/groups/{groupKey}/recover", async (string groupKey,
+            RecoverCollectionFailureGroupRequest request, CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var match = await store.GetActionableFailureGroupAsync(groupKey, DateTimeOffset.UtcNow, token);
+            if (match.MatchingGroupCount == 0) return Results.NotFound();
+            if (match.MatchingGroupCount > 1)
+                return Results.Conflict(new { message = "The failure group key matches multiple groups." });
+            if (match.Notifications.Count > 10000)
+                return Results.BadRequest(new { message = "At most 10000 notifications can be recovered at once." });
+            return await RecoverFailuresAsync(match.Notifications, request.RequestedRevision, request.Lane,
+                request.Priority, store, token);
         });
         admin.MapPost("/failure-notifications/{notificationId:guid}/published", async (Guid notificationId,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -322,25 +332,26 @@ public static class CollectionPlatformEndpointExtensions
         _ => throw new ArgumentException("Revision impact parameters are invalid."),
     };
 
-    private static string CreateFailureGroupKey(string definition, CollectionTaskStatus status, string errorCode)
+    private static async Task<IResult> RecoverFailuresAsync(
+        IReadOnlyList<PendingCollectionFailureNotification> failures, int? requestedRevision,
+        CollectionLane lane, int priority, CollectionPlatformStore store, CancellationToken token)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"{definition}\n{status}\n{errorCode}"));
-        return Convert.ToHexString(bytes, 0, 8);
-    }
-
-    private static IReadOnlyList<CollectionFailureGroup> BuildFailureGroups(
-        IReadOnlyList<PendingCollectionFailureNotification> notifications) => notifications.GroupBy(x => new
+        var taskIds = new List<Guid>(failures.Count);
+        var created = 0;
+        foreach (var failure in failures)
         {
-            Definition = x.Definition.Value,
-            x.Status,
-            ErrorCode = x.ErrorCode ?? string.Empty,
-        }).Select(x => new CollectionFailureGroup(
-            CreateFailureGroupKey(x.Key.Definition, x.Key.Status, x.Key.ErrorCode), new(x.Key.Definition), x.Key.Status,
-            string.IsNullOrEmpty(x.Key.ErrorCode) ? null : x.Key.ErrorCode,
-            x.OrderByDescending(y => y.FailedAt).Select(y => y.ErrorMessage).FirstOrDefault(), x.Count(),
-            x.Min(y => y.FailedAt), x.Max(y => y.FailedAt), x.Select(y => y.NotificationId).ToList(),
-            x.Select(y => y.Resource).Distinct().Take(20).ToList())).OrderByDescending(x => x.LastFailedAt).ToList();
+            var state = await store.GetStateAsync(failure.Resource, failure.Definition, token);
+            var revision = requestedRevision ?? state?.RequiredRevision
+                ?? throw new InvalidOperationException("Collection state was not found for a pending failure.");
+            var receipt = await store.RequestAsync(failure.Resource, failure.Definition,
+                revision, CollectionReason.Recovery, DateTimeOffset.UtcNow, lane, priority,
+                cancellationToken: token);
+            if (receipt.CreatedTask) created++;
+            taskIds.Add(receipt.TaskId);
+        }
+        return Results.Accepted(value: new CollectionFailureRecoveryResult(failures.Count, created,
+            failures.Count - created, taskIds.Distinct().ToList()));
+    }
 
     private static async Task<IReadOnlyList<CollectionBulkTarget>> ResolveBulkTargetsAsync(
         BulkCollectionOperationRequest request, CollectionPlatformStore store,
@@ -397,6 +408,8 @@ public sealed record PauseCollectionPipelineRequest(string? Reason);
 public sealed record RecoverCollectionFailuresRequest(IReadOnlyList<Guid> NotificationIds,
     int? RequestedRevision = null, CollectionLane Lane = CollectionLane.Normal,
     int Priority = (int)CollectionPriority.Normal);
+public sealed record RecoverCollectionFailureGroupRequest(int? RequestedRevision = null,
+    CollectionLane Lane = CollectionLane.Normal, int Priority = (int)CollectionPriority.Normal);
 
 public enum BulkCollectionSelection
 {

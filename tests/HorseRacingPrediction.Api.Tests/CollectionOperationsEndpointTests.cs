@@ -106,7 +106,8 @@ public sealed class CollectionOperationsEndpointTests
             foreach (var id in new[] { "H001", "H002" })
             {
                 var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
-                    new("horse-profile"), 1, CollectionReason.Initial, now);
+                    new("horse-profile"), 1, CollectionReason.Initial, now,
+                    explicitUrl: new Uri($"https://explicit.example.test/{id}"));
                 Assert.IsTrue(await store.ReconcileDeadLetterAsync(receipt.TaskId, 1, now.AddSeconds(1), "same failure"));
             }
             await using var app = await CreateApplicationAsync(store);
@@ -127,6 +128,60 @@ public sealed class CollectionOperationsEndpointTests
             Assert.AreEqual(2, recovery.CreatedTaskCount);
             Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10));
             Assert.AreEqual(2, (await store.GetTasksAsync()).Count(x => x.Status == CollectionTaskStatus.Ready));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task FailureGroupDetail_PagesSearchesAndRecoversEntireGroup()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+            foreach (var id in new[] { "H001", "H002", "OTHER" })
+            {
+                var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
+                    new("horse-profile"), 1, CollectionReason.Initial, now,
+                    explicitUrl: new Uri($"https://explicit.example.test/{id}"));
+                var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+                await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                    new(CollectionAttemptResult.PermanentFailure, "PlaywrightException", "resource exhausted",
+                        id == "H002" ? null : new Uri($"https://example.test/{id}"),
+                        new Uri($"https://example.test/{id}/final"), 200,
+                        "horse-profile"));
+            }
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+            var groups = await client.GetFromJsonAsync<IReadOnlyList<CollectionFailureGroup>>(
+                "/api/admin/collection/failure-notifications/groups");
+            var key = groups!.Single().GroupKey;
+
+            var firstPage = await client.GetFromJsonAsync<CollectionFailureGroupPage>(
+                $"/api/admin/collection/failure-notifications/groups/{key}?page=1&pageSize=2");
+            var searched = await client.GetFromJsonAsync<CollectionFailureGroupPage>(
+                $"/api/admin/collection/failure-notifications/groups/{key}?search=H002&page=1&pageSize=50");
+
+            Assert.IsNotNull(firstPage);
+            Assert.AreEqual(3, firstPage.TotalCount);
+            Assert.HasCount(2, firstPage.Items);
+            Assert.IsTrue(firstPage.Items.All(x => x.FinalUrl is not null));
+            Assert.IsNotNull(searched);
+            Assert.AreEqual(1, searched.TotalCount);
+            Assert.AreEqual("H002", searched.Items.Single().Resource.Id);
+            Assert.AreEqual("https://explicit.example.test/H002", searched.Items.Single().RequestedUrl);
+
+            var response = await client.PostAsJsonAsync(
+                $"/api/admin/collection/failure-notifications/groups/{key}/recover",
+                new RecoverCollectionFailureGroupRequest());
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            var recovery = await response.Content.ReadFromJsonAsync<CollectionFailureRecoveryResult>();
+            Assert.IsNotNull(recovery);
+            Assert.AreEqual(3, recovery.SelectedCount);
+            Assert.AreEqual(3, recovery.CreatedTaskCount);
+            Assert.AreEqual(HttpStatusCode.NotFound,
+                (await client.GetAsync($"/api/admin/collection/failure-notifications/groups/{key}" )).StatusCode);
         }
         finally { Directory.Delete(directory, true); }
     }
