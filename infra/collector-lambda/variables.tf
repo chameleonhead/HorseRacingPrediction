@@ -31,15 +31,3 @@ variable "alert_phone_number" {
     error_message = "alert_phone_number must be empty or an E.164 phone number such as +819012345678."
   }
 }
-
-variable "activate_resource_collection_queue" {
-  type        = bool
-  description = "Switch the Lambda event source and queue outputs to the resource collection queue. Keep false while provisioning and inspecting the replacement queues."
-  default     = false
-}
-
-variable "retain_legacy_collection_queues" {
-  type        = bool
-  description = "Keep the legacy collector queue and DLQ. Set false only after the resource collection smoke test succeeds."
-  default     = true
-}

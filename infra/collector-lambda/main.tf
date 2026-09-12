@@ -1,14 +1,5 @@
 locals {
   function_enabled = var.image_uri != ""
-  active_queue_arn = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.arn : aws_sqs_queue.collector[0].arn
-  active_queue_url = var.activate_resource_collection_queue ? aws_sqs_queue.resource_collection.url : aws_sqs_queue.collector[0].url
-}
-
-check "legacy_queues_removed_only_after_activation" {
-  assert {
-    condition     = var.retain_legacy_collection_queues || var.activate_resource_collection_queue
-    error_message = "activate_resource_collection_queue must be true before legacy collection queues can be removed."
-  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -78,24 +69,6 @@ resource "aws_iam_role_policy_attachment" "logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_sqs_queue" "collector_dlq" {
-  count                     = var.retain_legacy_collection_queues ? 1 : 0
-  name                      = "horse-racing-prediction-collector-dlq"
-  message_retention_seconds = 1209600
-}
-
-resource "aws_sqs_queue" "collector" {
-  count                      = var.retain_legacy_collection_queues ? 1 : 0
-  name                       = "horse-racing-prediction-collector"
-  visibility_timeout_seconds = 5400
-  message_retention_seconds  = 345600
-  receive_wait_time_seconds  = 20
-  redrive_policy = jsonencode({
-    deadLetterTargetArn = aws_sqs_queue.collector_dlq[0].arn
-    maxReceiveCount     = 3
-  })
-}
-
 resource "aws_sqs_queue" "resource_collection_dlq" {
   name                      = "horse-racing-prediction-resource-collection-dlq"
   message_retention_seconds = 1209600
@@ -157,8 +130,8 @@ resource "aws_cloudwatch_metric_alarm" "collector_lambda_throttles" {
   alarm_actions       = [aws_sns_topic.collector_alerts.arn]
 }
 
-resource "aws_cloudwatch_metric_alarm" "collector_dlq_messages" {
-  alarm_name          = "horse-racing-prediction-collector-dlq-messages"
+resource "aws_cloudwatch_metric_alarm" "resource_collection_dlq_messages" {
+  alarm_name          = "horse-racing-prediction-resource-collection-dlq-messages"
   alarm_description   = "Collector messages reached the SQS dead-letter queue."
   namespace           = "AWS/SQS"
   metric_name         = "ApproximateNumberOfMessagesVisible"
@@ -201,7 +174,7 @@ resource "aws_iam_role_policy" "collector_queue_consumer" {
           "sqs:ChangeMessageVisibility",
           "sqs:GetQueueAttributes"
         ]
-        Resource = local.active_queue_arn
+        Resource = aws_sqs_queue.resource_collection.arn
       }
     ]
   })
@@ -213,12 +186,9 @@ resource "aws_iam_policy" "api_queue_sender" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
-        Resource = concat(
-          [aws_sqs_queue.resource_collection.arn],
-          var.retain_legacy_collection_queues ? [aws_sqs_queue.collector[0].arn] : []
-        )
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue"]
+        Resource = [aws_sqs_queue.resource_collection.arn]
       },
       {
         Effect = "Allow"
@@ -226,10 +196,7 @@ resource "aws_iam_policy" "api_queue_sender" {
           "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:PurgeQueue",
           "sqs:ReceiveMessage", "sqs:DeleteMessage"
         ]
-        Resource = concat(
-          [aws_sqs_queue.resource_collection_dlq.arn],
-          var.retain_legacy_collection_queues ? [aws_sqs_queue.collector_dlq[0].arn] : []
-        )
+        Resource = [aws_sqs_queue.resource_collection_dlq.arn]
       },
       {
         Effect   = "Allow"
@@ -289,7 +256,7 @@ resource "aws_lambda_function" "collector" {
 
 resource "aws_lambda_event_source_mapping" "collector_queue" {
   count                              = local.function_enabled ? 1 : 0
-  event_source_arn                   = local.active_queue_arn
+  event_source_arn                   = aws_sqs_queue.resource_collection.arn
   function_name                      = aws_lambda_function.collector[0].arn
   batch_size                         = 1
   maximum_batching_window_in_seconds = 0

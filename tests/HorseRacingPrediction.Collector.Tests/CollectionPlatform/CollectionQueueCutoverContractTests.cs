@@ -7,42 +7,29 @@ public sealed class CollectionQueueCutoverContractTests
 {
     private static readonly string Root = FindRepositoryRoot();
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
-    private static string Variables => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "variables.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
 
     [TestMethod]
-    public void Terraform_DefinesDistinctLegacyAndReplacementQueuePairs()
+    public void Terraform_DefinesOnlyResourceCollectionQueuePair()
     {
-        AssertQueueResource("collector", "horse-racing-prediction-collector");
-        AssertQueueResource("collector_dlq", "horse-racing-prediction-collector-dlq");
         AssertQueueResource("resource_collection", "horse-racing-prediction-resource-collection");
         AssertQueueResource("resource_collection_dlq", "horse-racing-prediction-resource-collection-dlq");
         StringAssert.Contains(ResourceBlock(Main, "resource_collection"),
             "deadLetterTargetArn = aws_sqs_queue.resource_collection_dlq.arn");
-        StringAssert.Contains(ResourceBlock(Main, "collector"),
-            "deadLetterTargetArn = aws_sqs_queue.collector_dlq[0].arn");
         var queueResources = Regex.Matches(Main, "resource \\\"aws_sqs_queue\\\" \\\"(?<name>[^\\\"]+)\\\"")
             .Select(x => x.Groups["name"].Value).Order().ToArray();
-        CollectionAssert.AreEqual(new[]
-        {
-            "collector", "collector_dlq", "resource_collection", "resource_collection_dlq"
-        }, queueResources);
+        CollectionAssert.AreEqual(new[] { "resource_collection", "resource_collection_dlq" }, queueResources);
+        Assert.IsFalse(Main.Contains("horse-racing-prediction-collector-dlq", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void Terraform_DefaultsToLegacyActiveAndRetained()
+    public void Terraform_UsesResourceCollectionQueueWithoutCutoverFlags()
     {
-        StringAssert.Matches(Variables, new Regex(
-            "variable \\\"activate_resource_collection_queue\\\"[\\s\\S]*?default\\s*=\\s*false"));
-        StringAssert.Matches(Variables, new Regex(
-            "variable \\\"retain_legacy_collection_queues\\\"[\\s\\S]*?default\\s*=\\s*true"));
-        StringAssert.Matches(Main, new Regex(
-            "active_queue_arn\\s*=\\s*var\\.activate_resource_collection_queue \\? aws_sqs_queue\\.resource_collection\\.arn : aws_sqs_queue\\.collector\\[0\\]\\.arn"));
-        StringAssert.Matches(Main, new Regex(
-            "active_queue_url\\s*=\\s*var\\.activate_resource_collection_queue \\? aws_sqs_queue\\.resource_collection\\.url : aws_sqs_queue\\.collector\\[0\\]\\.url"));
-        StringAssert.Contains(Outputs, "value = local.active_queue_url");
-        StringAssert.Contains(Outputs, "value = local.active_queue_arn");
+        StringAssert.Contains(Outputs, "value = aws_sqs_queue.resource_collection.url");
+        StringAssert.Contains(Outputs, "value = aws_sqs_queue.resource_collection.arn");
+        Assert.IsFalse(Main.Contains("active_queue_", StringComparison.Ordinal));
+        Assert.IsFalse(Main.Contains("retain_legacy_collection_queues", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -50,18 +37,15 @@ public sealed class CollectionQueueCutoverContractTests
     {
         StringAssert.Contains(DeployWorkflow, "-target=aws_ecr_repository.collector");
         StringAssert.Contains(DeployWorkflow, "-target=aws_ecr_lifecycle_policy.collector");
-        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.collector");
-        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.collector_dlq");
+        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.resource_collection");
+        StringAssert.Contains(DeployWorkflow, "-target=aws_sqs_queue.resource_collection_dlq");
     }
 
     [TestMethod]
-    public void Terraform_GuardsLegacyDeletionAndSwitchesLambdaThroughActiveQueue()
+    public void Terraform_ConnectsLambdaDirectlyToResourceCollectionQueue()
     {
-        var check = NamedBlock(Main, "check", "legacy_queues_removed_only_after_activation");
-        StringAssert.Contains(check,
-            "condition     = var.retain_legacy_collection_queues || var.activate_resource_collection_queue");
         var mapping = ResourceBlock(Main, "collector_queue", "aws_lambda_event_source_mapping");
-        StringAssert.Contains(mapping, "event_source_arn                   = local.active_queue_arn");
+        StringAssert.Contains(mapping, "event_source_arn                   = aws_sqs_queue.resource_collection.arn");
         StringAssert.Contains(mapping, "function_name                      = aws_lambda_function.collector[0].arn");
     }
 
@@ -87,36 +71,12 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
-    public void Terraform_LegacyRetentionCanDeleteOnlyTheOldQueuePair()
+    public void Terraform_IamPoliciesDoNotReferenceLegacyQueues()
     {
-        var guardedResources = new[] { "collector", "collector_dlq", "resource_collection", "resource_collection_dlq" }
-            .Where(name => ResourceBlock(Main, name).Contains(
-                "count                     = var.retain_legacy_collection_queues ? 1 : 0", StringComparison.Ordinal)
-                || ResourceBlock(Main, name).Contains(
-                    "count                      = var.retain_legacy_collection_queues ? 1 : 0", StringComparison.Ordinal))
-            .Order().ToArray();
-        CollectionAssert.AreEqual(new[] { "collector", "collector_dlq" }, guardedResources);
-        Assert.IsFalse(ResourceBlock(Main, "resource_collection").Contains("retain_legacy_collection_queues",
-            StringComparison.Ordinal));
-        Assert.IsFalse(ResourceBlock(Main, "resource_collection_dlq").Contains("retain_legacy_collection_queues",
-            StringComparison.Ordinal));
-    }
-
-    [TestMethod]
-    public void HelperAndRunbook_RequireSuccessfulSmokeTaskIdBeforeLegacyDeletion()
-    {
-        var helper = File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda",
-            "Invoke-CollectionQueueCutover.ps1"));
-        StringAssert.Contains(helper, "if ([string]::IsNullOrWhiteSpace($SmokeTaskId))");
-        StringAssert.Contains(helper, "DeleteLegacy requires -SmokeTaskId from a successful smoke test.");
-        StringAssert.Contains(helper, "'DeleteLegacy' {");
-        StringAssert.Contains(helper, "@('true', 'false')");
-
-        var runbook = File.ReadAllText(Path.Combine(Root, "docs", "changes",
-            "20260911_unified-collection-platform", "cutover-runbook.md"));
-        StringAssert.Contains(runbook, "-Stage DeleteLegacy -VarFile <tfvars-path> -SmokeTaskId <task-id>");
-        StringAssert.Contains(runbook, "Only after Gate 3 is recorded as successful");
-        StringAssert.Contains(runbook, "horse-racing-prediction-collector-dlq");
+        StringAssert.Contains(Main, "Resource = [aws_sqs_queue.resource_collection.arn]");
+        StringAssert.Contains(Main, "Resource = [aws_sqs_queue.resource_collection_dlq.arn]");
+        Assert.IsFalse(Main.Contains("aws_sqs_queue.collector", StringComparison.Ordinal));
+        Assert.IsFalse(Outputs.Contains("legacy_collector_queue_url", StringComparison.Ordinal));
     }
 
     private static void AssertQueueResource(string resourceName, string physicalName)

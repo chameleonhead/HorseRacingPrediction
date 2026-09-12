@@ -7,11 +7,11 @@ output "function_name" {
 }
 
 output "queue_url" {
-  value = local.active_queue_url
+  value = aws_sqs_queue.resource_collection.url
 }
 
 output "queue_arn" {
-  value = local.active_queue_arn
+  value = aws_sqs_queue.resource_collection.arn
 }
 
 output "resource_collection_queue_url" {
@@ -20,10 +20,6 @@ output "resource_collection_queue_url" {
 
 output "resource_collection_queue_arn" {
   value = aws_sqs_queue.resource_collection.arn
-}
-
-output "legacy_collector_queue_url" {
-  value = try(aws_sqs_queue.collector[0].url, null)
 }
 
 output "collector_alert_topic_arn" {
