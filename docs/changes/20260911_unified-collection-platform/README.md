@@ -1,6 +1,6 @@
 # 競馬情報収集状態管理基盤
 
-- Status: Approved (operations completion in progress; production cutover pending)
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-11
 - Updated: 2026-09-12
@@ -201,6 +201,7 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 ## Verification record
 
 - 2026-09-12: 利用者が本番の不要リソース削除を明示的に承認した。稼働中のAPIが新 `horse-racing-prediction-resource-collection` へ送信する一方、Lambda event sourceが旧 `horse-racing-prediction-collector` を参照していた構成不一致を確認した。定常Terraformを新main queue/DLQ固定へ変更し、旧main queue/DLQ、旧出力、旧IAM参照、段階切替フラグと完了済みcutover helperを削除する。適用後に新queueの消費、Attempt生成、旧queue不存在を本番で検証する。
+- 2026-09-12: commit `b5a299e` の app-ci / app-deploy が成功した。本番Terraform applyは2 resources added、3 changed、4 destroyedで完了し、旧 `horse-racing-prediction-collector`、旧DLQ、旧DLQ alarm、旧event source mappingの削除と、新queue向けevent source mapping・alarmの作成をログで確認した。旧構成中に `DispatchAttemptsExceeded` となったDiscovery 2件を通常Recovery経路へ再投入し、先行taskが `収集中`・Attempt 1へ進み、後続taskが単一Lambda concurrencyに従って処理待ちとなることを管理画面で確認した。
 
 - 2026-09-12: 収集状況の独自カード型リンクを、承認済みモックとアプリ内詳細画面で使用している標準 `FluentTabs` に置換した。選択状態はFluentのactive indicator（下線）で表し、各ラベルの件数とURLによるview復元を維持した。独自の背景、角丸、影、件数pillを削除し、狭幅時はタブ列だけを横スクロールする。bUnit対象8件が成功し、実ブラウザーで初期「要対応」と「待機中」の切替、選択下線、`?view=waiting`、一覧更新、ページ全体に横overflowが出ないことを確認した。
 - 2026-09-12: タブ追加レビューの4点を完了した。選択tabpanel内へ実際のfilter/listを移してARIA関係を修正し、5回の逐次件数検索を単一集約endpointへ変更した。再読み込みは初回だけ全体loadingとし、その後は既存内容と最終更新時刻を保持したままFluent progress/statusを示す。実ブラウザーでtabpanelのaccessibility treeと狭幅の後方タブ直接表示を確認した。
