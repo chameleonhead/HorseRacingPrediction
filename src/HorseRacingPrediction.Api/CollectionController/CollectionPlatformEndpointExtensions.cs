@@ -16,6 +16,10 @@ public static class CollectionPlatformEndpointExtensions
         var admin = endpoints.MapGroup("/api/admin/collection").WithTags("Collection Platform");
         admin.MapGet("/tasks", async (CollectionTaskStatus? status, int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetTasksAsync(status, limit ?? 200, token)));
+        admin.MapGet("/execution-batches/{executionBatchId:guid}", async (Guid executionBatchId,
+            CollectionPlatformStore store, CancellationToken token) =>
+            await store.GetExecutionBatchAsync(executionBatchId, token) is { } batch
+                ? Results.Ok(batch) : Results.NotFound());
         admin.MapGet("/tasks/search", async (string? statuses, ResourceType? resourceType, string? provider,
             string? definitionId, CollectionLane? lane, string? search, string? errorSearch, DateTimeOffset? createdFrom,
             DateTimeOffset? createdTo, int? page, int? pageSize, CollectionPlatformStore store,
@@ -64,7 +68,7 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapGet("/dashboard", async (CollectionPlatformStore store, CancellationToken token) =>
         {
             var progressTask = store.GetProgressAsync(token);
-            var notificationsTask = store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var notificationsTask = store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
             var backfillsTask = store.GetBackfillBatchesAsync(token);
             await Task.WhenAll(progressTask, notificationsTask, backfillsTask);
             return Results.Ok(new CollectionOperationsDashboard(await progressTask,
@@ -89,12 +93,15 @@ public static class CollectionPlatformEndpointExtensions
             CancellationToken token) => await store.CancelTaskAsync(taskId, DateTimeOffset.UtcNow, token)
                 ? Results.NoContent() : Results.Conflict());
         admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
-            CancellationToken token) => Results.Ok(await store.GetPendingFailureNotificationsAsync(
+            CancellationToken token) => Results.Ok(await store.GetActionableFailureNotificationsAsync(
+                DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
+        admin.MapGet("/failure-notifications/unpublished", async (int? limit, CollectionPlatformStore store,
+            CancellationToken token) => Results.Ok(await store.GetUnpublishedFailureNotificationsAsync(
                 DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
         admin.MapGet("/failure-notifications/groups", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) =>
         {
-            var notifications = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow,
+            var notifications = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow,
                 Math.Clamp(limit ?? 5000, 1, 10000), token);
             return Results.Ok(BuildFailureGroups(notifications));
         });
@@ -106,7 +113,7 @@ public static class CollectionPlatformEndpointExtensions
                 return Results.BadRequest(new { message = "At least one notification is required." });
             if (selectedIds.Count > 10000)
                 return Results.BadRequest(new { message = "At most 10000 notifications can be recovered at once." });
-            var pending = await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var pending = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
             var selected = pending.Where(x => selectedIds.Contains(x.NotificationId)).ToList();
             if (selected.Count != selectedIds.Count)
                 return Results.Conflict(new { message = "Some failures are no longer pending. Refresh and try again." });
@@ -123,8 +130,6 @@ public static class CollectionPlatformEndpointExtensions
                     DateTimeOffset.UtcNow, request.Lane, request.Priority, cancellationToken: token);
                 if (receipt.CreatedTask) created++;
                 taskIds.Add(receipt.TaskId);
-                await store.MarkFailureNotificationPublishedAsync(failure.NotificationId,
-                    DateTimeOffset.UtcNow, token);
             }
             return Results.Accepted(value: new CollectionFailureRecoveryResult(selected.Count, created,
                 selected.Count - created, taskIds.Distinct().ToList()));
@@ -274,9 +279,14 @@ public static class CollectionPlatformEndpointExtensions
         worker.MapPost("/tasks/{taskId:guid}/acquire", async (Guid taskId, AcquireCollectionTaskRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
         {
+            if (request.Correlation is not null && !request.Correlation.IsSupported())
+                return Results.BadRequest(new { Error = "The collection attempt correlation is invalid." });
             var lease = await store.AcquireAsync(taskId, request.DispatchGeneration, DateTimeOffset.UtcNow,
-                TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), token);
-            return lease is null ? Results.Conflict() : Results.Ok(lease);
+                TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), request.Correlation, token);
+            if (lease is not null)
+                return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease));
+            var status = await store.ClassifyAcquireFailureAsync(taskId, request.DispatchGeneration, token);
+            return Results.Ok(new CollectionTaskAcquireResult(status));
         });
         worker.MapPost("/tasks/{taskId:guid}/complete", async (Guid taskId, CompleteCollectionAttemptRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -379,7 +389,8 @@ public sealed record CreateCollectionRequest(ResourceType ResourceType, string P
     string? ExplicitUrl = null, string? BatchId = null, DateOnly? EffectiveDate = null,
     IReadOnlyDictionary<string, string>? Attributes = null);
 
-public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900);
+public sealed record AcquireCollectionTaskRequest(long DispatchGeneration, int LeaseSeconds = 900,
+    CollectionAttemptCorrelation? Correlation = null);
 public sealed record HeartbeatCollectionTaskRequest(string LeaseToken, int LeaseSeconds = 900);
 public sealed record PauseCollectionPipelineRequest(string? Reason);
 public sealed record RecoverCollectionFailuresRequest(IReadOnlyList<Guid> NotificationIds,

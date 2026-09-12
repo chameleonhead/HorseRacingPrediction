@@ -1,0 +1,87 @@
+@page "/jobs/execution-batches/{ExecutionBatchId:guid}"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集詳細に戻る" Title="実行バッチ詳細"
+                     Section="運用 / 収集管理" Description="同じLambda呼び出しとブラウザーセッションで処理された収集タスクです。">
+    <Actions><FluentButton OnClick="LoadAsync" Disabled="loading">更新</FluentButton></Actions>
+</RaceOpsObjectHeader>
+
+@if (loading)
+{
+    <UiState Kind="loading" Title="実行バッチを読み込んでいます" />
+}
+else if (errors.Count > 0)
+{
+    <UiState Kind="error" Title="実行バッチを表示できません" Message="@string.Join(" ", errors)" />
+}
+else if (batch is not null)
+{
+    <section class="profile-facts" aria-label="実行バッチの概要">
+        <div class="profile-fact"><span>処理タスク</span><strong>@batch.Tasks.Count / @batch.BatchTaskCount 件</strong></div>
+        <div class="profile-fact"><span>開始</span><strong>@Time(batch.StartedAt)</strong></div>
+        <div class="profile-fact"><span>終了</span><strong>@Time(batch.FinishedAt)</strong></div>
+        <div class="profile-fact"><span>処理時間</span><strong>@Duration(batch)</strong></div>
+    </section>
+
+    <section class="detail-card detail-section">
+        <h2>実行の識別情報</h2>
+        <dl class="meta">
+            <dt>実行バッチID</dt><dd><code>@batch.ExecutionBatchId</code></dd>
+            <dt>配送Envelope ID</dt><dd><code>@batch.DispatchEnvelopeId</code></dd>
+            <dt>SQS message ID</dt><dd><code>@batch.QueueMessageId</code></dd>
+            <dt>Lambda request ID</dt><dd><code>@(batch.LambdaRequestId ?? "ローカル実行")</code></dd>
+        </dl>
+    </section>
+
+    <section class="entity-section detail-section">
+        <h2>同じバッチの収集タスク</h2>
+        <p class="section-description">処理順と結果を確認し、対象を選ぶとその収集詳細へ移動できます。</p>
+        <FluentDataGrid Items="@batch.Tasks.OrderBy(x => x.BatchTaskOrdinal).AsQueryable()"
+                        TGridItem="CollectionExecutionBatchTaskSummary" aria-label="同じ実行バッチの収集タスク">
+            <PropertyColumn Property="@(x => x.BatchTaskOrdinal)" Title="順序" />
+            <TemplateColumn Title="収集対象"><a href="@TaskUrl(context)">@ResourceLabel(context.Resource) / @context.Resource.Id</a></TemplateColumn>
+            <TemplateColumn Title="収集内容">@DefinitionLabel(context.Definition)</TemplateColumn>
+            <TemplateColumn Title="タスク状態">@TaskStatusLabel(context.Status)</TemplateColumn>
+            <TemplateColumn Title="試行結果">@AttemptResultLabel(context.Result)</TemplateColumn>
+            <TemplateColumn Title="処理時間">@TaskDuration(context)</TemplateColumn>
+        </FluentDataGrid>
+    </section>
+}
+
+@code {
+    [Parameter] public Guid ExecutionBatchId { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+    private bool loading;
+    private HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionExecutionBatchDetail? batch;
+    private IReadOnlyList<string> errors = [];
+    private string BackHref => !string.IsNullOrWhiteSpace(ReturnUrl) && ReturnUrl.StartsWith("/jobs/", StringComparison.Ordinal)
+        && !ReturnUrl.StartsWith("//", StringComparison.Ordinal) ? ReturnUrl : "/jobs";
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+    private async Task LoadAsync()
+    {
+        loading = true;
+        errors = [];
+        try
+        {
+            batch = await Api.GetCollectionExecutionBatchAsync(ExecutionBatchId);
+            if (batch is null) errors = ["指定された実行バッチは見つかりませんでした。"];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            errors = ["管理APIに接続できません。もう一度お試しください。"];
+        }
+        finally { loading = false; }
+    }
+
+    private string TaskUrl(CollectionExecutionBatchTaskSummary task)
+        => $"/jobs/{task.Resource.Type}/{Uri.EscapeDataString(task.Resource.Provider)}/{Uri.EscapeDataString(task.Resource.Id)}/{Uri.EscapeDataString(task.Definition.Value)}?returnUrl={Uri.EscapeDataString($"/jobs/execution-batches/{ExecutionBatchId:D}")}";
+    private static string ResourceLabel(ResourceKey resource) => resource.Type switch { ResourceType.Race => "レース", ResourceType.RaceCard => "出馬表", ResourceType.RaceOdds => "オッズ", ResourceType.RaceResult => "レース結果", ResourceType.Horse => "競走馬", ResourceType.Jockey => "騎手", ResourceType.Trainer => "調教師", _ => resource.Type.ToString() };
+    private static string DefinitionLabel(CollectionDefinitionId definition) => definition.Value switch { "race-discovery" => "開催レースの探索", "race-card" => "出馬表の収集", "race-odds" => "オッズの収集", "race-result" => "レース結果の収集", "horse-profile" => "競走馬情報の収集", "jockey-profile" => "騎手情報の収集", "trainer-profile" => "調教師情報の収集", _ => definition.Value };
+    private static string TaskStatusLabel(CollectionTaskStatus value) => value switch { CollectionTaskStatus.Pending => "登録待ち", CollectionTaskStatus.Ready => "実行待ち", CollectionTaskStatus.Running => "実行中", CollectionTaskStatus.RetryWaiting => "再試行待ち", CollectionTaskStatus.WaitingDiscovery => "取得先の探索待ち", CollectionTaskStatus.Succeeded => "完了", CollectionTaskStatus.Failed => "失敗", CollectionTaskStatus.Cancelled => "中断", CollectionTaskStatus.DeadLetter => "要対応", _ => value.ToString() };
+    private static string AttemptResultLabel(CollectionAttemptResult value) => value switch { CollectionAttemptResult.Running => "実行中", CollectionAttemptResult.Succeeded => "成功", CollectionAttemptResult.TransientFailure => "一時的な失敗", CollectionAttemptResult.PermanentFailure => "恒久的な失敗", CollectionAttemptResult.ResourceNotFound => "対象なし", CollectionAttemptResult.ResourceNotYetAvailable => "公開待ち", CollectionAttemptResult.ParseFailure => "読み取り失敗", CollectionAttemptResult.ValidationFailure => "内容検証失敗", CollectionAttemptResult.UnexpectedPage => "別ページを検出", CollectionAttemptResult.AccessLimited => "アクセス制限", CollectionAttemptResult.Cancelled => "中断", _ => value.ToString() };
+    private static string Time(DateTimeOffset? value) => value?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") ?? "—";
+    private static string Duration(HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionExecutionBatchDetail value) => value.FinishedAt is null ? "実行中" : $"{Math.Max(0, (value.FinishedAt.Value - value.StartedAt).TotalSeconds):0.0} 秒";
+    private static string TaskDuration(CollectionExecutionBatchTaskSummary value) => value.FinishedAt is null ? "実行中" : $"{Math.Max(0, (value.FinishedAt.Value - value.StartedAt).TotalSeconds):0.0} 秒";
+}

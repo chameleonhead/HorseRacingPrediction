@@ -22,17 +22,18 @@ public sealed class LocalCollectionQueueTests
     public async Task Message_IsInvisibleUntilReleased_AndAckRemovesIt()
     {
         var queue = new LocalCollectionQueue(Path.Combine(_directory, "queue.db"));
-        var notification = new CollectionTaskNotification(Guid.NewGuid(), 3);
-        await queue.SendAsync(notification);
+        var envelope = CreateEnvelope(3);
+        await queue.SendAsync(envelope);
 
         var received = await queue.ReceiveAsync(TimeSpan.FromMinutes(1));
         Assert.IsNotNull(received);
-        Assert.AreEqual(notification, received.Notification);
+        AssertEnvelope(envelope, received.Envelope);
         Assert.IsNull(await queue.ReceiveAsync(TimeSpan.FromMinutes(1)));
 
         await queue.ReleaseAsync(received.ReceiptHandle);
         var redelivered = await queue.ReceiveAsync(TimeSpan.FromMinutes(1));
         Assert.IsNotNull(redelivered);
+        AssertEnvelope(envelope, redelivered.Envelope);
         Assert.AreEqual(2, redelivered.ReceiveCount);
         await queue.AcknowledgeAsync(redelivered.ReceiptHandle);
         Assert.AreEqual((0L, 0L, 0L), await queue.GetDepthAsync());
@@ -42,7 +43,7 @@ public sealed class LocalCollectionQueueTests
     public async Task Message_MovesToDeadLetterAfterMaximumReceives()
     {
         var queue = new LocalCollectionQueue(Path.Combine(_directory, "queue.db"));
-        await queue.SendAsync(new(Guid.NewGuid(), 1));
+        await queue.SendAsync(CreateEnvelope(1));
         for (var count = 1; count <= 3; count++)
         {
             var message = await queue.ReceiveAsync(TimeSpan.FromMinutes(1));
@@ -55,15 +56,26 @@ public sealed class LocalCollectionQueueTests
     }
 
     [TestMethod]
-    public void Notification_SerializesExplicitContractVersion()
+    public void Envelope_SerializesExplicitContractVersion()
     {
-        var notification = new CollectionTaskNotification(Guid.NewGuid(), 4);
-        using var json = JsonDocument.Parse(JsonSerializer.Serialize(notification,
+        var envelope = CreateEnvelope(4);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(envelope,
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
-        Assert.AreEqual(CollectionTaskNotification.CurrentContractVersion,
+        Assert.AreEqual(CollectionDispatchEnvelope.CurrentContractVersion,
             json.RootElement.GetProperty("contractVersion").GetInt32());
-        Assert.IsTrue(notification.IsSupported());
-        Assert.IsFalse((notification with { ContractVersion = 99 }).IsSupported());
+        Assert.IsTrue(envelope.IsSupported());
+        Assert.IsFalse((envelope with { ContractVersion = 99 }).IsSupported());
+    }
+
+    private static CollectionDispatchEnvelope CreateEnvelope(long generation) => new(Guid.NewGuid(),
+        new("JRA", new("race-card"), new DateOnly(2026, 9, 12), CollectionLane.Realtime),
+        [new(Guid.NewGuid(), generation)]);
+
+    private static void AssertEnvelope(CollectionDispatchEnvelope expected, CollectionDispatchEnvelope actual)
+    {
+        Assert.AreEqual(expected.EnvelopeId, actual.EnvelopeId);
+        Assert.AreEqual(expected.Compatibility, actual.Compatibility);
+        CollectionAssert.AreEqual(expected.Tasks.ToArray(), actual.Tasks.ToArray());
     }
 }

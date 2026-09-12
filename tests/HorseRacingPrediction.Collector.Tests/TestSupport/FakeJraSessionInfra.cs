@@ -14,13 +14,13 @@ namespace HorseRacingPrediction.Collector.Tests.TestSupport;
 /// 最小限のダミー実装。Navigate/Pagesは、テストでWorkflowファクトリを差し替えて使わない限り
 /// 呼ばれない想定であり、呼ばれた場合は明示的に失敗させる。
 /// </summary>
-internal sealed class NoOpWebBrowser : IWebBrowser
+internal class NoOpWebBrowser : IWebBrowser
 {
     public bool IsDisposed { get; private set; }
 
     public string? CurrentUrl => null;
 
-    public ValueTask DisposeAsync()
+    public virtual ValueTask DisposeAsync()
     {
         IsDisposed = true;
         return ValueTask.CompletedTask;

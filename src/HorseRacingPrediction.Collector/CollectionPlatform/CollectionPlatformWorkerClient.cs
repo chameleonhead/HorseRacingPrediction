@@ -11,11 +11,20 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
     {
         using var acquireResponse = await client.PostAsJsonAsync(
             $"api/internal/collection/tasks/{notification.TaskId}/acquire",
-            new { notification.DispatchGeneration, LeaseSeconds = 900 }, cancellationToken).ConfigureAwait(false);
-        if (acquireResponse.StatusCode == System.Net.HttpStatusCode.Conflict) return;
+            new { notification.DispatchGeneration, LeaseSeconds = 900,
+                Correlation = CollectionAttemptCorrelationScope.Current }, cancellationToken).ConfigureAwait(false);
         acquireResponse.EnsureSuccessStatusCode();
-        var task = await acquireResponse.Content.ReadFromJsonAsync<LeasedCollectionTask>(cancellationToken)
-            .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task lease response was empty.");
+        var acquire = await acquireResponse.Content.ReadFromJsonAsync<CollectionTaskAcquireResult>(cancellationToken)
+            .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task acquire response was empty.");
+        if (acquire.Status is CollectionTaskAcquireStatus.AlreadyTerminal
+            or CollectionTaskAcquireStatus.SupersededGeneration) return;
+        if (acquire.Status == CollectionTaskAcquireStatus.ActiveElsewhere)
+            throw new CollectionTaskActiveElsewhereException(notification.TaskId);
+        var task = acquire.Task ?? throw new InvalidOperationException("Acquired task lease was empty.");
+
+        var expected = JraSessionExecutionScope.CurrentCompatibilityKey;
+        if (expected is not null && !IsCompatible(task, expected))
+            throw new CollectionDispatchCompatibilityException(notification.TaskId);
 
         CollectionAttemptCompletion completion;
         try
@@ -41,6 +50,12 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);
     }
 
+    private static bool IsCompatible(LeasedCollectionTask task, CollectionDispatchCompatibilityKey expected)
+        => string.Equals(task.Resource.Provider, expected.Provider, StringComparison.Ordinal)
+           && task.Definition == expected.Definition
+           && task.EffectiveDate == expected.EffectiveDate
+           && task.Lane == expected.Lane;
+
     private async Task CompleteAsync(Guid taskId, string leaseToken, CollectionAttemptCompletion completion,
         CancellationToken cancellationToken)
     {
@@ -59,3 +74,9 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         int? HttpStatusCode, string? PageIdentification, DateTimeOffset? RetryAt,
         DateTimeOffset? NextCollectionAt, IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes);
 }
+
+public sealed class CollectionTaskActiveElsewhereException(Guid taskId)
+    : Exception($"Collection task {taskId} is active in another worker.");
+
+public sealed class CollectionDispatchCompatibilityException(Guid taskId)
+    : Exception($"Collection task {taskId} did not match its dispatch envelope compatibility key.");

@@ -4,8 +4,9 @@ namespace HorseRacingPrediction.Api.CollectionController;
 
 public sealed class LocalCollectionTaskQueue(LocalCollectionQueue queue) : ICollectionTaskQueue, ICollectionPlatformTaskQueue
 {
-    Task ICollectionPlatformTaskQueue.SendAsync(CollectionTaskNotification notification, CancellationToken token)
-        => queue.SendAsync(notification, token);
+    async Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendAsync(
+        CollectionDispatchEnvelope envelope, CancellationToken token)
+        => new((await queue.SendAsync(envelope, token).ConfigureAwait(false)).ToString());
 
     public async Task<CollectionQueueDepth> GetQueueDepthAsync(CancellationToken token)
     {

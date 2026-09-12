@@ -92,6 +92,13 @@ The management UI uses Japanese business terms as the primary labels. Internal m
 | Backfill | 過去データ収集 |
 
 Resource types, state/task/attempt statuses, lanes, location sources, and location statuses are translated at the presentation boundary. The persisted enum values and API contracts are not localized. Empty states explain the next action, explicit URL input explains that it is normally unnecessary, and bulk recollection uses the sequence `対象を確認 -> 再取得を依頼`.
+
+## 障害対応状態
+
+- 「要対応」と「障害のまとまり」はOpenの障害だけを同じActionable queryから表示する。
+- 再取得受付後はRecoveryInProgressとなり通常の障害一覧から外れるが、Resource詳細の「障害履歴」で追跡できる。
+- ResolvedとSupersededは件数へ含めず、発生、対応開始、解決時刻とともにResource詳細へ残す。
+- SNS等への通知済み状態は運用対応状態を変更しない。
 ## 一覧画面のタブ規約
 
 - 主要一覧のview切替は Microsoft Fluent UI の `FluentTabs` を使用し、独自button群で模倣しない。

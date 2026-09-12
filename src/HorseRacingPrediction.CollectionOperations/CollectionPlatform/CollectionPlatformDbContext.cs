@@ -74,6 +74,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.Property(x => x.Result).HasConversion<string>();
             e.Property(x => x.StartedAt).HasConversion<string>();
             e.HasIndex(x => new { x.TaskId, x.AttemptNumber }).IsUnique();
+            e.HasIndex(x => x.ExecutionBatchId);
         });
         modelBuilder.Entity<ResourceLocationEntity>(e =>
         {
@@ -85,6 +86,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_task_outbox"); e.HasKey(x => x.OutboxId);
             e.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
+            e.HasIndex(x => new { x.DispatchedAt, x.ReservedUntilUnixMilliseconds });
         });
         modelBuilder.Entity<CollectionPlatformControlEntity>(e =>
         {
@@ -94,6 +96,9 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_failure_notifications"); e.HasKey(x => x.NotificationId);
             e.HasIndex(x => new { x.PublishedAt, x.AvailableAt });
+            e.Property(x => x.ResolutionStatus).HasConversion<string>();
+            e.HasIndex(x => new { x.ResolutionStatus, x.AvailableAt });
+            e.HasIndex(x => x.RecoveryTaskId);
             e.HasIndex(x => x.TaskId);
         });
         modelBuilder.Entity<BackfillBatchEntity>(e =>

@@ -24,6 +24,7 @@ builder.Services.AddHttpAgentServices();
 builder.Services.AddJraScraping();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
+builder.Services.Configure<RaceDiscoveryCollectionOptions>(builder.Configuration.GetSection("RaceDiscoveryCollection"));
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();
 builder.Services.Configure<RaceOddsCollectionOptions>(builder.Configuration.GetSection("RaceOddsCollection"));
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceOddsCollectionHandler>();
@@ -87,8 +88,21 @@ if (runLocalQueue)
         if (message is null) { await Task.Delay(TimeSpan.FromSeconds(1)); continue; }
         try
         {
-            await app.Services.GetRequiredService<CollectionPlatformWorkerClient>()
-                .ExecuteAsync(message.Notification, CancellationToken.None).ConfigureAwait(false);
+            var worker = app.Services.GetRequiredService<CollectionPlatformWorkerClient>();
+            var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
+            await JraSessionExecutionScope.ExecuteAsync(sessionFactory, async cancellationToken =>
+            {
+                  var executionBatchId = Guid.NewGuid();
+                  for (var index = 0; index < message.Envelope.Tasks.Count; index++)
+                  {
+                      var task = message.Envelope.Tasks[index];
+                      using var correlation = CollectionAttemptCorrelationScope.Push(new(executionBatchId,
+                          message.Envelope.EnvelopeId, $"local-{message.MessageId}", null,
+                          index + 1, message.Envelope.Tasks.Count));
+                      await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), cancellationToken)
+                          .ConfigureAwait(false);
+                  }
+            }, CancellationToken.None, message.Envelope.Compatibility).ConfigureAwait(false);
             await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -100,9 +114,8 @@ if (runLocalQueue)
 }
 else if (runOnce)
 {
-    // Lambda（SQS event source mapping）から1回呼ばれる経路。常駐BackgroundServiceの
-    // ExecuteAsyncループは開始せず、1メッセージ=1ジョブの原則で、このLambda呼び出しを
-    // 起こしたSQSメッセージが指すジョブ1件だけを処理して終了する。
+    // Lambda（SQS event source mapping）から1回呼ばれる経路。1 SQS message内の
+    // 互換Task envelopeを逐次処理し、未解決messageだけを部分失敗応答へ含める。
     // Lambdaのタイムアウトは15分（infra/collector-lambda/main.tf）。結果報告・
     // ブラウザー終了の猶予として1分だけ残し、14分で打ち切る。
     using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(14));
@@ -119,11 +132,20 @@ else if (runOnce)
 
     try
     {
-        var notification = TryReadTriggeringNotification();
-        if (notification is null)
-            throw new InvalidOperationException("A valid resource collection SQS notification is required.");
-        await app.Services.GetRequiredService<CollectionPlatformWorkerClient>()
-            .ExecuteAsync(notification, cts.Token).ConfigureAwait(false);
+        var eventPath = Environment.GetEnvironmentVariable("COLLECTOR_EVENT_PATH");
+        if (string.IsNullOrWhiteSpace(eventPath) || !File.Exists(eventPath))
+            throw new InvalidOperationException("A resource collection SQS event is required.");
+        var worker = app.Services.GetRequiredService<CollectionPlatformWorkerClient>();
+        var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
+        var response = await CollectionLambdaInvocation.ExecuteAsync(await File.ReadAllTextAsync(eventPath, cts.Token),
+            worker.ExecuteAsync, HasLambdaTimeRemaining, cts.Token,
+             (envelope, operation, cancellationToken) => JraSessionExecutionScope.ExecuteAsync(
+                  sessionFactory, operation, cancellationToken, envelope.Compatibility),
+             requestId).ConfigureAwait(false);
+        var responsePath = Environment.GetEnvironmentVariable("COLLECTOR_RESPONSE_PATH")
+            ?? "/tmp/collector-response.json";
+        await File.WriteAllTextAsync(responsePath, CollectionLambdaInvocation.SerializeResponse(response),
+            CancellationToken.None).ConfigureAwait(false);
     }
     catch (Exception ex) when (ex is TimeoutException || (ex is OperationCanceledException && cts.IsCancellationRequested))
     {
@@ -147,56 +169,9 @@ else
     throw new InvalidOperationException("Collector requires --once and a resource collection notification.");
 }
 
-/// <summary>
-/// bootstrapがLambdaランタイムAPIから受け取り、環境変数 COLLECTOR_EVENT_PATH の指す
-/// ファイルへ書き出しておいたSQSイベント（Records[0].body に <see cref="CollectionTaskNotification"/>
-/// のJSONが入っている）から、このLambda呼び出しを起こした通知を読み取る。
-/// batch_size=1（infra/collector-lambda/main.tf）のため通常は1件。契約バージョン、TaskId、
-/// DispatchGenerationを検証し、旧形式・破損通知は実行せずLambda呼び出しを失敗させる。
-/// </summary>
-static HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification? TryReadTriggeringNotification()
+static bool HasLambdaTimeRemaining()
 {
-    var eventPath = Environment.GetEnvironmentVariable("COLLECTOR_EVENT_PATH");
-    if (string.IsNullOrWhiteSpace(eventPath) || !File.Exists(eventPath))
-    {
-        return null;
-    }
-
-    try
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(eventPath));
-        if (!document.RootElement.TryGetProperty("Records", out var records)
-            || records.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        var firstRecord = records.EnumerateArray().FirstOrDefault();
-        if (firstRecord.ValueKind != JsonValueKind.Object
-            || !firstRecord.TryGetProperty("body", out var bodyElement)
-            || bodyElement.ValueKind != JsonValueKind.String)
-        {
-            return null;
-        }
-
-        var body = bodyElement.GetString()!;
-        using var bodyDocument = JsonDocument.Parse(body);
-        if (!bodyDocument.RootElement.TryGetProperty("contractVersion", out var versionElement)
-            || versionElement.ValueKind != JsonValueKind.Number
-            || !versionElement.TryGetInt32(out var version)
-            || version != HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification.CurrentContractVersion)
-        {
-            return null;
-        }
-
-        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var notification = JsonSerializer.Deserialize<HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification>(
-            body, jsonOptions);
-        return notification?.IsSupported() == true ? notification : null;
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"Failed to parse the triggering SQS event ({eventPath}): {ex.Message}");
-        return null;
-    }
+    var value = Environment.GetEnvironmentVariable("AWS_LAMBDA_DEADLINE_MS");
+    return !long.TryParse(value, out var deadlineMilliseconds)
+           || DateTimeOffset.UtcNow < DateTimeOffset.FromUnixTimeMilliseconds(deadlineMilliseconds).AddMinutes(-1);
 }

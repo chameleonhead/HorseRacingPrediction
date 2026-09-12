@@ -18,8 +18,8 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue, ICollectionPl
     }
 
 
-    async Task ICollectionPlatformTaskQueue.SendAsync(
-        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification notification,
+    async Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendAsync(
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionDispatchEnvelope envelope,
         CancellationToken cancellationToken)
     {
         if (!_options.Enabled || (string.IsNullOrWhiteSpace(_options.QueueUrl) && string.IsNullOrWhiteSpace(_options.QueueName)))
@@ -27,11 +27,12 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue, ICollectionPl
         var queueUrl = _options.QueueUrl;
         if (string.IsNullOrWhiteSpace(queueUrl))
             queueUrl = (await _sqs.GetQueueUrlAsync(_options.QueueName, cancellationToken).ConfigureAwait(false)).QueueUrl;
-        await _sqs.SendMessageAsync(new SendMessageRequest
+        var response = await _sqs.SendMessageAsync(new SendMessageRequest
         {
             QueueUrl = queueUrl,
-            MessageBody = JsonSerializer.Serialize(notification, JsonOptions)
+            MessageBody = JsonSerializer.Serialize(envelope, JsonOptions)
         }, cancellationToken).ConfigureAwait(false);
+        return new(response.MessageId);
     }
 
     async Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ICollectionPlatformTaskQueue.ReceiveDeadLetterMessagesAsync(

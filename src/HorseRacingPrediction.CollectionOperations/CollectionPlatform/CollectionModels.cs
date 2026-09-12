@@ -101,6 +101,16 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
 
+public enum CollectionTaskAcquireStatus
+{
+    Acquired,
+    AlreadyTerminal,
+    SupersededGeneration,
+    ActiveElsewhere,
+}
+
+public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Status, LeasedCollectionTask? Task = null);
+
 public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, string LeaseToken, DateTimeOffset LeaseExpiresAt,
@@ -153,7 +163,34 @@ public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGenera
     public bool IsSupported()
         => ContractVersion == CurrentContractVersion && TaskId != Guid.Empty && DispatchGeneration > 0;
 }
+
+public sealed record CollectionDispatchTaskReference(Guid TaskId, long DispatchGeneration)
+{
+    public bool IsSupported() => TaskId != Guid.Empty && DispatchGeneration > 0;
+}
+
+public sealed record CollectionDispatchCompatibilityKey(string Provider, CollectionDefinitionId Definition,
+    DateOnly? EffectiveDate, CollectionLane Lane)
+{
+    public bool IsSupported() => !string.IsNullOrWhiteSpace(Provider) && !string.IsNullOrWhiteSpace(Definition.Value);
+}
+
+public sealed record CollectionDispatchEnvelope(Guid EnvelopeId, CollectionDispatchCompatibilityKey Compatibility,
+    IReadOnlyList<CollectionDispatchTaskReference> Tasks, int ContractVersion = 1)
+{
+    public const int CurrentContractVersion = 1;
+
+    public bool IsSupported()
+        => ContractVersion == CurrentContractVersion
+           && EnvelopeId != Guid.Empty
+           && Compatibility is not null
+           && Compatibility.IsSupported()
+           && Tasks is { Count: > 0 }
+           && Tasks.All(x => x is not null && x.IsSupported())
+           && Tasks.Select(x => x.TaskId).Distinct().Count() == Tasks.Count;
+}
 public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification,
+    ResourceKey Resource, CollectionDefinitionId Definition, DateOnly? EffectiveDate,
     CollectionLane Lane, int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
@@ -198,9 +235,12 @@ public sealed record CollectionReadinessSnapshot(int PendingHorseRequests, int P
 }
 
 public sealed record CollectionPipelineState(bool IsPaused, string? Reason, DateTimeOffset? UpdatedAt);
+public enum CollectionFailureResolutionStatus { Open, RecoveryInProgress, Resolved, Superseded }
 public sealed record PendingCollectionFailureNotification(Guid NotificationId, Guid TaskId,
     ResourceKey Resource, CollectionDefinitionId Definition, CollectionTaskStatus Status,
-    string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt);
+    string? ErrorCode, string? ErrorMessage, int AttemptCount, DateTimeOffset FailedAt,
+    CollectionFailureResolutionStatus ResolutionStatus = CollectionFailureResolutionStatus.Open,
+    Guid? RecoveryTaskId = null, DateTimeOffset? RecoveryStartedAt = null, DateTimeOffset? ResolvedAt = null);
 public sealed record CollectionFailureGroup(string GroupKey, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage, int Count,
     DateTimeOffset FirstFailedAt, DateTimeOffset LastFailedAt,
@@ -212,12 +252,29 @@ public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevis
 public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,
     DateTimeOffset StartedAt, DateTimeOffset? FinishedAt, CollectionAttemptResult Result,
     string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl, int? HttpStatusCode,
-    string? PageIdentification = null);
+    string? PageIdentification = null, Guid? ExecutionBatchId = null, Guid? DispatchEnvelopeId = null,
+    string? QueueMessageId = null, string? LambdaRequestId = null, int? BatchTaskOrdinal = null,
+    int? BatchTaskCount = null);
+public sealed record CollectionAttemptCorrelation(Guid ExecutionBatchId, Guid DispatchEnvelopeId,
+    string QueueMessageId, string? LambdaRequestId, int BatchTaskOrdinal, int BatchTaskCount)
+{
+    public bool IsSupported() => ExecutionBatchId != Guid.Empty && DispatchEnvelopeId != Guid.Empty
+        && !string.IsNullOrWhiteSpace(QueueMessageId) && QueueMessageId.Length <= 256
+        && (LambdaRequestId is null || LambdaRequestId.Length <= 256)
+        && BatchTaskCount > 0 && BatchTaskOrdinal > 0 && BatchTaskOrdinal <= BatchTaskCount;
+}
+public sealed record CollectionExecutionBatchTaskSummary(Guid TaskId, ResourceKey Resource,
+    CollectionDefinitionId Definition, CollectionTaskStatus Status, CollectionAttemptResult Result,
+    int AttemptNumber, int BatchTaskOrdinal, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
+public sealed record CollectionExecutionBatchDetail(Guid ExecutionBatchId, Guid DispatchEnvelopeId,
+    string QueueMessageId, string? LambdaRequestId, int BatchTaskCount, DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt, IReadOnlyList<CollectionExecutionBatchTaskSummary> Tasks);
 public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<ResourceLocationCandidate> Locations, IReadOnlyList<CollectionRequestSummary> Requests,
     IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts,
     int RequestTotal = 0, int TaskTotal = 0, int AttemptTotal = 0, int HistoryPage = 1, int HistoryPageSize = 25,
-    CollectionTaskSummary? LatestTask = null, int? TaskHistoryPage = null, int? AttemptHistoryPage = null)
+    CollectionTaskSummary? LatestTask = null, int? TaskHistoryPage = null, int? AttemptHistoryPage = null,
+    IReadOnlyList<PendingCollectionFailureNotification>? Failures = null)
 {
     public int RequestHistoryPage => HistoryPage;
     public int EffectiveTaskHistoryPage => TaskHistoryPage ?? HistoryPage;

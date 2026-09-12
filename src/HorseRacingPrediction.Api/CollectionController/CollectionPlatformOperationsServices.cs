@@ -70,18 +70,14 @@ public sealed class CollectionPlatformDeadLetterReconciler(
             try
             {
                 using var document = JsonDocument.Parse(message.Body);
-                if (!document.RootElement.TryGetProperty("contractVersion", out var version)
-                    || version.ValueKind != JsonValueKind.Number
-                    || !version.TryGetInt32(out var contractVersion)
-                    || contractVersion != CollectionTaskNotification.CurrentContractVersion)
-                    throw new JsonException("DLQ message has a missing or unsupported contract version.");
-                var notification = JsonSerializer.Deserialize<CollectionTaskNotification>(message.Body, JsonOptions);
-                if (notification?.IsSupported() != true)
-                    throw new JsonException("DLQ message did not contain a supported task notification.");
-                reconciled += await store.ReconcileDeadLetterAsync(notification.TaskId,
-                    notification.DispatchGeneration, DateTimeOffset.UtcNow,
-                    "Worker delivery exhausted and entered the dead-letter queue.", cancellationToken)
-                    .ConfigureAwait(false) ? 1 : 0;
+                var envelope = JsonSerializer.Deserialize<CollectionDispatchEnvelope>(message.Body, JsonOptions);
+                if (envelope?.IsSupported() != true)
+                    throw new JsonException("DLQ message did not contain a supported dispatch envelope.");
+                foreach (var task in envelope.Tasks)
+                    reconciled += await store.ReconcileDeadLetterAsync(task.TaskId,
+                        task.DispatchGeneration, DateTimeOffset.UtcNow,
+                        $"Worker envelope {envelope.EnvelopeId} exhausted delivery and entered the dead-letter queue.",
+                        cancellationToken).ConfigureAwait(false) ? 1 : 0;
                 await queue.DeleteDeadLetterMessageAsync(message.ReceiptHandle, cancellationToken).ConfigureAwait(false);
             }
             catch (JsonException ex)

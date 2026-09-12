@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
+using BatchDetailPage = HorseRacingPrediction.Api.Web.Components.Pages.CollectionExecutionBatchDetail;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -30,6 +31,11 @@ public sealed class JobDetailComponentTests
         StringAssert.Contains(cut.Markup, "過去データ収集");
         StringAssert.Contains(cut.Markup, "タスク履歴 (2)");
         StringAssert.Contains(cut.Markup, "実行タスクの履歴");
+        StringAssert.Contains(cut.Markup, "障害履歴 (2)");
+        StringAssert.Contains(cut.Markup, "対応中");
+        StringAssert.Contains(cut.Markup, "解決済み");
+        StringAssert.Contains(cut.Markup, "実行バッチ");
+        StringAssert.Contains(cut.Markup, "/jobs/execution-batches/33333333-3333-3333-3333-333333333333");
         Assert.AreEqual(1, cut.FindComponents<FluentButton>()
             .Count(x => x.Markup.Contains("このタスクを取り消す</")));
 
@@ -124,6 +130,25 @@ public sealed class JobDetailComponentTests
             rejected.Find("a.back-link").GetAttribute("href")));
     }
 
+    [TestMethod]
+    public async Task ExecutionBatchDetail_ShowsTraceIdentifiersAndLinksToEachResource()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new JobDetailHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<BatchDetailPage>(parameters => parameters
+            .Add(x => x.ExecutionBatchId, Guid.Parse("33333333-3333-3333-3333-333333333333")));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "SQS message ID"));
+        StringAssert.Contains(cut.Markup, "sqs-message");
+        StringAssert.Contains(cut.Markup, "lambda-request");
+        StringAssert.Contains(cut.Markup, "H001");
+        StringAssert.Contains(cut.Markup, "/jobs/Horse/JRA/H001/horse-profile");
+    }
+
     private static IRenderedComponent<JobDetail> RenderDetail(BunitContext context) =>
         context.Render<JobDetail>(parameters => parameters
             .Add(x => x.ResourceTypeName, "Horse")
@@ -137,6 +162,7 @@ public sealed class JobDetailComponentTests
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         private static readonly Guid ActiveTaskId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         private static readonly Guid ReceiptTaskId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        private static readonly Guid ExecutionBatchId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         public bool CreatedTask { get; init; } = true;
         public bool FailManualRequest { get; init; }
         public int ManualRequests { get; private set; }
@@ -159,6 +185,16 @@ public sealed class JobDetailComponentTests
                 return new HttpResponseMessage(System.Net.HttpStatusCode.NoContent);
             }
 
+            if (request.RequestUri!.AbsolutePath.Contains("/execution-batches/", StringComparison.Ordinal))
+            {
+                var batchNow = DateTimeOffset.UtcNow;
+                return await Ok(new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionExecutionBatchDetail(
+                    ExecutionBatchId, Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                    "sqs-message", "lambda-request", 1, batchNow, batchNow.AddSeconds(2),
+                    [new(ActiveTaskId, Resource, Definition, CollectionTaskStatus.Succeeded,
+                        CollectionAttemptResult.Succeeded, 1, 1, batchNow, batchNow.AddSeconds(2))]));
+            }
+
             var now = DateTimeOffset.UtcNow;
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(request.RequestUri!.Query);
             RequestHistoryPage = int.TryParse(query["requestHistoryPage"], out var requestPage) ? requestPage : 1;
@@ -175,8 +211,20 @@ public sealed class JobDetailComponentTests
                     new(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Succeeded,
                         CollectionLane.Normal, 50, 1, now.AddDays(-1), 1),
                 ],
-                [], RequestTotal: 30, TaskTotal: 2, AttemptTotal: 0, LatestTask: latestTask,
-                TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1);
+                [new(Guid.NewGuid(), ActiveTaskId, 1, now, now.AddSeconds(2), CollectionAttemptResult.Succeeded,
+                    null, null, null, null, null, null, ExecutionBatchId, Guid.NewGuid(),
+                    "sqs-message", "lambda-request", 1, 2)],
+                RequestTotal: 30, TaskTotal: 2, AttemptTotal: 1, LatestTask: latestTask,
+                TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1,
+                Failures:
+                [
+                    new(Guid.NewGuid(), Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Failed,
+                        "Old", "old failure", 1, now.AddDays(-2), CollectionFailureResolutionStatus.Resolved,
+                        ResolvedAt: now.AddDays(-1)),
+                    new(Guid.NewGuid(), Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Failed,
+                        "Current", "recovering", 1, now.AddHours(-1),
+                        CollectionFailureResolutionStatus.RecoveryInProgress, ActiveTaskId, now),
+                ]);
             return await Ok(detail);
         }
 

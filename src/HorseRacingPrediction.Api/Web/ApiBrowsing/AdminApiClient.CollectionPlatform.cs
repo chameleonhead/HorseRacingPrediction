@@ -56,6 +56,11 @@ public sealed partial class AdminApiClient
             $"{CollectionPlatformPath}/tasks?limit={Math.Clamp(limit, 1, 1000)}" +
             (status is null ? string.Empty : $"&status={status}"), token);
 
+    public Task<CollectionExecutionBatchDetail?> GetCollectionExecutionBatchAsync(Guid executionBatchId,
+        CancellationToken token = default)
+        => GetJsonAsync<CollectionExecutionBatchDetail>(
+            $"{CollectionPlatformPath}/execution-batches/{executionBatchId:D}", token);
+
     public Task<CollectionTaskPage?> SearchCollectionTasksAsync(CollectionTaskQuery query,
         CancellationToken token = default)
     {

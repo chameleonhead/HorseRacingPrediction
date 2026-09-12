@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 3;
+    internal const int CurrentVersion = 6;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -67,9 +67,17 @@ internal static class CollectionPlatformSchemaMigrator
                     throw new InvalidOperationException(
                         "Existing collection platform database has an incomplete schema. Missing tables: "
                         + string.Join(", ", missing));
+                var hasResolution = existing.Contains("collection_failure_notifications")
+                    && await HasColumnAsync(connection, transaction, "collection_failure_notifications",
+                        "ResolutionStatus", cancellationToken).ConfigureAwait(false);
+                var hasOutboxReservation = await HasColumnAsync(connection, transaction, "collection_task_outbox",
+                    "ReservationToken", cancellationToken).ConfigureAwait(false);
+                var hasAttemptCorrelation = await HasColumnAsync(connection, transaction, "collection_attempts",
+                    "ExecutionBatchId", cancellationToken).ConfigureAwait(false);
                 var baselineVersion = existing.Contains("collection_platform_controls")
                     && existing.Contains("collection_failure_notifications")
-                    ? existing.Contains("collection_backfill_batches") ? CurrentVersion : 2
+                    ? existing.Contains("collection_backfill_batches")
+                        ? hasResolution ? hasOutboxReservation ? hasAttemptCorrelation ? CurrentVersion : 5 : 4 : 3 : 2
                     : 1;
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
@@ -129,6 +137,55 @@ internal static class CollectionPlatformSchemaMigrator
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (3, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+            version = 3;
+        }
+
+        if (version < 4)
+        {
+            await ExecuteAsync(connection, """
+                ALTER TABLE collection_failure_notifications ADD COLUMN ResolutionStatus TEXT NOT NULL DEFAULT 'Open';
+                ALTER TABLE collection_failure_notifications ADD COLUMN RecoveryTaskId TEXT NULL;
+                ALTER TABLE collection_failure_notifications ADD COLUMN RecoveryStartedAt TEXT NULL;
+                ALTER TABLE collection_failure_notifications ADD COLUMN ResolvedAt TEXT NULL;
+                CREATE INDEX IX_collection_failure_notifications_ResolutionStatus_AvailableAt
+                    ON collection_failure_notifications (ResolutionStatus, AvailableAt);
+                CREATE INDEX IX_collection_failure_notifications_RecoveryTaskId
+                    ON collection_failure_notifications (RecoveryTaskId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (4, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+            version = 4;
+        }
+
+        if (version < 5)
+        {
+            await ExecuteAsync(connection, """
+                ALTER TABLE collection_task_outbox ADD COLUMN ReservationToken TEXT NULL;
+                ALTER TABLE collection_task_outbox ADD COLUMN ReservedUntilUnixMilliseconds INTEGER NULL;
+                ALTER TABLE collection_task_outbox ADD COLUMN EnvelopeId TEXT NULL;
+                ALTER TABLE collection_task_outbox ADD COLUMN QueueMessageId TEXT NULL;
+                CREATE INDEX IX_collection_task_outbox_DispatchedAt_ReservedUntilUnixMilliseconds
+                    ON collection_task_outbox (DispatchedAt, ReservedUntilUnixMilliseconds);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (5, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+            version = 5;
+        }
+
+        if (version < 6)
+        {
+            await ExecuteAsync(connection, """
+                ALTER TABLE collection_attempts ADD COLUMN ExecutionBatchId TEXT NULL;
+                ALTER TABLE collection_attempts ADD COLUMN DispatchEnvelopeId TEXT NULL;
+                ALTER TABLE collection_attempts ADD COLUMN QueueMessageId TEXT NULL;
+                ALTER TABLE collection_attempts ADD COLUMN LambdaRequestId TEXT NULL;
+                ALTER TABLE collection_attempts ADD COLUMN BatchTaskOrdinal INTEGER NULL;
+                ALTER TABLE collection_attempts ADD COLUMN BatchTaskCount INTEGER NULL;
+                CREATE INDEX IX_collection_attempts_ExecutionBatchId
+                    ON collection_attempts (ExecutionBatchId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (6, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -160,6 +217,18 @@ internal static class CollectionPlatformSchemaMigrator
             if (!string.Equals(name, HistoryTable, StringComparison.Ordinal)) tables.Add(name);
         }
         return tables;
+    }
+
+    private static async Task<bool> HasColumnAsync(SqliteConnection connection, SqliteTransaction transaction,
+        string table, string column, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"PRAGMA table_info({table});";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
 
     private static async Task ExecuteAsync(SqliteConnection connection, string sql,

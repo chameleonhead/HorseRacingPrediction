@@ -59,7 +59,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var identity = new JraSubjectIdentity(descriptor.SubjectType, name,
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
             task.Attributes.GetValueOrDefault("sourceIdentity"));
-        await using var session = await sessions.CreateAsync(cancellationToken).ConfigureAwait(false);
+        await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
+            .ConfigureAwait(false);
+        var session = sessionLease.Session;
         JraSubjectPage? page = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])

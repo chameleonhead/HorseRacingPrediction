@@ -42,7 +42,9 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
     {
         var race = JraRaceCardCollectionHandler.ParseRaceId(task);
-        await using var session = await sessions.CreateAsync(token).ConfigureAwait(false);
+        await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, token)
+            .ConfigureAwait(false);
+        var session = sessionLease.Session;
         JraRaceOddsPage? page = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])

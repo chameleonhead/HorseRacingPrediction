@@ -12,6 +12,36 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionOperationsEndpointTests
 {
     [TestMethod]
+    public async Task PublishedFailure_RemainsActionableButLeavesUnpublishedFeed()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "published"),
+                new("horse-profile"), 1, CollectionReason.Initial, now);
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.PermanentFailure, "Broken"));
+            var failure = (await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10)).Single();
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var publish = await client.PostAsJsonAsync(
+                $"/api/admin/collection/failure-notifications/{failure.NotificationId}/published", new { });
+            publish.EnsureSuccessStatusCode();
+            var actionable = await client.GetFromJsonAsync<List<PendingCollectionFailureNotification>>(
+                "/api/admin/collection/failure-notifications");
+            var unpublished = await client.GetFromJsonAsync<List<PendingCollectionFailureNotification>>(
+                "/api/admin/collection/failure-notifications/unpublished");
+
+            Assert.HasCount(1, actionable!);
+            Assert.IsEmpty(unpublished!);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+    [TestMethod]
     public async Task TaskViewCounts_AggregateEveryStatusInOneResponse()
     {
         var directory = CreateDirectory();
@@ -95,7 +125,7 @@ public sealed class CollectionOperationsEndpointTests
             var recovery = await response.Content.ReadFromJsonAsync<CollectionFailureRecoveryResult>();
             Assert.IsNotNull(recovery);
             Assert.AreEqual(2, recovery.CreatedTaskCount);
-            Assert.IsEmpty(await store.GetPendingFailureNotificationsAsync(DateTimeOffset.UtcNow, 10));
+            Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10));
             Assert.AreEqual(2, (await store.GetTasksAsync()).Count(x => x.Status == CollectionTaskStatus.Ready));
         }
         finally { Directory.Delete(directory, true); }

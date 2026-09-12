@@ -2,8 +2,8 @@ namespace HorseRacingPrediction.Api.CollectionController;
 
 public sealed class NullCollectionTaskQueue : ICollectionTaskQueue, ICollectionPlatformTaskQueue
 {
-    Task ICollectionPlatformTaskQueue.SendAsync(
-        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification notification,
+    Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendAsync(
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionDispatchEnvelope envelope,
         CancellationToken cancellationToken)
         => throw new InvalidOperationException("CollectionQueue is not configured.");
 

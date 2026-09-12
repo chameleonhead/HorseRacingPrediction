@@ -105,6 +105,10 @@ public sealed class CollectionFailureNotificationEntity
     public DateTimeOffset? PublishedAt { get; set; }
     public int PublishAttemptCount { get; set; }
     public string? LastPublishError { get; set; }
+    public CollectionFailureResolutionStatus ResolutionStatus { get; set; }
+    public Guid? RecoveryTaskId { get; set; }
+    public DateTimeOffset? RecoveryStartedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
 }
 
 public sealed class BackfillBatchEntity
@@ -138,6 +142,12 @@ public sealed class CollectionAttemptEntity
     public string? FinalUrl { get; set; }
     public int? HttpStatusCode { get; set; }
     public string? PageIdentification { get; set; }
+    public Guid? ExecutionBatchId { get; set; }
+    public Guid? DispatchEnvelopeId { get; set; }
+    public string? QueueMessageId { get; set; }
+    public string? LambdaRequestId { get; set; }
+    public int? BatchTaskOrdinal { get; set; }
+    public int? BatchTaskCount { get; set; }
 }
 
 public sealed class ResourceLocationEntity
@@ -161,5 +171,9 @@ public sealed class CollectionDispatchOutboxEntity
     public long DispatchGeneration { get; set; }
     public DateTimeOffset AvailableAt { get; set; }
     public DateTimeOffset? DispatchedAt { get; set; }
+    public string? ReservationToken { get; set; }
+    public long? ReservedUntilUnixMilliseconds { get; set; }
+    public Guid? EnvelopeId { get; set; }
+    public string? QueueMessageId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

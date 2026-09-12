@@ -31,7 +31,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("receipt-1", JsonSerializer.Serialize(
-            new CollectionTaskNotification(receipt.TaskId, 1), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+            CreateEnvelope(receipt.TaskId, 1), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = new CollectionPlatformDeadLetterReconciler(store, queue,
             Options.Create(new CollectionDeadLetterQueueReconcilerOptions()),
             NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
@@ -64,7 +64,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         var queue = new RecordingQueue(
             new CollectionPlatformDeadLetterMessage("legacy", $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1}"""),
             new CollectionPlatformDeadLetterMessage("invalid", JsonSerializer.Serialize(
-                new CollectionTaskNotification(Guid.Empty, 0), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+                CreateEnvelope(Guid.Empty, 0), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = new CollectionPlatformDeadLetterReconciler(store, queue,
             Options.Create(new CollectionDeadLetterQueueReconcilerOptions()),
             NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
@@ -86,12 +86,16 @@ public sealed class CollectionPlatformOperationsServicesTests
         return store;
     }
 
+    private static CollectionDispatchEnvelope CreateEnvelope(Guid taskId, long generation) => new(Guid.NewGuid(),
+        new("JRA", new("horse-profile"), null, CollectionLane.Normal), [new(taskId, generation)]);
+
     private sealed class RecordingQueue(params CollectionPlatformDeadLetterMessage[] messages)
         : ICollectionPlatformTaskQueue
     {
         public List<string> Deleted { get; } = [];
-        public Task SendAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
-            => Task.CompletedTask;
+        public Task<CollectionQueueSendReceipt> SendAsync(CollectionDispatchEnvelope envelope,
+            CancellationToken cancellationToken)
+            => Task.FromResult(new CollectionQueueSendReceipt(null));
         public Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ReceiveDeadLetterMessagesAsync(
             int maxMessages, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<CollectionPlatformDeadLetterMessage>>(messages.Take(maxMessages).ToList());

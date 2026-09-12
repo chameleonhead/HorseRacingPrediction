@@ -282,6 +282,10 @@ U9では390x844の認証済みブラウザーで一覧、依頼Dialog、Revision
 
 追加の異常系監査U16では、入力、Worker完了改ざん、外部通信、復旧再実行、ページ境界、Odds payloadを検証した。重複/不正URLは422で匿名workを作らず、Location outcomeは所属・存在・矛盾・件数を完了前に一括検証する。404/UnexpectedのみSuspect、429/5xx/timeoutはretryableとし、lease不一致と完了再送は既存状態を変更しない。Backfillは復旧失敗後も新しい実行IDで再依頼でき、同時刻のRecovery成功だけを解消として扱う。履歴pageは負値・0・極大値・同時刻を安定処理し、Oddsのnull/空/負値/重複は400 validationへ変換する。ローカルExecutorのcancelもcancel済みtokenを再利用せずretryable完了を保存する。最終確認はRelease build警告0・エラー0、API 161件成功/外部依存1件skip、Collector 110件成功/失敗0だった。
 
+収集障害の運用状態は[収集障害の対応状態ライフサイクル](../20260912_collection-failure-lifecycle/README.md)で定義する。外部通知の`PublishedAt`と、Open / RecoveryInProgress / Resolved / Supersededの対応状態は独立して永続化し、管理画面の要対応集計はOpenだけを参照する。
+
+未来開催日のレース一覧が未公開の場合は、[未来開催レース探索の公開待ち扱い](../20260912_future-race-discovery-waiting/README.md)に従い、探索Attemptを`ResourceNotYetAvailable`として将来時刻へ再配置する。未公開日はFailure通知や要対応件数へ含めず、同じ探索窓の公開済み日から生成したrequestは保持する。JST境界と日付依存retry policyはCollector側で評価する。
+
 ### 2026-09-11 implementation review retrospective
 
 The implementation checkpoint exposed a systemic traceability failure. New models and isolated policy tests were treated as evidence of connected capabilities without tracing the production path through discovery, location resolution, SQS dispatch, Lambda cancellation, retry recovery, and cutover. This allowed a new discovery handler to call a legacy job producer after the legacy dispatcher was disabled, left explicit URLs and ResourceLocation disconnected from workers, left the fairness allocator disconnected from the outbox dispatcher, and represented a destructive queue replacement as a Terraform rename rather than a smoke-gated cutover.
