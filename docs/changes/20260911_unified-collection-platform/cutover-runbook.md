@@ -10,6 +10,24 @@ This runbook is the executable order for replacing the legacy collection queues.
 | Replacement | `horse-racing-prediction-resource-collection` | `horse-racing-prediction-resource-collection-dlq` |
 
 The replacement queue carries only the `{ taskId, dispatchGeneration }` contract. Never send legacy payloads to it or new payloads to the legacy queue.
+The serialized contract also requires `contractVersion: 1`. Missing/unknown versions, an empty task ID, and a non-positive dispatch generation are poison messages: the collector must perform no API acquisition for them, SQS retries them up to the redrive limit, and the DLQ alarm requires operator inspection.
+
+## Production failure matrix
+
+| Failure | Expected automatic behavior | Operator check/action |
+|---|---|---|
+| Duplicate SQS delivery | API acquisition/generation checks keep execution idempotent; an expired lease is recovered by the watchdog | Confirm no overlapping active attempts and eventual terminal state |
+| API/network unavailable before acquisition | Lambda fails; SQS retries up to 3 receives before DLQ | Check API health, Lambda `Errors`, queue age, then redrive only after recovery |
+| Lambda timeout/process crash after acquisition | Message is redelivered; an active lease prevents overlap; watchdog reclaims the expired lease | Check attempt/lease timestamps before manual recovery |
+| HTTP 429/5xx from source | Worker records a retryable attempt; location remains usable and API schedules the next task | Check retry time and access-limit policy; do not redrive the SQS message manually |
+| Malformed/legacy/unknown-version message | No collection API call is made; message reaches DLQ after transport retries and the reconciler retains it | Preserve body/attributes for diagnosis, fix producer, then remove; do not redrive an unsupported body |
+| DLQ reconciliation or deletion interrupted | Reconciliation is generation-aware and can run again | Confirm task state and DLQ depth converge; never purge before evidence capture |
+| Reserved concurrency throttling | SQS retains work and queue-age alarm detects delay | Check `Throttles`; distinguish expected concurrency=1 backpressure from a concurrency/configuration fault |
+| Deployment/cutover failure | Both queues remain during Gates 1-3 and event source can be switched back | Follow Gate 3 rollback; do not delete legacy queues or old job DB |
+
+The Lambda timeout is 900 seconds and the queue visibility timeout is 5,400 seconds (six times the function timeout). Source retention is four days and DLQ retention is fourteen days. Keep these relationships when tuning values. `batch_size = 1` deliberately isolates poison messages; partial-batch response remains enabled as a deployment invariant.
+
+Before redriving a DLQ message, record its body, message attributes, approximate receive count, task detail/attempt history, Lambda request ID, and API health window. Redrive only supported `contractVersion: 1` messages whose underlying fault has been corrected. Do not redrive malformed or legacy payloads.
 
 ## Gate 1: provision without switching
 

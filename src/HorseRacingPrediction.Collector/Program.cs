@@ -151,9 +151,8 @@ else
 /// bootstrapがLambdaランタイムAPIから受け取り、環境変数 COLLECTOR_EVENT_PATH の指す
 /// ファイルへ書き出しておいたSQSイベント（Records[0].body に <see cref="CollectionTaskNotification"/>
 /// のJSONが入っている）から、このLambda呼び出しを起こした通知を読み取る。
-/// batch_size=1（infra/collector-lambda/main.tf）のため、Recordsは常に0または1件。
-/// イベントが存在しない/解析できない場合はnullを返す（呼び出し元は従来の全件処理に
-/// フォールバックする）。
+/// batch_size=1（infra/collector-lambda/main.tf）のため通常は1件。契約バージョン、TaskId、
+/// DispatchGenerationを検証し、旧形式・破損通知は実行せずLambda呼び出しを失敗させる。
 /// </summary>
 static HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification? TryReadTriggeringNotification()
 {
@@ -180,9 +179,20 @@ static HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionT
             return null;
         }
 
+        var body = bodyElement.GetString()!;
+        using var bodyDocument = JsonDocument.Parse(body);
+        if (!bodyDocument.RootElement.TryGetProperty("contractVersion", out var versionElement)
+            || versionElement.ValueKind != JsonValueKind.Number
+            || !versionElement.TryGetInt32(out var version)
+            || version != HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification.CurrentContractVersion)
+        {
+            return null;
+        }
+
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        return JsonSerializer.Deserialize<HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification>(
-            bodyElement.GetString()!, jsonOptions);
+        var notification = JsonSerializer.Deserialize<HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionTaskNotification>(
+            body, jsonOptions);
+        return notification?.IsSupported() == true ? notification : null;
     }
     catch (Exception ex)
     {

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -51,5 +52,18 @@ public sealed class LocalCollectionQueueTests
 
         Assert.AreEqual((0L, 0L, 1L), await queue.GetDepthAsync());
         Assert.IsNull(await queue.ReceiveAsync(TimeSpan.FromMinutes(1)));
+    }
+
+    [TestMethod]
+    public void Notification_SerializesExplicitContractVersion()
+    {
+        var notification = new CollectionTaskNotification(Guid.NewGuid(), 4);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(notification,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        Assert.AreEqual(CollectionTaskNotification.CurrentContractVersion,
+            json.RootElement.GetProperty("contractVersion").GetInt32());
+        Assert.IsTrue(notification.IsSupported());
+        Assert.IsFalse((notification with { ContractVersion = 99 }).IsSupported());
     }
 }

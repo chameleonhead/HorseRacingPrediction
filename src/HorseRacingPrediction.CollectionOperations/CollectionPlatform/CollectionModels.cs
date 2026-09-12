@@ -146,7 +146,13 @@ public sealed record ResourceLocationCandidate(long LocationId, Uri Url, Resourc
 public sealed record ResourceLocationOutcome(long LocationId, CollectionAttemptResult Result,
     string? ErrorCode = null);
 
-public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGeneration);
+public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGeneration, int ContractVersion = 1)
+{
+    public const int CurrentContractVersion = 1;
+
+    public bool IsSupported()
+        => ContractVersion == CurrentContractVersion && TaskId != Guid.Empty && DispatchGeneration > 0;
+}
 public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification,
     CollectionLane Lane, int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,

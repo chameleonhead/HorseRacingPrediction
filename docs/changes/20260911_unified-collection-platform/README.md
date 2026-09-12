@@ -258,6 +258,8 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 ### 2026-09-12 review closure continuation
 
+本番SQS/Lambda異常系の追加監査では、at-least-onceの重複配信は既存のdispatch generation・lease・active guardで冪等化されている一方、transport障害も1回でDLQへ送る設定と、通知version未検証を検出した。source queueのmaxReceiveCountを3とし、`contractVersion: 1`を必須化した。旧/破損通知はTask acquisitionを実行せず、DLQ reconcilerでも業務Taskを変更しない。Lambda Throttles alarmを追加し、SQSトリガーに作用しないasync invoke failure destinationと不要権限を削除した。運用runbookにはAPI停止、timeout/crash、重複、poison、DLQ reconciliation中断、throttling、cutover失敗の期待動作と証跡を追加した。ローカル検証はAPI 162件成功・外部依存1件skip、Collector 112件成功、Release build警告0・エラー0。実AWS上のplan/apply/redriveはU10のmaintenance workとして残る。
+
 レビュー指摘を実装台帳へ転記しないまま、主要画面の改善をもって作業全体を完了扱いしたことが中断の原因だった。以後は各指摘を Runnable / Dependent / Externally blocked / Rejected に分類し、個別の実装・検証証拠と原レビューへの照合が揃うまで完了応答しない。`learn-from-implementation-failures` skill にこの closure gate を追加し、validatorで妥当性を確認した。
 
 今回の継続では、サーバー側State/error paging、1,001件超の障害復旧確認、Revision登録操作、Backfill詳細・欠損復旧、起動場所に依存しないデータpath解決を実装した。残るローカル項目は詳細履歴paging、dashboard query集約/自動更新/tab URL復元、認証済みdesktop/narrow browser検証である。本番Terraform/cutoverと旧SQS削除はAWS環境とcutover windowを必要とするため外部blockerとして分離する。

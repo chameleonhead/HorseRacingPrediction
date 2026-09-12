@@ -92,10 +92,7 @@ resource "aws_sqs_queue" "collector" {
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.collector_dlq[0].arn
-    # Lambda側のSQS再試行(可視性タイムアウトによる再配信)は行わない。1回の実行失敗で
-    # 即座にDLQへ送る。リトライ判断はAPI(ジョブコントローラー)側の責務とし、
-    # CollectionDeadLetterQueueReconcilerがDLQを回収してジョブをFailedにマークする。
-    maxReceiveCount = 1
+    maxReceiveCount = 3
   })
 }
 
@@ -111,7 +108,9 @@ resource "aws_sqs_queue" "resource_collection" {
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.resource_collection_dlq.arn
-    maxReceiveCount     = 1
+    # API停止、Lambda初期化失敗、ネットワーク断など、ジョブ側がAttemptを記録できない
+    # transport障害にはSQS再配信の余地を持たせる。収集処理自身のretryはAPIが管理する。
+    maxReceiveCount = 3
   })
 }
 
@@ -132,6 +131,22 @@ resource "aws_cloudwatch_metric_alarm" "collector_lambda_errors" {
   alarm_description   = "Collector Lambda returned an error."
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.collector[0].function_name }
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.collector_alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "collector_lambda_throttles" {
+  count               = local.function_enabled ? 1 : 0
+  alarm_name          = "horse-racing-prediction-collector-lambda-throttles"
+  alarm_description   = "Collector Lambda was throttled; queued realtime work may be delayed."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
   dimensions          = { FunctionName = aws_lambda_function.collector[0].function_name }
   statistic           = "Sum"
   period              = 60
@@ -187,13 +202,6 @@ resource "aws_iam_role_policy" "collector_queue_consumer" {
           "sqs:GetQueueAttributes"
         ]
         Resource = local.active_queue_arn
-      },
-      {
-        # aws_lambda_function_event_invoke_config の on_failure 送信先（DLQ）へ
-        # Lambdaランタイム自身がメッセージを送出するために必要。
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.resource_collection_dlq.arn
       }
     ]
   })
@@ -286,21 +294,4 @@ resource "aws_lambda_event_source_mapping" "collector_queue" {
   batch_size                         = 1
   maximum_batching_window_in_seconds = 0
   function_response_types            = ["ReportBatchItemFailures"]
-}
-
-# SQS event source mapping（同期呼び出し）では本来この非同期呼び出し設定は参照されないが、
-# コンソール上の既定値（再試行2回・送信先未設定）のままだと運用者が混乱するため、実際の
-# 挙動（SQS側のredrive_policyで1回失敗即DLQ、main.tf内 aws_sqs_queue.resource_collection 参照）と
-# 一致するよう明示的に再試行0回・失敗時の送信先をDLQへ設定しておく。
-resource "aws_lambda_function_event_invoke_config" "collector" {
-  count                        = local.function_enabled ? 1 : 0
-  function_name                = aws_lambda_function.collector[0].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 21600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.resource_collection_dlq.arn
-    }
-  }
 }

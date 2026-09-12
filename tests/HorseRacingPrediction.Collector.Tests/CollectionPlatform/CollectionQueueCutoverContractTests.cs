@@ -56,6 +56,27 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
+    public void Terraform_ProtectsLambdaTransportFailureBoundaries()
+    {
+        var queue = ResourceBlock(Main, "resource_collection");
+        var dlq = ResourceBlock(Main, "resource_collection_dlq");
+        var lambda = ResourceBlock(Main, "collector", "aws_lambda_function");
+        var mapping = ResourceBlock(Main, "collector_queue", "aws_lambda_event_source_mapping");
+
+        StringAssert.Contains(queue, "visibility_timeout_seconds = 5400");
+        StringAssert.Contains(queue, "message_retention_seconds  = 345600");
+        StringAssert.Contains(queue, "maxReceiveCount = 3");
+        StringAssert.Contains(dlq, "message_retention_seconds = 1209600");
+        StringAssert.Contains(lambda, "timeout                        = 900");
+        StringAssert.Contains(lambda, "reserved_concurrent_executions = 1");
+        StringAssert.Contains(mapping, "batch_size                         = 1");
+        StringAssert.Contains(mapping, "function_response_types            = [\"ReportBatchItemFailures\"]");
+        StringAssert.Contains(Main, "resource \"aws_cloudwatch_metric_alarm\" \"collector_lambda_throttles\"");
+        Assert.IsFalse(Main.Contains("aws_lambda_function_event_invoke_config", StringComparison.Ordinal),
+            "SQS event source mappings must use the queue redrive policy, not Lambda async invoke settings.");
+    }
+
+    [TestMethod]
     public void Terraform_LegacyRetentionCanDeleteOnlyTheOldQueuePair()
     {
         var guardedResources = new[] { "collector", "collector_dlq", "resource_collection", "resource_collection_dlq" }

@@ -43,7 +43,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     }
 
     [TestMethod]
-    public async Task DlqReconciler_DiscardsMalformedMessageSoItCannotBlockTheQueue()
+    public async Task DlqReconciler_RetainsMalformedMessageForOperatorInspection()
     {
         var store = await CreateStoreAsync();
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("receipt-bad", "not-json"));
@@ -52,7 +52,27 @@ public sealed class CollectionPlatformOperationsServicesTests
             NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
 
         Assert.AreEqual(0, await service.RunOnceAsync(CancellationToken.None));
-        CollectionAssert.AreEqual(new[] { "receipt-bad" }, queue.Deleted);
+        Assert.HasCount(0, queue.Deleted);
+    }
+
+    [TestMethod]
+    public async Task DlqReconciler_DiscardsLegacyOrInvalidNotificationWithoutChangingTasks()
+    {
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var queue = new RecordingQueue(
+            new CollectionPlatformDeadLetterMessage("legacy", $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1}"""),
+            new CollectionPlatformDeadLetterMessage("invalid", JsonSerializer.Serialize(
+                new CollectionTaskNotification(Guid.Empty, 0), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+        var service = new CollectionPlatformDeadLetterReconciler(store, queue,
+            Options.Create(new CollectionDeadLetterQueueReconcilerOptions()),
+            NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
+
+        Assert.AreEqual(0, await service.RunOnceAsync(CancellationToken.None));
+        Assert.HasCount(0, queue.Deleted);
+        Assert.AreEqual(CollectionTaskStatus.Ready,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()
