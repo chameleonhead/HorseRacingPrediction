@@ -30,12 +30,12 @@
 }
 
 <div class="collection-status-heading"><strong>収集状況</strong>@if(progress is not null){<span class="hint">収集対象 @progress.ResourcesByType.Values.Sum() 件</span>}</div>
-<nav class="view-tabs collection-status-tabs" aria-label="収集状況">
+<FluentTabs Class="collection-status-tabs" ShowActiveIndicator="true" ActiveTabId="@view" ActiveTabIdChanged="OnStatusTabChanged" aria-label="収集状況">
     @foreach (var option in views)
     {
-        <button type="button" class="@(view == option.Value ? "active" : null)" aria-current="@(view == option.Value ? "page" : null)" @onclick="() => SetView(option.Value)">@option.Label <span class="tab-count">@ViewCount(option.Value)</span></button>
+        <FluentTab Id="@option.Value" Label="@StatusTabLabel(option)" />
     }
-</nav>
+</FluentTabs>
 <section class="filter-bar" aria-label="収集処理の絞り込み">
     <div class="filter-toolbar">
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集処理を検索" Placeholder="対象ID、収集内容、状態を検索" @bind-Value="query" /></div>
@@ -227,6 +227,7 @@ else
     private bool MatchesFilter(CollectionTaskSummary x) => (string.IsNullOrWhiteSpace(filter) || $"{x.Resource.Type} {ResourceTypeLabel(x.Resource.Type)} {x.Resource.Provider} {x.Resource.Id} {x.Definition.Value} {DefinitionLabel(x.Definition)} {TaskStatusLabel(x.Status)}".Contains(filter, StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrEmpty(resourceFilter)||x.Resource.Type.ToString()==resourceFilter) && (string.IsNullOrEmpty(statusFilter)||x.Status.ToString()==statusFilter) && (string.IsNullOrEmpty(laneFilter)||x.Lane.ToString()==laneFilter) && (string.IsNullOrWhiteSpace(providerFilter)||x.Resource.Provider.Contains(providerFilter,StringComparison.OrdinalIgnoreCase)) && (string.IsNullOrWhiteSpace(errorFilter)||failures.Any(f=>f.TaskId==x.TaskId&&$"{f.ErrorCode} {f.ErrorMessage}".Contains(errorFilter,StringComparison.OrdinalIgnoreCase)));
     private static bool IsWaiting(CollectionTaskStatus x) => x is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
     private async Task SetView(string value){if((view=="resources")!=(value=="resources"))statusFilter=string.Empty;view=value;page=1;PersistState();await LoadAsync();}
+    private Task OnStatusTabChanged(string value)=>value==view?Task.CompletedTask:SetView(value);
     private async Task PreviousPage(){if(page>1){page--;PersistState();await LoadAsync();}}
     private async Task NextPage(){if(page<TotalPages){page++;PersistState();await LoadAsync();}}
     private async Task ApplyFilter(){filter=query.Trim();page=1;PersistState();await LoadAsync();}
@@ -234,6 +235,7 @@ else
     private bool HasFilters=>!string.IsNullOrWhiteSpace(filter)||!string.IsNullOrEmpty(resourceFilter)||!string.IsNullOrEmpty(statusFilter)||!string.IsNullOrEmpty(laneFilter)||!string.IsNullOrWhiteSpace(providerFilter)||!string.IsNullOrWhiteSpace(errorFilter);
     private void PersistState(){var uri=Navigation.GetUriWithQueryParameters(new Dictionary<string,object?>{{"view",view=="attention"?null:view},{"q",string.IsNullOrWhiteSpace(filter)?null:filter},{"page",page<=1?null:page},{"type",string.IsNullOrEmpty(resourceFilter)?null:resourceFilter},{"status",string.IsNullOrEmpty(statusFilter)?null:statusFilter},{"lane",string.IsNullOrEmpty(laneFilter)?null:laneFilter},{"provider",string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter},{"error",string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter}});Navigation.NavigateTo(uri,replace:true);}
     private int ViewCount(string value)=>value=="resources"?progress?.ResourcesByType.Values.Sum()??UniqueResources.Count:serverViewCounts.TryGetValue(value,out var count)?count:0;
+    private string StatusTabLabel(FilterOption option)=>$"{option.Label}  {ViewCount(option.Value)}";
     private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private string StateDetailHref(CollectionStateSnapshot item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}

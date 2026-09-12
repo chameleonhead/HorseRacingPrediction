@@ -26,39 +26,12 @@
 }
 
 .collection-status-tabs {
-    background: var(--neutral-fill-secondary-rest);
-    border: 1px solid var(--neutral-stroke-rest);
-    border-radius: 8px;
-    gap: 2px;
-    margin: 6px 0 14px;
-    padding: 4px;
-}
-
-.collection-status-tabs button {
-    border-bottom: 0;
-    border-radius: 5px;
-    min-height: 36px;
-    padding-block: 7px;
-}
-
-.collection-status-tabs button.active {
-    background: var(--neutral-layer-floating);
-    box-shadow: var(--elevation-shadow-card-rest);
-}
-
-.collection-status-tabs button:first-child .tab-count {
-    color: var(--status-danger-foreground-1);
-}
-
-.tab-count {
-    background: var(--neutral-fill-secondary-rest);
-    border-radius: 999px;
-    display: inline-block;
-    font-size: var(--type-ramp-minus-1-font-size);
-    margin-left: 4px;
-    min-width: 20px;
-    padding: 1px 6px;
-    text-align: center;
+    display: block;
+    margin: 2px 0 14px;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .filter-bar {

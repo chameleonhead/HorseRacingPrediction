@@ -93,6 +93,27 @@ public sealed class CollectionAdministrationComponentTests
     }
 
     [TestMethod]
+    public async Task StatusNavigation_UsesFluentTabsAndChangesThePersistedView()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new ResourceHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Jobs>();
+
+        cut.WaitForAssertion(() => Assert.HasCount(1, cut.FindComponents<FluentTabs>()));
+        var tabs = cut.FindComponent<FluentTabs>();
+        Assert.IsTrue(tabs.Instance.ShowActiveIndicator);
+        CollectionAssert.IsSubsetOf(new[] { "要対応", "処理中", "待機中", "最近完了", "収集対象", "直近の処理" },
+            cut.FindComponents<FluentTab>().Select(x => x.Instance.Label?.ToString()?.Split("  ")[0]).ToArray());
+
+        await cut.InvokeAsync(() => tabs.Instance.ActiveTabIdChanged.InvokeAsync("waiting"));
+        cut.WaitForAssertion(() => StringAssert.Contains(
+            context.Services.GetRequiredService<NavigationManager>().Uri, "view=waiting"));
+    }
+
+    [TestMethod]
     public async Task Search_WithJapaneseResourceName_FiltersAndCanBeCleared()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -196,8 +217,17 @@ public sealed class CollectionAdministrationComponentTests
     private static Task ClickFluentButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
         cut.FindComponents<FluentButton>().First(x => x.Markup.Contains($">{text}</")).Instance.OnClick.InvokeAsync());
 
-    private static Task ClickButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(() =>
-        cut.FindAll("button").First(x => x.TextContent.Trim().StartsWith(text, StringComparison.Ordinal)).Click());
+    private static Task ClickButtonAsync(IRenderedComponent<Jobs> cut, string text) => cut.InvokeAsync(async () =>
+    {
+        var tab = cut.FindComponents<FluentTab>()
+            .FirstOrDefault(x => x.Instance.Label?.ToString()?.StartsWith(text, StringComparison.Ordinal) == true);
+        if (tab is not null)
+        {
+            await cut.FindComponent<FluentTabs>().Instance.ActiveTabIdChanged.InvokeAsync(tab.Instance.Id);
+            return;
+        }
+        cut.FindAll("button").First(x => x.TextContent.Trim().StartsWith(text, StringComparison.Ordinal)).Click();
+    });
 
     private static Task SelectAsync(IRenderedComponent<Jobs> cut, string label, string value) => cut.InvokeAsync(() =>
         cut.Find($"select[aria-label='{label}']").Change(value));
