@@ -77,6 +77,18 @@ When a pushed change fails continuous integration after local verification, trea
 
 The observable correction is that the same commit passes the locally reproduced workflow commands and the remote required workflows, with any platform-sensitive fix covered by a test that executes on the CI runner OS.
 
+## External adapter fidelity gate
+
+When a production failure occurs because an external page, payload, or navigation graph differs from a test fixture, treat fixture fidelity and terminal validation as separate gates.
+
+- Capture the smallest production-shaped evidence that distinguishes the failure: candidate count and ordering, labels/attributes, resolved URL, identified page kind, and requested resource identity. Do not reduce a multi-candidate production structure to a single ideal candidate in the regression fixture.
+- For selection logic, include at least one ambiguous fixture where a plausible wrong candidate appears before the correct candidate. Assert the semantic selection criterion and the terminal outcome (for example, a RaceCard request produces a validated RaceCard page for the requested race), not merely that some URL was extracted or navigation returned HTTP 200.
+- Inventory whether live-site tests are excluded by the normal CI filter. If they are, record and run a bounded pre-release smoke test for the changed adapter against a current, non-destructive target, or explicitly record that live compatibility remains unverified. A passing fixture suite must not be reported as proof of current external-site compatibility.
+- When production logs reveal a richer structure than the stored fixture, add or refresh a sanitized fixture and its regression test as part of the fix. Keep volatile tokens and URLs out of identity assertions; validate stable semantics and page identification instead.
+- Verify failure classification as well as success: a resolved page of the wrong kind or identity must become `UnexpectedPage`/validation failure with the observed URL and page kind, rather than a generic exception that hides the selection defect.
+
+The observable correction is a regression test that fails with the production-shaped ambiguity, passes only when the correct semantic candidate is chosen, and proves the requested resource type and identity at the workflow boundary.
+
 ## Boundaries
 
 - Do not rewrite a skill solely to rationalize an isolated typo or unpredictable external failure.
