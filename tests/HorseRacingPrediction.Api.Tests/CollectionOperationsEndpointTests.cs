@@ -181,7 +181,7 @@ public sealed class CollectionOperationsEndpointTests
             Assert.AreEqual(3, recovery.SelectedCount);
             Assert.AreEqual(3, recovery.CreatedTaskCount);
             Assert.AreEqual(HttpStatusCode.NotFound,
-                (await client.GetAsync($"/api/admin/collection/failure-notifications/groups/{key}" )).StatusCode);
+                (await client.GetAsync($"/api/admin/collection/failure-notifications/groups/{key}")).StatusCode);
         }
         finally { Directory.Delete(directory, true); }
     }

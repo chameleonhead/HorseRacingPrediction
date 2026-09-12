@@ -1624,11 +1624,11 @@ public sealed class CollectionPlatformStore
         var notifications = await GetActionableFailureNotificationsAsync(now, int.MaxValue, cancellationToken)
             .ConfigureAwait(false);
         var matchingGroups = notifications.GroupBy(x => new
-            {
-                Definition = x.Definition.Value,
-                x.Status,
-                ErrorCode = x.ErrorCode ?? string.Empty,
-            })
+        {
+            Definition = x.Definition.Value,
+            x.Status,
+            ErrorCode = x.ErrorCode ?? string.Empty,
+        })
             .Where(x => string.Equals(CollectionFailureGrouping.CreateKey(
                 x.Key.Definition, x.Key.Status, x.Key.ErrorCode), groupKey, StringComparison.OrdinalIgnoreCase))
             .Select(x => x.ToList())
