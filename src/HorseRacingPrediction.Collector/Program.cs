@@ -92,16 +92,16 @@ if (runLocalQueue)
             var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
             await JraSessionExecutionScope.ExecuteAsync(sessionFactory, async cancellationToken =>
             {
-                  var executionBatchId = Guid.NewGuid();
-                  for (var index = 0; index < message.Envelope.Tasks.Count; index++)
-                  {
-                      var task = message.Envelope.Tasks[index];
-                      using var correlation = CollectionAttemptCorrelationScope.Push(new(executionBatchId,
-                          message.Envelope.EnvelopeId, $"local-{message.MessageId}", null,
-                          index + 1, message.Envelope.Tasks.Count));
-                      await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), cancellationToken)
-                          .ConfigureAwait(false);
-                  }
+                var executionBatchId = Guid.NewGuid();
+                for (var index = 0; index < message.Envelope.Tasks.Count; index++)
+                {
+                    var task = message.Envelope.Tasks[index];
+                    using var correlation = CollectionAttemptCorrelationScope.Push(new(executionBatchId,
+                        message.Envelope.EnvelopeId, $"local-{message.MessageId}", null,
+                        index + 1, message.Envelope.Tasks.Count));
+                    await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }, CancellationToken.None, message.Envelope.Compatibility).ConfigureAwait(false);
             await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
         }

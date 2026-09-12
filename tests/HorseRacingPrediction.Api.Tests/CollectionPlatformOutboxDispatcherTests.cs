@@ -25,8 +25,13 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                     effectiveDate: date);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 1,
-                    EnvelopeMaxTasks = 12, AggregationDelayMilliseconds = 0 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    EnvelopeMaxTasks = 12,
+                    AggregationDelayMilliseconds = 0
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -60,8 +65,12 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                 CollectionReason.Backfill, now, CollectionLane.Background, 10);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 1,
-                    EnvelopeMaxTasks = 1 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    EnvelopeMaxTasks = 1
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             for (var count = 0; count < 5; count++) await dispatcher.DispatchOnceAsync(CancellationToken.None);

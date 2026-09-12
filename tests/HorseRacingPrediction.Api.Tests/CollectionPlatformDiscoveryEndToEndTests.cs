@@ -66,8 +66,12 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
 
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 1,
-                    AggregationDelayMilliseconds = 0 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    AggregationDelayMilliseconds = 0
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
             Assert.HasCount(1, queue.MessageBodies);
@@ -117,7 +121,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-                { StateDirectory = directory }));
+            { StateDirectory = directory }));
             await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
                 1, "initial", false);
             var builder = WebApplication.CreateBuilder();
@@ -133,16 +137,26 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var future = new DateOnly(2026, 9, 19);
             using var createResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
             {
-                ResourceType = ResourceType.Race, Provider = "JRA", ResourceId = $"discovery:{today:yyyyMMdd}",
-                DefinitionId = "race-discovery", RequestedRevision = 1, Reason = CollectionReason.Discovery,
-                Lane = CollectionLane.Realtime, Priority = 100, EffectiveDate = today,
+                ResourceType = ResourceType.Race,
+                Provider = "JRA",
+                ResourceId = $"discovery:{today:yyyyMMdd}",
+                DefinitionId = "race-discovery",
+                RequestedRevision = 1,
+                Reason = CollectionReason.Discovery,
+                Lane = CollectionLane.Realtime,
+                Priority = 100,
+                EffectiveDate = today,
             });
             createResponse.EnsureSuccessStatusCode();
 
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 1,
-                    AggregationDelayMilliseconds = 0 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    AggregationDelayMilliseconds = 0
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
             var envelope = JsonSerializer.Deserialize<CollectionDispatchEnvelope>(queue.MessageBodies.Single(),

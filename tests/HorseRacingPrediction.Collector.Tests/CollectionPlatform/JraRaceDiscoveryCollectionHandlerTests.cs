@@ -127,7 +127,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             },
         };
         var schedule = new FakeJraScheduleCollectionWorkflow
-            { CoursesByDate = target => target == today ? [RaceCourse.Tokyo] : [] };
+        { CoursesByDate = target => target == today ? [RaceCourse.Tokyo] : [] };
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, new RecordingSink(),
             Options.Create(new RaceDiscoveryCollectionOptions()),
             new FixedTimeProvider(new(2026, 9, 11, 15, 30, 0, TimeSpan.Zero))); // 9/12 00:30 JST
@@ -150,7 +150,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             },
         };
         var schedule = new FakeJraScheduleCollectionWorkflow
-            { CoursesByDate = target => target == future ? [RaceCourse.Tokyo] : [] };
+        { CoursesByDate = target => target == future ? [RaceCourse.Tokyo] : [] };
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, new RecordingSink(),
             Options.Create(new RaceDiscoveryCollectionOptions()),
             new FixedTimeProvider(new(2026, 9, 12, 1, 0, 0, TimeSpan.Zero)));
@@ -174,7 +174,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             },
         };
         var schedule = new FakeJraScheduleCollectionWorkflow
-            { CoursesByDate = target => target == future ? [RaceCourse.Tokyo] : [] };
+        { CoursesByDate = target => target == future ? [RaceCourse.Tokyo] : [] };
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, new RecordingSink(),
             Options.Create(new RaceDiscoveryCollectionOptions()),
             new FixedTimeProvider(new(2026, 9, 12, 1, 0, 0, TimeSpan.Zero)));
@@ -231,7 +231,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             },
         };
         var schedule = new FakeJraScheduleCollectionWorkflow
-            { CoursesByDate = target => target == tomorrow ? [RaceCourse.Tokyo] : [] };
+        { CoursesByDate = target => target == tomorrow ? [RaceCourse.Tokyo] : [] };
         var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, new RecordingSink(),
             Options.Create(new RaceDiscoveryCollectionOptions { NearPublicationRetryMinutes = 47 }),
             new FixedTimeProvider(now));

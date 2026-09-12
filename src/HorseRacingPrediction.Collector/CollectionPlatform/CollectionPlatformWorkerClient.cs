@@ -11,8 +11,12 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
     {
         using var acquireResponse = await client.PostAsJsonAsync(
             $"api/internal/collection/tasks/{notification.TaskId}/acquire",
-            new { notification.DispatchGeneration, LeaseSeconds = 900,
-                Correlation = CollectionAttemptCorrelationScope.Current }, cancellationToken).ConfigureAwait(false);
+            new
+            {
+                notification.DispatchGeneration,
+                LeaseSeconds = 900,
+                Correlation = CollectionAttemptCorrelationScope.Current
+            }, cancellationToken).ConfigureAwait(false);
         acquireResponse.EnsureSuccessStatusCode();
         var acquire = await acquireResponse.Content.ReadFromJsonAsync<CollectionTaskAcquireResult>(cancellationToken)
             .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task acquire response was empty.");

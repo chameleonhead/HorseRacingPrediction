@@ -14,7 +14,7 @@ public sealed class CollectionDispatchReservationTests
         try
         {
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
-                { StateDirectory = directory }));
+            { StateDirectory = directory }));
             await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow;
             await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
