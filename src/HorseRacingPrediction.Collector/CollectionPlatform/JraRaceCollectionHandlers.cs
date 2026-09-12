@@ -199,6 +199,27 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             {
                 result = await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
             }
+            catch (JraPageKindMismatchException ex)
+            {
+                return new(
+                    CollectionAttemptResult.UnexpectedPage,
+                    ex.GetType().Name,
+                    ex.Message,
+                    FinalUrl: ToUri(ex.Url),
+                    PageIdentification:
+                        $"Expected={ex.ExpectedKind}; Actual={ex.ActualKind}; Resource={ex.ExpectedResourceId ?? task.Resource.Id}",
+                    LocationOutcomes: locationOutcomes);
+            }
+            catch (JraPageParseException ex)
+            {
+                return new(
+                    CollectionAttemptResult.UnexpectedPage,
+                    ex.GetType().Name,
+                    ex.Message,
+                    FinalUrl: ToUri(ex.Url),
+                    PageIdentification: $"Expected=RaceCard; Actual={ex.PageKind}; Resource={task.Resource.Id}",
+                    LocationOutcomes: locationOutcomes);
+            }
             catch (JraCollectionException ex) when (IsCurrentOrFuture(task.EffectiveDate))
             {
                 return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",

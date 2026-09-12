@@ -330,7 +330,8 @@ public sealed partial class JraNavigator
             await NavigateRaceNumberLinkAsync(
                 race.Number,
                 JraNavigationLinks.RaceCard,
-                cancellationToken);
+                cancellationToken,
+                allowGenericRaceNumberFallback: false);
         }
 
         var page =
@@ -342,7 +343,25 @@ public sealed partial class JraNavigator
             page.Kind,
             page.Url);
 
-        return page;
+        if (page is not JraRaceCardPage raceCard)
+        {
+            throw new JraPageKindMismatchException(
+                JraPageKind.RaceCard,
+                page.Kind,
+                page.Url,
+                race.ToString());
+        }
+
+        if (raceCard.RaceId != race)
+        {
+            throw new JraRaceIdentityMismatchException(
+                JraPageKind.RaceCard,
+                page.Url,
+                race.ToString(),
+                raceCard.RaceId.ToString());
+        }
+
+        return raceCard;
     }
 
     private async Task<JraRaceCardPage?> TryNavigateFromCurrentPageAsync(
@@ -1134,9 +1153,14 @@ public sealed partial class JraNavigator
     private async Task NavigateRaceNumberLinkAsync(
         int raceNumber,
         IReadOnlyList<string> linkTextCandidates,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowGenericRaceNumberFallback = true)
     {
-        if (!await TryNavigateRaceNumberLinkAsync(raceNumber, linkTextCandidates, cancellationToken))
+        if (!await TryNavigateRaceNumberLinkAsync(
+                raceNumber,
+                linkTextCandidates,
+                cancellationToken,
+                allowGenericRaceNumberFallback))
         {
             throw new JraNavigationException(
                 $"{raceNumber}R のリンクが見つかりませんでした。");
@@ -1151,7 +1175,8 @@ public sealed partial class JraNavigator
     private async Task<bool> TryNavigateRaceNumberLinkAsync(
         int raceNumber,
         IReadOnlyList<string> linkTextCandidates,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowGenericRaceNumberFallback = true)
     {
         var links =
             await _browser.GetLinksAsync(
@@ -1170,10 +1195,13 @@ public sealed partial class JraNavigator
                 linkTextCandidates.Any(candidate =>
                     x.Title.Contains(candidate, StringComparison.Ordinal)));
 
-        target ??=
-            links.FirstOrDefault(x =>
-                numberMarkers.Any(marker =>
-                    x.Title.Contains(marker, StringComparison.Ordinal)));
+        if (allowGenericRaceNumberFallback)
+        {
+            target ??=
+                links.FirstOrDefault(x =>
+                    numberMarkers.Any(marker =>
+                        x.Title.Contains(marker, StringComparison.Ordinal)));
+        }
 
         if (target is null)
         {

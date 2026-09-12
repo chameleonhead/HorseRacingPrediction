@@ -242,15 +242,15 @@ public sealed class RaceListPageParser
                 }
             }
 
+            var isResultSelection = RemoveWhitespace(table.Headers[numberIndex]) is "レース結果";
             var raceLink = table.GetCell(rowIndex, numberIndex)?.Fragments
                 .FirstOrDefault(fragment =>
                     fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) &&
+                    (isResultSelection || ContainsRaceCardLabel(fragment)) &&
                     (fragment.Url is not null || !string.IsNullOrWhiteSpace(fragment.RawUrl)))
                 is { } linkFragment
                     ? linkFragment.RawUrl ?? linkFragment.Url?.ToString()
                     : null;
-            var isResultSelection = RemoveWhitespace(table.Headers[numberIndex]) is "レース結果";
-
             races.Add(new RaceSummary(
                 new RaceId(date, course, number),
                 name,
@@ -261,4 +261,10 @@ public sealed class RaceListPageParser
 
         return races;
     }
+
+    private static bool ContainsRaceCardLabel(
+        HorseRacingPrediction.Scraping.Browser.Snapshots.PageElementFragmentSnapshot fragment)
+        => new[] { fragment.Text, fragment.AccessibleName }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Any(value => RemoveWhitespace(value!).Contains("出馬表", StringComparison.Ordinal));
 }

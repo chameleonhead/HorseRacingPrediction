@@ -20,25 +20,41 @@ else if (detail is not null)
         <UiState Kind="error" Title="操作を完了できません" Message="@string.Join(" ", operationErrors)" />
     }
     <section class="profile-facts" aria-label="収集処理の概要">
-        <div class="profile-fact"><span>現在の状態</span><strong>@StatusLabel</strong></div>
+        <div class="profile-fact"><span>現在の処理</span><strong>@CurrentTaskLabel</strong></div>
+        <div class="profile-fact"><span>保存データ</span><strong>@StoredDataLabel</strong></div>
+        <div class="profile-fact"><span>障害対応</span><strong>@ActiveFailureLabel</strong></div>
         <div class="profile-fact"><span>抽出仕様</span><strong>適用 @(detail.State?.AppliedRevision ?? 0) / 必要 @(detail.State?.RequiredRevision ?? LatestTask?.RequestedRevision ?? 1)</strong></div>
         <div class="profile-fact"><span>最終取得</span><strong>@Time(detail.State?.LastCollectedAt)</strong></div>
         <div class="profile-fact"><span>次回予定</span><strong>@Time(detail.State?.NextCollectionAt)</strong></div>
     </section>
+    @if (LatestTask is { } currentTask && IsActive(currentTask.Status))
+    {
+        <FluentMessageBar Intent="@MessageIntent.Info" Title="@ActiveTaskTitle(currentTask.Status)">
+            @if (detail.State?.LastCollectedAt is not null)
+            {
+                <span>前回取得済みのデータは利用できます。最終取得: @Time(detail.State.LastCollectedAt)</span>
+            }
+            else
+            {
+                <span>初回の取得が完了するまでお待ちください。</span>
+            }
+        </FluentMessageBar>
+    }
     @if (DomainUrl is not null)
     {
         <div class="action-row"><FluentButton Href="@DomainUrl">@ResourceTypeLabel の業務データを開く</FluentButton></div>
     }
 
-    @if (LatestFailedAttempt is { } failedAttempt)
+    @if (ActiveFailure is { } activeFailure)
     {
-        var advice = CollectionErrorPresentation.Describe(failedAttempt.ErrorCode, failedAttempt.ErrorMessage);
-        <section class="latest-error" aria-labelledby="latest-error-title">
-            <div class="latest-error-heading"><div><span class="eyebrow">最新の失敗</span><h2 id="latest-error-title">@advice.Title</h2></div><RaceOpsStatusBadge Label="要確認" Tone="danger" /></div>
+        var failedAttempt = ActiveFailureAttempt;
+        var advice = CollectionErrorPresentation.Describe(activeFailure.ErrorCode, activeFailure.ErrorMessage);
+        <section class="latest-error @(activeFailure.ResolutionStatus == CollectionFailureResolutionStatus.RecoveryInProgress ? "recovery" : null)" aria-labelledby="latest-error-title">
+            <div class="latest-error-heading"><div><span class="eyebrow">未解決の障害</span><h2 id="latest-error-title">@advice.Title</h2></div><RaceOpsStatusBadge Label="@FailureStatusLabel(activeFailure.ResolutionStatus)" Tone="@(activeFailure.ResolutionStatus == CollectionFailureResolutionStatus.Open ? "danger" : "warning")" /></div>
             <p>@advice.Explanation</p>
             <div class="suggested-action"><strong>推奨する対応</strong><span>@advice.SuggestedAction</span></div>
-            <div class="url-evidence"><UrlEvidence Label="要求URL" Value="@failedAttempt.RequestedUrl" /><UrlEvidence Label="最終URL" Value="@failedAttempt.FinalUrl" /></div>
-            <details><summary>技術情報を表示</summary><dl class="technical-details"><dt>エラーコード</dt><dd><code>@(failedAttempt.ErrorCode ?? "—")</code></dd><dt>詳細</dt><dd><pre>@(failedAttempt.ErrorMessage ?? "—")</pre></dd><dt>HTTP</dt><dd>@(failedAttempt.HttpStatusCode?.ToString() ?? "—")</dd><dt>ページ判定</dt><dd>@(failedAttempt.PageIdentification ?? "—")</dd><dt>実行バッチ</dt><dd>@(failedAttempt.ExecutionBatchId?.ToString("D") ?? "—")</dd></dl></details>
+            <div class="url-evidence"><UrlEvidence Label="要求URL" Value="@failedAttempt?.RequestedUrl" /><UrlEvidence Label="最終URL" Value="@failedAttempt?.FinalUrl" /></div>
+            <details><summary>技術情報を表示</summary><dl class="technical-details"><dt>エラーコード</dt><dd><code>@(activeFailure.ErrorCode ?? "—")</code></dd><dt>詳細</dt><dd><pre>@(activeFailure.ErrorMessage ?? "—")</pre></dd><dt>HTTP</dt><dd>@(failedAttempt?.HttpStatusCode?.ToString() ?? "—")</dd><dt>ページ判定</dt><dd>@(failedAttempt?.PageIdentification ?? "—")</dd><dt>実行バッチ</dt><dd>@(failedAttempt?.ExecutionBatchId?.ToString("D") ?? "—")</dd></dl></details>
         </section>
     }
 
@@ -62,14 +78,19 @@ else if (detail is not null)
     private bool loading, busy; private int requestHistoryPage=1,taskHistoryPage=1,attemptHistoryPage=1; private const int HistoryPageSize=25; private CollectionResourceDetail? detail; private string? explicitUrl, operationMessage; private IReadOnlyList<string> errors=[],requestErrors=[],operationErrors=[];
     private ResourceType? Type=>Enum.TryParse<ResourceType>(ResourceTypeName,true,out var value)?value:null;
     private CollectionTaskSummary? LatestTask=>detail?.LatestTask;
-    private CollectionAttemptSummary? LatestFailedAttempt=>detail?.Attempts.OrderByDescending(x=>x.StartedAt).FirstOrDefault(x=>x.Result is not CollectionAttemptResult.Succeeded and not CollectionAttemptResult.Running);
+    private PendingCollectionFailureNotification? ActiveFailure=>detail?.Failures?.Where(x=>x.ResolutionStatus is CollectionFailureResolutionStatus.Open or CollectionFailureResolutionStatus.RecoveryInProgress).OrderByDescending(x=>x.FailedAt).FirstOrDefault();
+    private CollectionAttemptSummary? ActiveFailureAttempt=>ActiveFailure is null?null:detail?.Attempts.Where(x=>x.TaskId==ActiveFailure.TaskId).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
     private string ResourceTypeLabel=>Type switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>ResourceTypeName};
     private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>DefinitionId};
     private string ResourceDescription=>$"{ResourceTypeLabel} ・ {Provider} ・ {ResourceId}";
     private string? DomainUrl=>Type switch{ResourceType.Horse=>$"/horses/{Uri.EscapeDataString(ResourceId)}",ResourceType.Jockey=>$"/jockeys/{Uri.EscapeDataString(ResourceId)}",ResourceType.Trainer=>$"/trainers/{Uri.EscapeDataString(ResourceId)}",_=>null};
     private string BackHref=>!string.IsNullOrWhiteSpace(ReturnUrl)&&ReturnUrl.StartsWith("/jobs",StringComparison.Ordinal)&&!ReturnUrl.StartsWith("//",StringComparison.Ordinal)?ReturnUrl:"/jobs";
-    private string StatusLabel=>detail?.State?.Status switch{CollectionStateStatus.Unknown=>"未確認",CollectionStateStatus.Pending=>"処理待ち",CollectionStateStatus.Collecting=>"収集中",CollectionStateStatus.Current=>"収集済み",CollectionStateStatus.RefreshDue=>"更新待ち",CollectionStateStatus.Stale=>"要再取得",CollectionStateStatus.Failed=>"失敗",CollectionStateStatus.Unavailable=>"取得不可",_=>LatestTask is null?"未確認":TaskStatusLabel(LatestTask.Status)};
-    private string StatusTone=>detail?.State?.Status switch{CollectionStateStatus.Current=>"success",CollectionStateStatus.Failed or CollectionStateStatus.Stale=>"danger",CollectionStateStatus.Collecting=>"info",_=>"warning"};
+    private string StatusLabel=>LatestTask is { } task&&IsActive(task.Status)?TaskStatusLabel(task.Status):ActiveFailure is { } failure?FailureStatusLabel(failure.ResolutionStatus):StoredDataLabel;
+    private string StatusTone=>LatestTask is { } task&&IsActive(task.Status)?"info":ActiveFailure?.ResolutionStatus==CollectionFailureResolutionStatus.Open?"danger":StoredDataIsCurrent?"success":"warning";
+    private string CurrentTaskLabel=>LatestTask is null?"実行タスクなし":TaskStatusLabel(LatestTask.Status);
+    private bool StoredDataIsCurrent=>detail?.State is { LastCollectedAt: not null } state&&state.AppliedRevision>=state.RequiredRevision;
+    private string StoredDataLabel=>detail?.State switch{{LastCollectedAt:not null} when StoredDataIsCurrent=>"取得済み",{LastCollectedAt:not null,Status:CollectionStateStatus.Stale}=>"要再取得",{LastCollectedAt:not null}=>"取得履歴あり",_=>"未取得"};
+    private string ActiveFailureLabel=>ActiveFailure is null?"未解決なし":FailureStatusLabel(ActiveFailure.ResolutionStatus);
     private int RequestHistoryPages=>Pages(detail?.RequestTotal??0);
     private int TaskHistoryPages=>Pages(detail?.TaskTotal??0);
     private int AttemptHistoryPages=>Pages(detail?.AttemptTotal??0);
@@ -87,6 +108,7 @@ else if (detail is not null)
     private async Task SubmitRequestAsync(string? requestedUrl){if(Type is null||detail is null)return;requestErrors=[];operationErrors=[];operationMessage=null;busy=true;try{var task=LatestTask;var revision=Math.Max(task?.RequestedRevision??1,detail.State?.RequiredRevision??1);var result=await Api.RequestCollectionAsync(new(Type.Value,Provider,ResourceId,DefinitionId,revision,CollectionReason.ManualRefresh,task?.Lane??CollectionLane.Normal,task?.Priority??50,string.IsNullOrWhiteSpace(requestedUrl)?null:requestedUrl));if(result.Success&&result.Value is not null){explicitUrl=null;operationMessage=result.Value.CreatedTask?$"収集依頼を受け付けました。タスク {ShortId(result.Value.TaskId)} を作成しました。":$"収集依頼を受け付けました。実行中のタスク {ShortId(result.Value.TaskId)} にまとめました。";await LoadAsync();}else requestErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){requestErrors=["管理APIに接続できません。入力内容を保持しています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}
     private async Task CancelAsync(CollectionTaskSummary task){operationErrors=[];operationMessage=null;busy=true;try{var result=await Api.CancelCollectionTaskAsync(task.TaskId);if(result.Success){operationMessage=$"タスク {ShortId(task.TaskId)} を取り消しました。";await LoadAsync();}else operationErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){operationErrors=["管理APIに接続できないため、タスクを取り消せませんでした。もう一度お試しください。"]; }finally{busy=false;}}
     private static bool IsActive(CollectionTaskStatus value)=>value is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
+    private static string ActiveTaskTitle(CollectionTaskStatus value)=>value==CollectionTaskStatus.Running?"再取得を実行しています":"再取得を待っています";
     private static string ShortId(Guid value)=>value.ToString("D")[..8];
     private string BatchUrl(Guid value)=>$"/jobs/execution-batches/{value:D}?returnUrl={Uri.EscapeDataString(NavigationPath)}";
     private string NavigationPath=>$"/jobs/{Uri.EscapeDataString(ResourceTypeName)}/{Uri.EscapeDataString(Provider)}/{Uri.EscapeDataString(ResourceId)}/{Uri.EscapeDataString(DefinitionId)}";
@@ -95,7 +117,7 @@ else if (detail is not null)
     private static string TaskStatusLabel(CollectionTaskStatus value)=>value switch{CollectionTaskStatus.Pending=>"登録待ち",CollectionTaskStatus.Ready=>"実行待ち",CollectionTaskStatus.Running=>"実行中",CollectionTaskStatus.RetryWaiting=>"再試行待ち",CollectionTaskStatus.WaitingDiscovery=>"取得先の探索待ち",CollectionTaskStatus.Succeeded=>"完了",CollectionTaskStatus.Failed=>"失敗",CollectionTaskStatus.Cancelled=>"中断",CollectionTaskStatus.DeadLetter=>"要対応",_=>value.ToString()};
     private static string LaneLabel(CollectionLane value)=>value switch{CollectionLane.Realtime=>"リアルタイム",CollectionLane.Normal=>"通常",CollectionLane.Background=>"バックグラウンド",_=>value.ToString()};
     private static string AttemptResultLabel(CollectionAttemptResult value)=>value switch{CollectionAttemptResult.Running=>"実行中",CollectionAttemptResult.Succeeded=>"成功",CollectionAttemptResult.TransientFailure=>"一時的な失敗",CollectionAttemptResult.PermanentFailure=>"恒久的な失敗",CollectionAttemptResult.ResourceNotFound=>"対象なし",CollectionAttemptResult.ResourceNotYetAvailable=>"公開待ち",CollectionAttemptResult.ParseFailure=>"読み取り失敗",CollectionAttemptResult.ValidationFailure=>"内容検証失敗",CollectionAttemptResult.UnexpectedPage=>"別ページを検出",CollectionAttemptResult.AccessLimited=>"アクセス制限",CollectionAttemptResult.Cancelled=>"中断",_=>value.ToString()};
-    private static string FailureStatusLabel(CollectionFailureResolutionStatus value)=>value switch{CollectionFailureResolutionStatus.Open=>"要対応",CollectionFailureResolutionStatus.RecoveryInProgress=>"対応中",CollectionFailureResolutionStatus.Resolved=>"解決済み",CollectionFailureResolutionStatus.Superseded=>"新しい障害へ更新",_=>value.ToString()};
+    private static string FailureStatusLabel(CollectionFailureResolutionStatus value)=>value switch{CollectionFailureResolutionStatus.Open=>"要対応",CollectionFailureResolutionStatus.RecoveryInProgress=>"再取得処理中",CollectionFailureResolutionStatus.Resolved=>"解決済み",CollectionFailureResolutionStatus.Superseded=>"新しい障害へ更新",_=>value.ToString()};
     private static string LocationSourceLabel(ResourceLocationSource value)=>value switch{ResourceLocationSource.Explicit=>"手動指定",ResourceLocationSource.Generated=>"規則から生成",ResourceLocationSource.Discovered=>"探索で発見",ResourceLocationSource.Redirected=>"転送先",ResourceLocationSource.Manual=>"管理者登録",_=>value.ToString()};
     private static string LocationStatusLabel(ResourceLocationStatus value)=>value switch{ResourceLocationStatus.Unknown=>"未確認",ResourceLocationStatus.Active=>"利用可能",ResourceLocationStatus.Suspect=>"要再確認",ResourceLocationStatus.Invalid=>"利用不可",_=>value.ToString()};
     private static string Time(DateTimeOffset? value)=>value?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"—";

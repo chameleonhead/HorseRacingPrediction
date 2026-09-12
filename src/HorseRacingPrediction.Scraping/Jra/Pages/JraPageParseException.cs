@@ -122,6 +122,36 @@ public sealed class JraRaceIdentityMismatchException
 }
 
 /// <summary>
+/// Navigationが要求したページ種別と、実際に到達して解析したページ種別が一致しない。
+/// HTTP 200でも別種別のページなら成功として扱わないために使用する。
+/// </summary>
+public sealed class JraPageKindMismatchException
+    : JraPageParseException
+{
+    public JraPageKindMismatchException(
+        JraPageKind expectedKind,
+        JraPageKind actualKind,
+        string url,
+        string? expectedResourceId = null)
+        : base(
+            actualKind,
+            url,
+            $"要求したページ種別と実際のページ種別が一致しません。Expected={expectedKind}, Actual={actualKind}" +
+            (expectedResourceId is null ? string.Empty : $", ExpectedResourceId={expectedResourceId}"),
+            "PageKind",
+            actualKind.ToString())
+    {
+        ExpectedKind = expectedKind;
+        ActualKind = actualKind;
+        ExpectedResourceId = expectedResourceId;
+    }
+
+    public JraPageKind ExpectedKind { get; }
+    public JraPageKind ActualKind { get; }
+    public string? ExpectedResourceId { get; }
+}
+
+/// <summary>
 /// 個々の値はParseできたが、結果データ内の他項目と矛盾する（依頼書31節）。
 /// 例：ResultStatus=FinishedなのにFinishPositionが存在しない、降着表現を検出した
 /// のに元の入線順位を解析できない等。

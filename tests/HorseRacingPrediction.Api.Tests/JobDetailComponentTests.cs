@@ -32,7 +32,7 @@ public sealed class JobDetailComponentTests
         StringAssert.Contains(cut.Markup, "タスク履歴 (2)");
         StringAssert.Contains(cut.Markup, "実行タスクの履歴");
         StringAssert.Contains(cut.Markup, "障害履歴 (2)");
-        StringAssert.Contains(cut.Markup, "対応中");
+        StringAssert.Contains(cut.Markup, "再取得処理中");
         StringAssert.Contains(cut.Markup, "解決済み");
         StringAssert.Contains(cut.Markup, "実行バッチ");
         StringAssert.Contains(cut.Markup, "/jobs/execution-batches/33333333-3333-3333-3333-333333333333");
@@ -85,6 +85,88 @@ public sealed class JobDetailComponentTests
 
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "実行中のタスク 22222222 にまとめました"));
         Assert.AreEqual(1, handler.ManualRequests);
+    }
+
+    [TestMethod]
+    public async Task PendingRecollection_WithPreviouslyCollectedData_ShowsBothStates()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new JobDetailHandler { ActiveFailureStatus = null })
+        { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = RenderDetail(context);
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "再取得を待っています"));
+        StringAssert.Contains(cut.Markup, "前回取得済みのデータは利用できます");
+        Assert.IsTrue(cut.FindAll(".profile-fact").Any(x => x.TextContent.Contains("保存データ取得済み")));
+        Assert.IsTrue(cut.FindAll(".profile-fact").Any(x => x.TextContent.Contains("障害対応未解決なし")));
+        Assert.AreEqual(0, cut.FindAll("section.latest-error").Count);
+    }
+
+    [TestMethod]
+    public async Task ResolvedFailure_RemainsInHistory_ButIsNotShownAsCurrentFailure()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new JobDetailHandler { ActiveFailureStatus = null })
+        { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = RenderDetail(context);
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "障害履歴 (1)"));
+        StringAssert.Contains(cut.Markup, "解決済み");
+        Assert.AreEqual(0, cut.FindAll("section.latest-error").Count);
+    }
+
+    [TestMethod]
+    public async Task OpenFailure_IsPromotedAsUnresolvedFailure()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new JobDetailHandler
+        {
+            ActiveFailureStatus = CollectionFailureResolutionStatus.Open,
+        })
+        { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = RenderDetail(context);
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "未解決の障害"));
+        Assert.AreEqual(1, cut.FindAll("section.latest-error").Count);
+        Assert.IsTrue(cut.FindAll(".profile-fact").Any(x => x.TextContent.Contains("障害対応要対応")));
+    }
+
+    [TestMethod]
+    [DataRow(null, "実行タスクなし")]
+    [DataRow(CollectionTaskStatus.Succeeded, "完了")]
+    public async Task InactiveOrMissingTask_DoesNotShowActiveTaskMessage(
+        CollectionTaskStatus? latestTaskStatus,
+        string expectedTaskLabel)
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new JobDetailHandler
+        {
+            ActiveFailureStatus = null,
+            LatestTaskStatus = latestTaskStatus,
+        })
+        { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = RenderDetail(context);
+
+        cut.WaitForAssertion(() => Assert.IsTrue(cut.FindAll(".profile-fact")
+            .Any(x => x.TextContent.Contains($"現在の処理{expectedTaskLabel}"))));
+        Assert.IsFalse(cut.Markup.Contains("再取得を待っています", StringComparison.Ordinal));
+        Assert.IsFalse(cut.Markup.Contains("再取得を実行しています", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -165,6 +247,9 @@ public sealed class JobDetailComponentTests
         private static readonly Guid ExecutionBatchId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         public bool CreatedTask { get; init; } = true;
         public bool FailManualRequest { get; init; }
+        public CollectionFailureResolutionStatus? ActiveFailureStatus { get; init; } =
+            CollectionFailureResolutionStatus.RecoveryInProgress;
+        public CollectionTaskStatus? LatestTaskStatus { get; init; } = CollectionTaskStatus.Pending;
         public int ManualRequests { get; private set; }
         public int CancelRequests { get; private set; }
         public int RequestHistoryPage { get; private set; } = 1;
@@ -199,8 +284,10 @@ public sealed class JobDetailComponentTests
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(request.RequestUri!.Query);
             RequestHistoryPage = int.TryParse(query["requestHistoryPage"], out var requestPage) ? requestPage : 1;
             TaskHistoryPage = int.TryParse(query["taskHistoryPage"], out var taskPage) ? taskPage : 1;
-            var latestTask = new CollectionTaskSummary(ActiveTaskId, Resource, Definition,
-                CollectionTaskStatus.Pending, CollectionLane.Realtime, 90, 1, now, 0);
+            var latestTask = LatestTaskStatus is { } latestStatus
+                ? new CollectionTaskSummary(ActiveTaskId, Resource, Definition,
+                    latestStatus, CollectionLane.Realtime, 90, 1, now, 0)
+                : null;
             var detail = new CollectionResourceDetail(
                 new(Resource, Definition, 1, 1, now.AddHours(-1), null, CollectionStateStatus.Pending),
                 [],
@@ -216,16 +303,25 @@ public sealed class JobDetailComponentTests
                     "sqs-message", "lambda-request", 1, 2)],
                 RequestTotal: 30, TaskTotal: 2, AttemptTotal: 1, LatestTask: latestTask,
                 TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1,
-                Failures:
-                [
-                    new(Guid.NewGuid(), Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Failed,
-                        "Old", "old failure", 1, now.AddDays(-2), CollectionFailureResolutionStatus.Resolved,
-                        ResolvedAt: now.AddDays(-1)),
-                    new(Guid.NewGuid(), Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Failed,
-                        "Current", "recovering", 1, now.AddHours(-1),
-                        CollectionFailureResolutionStatus.RecoveryInProgress, ActiveTaskId, now),
-                ]);
+                Failures: BuildFailures(now));
             return await Ok(detail);
+        }
+
+        private IReadOnlyList<PendingCollectionFailureNotification> BuildFailures(DateTimeOffset now)
+        {
+            var failures = new List<PendingCollectionFailureNotification>
+            {
+                new(Guid.NewGuid(), Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Failed,
+                    "Old", "old failure", 1, now.AddDays(-2), CollectionFailureResolutionStatus.Resolved,
+                    ResolvedAt: now.AddDays(-1)),
+            };
+            if (ActiveFailureStatus is { } status)
+            {
+                failures.Add(new PendingCollectionFailureNotification(
+                    Guid.NewGuid(), ActiveTaskId, Resource, Definition, CollectionTaskStatus.Failed,
+                    "Current", "recovering", 1, now.AddHours(-1), status, ActiveTaskId, now));
+            }
+            return failures;
         }
 
         private static Task<HttpResponseMessage> Ok(object value) => Task.FromResult(

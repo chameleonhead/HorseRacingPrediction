@@ -1,6 +1,6 @@
 # 収集状態の明確化と出馬表リンク選択の修正
 
-- Status: Proposed
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -82,3 +82,29 @@
 - 2026-09-13: CloudWatchで同一バッチの中山5R以降が`Destination=RaceCard ResolvedKind=RaceOdds`となり、その後`JraCollectionException: 出馬表を取得できませんでした`で完了していることを確認した。ページ読み込み・semantic snapshotは成功しており、Playwright資源不足ではない。
 - 2026-09-13: parser unit testはレース番号セルにanchorが1件だけのfixtureで`RaceCardUrl`の転記だけを検証していた。実サイトE2Eは`TestCategory=External`で、CIは`TestCategory!=External`を実行するため対象外だった。
 - 2026-09-13: Sapporo 8RはTask履歴が「実行待ち」「完了」「要対応」、StateはApplied/Required 1/1・最終取得16:47:59、Failure履歴は`DispatchAttemptsExceeded`が16:47:59に解決済みだった。現在の赤いパネルは解決済みFailureに属する過去Attemptを誤って現在障害として表示している。
+- 2026-09-13: ユーザー承認を受け、Execution Modeへ移行した。
+- 2026-09-13: production-shaped fixtureで「オッズ、出馬表、結果」の順でも出馬表を選択し、種類不明リンクを採用しないことを確認した。レース結果選択列の既存URL抽出は別fixtureで維持を確認した。
+- 2026-09-13: Navigatorで曖昧なレース番号リンクを採用しないこと、異種ページ到達時にURL・実ページ種別・要求Resource IDを含む`UnexpectedPage`となることを確認した。
+- 2026-09-13: JobDetail component testsでTaskなし、成功のみ、Active＋過去成功、Open failure、RecoveryInProgress、Resolved failureを検証した。
+- 2026-09-13: ローカル画面で「現在の処理」「保存データ」「障害対応」とActive Task案内が読み上げ可能なテキストで表示されることを確認した。
+- 2026-09-13: `dotnet format --verify-no-changes`、Release build、`TestCategory!=External`の全テスト（736合格、既存1スキップ）、脆弱package検査、pending migration検査、空SQLite DBへのmigration適用を通過した。
+- 2026-09-13: 通常CI外の限定External smoke `JraSiteE2ETests.現在週RaceCard取得`を実行し、実JRAサイトでRaceCard種別・Race ID・出走馬情報の取得が成功した（12秒）。
+
+## Retrospective
+
+### なぜ既存動作を変えてしまったか
+
+- 2026-09-08の`7372eaf Capture table DOM and race links in one snapshot`で、ブラウザー遷移を減らす目的からレース番号セル内のanchorを`RaceCardUrl`へ保存した。このとき「セル内の最初のanchorが出馬表」という未検証の前提を追加した。
+- 新収集基盤の「既知URLを優先する」方針を、従来の意味的な「出馬表」リンク選択より強く適用した。高速化は経路の置換であって、到達するResource種別を変えてよい仕様変更ではなかった。
+- 単体fixtureはanchorを1件しか持たず、URLが転記されたことだけを確認していた。従来経路と同じ`RaceCard`・Race IDへ到達する終端契約を検証していなかった。
+- 実サイト確認は通常CIから除外されており、複数リンクの順序と、`RaceCard`要求が`RaceOdds`へ到達する本番形状をリリース前ゲートにできていなかった。
+
+したがって本件は承認された仕様変更ではなく、基盤移行時の振る舞い維持漏れである。再発防止として`learn-from-implementation-failures`へ「外部adapter fidelity gate」に加え「infrastructure migration behavior-preservation gate」を追加し、旧経路の意味的選択・fallback・終端検証を新経路へ対応付けることを必須にした。
+
+## Implementation notes
+
+- `RaceListPageParser`は「出馬表」と意味的に識別できるanchorだけを`RaceCardUrl`候補に保存する。種類不明ならURLを保存せず、Navigatorの明示的な出馬表探索へ戻す。
+- `JraNavigator`はRaceCard取得時だけレース番号一致のみの曖昧fallbackを禁止し、到達ページの種別とRace IDを終端で検証する。
+- ページ種別不一致には`JraPageKindMismatchException`を使い、Collectorは`UnexpectedPage`、最終URL、実ページ種別として永続化する。
+- `JobDetail`は現在Task、保存済みデータ、未解決Failureを分離した。Resolved/Supersededは履歴だけに残し、RecoveryInProgressは「再取得処理中」と警告色、Openだけを要対応として表示する。
+- API ReadModelは既に`LatestTask`、`CollectionState.LastCollectedAt`、resolution付き`Failures`を返していたため、契約追加は行わず既存情報から表示モデルを構成した。

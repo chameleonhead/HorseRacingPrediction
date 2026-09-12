@@ -293,6 +293,63 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceCardAsync_DoesNotUseAmbiguousRaceNumberLink()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        const string oddsUrl = "https://www.jra.go.jp/keiba/sample/odds/11/";
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+        browser.SetLinks(raceListUrl, [new TestPageLink(oddsUrl, "11R オッズ")]);
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        await Assert.ThrowsExactlyAsync<JraNavigationException>(() => navigator.ToRaceCardAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11)));
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, oddsUrl);
+    }
+
+    [TestMethod]
+    public async Task ToRaceCardAsync_ReachDifferentPageKind_ReportsKindAndUrl()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        const string wrongUrl = "https://www.jra.go.jp/keiba/sample/odds/11/";
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(
+            MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+        browser.SetLinks(raceListUrl, [new TestPageLink(wrongUrl, "11R 出馬表")]);
+        browser.SetSnapshot(
+            wrongUrl,
+            new TestPageSnapshot(wrongUrl, "オッズ", [new("オッズ", "", [], [], [], [])]));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraPageKindMismatchException>(() => navigator.ToRaceCardAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11)));
+        StringAssert.Contains(exception.Message, "Expected=RaceCard");
+        StringAssert.Contains(exception.Message, "ExpectedResourceId=");
+        StringAssert.Contains(exception.Message, wrongUrl);
+    }
+
+    [TestMethod]
     public async Task ToRaceCardAsync_RaceNotInList_Throws()
     {
         const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
@@ -838,7 +895,9 @@ public sealed class JraNavigatorTests
         browser.SetLinks(
             raceListUrlHanshin,
             [new TestPageLink(raceCardUrlHanshin1, "1R 出馬表")]);
-        browser.SetSnapshot(raceCardUrlHanshin1, BuildRaceCardSnapshot(raceCardUrlHanshin1, "1R"));
+        browser.SetSnapshot(
+            raceCardUrlHanshin1,
+            BuildRaceCardSnapshot(raceCardUrlHanshin1, "1R", "2026年9月6日 阪神"));
 
         var navigator = new JraNavigator(browser, CreateReader(browser), logger: null, today: () => new DateOnly(2026, 9, 5));
 

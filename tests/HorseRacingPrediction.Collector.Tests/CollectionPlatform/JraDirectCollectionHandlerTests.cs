@@ -175,6 +175,32 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.IsNotNull(result.RetryAt);
     }
 
+    [TestMethod]
+    public async Task RaceCard_DiscoveryReachesWrongPage_IsUnexpectedPageWithDiagnostics()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        const string wrongUrl = "https://example.test/odds/11";
+        var sessions = new FakeJraSessionFactory();
+        var workflow = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraPageKindMismatchException(
+                JraPageKind.RaceCard,
+                JraPageKind.RaceOdds,
+                wrongUrl,
+                "20260912:Tokyo:11"),
+        };
+
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.Result);
+        Assert.AreEqual(nameof(JraPageKindMismatchException), result.ErrorCode);
+        Assert.AreEqual(new Uri(wrongUrl), result.FinalUrl);
+        Assert.AreEqual(
+            "Expected=RaceCard; Actual=RaceOdds; Resource=20260912:Tokyo:11",
+            result.PageIdentification);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

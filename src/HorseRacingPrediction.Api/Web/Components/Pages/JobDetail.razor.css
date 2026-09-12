@@ -32,6 +32,8 @@ code {
 }
 
 .latest-error { background: color-mix(in srgb, var(--status-danger-background-1) 45%, var(--neutral-layer-1)); border: 1px solid var(--status-danger-foreground-1); border-left-width: 4px; border-radius: 8px; margin: 18px 0; padding: 18px; }
+.latest-error.recovery { background: color-mix(in srgb, var(--status-warning-background-1) 45%, var(--neutral-layer-1)); border-color: var(--status-warning-foreground-1); }
+.latest-error.recovery .eyebrow { color: var(--status-warning-foreground-1); }
 .latest-error-heading, .url-detail, .history-url { align-items: center; display: flex; gap: 10px; }
 .latest-error-heading { justify-content: space-between; }
 .latest-error h2 { margin: 2px 0 0; }
