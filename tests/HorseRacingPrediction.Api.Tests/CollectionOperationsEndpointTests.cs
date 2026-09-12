@@ -12,6 +12,32 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionOperationsEndpointTests
 {
     [TestMethod]
+    public async Task TaskViewCounts_AggregateEveryStatusInOneResponse()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var now = DateTimeOffset.UtcNow;
+            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), new("horse-profile"), 1,
+                CollectionReason.Initial, now);
+            await store.RequestAsync(new(ResourceType.Horse, "JRA", "H002"), new("horse-profile"), 1,
+                CollectionReason.Initial, now);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            var result = await client.GetFromJsonAsync<CollectionTaskViewCounts>(
+                "/api/admin/collection/task-view-counts");
+
+            Assert.IsNotNull(result);
+            Assert.AreEqual(2, result.Counts["waiting"]);
+            Assert.AreEqual(2, result.Counts["all"]);
+            Assert.AreEqual(0, result.Counts["attention"]);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task TaskSearch_ReturnsFilteredPageAndRejectsUnknownStatus()
     {
         var directory = CreateDirectory();

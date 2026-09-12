@@ -98,15 +98,20 @@ public sealed class CollectionAdministrationComponentTests
         var (app, original) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
         using var ignored = original;
-        using var http = new HttpClient(new ResourceHandler()) { BaseAddress = new Uri("http://localhost") };
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
         await using var context = CreateContext(app.Services, http);
         var cut = context.Render<Jobs>();
 
         cut.WaitForAssertion(() => Assert.HasCount(1, cut.FindComponents<FluentTabs>()));
         var tabs = cut.FindComponent<FluentTabs>();
         Assert.IsTrue(tabs.Instance.ShowActiveIndicator);
+        var activePanel = cut.Find("#attention-panel");
+        StringAssert.Contains(activePanel.InnerHtml, "収集処理の絞り込み");
         CollectionAssert.IsSubsetOf(new[] { "要対応", "処理中", "待機中", "最近完了", "収集対象", "直近の処理" },
             cut.FindComponents<FluentTab>().Select(x => x.Instance.Label?.ToString()?.Split("  ")[0]).ToArray());
+        Assert.AreEqual(1, handler.TaskSearchRequests);
+        Assert.AreEqual(1, handler.TaskViewCountRequests);
 
         await cut.InvokeAsync(() => tabs.Instance.ActiveTabIdChanged.InvokeAsync("waiting"));
         cut.WaitForAssertion(() => StringAssert.Contains(
@@ -239,11 +244,17 @@ public sealed class CollectionAdministrationComponentTests
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
         public int ExplicitUrlRequests { get; private set; }
+        public int TaskSearchRequests { get; private set; }
+        public int TaskViewCountRequests { get; private set; }
         public CreateCollectionRequest? LastManualRequest { get; private set; }
         public CreateExplicitUrlCollectionRequest? LastExplicitUrlRequest { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (request.RequestUri!.AbsolutePath == "/api/admin/collection/tasks/search")
+                TaskSearchRequests++;
+            if (request.RequestUri.AbsolutePath == "/api/admin/collection/task-view-counts")
+                TaskViewCountRequests++;
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests/bulk/preview"))
             {
                 Previews++;
@@ -279,6 +290,9 @@ public sealed class CollectionAdministrationComponentTests
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },
                     new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
                     new Dictionary<string, int>(), 0),
+                "/api/admin/collection/task-view-counts" => new CollectionTaskViewCounts(
+                    new Dictionary<string, int> { ["attention"] = 0, ["running"] = 0,
+                        ["waiting"] = 1, ["recent"] = 0, ["all"] = 1 }),
                 "/api/admin/collection/pipeline" => new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState(false, null, DateTimeOffset.UtcNow),
                 "/api/admin/collection/failure-notifications" => Array.Empty<PendingCollectionFailureNotification>(),
                 "/api/admin/collection/backfills" => Array.Empty<BackfillBatchSnapshot>(),

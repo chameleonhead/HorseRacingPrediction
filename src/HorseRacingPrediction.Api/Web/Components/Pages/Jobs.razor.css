@@ -30,8 +30,15 @@
     margin: 2px 0 14px;
     max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+}
+
+.collection-refreshing {
+    align-items: center;
+    color: var(--neutral-foreground-hint);
+    display: flex;
+    font-size: var(--type-ramp-minus-1-font-size);
+    gap: 8px;
+    min-height: 28px;
 }
 
 .filter-bar {

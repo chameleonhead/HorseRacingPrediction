@@ -201,6 +201,7 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 ## Verification record
 
 - 2026-09-12: 収集状況の独自カード型リンクを、承認済みモックとアプリ内詳細画面で使用している標準 `FluentTabs` に置換した。選択状態はFluentのactive indicator（下線）で表し、各ラベルの件数とURLによるview復元を維持した。独自の背景、角丸、影、件数pillを削除し、狭幅時はタブ列だけを横スクロールする。bUnit対象8件が成功し、実ブラウザーで初期「要対応」と「待機中」の切替、選択下線、`?view=waiting`、一覧更新、ページ全体に横overflowが出ないことを確認した。
+- 2026-09-12: タブ追加レビューの4点を完了した。選択tabpanel内へ実際のfilter/listを移してARIA関係を修正し、5回の逐次件数検索を単一集約endpointへ変更した。再読み込みは初回だけ全体loadingとし、その後は既存内容と最終更新時刻を保持したままFluent progress/statusを示す。実ブラウザーでtabpanelのaccessibility treeと狭幅の後方タブ直接表示を確認した。
 
 - 2026-09-12: 利用者が残存実装の整理と順次実装を承認した。前回はレビューで列挙した全項目をclosure ledgerへ転記せず、主要UIの完了を全体完了と誤認した。再発防止として `learn-from-implementation-failures` に review-to-execution closure gate を追加し、全指摘を `execution-plan.md` の U2〜U10 へ登録した。
 

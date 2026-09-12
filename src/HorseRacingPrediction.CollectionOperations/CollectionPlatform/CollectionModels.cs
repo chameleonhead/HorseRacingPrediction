@@ -174,6 +174,7 @@ public sealed record CollectionTaskQuery(
 
 public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
     IReadOnlyList<CollectionTaskSummary> Items);
+public sealed record CollectionTaskViewCounts(IReadOnlyDictionary<string, int> Counts);
 
 public sealed record CollectionStateQuery(IReadOnlyCollection<CollectionStateStatus>? Statuses = null,
     ResourceType? ResourceType = null, string? Provider = null, string? DefinitionId = null,

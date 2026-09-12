@@ -1086,6 +1086,25 @@ public sealed class CollectionPlatformStore
         return new(totalCount, page, pageSize, items);
     }
 
+    public async Task<CollectionTaskViewCounts> GetTaskViewCountsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var counts = await db.Tasks.AsNoTracking().GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken).ConfigureAwait(false);
+        int Count(params CollectionTaskStatus[] statuses) => statuses.Sum(x => counts.GetValueOrDefault(x));
+        return new(new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["attention"] = Count(CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter),
+            ["running"] = Count(CollectionTaskStatus.Running),
+            ["waiting"] = Count(CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
+                CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.WaitingDiscovery),
+            ["recent"] = Count(CollectionTaskStatus.Succeeded),
+            ["all"] = counts.Values.Sum(),
+        });
+    }
+
     public async Task<CollectionStatePage> SearchStatesAsync(CollectionStateQuery request,
         CancellationToken cancellationToken = default)
     {

@@ -11,6 +11,9 @@ public sealed partial class AdminApiClient
     public Task<CollectionProgressSnapshot?> GetCollectionProgressAsync(CancellationToken token = default)
         => GetJsonAsync<CollectionProgressSnapshot>($"{CollectionPlatformPath}/progress", token);
 
+    public Task<CollectionTaskViewCounts?> GetCollectionTaskViewCountsAsync(CancellationToken token = default)
+        => GetJsonAsync<CollectionTaskViewCounts>($"{CollectionPlatformPath}/task-view-counts", token);
+
     public Task<CollectionOperationsDashboard?> GetCollectionOperationsDashboardAsync(CancellationToken token = default)
         => GetJsonAsync<CollectionOperationsDashboard>($"{CollectionPlatformPath}/dashboard", token);
 

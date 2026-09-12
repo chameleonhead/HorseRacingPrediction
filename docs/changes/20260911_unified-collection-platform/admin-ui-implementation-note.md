@@ -58,6 +58,8 @@ Failure rows are not the primary incident representation once many resources fai
 
 Visual QA iterations align the status navigation with the approved mock and the rest of the application: it uses standard Fluent tabs with an active underline and count in each label, without a page-specific card/segment appearance. The row scrolls horizontally only when space is insufficient. Search and its action stay on one desktop row and collapse safely on narrow screens. Collection type cards use a two-column desktop layout, a single-column narrow layout, and visible hover/focus feedback. The independent detail page gives the state facts a contained summary surface while keeping attempts and locations in comparison-friendly tabs. The `直近の処理` label explicitly communicates the 1,000-task read limit; the `収集対象` count comes from the platform-wide progress projection rather than that limited list.
 
+The selected tab now owns its filter and result list as actual `tabpanel` content; tabs are no longer empty accessibility containers around unrelated page content. A single task-view-count endpoint returns all tab counts instead of five sequential searches. Initial load uses the full loading state, while subsequent tab/manual/automatic refreshes preserve the current panel and expose a compact live status. Direct navigation to a later tab remains selected and visible in the narrow browser layout.
+
 ## States and interaction
 
 - Loading keeps the page heading and filters visible and shows an explicit progress state.

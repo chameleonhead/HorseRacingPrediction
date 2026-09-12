@@ -59,6 +59,8 @@ public static class CollectionPlatformEndpointExtensions
         });
         admin.MapGet("/progress", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetProgressAsync(token)));
+        admin.MapGet("/task-view-counts", async (CollectionPlatformStore store, CancellationToken token) =>
+            Results.Ok(await store.GetTaskViewCountsAsync(token)));
         admin.MapGet("/dashboard", async (CollectionPlatformStore store, CancellationToken token) =>
         {
             var progressTask = store.GetProgressAsync(token);

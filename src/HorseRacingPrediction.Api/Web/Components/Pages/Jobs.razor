@@ -33,9 +33,9 @@
 <FluentTabs Class="collection-status-tabs" ShowActiveIndicator="true" ActiveTabId="@view" ActiveTabIdChanged="OnStatusTabChanged" aria-label="収集状況">
     @foreach (var option in views)
     {
-        <FluentTab Id="@option.Value" Label="@StatusTabLabel(option)" />
-    }
-</FluentTabs>
+        <FluentTab Id="@option.Value" Label="@StatusTabLabel(option)">
+        @if (view == option.Value)
+        {
 <section class="filter-bar" aria-label="収集処理の絞り込み">
     <div class="filter-toolbar">
         <div class="filter-field filter-field-primary"><FluentTextField aria-label="収集処理を検索" Placeholder="対象ID、収集内容、状態を検索" @bind-Value="query" /></div>
@@ -50,6 +50,11 @@
     </div>
     <div class="refresh-status"><span>最終更新: @(lastUpdatedAt?.ToLocalTime().ToString("HH:mm:ss") ?? "—")</span><label><input type="checkbox" @bind="autoRefresh" /> 処理中は自動更新</label></div>
 </section>
+
+@if (refreshing)
+{
+    <div class="collection-refreshing" role="status"><FluentProgressRing /> 表示を更新しています</div>
+}
 
 @if (!loading && view == "attention" && FailureGroups.Count > 0)
 {
@@ -102,6 +107,10 @@ else
         <div class="list-pagination"><FluentButton Appearance="@Appearance.Outline" Disabled="@(page <= 1)" OnClick="PreviousPage">前へ</FluentButton><span>@(page) / @TotalPages</span><FluentButton Appearance="@Appearance.Outline" Disabled="@(page >= TotalPages)" OnClick="NextPage">次へ</FluentButton></div>
     }
 }
+        }
+        </FluentTab>
+    }
+</FluentTabs>
 
 <FluentDialog Hidden="@(!showCreate)" HiddenChanged="@(h => showCreate = !h)" Modal="true" TrapFocus="true" AriaLabelledby="create-title" Style="width:min(620px,calc(100vw - 32px));">
     <FluentDialogHeader ShowDismiss="true" ShowDismissTooltip="true"><h2 id="create-title">@CreateTitle</h2></FluentDialogHeader>
@@ -185,7 +194,7 @@ else
     private DateOnly? bulkFrom, bulkTo;
     private DateTime? bulkLastCollectedBefore;
     private int page = 1;
-    private bool loading = true, busy, showCreate, showBulk, showPause, initialized, autoRefresh = true;
+    private bool loading = true, refreshing, busy, showCreate, showBulk, showPause, initialized, autoRefresh = true;
     private string pauseReason = "";
     private DateTimeOffset? lastUpdatedAt;
     private CancellationTokenSource? refreshCancellation;
@@ -217,9 +226,8 @@ else
     private static readonly IReadOnlyList<CollectionKind> collectionKinds = [new("RaceCard", "race-card", "出馬表", "出走馬・騎手・調教師など"), new("RaceResult", "race-result", "レース結果", "着順・払戻・競走中の出来事など"), new("RaceOdds", "race-odds", "オッズ", "時系列で変化する各種オッズ"), new("Horse", "horse-profile", "競走馬", "プロフィール・血統など"), new("Jockey", "jockey-profile", "騎手", "プロフィール・所属など"), new("Trainer", "trainer-profile", "調教師", "プロフィール・所属など")];
 
     protected override async Task OnParametersSetAsync(){if(!initialized){view=views.Any(x=>x.Value==ViewQuery)?ViewQuery!:"attention";query=filter=SearchQuery??"";page=Math.Max(1,PageQuery??1);resourceFilter=ResourceFilterQuery??"";statusFilter=StatusFilterQuery??"";laneFilter=LaneFilterQuery??"";providerFilter=ProviderFilterQuery??"";errorFilter=ErrorFilterQuery??"";initialized=true;await LoadAsync();refreshCancellation=new();_ = RefreshLoopAsync(refreshCancellation.Token);}}
-    private async Task LoadAsync(){loading=true;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=LoadViewCountsAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;failures=await d??[];serverViewCounts=await e;if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;}}
+    private async Task LoadAsync(){var initial=progress is null;loading=initial;refreshing=!initial;errors=[];try{var a=Api.GetCollectionProgressAsync();var b=Api.GetCollectionPipelineAsync();var c=LoadTaskPageAsync();var d=Api.GetCollectionFailureNotificationsAsync(1000);var e=Api.GetCollectionTaskViewCountsAsync();await Task.WhenAll(a,b,c,d,e);progress=await a;pipeline=await b;failures=await d??[];serverViewCounts=(await e)?.Counts??new Dictionary<string,int>();if(page>TotalPages)page=TotalPages;lastUpdatedAt=DateTimeOffset.Now;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){errors=["管理APIに接続できません。APIが起動しているか確認し、もう一度更新してください。"]; }finally{loading=false;refreshing=false;}}
     private async Task LoadTaskPageAsync(){if(view=="resources"){statePage=await Api.SearchCollectionStatesAsync(BuildStateQuery());visibleStates=statePage?.Items??[];tasks=[];taskPage=null;return;}taskPage=await Api.SearchCollectionTasksAsync(BuildTaskQuery(page,PageSize));tasks=taskPage?.Items??[];statePage=null;visibleStates=[];}
-    private async Task<IReadOnlyDictionary<string,int>> LoadViewCountsAsync(){var values=new Dictionary<string,int>();foreach(var item in new[]{"attention","running","waiting","recent","all"}){var result=await Api.SearchCollectionTasksAsync(BuildTaskQuery(1,1,item));values[item]=result?.TotalCount??0;}return values;}
     private CollectionTaskQuery BuildTaskQuery(int targetPage,int pageSize,string? targetView=null){var selectedView=targetView??view;IReadOnlyCollection<CollectionTaskStatus>? statuses=selectedView switch{"attention"=>[CollectionTaskStatus.Failed,CollectionTaskStatus.DeadLetter],"running"=>[CollectionTaskStatus.Running],"waiting"=>[CollectionTaskStatus.Pending,CollectionTaskStatus.Ready,CollectionTaskStatus.RetryWaiting,CollectionTaskStatus.WaitingDiscovery],"recent"=>[CollectionTaskStatus.Succeeded],_=>null};if(Enum.TryParse<CollectionTaskStatus>(statusFilter,out var status))statuses=[status];ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsedResource)?parsedResource:null;CollectionLane? lane=Enum.TryParse<CollectionLane>(laneFilter,out var parsedLane)?parsedLane:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,null,lane,string.IsNullOrWhiteSpace(filter)?null:filter,ErrorSearch:string.IsNullOrWhiteSpace(errorFilter)?null:errorFilter,Page:targetPage,PageSize:pageSize);}
     private CollectionStateQuery BuildStateQuery(){IReadOnlyCollection<CollectionStateStatus>? statuses=Enum.TryParse<CollectionStateStatus>(statusFilter,out var status)?[status]:null;ResourceType? resource=Enum.TryParse<ResourceType>(resourceFilter,out var parsed)?parsed:null;return new(statuses,resource,string.IsNullOrWhiteSpace(providerFilter)?null:providerFilter,Search:string.IsNullOrWhiteSpace(filter)?null:filter,Page:page,PageSize:PageSize);}
     private async Task RefreshLoopAsync(CancellationToken token){using var timer=new PeriodicTimer(TimeSpan.FromSeconds(15));try{while(await timer.WaitForNextTickAsync(token)){if(autoRefresh && !busy && (tasks.Any(x=>x.Status==CollectionTaskStatus.Running)||view is "running" or "waiting"))await InvokeAsync(LoadAsync);}}catch(OperationCanceledException){}}
