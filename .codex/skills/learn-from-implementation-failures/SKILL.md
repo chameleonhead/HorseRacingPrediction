@@ -89,6 +89,18 @@ When a production failure occurs because an external page, payload, or navigatio
 
 The observable correction is a regression test that fails with the production-shaped ambiguity, passes only when the correct semantic candidate is chosen, and proves the requested resource type and identity at the workflow boundary.
 
+## Behavior-preservation gate for infrastructure migrations
+
+When an existing capability stops working after moving it onto a new queue, scheduler, collection platform, or execution path, do not describe an internal shortcut as an intentional specification change unless the approved change record explicitly changed that user-visible behavior.
+
+- Inventory the old production path's observable guarantees before replacing it: semantic target selection, fallbacks, terminal validation, persistence side effects, and operator-visible diagnostics. Map each guarantee to the new path or record an approved removal.
+- For optimizations such as direct URLs, caches, batching, or fewer browser navigations, test them as alternate routes to the same terminal contract. The optimization is invalid if it can return a different resource kind or identity, even when it is faster and HTTP succeeds.
+- Add a migration regression test that enters through the new production handler and proves the same terminal domain result as the old path. Unit tests for intermediate URL capture, queue publication, or parser invocation do not satisfy this gate alone.
+- During review, classify a changed behavior as one of `approved change`, `preserved`, or `regression`. Any unapproved change in a previously working flow is a regression and must be fixed before declaring the migration complete.
+- When an implementation introduces an assumption that the old path did not require (for example, “the first anchor is the desired resource”), require production-shaped evidence for that invariant. Without evidence, retain semantic selection or validation from the old path.
+
+The observable correction is a behavior map plus an end-to-end regression test demonstrating that infrastructure replacement preserved each approved user-visible capability.
+
 ## Boundaries
 
 - Do not rewrite a skill solely to rationalize an isolated typo or unpredictable external failure.
