@@ -171,8 +171,9 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapPost("/requests", async (CreateCollectionRequest request, CollectionPlatformStore store,
             CancellationToken token) =>
         {
-            if (!Uri.TryCreate(request.ExplicitUrl, UriKind.Absolute, out var explicitUrl) && request.ExplicitUrl is not null)
-                return Results.BadRequest(new { message = "ExplicitUrl must be an absolute URL." });
+            if (!CollectionHttpUrl.TryCreate(request.ExplicitUrl, out var explicitUrl)
+                && request.ExplicitUrl is not null)
+                return Results.BadRequest(new { message = "ExplicitUrl must be an absolute HTTP(S) URL." });
             var receipt = await store.RequestAsync(new(request.ResourceType, request.Provider, request.ResourceId),
                 new(request.DefinitionId), request.RequestedRevision, request.Reason, DateTimeOffset.UtcNow,
                 request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,

@@ -87,7 +87,8 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     if (!historical)
                     {
                         await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
-                            CollectionReason.Discovery, CollectionLane.Realtime, 80, ToUri(race.RaceCardUrl), date,
+                            CollectionReason.Discovery, CollectionLane.Realtime, 80,
+                            CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), date,
                             attributes, cancellationToken).ConfigureAwait(false);
                         if (race.StartTime is { } start)
                         {
@@ -102,7 +103,8 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         await requests.RequestAsync(new(ResourceType.RaceResult, "JRA", id), new("race-result"),
                             task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
                             historical ? CollectionLane.Background : CollectionLane.Realtime,
-                            historical ? 10 : 100, ToUri(race.ResultUrl), date, attributes, cancellationToken)
+                            historical ? 10 : 100, CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), date,
+                            attributes, cancellationToken)
                             .ConfigureAwait(false);
                 }
             }
@@ -150,7 +152,6 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
         return new DateTimeOffset(localCheck, zone.GetUtcOffset(localCheck)).ToUniversalTime();
     }
 
-    private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
 }
 
 public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
@@ -237,7 +238,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             LocationOutcomes: locationOutcomes);
     }
 
-    private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
+    private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
 
     private bool IsCurrentOrFuture(DateOnly? date)
     {
@@ -341,5 +342,5 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
             ;
     }
 
-    private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
+    private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
 }

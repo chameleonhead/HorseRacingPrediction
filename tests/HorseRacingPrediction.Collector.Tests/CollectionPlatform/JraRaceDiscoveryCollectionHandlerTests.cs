@@ -47,6 +47,33 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task Discovery_ResolvesRelativeRaceUrlsAgainstTheSourcePage()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, course) => new JraRaceListPage(
+                    "https://www.jra.go.jp/JRADB/accessD.html", target, course,
+                    [new(new(target, course, 7), "test", new(13, 10),
+                        "/JRADB/card.html?race=7", "/JRADB/result.html?race=7")]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Sapporo] : [] };
+        var sink = new RecordingSink();
+
+        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
+            .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/card.html?race=7"),
+            sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceCard).ExplicitUrl);
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/result.html?race=7"),
+            sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceResult).ExplicitUrl);
+    }
+
+    [TestMethod]
     public async Task BackfillDiscovery_VisitsOnlyItsDayAndPropagatesBatchId()
     {
         var date = new DateOnly(2020, 1, 5);
@@ -255,13 +282,13 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     private sealed class RecordingSink : ICollectionRequestSink
     {
         public List<(ResourceKey Resource, CollectionDefinitionId Definition,
-            IReadOnlyDictionary<string, string> Attributes)> Requests
+            IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
         { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add((resource, definition, attributes));
+            Requests.Add((resource, definition, attributes, explicitUrl));
             return Task.CompletedTask;
         }
     }

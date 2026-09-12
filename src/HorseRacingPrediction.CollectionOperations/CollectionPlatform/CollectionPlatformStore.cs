@@ -109,6 +109,7 @@ public sealed class CollectionPlatformStore
         if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
             throw new ArgumentException("Provider and resource id are required.", nameof(resource));
         if (requestedRevision < 1) throw new ArgumentOutOfRangeException(nameof(requestedRevision));
+        CollectionHttpUrl.EnsureHttp(explicitUrl, nameof(explicitUrl));
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -419,10 +420,13 @@ public sealed class CollectionPlatformStore
                 && x.DefinitionId == task.DefinitionId && x.Status != ResourceLocationStatus.Invalid)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
             var candidates = locations.OrderByDescending(x => x.Status == ResourceLocationStatus.Active)
-                .ThenByDescending(x => x.LastVerifiedAt).Select(x => new ResourceLocationCandidate(
-                    x.LocationId, new Uri(x.Url), x.Source, x.Status, x.LastVerifiedAt)).ToList();
-            if (Uri.TryCreate(request.ExplicitUrl, UriKind.Absolute, out var explicitUrl))
-                candidates.Insert(0, new(0, explicitUrl, ResourceLocationSource.Explicit,
+                .ThenByDescending(x => x.LastVerifiedAt)
+                .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
+                .Where(x => x.Valid)
+                .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
+                    x.Location.Status, x.Location.LastVerifiedAt)).ToList();
+            if (CollectionHttpUrl.TryCreate(request.ExplicitUrl, out var explicitUrl))
+                candidates.Insert(0, new(0, explicitUrl!, ResourceLocationSource.Explicit,
                     ResourceLocationStatus.Unknown, null));
             task.Status = CollectionTaskStatus.Running;
             task.LeaseToken = Guid.NewGuid().ToString("N");
@@ -1035,6 +1039,7 @@ public sealed class CollectionPlatformStore
         ResourceLocationSource source, DateTimeOffset discoveredAt, CancellationToken cancellationToken = default)
     {
         resource = resource.Normalize();
+        CollectionHttpUrl.EnsureHttp(url, nameof(url));
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -1074,7 +1079,10 @@ public sealed class CollectionPlatformStore
                           select location).ToListAsync(cancellationToken);
         return rows.OrderBy(x => x.Status == ResourceLocationStatus.Active ? 0 : x.Status == ResourceLocationStatus.Unknown ? 1 : 2)
             .ThenByDescending(x => x.LastVerifiedAt)
-            .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url), x.Source, x.Status, x.LastVerifiedAt))
+            .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
+            .Where(x => x.Valid)
+            .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
+                x.Location.Status, x.Location.LastVerifiedAt))
             .ToList();
     }
 

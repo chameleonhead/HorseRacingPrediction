@@ -12,6 +12,26 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionOperationsEndpointTests
 {
     [TestMethod]
+    public async Task CreateRequest_RejectsFileUrl()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var response = await client.PostAsJsonAsync("/api/admin/collection/requests",
+                new CreateCollectionRequest(ResourceType.Horse, "JRA", "H123", "horse-profile", 1,
+                    CollectionReason.ManualRefresh, ExplicitUrl: "file:///JRADB/accessS.html"));
+
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+            StringAssert.Contains(await response.Content.ReadAsStringAsync(), "HTTP(S)");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task PublishedFailure_RemainsActionableButLeavesUnpublishedFeed()
     {
         var directory = CreateDirectory();

@@ -238,6 +238,29 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.IsEmpty(workflow.Requests);
     }
 
+    [TestMethod]
+    public async Task RaceResult_InvalidCandidate_FallsBackToDiscoveryWorkflow()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var invalid = new Uri("https://example.test/not-a-result");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => new JraUnknownPage(url.AbsoluteUri, "unexpected"),
+            },
+        };
+        var workflow = new FakeJraRaceResultCollectionWorkflow();
+
+        var result = await new JraRaceResultCollectionHandler(sessions, _ => workflow)
+            .CollectAsync(CreateTask(ResourceType.RaceResult, "race-result", date, invalid),
+                CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.LocationOutcomes!.Single().Result);
+        Assert.HasCount(1, workflow.Requests);
+    }
+
     private static LeasedCollectionTask CreateTask(ResourceType type, string definition, DateOnly date,
         params Uri[] locations) => new(Guid.NewGuid(), Guid.NewGuid(),
         new(type, "JRA", "20260912:Tokyo:11"), new(definition), 1,

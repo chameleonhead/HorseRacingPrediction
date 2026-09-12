@@ -62,6 +62,51 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task Request_RejectsNonHttpExplicitUrl()
+    {
+        var store = await CreateStoreAsync();
+
+        var exception = await Assert.ThrowsExactlyAsync<ArgumentException>(() => store.RequestAsync(
+            Horse, HorseProfile, 7, CollectionReason.ManualRefresh, DateTimeOffset.UtcNow,
+            explicitUrl: new Uri("file:///JRADB/accessS.html")));
+
+        Assert.AreEqual("explicitUrl", exception.ParamName);
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    public void HttpUrl_ResolvesRootRelativePathWithoutOperatingSystemFileSemantics()
+    {
+        var resolved = CollectionHttpUrl.Resolve("/JRADB/accessS.html?CNAME=result",
+            "https://www.jra.go.jp/JRADB/accessD.html");
+
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=result"), resolved);
+        Assert.IsFalse(CollectionHttpUrl.TryCreate("file:///JRADB/accessS.html", out _));
+    }
+
+    [TestMethod]
+    public async Task Acquire_SkipsLegacyNonHttpExplicitUrl()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        await using (var connection = new SqliteConnection(
+            $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE collection_requests SET ExplicitUrl = $url";
+            command.Parameters.AddWithValue("$url", "file:///JRADB/accessS.html");
+            Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
+        }
+
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        Assert.IsNotNull(lease);
+        Assert.IsEmpty(lease.Locations ?? []);
+    }
+
+    [TestMethod]
     public async Task SearchTasks_FiltersAndPagesWithAnExactTotalCount()
     {
         var store = await CreateStoreAsync();
