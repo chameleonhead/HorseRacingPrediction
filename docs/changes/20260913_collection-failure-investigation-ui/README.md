@@ -1,6 +1,6 @@
 # 収集障害の調査・一括復旧UI
 
-- Status: Proposed
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -114,6 +114,32 @@ Jobs画面と収集運用画面のグループ行は代表Resourceではなく�
 - エラー原因は例外原文だけで断定せず、「確認できた事実」「想定原因」「推奨対応」を分ける。
 - URLはResource identityではなく取得証跡として表示する。URL表示を追加してもResourceKey中心の設計は変更しない。
 - 全件Recoveryはページングに依存しないサーバー側選択とする。
+- チェック選択はページを移動しても保持し、解決済みになった通知は確定時に除外する。「すべて選択」は表示中ページだけを選択するものと明記し、グループ全件操作と混同させない。
+- group keyの衝突や解決済みによる消滅を暗黙に別グループへ結び付けない。サーバーが一意に解決できない場合はConflict、Open対象がなくなった場合は説明付きemptyとして扱う。
+- URLのコピーは共有の小さな操作として実装し、Clipboard APIが拒否された場合はURL本文を選択できる状態とエラーフィードバックを残す。
+
+## Pre-implementation self-review
+
+- Primary Action: グループ詳細の「対象をまとめて再取得」に限定し、選択対象の再取得は選択後だけ有効なSecondary Actionとする。
+- 操作数: Jobsのグループから1遷移で対象・原因・URLを確認でき、全件Recoveryは詳細→確認→確定の3操作以内とする。
+- 情報密度: Resource詳細の横長試行表から例外全文とURLを外し、最新障害を先に読む構造へ変更する。技術情報は削除せず展開領域へ移す。
+- Dialog/Page: 調査は検索・ページング・再訪を伴うため独立Page、確定だけを短いDialogとする判断に問題はない。
+- 大量対象: クライアントが全notification IDを取得する案は1000件超で破綻するため退け、group全件はサーバー側選択にする。選択操作はIDだけを保持する。
+- 競合: 画面表示後に解決した対象、既存Active Task、二重送信を受け入れ基準9で扱う。確認Dialogの確定中は操作を無効化する。
+- レスポンシブ: desktopはFluentDataGrid、狭幅は同じ情報順の一覧へreflowする。横スクロールだけに依存しない。
+- アクセシビリティ: 行全体クリックに依存せず、Resource詳細リンク、ラベル付きFluentCheckbox、標準Dialog、展開summaryを使用する。
+- 既存整合: Resource詳細、CollectionOperations、Failure lifecycle、既存Recovery APIを再利用し、新しいWorkerやキューは作らない。
+- 結論: 実装を妨げる未解決の仕様問題はない。ユーザーの2026-09-13承認に基づきExecution Modeへ移行する。
+
+## Acceptance-criterion matrix
+
+| AC | 状態 | 実装・検証先 |
+|---|---|---|
+| 1–3 | Verified | Resource詳細にExplicit/要求/最終URL、最新障害要約、技術詳細を実装。API buildとcomponent testで検証 |
+| 4–8 | Verified | group API/page、全件・選択Recovery、Jobs/収集運用の導線を実装。endpoint/component testsで検証 |
+| 9–10 | Verified | Open再解決、Active Task再利用、0件/衝突/最大10,000件、検索・ページングをendpoint testsで検証 |
+| 11–12 | Verified | Fluent標準操作、label付き選択、Dialog、details、狭幅reflowを実装し、component renderとローカル認証済み画面で導線を確認 |
+| 13–14 | Verified | 既知エラー・URLのcomponent test、相関情報をgroup/Resource詳細と実行バッチリンクへ表示 |
 
 ## Acceptance criteria
 
@@ -148,3 +174,14 @@ Jobs画面と収集運用画面のグループ行は代表Resourceではなく�
 - 2026-09-13: 本番で障害グループが代表Resourceへのリンクであること、出馬表27件等の他対象を同画面から確認できないこと、原因説明・推奨対応・URLが一つの調査単位として表示されないことを確認した。
 - 2026-09-13: CloudWatch Logsとデプロイ時刻を照合した。`ERR_INSUFFICIENT_RESOURCES` 53件が発生した15:20 UTCは、microbatch Lambdaの反映完了15:25:51 UTCより前だった。導入前15:15–15:22:30は108 invocation、2,048MB中最大1,939.8MB、平均報告最大1,939.8MB、平均2.24秒だった。導入後15:26:30以降は8 invocation、最大1,149.2MB、平均報告最大1,005.4MB、平均118.74秒で、複数Taskを同一browser sessionへ集約した結果と整合する。Lambdaはreserved concurrency 1、SQS batch size 1（messageは複数Taskを含むenvelope）、memory 2,048MB、timeout 900秒である。
 - 2026-09-13: 資源不足の直接要因は、旧方式で短いLambda invocationごとにChromiumを繰り返し起動し、warm execution environment内の報告最大メモリが上限の94.7%へ達したことと判断した。microbatch後の最大使用率は56.1%で、同エラーは新Lambda反映後のログには確認されていない。現時点ではメモリ増強を即時実施せず、同じ障害グループをRecoveryして新方式で再観測する。最大使用率80%超、`ERR_INSUFFICIENT_RESOURCES`再発、またはバッチ途中の`TargetClosedException`が継続した場合に3,072MB以上への増強とバッチ上限の再評価を行う。
+- 2026-09-13: 障害グループ詳細ReadModel/API、サーバー側全件Recovery、ページング・検索、0件404・group key衝突409・10,000件上限を実装した。Jobsと収集運用から代表Resourceではなく専用ページへ遷移する。
+- 2026-09-13: Resource詳細に最新障害の日本語説明、推奨対応、Explicit/要求/最終URL、コピー・外部リンク、展開式技術情報を追加した。試行履歴は主要列と展開詳細に整理し、グループ各行からResource・実行バッチへ遷移できる。
+- 2026-09-13: グループ全件とページをまたいで保持する選択対象のRecoveryを分離し、確認Dialog、作成Task数・既存Task再利用数の結果表示を追加した。
+- 2026-09-13: `dotnet build src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj --no-restore -p:BaseOutputPath=.build/verify/` は警告0・エラー0。関連endpoint/component tests 13件成功。`dotnet test HorseRacingPrediction.sln --no-restore` は全プロジェクト成功（合計854件成功、2件スキップ）。ローカルAPIを新ビルドで再起動し、認証済みJobs画面の既存ナビゲーションとAPI応答を確認した。ローカルDBにOpen障害がない状態は空表示となり、障害詳細のデータ表示はcomponent testで確認した。
+
+## Implementation notes
+
+- DB migrationは不要だった。既存のRequest/Attempt/Failure情報をReadModelへ投影している。
+- 全件Recoveryはクライアントへ全IDを配布せず、確定時にサーバーでOpen対象を再解決する。選択Recoveryは既存notification ID APIを再利用する。
+- Lambdaメモリはユーザー方針に従い2,048MBのまま変更していない。microbatch適用後の再発有無を上記閾値で監視する。
+- 設計との差分として、対象種別・開催日の専用フィルターは現時点のgroupがDefinition単位であり、全文検索でResource種別・ID・URL・エラーを扱えるため追加しなかった。
