@@ -92,3 +92,10 @@ The management UI uses Japanese business terms as the primary labels. Internal m
 | Backfill | 過去データ収集 |
 
 Resource types, state/task/attempt statuses, lanes, location sources, and location statuses are translated at the presentation boundary. The persisted enum values and API contracts are not localized. Empty states explain the next action, explicit URL input explains that it is normally unnecessary, and bulk recollection uses the sequence `対象を確認 -> 再取得を依頼`.
+## 一覧画面のタブ規約
+
+- 主要一覧のview切替は Microsoft Fluent UI の `FluentTabs` を使用し、独自button群で模倣しない。
+- active状態はFluent標準のindicatorで示し、画面固有の背景・角丸・影を重ねない。
+- `page-view-tabs`を共通host classとし、画面固有classは余白や狭幅overflowなど必要最小限に限定する。
+- 選択中の`FluentTab` panelがfilter、状態表示、一覧、paginationを所有し、空のtabpanelと外側の実コンテンツを分離しない。
+- レース一覧の手入力・URL指定期間が標準presetに一致しない場合は「指定期間」を選択表示する。

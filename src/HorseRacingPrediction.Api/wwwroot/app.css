@@ -92,11 +92,7 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
 .page-header-actions { flex: 0 0 auto !important; width: fit-content !important; flex-wrap: wrap; justify-content: flex-end; }
 
 .filter-bar, .filter-card { display: block; margin: 0; padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--neutral-stroke-rest); background: transparent; box-shadow: none; }
-.view-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--neutral-stroke-rest); }
-.view-tabs button { min-height: 40px; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--neutral-foreground-hint); font: inherit; white-space: nowrap; cursor: pointer; }
-.view-tabs button.active { border-bottom-color: var(--accent-fill-rest); color: var(--accent-foreground-rest); font-weight: var(--font-weight-semibold); }
-.view-tabs button:hover { background: var(--neutral-fill-secondary-hover); color: var(--neutral-foreground-rest); }
-.view-tabs button:focus-visible { outline: 2px solid var(--focus-stroke-outer); outline-offset: -2px; }
+.page-view-tabs { display: block; max-width: 100%; min-width: 0; }
 /* CSS Grid (not flex-wrap) keeps every row's columns the same width, so fields never
    reflow into a ragged, unevenly-wrapped layout as the container is resized. */
 .filter-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: 8px 12px; }
@@ -111,7 +107,6 @@ fluent-text-field::part(control):focus-within, fluent-select::part(control):focu
    見えることがある。専用行にすることでどの幅でも絶対に重ならない。 */
 .filter-toolbar > fluent-button, .filter-toolbar > .filter-action { grid-column: 1 / -1; justify-self: end; align-self: center; width: fit-content; margin-top: 4px; }
 .filter-toolbar > .filter-action fluent-button { width: auto; }
-.filter-card > .view-tabs { margin-bottom: 12px; }
 .filter-card > .action-row { margin-bottom: 12px; }
 .filter-card > .action-row + .filter-toolbar { margin-top: 0; }
 .filter-card > .filter-toolbar + .action-row { margin-top: 12px; margin-bottom: 0; }

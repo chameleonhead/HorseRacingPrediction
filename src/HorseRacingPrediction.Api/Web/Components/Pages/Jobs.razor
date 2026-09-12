@@ -30,7 +30,7 @@
 }
 
 <div class="collection-status-heading"><strong>収集状況</strong>@if(progress is not null){<span class="hint">収集対象 @progress.ResourcesByType.Values.Sum() 件</span>}</div>
-<FluentTabs Class="collection-status-tabs" ShowActiveIndicator="true" ActiveTabId="@view" ActiveTabIdChanged="OnStatusTabChanged" aria-label="収集状況">
+<FluentTabs Class="page-view-tabs collection-status-tabs" ShowActiveIndicator="true" ActiveTabId="@view" ActiveTabIdChanged="OnStatusTabChanged" aria-label="収集状況">
     @foreach (var option in views)
     {
         <FluentTab Id="@option.Value" Label="@StatusTabLabel(option)">
