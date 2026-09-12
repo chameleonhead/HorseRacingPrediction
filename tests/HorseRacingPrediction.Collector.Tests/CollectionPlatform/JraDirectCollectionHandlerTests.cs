@@ -157,7 +157,8 @@ public sealed class JraDirectCollectionHandlerTests
     [TestMethod]
     public async Task RaceCard_CurrentDateNotPublished_IsRetryableAvailabilityState()
     {
-        var date = DateOnly.FromDateTime(DateTime.Today);
+        var now = new DateTimeOffset(2026, 9, 12, 15, 30, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 13);
         var sessions = new FakeJraSessionFactory();
         var workflow = new FakeJraRaceCardCollectionWorkflow
         {
@@ -165,12 +166,18 @@ public sealed class JraDirectCollectionHandlerTests
         };
         var task = CreateTask(ResourceType.RaceCard, "race-card", date);
 
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(now))
             .CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, result.Result);
         Assert.AreEqual("RaceCardNotYetAvailable", result.ErrorCode);
         Assert.IsNotNull(result.RetryAt);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     [TestMethod]

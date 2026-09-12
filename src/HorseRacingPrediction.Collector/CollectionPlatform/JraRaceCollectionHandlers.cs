@@ -155,8 +155,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
 
 public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
     JraRaceCardCollectionWorkflowFactory workflows, IPredictionSchedule? predictionSchedule = null,
-    ICollectionRequestSink? requests = null) : ICollectionDefinitionHandler
+    ICollectionRequestSink? requests = null, TimeProvider? timeProvider = null) : ICollectionDefinitionHandler
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => new("race-card");
     public ResourceType ResourceType => ResourceType.RaceCard;
 
@@ -217,11 +218,12 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
 
     private static Uri? ToUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
 
-    private static bool IsCurrentOrFuture(DateOnly? date)
+    private bool IsCurrentOrFuture(DateOnly? date)
     {
         if (date is null) return false;
-        var jst = TimeZoneInfo.FindSystemTimeZoneById("Tokyo Standard Time");
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, jst).DateTime);
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
         return date >= today;
     }
 
