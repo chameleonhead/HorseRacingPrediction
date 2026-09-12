@@ -99,6 +99,39 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    [DataRow(404, CollectionAttemptResult.ResourceNotFound)]
+    [DataRow(429, CollectionAttemptResult.AccessLimited)]
+    [DataRow(503, CollectionAttemptResult.TransientFailure)]
+    public async Task RaceCard_ClassifiesHttpCandidateFailureAndContinuesWithNextCandidate(
+        int statusCode, CollectionAttemptResult expectedResult)
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var first = new Uri($"https://example.test/card/{statusCode}");
+        var second = new Uri("https://example.test/card/11");
+        var race = new RaceId(date, RaceCourse.Tokyo, 11);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => url == first
+                    ? throw new HttpRequestException("candidate failed", null,
+                        (System.Net.HttpStatusCode)statusCode)
+                    : new JraRaceCardPage(url.AbsoluteUri, race, "test", new(15, 30), []),
+            },
+        };
+        var workflow = new FakeJraRaceCardCollectionWorkflow();
+
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+            .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, first, second),
+                CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.AreEqual(expectedResult, result.LocationOutcomes![0].Result);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.LocationOutcomes[1].Result);
+        CollectionAssert.AreEqual(new[] { first, second }, sessions.LastNavigator!.DirectUrlRequests);
+    }
+
+    [TestMethod]
     public async Task RaceCard_AllCandidatesInvalid_FallsBackToDiscoveryWorkflow()
     {
         var date = new DateOnly(2026, 9, 12);

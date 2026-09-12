@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Net;
+using System.Text;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
@@ -67,5 +69,69 @@ public sealed class RaceOddsSnapshotApiTests
         Assert.HasCount(3, snapshots[0].Observations!);
         Assert.AreEqual("1-3", snapshots[0].Observations![1].Selection);
         Assert.AreEqual(8.4m, snapshots[0].Observations![1].Value);
+    }
+
+    [TestMethod]
+    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":null}")]
+    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\"}")]
+    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[]}")]
+    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[null]}")]
+    [DataRow("{\"observedAt\":\"2026-09-12T05:00:00Z\",\"entries\":[],\"observations\":[null]}")]
+    public async Task EmptyOrMissingOdds_ReturnsValidationProblem(string json)
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var lifetime = app;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        using var response = await client.PostAsync("/api/admin/races/race-missing/odds-snapshots",
+            new StringContent(json, Encoding.UTF8, "application/json"));
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task InvalidAndDuplicateOdds_ReturnValidationProblem()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var lifetime = app;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var requests = new[]
+        {
+            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, -1m)]),
+            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [new(1, 2m), new(1, 3m)]),
+            new RecordRaceOddsSnapshotRequest(DateTimeOffset.UtcNow, [],
+                [new("Win", "1", 2m), new(" win ", " 1 ", 3m)]),
+        };
+
+        foreach (var request in requests)
+        {
+            using var response = await client.PostAsJsonAsync(
+                "/api/admin/races/race-invalid/odds-snapshots", request);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+    }
+
+    [TestMethod]
+    public async Task LegacyEntriesOnlyAndRepeatedEqualValuesRemainValidSnapshots()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var lifetime = app;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        const string raceId = "race-00000000-0000-0000-0000-000000000013";
+        using var created = await client.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(new(2026, 9, 12), "東京", 10, "legacy", raceId));
+        created.EnsureSuccessStatusCode();
+        var firstAt = new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero);
+        foreach (var observedAt in new[] { firstAt, firstAt.AddMinutes(1) })
+        {
+            using var response = await client.PostAsJsonAsync($"/api/admin/races/{raceId}/odds-snapshots",
+                new RecordRaceOddsSnapshotRequest(observedAt, [new(1, 2.5m, 1)]));
+            response.EnsureSuccessStatusCode();
+        }
+
+        var snapshots = await client.GetFromJsonAsync<List<RaceOddsSnapshot>>(
+            $"/api/admin/races/{raceId}/odds-snapshots");
+        Assert.IsNotNull(snapshots);
+        Assert.HasCount(2, snapshots);
+        Assert.IsTrue(snapshots.All(x => x.Observations is [{ Market: "Win", Selection: "1", Value: 2.5m }]));
     }
 }

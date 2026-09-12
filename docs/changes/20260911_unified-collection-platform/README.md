@@ -270,6 +270,8 @@ U9では390x844の認証済みブラウザーで一覧、依頼Dialog、Revision
 
 検証はRelease全体build（警告0・エラー0）、全solution test（成功759、外部依存skip 2、失敗0）、追加修正後の対象API/UI 21件とStore/Worker/handler 37件で行った。認証済み実ブラウザーでもURL収集導線、入力error、独立詳細page、履歴tab総件数を確認した。ローカルで実行可能なU11〜U15は完了し、外部blockerはU10の本番Terraform/cutoverと旧SQS/DLQ・旧DB削除だけである。
 
+追加の異常系監査U16では、入力、Worker完了改ざん、外部通信、復旧再実行、ページ境界、Odds payloadを検証した。重複/不正URLは422で匿名workを作らず、Location outcomeは所属・存在・矛盾・件数を完了前に一括検証する。404/UnexpectedのみSuspect、429/5xx/timeoutはretryableとし、lease不一致と完了再送は既存状態を変更しない。Backfillは復旧失敗後も新しい実行IDで再依頼でき、同時刻のRecovery成功だけを解消として扱う。履歴pageは負値・0・極大値・同時刻を安定処理し、Oddsのnull/空/負値/重複は400 validationへ変換する。ローカルExecutorのcancelもcancel済みtokenを再利用せずretryable完了を保存する。最終確認はRelease build警告0・エラー0、API 161件成功/外部依存1件skip、Collector 110件成功/失敗0だった。
+
 ### 2026-09-11 implementation review retrospective
 
 The implementation checkpoint exposed a systemic traceability failure. New models and isolated policy tests were treated as evidence of connected capabilities without tracing the production path through discovery, location resolution, SQS dispatch, Lambda cancellation, retry recovery, and cutover. This allowed a new discovery handler to call a legacy job producer after the legacy dispatcher was disabled, left explicit URLs and ResourceLocation disconnected from workers, left the fairness allocator disconnected from the outbox dispatcher, and represented a destructive queue replacement as a Terraform rename rather than a smoke-gated cutover.

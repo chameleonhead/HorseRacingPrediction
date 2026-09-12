@@ -76,6 +76,25 @@ public sealed class CollectionLaneAllocator
     }
 }
 
+public static class CollectionAttemptFailureClassifier
+{
+    public static CollectionAttemptCompletion FromException(Exception exception)
+    {
+        var result = exception switch
+        {
+            HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound } =>
+                CollectionAttemptResult.ResourceNotFound,
+            HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } =>
+                CollectionAttemptResult.AccessLimited,
+            HttpRequestException { StatusCode: >= System.Net.HttpStatusCode.InternalServerError } =>
+                CollectionAttemptResult.TransientFailure,
+            TimeoutException or TaskCanceledException => CollectionAttemptResult.TransientFailure,
+            _ => CollectionAttemptResult.PermanentFailure,
+        };
+        return new(result, exception.GetType().Name, exception.Message);
+    }
+}
+
 public sealed class CollectionTaskExecutor(CollectionPlatformStore store, CollectionDefinitionHandlerRegistry handlers)
 {
     public async Task<bool> ExecuteAsync(CollectionTaskNotification notification, DateTimeOffset now,
@@ -85,6 +104,7 @@ public sealed class CollectionTaskExecutor(CollectionPlatformStore store, Collec
             now, leaseDuration, cancellationToken).ConfigureAwait(false);
         if (task is null) return false;
         CollectionAttemptCompletion result;
+        var completionToken = cancellationToken;
         try
         {
             var handler = handlers.Resolve(task.Definition, task.Resource.Type);
@@ -94,12 +114,13 @@ public sealed class CollectionTaskExecutor(CollectionPlatformStore store, Collec
         {
             result = new(CollectionAttemptResult.TransientFailure, "Cancelled", "Collection was cancelled.",
                 RetryAt: now.AddMinutes(1));
+            completionToken = CancellationToken.None;
         }
         catch (Exception ex)
         {
-            result = new(CollectionAttemptResult.PermanentFailure, ex.GetType().Name, ex.Message);
+            result = CollectionAttemptFailureClassifier.FromException(ex);
         }
         return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, DateTimeOffset.UtcNow,
-            result, cancellationToken).ConfigureAwait(false);
+            result, completionToken).ConfigureAwait(false);
     }
 }

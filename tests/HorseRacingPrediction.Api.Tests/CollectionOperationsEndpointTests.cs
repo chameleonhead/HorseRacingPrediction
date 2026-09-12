@@ -120,6 +120,104 @@ public sealed class CollectionOperationsEndpointTests
         finally { Directory.Delete(directory, true); }
     }
 
+    [TestMethod]
+    public async Task BackfillRecovery_CanRetryAfterFailedRecovery_AndDoesNotDuplicateActiveTask()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+                1, "initial", false);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await store.CreateOrResumeBackfillBatchAsync("retryable", "JRA",
+                new(2026, 9, 1), new(2026, 9, 1), now);
+            var original = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260901");
+            Assert.IsTrue(await store.ReconcileDeadLetterAsync(original.TaskId, 1, now.AddSeconds(1), "failed"));
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var firstResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/backfills/retryable/recover-holes", new { });
+            var first = await firstResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            Assert.AreEqual(1, first?.TasksCreated);
+            using var duplicateResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/backfills/retryable/recover-holes", new { });
+            var duplicate = await duplicateResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            Assert.AreEqual(0, duplicate?.TasksCreated, "An active task must not be duplicated.");
+
+            var recovery = (await store.GetTasksAsync()).Single(x => x.TaskId != original.TaskId);
+            Assert.IsTrue(await store.ReconcileDeadLetterAsync(recovery.TaskId, 1, now.AddSeconds(2), "again"));
+            using var retryResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/backfills/retryable/recover-holes", new { });
+            var retry = await retryResponse.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+            Assert.AreEqual(1, retry?.TasksCreated, "A terminal failed recovery must be retryable.");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task BackfillRecovery_EmptyBatchIsNoOp()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+                1, "initial", false);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await store.CreateOrResumeBackfillBatchAsync("complete", "JRA",
+                new(2026, 9, 1), new(2026, 9, 1), now);
+            var task = (await store.GetTasksAsync()).Single(x => x.Resource.Id == "backfill:20260901");
+            var lease = await store.AcquireAsync(task.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            Assert.IsNotNull(lease);
+            await store.CompleteAttemptAsync(task.TaskId, lease.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.Succeeded));
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var response = await client.PostAsJsonAsync(
+                "/api/admin/collection/backfills/complete/recover-holes", new { });
+            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.AreEqual(0, result?.Holes);
+            Assert.AreEqual(0, result?.TasksCreated);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task BackfillRecovery_ExpandsAllHolesBeyondTypicalPageSize()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
+                1, "initial", false);
+            var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await store.CreateOrResumeBackfillBatchAsync("large", "JRA",
+                new(2026, 1, 1), new(2026, 4, 11), now);
+            var tasks = (await store.GetTasksAsync(limit: 1000)).Where(x => x.Resource.Id.StartsWith("backfill:"))
+                .ToList();
+            Assert.HasCount(101, tasks);
+            foreach (var task in tasks)
+                Assert.IsTrue(await store.ReconcileDeadLetterAsync(task.TaskId, 1, now.AddSeconds(1), "failed"));
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var response = await client.PostAsJsonAsync(
+                "/api/admin/collection/backfills/large/recover-holes", new { });
+            var result = await response.Content.ReadFromJsonAsync<BackfillHoleRecoveryResult>();
+
+            Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+            Assert.AreEqual(101, result?.Holes);
+            Assert.AreEqual(101, result?.TasksCreated);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     private static string CreateDirectory()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"collection-operations-api-{Guid.NewGuid():N}");

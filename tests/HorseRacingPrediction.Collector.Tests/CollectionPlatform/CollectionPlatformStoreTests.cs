@@ -263,6 +263,10 @@ public sealed class CollectionPlatformStoreTests
             new Uri("https://example.test/card"), ResourceLocationSource.Discovered, now);
         var transient = await store.UpsertLocationAsync(resource, new("race-card"),
             new Uri("https://example.test/temporarily-unavailable"), ResourceLocationSource.Discovered, now);
+        var limited = await store.UpsertLocationAsync(resource, new("race-card"),
+            new Uri("https://example.test/rate-limited"), ResourceLocationSource.Discovered, now);
+        var missing = await store.UpsertLocationAsync(resource, new("race-card"),
+            new Uri("https://example.test/missing"), ResourceLocationSource.Discovered, now);
         var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
 
         Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
@@ -270,6 +274,8 @@ public sealed class CollectionPlatformStoreTests
             [
                 new(first, CollectionAttemptResult.UnexpectedPage, "RaceIdMismatch"),
                 new(transient, CollectionAttemptResult.TransientFailure, "Http503"),
+                new(limited, CollectionAttemptResult.AccessLimited, "Http429"),
+                new(missing, CollectionAttemptResult.ResourceNotFound, "Http404"),
                 new(second, CollectionAttemptResult.Succeeded),
             ])));
 
@@ -277,6 +283,99 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(ResourceLocationStatus.Active, locations.Single(x => x.LocationId == second).Status);
         Assert.AreEqual(ResourceLocationStatus.Suspect, locations.Single(x => x.LocationId == first).Status);
         Assert.AreEqual(ResourceLocationStatus.Unknown, locations.Single(x => x.LocationId == transient).Status);
+        Assert.AreEqual(ResourceLocationStatus.Unknown, locations.Single(x => x.LocationId == limited).Status);
+        Assert.AreEqual(ResourceLocationStatus.Suspect, locations.Single(x => x.LocationId == missing).Status);
+    }
+
+    [TestMethod]
+    public async Task CompleteAttempt_RejectsForeignOrMissingLocationWithoutChangingTaskOrLocations()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-card");
+        await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard, 1,
+            "Initial", false);
+        var resource = new ResourceKey(ResourceType.RaceCard, "JRA", "R1");
+        var foreignResource = new ResourceKey(ResourceType.RaceCard, "JRA", "R2");
+        var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now);
+        await store.RequestAsync(foreignResource, definition, 1, CollectionReason.Initial, now);
+        var own = await store.UpsertLocationAsync(resource, definition, new("https://example.test/r1"),
+            ResourceLocationSource.Discovered, now);
+        var foreign = await store.UpsertLocationAsync(foreignResource, definition, new("https://example.test/r2"),
+            ResourceLocationSource.Discovered, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [new(own, CollectionAttemptResult.Succeeded), new(foreign, CollectionAttemptResult.UnexpectedPage)])));
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [new(own, CollectionAttemptResult.Succeeded), new(long.MaxValue, CollectionAttemptResult.UnexpectedPage)])));
+
+        Assert.AreEqual(ResourceLocationStatus.Unknown,
+            (await store.ResolveLocationsAsync(resource, definition)).Single().Status);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+            new(CollectionAttemptResult.Succeeded,
+                LocationOutcomes: [new(own, CollectionAttemptResult.Succeeded)])));
+    }
+
+    [TestMethod]
+    public async Task CompleteAttempt_RejectsConflictingOrExcessiveOutcomesButAcceptsExactDuplicates()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var location = await store.UpsertLocationAsync(Horse, HorseProfile,
+            new("https://example.test/horse/H123"), ResourceLocationSource.Discovered, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [
+                new(location, CollectionAttemptResult.Succeeded),
+                new(location, CollectionAttemptResult.UnexpectedPage, "RaceIdMismatch"),
+            ])));
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes: Enumerable.Range(0, 101)
+                .Select(_ => new ResourceLocationOutcome(location, CollectionAttemptResult.Succeeded)).ToList())));
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [
+                new(location, CollectionAttemptResult.Succeeded),
+                new(location, CollectionAttemptResult.Succeeded),
+            ])));
+        Assert.AreEqual(ResourceLocationStatus.Active,
+            (await store.ResolveLocationsAsync(Horse, HorseProfile)).Single().Status);
+    }
+
+    [TestMethod]
+    public async Task CompleteAttempt_WrongLeaseAndRedeliveryCannotOverwriteCompletedOutcome()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var location = await store.UpsertLocationAsync(Horse, HorseProfile,
+            new("https://example.test/horse/H123"), ResourceLocationSource.Discovered, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, "wrong-lease", now.AddSeconds(1),
+            new(CollectionAttemptResult.UnexpectedPage,
+                LocationOutcomes: [new(location, CollectionAttemptResult.UnexpectedPage)])));
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+            new(CollectionAttemptResult.Succeeded,
+                LocationOutcomes: [new(location, CollectionAttemptResult.Succeeded)])));
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+            new(CollectionAttemptResult.UnexpectedPage,
+                LocationOutcomes: [new(location, CollectionAttemptResult.UnexpectedPage)])));
+
+        var state = await store.GetStateAsync(Horse, HorseProfile);
+        Assert.AreEqual(CollectionStateStatus.Current, state?.Status);
+        Assert.AreEqual(ResourceLocationStatus.Active,
+            (await store.ResolveLocationsAsync(Horse, HorseProfile)).Single().Status);
     }
 
     [TestMethod]
@@ -488,6 +587,60 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task Backfill_RecoveryAtSameTimestampStillResolvesHole()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = CreateStore();
+        var discovery = new CollectionDefinitionId("race-discovery");
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+            1, "initial", false);
+        await store.CreateOrResumeBackfillBatchAsync("jra:same-time", "jra",
+            new(2026, 1, 1), new(2026, 1, 1), now);
+        var failedTask = (await store.GetTasksAsync()).Single();
+        var failedLease = await store.AcquireAsync(failedTask.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(failedLease);
+        await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now,
+            new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+
+        var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
+            now, CollectionLane.Background, (int)CollectionPriority.Background,
+            batchId: "recovery:jra:same-time:1");
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(recoveryLease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease.LeaseToken, now,
+            new(CollectionAttemptResult.Succeeded)));
+
+        Assert.IsEmpty((await store.GetBackfillBatchAsync("jra:same-time"))!.Holes);
+    }
+
+    [TestMethod]
+    public async Task Backfill_OlderRecoverySuccessDoesNotHideLaterFailure()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = CreateStore();
+        var discovery = new CollectionDefinitionId("race-discovery");
+        await store.RegisterDefinitionAsync(discovery, "Race discovery", ResourceType.Race,
+            1, "initial", false);
+        await store.CreateOrResumeBackfillBatchAsync("jra:ordered", "jra",
+            new(2026, 1, 1), new(2026, 1, 1), now);
+        var failedTask = (await store.GetTasksAsync()).Single();
+        var failedLease = await store.AcquireAsync(failedTask.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(failedLease);
+        await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now,
+            new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+
+        var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
+            now.AddMinutes(-1), CollectionLane.Background, (int)CollectionPriority.Background,
+            batchId: "recovery:jra:ordered:old");
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(recoveryLease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease.LeaseToken, now,
+            new(CollectionAttemptResult.Succeeded)));
+
+        Assert.HasCount(1, (await store.GetBackfillBatchAsync("jra:ordered"))!.Holes);
+    }
+
+    [TestMethod]
     public async Task BackfillList_OrdersBatchesWithoutSqliteDateTimeOffsetOrdering()
     {
         var store = CreateStore();
@@ -665,6 +818,55 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(2, detail.RequestHistoryPage);
         Assert.AreEqual(3, detail.EffectiveTaskHistoryPage);
         Assert.AreEqual(2, detail.EffectiveAttemptHistoryPage);
+    }
+
+    [TestMethod]
+    public async Task ResourceDetail_NormalizesInvalidPaging_AndExtremePageReturnsEmpty()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now);
+        await CompleteAsync(store, receipt, now);
+
+        var normalized = await store.GetResourceDetailPagedAsync(Horse, HorseProfile,
+            requestHistoryPage: 0, taskHistoryPage: -4, attemptHistoryPage: 0, historyPageSize: 0);
+        var extreme = await store.GetResourceDetailPagedAsync(Horse, HorseProfile,
+            requestHistoryPage: int.MaxValue, taskHistoryPage: int.MaxValue,
+            attemptHistoryPage: int.MaxValue, historyPageSize: int.MaxValue);
+
+        Assert.IsNotNull(normalized);
+        Assert.AreEqual(1, normalized.RequestHistoryPage);
+        Assert.AreEqual(1, normalized.EffectiveTaskHistoryPage);
+        Assert.AreEqual(1, normalized.EffectiveAttemptHistoryPage);
+        Assert.AreEqual(1, normalized.HistoryPageSize);
+        Assert.HasCount(1, normalized.Requests);
+        Assert.IsNotNull(extreme);
+        Assert.AreEqual(100, extreme.HistoryPageSize);
+        Assert.IsEmpty(extreme.Requests);
+        Assert.IsEmpty(extreme.Tasks);
+        Assert.IsEmpty(extreme.Attempts);
+        Assert.AreEqual(receipt.TaskId, extreme.LatestTask?.TaskId);
+    }
+
+    [TestMethod]
+    public async Task ResourceDetail_SameTimestampOrderingIsStableAcrossPages()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        for (var index = 0; index < 5; index++)
+            await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now);
+
+        var first = await store.GetResourceDetailPagedAsync(Horse, HorseProfile, 1, 1, 1, 2);
+        var second = await store.GetResourceDetailPagedAsync(Horse, HorseProfile, 2, 2, 2, 2);
+        var repeated = await store.GetResourceDetailPagedAsync(Horse, HorseProfile, 1, 1, 1, 2);
+
+        Assert.IsNotNull(first);
+        Assert.IsNotNull(second);
+        Assert.IsNotNull(repeated);
+        CollectionAssert.AreEqual(first.Requests.Select(x => x.RequestId).ToArray(),
+            repeated.Requests.Select(x => x.RequestId).ToArray());
+        Assert.IsEmpty(first.Requests.Select(x => x.RequestId).Intersect(second.Requests.Select(x => x.RequestId)));
+        Assert.AreEqual(first.LatestTask?.TaskId, second.LatestTask?.TaskId);
     }
 
     private CollectionPlatformStore CreateStore() => new(Options.Create(new CollectionPlatformOptions

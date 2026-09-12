@@ -35,7 +35,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         }
         catch (Exception ex)
         {
-            completion = new(CollectionAttemptResult.PermanentFailure, ex.GetType().Name, ex.Message);
+            completion = CollectionAttemptFailureClassifier.FromException(ex);
         }
 
         await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);

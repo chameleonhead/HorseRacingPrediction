@@ -255,13 +255,14 @@ public static class CollectionPlatformEndpointExtensions
             var batch = await store.GetBackfillBatchAsync(batchId, token);
             if (batch is null) return Results.NotFound();
             var created = 0;
+            var recoveryBatchId = $"recovery:{batchId}:{Guid.NewGuid():N}";
             foreach (var hole in batch.Holes)
             {
                 var state = await store.GetStateAsync(hole.Resource, hole.Definition, token);
                 var receipt = await store.RequestAsync(hole.Resource, hole.Definition,
                     Math.Max(1, state?.RequiredRevision ?? state?.AppliedRevision ?? 1), CollectionReason.Recovery,
                     DateTimeOffset.UtcNow, CollectionLane.Background, (int)CollectionPriority.Background,
-                    batchId: $"recovery:{batchId}", cancellationToken: token);
+                    batchId: recoveryBatchId, cancellationToken: token);
                 if (receipt.CreatedTask) created++;
             }
             return Results.Accepted(value: new BackfillHoleRecoveryResult(batch.Holes.Count, created));

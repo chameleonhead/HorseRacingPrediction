@@ -52,6 +52,48 @@ public sealed class CollectionPlatformWorkerClientTests
         Assert.AreEqual("CollectorTimeout", document.RootElement.GetProperty("errorCode").GetString());
     }
 
+    [TestMethod]
+    [DataRow(404, CollectionAttemptResult.ResourceNotFound)]
+    [DataRow(429, CollectionAttemptResult.AccessLimited)]
+    [DataRow(503, CollectionAttemptResult.TransientFailure)]
+    public async Task HandlerHttpFailure_IsReportedWithRetrySafeClassification(
+        int statusCode, CollectionAttemptResult expectedResult)
+    {
+        var taskId = Guid.NewGuid();
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "H1"),
+            new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
+            "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
+        var transport = new RecordingTransport(lease);
+        var client = new CollectionPlatformWorkerClient(
+            new HttpClient(transport) { BaseAddress = new("https://api.test/") },
+            new CollectionDefinitionHandlerRegistry([new ThrowingHandler(
+                new HttpRequestException("failure", null, (HttpStatusCode)statusCode))]));
+
+        await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
+
+        using var document = JsonDocument.Parse(transport.CompletionBody!);
+        Assert.AreEqual((int)expectedResult, document.RootElement.GetProperty("result").GetInt32());
+    }
+
+    [TestMethod]
+    public async Task HandlerTimeout_IsReportedAsTransientFailure()
+    {
+        var taskId = Guid.NewGuid();
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.Horse, "JRA", "H1"),
+            new("horse-profile"), 1, CollectionReason.Initial, CollectionLane.Normal, 50,
+            "lease", DateTimeOffset.UtcNow.AddMinutes(15), null, new Dictionary<string, string>());
+        var transport = new RecordingTransport(lease);
+        var client = new CollectionPlatformWorkerClient(
+            new HttpClient(transport) { BaseAddress = new("https://api.test/") },
+            new CollectionDefinitionHandlerRegistry([new ThrowingHandler(new TimeoutException("timeout"))]));
+
+        await client.ExecuteAsync(new(taskId, 1), CancellationToken.None);
+
+        using var document = JsonDocument.Parse(transport.CompletionBody!);
+        Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
+            document.RootElement.GetProperty("result").GetInt32());
+    }
+
     private sealed class CancellingHandler(Action cancel) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
@@ -74,6 +116,14 @@ public sealed class CollectionPlatformWorkerClientTests
                     new(41, CollectionAttemptResult.UnexpectedPage, "UnexpectedPage"),
                     new(42, CollectionAttemptResult.Succeeded),
                 ]));
+    }
+
+    private sealed class ThrowingHandler(Exception exception) : ICollectionDefinitionHandler
+    {
+        public CollectionDefinitionId DefinitionId => new("horse-profile");
+        public ResourceType ResourceType => ResourceType.Horse;
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
+            => Task.FromException<CollectionAttemptCompletion>(exception);
     }
 
     private sealed class RecordingTransport(LeasedCollectionTask lease) : HttpMessageHandler
