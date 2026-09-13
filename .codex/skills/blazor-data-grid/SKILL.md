@@ -13,6 +13,10 @@ FluentDataGridを使用する。
 
 独自table/grid実装を作らない。
 
+適用中のchange recordがある場合、列、sorting、filtering、pagination、row action、loading/empty、
+responsiveの判断を関連する受入れ基準へ対応づけ、検証方法と完了証拠をVerification recordへ接続する。
+実装前の設計判断はこのスキルに記録し、実行結果の証拠は`blazor-ui-testing`の手順で残す。
+
 ## Columns
 
 列はユーザーにとっての重要度で並べる。

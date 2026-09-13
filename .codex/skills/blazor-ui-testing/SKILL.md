@@ -13,6 +13,11 @@ Blazor UI変更では、
 
 すべてをE2Eで確認しない。
 
+適用中のchange recordがある場合、このスキルは各UI関連ACを、component test、browser
+verification、または明示的な未検証理由へ対応づけ、実行したコマンド、対象状態、観測結果、
+残課題をVerification recordへ記録する責務を持つ。設計方針や画面構成の採否は
+`blazor-fluent-ui-design`および該当UIスキルの責務であり、テスト成功だけで設計適合を推測しない。
+
 ## Component Test
 
 Component単体の状態・Interactionは

@@ -10,6 +10,11 @@ description: >
 
 Blazorで入力フォームを作成・変更するときに使用する。
 
+適用中のchange recordがある場合、入力順序、layout、validation、submit、unsaved changes、
+responsiveの判断を関連する受入れ基準へ対応づけ、検証方法と完了証拠をVerification recordへ接続する。
+フォーム設計はこのスキルの責務とし、component/browser testの実行結果は
+`blazor-ui-testing`へ記録する。委譲成果は主担当がAC適合と目的外変更をレビューして採用する。
+
 ## Fluent Inputを使用する
 
 Fluent UI Blazorに対応Componentが存在する場合、

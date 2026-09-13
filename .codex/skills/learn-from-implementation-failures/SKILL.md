@@ -18,19 +18,34 @@ Turn observed failures into narrow, testable improvements to future decisions. D
 7. Validate every modified skill with the skill-creator validator. Inspect the final diff for generic platitudes, duplicated policy, unfinished placeholders, and unverifiable rules.
 8. Report the causes, changed skills, and the concrete behavior that will differ next time.
 
+## Delegation-failure recovery
+
+通常のモデル選択、委譲、並列化、worker成果の採用は
+`agent-task-orchestration` の責務とする。このスキルは、委譲後に観測された失敗を
+分析し、再分割またはモデル昇格が必要かを決める。
+
+委譲タスクが失敗した、受入れ基準を満たさない、根拠不足で採用できない、または
+同種の失敗を繰り返した場合は、次の順で記録する。
+
+1. 承認済みの受入れ基準、workerの入力、diff、テスト、レビュー指摘を突き合わせ、事実と推測を分ける。
+2. タスクを独立して検証できる成果単位へ再分割する。共有ファイル、未確定の設計判断、複数境界を跨ぐ処理を一つのworkerへ戻さない。
+3. 再分割後も曖昧さ、統合負荷、失敗率、レビュー負荷が高い場合は主担当または上位モデルへ昇格する。
+4. change recordの実行計画またはVerification recordに、原因、再分割/昇格の判断、再試行回数、レビュー指摘、再検証結果を追記する。
+
+再分割の完了条件は、各新タスクに owner、依存、書込範囲、検証コマンド、完了証拠があり、
+失敗した元タスクとの対応を追跡できることである。モデル単価だけでなく、初回受入率、
+再試行、レビュー負荷、修正時間を根拠にrouting ruleを狭く更新する。
+
 ## Repeated interruption and autonomy review
 
-When a multi-step implementation repeatedly stops at checkpoints while safe approved work remains, treat the interruption pattern itself as a delivery failure and analyze it before the next checkpoint.
+承認済みの安全な作業が残る状態でチェックポイント停止を繰り返した場合は、停止パターン自体を失敗として扱う。
 
-- Build a dependency graph for all remaining acceptance criteria. Mark tasks as runnable, blocked, or dependent; do not use a flat list that encourages stopping after the first item.
-- Execute the entire runnable frontier. When delegation is authorized and tasks have non-overlapping write scopes, assign independent frontier tasks in parallel while retaining integration, skill interpretation, and final verification in the main agent.
-- In a shared worktree, non-overlapping ownership also means preserving a buildable integration surface. Add required types before their callers, avoid leaving uncompilable intermediate edits across waits, run a fast build immediately after cross-project contract changes, and notify other owners as soon as the shared build is restored. Treat repeated cross-agent compile blocking as evidence that task boundaries or edit order must be tightened.
-- A commit, passing focused test, context compaction, or completed subtask is a checkpoint, not a stopping condition. Immediately select the next runnable task after recording it.
-- Maintain a durable execution plan containing task owner, dependency, write scope, verification command, and completion evidence so work can resume without rediscovery after compaction.
-- Before yielding, check whether any approved task is runnable with current authority and tools. If so, continue. Yield only when the requested outcome is complete or a permitted blocker genuinely requires user/external input.
-- If a task is too large for one slice, split it by independently verifiable production paths, not by layers that leave disconnected scaffolding.
+- 残りの受入れ基準を依存グラフへ展開し、`Runnable`、`Dependent`、`Externally blocked` を記録する。
+- runnable項目を実行できないまま停止した理由をchange recordへ記録し、同じ停止を防ぐ再分割または昇格を行う。
+- 共有worktreeのビルド破壊、クロスエージェントの待ち状態、長すぎるタスクが見つかったら、独立検証可能な本番経路単位へ切り分ける。
+- コミット、部分テスト、コンテキスト圧縮、サブタスク完了は停止条件ではない。次のrunnable項目と検証を実行計画へ記録する。
 
-The observable correction is sustained progress across multiple dependent checkpoints, with the execution plan and acceptance matrix showing why work continued or why it was genuinely blocked.
+観測可能な修正は、複数チェックポイントをまたいで作業が継続し、実行計画と受入れ基準マトリクスに継続または阻害の理由が残ることである。
 
 ### Review-to-execution closure gate
 

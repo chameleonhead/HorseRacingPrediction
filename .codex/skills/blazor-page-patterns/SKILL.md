@@ -15,6 +15,11 @@ Blazorの業務画面では、
 デザイン判断には
 blazor-fluent-ui-designの原則を適用する。
 
+適用中のchange recordがある場合、Page種別、PageHeader、dialog/page選択、主要導線、
+既存pattern再利用の判断を関連する受入れ基準へ対応づけ、検証方法と完了証拠をVerification recordへ接続する。
+ページ構造の設計はこのスキルの責務とし、操作確認・browser verificationの証拠は
+`blazor-ui-testing`へ記録する。change recordのACにない構造変更を、実装都合だけで追加しない。
+
 ## 基本構造
 
 標準ページは原則として、

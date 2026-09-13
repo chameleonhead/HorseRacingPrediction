@@ -16,9 +16,24 @@ Treat the document as the durable record of intent and the implementation as its
 5. Store planning artifacts under the same directory. Use `mocks/` for wireframes or visual mocks and `decisions/` only when a decision needs substantial standalone rationale. Link every artifact from the change record.
 6. Set the document status to `Proposed` while decisions remain open. Present the document to the user and request explicit confirmation.
 7. Change the status to `Approved` only after the user confirms the documented design. Do not change production code before this gate.
-8. Implement only the approved scope. If implementation reveals a material design change, update the document and every affected canonical document, return the change record to `Proposed`, and obtain approval again before continuing.
-9. Verify the acceptance criteria and relevant regressions. Record commands, results, intentional deviations, remaining work, and documentation updates in the change record.
-10. Set the status to `Implemented` only when the approved scope, required documentation updates, and required verification are complete.
+8. For a multi-task or multi-agent change, complete the four review gates below. Record the reviewer, inputs, decision, and follow-up in the change record before proceeding past each gate.
+9. Implement only the approved scope. If implementation reveals a material design change, update the document and every affected canonical document, return the change record to `Proposed`, and obtain approval again before continuing.
+10. Verify the acceptance criteria and relevant regressions. Record commands, results, intentional deviations, remaining work, and documentation updates in the change record.
+11. Set the status to `Implemented` only when the approved scope, required documentation updates, and required verification are complete and no task or acceptance criterion remains unfinished.
+
+## Task plan and review gates
+
+For changes with multiple tasks or agents, include a task plan in the record (or a linked `execution-plan.md`) with `ID`, `Task`, `Owner`, `Model tier`, `Depends on`, `Write scope`, `Verification`, `Completion evidence`, and `State`. A short single task may compress the same fields into bullets. Link every task to at least one acceptance criterion and at least one verification; link every acceptance criterion back to one or more tasks. Use observable evidence, not an agent's completion claim.
+
+Before approval, perform a **Design and task-split review**: the main owner confirms the design decisions are settled, all acceptance criteria have task and verification coverage, boundaries and dependencies are valid, parallel write scopes do not overlap, and delegation is suitable for the selected model tier. Do not delegate unresolved design decisions.
+
+Immediately after approval and before code changes, perform a **Pre-implementation review**: classify every task as `Runnable`, `Dependent`, `Externally blocked`, or `Rejected with reason`; confirm the current frontier has non-overlapping write scopes; and record the exact worker inputs, expected evidence, and escalation conditions.
+
+At each substantial checkpoint, perform a **Checkpoint review**: the main owner reads the delegated diff or primary evidence, compares it with the approved design and acceptance-criterion matrix, checks tests and scope, and records fixes, re-sequencing, or model escalation. A checkpoint may contain unfinished work; it is not a completion claim.
+
+Before `Implemented`, perform a **Final review**: every task needed by the approved scope and every acceptance criterion is `Verified`, and no `Runnable`, `In progress`, `Dependent`, or acceptance-blocking `Externally blocked` task remains. An external blocker may remain only as an explicitly excluded follow-up that does not prevent any approved acceptance criterion; otherwise keep the record `Approved` and report the blocker. Record final diff/status checks and relevant tests. Never mark a record complete from isolated tests or scaffolding that is not connected to the documented path.
+
+The `agent-task-orchestration` skill is required when delegation, model-tier routing, parallel workers, or worker-result adoption is part of the change. It is not required for a single short task with no delegation. The change-record gates and traceability requirements still apply whenever a change record is required.
 
 ## Implementation Traceability Gate
 
@@ -69,4 +84,4 @@ When the repository contains `.codegraph/`, treat its index as a derived verific
 
 ## Scope Boundary
 
-Tiny corrections that cannot change behavior—such as spelling fixes or comment-only clarification—do not require a change record. When uncertain whether a change affects behavior or review decisions, create one.
+Tiny corrections that cannot change behavior—only spelling fixes or comment-only clarification—do not require a change record. When uncertain whether a change affects behavior or review decisions, create one.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent task orchestration"
+  short_description: "Plan and govern tiered agent work"
+  default_prompt: "Use $agent-task-orchestration to plan delegated work with explicit scope, evidence, and escalation gates."
