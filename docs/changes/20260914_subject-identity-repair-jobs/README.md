@@ -1,6 +1,6 @@
 # 4主体の要対応データ補正ジョブを管理画面から実行する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -129,16 +129,16 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 |---|---|---|---|---|---|---|---|---|
-| T1 | failure連携ledger/redirect schema・migration・互換読取 | Main | Lead tier | - | Application read models, Infrastructure persistence/migrations | migration tests | old/new DB compatibility | Proposed |
-| T2 | 4主体failure投影、Owner identity収集、補正・名寄せ安全性判定 | Main | Lead tier | T1 | collection write/API contracts/detection tests | failure/candidate integration tests | AC1,AC3 evidence | Proposed |
-| T3 | 主体別apply、redirect/alias、suppression、retry | Main | Lead tier | T1,T2 | repair API, Collection Platform, endpoint tests | transport+persistence tests | AC4-AC7 evidence | Proposed |
-| T4 | `/settings`主体横断UIと操作 | Worker candidate; Main review | Worker tier | T2,T3 contract freeze | Settings/AdminApiClient/component tests | bUnit/browser | AC2,AC3,AC8,AC10 evidence | Proposed |
-| T5 | 文書同期、全回帰、最終監査 | Main | Lead tier | T1-T4 | docs/change record only | format/build/test/diff/status/CodeGraph | all AC/task reconciliation | Proposed |
+| T1 | failure連携ledger/redirect schema・migration・互換読取 | Main | Lead tier | - | Application read models, Infrastructure persistence/migrations | migration tests | old/new DB compatibility | Runnable |
+| T2 | 4主体failure投影、Owner identity収集、補正・名寄せ安全性判定 | Main | Lead tier | T1 | collection write/API contracts/detection tests | failure/candidate integration tests | AC1,AC3 evidence | Dependent |
+| T3 | 主体別apply、redirect/alias、suppression、retry | Main | Lead tier | T1,T2 | repair API, Collection Platform, endpoint tests | transport+persistence tests | AC4-AC7 evidence | Dependent |
+| T4 | `/settings`主体横断UIと操作 | Worker candidate; Main review | Worker tier | T2,T3 contract freeze | Settings/AdminApiClient/component tests | bUnit/browser | AC2,AC3,AC8,AC10 evidence | Dependent |
+| T5 | 文書同期、全回帰、最終監査 | Main | Lead tier | T1-T4 | docs/change record only | format/build/test/diff/status/CodeGraph | all AC/task reconciliation | Dependent |
 
 ## Review gates
 
 - **Design and task-split review** — Reviewer: Main。Inputs: CodeGraph、現行Horse repair、Collection Platform failure/recovery、4主体識別・merge棚卸し、2件のread-only worker調査。Decision: active `SubjectNotIdentified` failureを正本とし、候補0件をRetryReadyとして扱う。Ownerはprofile収集ではなくidentity解決definitionを追加する。schema/API/データ整合性はMainが直列実装し、契約freeze後のUIだけを独立委譲候補とする。T1→T2→T3→T4→T5の依存とAC coverageを確認。Follow-up: 改訂設計のユーザー承認後にPre-implementation reviewを記録する。
-- **Pre-implementation review** — 承認後に記録する。
+- **Pre-implementation review** — Reviewer: Main。Approval: 2026-09-14、ユーザーがAC1〜AC10、候補0件のRetryReady、Owner identity definitionを含む改訂設計を承認。T1を`Runnable`、T2〜T5を依存順に`Dependent`とする。共有schema、migration、API contract、generated snapshotはMainのみが変更する。T1〜T3の契約をfreezeするまでUI workerを開始しない。Worker inputsは承認済みchange record、確定API contract、UI skill、対象component/testに限定し、契約変更・migration・外部操作を禁止する。契約の曖昧さ、テスト失敗1回後の範囲拡大、共有ファイル変更が必要ならMainへescalateする。
 - **Checkpoint review** — 各checkpointで記録する。
 - **Final review** — 全task/ACをVerifiedへ照合後に記録する。
 
@@ -154,4 +154,4 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 ## Deviations and follow-up
 
 - 本番データへの補正実行は実装・ローカル検証に含めない。
-- 本changeはProposedであり、承認前はproduction codeを変更しない。
+- 2026-09-14に改訂設計が承認された。production codeはPre-implementation review記録後に変更する。
