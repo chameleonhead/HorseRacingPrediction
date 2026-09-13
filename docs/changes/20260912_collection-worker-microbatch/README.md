@@ -178,6 +178,15 @@ URLは書き換えず候補のまま直接取得し、ページ種別とRaceId�
 出馬表に含まれる「単勝オッズ(人気)」列をオッズページと誤認しないよう、ページが「出馬表」を
 名乗る場合は出馬表Parserを優先する。本番URLと同じ識別子形状・曖昧な列構造を回帰テストに含める。
 
+同日のAWS実行確認では、未保存のExplicit URL候補が `LocationId=0` を持つ一方、完了APIが
+すべてのLocation outcomeに永続IDを要求して409を返していた。このため業務データ保存後もTaskが
+Runningに残り、15分後のLeaseExpired、SQS再配信、DLQ移送へ連鎖していた。`LocationId=0` は
+既存Locationの更新対象から除外し、成功時は従来どおりRequestedUrlから新規ResourceLocationとして
+登録する。負のID、Running結果、別Resourceの永続Location IDは引き続き拒否する。
+
+回帰テストでは、Explicit URLを取得したleaseが `LocationId=0` であること、そのoutcomeを含む
+完了が受理され、URLが検証済みResourceLocationへ昇格することを確認した。
+
 また、開催週の出走馬についてはプロフィール内の出走履歴リンクを、URLから日付・競馬場・
 レース番号を同定でき、表示行とも一致する場合に限って通常の `RaceResult` Resourceへ展開する。
 `weekendPriorityUntil` までに処理された履歴はRealtime・High、期限後に処理された履歴は
