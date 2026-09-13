@@ -1,6 +1,6 @@
 # JRA競走馬識別子の不具合修復を管理画面から実行する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -133,7 +133,8 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 - 2026-09-14: 既存のversioned repair API、管理UIのNavMenu、AdminApiClient、Cookie/API key認証境界、`/jobs` のPage patternとbUnitテストを確認した。
 - 2026-09-14: 実装前セルフレビューを行い、収集管理へ混在させず、repair固有ページからサーバーpreviewに列挙された候補だけを操作する案とした。
 - 2026-09-14: ユーザー指定により画面名を「その他設定」とし、補正実行はデータ収集ジョブと別系統にした。名寄せ後は削除済み統合元Horseの既存・将来の収集をsuppressionし、履歴は保持する設計へ拡張した。
+- 2026-09-14: ユーザーが更新後の設計を明示的に承認したため、StatusをApprovedとしてExecution Modeへ移行した。
 
 ## Deviations and follow-up
 
-- 本change recordがApprovedになるまでプロダクションコードは変更しない。
+- 本番データへのrepair適用は、実装・ローカル検証とは分離する。
