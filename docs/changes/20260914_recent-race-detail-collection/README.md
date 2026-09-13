@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -320,3 +320,16 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
 
 - migration apply は管理APIでpipeline pauseを必須とし、Store側でも旧・新active taskがゼロであることを検証する。未送信outboxはterminal task IDを保持したまま移行され、worker側の世代・状態検証で安全に無視できるため、個別のゼロ件前提にはしなかった。
 - レース全体の公式取止を示す専用JRAページ標本は現行parser契約に存在しない。馬単位の取消・除外・競走中止・失格は従来どおり結果として保存する。レース全体の取止ページを取得できた時点で、推測せず終端化するparser fixtureを別途追加する。
+
+2026-09-14 の初回実装では、以下が未完了のまま誤って `Implemented` とした。完了ゲート違反を確認したため
+`Approved` へ戻し、closure ledgerとして追跡する。
+
+| Finding | State | Completion evidence |
+| --- | --- | --- |
+| F1 公式取止を推測せず終端化する | Runnable | parser/page/workflow/handlerのfixtureテストと終端state |
+| F2 結果未公開の段階的backoffを設定化する | Runnable | 当日・翌日以降のretry時刻テスト |
+| F3 管理画面で待機理由と次回確認時刻を表示する | Runnable | component/API projectionテスト |
+| F4 実collection DB migrationをpreview/applyする | Dependent | 対象DB特定、backup、pause/drain、preview、apply、件数検証 |
+| F5 実JRAページで直近の出馬表→結果と馬主補完を確認する | Dependent | bounded live smokeの取得・domain保存証跡 |
+
+次の実行順は F1 → F2 → F3 → focused/full test → F4/F5 の対象環境確認と安全な適用である。
