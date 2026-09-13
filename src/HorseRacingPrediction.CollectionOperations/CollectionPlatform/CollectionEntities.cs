@@ -70,6 +70,8 @@ public sealed class CollectionRequestEntity
     public DateTimeOffset RequestedAt { get; set; }
     public string? ExplicitUrl { get; set; }
     public string? BatchId { get; set; }
+    public string? OriginDefinitionId { get; set; }
+    public int? OriginRequestedRevision { get; set; }
 }
 
 public sealed class CollectionTaskEntity
@@ -92,6 +94,8 @@ public sealed class CollectionTaskEntity
     public long DispatchGeneration { get; set; }
     public int AttemptCount { get; set; }
     public DateTimeOffset? CancellationRequestedAt { get; set; }
+    public string? OriginDefinitionId { get; set; }
+    public int? OriginRequestedRevision { get; set; }
 }
 
 public sealed class CollectionPlatformControlEntity

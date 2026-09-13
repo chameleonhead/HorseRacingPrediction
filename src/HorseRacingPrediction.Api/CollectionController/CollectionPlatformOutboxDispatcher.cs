@@ -100,7 +100,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     private static CollectionDispatchCompatibilityKey CreateCompatibility(PendingCollectionDispatch item)
     {
-        if (item.EffectiveDate.HasValue && item.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult)
+        if (item.EffectiveDate.HasValue && item.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
             return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
                 CollectionDispatchGroupKind.RaceDay, item.EffectiveDate.Value.ToString("yyyy-MM-dd"));
         if (item.Resource.Type == ResourceType.Horse
@@ -128,7 +128,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
         => int.TryParse(item.Attributes?.GetValueOrDefault("number"), out var number) ? number : int.MaxValue;
     private static int RouteType(PendingCollectionDispatch item) => item.Resource.Type switch
     {
-        ResourceType.RaceCard => 0,
+        ResourceType.Race or ResourceType.RaceCard => 0,
         ResourceType.RaceResult => 1,
         _ => 2,
     };

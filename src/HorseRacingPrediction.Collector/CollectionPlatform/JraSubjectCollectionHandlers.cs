@@ -232,7 +232,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 };
                 if (priorityUntil is not null)
                     requestAttributes["weekendPriorityUntil"] = priorityUntil.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-                await sink.RequestAsync(resource, new("race-result"), CollectionReason.Discovery, lane, priority,
+                await sink.RequestAsync(resource, new("race-detail"), CollectionReason.Discovery, lane, priority,
                     url, effectiveDate, requestAttributes, cancellationToken).ConfigureAwait(false);
             }
             page = await navigator.NextHorseHistoryPageAsync(page, cancellationToken).ConfigureAwait(false);
@@ -255,7 +255,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             || !int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number)
             || number is < 1 or > 12 || !CourseCodes.TryGetValue(match.Groups["course"].Value, out var course)
             || history.Date != effectiveDate || RaceCourseNames.Parse(history.Course) != course) return false;
-        resource = new(ResourceType.RaceResult, "JRA", $"{effectiveDate:yyyyMMdd}:{course}:{number}");
+        resource = new(ResourceType.Race, "JRA", $"{effectiveDate:yyyyMMdd}:{course}:{number}");
         attributes = new Dictionary<string, string>
         {
             ["course"] = RaceCourseNames.GetJraName(course),

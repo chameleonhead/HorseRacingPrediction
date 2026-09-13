@@ -88,6 +88,18 @@ public static class CollectionPlatformEndpointExtensions
             await store.SetPausedAsync(false, null, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.NoContent();
         });
+        admin.MapPost("/migrations/race-detail/preview", async (CollectionPlatformStore store,
+            CancellationToken token) => Results.Ok(await store.MergeLegacyRaceDetailsAsync(false,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)));
+        admin.MapPost("/migrations/race-detail/apply", async (CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            var pipeline = await store.GetPipelineStateAsync(token);
+            if (!pipeline.IsPaused) return Results.Conflict(new { message = "Collection pipeline must be paused." });
+            var report = await store.MergeLegacyRaceDetailsAsync(true,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
+            return report.Errors.Count == 0 ? Results.Ok(report) : Results.Conflict(report);
+        });
         admin.MapPost("/tasks/{taskId:guid}/cancel", async (Guid taskId, CollectionPlatformStore store,
             CancellationToken token) => await store.CancelTaskAsync(taskId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                 ? Results.NoContent() : Results.Conflict());

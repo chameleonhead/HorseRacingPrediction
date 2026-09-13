@@ -1606,6 +1606,218 @@ public sealed class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<LegacyRaceDetailMergeReport> MergeLegacyRaceDetailsAsync(bool execute,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var legacyTypes = new[] { ResourceType.RaceCard, ResourceType.RaceResult };
+            var legacy = await db.Resources.Where(x => legacyTypes.Contains(x.Type)).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var errors = new List<string>();
+            var mapped = new List<(CollectionResourceEntity Source, string Id, DateOnly Date,
+                Dictionary<string, string> Attributes)>();
+            foreach (var source in legacy)
+            {
+                Dictionary<string, string> attributes;
+                try
+                {
+                    attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(source.AttributesJson) ?? [];
+                }
+                catch (JsonException)
+                {
+                    errors.Add($"Invalid attributes JSON: {source.Type}/{source.Provider}/{source.ResourceId}");
+                    continue;
+                }
+                if (source.EffectiveDate is not { } date
+                    || !attributes.TryGetValue("course", out var course)
+                    || !attributes.TryGetValue("number", out var numberText)
+                    || !int.TryParse(numberText, out var number) || number is < 1 or > 12
+                    || !TryCanonicalCourse(course, out var canonicalCourse))
+                {
+                    errors.Add($"Unidentified race resource: {source.Type}/{source.Provider}/{source.ResourceId}");
+                    continue;
+                }
+                mapped.Add((source, $"{date:yyyyMMdd}:{canonicalCourse}:{number}", date, attributes));
+            }
+            var legacyPks = legacy.Select(x => x.ResourcePk).ToArray();
+            var raceDetailDefinition = await db.Definitions.AsNoTracking().SingleOrDefaultAsync(
+                x => x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
+            if (raceDetailDefinition is null || !raceDetailDefinition.Enabled
+                || raceDetailDefinition.ResourceType != ResourceType.Race || raceDetailDefinition.CurrentRevision < 1)
+                errors.Add("The enabled race-detail revision 1 definition must be registered before migration.");
+            var activeCount = await db.ActiveTasks.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken)
+                .ConfigureAwait(false);
+            if (activeCount > 0) errors.Add($"Legacy race collection has {activeCount} active task(s); drain them first.");
+            var targetIds = mapped.Select(x => x.Id).Distinct().ToArray();
+            var activeTargetCount = await db.ActiveTasks.Join(db.Resources.Where(x => x.Type == ResourceType.Race
+                        && targetIds.Contains(x.ResourceId)), active => active.ResourcePk, resource => resource.ResourcePk,
+                    (active, _) => active)
+                .CountAsync(x => x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
+            if (activeTargetCount > 0)
+                errors.Add($"Unified race collection has {activeTargetCount} active task(s); drain them first.");
+            if (errors.Count > 0 || !execute)
+            {
+                var previewGroups = mapped.Select(x => (x.Source.Provider, x.Id)).Distinct().Count();
+                var previewRequests = await db.Requests.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
+                var previewTasks = await db.Tasks.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
+                var previewTaskIds = await db.Tasks.Where(x => legacyPks.Contains(x.ResourcePk))
+                    .Select(x => x.TaskId).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+                var previewAttempts = await db.Attempts.CountAsync(x => previewTaskIds.Contains(x.TaskId), cancellationToken);
+                var previewLocations = await db.Locations.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
+                var previewStates = await db.States.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken);
+                var previewToday = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Time.JstTime.Convert(now).Date);
+                var previewSupplements = mapped.GroupBy(x => (x.Source.Provider, x.Id)).Count(group =>
+                {
+                    var pks = group.Select(x => x.Source.ResourcePk).ToArray();
+                    var groupStates = db.States.AsNoTracking().Where(x => pks.Contains(x.ResourcePk)).ToList();
+                    var cardCurrent = groupStates.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current);
+                    var resultCurrent = groupStates.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current);
+                    var date = group.First().Date;
+                    return date > previewToday || (date >= previewToday.AddDays(-5)
+                        ? !(cardCurrent && resultCurrent) : !resultCurrent);
+                });
+                return new(!execute, legacy.Count, previewGroups, previewRequests, previewTasks, previewAttempts,
+                    previewLocations, previewStates, previewSupplements, errors);
+            }
+
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var requestCount = 0;
+            var taskCount = 0;
+            var attemptCount = 0;
+            var locationCount = 0;
+            var stateCount = 0;
+            var supplementCount = 0;
+            var today = DateOnly.FromDateTime(HorseRacingPrediction.Contracts.Time.JstTime.Convert(now).Date);
+            foreach (var group in mapped.GroupBy(x => (x.Source.Provider, x.Id)))
+            {
+                var first = group.First();
+                var target = await db.Resources.SingleOrDefaultAsync(x => x.Type == ResourceType.Race
+                    && x.Provider == group.Key.Provider && x.ResourceId == group.Key.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                if (target is null)
+                {
+                    target = new CollectionResourceEntity
+                    {
+                        Type = ResourceType.Race,
+                        Provider = group.Key.Provider,
+                        ResourceId = group.Key.Id,
+                        EffectiveDate = first.Date,
+                        AttributesJson = JsonSerializer.Serialize(MergeAttributes(group.Select(x => x.Attributes))),
+                        CreatedAt = group.Min(x => x.Source.CreatedAt),
+                    };
+                    db.Resources.Add(target);
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+                var sourcePks = group.Select(x => x.Source.ResourcePk).ToArray();
+                var requests = await db.Requests.Where(x => sourcePks.Contains(x.ResourcePk)
+                    && (x.DefinitionId == "race-card" || x.DefinitionId == "race-result"))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var request in requests)
+                {
+                    request.OriginDefinitionId ??= request.DefinitionId;
+                    request.OriginRequestedRevision ??= request.RequestedRevision;
+                    request.ResourcePk = target.ResourcePk;
+                    request.DefinitionId = "race-detail";
+                    request.RequestedRevision = 1;
+                }
+                requestCount += requests.Count;
+                var tasks = await db.Tasks.Where(x => sourcePks.Contains(x.ResourcePk)
+                    && (x.DefinitionId == "race-card" || x.DefinitionId == "race-result"))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var task in tasks)
+                {
+                    task.OriginDefinitionId ??= task.DefinitionId;
+                    task.OriginRequestedRevision ??= task.RequestedRevision;
+                    task.ResourcePk = target.ResourcePk;
+                    task.DefinitionId = "race-detail";
+                    task.RequestedRevision = 1;
+                }
+                taskCount += tasks.Count;
+                var taskIds = tasks.Select(x => x.TaskId).ToArray();
+                attemptCount += await db.Attempts.CountAsync(x => taskIds.Contains(x.TaskId), cancellationToken)
+                    .ConfigureAwait(false);
+
+                var locations = await db.Locations.Where(x => sourcePks.Contains(x.ResourcePk)
+                    && (x.DefinitionId == "race-card" || x.DefinitionId == "race-result"))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var location in locations)
+                {
+                    var duplicate = await db.Locations.FirstOrDefaultAsync(x => x.ResourcePk == target.ResourcePk
+                        && x.DefinitionId == "race-detail" && x.Url == location.Url, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (duplicate is null)
+                    {
+                        location.ResourcePk = target.ResourcePk;
+                        location.DefinitionId = "race-detail";
+                    }
+                    else
+                    {
+                        MergeLocation(duplicate, location);
+                        db.Locations.Remove(location);
+                    }
+                }
+                locationCount += locations.Count;
+
+                var states = await db.States.Where(x => sourcePks.Contains(x.ResourcePk)
+                    && (x.DefinitionId == "race-card" || x.DefinitionId == "race-result"))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                var cardCurrent = states.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current);
+                var resultCurrent = states.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current);
+                var requiresCard = first.Date >= today.AddDays(-5);
+                var complete = first.Date > today ? false : requiresCard ? cardCurrent && resultCurrent : resultCurrent;
+                var targetState = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == target.ResourcePk
+                    && x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
+                targetState ??= new CollectionStateEntity { ResourcePk = target.ResourcePk, DefinitionId = "race-detail" };
+                if (db.Entry(targetState).State == EntityState.Detached) db.States.Add(targetState);
+                targetState.RequiredRevision = 1;
+                targetState.AppliedRevision = complete ? 1 : 0;
+                targetState.Status = complete ? CollectionStateStatus.Current : CollectionStateStatus.Pending;
+                targetState.LastCollectedAt = states.Select(x => x.LastCollectedAt).DefaultIfEmpty().Max();
+                targetState.NextCollectionAt = complete ? null : now;
+                targetState.UpdatedAt = now;
+                db.States.RemoveRange(states);
+                stateCount += states.Count;
+                if (!complete)
+                {
+                    var request = new CollectionRequestEntity
+                    {
+                        RequestId = Guid.NewGuid(), ResourcePk = target.ResourcePk, DefinitionId = "race-detail",
+                        RequestedRevision = 1, Reason = CollectionReason.DefinitionChanged, RequestedAt = now,
+                    };
+                    var task = new CollectionTaskEntity
+                    {
+                        TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = target.ResourcePk,
+                        DefinitionId = "race-detail", RequestedRevision = 1, Status = CollectionTaskStatus.Ready,
+                        Lane = CollectionLane.Realtime, Priority = (int)CollectionPriority.High,
+                        AvailableAt = now, CreatedAt = now, UpdatedAt = now, DispatchGeneration = 1,
+                    };
+                    db.Requests.Add(request);
+                    db.Tasks.Add(task);
+                    db.ActiveTasks.Add(new CollectionActiveTaskEntity
+                        { ResourcePk = target.ResourcePk, DefinitionId = "race-detail", TaskId = task.TaskId });
+                    db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                    {
+                        OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = 1,
+                        AvailableAt = now, CreatedAt = now,
+                    });
+                    supplementCount++;
+                }
+            }
+            db.Resources.RemoveRange(legacy);
+            var oldDefinitions = await db.Definitions.Where(x => x.DefinitionId == "race-card"
+                || x.DefinitionId == "race-result").ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var definition in oldDefinitions) definition.Enabled = false;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(false, legacy.Count, mapped.Select(x => (x.Source.Provider, x.Id)).Distinct().Count(),
+                requestCount, taskCount, attemptCount, locationCount, stateCount, supplementCount, []);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<CollectionResourceSuppressionResult> SuppressResourceAsync(
         ResourceKey resource, string reason, string repairId, DateTimeOffset now,
         CancellationToken cancellationToken = default)
@@ -2154,10 +2366,11 @@ public sealed class CollectionPlatformStore
                     {
                         ResourcePk = resource.ResourcePk,
                         DefinitionId = seed.Definition.Value,
-                        AppliedRevision = seed.AppliedRevision,
+                        AppliedRevision = seed.IsComplete ? seed.AppliedRevision : 0,
                         RequiredRevision = seed.AppliedRevision,
                         LastCollectedAt = seed.CollectedAt,
-                        Status = CollectionStateStatus.Current,
+                        NextCollectionAt = seed.IsComplete ? null : seed.CollectedAt,
+                        Status = seed.IsComplete ? CollectionStateStatus.Current : CollectionStateStatus.RefreshDue,
                         UpdatedAt = seed.CollectedAt
                     });
                 }
@@ -2448,6 +2661,46 @@ public sealed class CollectionPlatformStore
             });
         }
         if (expired.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool TryCanonicalCourse(string value, out string canonical)
+    {
+        canonical = value.Trim() switch
+        {
+            "札幌" or "Sapporo" => "Sapporo", "函館" or "Hakodate" => "Hakodate",
+            "福島" or "Fukushima" => "Fukushima", "新潟" or "Niigata" => "Niigata",
+            "東京" or "Tokyo" => "Tokyo", "中山" or "Nakayama" => "Nakayama",
+            "中京" or "Chukyo" => "Chukyo", "京都" or "Kyoto" => "Kyoto",
+            "阪神" or "Hanshin" => "Hanshin", "小倉" or "Kokura" => "Kokura",
+            _ => string.Empty,
+        };
+        return canonical.Length > 0;
+    }
+
+    private static Dictionary<string, string> MergeAttributes(IEnumerable<Dictionary<string, string>> sources)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in sources)
+            foreach (var pair in source)
+                if (!string.IsNullOrWhiteSpace(pair.Value)) result[pair.Key] = pair.Value;
+        return result;
+    }
+
+    private static void MergeLocation(ResourceLocationEntity target, ResourceLocationEntity source)
+    {
+        static int Rank(ResourceLocationStatus value) => value switch
+        {
+            ResourceLocationStatus.Active => 4, ResourceLocationStatus.Unknown => 3,
+            ResourceLocationStatus.Suspect => 2, _ => 1,
+        };
+        if (Rank(source.Status) > Rank(target.Status)) target.Status = source.Status;
+        if (source.DiscoveredAt < target.DiscoveredAt) target.DiscoveredAt = source.DiscoveredAt;
+        if (source.LastVerifiedAt > target.LastVerifiedAt) target.LastVerifiedAt = source.LastVerifiedAt;
+        if (source.LastFailedAt > target.LastFailedAt)
+        {
+            target.LastFailedAt = source.LastFailedAt;
+            target.LastFailureCode = source.LastFailureCode;
+        }
     }
 
     private CollectionPlatformDbContext CreateDbContext() => new(_dbOptions);

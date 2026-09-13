@@ -33,9 +33,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             }));
             await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
                 1, "initial", false);
-            await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard,
-                1, "initial", false);
-            await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult,
+            await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
                 1, "initial", false);
             await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds,
                 1, "initial", false);
@@ -95,24 +93,21 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var tasks = await store.GetTasksAsync(limit: 10);
             var discovery = tasks.Single(x => x.Definition.Value == "race-discovery");
             Assert.AreEqual(CollectionTaskStatus.Succeeded, discovery.Status);
-            var card = tasks.Single(x => x.Definition.Value == "race-card");
-            var result = tasks.Single(x => x.Definition.Value == "race-result");
+            var detail = tasks.Single(x => x.Definition.Value == "race-detail");
             var odds = tasks.Single(x => x.Definition.Value == "race-odds");
-            Assert.AreEqual(CollectionTaskStatus.Ready, card.Status);
-            Assert.AreEqual(CollectionTaskStatus.Ready, result.Status);
+            Assert.AreEqual(CollectionTaskStatus.Ready, detail.Status);
             Assert.AreEqual(CollectionTaskStatus.Ready, odds.Status);
-            Assert.AreEqual($"{date:yyyyMMdd}:Tokyo:11", card.Resource.Id);
-            Assert.AreEqual(card.Resource.Id, result.Resource.Id);
-            Assert.AreEqual(card.Resource.Id, odds.Resource.Id);
+            Assert.AreEqual($"{date:yyyyMMdd}:Tokyo:11", detail.Resource.Id);
+            Assert.AreEqual(detail.Resource.Id, odds.Resource.Id);
             Assert.AreEqual(15, schedule.RequestedDates.Count); // the approved ±7 day discovery window
             Assert.HasCount(1, sessions.Navigator.RaceListRequests);
 
             using var rediscoveryResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
             {
-                ResourceType = ResourceType.RaceCard,
+                ResourceType = ResourceType.Race,
                 Provider = "JRA",
-                ResourceId = card.Resource.Id,
-                DefinitionId = "race-card",
+                ResourceId = detail.Resource.Id,
+                DefinitionId = "race-detail",
                 RequestedRevision = 1,
                 Reason = CollectionReason.Discovery,
                 Lane = CollectionLane.Realtime,
@@ -123,8 +118,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var rediscovery = await rediscoveryResponse.Content.ReadFromJsonAsync<CollectionRequestReceipt>();
             Assert.IsNotNull(rediscovery);
             Assert.IsFalse(rediscovery.CreatedTask);
-            Assert.AreEqual(card.TaskId, rediscovery.TaskId);
-            Assert.HasCount(4, await store.GetTasksAsync(limit: 10));
+            Assert.AreEqual(detail.TaskId, rediscovery.TaskId);
+            Assert.HasCount(3, await store.GetTasksAsync(limit: 10));
         }
         finally
         {

@@ -10,7 +10,7 @@ public sealed class JraCollectionSchedulePolicy : ICollectionSchedulePolicy
         {
             ResourceType.RaceOdds => Odds(date, localNow),
             ResourceType.RaceCard => Card(date, localNow),
-            ResourceType.RaceResult => Result(date, localNow, state),
+            ResourceType.Race when state.Definition.Value == "race-detail" => Result(date, localNow, state),
             ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer => Profile(state, now),
             _ => new(false, null, CollectionPriority.Background, CollectionLane.Background, "immutable"),
         };

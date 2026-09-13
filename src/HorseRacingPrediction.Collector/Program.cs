@@ -22,8 +22,7 @@ builder.Services.AddOptions<ApiClientOptions>()
 builder.Services.AddHttpAgentServices();
 
 builder.Services.AddJraScraping();
-builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceCardCollectionHandler>();
-builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceResultCollectionHandler>();
+builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDetailCollectionHandler>();
 builder.Services.Configure<RaceDiscoveryCollectionOptions>(builder.Configuration.GetSection("RaceDiscoveryCollection"));
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();
 builder.Services.Configure<RaceOddsCollectionOptions>(builder.Configuration.GetSection("RaceOddsCollection"));

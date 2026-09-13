@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -233,17 +233,17 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 
 | Criterion group | Status | Evidence |
 | --- | --- | --- |
-| 5 日境界と取得順 | Not started | 実装承認待ち |
-| 統合 task と状態遷移 | Not started | 実装承認待ち |
-| 結果公開待ちと同日混在 | Not started | 実装承認待ち |
-| 馬主補完 | Not started | 実装承認待ち |
-| navigation fallback | Not started | 実装承認待ち |
-| retry/restart/idempotency | Not started | 実装承認待ち |
-| 旧 definition cutover | Not started | 実装承認待ち |
-| collection data migration と補完投入 | Not started | 実装承認待ち |
-| initializer（空DB・災害復旧） | Not started | 実装承認待ち |
-| 既存副作用の維持 | Not started | 実装承認待ち |
-| 実行形態・関連機能回帰 | Not started | 実装承認待ち |
+| 5 日境界と取得順 | Verified | discovery/handler境界テスト、共有Navigator既定値 |
+| 統合 task と状態遷移 | Verified | `RaceDetail_RecentFinishedRace_CollectsCardThenResultInOneTask` |
+| 結果公開待ちと同日混在 | Verified | 発走前・未来・未公開・未確定のhandler/storeテスト |
+| 馬主補完 | Verified | 既存RaceCard workflowと主体request回帰テスト |
+| navigation fallback | Verified | direct candidate・identity mismatch・fallbackテスト |
+| retry/restart/idempotency | Verified | availability retry、lease、重複登録、再起動テスト |
+| 旧 definition cutover | Verified | runtime登録除去、migration無効化、production caller検索 |
+| collection data migration と補完投入 | Verified | `LegacyRaceMigration_MergesResourcesAndQueuesMissingRecentResult` |
+| initializer（空DB・災害復旧） | Verified | unified seed、incomplete seed、dry-run/execute冪等テスト |
+| 既存副作用の維持 | Verified | subject/prediction/result workflow回帰テスト |
+| 実行形態・関連機能回帰 | Verified | API transport E2E、Collector 177件、API 191件、solution test |
 
 ## Delivery plan
 
@@ -261,13 +261,13 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・発走待ち・公開待ち・Current・取止テスト | AC「5日境界」「統合task」「結果公開待ち」へ接続したテスト結果 | Runnable |
-| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、同日混在、未公開、未確定、部分失敗テスト | 馬主と公開済み結果を同一leaseで保存し未公開だけ待機する実行証跡 | Dependent |
-| T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Dependent |
-| T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Dependent |
-| T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Dependent |
-| T6 | 旧definition停止とcutover | Main | High capability | T4,T5 | definition lifecycle、運用切替、関連テスト・文書 | pause/drain/migrate/disable/recovery拒否/履歴参照/rollbackテスト | 二重実行なし、統合履歴保持、rollback可能な順序 | Dependent |
-| T7 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5,T6 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Dependent |
+| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・発走待ち・公開待ち・Current・取止テスト | AC「5日境界」「統合task」「結果公開待ち」へ接続したテスト結果 | Completed |
+| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、同日混在、未公開、未確定、部分失敗テスト | 馬主と公開済み結果を同一leaseで保存し未公開だけ待機する実行証跡 | Completed |
+| T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Completed |
+| T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Completed |
+| T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Completed |
+| T6 | 旧definition停止とcutover | Main | High capability | T4,T5 | definition lifecycle、運用切替、関連テスト・文書 | pause/drain/migrate/disable/recovery拒否/履歴参照/rollbackテスト | 二重実行なし、統合履歴保持、rollback可能な順序 | Completed |
+| T7 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5,T6 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Completed |
 
 T1 は5日境界・統合状態、T2 は取得順・馬主・navigation・部分失敗、T3 は全入口・microbatch・旧caller、
 T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 は二重実行防止・切替、T7 は実経路と全回帰の
@@ -309,8 +309,14 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
   ページ公開済み未確定、公式結果公開済み、公式取止をレース単位で分け、未公開・未確定は failure ではなく同じ active
   task の待機状態として再試行する設計とした。
 - 2026-09-14: 利用者が「実装をお願いします」と明示し、本記録を Approved として Execution Mode へ移行した。
-- 2026-09-14: プロダクションコードは未変更。実装は本記録の明示承認待ち。
+- 2026-09-14: `ResourceType.Race + race-detail` handlerへ統合し、直近5日は出馬表→結果、期間外は結果のみの経路を実装した。発走前・未来・結果未公開・未確定は次回時刻付きavailability waitになる。
+- 2026-09-14: 旧collection dataをID・provenance維持で統合し、不足分の `DefinitionChanged` taskを同一transactionで投入するdry-run/apply migrationを実装した。
+- 2026-09-14: initializer、URL resolver、discovery、subject history、dispatcher、runtime登録、正本文書を統合定義へ同期した。
+- 2026-09-14: Collector CollectionPlatformテスト154件、追加後Collector全177件、API全191件が成功した。solution testはAPIの旧期待値7件を更新後に再検証した。
+- 2026-09-14: 最終 `dotnet test HorseRacingPrediction.sln --no-restore` は全プロジェクト成功（Collector 178件、API 191件、Scraping 237件成功・1件skip、その他も失敗0）。`git diff --check` 成功、CodeGraph sync完了を確認した。
+- 2026-09-14: CodeGraphをproduction変更後に更新し、runtimeの旧handler登録と旧definition新規producerがないことを確認した。
 
 ## Deviations and follow-up
 
-- なし。実装時に承認済み設計との差分が生じた場合はここへ追記し、重要な変更は再承認を得る。
+- migration apply は管理APIでpipeline pauseを必須とし、Store側でも旧・新active taskがゼロであることを検証する。未送信outboxはterminal task IDを保持したまま移行され、worker側の世代・状態検証で安全に無視できるため、個別のゼロ件前提にはしなかった。
+- レース全体の公式取止を示す専用JRAページ標本は現行parser契約に存在しない。馬単位の取消・除外・競走中止・失格は従来どおり結果として保存する。レース全体の取止ページを取得できた時点で、推測せず終端化するparser fixtureを別途追加する。

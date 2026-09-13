@@ -101,6 +101,9 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
 public sealed record CollectionResourceSuppressionResult(int CancelledTasks, int RunningCancellationRequests);
+public sealed record LegacyRaceDetailMergeReport(bool DryRun, int SourceResources, int TargetResources,
+    int Requests, int Tasks, int Attempts, int Locations, int States, int SupplementRequests,
+    IReadOnlyList<string> Errors);
 public sealed record CollectionResourceSuppressionPreview(int PendingTasks, int RunningTasks)
 {
     public int TotalTasks => PendingTasks + RunningTasks;
@@ -318,6 +321,6 @@ public sealed record BackfillHole(ResourceKey Resource, CollectionDefinitionId D
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage);
 public sealed record CollectionInitializationSeed(ResourceKey Resource, CollectionDefinitionId Definition,
     int AppliedRevision, DateTimeOffset CollectedAt, DateOnly? EffectiveDate,
-    IReadOnlyDictionary<string, string> Attributes, Uri? SourceUrl = null);
+    IReadOnlyDictionary<string, string> Attributes, Uri? SourceUrl = null, bool IsComplete = true);
 public sealed record CollectionInitializationReport(bool DryRun, int Examined, int ResourcesAdded,
     int StatesAdded, int LocationsAdded, IReadOnlyList<string> BackfillMonths);

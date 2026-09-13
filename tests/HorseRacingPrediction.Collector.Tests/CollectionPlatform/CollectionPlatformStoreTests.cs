@@ -545,7 +545,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(9L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(10L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -853,7 +853,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 9;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 10;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -986,6 +986,44 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
             "Initial profile extractor", false);
         return store;
+    }
+
+    [TestMethod]
+    public async Task LegacyRaceMigration_MergesResourcesAndQueuesMissingRecentResult()
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
+        var now = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 13);
+        var attributes = new Dictionary<string, string> { ["course"] = "中山", ["number"] = "11" };
+        await store.InitializeFromDomainDataAsync([
+            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 1, now.AddDays(-1),
+                date, attributes),
+            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 1, now.AddDays(-1),
+                date, attributes, IsComplete: false),
+        ], dryRun: false);
+
+        var preview = await store.MergeLegacyRaceDetailsAsync(false, now);
+        Assert.IsTrue(preview.DryRun);
+        Assert.AreEqual(2, preview.SourceResources);
+        Assert.AreEqual(1, preview.TargetResources);
+        Assert.AreEqual(1, preview.SupplementRequests);
+
+        var applied = await store.MergeLegacyRaceDetailsAsync(true, now);
+        Assert.IsEmpty(applied.Errors);
+        Assert.AreEqual(1, applied.SupplementRequests);
+        var target = new ResourceKey(ResourceType.Race, "JRA", "20260913:Nakayama:11");
+        var state = await store.GetStateAsync(target, new("race-detail"));
+        Assert.IsNotNull(state);
+        Assert.AreEqual(CollectionStateStatus.Pending, state.Status);
+        Assert.HasCount(1, await store.GetTasksAsync());
+        Assert.IsNull(await store.GetStateAsync(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card")));
+
+        var repeated = await store.MergeLegacyRaceDetailsAsync(true, now.AddMinutes(1));
+        Assert.AreEqual(0, repeated.SourceResources);
+        Assert.AreEqual(0, repeated.SupplementRequests);
     }
 
     [TestMethod]

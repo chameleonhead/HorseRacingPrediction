@@ -23,6 +23,10 @@
 > 2026-09-14 提案: `ResourceType.Race` の `race-card` と `race-result` を単一 `race-detail` definition へ統合する。JST の対象日が今日から 5 日前以降なら出馬表を先に domain write し、当日以前は同一 task/session で結果へ遷移する。それより古い場合だけ結果を直接取得する。直近レースは両方の保存成功まで Current にせず、結果未公開・未来日は次回時刻付きで待機する。Location schema は増やさず、JRA URL と取得ページ identity で入口を検証する。切替時は旧collection dataを捨てず、Resource/State/Location/Request/Task/FailureをIDと移行元provenanceを維持して `race-detail` へtransactionalにマージし、不足する直近レースへ補完requestを作ってから旧definitionを無効化する。切替と検証の正は [直近レースの出馬表・結果を一体収集する](changes/20260914_recent-race-detail-collection/README.md) とし、承認・実装までは既存 definition を維持する。
 > 結果公開状態は開催日単位ではなくRace単位とする。同日内で発走前・発走後未公開・結果未確定・公開済みが混在しても、未公開のRaceだけを同じactive taskの `RetryWaiting` とし、公開済みRaceのCurrent化と後続Raceの出馬表更新を妨げない。
 
+2026-09-14にこの提案を実装した。新規レース収集の正規形は `ResourceType.Race / race-detail` であり、直近5日はRaceCardと公式RaceResultの両方が成功した場合だけCurrent、それ以前は公式RaceResultの成功でCurrentになる。発走前・未公開・未確定は次回確認時刻を持つretryable availabilityとして扱う。
+
+既存 `RaceCard` / `RaceResult` collection dataは、管理APIのpreview/applyでcanonical Raceへ統合する。Request/Task/Attempt IDを維持し、Request/Taskの移行元definition/revisionをprovenance列へ保存する。StateとLocationを統合し、不完全な直近Raceには同一transaction内で `DefinitionChanged` request/task/outboxを作成してから旧definitionを無効化する。空DB initializerも同じcanonical Raceとcompleteness policyを使用する。
+
 ## Invariants
 
 1. `Resource != URL`。

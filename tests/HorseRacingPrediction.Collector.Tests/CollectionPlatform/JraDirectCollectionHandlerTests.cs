@@ -4,12 +4,75 @@ using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using HorseRacingPrediction.Scraping.Jra.Workflow;
+using HorseRacingPrediction.Scraping.Jra.Navigation;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
 [TestClass]
 public sealed class JraDirectCollectionHandlerTests
 {
+    [TestMethod]
+    public async Task RaceDetail_RecentFinishedRace_CollectsCardThenResultInOneTask()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var race = new RaceId(date, RaceCourse.Tokyo, 11);
+        var direct = new Uri("https://example.test/card/11");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(direct.AbsoluteUri, race, "test", new(15, 30), []),
+            },
+        };
+        var card = new FakeJraRaceCardCollectionWorkflow();
+        var result = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [1], [],
+                "https://example.test/result/11", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => card, _ => result,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260912:Tokyo:11"), new("race-detail"), 1,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" },
+            [new(1, direct, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.HasCount(1, card.RefreshRequests);
+        Assert.HasCount(1, result.Requests);
+        Assert.AreEqual(race, result.Requests.Single());
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_ResultNotPublished_IsAvailabilityWaitEvenOutsideCardWindow()
+    {
+        var date = new DateOnly(2026, 9, 1);
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ThrowOnCollect = new JraNavigationException("result is not published",
+                HorseRacingPrediction.Scraping.Jra.Navigation.JraNavigationFailureReason.NotYetPublished),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260901:Tokyo:11"), new("race-detail"), 1,
+            CollectionReason.Backfill, CollectionLane.Background, 10, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceResultNotYetAvailable", completion.ErrorCode);
+        Assert.IsNotNull(completion.RetryAt);
+    }
+
     [TestMethod]
     public async Task RaceCard_UsesExplicitCandidateAndValidatesRaceIdentity()
     {

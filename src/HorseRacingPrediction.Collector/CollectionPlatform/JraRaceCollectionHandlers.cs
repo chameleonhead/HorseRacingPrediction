@@ -15,7 +15,6 @@ public sealed class RaceDiscoveryCollectionOptions
     public int NearPublicationRetryMinutes { get; set; } = 180;
     public int DistantPublicationCheckHourJst { get; set; } = 9;
 }
-
 public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory sessions,
     JraScheduleCollectionWorkflowFactory schedules, ICollectionRequestSink requests,
     IOptions<RaceDiscoveryCollectionOptions>? options = null, TimeProvider? timeProvider = null)
@@ -45,7 +44,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
             foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
             {
-                var historical = task.Reason == CollectionReason.Backfill || offset < 0;
+                var historical = date < TodayJst().AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
                 IJraPage page;
                 try
                 {
@@ -101,14 +100,14 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     };
                     if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
+                    Uri? detailUrl;
                     if (!historical)
                     {
+                        if (race.StartTime is { } detailStart)
+                            attributes["startTime"] = detailStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
                         var cardUrl = JraRaceDetailUrl.Validate(
                             CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), ResourceType.RaceCard, race.Id);
-                        await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
-                            CollectionReason.Discovery, CollectionLane.Realtime, 80,
-                            cardUrl, date,
-                            attributes, cancellationToken).ConfigureAwait(false);
+                        detailUrl = cardUrl;
                         if (race.StartTime is { } start)
                         {
                             var oddsAttributes = new Dictionary<string, string>(attributes)
@@ -118,17 +117,15 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                                 oddsAttributes, cancellationToken).ConfigureAwait(false);
                         }
                     }
-                    if (historical || !string.IsNullOrWhiteSpace(race.ResultUrl))
+                    else
                     {
-                        var resultUrl = JraRaceDetailUrl.Validate(
+                        detailUrl = JraRaceDetailUrl.Validate(
                             CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
-                        await requests.RequestAsync(new(ResourceType.RaceResult, "JRA", id), new("race-result"),
-                            task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
-                            historical ? CollectionLane.Background : CollectionLane.Realtime,
-                            historical ? 10 : 100, resultUrl, date,
-                            attributes, cancellationToken)
-                            .ConfigureAwait(false);
                     }
+                    await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"),
+                        task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
+                        historical ? CollectionLane.Background : CollectionLane.Realtime,
+                        historical ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -177,13 +174,14 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
 
 }
 
-public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
-    JraRaceCardCollectionWorkflowFactory workflows, IPredictionSchedule? predictionSchedule = null,
+public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
+    JraRaceCardCollectionWorkflowFactory cardWorkflows,
+    JraRaceResultCollectionWorkflowFactory resultWorkflows, IPredictionSchedule? predictionSchedule = null,
     ICollectionRequestSink? requests = null, TimeProvider? timeProvider = null) : ICollectionDefinitionHandler
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
-    public CollectionDefinitionId DefinitionId => new("race-card");
-    public ResourceType ResourceType => ResourceType.RaceCard;
+    public CollectionDefinitionId DefinitionId => new("race-detail");
+    public ResourceType ResourceType => ResourceType.Race;
 
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
@@ -193,11 +191,13 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
             .ConfigureAwait(false);
         var session = sessionLease.Session;
-        var workflow = workflows(session);
+        var workflow = cardWorkflows(session);
+        var today = TodayJst();
+        var requiresCard = raceId.Date >= today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
         RaceCardRaceOutcome? result = null;
         Uri? successfulLocation = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
-        foreach (var location in task.Locations ?? [])
+        foreach (var location in requiresCard ? task.Locations ?? [] : [])
         {
             try
             {
@@ -217,7 +217,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
                 locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
             }
         }
-        if (result is null)
+        if (requiresCard && result is null)
         {
             try
             {
@@ -244,33 +244,90 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
                     PageIdentification: $"Expected=RaceCard; Actual={ex.PageKind}; Resource={task.Resource.Id}",
                     LocationOutcomes: locationOutcomes);
             }
-            catch (JraCollectionException ex) when (IsCurrentOrFuture(task.EffectiveDate))
+            catch (JraCollectionException ex)
             {
                 return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
                     ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(30),
                     LocationOutcomes: locationOutcomes);
             }
         }
-        if (requests is not null && result.Entries is not null)
+        if (requiresCard && requests is not null && result?.Entries is not null)
             await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests, cancellationToken)
                 .ConfigureAwait(false);
-        if (predictionSchedule is not null)
-            await predictionSchedule.EnqueueAsync([result.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
-        var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
-        return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
-            FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}",
+        if (requiresCard && predictionSchedule is not null)
+            await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+        var firstResultCheck = FirstResultCheck(raceId.Date, task.Attributes);
+        if (_time.GetUtcNow() < firstResultCheck)
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceNotStarted",
+                "Race result is not available before the first result check.", RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
+                RetryAt: firstResultCheck, LocationOutcomes: locationOutcomes);
+
+        var resultWorkflow = resultWorkflows(session);
+        RaceResultCollectionResult? raceResult = null;
+        if (!requiresCard)
+        {
+            foreach (var location in task.Locations ?? [])
+            {
+                try
+                {
+                    var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
+                    if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId)
+                    {
+                        locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch"));
+                        continue;
+                    }
+                    raceResult = await resultWorkflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty, cancellationToken)
+                        .ConfigureAwait(false);
+                    successfulLocation = location.Url;
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
+                    break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
+                }
+            }
+        }
+        try
+        {
+            raceResult ??= await resultWorkflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JraNavigationException ex)
+        {
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message,
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), RetryAt: _time.GetUtcNow().AddMinutes(10),
+                LocationOutcomes: locationOutcomes);
+        }
+        if (raceResult.Errors.Count > 0)
+            return new(CollectionAttemptResult.ValidationFailure, "DomainWriteRejected",
+                string.Join("; ", raceResult.Errors), RequestedUrl: ToUri(raceResult.SourceUrl),
+                LocationOutcomes: locationOutcomes);
+        if (!raceResult.IsOfficiallyConfirmed)
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
+                "Race result is not officially confirmed.", RequestedUrl: ToUri(raceResult.SourceUrl),
+                RetryAt: _time.GetUtcNow().AddMinutes(10), LocationOutcomes: locationOutcomes);
+        return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
+            FinalUrl: ToUri(raceResult.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
             LocationOutcomes: locationOutcomes);
     }
 
     private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
 
-    private bool IsCurrentOrFuture(DateOnly? date)
+    private DateOnly TodayJst()
     {
-        if (date is null) return false;
         var jst = TimeZoneInfo.FindSystemTimeZoneById(
             OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
-        return date >= today;
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
+    }
+
+    private DateTimeOffset FirstResultCheck(DateOnly date, IReadOnlyDictionary<string, string> attributes)
+    {
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var time = attributes.TryGetValue("startTime", out var value) && TimeOnly.TryParse(value, out var parsed)
+            ? parsed.AddMinutes(5) : new TimeOnly(9, 35);
+        var local = date.ToDateTime(time, DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, jst.GetUtcOffset(local)).ToUniversalTime();
     }
 
     internal static RaceId ParseRaceId(LeasedCollectionTask task)
@@ -325,61 +382,4 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
                 .ConfigureAwait(false);
         }
     }
-}
-
-public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
-    JraRaceResultCollectionWorkflowFactory workflows) : ICollectionDefinitionHandler
-{
-    public CollectionDefinitionId DefinitionId => new("race-result");
-    public ResourceType ResourceType => ResourceType.RaceResult;
-
-    public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
-        CancellationToken cancellationToken)
-    {
-        var raceId = JraRaceCardCollectionHandler.ParseRaceId(task);
-        await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
-            .ConfigureAwait(false);
-        var session = sessionLease.Session;
-        var workflow = workflows(session);
-        task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
-        RaceResultCollectionResult? result = null;
-        Uri? successfulLocation = null;
-        var locationOutcomes = new List<ResourceLocationOutcome>();
-        foreach (var location in task.Locations ?? [])
-        {
-            try
-            {
-                var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-                if (page is not JraRaceResultPage resultPage || resultPage.RaceId != raceId)
-                {
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch"));
-                    continue;
-                }
-                result = await workflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty, cancellationToken)
-                    .ConfigureAwait(false);
-                successfulLocation = location.Url;
-                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
-                break;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
-            }
-        }
-        result ??= await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
-        if (result.Errors.Count > 0)
-            return new(CollectionAttemptResult.ValidationFailure, "DomainWriteRejected",
-                string.Join("; ", result.Errors), RequestedUrl: ToUri(result.SourceUrl),
-                LocationOutcomes: locationOutcomes);
-        if (!result.IsOfficiallyConfirmed)
-            return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
-                "Race result is not officially confirmed.", RequestedUrl: ToUri(result.SourceUrl),
-                RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(10), LocationOutcomes: locationOutcomes);
-        return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl),
-                FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceResult:JRA:{task.Resource.Id}",
-                LocationOutcomes: locationOutcomes)
-            ;
-    }
-
-    private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
 }

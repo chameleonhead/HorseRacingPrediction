@@ -2540,3 +2540,7 @@ Collector(`IDataCollectionWriteService` 経由の Web API 書き込み)へ接続
 この境界を実装中に崩さないこと。
 
 結果ページのラップ・上りはタイム表の行ラベルから取得し、着順表の『推定上り』見出しと区別する。コーナー通過順位は行ラベルを優先し、スナップショットの先頭thヘッダーと二重解釈しない。結果ページの発走時刻は明示された発走ラベルのみを読む。
+
+## RaceCardLookupPeriod と統合レース詳細
+
+`JraNavigator.DefaultRaceCardLookupPeriodDays`（5日）を、Navigatorの探索制限とCollectorの取得元選択で共有する。期間内の `race-detail` はRaceCardをidentity検証・保存した後、現在ページの結果リンクを優先してRaceResultへ進み、リンク欠落時のみ完全探索へfallbackする。期間外は掲載終了したRaceCardを探索せずRaceResultへ直接進む。結果が未公開または未確定の場合もRaceCard側の保存結果は保持し、上位のcollection taskを待機させる。

@@ -165,6 +165,12 @@ JRA競走馬は表示名ではなく、JRA公開プロフィールから抽出�
 
 RaceCard/RaceResultの子requestへ保存するExplicit URLは、HTTP(S)・JRA正規host・期待pathに加えて、単一かつ非空の詳細指定パラメーターと対象Resourceとの整合を検証する。パラメーターなしの `/JRADB/accessD.html` と `/JRADB/accessS.html` は開催選択Discoveryの起点としてのみ利用し、詳細取得Locationには登録しない。検証済み詳細URLを得られない場合は、URLを推測せず通常Navigator Discoveryへフォールバックする。
 
+## レース詳細の統合収集
+
+レース本体は `ResourceType.Race + race-detail` の1タスクで扱う。JSTの開催日が今日から5日前以降なら出馬表を先に保存し、発走時刻から5分後以降に同じセッションで結果を確認する。それより古いレースは結果だけを取得する。未来・発走前・結果未公開・結果未確定は失敗にせず、同じactive taskを次回確認時刻付きで待機させる。したがって同一開催日の公開状況が混在してもレース単位で独立して進む。
+
+旧 `race-card` / `race-result` の新規登録とruntime handlerは停止する。既存collection DBは管理APIのdry-run後、pause/drainした状態でtransactional migrationを実行し、履歴IDと移行元provenanceを維持して `race-detail` へマージする。不足する直近レースには `DefinitionChanged` 補完タスクを作成する。
+
 ## 今後の課題（未着手・要検討）
 
 Lambda 対応の詳細は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。

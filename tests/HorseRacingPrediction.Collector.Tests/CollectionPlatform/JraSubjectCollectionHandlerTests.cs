@@ -77,7 +77,7 @@ public sealed class JraSubjectCollectionHandlerTests
             [new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]),
             CancellationToken.None);
 
-        Assert.AreEqual(CollectionAttemptResult.Succeeded, raceResult.Result);
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, raceResult.Result);
         CollectionAssert.AreEquivalent(new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer },
             requests.Requests.Select(x => x.Resource.Type).ToArray());
         Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
@@ -164,7 +164,8 @@ public sealed class JraSubjectCollectionHandlerTests
             new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }), CancellationToken.None);
 
         var request = requests.Requests.Single();
-        Assert.AreEqual(ResourceType.RaceResult, request.Resource.Type);
+        Assert.AreEqual(ResourceType.Race, request.Resource.Type);
+        Assert.AreEqual(new CollectionDefinitionId("race-detail"), request.Definition);
         Assert.AreEqual("20260906:Nakayama:5", request.Resource.Id);
         Assert.AreEqual(CollectionLane.Realtime, request.Lane);
         Assert.AreEqual((int)CollectionPriority.High, request.Priority);

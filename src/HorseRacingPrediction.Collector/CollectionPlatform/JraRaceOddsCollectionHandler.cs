@@ -41,7 +41,7 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
     public ResourceType ResourceType => ResourceType.RaceOdds;
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
     {
-        var race = JraRaceCardCollectionHandler.ParseRaceId(task);
+        var race = JraRaceDetailCollectionHandler.ParseRaceId(task);
         await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, token)
             .ConfigureAwait(false);
         var session = sessionLease.Session;

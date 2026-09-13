@@ -31,17 +31,25 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
             var attributes = new Dictionary<string, string> { ["domainRaceId"] = raceId };
             if (!reader.IsDBNull(2)) attributes["course"] = reader.GetString(2);
             if (!reader.IsDBNull(3)) attributes["number"] = reader.GetInt32(3).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            if (!reader.IsDBNull(4) && reader.GetInt32(4) > 0)
-                seeds.Add(new(new(ResourceType.RaceCard, "JRA", raceId), new("race-card"), 1,
-                    importedAt, date, attributes));
-            if (!reader.IsDBNull(5))
+            if (date.HasValue && attributes.TryGetValue("course", out var course)
+                && attributes.TryGetValue("number", out var number))
             {
-                var collectedAt = DateTimeOffset.TryParse(reader.GetString(5), out var parsed) ? parsed : importedAt;
-                seeds.Add(new(new(ResourceType.RaceResult, "JRA", raceId), new("race-result"), 1,
-                    collectedAt, date, attributes));
+                var parsed = importedAt;
+                var resultDeclared = !reader.IsDBNull(5)
+                    && DateTimeOffset.TryParse(reader.GetString(5), out parsed);
+                var collectedAt = resultDeclared ? parsed : importedAt;
+                seeds.Add(new(new(ResourceType.Race, "JRA", $"{date:yyyyMMdd}:{CanonicalCourse(course)}:{number}"),
+                    new("race-detail"), 1, collectedAt, date, attributes, IsComplete: resultDeclared));
             }
         }
     }
+
+    private static string CanonicalCourse(string value) => value switch
+    {
+        "札幌" => "Sapporo", "函館" => "Hakodate", "福島" => "Fukushima", "新潟" => "Niigata",
+        "東京" => "Tokyo", "中山" => "Nakayama", "中京" => "Chukyo", "京都" => "Kyoto",
+        "阪神" => "Hanshin", "小倉" => "Kokura", _ => value,
+    };
 
     private static async Task ReadProfilesAsync(SqliteConnection connection, List<CollectionInitializationSeed> seeds,
         CancellationToken cancellationToken)

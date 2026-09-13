@@ -64,7 +64,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
             || task.Lane != expected.Lane) return false;
         return expected.GroupKind switch
         {
-            CollectionDispatchGroupKind.RaceDay => task.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult
+            CollectionDispatchGroupKind.RaceDay => task.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race
                 && task.EffectiveDate.HasValue
                 && string.Equals(task.EffectiveDate.Value.ToString("yyyy-MM-dd"), expected.GroupKey,
                     StringComparison.Ordinal),

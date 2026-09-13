@@ -40,11 +40,11 @@ internal static partial class JraExplicitUrlResolver
         (ResourceType? resourceType, CollectionDefinitionId? definition, string? expectedPath) = cname switch
         {
             var value when value.StartsWith("pw01sde", StringComparison.OrdinalIgnoreCase) =>
-                ((ResourceType?)ResourceType.RaceResult,
-                    (CollectionDefinitionId?)new CollectionDefinitionId("race-result"), (string?)"/JRADB/accessS.html"),
+                ((ResourceType?)ResourceType.Race,
+                    (CollectionDefinitionId?)new CollectionDefinitionId("race-detail"), (string?)"/JRADB/accessS.html"),
             var value when value.StartsWith("pw01dde", StringComparison.OrdinalIgnoreCase) =>
-                ((ResourceType?)ResourceType.RaceCard,
-                    (CollectionDefinitionId?)new CollectionDefinitionId("race-card"), (string?)"/JRADB/accessD.html"),
+                ((ResourceType?)ResourceType.Race,
+                    (CollectionDefinitionId?)new CollectionDefinitionId("race-detail"), (string?)"/JRADB/accessD.html"),
             _ => ((ResourceType?)null, (CollectionDefinitionId?)null, null),
         };
         if (resourceType is null || definition is null || !string.Equals(uri.AbsolutePath, expectedPath,

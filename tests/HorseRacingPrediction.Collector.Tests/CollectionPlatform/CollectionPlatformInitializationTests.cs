@@ -31,21 +31,21 @@ public sealed class CollectionPlatformInitializationTests
         await CreateDomainFixtureAsync(domainPath);
         var seeds = await new DomainCollectionSeedReader(domainPath).ReadAsync(
             new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero));
-        Assert.HasCount(3, seeds); // card + result + cited horse; legacy_jobs is deliberately ignored
+        Assert.HasCount(2, seeds); // unified race detail + cited horse; legacy_jobs is deliberately ignored
         var store = await CreateStoreAsync();
 
         var preview = await store.InitializeFromDomainDataAsync(seeds, dryRun: true);
-        Assert.AreEqual(3, preview.ResourcesAdded);
-        Assert.AreEqual(3, preview.StatesAdded);
+        Assert.AreEqual(2, preview.ResourcesAdded);
+        Assert.AreEqual(2, preview.StatesAdded);
         Assert.AreEqual(1, preview.LocationsAdded);
         Assert.IsNull(await store.GetStateAsync(new(ResourceType.RaceCard, "JRA", "race-1"), new("race-card")));
 
         var applied = await store.InitializeFromDomainDataAsync(seeds, dryRun: false);
-        Assert.AreEqual(3, applied.ResourcesAdded);
-        Assert.AreEqual(3, applied.StatesAdded);
+        Assert.AreEqual(2, applied.ResourcesAdded);
+        Assert.AreEqual(2, applied.StatesAdded);
         Assert.AreEqual(1, applied.LocationsAdded);
         Assert.AreEqual(CollectionStateStatus.Current,
-            (await store.GetStateAsync(new(ResourceType.RaceResult, "JRA", "race-1"), new("race-result")))!.Status);
+            (await store.GetStateAsync(new(ResourceType.Race, "JRA", "20240106:Tokyo:1"), new("race-detail")))!.Status);
         Assert.HasCount(1, await store.ResolveLocationsAsync(new(ResourceType.Horse, "JRA", "horse-1"),
             new("horse-profile")));
 
@@ -69,6 +69,25 @@ public sealed class CollectionPlatformInitializationTests
         Assert.AreEqual(0, exitCode);
         Assert.IsFalse(Directory.Exists(target));
         Assert.IsFalse(File.Exists(Path.Combine(target, "collection-platform.db")));
+    }
+
+    [TestMethod]
+    public async Task IncompleteRaceSeed_IsScheduledForUnifiedSupplement()
+    {
+        var store = await CreateStoreAsync();
+        var importedAt = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260914:Nakayama:1");
+        await store.InitializeFromDomainDataAsync([
+            new(resource, new("race-detail"), 1, importedAt, new DateOnly(2026, 9, 14),
+                new Dictionary<string, string> { ["course"] = "中山", ["number"] = "1" },
+                IsComplete: false)
+        ], dryRun: false);
+
+        var state = await store.GetStateAsync(resource, new("race-detail"));
+        Assert.IsNotNull(state);
+        Assert.AreEqual(CollectionStateStatus.RefreshDue, state.Status);
+        Assert.AreEqual(0, state.AppliedRevision);
+        Assert.AreEqual(importedAt, state.NextCollectionAt);
     }
 
     [TestMethod]
@@ -97,8 +116,7 @@ public sealed class CollectionPlatformInitializationTests
         {
             StateDirectory = Path.Combine(_directory, "state")
         }));
-        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "initial", false);
-        await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "initial", false);
         await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "initial", false);
         return store;

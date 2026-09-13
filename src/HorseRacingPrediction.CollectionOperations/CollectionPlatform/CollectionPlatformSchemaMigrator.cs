@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 9;
+    internal const int CurrentVersion = 10;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -80,6 +80,15 @@ internal static class CollectionPlatformSchemaMigrator
                         ? hasResolution ? hasOutboxReservation ? hasAttemptCorrelation ? 7 : 5 : 4 : 3 : 2
                     : 1;
                 if (existing.Contains("collection_resource_suppressions")) baselineVersion = 9;
+                var hasRaceDetailProvenance = await HasColumnAsync(connection, transaction,
+                        "collection_requests", "OriginDefinitionId", cancellationToken).ConfigureAwait(false)
+                    && await HasColumnAsync(connection, transaction,
+                        "collection_requests", "OriginRequestedRevision", cancellationToken).ConfigureAwait(false)
+                    && await HasColumnAsync(connection, transaction,
+                        "collection_tasks", "OriginDefinitionId", cancellationToken).ConfigureAwait(false)
+                    && await HasColumnAsync(connection, transaction,
+                        "collection_tasks", "OriginRequestedRevision", cancellationToken).ConfigureAwait(false);
+                if (hasRaceDetailProvenance) baselineVersion = 10;
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
                     cancellationToken, transaction, ("$version", (object)baselineVersion),
@@ -246,6 +255,25 @@ internal static class CollectionPlatformSchemaMigrator
                 CREATE INDEX IF NOT EXISTS IX_collection_resource_suppressions_RepairId
                     ON collection_resource_suppressions (RepairId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (9, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 10)
+        {
+            foreach (var (table, column, type) in new[]
+                     {
+                         ("collection_requests", "OriginDefinitionId", "TEXT NULL"),
+                         ("collection_requests", "OriginRequestedRevision", "INTEGER NULL"),
+                         ("collection_tasks", "OriginDefinitionId", "TEXT NULL"),
+                         ("collection_tasks", "OriginRequestedRevision", "INTEGER NULL"),
+                     })
+                if (!await HasColumnAsync(connection, transaction, table, column, cancellationToken).ConfigureAwait(false))
+                    await ExecuteAsync(connection, $"ALTER TABLE {table} ADD COLUMN {column} {type};",
+                        cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (10, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);

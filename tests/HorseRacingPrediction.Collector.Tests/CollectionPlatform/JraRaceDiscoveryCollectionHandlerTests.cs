@@ -39,11 +39,12 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var result = await handler.CollectAsync(task, CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
-        Assert.HasCount(3, sink.Requests);
-        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceCard));
-        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceResult));
+        Assert.HasCount(2, sink.Requests);
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.Race
+            && x.Definition == new CollectionDefinitionId("race-detail")));
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceOdds));
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id == "20260912:Tokyo:11"));
+        Assert.AreEqual("15:30", sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).Attributes["startTime"]);
     }
 
     [TestMethod]
@@ -69,9 +70,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
         Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1001123456780720260912/25"),
-            sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceCard).ExplicitUrl);
-        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1001123456780720260912/2F"),
-            sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceResult).ExplicitUrl);
+            sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).ExplicitUrl);
     }
 
     [TestMethod]
@@ -95,8 +94,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
-        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceCard).ExplicitUrl);
-        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceResult).ExplicitUrl);
+        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).ExplicitUrl);
     }
 
     [TestMethod]
@@ -189,7 +187,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.AreEqual("RaceListNotYetAvailable", result.ErrorCode);
         Assert.IsNotNull(result.RetryAt);
         Assert.IsGreaterThan(now, result.RetryAt.Value);
-        Assert.HasCount(3, sink.Requests);
+        Assert.HasCount(2, sink.Requests);
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id.StartsWith("20260912", StringComparison.Ordinal)));
     }
 
@@ -290,7 +288,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var result = await handler.CollectAsync(CreateDiscoveryTask(today), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, result.Result);
-        Assert.HasCount(3, sink.Requests);
+        Assert.HasCount(2, sink.Requests);
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id.StartsWith("20260919", StringComparison.Ordinal)));
     }
 

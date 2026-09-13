@@ -93,8 +93,7 @@ public static class CollectionInitializerCommand
 
     private static async Task RegisterDefinitionsAsync(CollectionPlatformStore store, CancellationToken token)
     {
-        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "Initial", false, token);
-        await store.RegisterDefinitionAsync(new("race-result"), "Race result", ResourceType.RaceResult, 1, "Initial", false, token);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "Initial", false, token);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false, token);
         await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false, token);
     }

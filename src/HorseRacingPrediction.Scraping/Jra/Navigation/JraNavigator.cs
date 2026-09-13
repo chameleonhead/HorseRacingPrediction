@@ -46,7 +46,7 @@ public sealed partial class JraNavigator
     /// <summary>
     /// <see cref="_raceCardLookupPeriodDays"/> の既定値。
     /// </summary>
-    internal const int DefaultRaceCardLookupPeriodDays = 5;
+    public const int DefaultRaceCardLookupPeriodDays = 5;
 
     // NOTE(レース一覧URLキャッシュを撤回): 一度、ブラウザの「戻る」（GoBack）の不安定さ対策として
     // 直前に到達したレース一覧ページのURLをキャッシュし、そのURLへ直接ナビゲート（再GET）する
