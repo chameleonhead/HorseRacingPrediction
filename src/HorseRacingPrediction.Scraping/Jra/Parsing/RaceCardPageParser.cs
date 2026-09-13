@@ -102,7 +102,7 @@ public sealed class RaceCardPageParser
             raceId,
             raceName,
             startTime,
-            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot));
+            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot, raceName));
     }
 
     private static JraTableView? FindEntryTable(

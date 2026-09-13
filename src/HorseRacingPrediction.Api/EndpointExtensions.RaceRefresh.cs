@@ -90,7 +90,8 @@ public static partial class EndpointExtensions
         var t = request.TrackCondition;
         var winner = request.Entries?.FirstOrDefault(x => x.FinishPosition == 1);
         var winningId = winner is null ? null : entries.FirstOrDefault(x => x.HorseNumber == winner.HorseNumber)?.HorseId;
-        var data = new CollectedRaceData(request.RaceName, request.GradeCode, request.SurfaceCode,
+        var gradeCode = ResolveCollectedGradeCode(request.GradeCode, request.RaceName, existing.RaceName);
+        var data = new CollectedRaceData(request.RaceName, gradeCode, request.SurfaceCode,
             request.DistanceMeters, request.DirectionCode, request.EntryCount, entries,
             request.IsRaceCard ? null : results, request.WinningHorseName ?? winner?.HorseName, winningId,
             p is null ? null : new(p.DeclaredAt, Payouts(p.WinPayouts), Payouts(p.PlacePayouts),
@@ -104,5 +105,26 @@ public static partial class EndpointExtensions
         var outcome = await commands.PublishAsync(new RefreshCollectedRaceCommand(new RaceId(id), data), token);
         return outcome.IsSuccess ? Results.Ok(new Shared.DeclareRaceResultBulkResponse(id, []))
             : Results.BadRequest(new[] { "再取得情報の保存に失敗しました。" });
+    }
+
+    private static string? ResolveCollectedGradeCode(string? collectedGradeCode, params string?[] raceNames)
+    {
+        if (!string.IsNullOrWhiteSpace(collectedGradeCode))
+            return collectedGradeCode;
+
+        foreach (var raceName in raceNames)
+        {
+            if (string.IsNullOrWhiteSpace(raceName)) continue;
+            var normalized = raceName.ToUpperInvariant()
+                .Replace("Ｇ", "G", StringComparison.Ordinal)
+                .Replace("ＪＰＮ", "JPN", StringComparison.Ordinal)
+                .Replace("Ⅰ", "1", StringComparison.Ordinal)
+                .Replace("Ⅱ", "2", StringComparison.Ordinal)
+                .Replace("Ⅲ", "3", StringComparison.Ordinal);
+            foreach (var grade in new[] { "JPN1", "JPN2", "JPN3", "G1", "G2", "G3" })
+                if (normalized.Contains(grade, StringComparison.Ordinal)) return grade;
+        }
+
+        return null;
     }
 }

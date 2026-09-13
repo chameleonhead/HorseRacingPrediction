@@ -800,9 +800,14 @@ public static partial class EndpointExtensions
                     existing = null;
                 }
 
+                var gradeCode = ResolveCollectedGradeCode(
+                    request.GradeCode,
+                    request.RaceName,
+                    existing?.RaceName);
+
                 CorrectRaceDataCommand BuildCorrectCommand() => new(
                     raceId, request.RaceName, request.RacecourseCode, request.RaceNumber,
-                    request.GradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
+                    gradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
                     reason: "Collected by data collection agent (bulk)");
 
                 try
@@ -813,7 +818,7 @@ public static partial class EndpointExtensions
                         {
                             var createCommand = new CreateRaceCommand(
                                 raceId, request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
-                                gradeCode: request.GradeCode, surfaceCode: request.SurfaceCode,
+                                gradeCode: gradeCode, surfaceCode: request.SurfaceCode,
                                 distanceMeters: request.DistanceMeters, directionCode: request.DirectionCode);
                             await commandBus.PublishAsync(createCommand, cancellationToken).ConfigureAwait(false);
                         }

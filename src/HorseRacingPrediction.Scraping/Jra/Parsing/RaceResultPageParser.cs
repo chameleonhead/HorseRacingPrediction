@@ -187,7 +187,7 @@ public sealed class RaceResultPageParser
             cornerPassages is { Count: > 0 } ? cornerPassages : null,
             overallPaceText,
             prizeMoneyByPosition,
-            RaceGrade.Parse(snapshot),
+            RaceGrade.Parse(snapshot, raceName),
             RaceCardPageParser.ParseStartTime(snapshot, allowUnlabelledTime: false),
             ParseMeetingNumber(snapshot),
             ParseMeetingDay(snapshot),

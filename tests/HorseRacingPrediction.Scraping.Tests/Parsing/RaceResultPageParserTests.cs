@@ -472,6 +472,14 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void RaceGrade_UsesParsedRaceNameWhenPageBodyOmitsGradeBadgeText()
+    {
+        var snapshot = JraSnapshotView.Create(BuildSnapshot());
+
+        Assert.AreEqual("G3", RaceGrade.Parse(snapshot, "第71回 京成杯オータムハンデキャップ GⅢ"));
+    }
+
+    [TestMethod]
     public void Parse_コース表記_芝直を直線方向として分解できる()
     {
         var page = ParseWithMainText("天候 晴 芝 良 1,000メートル（芝・直）");

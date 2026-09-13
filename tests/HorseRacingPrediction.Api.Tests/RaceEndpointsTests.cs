@@ -97,6 +97,26 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task DeclareRaceResultBulk_InfersGradeFromRaceNameWhenParserGradeIsMissing()
+    {
+        var date = new DateOnly(2026, 9, 6);
+        var course = $"TEST-{Guid.NewGuid():N}";
+        const int raceNumber = 11;
+        var raceId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(date, course, raceNumber);
+        var raceName = "第40回 産経賞セントウルステークス GⅡ";
+        await _client.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(date, course, raceNumber, raceName, raceId), JsonOptions);
+
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
+            new DeclareRaceResultBulkRequest(date, course, raceNumber, raceName), JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(race);
+        Assert.AreEqual("G2", race.GradeCode);
+    }
+
+    [TestMethod]
     public async Task GetRace_UsesHorseProfileOwner_WhenEntryOwnerIsMissing()
     {
         var raceId = $"race-{Guid.NewGuid()}";
