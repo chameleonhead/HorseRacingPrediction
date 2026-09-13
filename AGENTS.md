@@ -80,6 +80,8 @@ Execution Mode に移行した後は、
 
 ## Document-Driven Development
 
+- 作業を継続できる未完了項目がある状態で中断する場合は、change record または実行計画へ、次に実行する操作、検証コマンド、未完了項目、意図的に残した未コミットファイルを記録する。コミット、部分テスト、サブタスク完了、コンテキスト圧縮だけでは停止理由にならない。
+
 - 機能追加、UI/UX 変更、外部仕様、データモデル、運用フローを変更する作業では、実装前に `.codex/skills/document-driven-development/SKILL.md` を全文読み、そのワークフローに従う
 - 変更ごとの企画、決定、受け入れ基準、検証結果は `docs/changes/yyyyMMdd_<change-name>/` に保存する。日付は変更セット作成日の8桁、変更名は短い kebab-case とする。企画時に作成したワイヤーフレーム、画面モック、図、比較案も同じ変更ディレクトリに含める
 - change record の状態が `Approved` になるまでプロダクションコードを変更しない。承認とは、ユーザーが設計内容または当該 change record を明示的に確定したことを指す
@@ -87,6 +89,9 @@ Execution Mode に移行した後は、
 - 実装完了時は、実装結果、設計との差分、実行した検証、残課題を change record に追記してから完了とする
 
 ### Agent task orchestration
+
+- タスク状態の正規語彙は `Proposed`、`Runnable`、`In progress`、`Dependent`、`Externally blocked`、`Rejected with reason`、`Verified` とする。`Implemented` 判定前に、承認済みスコープの `Rejected with reason`、`In progress`、`Runnable`、`Dependent`、その他の未完了状態、または受け入れ基準を阻害する `Externally blocked` を残してはならない。`Externally blocked` は、承認済み受け入れ基準に影響しない明示的な除外フォローアップに限り残せる。
+- 最終応答前に、承認済みタスク・受け入れ基準・重要なレビュー指摘を完了証拠または真正な外部 blockerへ追跡できることを、高能力モデルの主担当がリスクに応じた粒度で確認する。監査で将来の作業にも影響するスキル不足・委譲失敗が実証された場合は、`learn-from-implementation-failures` の事実確認、最小修正、validator、再検証を実施し、結果を change record に記録する。単発の軽微な実装ミスは実装内で修正する。
 
 - 通常の開発・調査で複数の作業へ分割できる場合は、`agent-task-orchestration` を適用する。適用対象は、入力、成果物、書込範囲、検証方法を明確に分離できる探索、調査、定型実装、テスト候補作成、文書棚卸しなどである。単一の短い作業や、分割による調整コストが成果を上回る作業には適用しない。
 - 主担当は、高能力モデルで要件解釈、設計、タスク分割、依存関係、委譲条件、成果の統合、設計適合レビュー、最終レビューを保持する。明確で独立した作業は、利用可能なコスト効率の高いモデルへ委譲してよいが、委譲成果を自己申告だけで採用しない。

@@ -26,6 +26,8 @@ Do not hard-code model IDs, pricing, or provider assumptions in plans or artifac
 5. Review the returned evidence against acceptance criteria before merging or forwarding it. The lead resolves conflicts and owns the final integrated change.
 6. Record routing results: successful outputs, rework/retries, escalations, measured usage/cost when available, and elapsed time. Evaluate cost per successful outcome, not token price alone.
 
+Before declaring the work complete, the lead performs a focused self-audit of the plan and dependencies, tier/routing choices, worker evidence, material acceptance gaps, and applicable skill instructions, proportional to the task's risk and size. Record material findings and their evidence; a short, low-risk task does not need a separate checklist. Do not complete while a material approved item is runnable, unverified, or unresolved. If the audit demonstrates a reusable process failure, apply `learn-from-implementation-failures`, update the narrowest applicable skill, validate it, and rerun the affected gate. Correct isolated implementation mistakes locally without turning each one into a skill rule.
+
 ## Worker prompt contract
 
 Every delegated prompt must state:
@@ -45,7 +47,7 @@ If any required item is unavailable, the worker should stop at the boundary and 
 
 Delegate to a worker tier when the task is bounded, reversible, locally verifiable, and has low ambiguity. Keep it with the lead when it changes architecture, public contracts, security/privacy, data integrity, user-visible acceptance, or requires interpreting conflicting requirements. A research worker may gather sources and summarize them, but the lead verifies source quality and applies the conclusion.
 
-Before starting, mark each item `ready` only if its write scope is disjoint from active items and its dependencies are satisfied. Otherwise mark it `blocked` or serialize it. After completion, mark it `verified` only when the stated evidence passes; a prose claim without evidence is `incomplete`.
+Before starting, mark each item `Runnable` only if its write scope is disjoint from active items and its dependencies are satisfied. Otherwise mark it `Dependent` or serialize it. After completion, mark it `Verified` only when the stated evidence passes; a prose claim without evidence remains `In progress` until classified as `Dependent`, `Externally blocked`, or `Rejected with reason`.
 
 ## Escalation and review
 
@@ -81,7 +83,7 @@ Dependencies: <ids or none>
 Read scope: <paths/systems>
 Write scope: <paths/systems or read-only>
 Acceptance/evidence: <checks and results>
-State: ready | running | blocked | incomplete | verified
+State: Proposed | Runnable | In progress | Dependent | Externally blocked | Rejected with reason | Verified
 Usage/effort: <measured values or unavailable>
 Rework/escalation: <count and reason>
 Lead decision: accept | revise | promote | reject

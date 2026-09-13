@@ -30,7 +30,7 @@ For multi-task or multi-agent changes, use this table (a short single task may u
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | <task> | Main or Worker | High capability or Cost efficient | - | <paths or read-only> | <command or observable check> | <artifact or result> | Proposed |
 
-Link each task to its acceptance criteria and each acceptance criterion to its task(s) and verification. Use observable evidence and keep state current. Recommended states are `Proposed`, `Runnable`, `In progress`, `Dependent`, `Externally blocked`, `Rejected with reason`, and `Verified`.
+Link each task to its acceptance criteria and each acceptance criterion to its task(s) and verification. Use observable evidence and keep state current. The canonical states are `Proposed`, `Runnable`, `In progress`, `Dependent`, `Externally blocked`, `Rejected with reason`, and `Verified`. `Rejected with reason` may be used only for work explicitly outside the approved scope; an approved-scope task cannot be rejected to bypass completion. `Externally blocked` may remain at completion only when it is an explicitly excluded follow-up that does not prevent an approved acceptance criterion.
 
 ## Review gates
 For multi-task or delegated changes, record the reviewer, inputs, decision, and follow-up for each gate:
@@ -38,7 +38,7 @@ For multi-task or delegated changes, record the reviewer, inputs, decision, and 
 - **Design and task-split review** — before approval; confirms settled decisions, AC/task/verification coverage, valid dependencies, non-overlapping write scopes, and suitable model tier.
 - **Pre-implementation review** — after approval and before code changes; classifies every task and confirms the runnable frontier and worker contracts.
 - **Checkpoint review** — at each substantial checkpoint; compares worker evidence, full diff, tests, and the acceptance-criterion matrix, recording fixes or escalation.
-- **Final review** — before `Implemented`; confirms every approved task and AC is `Verified`, with no runnable, dependent, in-progress, or acceptance-blocking external work left. A genuine external blocker keeps the record `Approved` unless it is an explicitly excluded follow-up that does not prevent an AC.
+- **Final review** — before `Implemented`; confirms every approved task and AC is `Verified`, with no approved-scope rejected, runnable, dependent, in-progress, or acceptance-blocking external work left. A genuine external blocker keeps the record `Approved` unless it is an explicitly excluded follow-up that does not prevent an AC. Reconcile the task/finding ledger when the work has multiple tasks, delegation, or material review findings; a short non-delegated task may record the same conclusion concisely. Record the next action if work is interrupted.
 
 ## Verification record
 ## Deviations and follow-up

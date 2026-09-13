@@ -49,13 +49,17 @@ Turn observed failures into narrow, testable improvements to future decisions. D
 
 ### Review-to-execution closure gate
 
-When the agent produces a numbered review or gap report and the user subsequently authorizes implementation, every reported finding becomes an explicit closure item before code changes begin.
+When a numbered or unnumbered review, gap report, audit, or self-review identifies a material finding within the approved outcome and the user authorizes implementation, make it an explicit closure item. Apply the same rule to material findings from a pre-completion self-audit. Hypotheses, exploratory notes, and unrelated suggestions are not closure items.
 
-- Copy each finding into the durable execution plan with one of: `Runnable`, `Dependent`, `Externally blocked`, or `Rejected with reason`. Do not silently reinterpret “implement the proposal” as permission to implement only the highest-priority subset.
+- Copy each finding into the durable execution plan with one of: `Proposed`, `Runnable`, `In progress`, `Dependent`, `Externally blocked`, `Rejected with reason`, or `Verified`. Do not silently reinterpret “implement the proposal” as permission to implement only the highest-priority subset.
 - Give every item observable completion evidence. If a finding is intentionally combined with another task, retain a mapping from both original findings to the shared evidence.
 - After each checkpoint, reconcile the original review list against commits, tests, runtime verification, and the acceptance matrix. A passing build or a polished primary screen does not close findings about pagination, large-data behavior, secondary workflows, operational cutover, or browser validation.
 - Before a completion response, run a zero-open-item check. If any authorized item is still runnable or dependent on another local item, continue. If an item requires external access or destructive production authority, report it as an explicit external blocker and do not describe the whole proposal as completed.
 - When a new self-review finds additional defects within the approved outcome, add them to the same closure ledger before fixing them; do not leave them only in commentary or the final response.
+
+### Pre-completion process-failure gate
+
+If the pre-completion self-audit finds an omitted acceptance item, unsupported worker result, incorrect routing decision, or missing process gate, reconstruct the finding from the plan, diff, tests, tool output, or review evidence and separate fact from inference. Fix an isolated implementation or test defect in the implementation. Update the narrowest applicable skill only when the evidence shows a reusable decision or workflow gap likely to affect future tasks; then run the skill-creator validator and rerun the affected verification gate. Do not change a skill for hypothetical risks alone.
 
 The observable gate is a one-to-one ledger from reported findings to completion evidence or a genuine external blocker, with no untracked “remaining work” introduced only after completion was claimed.
 

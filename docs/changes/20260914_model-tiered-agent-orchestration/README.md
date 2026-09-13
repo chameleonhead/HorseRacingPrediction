@@ -1,6 +1,6 @@
 # モデル階層に応じたエージェント分業と change record レビューを標準化する
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -175,6 +175,7 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 | AC7 | 通常委譲と失敗分析の責務が重複せず、委譲失敗が再分割またはモデル昇格の記録へつながる。 | Verified |
 | AC8 | 変更するすべてのスキルが `quick_validate.py` に成功し、placeholder、重複方針、検証不能な一般論がない。 | Verified |
 | AC9 | 現在の未コミットなユーザー変更を上書きせず、本変更だけの diff としてレビューできる。 | Verified |
+| AC10 | 完了前self-auditが計画・tier・worker証拠・全未達・適用skillを照合し、実証されたskill不足を最小更新・validator・影響ゲート再実行へ接続する。 | Verified |
 
 ## Task plan
 
@@ -187,6 +188,10 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 | T5 | failure/UIスキルの責務と接続を更新する | Worker drafts with disjoint files + Main integration | Cost efficient + High capability | T2, T3 | 指定6スキル | 全 validator、重複・矛盾レビュー | AC6-AC8 | Verified |
 | T6 | 独立した forward test と最終レビューを行う | Independent worker + Main | Cost efficient evaluator + High capability final review | T3-T5 | Read-only + 必要な修正 | realistic task simulation、全 validator、`git diff --check`、`git status` | 全ACの証拠、open itemゼロ | Verified |
 | T7 | change record を Implemented へ更新し、本変更だけをコミットする | Main | High capability | T6 | 本記録と本変更 | diff/status/commit review | commit hash と最終記録 | Verified |
+| T8 | 完了前自己監査とスキル自己改善ゲートを追加する | Worker draft + Main integration | Cost efficient + High capability | T7 | orchestration/failure skills | validator、反例再実行 | 自己監査からskill更新・再検証へ接続 | Verified |
+| T9 | 状態語彙とzero-open-item判定を全運用スキルで統一する | Worker draft + Main integration | Cost efficient + High capability | T7 | AGENTS.md、DDD、format、orchestration/failure skills | diff review、validator | approved-scope未達を全状態で遮断 | Verified |
+| T10 | AC↔Task↔Verification ledgerと実行証拠を補完して再監査する | Worker audit + Main integration | Cost efficient + High capability | T8, T9 | 本記録 | closure audit、全validator、git checks | 全AC・全task Verified | Verified |
+| T11 | 修正後の反証テスト、最終監査、記録更新、分離コミットを行う | Independent worker + Main | Cost efficient evaluator + High capability final review | T8-T10 | Read-only + 本変更 | counterexample replay、closure ledger、validator、git checks | open itemゼロとcommit | In progress |
 
 ## Design and task-split review
 
@@ -196,6 +201,7 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 - 外部調査と棚卸しは read-only の独立タスクとして実際にコスト効率モデルへ委譲し、主担当が一次資料とリポジトリ証拠を再確認した。
 - モデル名は環境で変わるため tier を契約とし、具体名は実行時に利用可能なモデル一覧と公式資料から選ぶ。
 - 本記録は Proposed であり、T3以降のスキル・AGENTS.md変更はユーザー承認まで開始しない。
+- Record location: 本節 `#design-and-task-split-review`。
 
 ## Pre-implementation review
 
@@ -203,6 +209,7 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 - Inputs: Approved change record、T3-T5のwrite scope、利用可能モデル、既存の未コミット変更。
 - Decision: T3-T5は実装可能で、各workerのwrite scopeは非重複。既存collector文書とproduction codeは対象外とする。設計・用語・最終採用は主担当が保持する。
 - Follow-up: 各worker promptへ目的、対象範囲、禁止範囲、依存、検証、成果形式を記載し、cost-efficient tierで並列起動した。
+- Record location: 本節 `#pre-implementation-review`。
 
 ## Checkpoint review
 
@@ -210,6 +217,30 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 - Inputs: T3-T5の全diff、worker validator、forward test。
 - Decision: 全worker成果を採用。ただし共有生成物・migration・契約凍結と、acceptance-blocking external blockerの完了判定に不足があったため、主担当が統合修正した。
 - Follow-up: 統合修正後に全skill validatorとdiff/statusを再検証した。
+- Record location: 本節 `#checkpoint-review`。
+
+### Completion-claim correction checkpoint
+
+- Reviewer: 高能力モデルの主担当。
+- Inputs: commit `5061490`、独立closure audit、instruction consistency audit、2つの反例テスト、ユーザーの追加要件。
+- Decision: 初回のFinal reviewは、AC↔Task↔Verificationの追跡不足と、skill自身を完了前に見直すゲートの欠落を見逃していたため無効。Statusを`Approved`へ戻し、T8-T11を追加した。
+- Follow-up: cost-efficient workerに反証・整合性・closure ledgerを委譲し、主担当が具体化しすぎない比例的なself-auditへ統合した。
+- Record location: 本節 `#completion-claim-correction-checkpoint`。
+
+## Acceptance-criterion closure ledger
+
+| AC | Task(s) | Verification | Actual evidence | Record location | State |
+| --- | --- | --- | --- | --- | --- |
+| AC1 | T4, T9 | `AGENTS.md`の主担当・worker・昇格・最終監査規則をレビュー | 高能力主担当が設計・統合・最終判定を保持し、軽微な誤りを許容する比例的監査へ修正 | `AGENTS.md` Agent task orchestration | Verified |
+| AC2 | T3, T6, T8 | orchestration skillのvalidator、初回・修正後forward test | routing、scope、evidence、escalation、focused self-auditを確認 | orchestration skill全体、Verification record | Verified |
+| AC3 | T4 | DDDとformatのtask-plan欄を比較 | owner、tier、dependency、write scope、verification、evidence、stateが存在 | DDD Task plan and review gates、format Task plan | Verified |
+| AC4 | T4, T10 | 4レビュー節のReviewer/Inputs/Decision/Follow-up/Record locationを確認 | 各レビューの記録先を本記録の見出しとして明記 | 本記録の4 review sections | Verified |
+| AC5 | T4, T9, T10 | AC表、Task plan、本ledgerを双方向比較 | 各ACにTaskとVerification、各TaskにACまたは本ledger上の成果を対応付け、未達状態の完了禁止を統一 | 本ledger、DDD canonical states | Verified |
+| AC6 | T5 | UI skill 5件の責務を比較 | UI設計、個別pattern、UI検証証拠を分離しchange recordへ接続 | 各Blazor skill | Verified |
+| AC7 | T5, T8 | orchestration/failure skillの責務を比較 | 通常委譲と、実証された再利用可能な失敗後の改善を分離 | 両skillのdelegation/failure sections | Verified |
+| AC8 | T3-T6, T8-T10 | UTF-8 validator 8件、placeholder・責務・一般論の手動検索 | 8件成功。placeholderは明示的なformat/handoff例だけ。責務の正本と観測ゲートを主担当が確認 | Verification record | Verified |
+| AC9 | T7, T11 | commit file listと`git status`を比較 | collector文書3件と別change recordは対象コミットから除外 | Verification record | Verified |
+| AC10 | T8-T11 | 2つの重大未達反例と軽微な単一修正例を再実行 | 重大未達は完了を止め、再利用可能なskill gapだけを更新し、軽微な誤りは局所修正する | orchestration self-audit、failure gate、Verification record | Verified |
 
 ## Verification record
 
@@ -225,21 +256,24 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 - 2026-09-14: 独立workerのforward testで、API・永続化・Blazor UIをまたぐ共有worktree実装を題材に、task plan、tier、依存、write scope、昇格、lead reviewをスキル本文だけから導出できることを確認した。
 - 2026-09-14: `PYTHONUTF8=1` を設定して全8スキルを `quick_validate.py` で再検証し、すべて `Skill is valid!` となった。Windows既定CP932では日本語スキルの読込に失敗するため、UTF-8指定を再現可能な検証コマンドとした。
 - 2026-09-14: 本変更対象に対する `git diff --check` が成功した。`git status` で既存の別変更が残ることを確認し、本変更の対象へ混在させていない。
+- 2026-09-14: 完了確認の依頼を受け、cost-efficient worker 3件でcommit closure、skill反証、instruction consistencyを独立監査した。初回`Implemented`判定にAC5の追跡不足とskill自己改善ゲートの欠落があることを確認し、Statusを`Approved`へ戻した。
+- 2026-09-14: `agent-task-orchestration`へリスク比例のpre-completion self-auditを追加し、`learn-from-implementation-failures`へmaterial findingと再利用可能なworkflow gapだけをskill更新へ送る境界を追加した。
+- 2026-09-14: DDD、format、AGENTS.mdでcanonical task statesとzero-open-item判定を統一した。単一・低リスク・非委譲作業は簡潔な照合でよく、独立チェックリストを要求しない。
+- 2026-09-14: 修正後の独立forward testで、(1) worker自己申告と単体テストだけの完了、(2)未達ACを残した完了、(3)軽微な単一ファイル修正を評価した。前2件は完了を拒否し、3件目は台帳やskill更新を強制しないため合格とした。
+- 2026-09-14: `$env:PYTHONUTF8='1'` の上で全8skillへ `quick_validate.py` を実行し8件成功。placeholder検索ではchange-record/handoffの明示的テンプレートだけが残り、TODO/TBD/未実装placeholderはなかった。責務検索と全diffの主担当レビューで、通常委譲、DDD、failure、UI設計、UI検証の正本が分離されていることを確認した。
+- 2026-09-14: 修正後の `git diff --check -- AGENTS.md .codex/skills docs/changes/20260914_model-tiered-agent-orchestration/README.md` が成功した。
 
 ## Final review
 
 - Reviewer: 高能力モデルの主担当。
-- Inputs: Approved change record、workerの変更と検証報告、全diff、forward test、全skill validator、`git diff --check`、`git status`。
-- Decision: AC1-AC9を満たす。通常委譲は新規skill、change recordのレビューはDDD、失敗後の再分割・昇格はfailure skill、UIの設計と検証は各UI skillへ分離され、重大な重複・矛盾・未完了項目はない。
-- Follow-up: モデル提供状況・価格は固定せず、将来の実績でroutingを狭く調整する。外部タスク管理pluginは導入しない。
+- Inputs: Approved change record、commit `5061490`、3件の独立再監査、修正後の反証テスト、全diff、全8skill validator、placeholder/責務検索、`git diff --check`、`git status`。
+- Decision: Pass。AC1-AC10は本ledgerの証拠へ追跡でき、T1-T10はVerified。高能力モデルの計画・統合・最終レビューを中心に据え、軽微な誤りへ過剰な台帳やskill更新を要求しない。T11の分離コミットだけを残す。
+- Follow-up: 本変更だけをstage・commitし、commit後にStatusとT11を最終更新する。モデル提供状況・価格は固定せず、将来の実績でroutingを狭く調整する。外部タスク管理pluginは導入しない。
+- Record location: 本節 `#final-review`。
 
 ## Completion evidence
 
-- AC1-AC2: `AGENTS.md` と `.codex/skills/agent-task-orchestration/` のdiff、およびforward test。
-- AC3-AC5: DDD本体とchange-record formatのtask plan・4 review gates・zero-open-item規定。
-- AC6-AC7: failure/UI skillの責務境界とchange record接続のdiff。
-- AC8: UTF-8環境で全8skillのvalidator成功、placeholderはテンプレート例に限定。
-- AC9: 本変更だけを明示的にstageし、既存のcollector文書変更を除外して確認する。
+各ACのtask、検証、実証結果、記録先は `Acceptance-criterion closure ledger` を正本とする。T11のcommit証拠は完了更新時に追記する。
 
 ## Implementation result
 
