@@ -5,6 +5,7 @@ using EventFlow.Queries;
 using ApiContracts = HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Commands.Horses;
 using HorseRacingPrediction.Application.Commands.Jockeys;
 using HorseRacingPrediction.Application.Commands.Memos;
@@ -42,6 +43,7 @@ public static partial class EndpointExtensions
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<ApiKeyEndpointFilter>()
             .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
+        MapHorseIdentityRepairEndpoints(writeGroup);
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]
@@ -527,6 +529,13 @@ public static partial class EndpointExtensions
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
         async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
+                string? previousHorseId;
+                using (var readContext = dbContextProvider.CreateContext())
+                {
+                    previousHorseId = (await readContext.RacePredictionContexts.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken).ConfigureAwait(false))?
+                        .Entries.FirstOrDefault(x => x.EntryId == request.EntryId)?.HorseId;
+                }
                 await EnsureRelatedSubjectsAsync(request, commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
 
                 var entryId = string.IsNullOrWhiteSpace(request.EntryId) ? $"entry-{Guid.NewGuid()}" : request.EntryId;
@@ -547,9 +556,35 @@ public static partial class EndpointExtensions
                     request.OwnerName);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
-                return result.IsSuccess
-                    ? Results.Created($"/api/races/{raceId}/entries/{entryId}", new { RaceId = raceId, EntryId = entryId })
-                    : Results.BadRequest(new[] { "Command execution failed." });
+                if (!result.IsSuccess) return Results.BadRequest(new[] { "Command execution failed." });
+                if (!string.IsNullOrWhiteSpace(previousHorseId)
+                    && !string.Equals(previousHorseId, request.HorseId, StringComparison.Ordinal)
+                    && JraSourceIdentity.TryNormalizeHorse(request.HorseSourceIdentity, out var jraIdentity)
+                    && string.Equals(request.HorseId,
+                        DeterministicIdGenerator.BuildHorseId(request.HorseName ?? request.HorseId, request.HorseSourceIdentity),
+                        StringComparison.Ordinal))
+                {
+                    using var repairContext = dbContextProvider.CreateContext();
+                    var candidateId = $"20260913-jra-horse-identity-repair:{raceId}:{entryId}";
+                    var candidate = await repairContext.HorseIdentityRepairCandidates
+                        .SingleOrDefaultAsync(x => x.CandidateId == candidateId, cancellationToken).ConfigureAwait(false);
+                    if (candidate is null)
+                    {
+                        repairContext.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
+                        {
+                            CandidateId = candidateId,
+                            RepairId = "20260913-jra-horse-identity-repair",
+                            SourceHorseId = previousHorseId,
+                            TargetHorseId = request.HorseId,
+                            JraIdentity = jraIdentity,
+                            RaceId = raceId,
+                            EntryId = entryId,
+                            DetectedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                        });
+                        await repairContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                return Results.Created($"/api/races/{raceId}/entries/{entryId}", new { RaceId = raceId, EntryId = entryId });
             })
             .WithName("RegisterEntry")
             .WithTags("Race API")
@@ -1577,8 +1612,15 @@ public static partial class EndpointExtensions
 
         app.MapGet("/api/horses/{horseId}",
             [SwaggerOperation(Summary = "Get horse profile", Description = "Returns horse profile read model")]
-        async (string horseId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string horseId, IQueryProcessor queryProcessor,
+                IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
+                using (var dbContext = dbContextProvider.CreateContext())
+                {
+                    var redirect = await dbContext.HorseIdentityRepairRedirects.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.SourceHorseId == horseId, cancellationToken).ConfigureAwait(false);
+                    if (redirect is not null) horseId = redirect.TargetHorseId;
+                }
                 var query = new ReadModelByIdQuery<AppReadModels.HorseReadModel>(horseId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
@@ -1609,8 +1651,11 @@ public static partial class EndpointExtensions
                     .AsNoTracking()
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
+                var redirectedIds = (await dbContext.HorseIdentityRepairRedirects.AsNoTracking()
+                    .Select(x => x.SourceHorseId).ToListAsync(cancellationToken).ConfigureAwait(false))
+                    .ToHashSet(StringComparer.Ordinal);
 
-                IEnumerable<AppReadModels.HorseReadModel> filtered = allHorses;
+                IEnumerable<AppReadModels.HorseReadModel> filtered = allHorses.Where(x => !redirectedIds.Contains(x.HorseId));
 
                 if (!string.IsNullOrWhiteSpace(request.HorseId))
                     filtered = filtered.Where(x => string.Equals(x.HorseId, request.HorseId, StringComparison.OrdinalIgnoreCase));

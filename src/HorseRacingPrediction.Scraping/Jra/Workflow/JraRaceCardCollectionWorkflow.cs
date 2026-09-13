@@ -180,7 +180,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             {
                 try
                 {
-                    await _writeService.UpsertHorseProfileAsync(
+                    await _writeService.UpsertHorseProfileByIdentityAsync(
                         registeredName: entry.HorseName,
                         normalizedName: null,
                         sexCode: null,
@@ -191,6 +191,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                         damName: entry.DamName,
                         damsireName: entry.DamsireName,
                         coatColor: entry.CoatColor,
+                        jraSourceIdentity: entry.HorseSourceIdentity,
                         cancellationToken: cancellationToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))
@@ -199,7 +200,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 }
             }
 
-            await _writeService.UpsertRaceEntryAsync(
+            await _writeService.UpsertRaceEntryWithHorseIdentityAsync(
                 raceId: raceId,
                 horseNumber: entry.HorseNumber,
                 horseName: entry.HorseName,
@@ -212,6 +213,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 declaredWeight: entry.BodyWeight,
                 declaredWeightDiff: entry.BodyWeightChange,
                 ownerName: entry.OwnerName,
+                jraHorseSourceIdentity: entry.HorseSourceIdentity,
                 cancellationToken: cancellationToken);
         }
 

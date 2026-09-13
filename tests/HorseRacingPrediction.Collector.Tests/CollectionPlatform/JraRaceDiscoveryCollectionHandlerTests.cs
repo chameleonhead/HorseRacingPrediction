@@ -57,7 +57,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
                 RaceCardListFactory = (target, course) => new JraRaceListPage(
                     "https://www.jra.go.jp/JRADB/accessD.html", target, course,
                     [new(new(target, course, 7), "test", new(13, 10),
-                        "/JRADB/card.html?race=7", "/JRADB/result.html?race=7")]),
+                        "/JRADB/accessD.html?CNAME=pw01dde1001123456780720260912/25",
+                        "/JRADB/accessS.html?CNAME=pw01sde1001123456780720260912/2F")]),
             },
         };
         var schedule = new FakeJraScheduleCollectionWorkflow
@@ -67,10 +68,35 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
-        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/card.html?race=7"),
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1001123456780720260912/25"),
             sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceCard).ExplicitUrl);
-        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/result.html?race=7"),
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1001123456780720260912/2F"),
             sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceResult).ExplicitUrl);
+    }
+
+    [TestMethod]
+    public async Task Discovery_DoesNotPersistParameterlessSelectionPagesAsDetailLocations()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, course) => new JraRaceListPage(
+                    "https://www.jra.go.jp/JRADB/accessD.html", target, course,
+                    [new(new(target, course, 7), "test", new(13, 10),
+                        "/JRADB/accessD.html", "/JRADB/accessS.html")]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Sapporo] : [] };
+        var sink = new RecordingSink();
+
+        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
+            .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+
+        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceCard).ExplicitUrl);
+        Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.RaceResult).ExplicitUrl);
     }
 
     [TestMethod]

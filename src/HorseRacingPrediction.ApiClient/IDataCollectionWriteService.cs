@@ -47,6 +47,13 @@ public interface IDataCollectionWriteService
         CancellationToken cancellationToken = default)
         => UpsertHorseWithOwnerAsync(registeredName, normalizedName, sexCode, birthDate, ownerName, cancellationToken);
 
+    Task<string> UpsertHorseProfileByIdentityAsync(string registeredName, string? normalizedName, string? sexCode,
+        string? birthDate, string? ownerName, string? breederName, string? sireName, string? damName,
+        string? damsireName, string? coatColor, string? jraSourceIdentity,
+        CancellationToken cancellationToken = default)
+        => UpsertHorseProfileAsync(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName,
+            sireName, damName, damsireName, coatColor, cancellationToken);
+
     /// <summary>騎手を作成または更新し、騎手 ID を返す。</summary>
     Task<string> UpsertJockeyAsync(
         string displayName,
@@ -94,6 +101,14 @@ public interface IDataCollectionWriteService
             raceId, horseNumber, horseName, jockeyName, trainerName,
             gateNumber, assignedWeight, sexCode, age, declaredWeight,
             declaredWeightDiff, cancellationToken);
+
+    Task<string> UpsertRaceEntryWithHorseIdentityAsync(
+        string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName,
+        int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
+        decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
+        CancellationToken cancellationToken = default)
+        => UpsertRaceEntryAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
+            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName, cancellationToken);
 
     /// <summary>レース全体の確定結果（勝ち馬）を宣言し、確認メッセージを返す。</summary>
     Task<string> DeclareRaceResultAsync(

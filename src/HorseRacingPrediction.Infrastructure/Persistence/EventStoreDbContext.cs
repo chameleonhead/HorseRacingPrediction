@@ -35,6 +35,8 @@ public class EventStoreDbContext : DbContext
     public DbSet<RaceSummaryReadModel> RaceSummaries => Set<RaceSummaryReadModel>();
     public DbSet<OwnerAliasMappingReadModel> OwnerAliasMappings => Set<OwnerAliasMappingReadModel>();
     public DbSet<OwnerMergeAuditReadModel> OwnerMergeAudits => Set<OwnerMergeAuditReadModel>();
+    public DbSet<HorseIdentityRepairCandidateReadModel> HorseIdentityRepairCandidates => Set<HorseIdentityRepairCandidateReadModel>();
+    public DbSet<HorseIdentityRepairRedirectReadModel> HorseIdentityRepairRedirects => Set<HorseIdentityRepairRedirectReadModel>();
 
     public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
         : base(options)
@@ -75,6 +77,19 @@ public class EventStoreDbContext : DbContext
         {
             entity.HasKey(x => x.AuditId);
             entity.HasIndex(x => new { x.TargetOwnerId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<HorseIdentityRepairCandidateReadModel>(entity =>
+        {
+            entity.HasKey(x => x.CandidateId);
+            entity.HasIndex(x => new { x.RepairId, x.AppliedAt });
+            entity.HasIndex(x => new { x.SourceHorseId, x.TargetHorseId });
+        });
+
+        modelBuilder.Entity<HorseIdentityRepairRedirectReadModel>(entity =>
+        {
+            entity.HasKey(x => x.SourceHorseId);
+            entity.HasIndex(x => x.TargetHorseId);
         });
 
         modelBuilder.Entity<HorseReadModel>(entity =>

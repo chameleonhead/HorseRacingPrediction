@@ -444,10 +444,26 @@ public sealed class RaceCardPageParser
                 parsedHorse.BodyWeight,
                 parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null,
                 parsedHorse.BreederName, parsedHorse.SireName, parsedHorse.DamName,
-                parsedHorse.DamsireName, coatColor));
+                parsedHorse.DamsireName, coatColor,
+                FindHorseSourceIdentity(table.GetCell(rowIndex, horseNameIndex), url)));
         }
 
         return entries;
+    }
+
+    private static string? FindHorseSourceIdentity(JraCellView? cell, string pageUrl)
+    {
+        if (cell is null) return null;
+        foreach (var fragment in cell.Fragments.Where(x => x.TagName.Equals("a", StringComparison.OrdinalIgnoreCase)))
+        {
+            var raw = fragment.RawUrl ?? fragment.Url?.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var resolved = Uri.TryCreate(raw, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https"
+                ? absolute.ToString()
+                : Uri.TryCreate(new Uri(pageUrl), raw, out var relative) ? relative.ToString() : null;
+            if (JraSourceIdentity.TryNormalizeHorse(resolved, out _)) return resolved;
+        }
+        return null;
     }
 
     private static bool IsHeaderRow(

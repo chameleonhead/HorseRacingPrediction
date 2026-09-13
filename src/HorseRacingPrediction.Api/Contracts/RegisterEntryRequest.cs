@@ -18,4 +18,5 @@ public sealed record RegisterEntryRequest(
     string? HorseName = null,
     string? JockeyName = null,
     string? TrainerName = null,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    string? HorseSourceIdentity = null);

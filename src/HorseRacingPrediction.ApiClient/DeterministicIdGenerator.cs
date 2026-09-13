@@ -46,6 +46,15 @@ public static class DeterministicIdGenerator
         return $"{prefix}-{guid:D}";
     }
 
+    /// <summary>JRAの公開主体識別子を優先し、未取得時だけ従来の名称キーへフォールバックする。</summary>
+    public static string BuildHorseId(string registeredName, string? jraSourceIdentity = null)
+    {
+        var key = JraSourceIdentity.TryNormalizeHorse(jraSourceIdentity, out var identity)
+            ? $"JRA|{identity}"
+            : NormalizeDisplayName(registeredName);
+        return BuildEntityId("horse", key);
+    }
+
     /// <summary>表示名を正規化する（前後の空白を除去）。</summary>
     public static string NormalizeDisplayName(string value) => value.Trim();
 

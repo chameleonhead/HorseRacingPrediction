@@ -103,9 +103,11 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
                     if (!historical)
                     {
+                        var cardUrl = JraRaceDetailUrl.Validate(
+                            CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), ResourceType.RaceCard, race.Id);
                         await requests.RequestAsync(new(ResourceType.RaceCard, "JRA", id), new("race-card"),
                             CollectionReason.Discovery, CollectionLane.Realtime, 80,
-                            CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), date,
+                            cardUrl, date,
                             attributes, cancellationToken).ConfigureAwait(false);
                         if (race.StartTime is { } start)
                         {
@@ -117,12 +119,16 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         }
                     }
                     if (historical || !string.IsNullOrWhiteSpace(race.ResultUrl))
+                    {
+                        var resultUrl = JraRaceDetailUrl.Validate(
+                            CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
                         await requests.RequestAsync(new(ResourceType.RaceResult, "JRA", id), new("race-result"),
                             task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
                             historical ? CollectionLane.Background : CollectionLane.Realtime,
-                            historical ? 10 : 100, CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), date,
+                            historical ? 10 : 100, resultUrl, date,
                             attributes, cancellationToken)
                             .ConfigureAwait(false);
+                    }
                 }
             }
         }
@@ -288,28 +294,34 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         var weekendRelated = effectiveDate >= today && effectiveDate <= today.AddDays(7);
         var lane = weekendRelated ? CollectionLane.Realtime : CollectionLane.Normal;
         var priority = weekendRelated ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
-        var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name)[]
+        var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name, string? SourceIdentity)[]
             {
-                (ResourceType.Horse, entry.HorseName),
-                (ResourceType.Jockey, entry.JockeyName),
-                (ResourceType.Trainer, entry.TrainerName),
+                (ResourceType.Horse, entry.HorseName, entry.HorseSourceIdentity),
+                (ResourceType.Jockey, entry.JockeyName, null),
+                (ResourceType.Trainer, entry.TrainerName, null),
             })
             .Where(x => !string.IsNullOrWhiteSpace(x.Name))
-            .Select(x => (x.Type, Name: x.Name!.Trim()))
+            .Select(x => (x.Type, Name: x.Name!.Trim(), x.SourceIdentity))
             .Distinct();
         foreach (var subject in subjects)
         {
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
-            var id = DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix, subject.Name);
+            var id = subject.Type == ResourceType.Horse
+                ? DeterministicIdGenerator.BuildHorseId(subject.Name, subject.SourceIdentity)
+                : DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix, subject.Name);
+            var attributes = new Dictionary<string, string>
+            {
+                ["name"] = subject.Name,
+                ["requestedByRaceId"] = requestedByRaceId,
+                ["weekendPriorityUntil"] = effectiveDate.ToString("yyyy-MM-dd"),
+            };
+            if (JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
+                attributes["sourceIdentity"] = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)!.ToString();
             await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
-                CollectionReason.Discovery, lane, priority, null,
+                CollectionReason.Discovery, lane, priority,
+                JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity),
                 effectiveDate,
-                new Dictionary<string, string>
-                {
-                    ["name"] = subject.Name,
-                    ["requestedByRaceId"] = requestedByRaceId,
-                    ["weekendPriorityUntil"] = effectiveDate.ToString("yyyy-MM-dd"),
-                }, cancellationToken)
+                attributes, cancellationToken)
                 .ConfigureAwait(false);
         }
     }

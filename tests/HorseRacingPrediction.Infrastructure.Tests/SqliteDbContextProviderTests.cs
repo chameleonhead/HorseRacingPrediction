@@ -44,6 +44,7 @@ public class SqliteDbContextProviderTests
         Assert.IsTrue(applied.Any(x => x.EndsWith("_InitialEventStore", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)));
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_AddHorseIdentityRepair", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -88,6 +89,8 @@ public class SqliteDbContextProviderTests
         await using (var previous = provider.CreateContext())
         {
             await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairCandidates");
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairRedirects");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE JraSubjectProfileReadModel");
             await previous.Database.ExecuteSqlRawAsync("INSERT INTO Horses (HorseId, RegisteredName, NormalizedName, Aliases) VALUES ('horse-legacy', 'preserved', 'preserved', '[]')");
         }
@@ -95,6 +98,27 @@ public class SqliteDbContextProviderTests
         await using var context = provider.CreateContext();
         Assert.AreEqual("preserved", await context.Database.SqlQueryRaw<string>("SELECT RegisteredName AS Value FROM Horses").SingleAsync());
         Assert.AreEqual(0, await context.Set<HorseRacingPrediction.Application.Queries.ReadModels.JraSubjectProfileReadModel>().CountAsync());
+        CollectionAssert.AreEquivalent(context.Database.GetMigrations().ToList(), (await context.Database.GetAppliedMigrationsAsync()).ToList());
+    }
+
+    [TestMethod]
+    public async Task Migrator_UpgradesJraProfileEnsureCreatedSchemaWithIdentityRepairTables()
+    {
+        using var provider = new SqliteDbContextProvider();
+        await using (var previous = provider.CreateContext())
+        {
+            await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairCandidates");
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairRedirects");
+            await previous.Database.ExecuteSqlRawAsync("INSERT INTO Horses (HorseId, RegisteredName, NormalizedName, Aliases) VALUES ('horse-legacy', 'preserved', 'preserved', '[]')");
+        }
+
+        await CreateMigrator(provider).MigrateAsync();
+
+        await using var context = provider.CreateContext();
+        Assert.AreEqual("preserved", await context.Database.SqlQueryRaw<string>("SELECT RegisteredName AS Value FROM Horses").SingleAsync());
+        Assert.AreEqual(0, await context.HorseIdentityRepairCandidates.CountAsync());
+        Assert.AreEqual(0, await context.HorseIdentityRepairRedirects.CountAsync());
         CollectionAssert.AreEquivalent(context.Database.GetMigrations().ToList(), (await context.Database.GetAppliedMigrationsAsync()).ToList());
     }
 

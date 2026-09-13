@@ -218,7 +218,7 @@ public sealed class RaceCardPageParserTests
                 new("1", []),
                 new(rows[0][2],
                 [
-                    new("div", ["name"], "エーオーキング"),
+                    new("a", ["name"], "エーオーキング", "/JRADB/accessU.html?CNAME=pw01dud002023106188/45"),
                     new("span", ["num"], "4.0"),
                     new("span", ["pop_rank"], "(3番人気)"),
                     new("div", ["cell", "weight"], "456kg(+6)"),
@@ -247,6 +247,8 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual(456, entry.BodyWeight);
         Assert.AreEqual(6, entry.BodyWeightChange);
         Assert.AreEqual("鹿", entry.CoatColor);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106188/45",
+            entry.HorseSourceIdentity);
     }
 
     // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、

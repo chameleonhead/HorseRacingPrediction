@@ -56,8 +56,10 @@ public sealed class JraSubjectCollectionHandlerTests
         var date = new DateOnly(2026, 9, 12);
         var race = new RaceId(date, RaceCourse.Tokyo, 11);
         var cardUrl = new Uri("https://example.test/card/11");
+        const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106188/45";
         var card = new JraRaceCardPage(cardUrl.AbsoluteUri, race, "test", new(15, 30),
-            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師")]);
+            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師",
+                HorseSourceIdentity: horseUrl)]);
         var sessions = new FakeJraSessionFactory
         {
             ConfigureNavigator = () => new FakeJraNavigator { DirectUrlFactory = _ => card },
@@ -81,6 +83,11 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
         Assert.IsTrue(requests.Requests.All(x => x.Priority == (int)CollectionPriority.High));
         Assert.IsTrue(requests.Requests.All(x => x.EffectiveDate == date));
+        var horseRequest = requests.Requests.Single(x => x.Resource.Type == ResourceType.Horse);
+        Assert.AreEqual(new Uri(horseUrl), horseRequest.ExplicitUrl);
+        Assert.AreEqual(horseUrl, horseRequest.Attributes["sourceIdentity"]);
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("テスト馬", horseUrl),
+            horseRequest.Resource.Id);
         var profileSink = new RecordingProfileSink();
         foreach (var request in requests.Requests)
         {

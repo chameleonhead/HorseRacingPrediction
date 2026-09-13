@@ -174,18 +174,26 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         UpsertHorseProfileCoreAsync(registeredName, normalizedName, sexCode, birthDate, ownerName,
             breederName, sireName, damName, damsireName, coatColor, cancellationToken);
 
+    public Task<string> UpsertHorseProfileByIdentityAsync(string registeredName, string? normalizedName,
+        string? sexCode, string? birthDate, string? ownerName, string? breederName, string? sireName,
+        string? damName, string? damsireName, string? coatColor, string? jraSourceIdentity,
+        CancellationToken cancellationToken = default) =>
+        UpsertHorseProfileCoreAsync(registeredName, normalizedName, sexCode, birthDate, ownerName,
+            breederName, sireName, damName, damsireName, coatColor, cancellationToken, jraSourceIdentity);
+
     private async Task<string> UpsertHorseProfileCoreAsync(
         string registeredName, string? normalizedName, string? sexCode, string? birthDate,
         string? ownerName, string? breederName, string? sireName, string? damName,
         string? damsireName, string? coatColor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? jraSourceIdentity = null)
     {
         ValidateRequiredText(registeredName, nameof(registeredName));
 
         try
         {
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? registeredName);
-            var horseId = DeterministicIdGenerator.BuildEntityId("horse", normalized);
+            var horseId = DeterministicIdGenerator.BuildHorseId(registeredName, jraSourceIdentity);
             var parsedBirthDate = TryParseDateOnly(birthDate);
 
             var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
@@ -443,6 +451,25 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? declaredWeightDiff,
         string? ownerName,
         CancellationToken cancellationToken = default)
+        => await UpsertRaceEntryCoreAsync(raceId, horseNumber, horseName, jockeyName, trainerName,
+            gateNumber, assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
+            null, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> UpsertRaceEntryCoreAsync(
+        string raceId,
+        int horseNumber,
+        string horseName,
+        string? jockeyName,
+        string? trainerName,
+        int? gateNumber,
+        decimal? assignedWeight,
+        string? sexCode,
+        int? age,
+        decimal? declaredWeight,
+        decimal? declaredWeightDiff,
+        string? ownerName,
+        string? jraHorseSourceIdentity,
+        CancellationToken cancellationToken)
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
@@ -461,6 +488,39 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
         if (existingEntry is not null)
         {
+            var identityHorseId = JraSourceIdentity.TryNormalizeHorse(jraHorseSourceIdentity, out _)
+                ? DeterministicIdGenerator.BuildHorseId(horseName, jraHorseSourceIdentity)
+                : null;
+            if (identityHorseId is not null && !string.Equals(existingEntry.HorseId, identityHorseId, StringComparison.Ordinal))
+            {
+                await UpsertHorseProfileByIdentityAsync(horseName, null, sexCode, null, ownerName,
+                    null, null, null, null, null, jraHorseSourceIdentity, cancellationToken).ConfigureAwait(false);
+                var replaceRequest = new
+                {
+                    EntryId = existingEntry.EntryId,
+                    HorseId = identityHorseId,
+                    HorseNumber = horseNumber,
+                    JockeyId = existingEntry.JockeyId,
+                    TrainerId = existingEntry.TrainerId,
+                    HorseName = horseName,
+                    JockeyName = cleanedJockeyName,
+                    TrainerName = trainerName,
+                    OwnerName = ownerName ?? existingEntry.OwnerName,
+                    GateNumber = gateNumber ?? existingEntry.GateNumber,
+                    AssignedWeight = assignedWeight ?? existingEntry.AssignedWeight,
+                    SexCode = sexCode ?? existingEntry.SexCode,
+                    Age = age ?? existingEntry.Age,
+                    DeclaredWeight = declaredWeight ?? existingEntry.DeclaredWeight,
+                    DeclaredWeightDiff = declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
+                    RunningStyleCode = existingEntry.RunningStyleCode,
+                    HorseSourceIdentity = jraHorseSourceIdentity,
+                };
+                var replaceResponse = await _httpClient.PostAsJsonAsync(
+                    $"/api/races/{Uri.EscapeDataString(raceId)}/entries", replaceRequest, cancellationToken)
+                    .ConfigureAwait(false);
+                replaceResponse.EnsureSuccessStatusCode();
+                return $"レース {raceId} の馬番 {horseNumber} をJRA識別子に基づく競走馬へ付け替えました。";
+            }
             // 既存エントリの場合でも、関連エンティティ欠落や名称欠落を補完する。
             await EnsureHorseExistsByIdAsync(existingEntry.HorseId, horseName, sexCode, cancellationToken).ConfigureAwait(false);
 
@@ -491,7 +551,11 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             return $"レース {raceId} の馬番 {horseNumber} の収集データを更新し、関連エンティティを補完しました。";
         }
 
-        var horseId = await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var horseId = JraSourceIdentity.TryNormalizeHorse(jraHorseSourceIdentity, out _)
+            ? await UpsertHorseProfileByIdentityAsync(horseName, null, sexCode, null, ownerName,
+                null, null, null, null, null, jraHorseSourceIdentity, cancellationToken).ConfigureAwait(false)
+            : await UpsertHorseAsync(horseName, normalizedName: null, sexCode: sexCode, birthDate: null,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         var jockeyId = string.IsNullOrWhiteSpace(cleanedJockeyName)
             ? null
             : await UpsertJockeyAsync(cleanedJockeyName, null, null, cancellationToken).ConfigureAwait(false);
@@ -516,7 +580,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             SexCode = sexCode,
             Age = age,
             DeclaredWeight = declaredWeight,
-            DeclaredWeightDiff = declaredWeightDiff
+            DeclaredWeightDiff = declaredWeightDiff,
+            HorseSourceIdentity = jraHorseSourceIdentity
         };
 
         var response = await _httpClient
@@ -532,6 +597,15 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         return $"レース {raceId} に馬番 {horseNumber} の出走登録を行いました。";
     }
+
+    public Task<string> UpsertRaceEntryWithHorseIdentityAsync(
+        string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName,
+        int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
+        decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
+        CancellationToken cancellationToken = default) =>
+        UpsertRaceEntryCoreAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
+            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
+            jraHorseSourceIdentity, cancellationToken);
 
     public async Task<string> DeclareRaceResultAsync(
         string raceId,

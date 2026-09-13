@@ -34,7 +34,10 @@ public sealed class SqliteDatabaseMigrator
         "OwnerAliasMappings",
         "OwnerMergeAudits"
     ];
-    private static readonly HashSet<string> CurrentEnsureCreatedTables = [.. PreviousEnsureCreatedTables, "JraSubjectProfileReadModel"];
+    private static readonly HashSet<string> JraProfileEnsureCreatedTables =
+        [.. PreviousEnsureCreatedTables, "JraSubjectProfileReadModel"];
+    private static readonly HashSet<string> CurrentEnsureCreatedTables =
+        [.. JraProfileEnsureCreatedTables, "HorseIdentityRepairCandidates", "HorseIdentityRepairRedirects"];
 
     private readonly IDbContextProvider<EventStoreDbContext> _contextProvider;
     private readonly SqliteMigrationOptions _options;
@@ -94,8 +97,9 @@ public sealed class SqliteDatabaseMigrator
 
         var isInitialSchema = existingTables.SetEquals(InitialTables);
         var isCurrentEnsureCreatedSchema = existingTables.SetEquals(CurrentEnsureCreatedTables);
+        var isJraProfileEnsureCreatedSchema = existingTables.SetEquals(JraProfileEnsureCreatedTables);
         var isPreviousEnsureCreatedSchema = existingTables.SetEquals(PreviousEnsureCreatedTables);
-        if (!isInitialSchema && !isCurrentEnsureCreatedSchema && !isPreviousEnsureCreatedSchema)
+        if (!isInitialSchema && !isCurrentEnsureCreatedSchema && !isJraProfileEnsureCreatedSchema && !isPreviousEnsureCreatedSchema)
         {
             var missing = InitialTables.Except(existingTables).OrderBy(x => x);
             var unexpected = existingTables.Except(InitialTables).OrderBy(x => x);
@@ -113,6 +117,12 @@ public sealed class SqliteDatabaseMigrator
             ? migrations.Where(migration =>
                 !migration.EndsWith("_StandardizeJstDateTimes", StringComparison.Ordinal)).ToList()
             : (IReadOnlyCollection<string>)[initialMigration];
+        if (isJraProfileEnsureCreatedSchema)
+        {
+            baselineMigrations = migrations.Where(migration =>
+                !migration.EndsWith("_StandardizeJstDateTimes", StringComparison.Ordinal)
+                && !migration.EndsWith("_AddHorseIdentityRepair", StringComparison.Ordinal)).ToList();
+        }
         if (isPreviousEnsureCreatedSchema)
         {
             await using var columnCommand = connection.CreateCommand();

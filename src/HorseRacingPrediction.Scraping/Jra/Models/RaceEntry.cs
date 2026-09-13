@@ -19,4 +19,5 @@ public sealed record RaceEntry(
     string? SireName = null,
     string? DamName = null,
     string? DamsireName = null,
-    string? CoatColor = null);
+    string? CoatColor = null,
+    string? HorseSourceIdentity = null);
