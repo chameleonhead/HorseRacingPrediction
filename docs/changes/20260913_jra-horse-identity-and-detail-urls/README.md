@@ -1,6 +1,6 @@
 # JRA競走馬の同定競合防止・不具合データ修復・詳細URL保証
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -95,6 +95,7 @@ DiscoveryがRaceCard/RaceResult子requestを作る際、詳細URLはHTTPS、JRA�
 
 ## Verification record
 
+- 2026-09-13: ユーザーが実装を明示的に依頼し、本change recordを承認したためExecution Modeへ移行した。
 - 2026-09-13: 本番対象画面で内部Horse ID `horse-349b8cd2-8278-5267-a7d7-2b7ab5f011bb`、名称「ビッグヒーロー」、生年月日なし、Location 0件を確認した。
 - 2026-09-13: 同画面の診断で `SubjectIdentification:MultipleCandidates` と、異なるJRA `accessU.html?CNAME=...` を持つ同名候補3件を確認した。
 - 2026-09-13: 本番Horse一覧では「ビッグヒーロー」の内部レコードは現時点で1件だった。JRA候補3件は同名別馬であり、その3件自体を名寄せしてはならない。
