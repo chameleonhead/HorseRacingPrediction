@@ -30,9 +30,10 @@ internal static class JraRaceLinkSelector
 
     private static string? NormalizeUrl(string? baseUrl, string url)
     {
-        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute))
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absolute) &&
+            absolute.Scheme is "http" or "https")
         {
-            return absolute.Scheme is "http" or "https" ? absolute.AbsoluteUri : null;
+            return absolute.AbsoluteUri;
         }
 
         return Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) &&

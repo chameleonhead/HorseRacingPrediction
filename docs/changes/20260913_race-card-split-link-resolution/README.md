@@ -69,3 +69,4 @@
 - 2026-09-13: Parser/Navigator focused tests 51件、Discovery handler tests 9件、Externalを除くsolution tests 857件（成功856、skip 1）が成功した。
 - 2026-09-13: 新規セッションの対象中山10R相当、現在週RaceCard、完了済みRaceResultの実サイト取得が成功した。
 - 2026-09-13: Discovery handlerが相対RaceCard URLを発見元ページ基準のHTTPS URLへ変換して依頼する既存テストを再確認した。
+- 2026-09-13: 初回CIでLinuxが`/JRADB/...`を`file:`絶対URIとして分類する実行環境差を検出した。絶対HTTP(S)だけを直接採用し、それ以外はHTTP(S)基準URLで解決するよう修正した。
