@@ -224,7 +224,7 @@ erDiagram
 
 詳細な対象境界、interaction、wireframe、受け入れ基準は [JRA競走馬識別子の不具合修復を管理画面から実行する](changes/20260914_horse-identity-repair-admin-ui/README.md) を参照する。
 
-後継設計では、同じ安全境界を競走馬・騎手・調教師・馬主の主体別「要対応データ補正ジョブ」へ拡張する。補正ジョブは同一JRA識別子または同一RaceEntryの再取得による置換を根拠として自動登録するが、自動適用せず、運用者が `/settings` で根拠と影響を確認して実行する。名前一致だけでは候補を作らない。収集失敗の再取得は引き続き `/jobs`、名寄せ・参照補正は `/settings` を正とする。設計・承認・実装状況は [4主体の要対応データ補正ジョブを管理画面から実行する](changes/20260914_subject-identity-repair-jobs/README.md) を参照する。
+後継設計では、同じ安全境界を競走馬・騎手・調教師・馬主の主体別「要対応データ補正」へ拡張する。対象の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブ、エラー、根拠と影響を確認して、識別情報の補正再収集または安全な場合だけ名寄せ後の再収集を実行する。名寄せ候補0件も正常に扱い、名前一致だけでは名寄せしない。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。設計・承認・実装状況は [4主体の要対応データ補正ジョブを管理画面から実行する](changes/20260914_subject-identity-repair-jobs/README.md) を参照する。
 
 ### 5.9 レース一覧 `/races`
 
