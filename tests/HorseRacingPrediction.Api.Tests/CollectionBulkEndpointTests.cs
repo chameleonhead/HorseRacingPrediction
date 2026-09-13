@@ -69,6 +69,24 @@ public sealed class CollectionBulkEndpointTests
             Assert.IsNotNull(trainerPreview);
             CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H1") },
                 trainerPreview.Resources.ToArray());
+
+            await collection.SuppressResourceAsync(new(ResourceType.Horse, "JRA", "H1"),
+                "Merged horse was deleted", "repair-1", DateTimeOffset.UtcNow);
+            var suppressedDatePreview = await (await client.PostAsJsonAsync(
+                "api/admin/collection/requests/bulk/preview", dateRequest)).Content
+                .ReadFromJsonAsync<CollectionBulkPreview>();
+            Assert.IsNotNull(suppressedDatePreview);
+            CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H2") },
+                suppressedDatePreview.Resources.ToArray());
+            var explicitRequest = new BulkCollectionOperationRequest("horse-profile", 1,
+                CollectionReason.ManualRefresh, BulkCollectionSelection.SpecificResources,
+                Resources: [new(ResourceType.Horse, "JRA", "H1"), new(ResourceType.Horse, "JRA", "H2")]);
+            var explicitPreview = await (await client.PostAsJsonAsync(
+                "api/admin/collection/requests/bulk/preview", explicitRequest)).Content
+                .ReadFromJsonAsync<CollectionBulkPreview>();
+            Assert.IsNotNull(explicitPreview);
+            CollectionAssert.AreEquivalent(new[] { new ResourceKey(ResourceType.Horse, "JRA", "H2") },
+                explicitPreview.Resources.ToArray());
         }
         finally { Directory.Delete(directory, true); }
     }

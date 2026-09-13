@@ -621,9 +621,12 @@ public sealed class CollectionPlatformStore
             {
                 task.Status = CollectionTaskStatus.Cancelled;
                 task.FinishedAt = now;
-                state.Status = CollectionStateStatus.Unknown;
+                var suppressed = await IsResourceSuppressedAsync(db, task.ResourcePk, cancellationToken)
+                    .ConfigureAwait(false);
+                state.Status = suppressed ? CollectionStateStatus.Unavailable : CollectionStateStatus.Unknown;
+                if (suppressed) state.NextCollectionAt = null;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
-                if (await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
+                if (!suppressed && await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
             }
             else if (completion.Result == CollectionAttemptResult.Succeeded)
@@ -1715,6 +1718,19 @@ public sealed class CollectionPlatformStore
             statuses.Count(x => x == CollectionTaskStatus.Running));
     }
 
+    public async Task<IReadOnlyList<CollectionBulkTarget>> ExcludeSuppressedResourcesAsync(
+        IEnumerable<CollectionBulkTarget> targets, CancellationToken cancellationToken = default)
+    {
+        var normalized = NormalizeBulkTargets(targets);
+        if (normalized.Count == 0) return normalized;
+        await using var db = CreateDbContext();
+        var suppressions = await db.ResourceSuppressions.AsNoTracking().ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return normalized.Where(target => !suppressions.Any(x => x.Type == target.Resource.Type
+                && x.Provider == target.Resource.Provider && x.ResourceId == target.Resource.Id))
+            .ToList();
+    }
+
     public async Task<bool> HeartbeatAsync(Guid taskId, string leaseToken, DateTimeOffset now,
         TimeSpan extension, CancellationToken cancellationToken = default)
     {
@@ -2407,9 +2423,12 @@ public sealed class CollectionPlatformStore
                 if (active is not null) db.ActiveTasks.Remove(active);
                 var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
                     && x.DefinitionId == task.DefinitionId, cancellationToken);
-                state.Status = CollectionStateStatus.Unknown;
+                var suppressed = await IsResourceSuppressedAsync(db, task.ResourcePk, cancellationToken)
+                    .ConfigureAwait(false);
+                state.Status = suppressed ? CollectionStateStatus.Unavailable : CollectionStateStatus.Unknown;
+                if (suppressed) state.NextCollectionAt = null;
                 state.UpdatedAt = now;
-                if (await ReopenFailuresAsync(db, task.TaskId, cancellationToken).ConfigureAwait(false) > 0)
+                if (!suppressed && await ReopenFailuresAsync(db, task.TaskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
                 continue;
             }
@@ -2432,4 +2451,13 @@ public sealed class CollectionPlatformStore
     }
 
     private CollectionPlatformDbContext CreateDbContext() => new(_dbOptions);
+
+    private static Task<bool> IsResourceSuppressedAsync(CollectionPlatformDbContext db, long resourcePk,
+        CancellationToken cancellationToken) =>
+        (from resource in db.Resources
+         join suppression in db.ResourceSuppressions
+             on new { resource.Type, resource.Provider, resource.ResourceId }
+             equals new { suppression.Type, suppression.Provider, suppression.ResourceId }
+         where resource.ResourcePk == resourcePk
+         select suppression).AnyAsync(cancellationToken);
 }

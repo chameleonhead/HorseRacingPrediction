@@ -1274,6 +1274,7 @@ public sealed class CollectionPlatformStoreTests
             new(CollectionAttemptResult.Cancelled)));
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
     }
 
     [TestMethod]
@@ -1291,5 +1292,21 @@ public sealed class CollectionPlatformStoreTests
         await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1", now.AddMinutes(2));
 
         Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10));
+    }
+
+    [TestMethod]
+    public async Task SuppressResource_ExpiredRunningLeaseRemainsUnavailable()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(1)));
+        await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1", now.AddSeconds(10));
+
+        Assert.AreEqual(1, await store.ReclaimExpiredLeasesAsync(now.AddMinutes(2)));
+
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
     }
 }

@@ -139,6 +139,9 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 - 2026-09-14: repair endpoint統合テストで、補正適用、source task取消、redirect、再要求拒否、再適用skipを検証した。Collection Platform storeテスト58件、solution全体931件（成功929、skip 2）が成功し、その後に追加したsuppressionのHTTP 409テストを含む関連5件も成功した。
 - 2026-09-14: ローカルの実ブラウザーで、認証後の空表示、通常候補、確認Dialog、390px狭幅のカードreflowを確認した。狭幅のdocument scroll widthは375pxで横overflowなし。通信失敗表示はbUnitで再現し、実ブラウザーの停止中サーバーを利用した不安定な再現は採用しなかった。
 - 2026-09-14: 最終production edit後に `codegraph sync .` を実行し、最新状態を確認した。`Settings.ApplyAsync` → `AdminApiClient.ApplyHorseIdentityRepairAsync` → repair endpoint → `CollectionPlatformStore.SuppressResourceAsync` の実経路と、suppressionのAPI・storeテストからの呼出しを `codegraph explore` で再確認した。
+- 2026-09-14: 実装レビューで、同一sourceの複数候補を同時適用した場合のredirect重複、Running取消完了後のstate上書き、bulk選択経路によるsuppression漏れを検出して修正した。同一source/target候補はsource単位でredirectを一度だけ作成し、異なるtargetが混在する場合はtransaction内で競合として拒否する。
+- 2026-09-14: Running taskの通常取消完了とlease失効回収の両方でsuppressionを再確認し、`Unavailable`と`NextCollectionAt = null`を維持するよう修正した。全bulk selectionを共通suppression filterへ通し、日付選択と明示指定のpreviewテストを追加した。
+- 2026-09-14: レビュー修正後に `codegraph sync .` と経路再確認を実行した。`dotnet test HorseRacingPrediction.sln -c Release --no-restore` は全933件中、成功931件・skip 2件・失敗0件だった。
 
 ## Implementation result
 

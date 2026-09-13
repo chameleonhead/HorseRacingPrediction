@@ -373,40 +373,45 @@ public static class CollectionPlatformEndpointExtensions
         IDbContextProvider<EventStoreDbContext> domainProvider,
         IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token)
     {
+        IReadOnlyList<CollectionBulkTarget> targets;
         if (request.Selection == BulkCollectionSelection.SpecificResources)
-            return (request.Resources ?? []).Select(x => new CollectionBulkTarget(x)).ToList();
-        if (request.Selection == BulkCollectionSelection.LastCollectedBefore)
-            return await store.SelectBulkTargetsAsync(new(request.DefinitionId), request.LastCollectedBefore,
-                cancellationToken: token);
-        if (request.Selection is BulkCollectionSelection.Failed or BulkCollectionSelection.Stale)
-            return await store.SelectBulkTargetsAsync(new(request.DefinitionId), status:
+            targets = (request.Resources ?? []).Select(x => new CollectionBulkTarget(x)).ToList();
+        else if (request.Selection == BulkCollectionSelection.LastCollectedBefore)
+            targets = await store.SelectBulkTargetsAsync(new(request.DefinitionId), request.LastCollectedBefore,
+                cancellationToken: token).ConfigureAwait(false);
+        else if (request.Selection is BulkCollectionSelection.Failed or BulkCollectionSelection.Stale)
+            targets = await store.SelectBulkTargetsAsync(new(request.DefinitionId), status:
                 request.Selection == BulkCollectionSelection.Failed ? CollectionStateStatus.Failed : CollectionStateStatus.Stale,
-                cancellationToken: token);
-        if (request.Selection == BulkCollectionSelection.RevisionImpact)
-            return await store.GetRevisionImpactTargetsAsync(new(request.DefinitionId),
-                request.ImpactRevision ?? throw new ArgumentException("ImpactRevision is required."), conditions, token);
-
-        await using var db = domainProvider.CreateContext();
-        var contexts = await db.RacePredictionContexts.AsNoTracking().ToListAsync(token).ConfigureAwait(false);
-        IEnumerable<RacePredictionContextReadModel> selected = contexts;
-        if (request.Selection == BulkCollectionSelection.HorsesRacedInDateRange)
+                cancellationToken: token).ConfigureAwait(false);
+        else if (request.Selection == BulkCollectionSelection.RevisionImpact)
+            targets = await store.GetRevisionImpactTargetsAsync(new(request.DefinitionId),
+                request.ImpactRevision ?? throw new ArgumentException("ImpactRevision is required."), conditions, token)
+                .ConfigureAwait(false);
+        else
         {
-            if (request.From is null || request.To is null || request.From > request.To)
-                throw new ArgumentException("A valid From/To range is required.");
-            selected = contexts.Where(x => x.RaceDate >= request.From && x.RaceDate <= request.To);
+            await using var db = domainProvider.CreateContext();
+            var contexts = await db.RacePredictionContexts.AsNoTracking().ToListAsync(token).ConfigureAwait(false);
+            IEnumerable<RacePredictionContextReadModel> selected = contexts;
+            if (request.Selection == BulkCollectionSelection.HorsesRacedInDateRange)
+            {
+                if (request.From is null || request.To is null || request.From > request.To)
+                    throw new ArgumentException("A valid From/To range is required.");
+                selected = contexts.Where(x => x.RaceDate >= request.From && x.RaceDate <= request.To);
+            }
+            else if (request.Selection == BulkCollectionSelection.HorsesByTrainer)
+            {
+                if (string.IsNullOrWhiteSpace(request.TrainerId)) throw new ArgumentException("TrainerId is required.");
+                selected = contexts.Where(x => x.Entries.Any(e => string.Equals(e.TrainerId, request.TrainerId,
+                    StringComparison.Ordinal)));
+            }
+            else throw new ArgumentOutOfRangeException(nameof(request.Selection));
+            targets = selected.SelectMany(x => x.Entries)
+                .Where(x => request.Selection != BulkCollectionSelection.HorsesByTrainer
+                            || string.Equals(x.TrainerId, request.TrainerId, StringComparison.Ordinal))
+                .Select(x => x.HorseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)
+                .Select(x => new CollectionBulkTarget(new(ResourceType.Horse, request.Provider, x))).ToList();
         }
-        else if (request.Selection == BulkCollectionSelection.HorsesByTrainer)
-        {
-            if (string.IsNullOrWhiteSpace(request.TrainerId)) throw new ArgumentException("TrainerId is required.");
-            selected = contexts.Where(x => x.Entries.Any(e => string.Equals(e.TrainerId, request.TrainerId,
-                StringComparison.Ordinal)));
-        }
-        else throw new ArgumentOutOfRangeException(nameof(request.Selection));
-        return selected.SelectMany(x => x.Entries)
-            .Where(x => request.Selection != BulkCollectionSelection.HorsesByTrainer
-                        || string.Equals(x.TrainerId, request.TrainerId, StringComparison.Ordinal))
-            .Select(x => x.HorseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)
-            .Select(x => new CollectionBulkTarget(new(ResourceType.Horse, request.Provider, x))).ToList();
+        return await store.ExcludeSuppressedResourcesAsync(targets, token).ConfigureAwait(false);
     }
 }
 

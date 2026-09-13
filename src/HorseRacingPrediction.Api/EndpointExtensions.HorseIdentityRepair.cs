@@ -59,31 +59,41 @@ public static partial class EndpointExtensions
                 var blocked = selected.Where(x => !x.SafeToApply).ToArray();
                 if (blocked.Length > 0)
                     return Results.Conflict(blocked.Select(x => $"{x.CandidateId}: {x.BlockingReason}").ToArray());
+                var conflictingSources = selected.GroupBy(x => x.SourceHorseId, StringComparer.Ordinal)
+                    .Where(group => group.Select(x => x.TargetHorseId).Distinct(StringComparer.Ordinal).Count() > 1)
+                    .Select(group => group.Key).ToArray();
+                if (conflictingSources.Length > 0)
+                    return Results.Conflict(conflictingSources.Select(x =>
+                        $"{x}に複数の統合先候補があります。候補を個別に再確認してください。").ToArray());
 
                 var applied = 0;
-                foreach (var item in selected)
+                foreach (var sourceGroup in selected.GroupBy(x => x.SourceHorseId, StringComparer.Ordinal))
                 {
-                    var candidate = await db.HorseIdentityRepairCandidates.SingleAsync(
-                        x => x.CandidateId == item.CandidateId, token).ConfigureAwait(false);
+                    var targetHorseId = sourceGroup.First().TargetHorseId;
                     var redirect = await db.HorseIdentityRepairRedirects.SingleOrDefaultAsync(
-                        x => x.SourceHorseId == candidate.SourceHorseId, token).ConfigureAwait(false);
+                        x => x.SourceHorseId == sourceGroup.Key, token).ConfigureAwait(false);
                     if (redirect is null)
                     {
                         db.HorseIdentityRepairRedirects.Add(new HorseIdentityRepairRedirectReadModel
                         {
-                            SourceHorseId = candidate.SourceHorseId,
-                            TargetHorseId = candidate.TargetHorseId,
+                            SourceHorseId = sourceGroup.Key,
+                            TargetHorseId = targetHorseId,
                             RepairId = HorseIdentityRepairId,
-                            JraIdentity = candidate.JraIdentity,
+                            JraIdentity = sourceGroup.First().JraIdentity,
                             CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                         });
                     }
-                    else if (!string.Equals(redirect.TargetHorseId, candidate.TargetHorseId, StringComparison.Ordinal))
+                    else if (!string.Equals(redirect.TargetHorseId, targetHorseId, StringComparison.Ordinal))
                     {
-                        return Results.Conflict(new[] { $"{candidate.SourceHorseId}には異なるredirect先があります。" });
+                        return Results.Conflict(new[] { $"{sourceGroup.Key}には異なるredirect先があります。" });
                     }
-                    candidate.AppliedAt ??= HorseRacingPrediction.Contracts.Time.JstTime.Now();
-                    applied++;
+                    foreach (var item in sourceGroup)
+                    {
+                        var candidate = await db.HorseIdentityRepairCandidates.SingleAsync(
+                            x => x.CandidateId == item.CandidateId, token).ConfigureAwait(false);
+                        candidate.AppliedAt ??= HorseRacingPrediction.Contracts.Time.JstTime.Now();
+                        applied++;
+                    }
                 }
                 await db.SaveChangesAsync(token).ConfigureAwait(false);
                 await transaction.CommitAsync(token).ConfigureAwait(false);

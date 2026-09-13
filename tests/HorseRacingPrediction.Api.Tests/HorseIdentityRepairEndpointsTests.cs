@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using EventFlow.EntityFramework;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -39,6 +42,22 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
             new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
                 EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).StatusCode);
+        using (var repairDb = application.Services
+                   .GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            repairDb.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
+            {
+                CandidateId = $"20260913-jra-horse-identity-repair:{raceId}:duplicate-evidence",
+                RepairId = "20260913-jra-horse-identity-repair",
+                SourceHorseId = sourceId,
+                TargetHorseId = targetId,
+                JraIdentity = $"pw01dud00{suffix}/45",
+                RaceId = raceId,
+                EntryId = entryId,
+                DetectedAt = DateTimeOffset.UtcNow,
+            });
+            await repairDb.SaveChangesAsync();
+        }
         var collectionStore = application.Services.GetRequiredService<CollectionPlatformStore>();
         var sourceResource = new ResourceKey(ResourceType.Horse, "JRA", sourceId);
         const int revision = 1;
@@ -49,13 +68,14 @@ public sealed class HorseIdentityRepairEndpointsTests
 
         var preview = await http.GetFromJsonAsync<HorseIdentityRepairPreviewResponse>(
             "/api/admin/repairs/20260913-jra-horse-identity");
-        var candidate = preview!.Candidates.Single();
-        Assert.IsTrue(candidate.SafeToApply, candidate.BlockingReason);
-        Assert.AreEqual(sourceId, candidate.SourceHorseId);
-        Assert.AreEqual(targetId, candidate.TargetHorseId);
+        var candidates = preview!.Candidates.ToArray();
+        Assert.HasCount(2, candidates);
+        Assert.IsTrue(candidates.All(x => x.SafeToApply), string.Join("; ", candidates.Select(x => x.BlockingReason)));
+        Assert.IsTrue(candidates.All(x => x.SourceHorseId == sourceId));
+        Assert.IsTrue(candidates.All(x => x.TargetHorseId == targetId));
 
         var apply = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",
-            new ApplyHorseIdentityRepairRequest([candidate.CandidateId]));
+            new ApplyHorseIdentityRepairRequest(candidates.Select(x => x.CandidateId).ToArray()));
         Assert.AreEqual(HttpStatusCode.OK, apply.StatusCode);
         var applied = await apply.Content.ReadFromJsonAsync<ApplyHorseIdentityRepairResponse>();
         Assert.AreEqual(1, applied!.DisabledCollectionTaskCount);
@@ -70,10 +90,10 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(targetId, resolved!.HorseId);
 
         var second = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",
-            new ApplyHorseIdentityRepairRequest([candidate.CandidateId]));
+            new ApplyHorseIdentityRepairRequest(candidates.Select(x => x.CandidateId).ToArray()));
         Assert.AreEqual(HttpStatusCode.OK, second.StatusCode);
         var repeated = await second.Content.ReadFromJsonAsync<ApplyHorseIdentityRepairResponse>();
         Assert.AreEqual(0, repeated!.AppliedCount);
-        Assert.AreEqual(1, repeated.SkippedCount);
+        Assert.AreEqual(2, repeated.SkippedCount);
     }
 }
