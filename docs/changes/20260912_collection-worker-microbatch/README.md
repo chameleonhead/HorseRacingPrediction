@@ -145,3 +145,29 @@ Envelope作成時はOutbox行を短いreservation leaseで確保し、複数API 
 
 - `CollectionExecutionBatch`専用テーブルは追加せず、Attemptの相関列を正本としてオンデマンドProjectionを構成した。個別Taskの状態管理を増やさずAcceptance 16を満たせるためである。
 - 運用画面の集約メトリクスのうち、個別batchの件数・所要時間・Task結果は実装した。複数batch横断の件数、1 invocationあたり平均Task数、browser起動時間は計測イベントと保持期間の設計が必要なため未実装であり、今回の完了範囲には含めない。
+
+## 2026-09-13 production follow-up
+
+本番で共有ブラウザーセッションを同日Taskへ適用した結果、単独実行では現れなかった
+ページ間状態の混線を検出した。RaceResultの近道は遷移後のページ種別だけを確認しており、
+前Taskと競馬場が異なる同一レース番号を要求すると、前競馬場の結果を返していた。
+RaceCardでは一覧のURL候補がオッズタブを指す場合があり、候補URLを正解として扱うと
+出馬表取得が終了していた。
+
+承認済みの「異なる対象を混同しない」「URLは候補であり内容検証とfallbackを行う」という
+受け入れ条件に従い、以下を追加する。
+
+- 共有sessionの近道でもResource TypeだけでなくRaceId全体を検証する。
+- RaceResultの近道が別Raceを返した場合は開催選択からのfull navigationへ戻る。
+- RaceCardのURL候補が別タブを返した場合は、同じRaceの出馬表操作で再解決する。
+- Discoveryは取得ページの日付・競馬場と要求値を照合し、不一致ページからResourceやLocationを作らない。
+- 単一Taskだけでなく、同日・異競馬場の連続Taskを回帰テストする。
+
+実装では、RaceResult shortcutのRaceId完全一致確認、RaceCard候補から別タブへ到達した場合の
+出馬表操作fallback、Discoveryページの日付・競馬場検証を追加した。開催週のRaceCardから
+発見したHorse/Jockey/Trainerは開催日を引き継いでRealtime・Highとし、開催後の定期更新は
+既存Schedule PolicyのNormal・Lowへ戻る。
+
+検証結果: CIと同じRelease solution buildは警告0・エラー0、`TestCategory!=External`は
+Contracts 38、Domain 96、Application 56、Infrastructure 11、MachineLearning 14、Agents 106、
+Scraping 211、Collector 149、Api 178（skip 1）が成功した。

@@ -338,6 +338,26 @@ public sealed partial class JraNavigator
             await _pageReader.ReadAsync(
                 cancellationToken);
 
+        // JRAの一覧に含まれるhrefは、同じレースの別タブ（オッズ等）を初期表示する
+        // URLになる場合がある。URLは取得候補にすぎないため、内容が出馬表でなければ
+        // 現在レースの「出馬表」操作を使って再解決する。
+        if (page is not JraRaceCardPage)
+        {
+            try
+            {
+                await _browser.ClickAsync(JraNavigationLinks.RaceCard[0], cancellationToken);
+                page = await _pageReader.ReadAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "JRA RaceCard candidate fallback failed. Race={Race} CandidateKind={Kind} CandidateUrl={Url}",
+                    race,
+                    page.Kind,
+                    page.Url);
+            }
+        }
+
         _logger.LogInformation(
             "JRA navigation done. Destination=RaceCard ResolvedKind={Kind} Url={Url}",
             page.Kind,
@@ -557,10 +577,16 @@ public sealed partial class JraNavigator
             {
                 page = await _pageReader.ReadAsync(cancellationToken);
 
-                if (page.Kind == JraPageKind.RaceResult)
+                if (page is JraRaceResultPage resultPage && resultPage.RaceId == race)
                 {
                     return page;
                 }
+
+                _logger.LogWarning(
+                    "JRA RaceResult shortcut reached another resource. Expected={Expected} ActualKind={Kind} ActualUrl={Url}; falling back to full navigation.",
+                    race,
+                    page.Kind,
+                    page.Url);
             }
         }
         catch (JraNavigationException)

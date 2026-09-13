@@ -88,7 +88,8 @@ public sealed class JraNavigatorTests
         return new TestPageSnapshot(url, $"{dateCourse} {headingSuffix} 出馬表", [section]);
     }
 
-    private static TestPageSnapshot BuildRaceResultSnapshot(string url, string headingSuffix = "11R")
+    private static TestPageSnapshot BuildRaceResultSnapshot(string url, string headingSuffix = "11R",
+        string dateCourse = "2026年9月5日 中山")
     {
         var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム"],
@@ -102,9 +103,9 @@ public sealed class JraNavigatorTests
             tables: [table],
             // 実サイトでは日付+レース番号を含む見出しの直後にレース名見出しが続く
             // (RaceResultPageParser.ParseRaceName参照)。
-            headings: [$"2026年9月5日 中山 {headingSuffix}", "テストレース"]);
+            headings: [$"{dateCourse} {headingSuffix}", "テストレース"]);
 
-        return new TestPageSnapshot(url, $"2026年9月5日 中山 {headingSuffix} レース結果", [section]);
+        return new TestPageSnapshot(url, $"{dateCourse} {headingSuffix} レース結果", [section]);
     }
 
     private static JraPageReader CreateReader(FakeWebBrowser browser)
@@ -372,7 +373,7 @@ public sealed class JraNavigatorTests
             new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11)));
         StringAssert.Contains(exception.Message, "Expected=RaceCard");
         StringAssert.Contains(exception.Message, "ExpectedResourceId=");
-        StringAssert.Contains(exception.Message, wrongUrl);
+        CollectionAssert.Contains(browser.NavigatedUrls, wrongUrl);
     }
 
     [TestMethod]
@@ -566,6 +567,36 @@ public sealed class JraNavigatorTests
 
         // 開催選択トップ（重い経路）へは一切遷移していないこと。
         CollectionAssert.DoesNotContain(browser.NavigatedUrls, ResultSelectionUrl);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultAsync_ShortcutOpensOtherCourse_FallsBackToRequestedMeeting()
+    {
+        const string currentUrl = "https://www.jra.go.jp/keiba/sample/result/hanshin/1/";
+        const string wrongShortcutUrl = "https://www.jra.go.jp/keiba/sample/result/hanshin/2/";
+        const string requestedUrl = "https://www.jra.go.jp/keiba/sample/result/nakayama/2/";
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(currentUrl);
+        browser.SetLinks(currentUrl, [new TestPageLink(wrongShortcutUrl, "2レース結果")]);
+        browser.SetSnapshot(wrongShortcutUrl,
+            BuildRaceResultSnapshot(wrongShortcutUrl, "2R", "2026年9月5日 阪神"));
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", requestedUrl);
+        browser.SetLinks(requestedUrl, [new TestPageLink(requestedUrl, "2レース")]);
+        browser.SetSnapshot(requestedUrl, BuildRaceResultSnapshot(requestedUrl, "2R"));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var page = await navigator.ToRaceResultAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2));
+
+        Assert.AreEqual(new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 2),
+            ((JraRaceResultPage)page).RaceId);
+        CollectionAssert.Contains(browser.NavigatedUrls, wrongShortcutUrl);
+        CollectionAssert.Contains(browser.NavigatedUrls, ResultSelectionUrl);
+        CollectionAssert.Contains(browser.NavigatedUrls, requestedUrl);
     }
 
     [TestMethod]

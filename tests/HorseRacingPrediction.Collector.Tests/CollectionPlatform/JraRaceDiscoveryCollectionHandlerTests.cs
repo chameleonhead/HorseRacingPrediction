@@ -74,6 +74,31 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task Discovery_PageBelongsToAnotherCourse_CreatesNoRequests()
+    {
+        var date = new DateOnly(2026, 9, 13);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, _) => new JraRaceListPage(
+                    "https://example.test/hanshin", target, RaceCourse.Hanshin,
+                    [new(new(target, RaceCourse.Hanshin, 8), "wrong course", new(14, 0),
+                        "https://example.test/card/8", null)]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
+
+        await Assert.ThrowsExactlyAsync<JraRaceIdentityMismatchException>(() =>
+            handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+
+        Assert.IsEmpty(sink.Requests);
+    }
+
+    [TestMethod]
     public async Task BackfillDiscovery_VisitsOnlyItsDayAndPropagatesBatchId()
     {
         var date = new DateOnly(2020, 1, 5);

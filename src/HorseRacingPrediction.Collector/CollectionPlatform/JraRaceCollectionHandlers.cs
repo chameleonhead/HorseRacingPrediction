@@ -69,6 +69,15 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     throw new JraCollectionException(
                         $"レース一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}");
                 }
+                if (page is JraRaceListPage parsedList
+                    && (parsedList.Date != date || parsedList.Course != course))
+                {
+                    throw new JraRaceIdentityMismatchException(
+                        JraPageKind.RaceList,
+                        parsedList.Url,
+                        $"{date:yyyy-MM-dd}:{course}",
+                        $"{parsedList.Date:yyyy-MM-dd}:{parsedList.Course}");
+                }
                 var races = page switch
                 {
                     JraRaceListPage list => list.Races,
@@ -77,6 +86,14 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                 };
                 foreach (var race in races)
                 {
+                    if (race.Id.Date != date || race.Id.Course != course)
+                    {
+                        throw new JraRaceIdentityMismatchException(
+                            page.Kind,
+                            page.Url,
+                            $"{date:yyyy-MM-dd}:{course}:{race.Number}",
+                            race.Id.ToString());
+                    }
                     var id = $"{date:yyyyMMdd}:{course}:{race.Number}";
                     var attributes = new Dictionary<string, string>
                     {
@@ -229,7 +246,8 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             }
         }
         if (requests is not null && result.Entries is not null)
-            await RequestReferencedSubjectsAsync(result.Entries, result.RaceId!, requests, cancellationToken).ConfigureAwait(false);
+            await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests, cancellationToken)
+                .ConfigureAwait(false);
         if (predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result.RaceId!], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
@@ -259,9 +277,17 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
         return new(task.EffectiveDate.Value, RaceCourseNames.Parse(course), number);
     }
 
-    private static async Task RequestReferencedSubjectsAsync(IReadOnlyList<RaceEntry> entries, string requestedByRaceId,
+    private async Task RequestReferencedSubjectsAsync(LeasedCollectionTask task,
+        IReadOnlyList<RaceEntry> entries, string requestedByRaceId,
         ICollectionRequestSink sink, CancellationToken cancellationToken)
     {
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
+        var effectiveDate = task.EffectiveDate ?? today;
+        var weekendRelated = effectiveDate >= today && effectiveDate <= today.AddDays(7);
+        var lane = weekendRelated ? CollectionLane.Realtime : CollectionLane.Normal;
+        var priority = weekendRelated ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
         var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name)[]
             {
                 (ResourceType.Horse, entry.HorseName),
@@ -276,12 +302,13 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
             var id = DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix, subject.Name);
             await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
-                CollectionReason.Discovery, CollectionLane.Normal, (int)CollectionPriority.Low, null,
-                DateOnly.FromDateTime(DateTime.UtcNow),
+                CollectionReason.Discovery, lane, priority, null,
+                effectiveDate,
                 new Dictionary<string, string>
                 {
                     ["name"] = subject.Name,
                     ["requestedByRaceId"] = requestedByRaceId,
+                    ["weekendPriorityUntil"] = effectiveDate.ToString("yyyy-MM-dd"),
                 }, cancellationToken)
                 .ConfigureAwait(false);
         }

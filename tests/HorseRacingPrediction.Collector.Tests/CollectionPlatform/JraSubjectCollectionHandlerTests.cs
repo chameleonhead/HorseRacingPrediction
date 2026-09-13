@@ -25,7 +25,8 @@ public sealed class JraSubjectCollectionHandlerTests
         };
         var requests = new RecordingRequestSink();
         var raceHandler = new JraRaceCardCollectionHandler(sessions,
-            _ => new FakeJraRaceCardCollectionWorkflow(), requests: requests);
+            _ => new FakeJraRaceCardCollectionWorkflow(), requests: requests,
+            timeProvider: new FixedTimeProvider(new(2026, 9, 11, 0, 0, 0, TimeSpan.Zero)));
 
         var raceResult = await raceHandler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
@@ -38,6 +39,9 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, raceResult.Result);
         CollectionAssert.AreEquivalent(new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer },
             requests.Requests.Select(x => x.Resource.Type).ToArray());
+        Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
+        Assert.IsTrue(requests.Requests.All(x => x.Priority == (int)CollectionPriority.High));
+        Assert.IsTrue(requests.Requests.All(x => x.EffectiveDate == date));
         var profileSink = new RecordingProfileSink();
         foreach (var request in requests.Requests)
         {
@@ -197,13 +201,19 @@ public sealed class JraSubjectCollectionHandlerTests
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add(new(resource, definition, attributes));
+            Requests.Add(new(resource, definition, lane, priority, effectiveDate, attributes));
             return Task.CompletedTask;
         }
     }
 
     private sealed record Request(ResourceKey Resource, CollectionDefinitionId Definition,
+        CollectionLane Lane, int Priority, DateOnly EffectiveDate,
         IReadOnlyDictionary<string, string> Attributes);
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     private sealed class RecordingProfileSink : IJraSubjectProfileSink
     {
