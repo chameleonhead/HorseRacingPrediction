@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -358,7 +358,7 @@ push `95bec01` のUbuntu CIで、ローカル完了判定に含めていなか�
 | --- | --- | --- | --- | --- | --- |
 | CI1 | `dotnet format --verify-no-changes` が今回の変更箇所を含む未整形コードを検出 | Main / Lead | formatter対象C#、本記録 | workflowと同じformat検証がexit 0 | Verified |
 | CI2 | `SelectingToday_UpdatesUrlAndSelectsTodayPanel` がrunnerのローカル日付をJSTの「今日」と比較 | Main / Lead | `RaceListTabsComponentTests.cs`、本記録 | `JstTime.Today()`へ統一しRelease全test成功 | Verified |
-| CI3 | 修正push後の`app-ci`と`app-deploy`を終端まで確認 | Main / Lead | GitHub Actions（監視のみ） | 同一commitの両workflowがsuccess | Runnable |
+| CI3 | 修正push後の`app-ci`と`app-deploy`を終端まで確認 | Main / Lead | GitHub Actions（監視のみ） | commit `911ab53` の両workflowがsuccess、production health成功 | Verified |
 | CI4 | コミット前にCIのformat検証が抜けるprocess gapを修正 | Main / Lead | `.codex/skills/document-driven-development/SKILL.md`、本記録 | skill validator成功、exact format gate再実行 | Verified |
 
 Pre-implementation review: CI1とCI2は独立原因だがformatterが共有ファイルを書き換えるため主担当で直列実行する。
@@ -370,3 +370,13 @@ CI4は、既存のpush後CI parity規則だけではコミット前format実行�
 Checkpoint review: `dotnet format`でCI指摘4ファイルを整形し、日付テストをJST基準へ統一した。skill validator、
 workflowと同一のformat検証、Release build、pending migration確認、空SQLiteへの全migration適用、Release全test
 （External除外、失敗0）、脆弱package確認（該当0）が成功した。CI3だけを修正commitのpush後に確認する。
+
+Final review: commit `911ab53` の
+[`app-ci`](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/34772776045) はformatを含む全step、
+[`app-deploy`](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/34772776015) はverify、API image、Collector Lambda、
+production再起動、health checkまで成功した。CI1〜CI4に未完了項目はない。Node.js 20 deprecation annotationは今回の
+失敗原因ではなく、GitHubがNode.js 24で互換実行して全jobが成功しているため、本変更の受け入れ基準を阻害しない。
+
+Delegation record: CIログとworkflowのread-only調査をWorker tierへ1件委譲し、再試行0、write 0で、run ID、runner OS、
+失敗command、failure locationを取得した。主担当がraw logとworkflowを照合して採用し、修正・skill更新・全検証・監視を担当した。
+利用量の測定値は取得不可。独立調査により原因特定が並行化され、reworkは発生しなかった。
