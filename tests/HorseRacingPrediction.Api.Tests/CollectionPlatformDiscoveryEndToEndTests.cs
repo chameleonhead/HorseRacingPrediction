@@ -106,6 +106,25 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             Assert.AreEqual(card.Resource.Id, odds.Resource.Id);
             Assert.AreEqual(15, schedule.RequestedDates.Count); // the approved ±7 day discovery window
             Assert.HasCount(1, sessions.Navigator.RaceListRequests);
+
+            using var rediscoveryResponse = await client.PostAsJsonAsync("api/admin/collection/requests", new
+            {
+                ResourceType = ResourceType.RaceCard,
+                Provider = "JRA",
+                ResourceId = card.Resource.Id,
+                DefinitionId = "race-card",
+                RequestedRevision = 1,
+                Reason = CollectionReason.Discovery,
+                Lane = CollectionLane.Realtime,
+                Priority = 80,
+                EffectiveDate = date,
+            });
+            rediscoveryResponse.EnsureSuccessStatusCode();
+            var rediscovery = await rediscoveryResponse.Content.ReadFromJsonAsync<CollectionRequestReceipt>();
+            Assert.IsNotNull(rediscovery);
+            Assert.IsFalse(rediscovery.CreatedTask);
+            Assert.AreEqual(card.TaskId, rediscovery.TaskId);
+            Assert.HasCount(4, await store.GetTasksAsync(limit: 10));
         }
         finally
         {

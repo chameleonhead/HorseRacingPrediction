@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 7;
+    internal const int CurrentVersion = 8;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -77,7 +77,7 @@ internal static class CollectionPlatformSchemaMigrator
                 var baselineVersion = existing.Contains("collection_platform_controls")
                     && existing.Contains("collection_failure_notifications")
                     ? existing.Contains("collection_backfill_batches")
-                        ? hasResolution ? hasOutboxReservation ? hasAttemptCorrelation ? CurrentVersion : 5 : 4 : 3 : 2
+                        ? hasResolution ? hasOutboxReservation ? hasAttemptCorrelation ? 7 : 5 : 4 : 3 : 2
                     : 1;
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
@@ -213,6 +213,18 @@ internal static class CollectionPlatformSchemaMigrator
             await ExecuteAsync(connection,
                 "INSERT INTO collection_schema_history (version, applied_at) VALUES (7, $appliedAt);",
                 cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+            version = 7;
+        }
+
+        if (version < 8)
+        {
+            await ExecuteAsync(connection, """
+                CREATE INDEX IF NOT EXISTS IX_collection_tasks_ResourcePk_DefinitionId_RequestedRevision_CreatedAt
+                    ON collection_tasks (ResourcePk, DefinitionId, RequestedRevision, CreatedAt);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (8, $appliedAt);
+                """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);
         }

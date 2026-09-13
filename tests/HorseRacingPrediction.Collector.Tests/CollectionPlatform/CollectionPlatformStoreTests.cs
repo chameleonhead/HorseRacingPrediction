@@ -35,7 +35,6 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
-
         var second = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddDays(1));
 
         Assert.IsTrue(second.CreatedTask);
@@ -44,6 +43,94 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(state);
         Assert.AreEqual(7, state.AppliedRevision);
         Assert.AreEqual(CollectionStateStatus.Pending, state.Status);
+    }
+
+    [TestMethod]
+    [DataRow(CollectionReason.Initial)]
+    [DataRow(CollectionReason.Backfill)]
+    [DataRow(CollectionReason.Discovery)]
+    public async Task OrdinaryRegistration_ReusesExistingRevisionWithoutAddingHistoryOrDispatch(
+        CollectionReason reason)
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded)));
+        var dispatchCountBeforeDuplicate = (await store.GetPendingDispatchesAsync(now.AddDays(1), 10)).Count;
+
+        var duplicate = await store.RequestAsync(Horse, HorseProfile, 7, reason, now.AddDays(1),
+            attributes: new Dictionary<string, string> { ["source"] = "rediscovered" });
+
+        Assert.IsFalse(duplicate.CreatedTask);
+        Assert.AreEqual(first.RequestId, duplicate.RequestId);
+        Assert.AreEqual(first.TaskId, duplicate.TaskId);
+        Assert.HasCount(1, await store.GetTasksAsync());
+        var detail = await store.GetResourceDetailAsync(Horse, HorseProfile);
+        Assert.IsNotNull(detail);
+        Assert.HasCount(1, detail.Requests);
+        Assert.AreEqual(dispatchCountBeforeDuplicate,
+            (await store.GetPendingDispatchesAsync(now.AddDays(1), 10)).Count);
+    }
+
+    [TestMethod]
+    public async Task OrdinaryRegistration_CreatesTaskForANewerRevision()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded)));
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 8,
+            "Updated profile extractor", true);
+
+        var updated = await store.RequestAsync(Horse, HorseProfile, 8, CollectionReason.Discovery, now.AddDays(1));
+
+        Assert.IsTrue(updated.CreatedTask);
+        Assert.AreNotEqual(first.TaskId, updated.TaskId);
+        Assert.HasCount(2, await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    [DataRow(CollectionReason.ManualRefresh)]
+    [DataRow(CollectionReason.Recovery)]
+    [DataRow(CollectionReason.ScheduledRefresh)]
+    [DataRow(CollectionReason.DefinitionChanged)]
+    public async Task RefreshReasons_CreateAnotherTaskForExistingRevision(CollectionReason reason)
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+            new(CollectionAttemptResult.Succeeded)));
+
+        var refresh = await store.RequestAsync(Horse, HorseProfile, 7, reason, now.AddDays(1));
+
+        Assert.IsTrue(refresh.CreatedTask);
+        Assert.AreNotEqual(first.TaskId, refresh.TaskId);
+        Assert.HasCount(2, await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    public async Task ConcurrentOrdinaryRegistrations_CreateAtMostOneTask()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
+
+        var receipts = await Task.WhenAll(Enumerable.Range(0, 8).Select(index =>
+            store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery,
+                now.AddMilliseconds(index))));
+
+        Assert.AreEqual(1, receipts.Count(x => x.CreatedTask));
+        Assert.AreEqual(1, receipts.Select(x => x.TaskId).Distinct().Count());
+        Assert.AreEqual(1, receipts.Select(x => x.RequestId).Distinct().Count());
+        Assert.HasCount(1, await store.GetTasksAsync());
     }
 
     [TestMethod]
@@ -458,7 +545,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(7L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(8L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -766,7 +853,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 7;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 8;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -783,7 +870,7 @@ public sealed class CollectionPlatformStoreTests
             await connection.OpenAsync();
             await using var downgrade = connection.CreateCommand();
             downgrade.CommandText = """
-                DELETE FROM collection_schema_history WHERE version = 7;
+                DELETE FROM collection_schema_history WHERE version >= 7;
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (6, '2026-09-13T15:00:00+00:00');
                 UPDATE collection_tasks SET CreatedAt = '2026-09-13T15:30:00.0000000+00:00';
                 """;

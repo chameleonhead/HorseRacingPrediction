@@ -66,6 +66,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_tasks"); e.HasKey(x => x.TaskId);
             e.Property(x => x.Status).HasConversion<string>(); e.Property(x => x.Lane).HasConversion<string>();
             e.HasIndex(x => new { x.Status, x.AvailableAt, x.Lane, x.Priority });
+            e.HasIndex(x => new { x.ResourcePk, x.DefinitionId, x.RequestedRevision, x.CreatedAt });
             e.HasIndex(x => x.RequestId);
         });
         modelBuilder.Entity<CollectionActiveTaskEntity>(e =>

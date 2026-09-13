@@ -27,7 +27,7 @@
 3. HTTP 200 ではなく expected Resource identity の検証成功を collection 成功条件にする。
 4. current/applied revision の単純比較ではなく Resource ごとの required revision で stale を判定する。
 5. Initial、Backfill、refresh、definition change、manual、recovery は同じ経路を使う。
-6. 同じ Resource + Definition の active task は一件、terminal task は複数許容する。
+6. 同じ Resource + Definition の active task は一件とする。Initial、Backfill、Discovery による通常登録は Resource + Definition + requested revision が既登録なら terminal status にかかわらず request/task/outbox を増やさない。requested revision の更新、ScheduledRefresh、DefinitionChanged、ManualRefresh、Recovery は再取得を許可し、terminal task は複数許容する。詳細は[収集済み対象の通常タスク重複登録抑止](changes/20260913_skip-duplicate-collection-registration/README.md)を参照する。
 7. Backfill と Realtime は同じ状態正本を使い lane と公平配分で制御する。
 8. state は Projection であり、request/task/attempt/domain write outcome が監査根拠である。
 9. URL 一時障害は location の恒久無効を意味しない。

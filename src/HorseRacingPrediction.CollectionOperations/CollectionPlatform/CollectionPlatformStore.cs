@@ -161,9 +161,28 @@ public sealed class CollectionPlatformStore
                     var existingActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
                         x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value,
                         cancellationToken).ConfigureAwait(false);
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
                     return new(existingRequest.RequestId,
                         existingTask?.TaskId ?? existingActive?.TaskId ?? Guid.Empty, false);
+                }
+            }
+
+            if (IsOrdinaryRegistration(reason))
+            {
+                var existingTask = await db.Tasks.AsNoTracking()
+                    .Where(x => x.ResourcePk == resourceEntity.ResourcePk
+                        && x.DefinitionId == definition.Value
+                        && x.RequestedRevision == requestedRevision)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .ThenByDescending(x => x.TaskId)
+                    .Select(x => new { x.TaskId, x.RequestId })
+                    .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+                if (existingTask is not null)
+                {
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    return new(existingTask.RequestId, existingTask.TaskId, false);
                 }
             }
 
@@ -260,6 +279,9 @@ public sealed class CollectionPlatformStore
         }
         finally { _gate.Release(); }
     }
+
+    private static bool IsOrdinaryRegistration(CollectionReason reason)
+        => reason is CollectionReason.Initial or CollectionReason.Backfill or CollectionReason.Discovery;
 
     public async Task<CollectionBulkPreview> PreviewBulkRequestAsync(CollectionDefinitionId definition,
         int requestedRevision, IEnumerable<CollectionBulkTarget> targets,
