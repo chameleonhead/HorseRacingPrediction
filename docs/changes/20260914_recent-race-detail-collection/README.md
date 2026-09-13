@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -261,13 +261,13 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・発走待ち・公開待ち・Current・取止テスト | AC「5日境界」「統合task」「結果公開待ち」へ接続したテスト結果 | Proposed |
-| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、同日混在、未公開、未確定、部分失敗テスト | 馬主と公開済み結果を同一leaseで保存し未公開だけ待機する実行証跡 | Proposed |
-| T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Proposed |
-| T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Proposed |
-| T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Proposed |
-| T6 | 旧definition停止とcutover | Main | High capability | T4,T5 | definition lifecycle、運用切替、関連テスト・文書 | pause/drain/migrate/disable/recovery拒否/履歴参照/rollbackテスト | 二重実行なし、統合履歴保持、rollback可能な順序 | Proposed |
-| T7 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5,T6 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Proposed |
+| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・発走待ち・公開待ち・Current・取止テスト | AC「5日境界」「統合task」「結果公開待ち」へ接続したテスト結果 | Runnable |
+| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、同日混在、未公開、未確定、部分失敗テスト | 馬主と公開済み結果を同一leaseで保存し未公開だけ待機する実行証跡 | Dependent |
+| T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Dependent |
+| T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Dependent |
+| T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Dependent |
+| T6 | 旧definition停止とcutover | Main | High capability | T4,T5 | definition lifecycle、運用切替、関連テスト・文書 | pause/drain/migrate/disable/recovery拒否/履歴参照/rollbackテスト | 二重実行なし、統合履歴保持、rollback可能な順序 | Dependent |
+| T7 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5,T6 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Dependent |
 
 T1 は5日境界・統合状態、T2 は取得順・馬主・navigation・部分失敗、T3 は全入口・microbatch・旧caller、
 T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 は二重実行防止・切替、T7 は実経路と全回帰の
@@ -279,8 +279,10 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
   handler registry、dispatcher、initializer を確認した。`ResourceType.Race` 再利用、Location schema 非変更、旧definitionの
   明示無効化に加え、既存 collection data をID・provenance付きで物理マージする方針を採用した。T1〜T7 で
   すべての受け入れ基準と検証をカバーできると判断した。未解決の設計判断はない。
-- **Pre-implementation review:** 承認後、コード変更前に各 task の `Runnable` / `Dependent` / `Externally blocked` を更新し、
-  実際の未コミット変更との write scope 衝突を再確認する。
+- **Pre-implementation review (2026-09-14, Main):** 利用者の「実装をお願いします」を本記録への明示承認として確認した。
+  working tree は clean、CodeGraph は up to date であり、既存変更との write scope 衝突はない。T1 を Runnable、T2〜T7 を
+  依存順に Dependent とした。各 task は前段のproduction接続と対象テストを入力とし、受け入れ基準に反する状態モデル、
+  migrationの識別不能・部分適用、旧経路の残存を検出した場合はcheckpointで修正してから後段へ進む。
 - **Checkpoint review:** T1/T2、T3/T4、T5/T6、T7 の各検証可能な境界で diff、テスト、matrix、CodeGraph を確認する。
 - **Final review:** 全 task と受け入れ基準が Verified、旧 production caller と runtime 登録がゼロ、直近補完経路が
   実 transport/persistence 境界で成功した場合だけ Implemented とする。
@@ -306,6 +308,7 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
 - 2026-09-14: 利用者の指摘により、同日すべての結果が同時公開される前提を明示的に排除した。発走前、発走後未公開、
   ページ公開済み未確定、公式結果公開済み、公式取止をレース単位で分け、未公開・未確定は failure ではなく同じ active
   task の待機状態として再試行する設計とした。
+- 2026-09-14: 利用者が「実装をお願いします」と明示し、本記録を Approved として Execution Mode へ移行した。
 - 2026-09-14: プロダクションコードは未変更。実装は本記録の明示承認待ち。
 
 ## Deviations and follow-up
