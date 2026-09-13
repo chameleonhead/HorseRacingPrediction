@@ -154,6 +154,14 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 
 自律収集見直しは、本番有効化前に本番予定の15分間隔を短縮せず、隔離したリリース候補環境で連続4回・合計60分以上確認する。周期欠落・重複、前景優先、バックフィル抑制と復帰、no-op、実行中リース、キュー/DLQ、JRAアクセス量、Lambda相当の実行時間と費用見積りを評価し、[変更記録のGo/No-Go基準](changes/20260909_autonomous-historical-race-backfill/README.md#go--no-go-criteria)を満たすまで本番フラグを有効にしない。
 
+## JRA主体identityと詳細URL
+
+JRA競走馬は表示名ではなく、JRA公開プロフィールから抽出したProvider固有identityを強い一意キーとして扱う。RaceCardで取得したプロフィールlinkはHorse解決、RaceEntry保存、horse-profile collection requestまで失わず伝播する。同名でidentityが異なる競走馬は別主体であり、名称一致だけで統合・選択しない。
+
+同一JRA identityが複数の内部Horseへ結び付いた場合、または同じRaceEntryからlegacy Horse参照とJRA identity付きHorseが同時に確認できた場合に限り、自動名寄せできる。名寄せは参照をcanonical Horseへ付け替え、統合元IDのredirectと監査を残し、再実行しても結果が増えないことを必須とする。詳細な選択規則と移行範囲は[変更記録](changes/20260913_jra-horse-identity-and-detail-urls/README.md)を正本とする。
+
+RaceCard/RaceResultの子requestへ保存するExplicit URLは、HTTP(S)・JRA正規host・期待pathに加えて、単一かつ非空の詳細指定パラメーターと対象Resourceとの整合を検証する。パラメーターなしの `/JRADB/accessD.html` と `/JRADB/accessS.html` は開催選択Discoveryの起点としてのみ利用し、詳細取得Locationには登録しない。検証済み詳細URLを得られない場合は、URLを推測せず通常Navigator Discoveryへフォールバックする。
+
 ## 今後の課題（未着手・要検討）
 
 Lambda 対応の詳細は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md) を参照。
