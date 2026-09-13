@@ -153,3 +153,4 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 ## Deviations and follow-up
 
 - 本番データへのrepair適用は、実装・ローカル検証とは分離する。
+- 4主体の要対応データ補正ジョブへ拡張する後継設計は [4主体の要対応データ補正ジョブを管理画面から実行する](../20260914_subject-identity-repair-jobs/README.md) で管理する。
