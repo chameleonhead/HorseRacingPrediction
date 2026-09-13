@@ -110,6 +110,55 @@ public sealed class RaceListPageParserTests
     }
 
     [TestMethod]
+    public void Parse_レース番号と出馬表が別リンクでも同一UrlならRaceCardUrlへ保持する()
+    {
+        const string cardUrl = "/JRADB/accessD.html?CNAME=card10";
+        var table = new TestPageTable(["R", "発走時刻", "レース名"],
+            [new[] { "10R", "15:10", "テスト特別" }]);
+        var section = new TestPageSection("レース一覧", "",
+            [new(cardUrl, "10レース"), new(cardUrl, "出馬表")], [], [table],
+            ["2026年9月5日 中山"]);
+
+        var page = (JraRaceListPage)new RaceListPageParser().Parse(
+            new TestPageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
+
+        Assert.AreEqual(cardUrl, page.Races.Single().RaceCardUrl);
+    }
+
+    [TestMethod]
+    public void Parse_相対Urlと絶対Urlでも解決先が同じならRaceCardUrlへ保持する()
+    {
+        const string relativeCardUrl = "/JRADB/accessD.html?CNAME=card10";
+        const string absoluteCardUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=card10";
+        var table = new TestPageTable(["R", "発走時刻", "レース名"],
+            [new[] { "10R", "15:10", "テスト特別" }]);
+        var section = new TestPageSection("レース一覧", "",
+            [new(relativeCardUrl, "10レース"), new(absoluteCardUrl, "出馬表")], [], [table],
+            ["2026年9月5日 中山"]);
+
+        var page = (JraRaceListPage)new RaceListPageParser().Parse(
+            new TestPageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
+
+        Assert.AreEqual(relativeCardUrl, page.Races.Single().RaceCardUrl);
+    }
+
+    [TestMethod]
+    public void Parse_レース番号とオッズだけが同一UrlならRaceCardUrlへ保持しない()
+    {
+        const string oddsUrl = "/JRADB/accessO.html?CNAME=odds10";
+        var table = new TestPageTable(["R", "発走時刻", "レース名"],
+            [new[] { "10R", "15:10", "テスト特別" }]);
+        var section = new TestPageSection("レース一覧", "",
+            [new(oddsUrl, "10レース"), new(oddsUrl, "オッズ")], [], [table],
+            ["2026年9月5日 中山"]);
+
+        var page = (JraRaceListPage)new RaceListPageParser().Parse(
+            new TestPageSnapshot(Url, "2026年9月5日 中山 レース一覧", [section]));
+
+        Assert.IsNull(page.Races.Single().RaceCardUrl);
+    }
+
+    [TestMethod]
     public void Parse_種類不明のリンクしかない場合_RaceCardUrlへ保持しない()
     {
         var rows = new IReadOnlyList<string>[] { ["1R", "10:10", "2歳未勝利"] };

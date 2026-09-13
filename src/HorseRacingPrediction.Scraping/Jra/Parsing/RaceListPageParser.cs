@@ -53,7 +53,7 @@ public sealed class RaceListPageParser
             ParseCourse(snapshot);
 
         var races =
-            ParseRaces(table, date, course);
+            ParseRaces(snapshot, table, date, course);
 
         return new JraRaceListPage(
             snapshot.Url,
@@ -188,6 +188,7 @@ public sealed class RaceListPageParser
     }
 
     private static IReadOnlyList<RaceSummary> ParseRaces(
+        JraSnapshotView snapshot,
         JraTableView table,
         DateOnly date,
         RaceCourse course)
@@ -243,14 +244,25 @@ public sealed class RaceListPageParser
             }
 
             var isResultSelection = RemoveWhitespace(table.Headers[numberIndex]) is "レース結果";
-            var raceLink = table.GetCell(rowIndex, numberIndex)?.Fragments
-                .FirstOrDefault(fragment =>
-                    fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase) &&
-                    (isResultSelection || ContainsRaceCardLabel(fragment)) &&
-                    (fragment.Url is not null || !string.IsNullOrWhiteSpace(fragment.RawUrl)))
-                is { } linkFragment
-                    ? linkFragment.RawUrl ?? linkFragment.Url?.ToString()
-                    : null;
+            var rowLinks = table.Cells[rowIndex]
+                .Where(cell => cell is not null)
+                .SelectMany(cell => cell!.Fragments)
+                .Where(fragment => fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase))
+                .Select(fragment => (Url: fragment.RawUrl ?? fragment.Url?.ToString() ?? string.Empty,
+                    Label: LinkLabel(fragment)))
+                .Concat(snapshot.Links.Select(link => (link.Url, link.Title)));
+            var purpose = isResultSelection ? Jra.Navigation.JraNavigationLinks.RaceResult
+                : Jra.Navigation.JraNavigationLinks.RaceCard;
+            var raceLink = JraRaceLinkSelector.FindUrl(rowLinks, number, purpose, snapshot.Url);
+            if (raceLink is null && isResultSelection)
+            {
+                raceLink = table.GetCell(rowIndex, numberIndex)?.Fragments
+                    .FirstOrDefault(fragment => fragment.TagName.Equals("a", StringComparison.OrdinalIgnoreCase)
+                        && (fragment.Url is not null || !string.IsNullOrWhiteSpace(fragment.RawUrl)))
+                    is { } linkFragment
+                        ? linkFragment.RawUrl ?? linkFragment.Url?.ToString()
+                        : null;
+            }
             races.Add(new RaceSummary(
                 new RaceId(date, course, number),
                 name,
@@ -262,9 +274,8 @@ public sealed class RaceListPageParser
         return races;
     }
 
-    private static bool ContainsRaceCardLabel(
+    private static string LinkLabel(
         HorseRacingPrediction.Scraping.Browser.Snapshots.PageElementFragmentSnapshot fragment)
         => new[] { fragment.Text, fragment.AccessibleName }
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Any(value => RemoveWhitespace(value!).Contains("出馬表", StringComparison.Ordinal));
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 }

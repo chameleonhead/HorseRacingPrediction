@@ -1182,33 +1182,16 @@ public sealed partial class JraNavigator
             await _browser.GetLinksAsync(
                 cancellationToken: cancellationToken);
 
-        var numberMarkers = new[]
-        {
-            $"{raceNumber}R",
-            $"{raceNumber}レース",
-        };
+        var targetUrl = JraRaceLinkSelector.FindUrl(
+            links.Select(link => (link.Url, link.Title)), raceNumber, linkTextCandidates,
+            _browser.CurrentUrl, allowGenericRaceNumberFallback);
 
-        var target =
-            links.FirstOrDefault(x =>
-                numberMarkers.Any(marker =>
-                    x.Title.Contains(marker, StringComparison.Ordinal)) &&
-                linkTextCandidates.Any(candidate =>
-                    x.Title.Contains(candidate, StringComparison.Ordinal)));
-
-        if (allowGenericRaceNumberFallback)
-        {
-            target ??=
-                links.FirstOrDefault(x =>
-                    numberMarkers.Any(marker =>
-                        x.Title.Contains(marker, StringComparison.Ordinal)));
-        }
-
-        if (target is null)
+        if (targetUrl is null)
         {
             return false;
         }
 
-        var url = ResolveUrl(_browser.CurrentUrl, target.Url);
+        var url = ResolveUrl(_browser.CurrentUrl, targetUrl);
 
         if (url is null)
         {
