@@ -30,7 +30,7 @@
 
 ### 主な利用者と完了状態
 
-管理画面へログインできる運用者が `/data-corrections` を開き、今回の不具合修復候補を確認する。完了状態は、選択した安全候補が補正済みとなり、成功メッセージと最新の未処理候補一覧が表示された状態である。
+管理画面へログインできる運用者が `/settings` を開き、今回の不具合修復候補を確認する。完了状態は、選択した安全候補が補正済みとなり、成功メッセージと最新の未処理候補一覧が表示された状態である。
 
 ### ページ構造
 
@@ -64,7 +64,7 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 
 ## Navigation and relationships
 
-- 左ナビゲーションの「運用」に `データ補正` を追加し、`/data-corrections` へ遷移する。
+- 左ナビゲーションの「運用」に `データ補正` を追加し、`/settings` へ遷移する。
 - 候補の統合元／統合先は `/horses/{horseId}`、根拠レースは `/races/{raceId}` へリンクする。
 - 画面はCookie認証、自己ループバックAPIは既存のAPI key付与をそのまま利用する。
 
@@ -74,15 +74,15 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 
 ## Documentation updates
 
-- `docs/20-admin-ui-design.md`: `/data-corrections` の位置づけ、候補表示、確認、成功・失敗状態を追記する。管理画面操作の正本である。
+- `docs/20-admin-ui-design.md`: `/settings` の位置づけ、候補表示、確認、成功・失敗状態を追記する。管理画面操作の正本である。
 - `docs/changes/20260913_jra-horse-identity-and-detail-urls/README.md`: 実装済みrepairの操作画面は本change recordで追加する旨をfollow-upとしてリンクする。
 
 ## Technical impact
 
 - `AdminApiClient` にrepair preview/apply呼出しを追加する。UIはAPIを迂回してDbContextを直接操作しない。
 - preview responseへ表示用のsource/target Horse名、根拠レース名、適用時に更新する参照件数を追加する。安全性判定の正本は引き続きサーバー側とする。
-- `Web/Components/Pages` に `/data-corrections` ページを追加し、既存のFluent UI、`RaceOpsPageHeader`、`RaceOpsStatusBadge`、`RaceOpsAlert`、`UiState`を再利用する。
-- `NavMenu` とAPI key middlewareの管理UIルート許可リストに `data-corrections` を追加する。認証・認可モデルは変更しない。
+- `Web/Components/Pages` に `/settings` ページを追加し、既存のFluent UI、`RaceOpsPageHeader`、`RaceOpsStatusBadge`、`RaceOpsAlert`、`UiState`を再利用する。
+- `NavMenu` とAPI key middlewareの管理UIルート許可リストに `settings` を追加する。認証・認可モデルは変更しない。
 - bUnitでloading、empty、safe/blocked、選択、確認、成功、API競合を検証する。repair endpointの既存統合テストも維持する。
 
 ## Decisions
@@ -110,7 +110,7 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 ## Delivery plan
 
 1. preview contractを表示情報付きへ拡張し、endpoint/API clientのテストを追加する。
-2. `/data-corrections` ページ、ナビゲーション、ルート認証境界を実装する。
+2. `/settings` ページ、ナビゲーション、ルート認証境界を実装する。
 3. bUnitで状態とinteractionを検証する。
 4. ローカル管理画面を実ブラウザーで通常・空・失敗・狭幅確認し、最大の問題を修正して再確認する。
 5. 全回帰テストと文書同期を行い、change recordをImplementedへ更新する。
@@ -123,4 +123,3 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 ## Deviations and follow-up
 
 - 本change recordがApprovedになるまでプロダクションコードは変更しない。
-
