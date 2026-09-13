@@ -137,15 +137,24 @@ public sealed class CollectionPipelineAlertDispatchService(
             return false;
         var end = pipeline.Reason.IndexOf(':', Prefix.Length);
         if (end < 0 || !Guid.TryParse(pipeline.Reason[Prefix.Length..end], out var notificationId)) return false;
-        var notification = (await store.GetUnpublishedFailureNotificationsAsync(
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), 10000, cancellationToken).ConfigureAwait(false))
-            .SingleOrDefault(x => x.NotificationId == notificationId);
+        var notification = await store.GetUnpublishedFailureNotificationAsync(notificationId, cancellationToken)
+            .ConfigureAwait(false);
         if (notification is null) return false;
         var reason = $"Incident={notification.NotificationId:D}; Task={notification.TaskId:D}; "
             + $"Resource={notification.Resource.Type}/{notification.Resource.Provider}/{notification.Resource.Id}; "
-            + $"Definition={notification.Definition}; Error={notification.ErrorCode ?? "Unknown"}; "
+            + $"Definition={notification.Definition}; TaskStatus={notification.Status}; "
+            + $"Error={notification.ErrorCode ?? "Unknown"}; "
             + $"OccurredAt={notification.FailedAt:O}; {notification.ErrorMessage}";
-        await publisher.PublishCollectionStoppedAsync(reason, 1, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await publisher.PublishCollectionStoppedAsync(reason, 1, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            await store.MarkFailureNotificationPublishFailedAsync(notification.NotificationId,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), ex.Message, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
         await store.MarkFailureNotificationPublishedAsync(notification.NotificationId,
             HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         return true;

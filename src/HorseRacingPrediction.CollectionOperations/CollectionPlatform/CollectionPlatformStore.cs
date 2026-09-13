@@ -1690,6 +1690,22 @@ public sealed class CollectionPlatformStore
         DateTimeOffset now, int maxCount, CancellationToken cancellationToken = default)
         => GetPendingFailureNotificationsAsync(now, maxCount, cancellationToken);
 
+    public async Task<PendingCollectionFailureNotification?> GetUnpublishedFailureNotificationAsync(
+        Guid notificationId, CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var row = await (from notification in db.FailureNotifications.AsNoTracking()
+                         join task in db.Tasks.AsNoTracking() on notification.TaskId equals task.TaskId
+                         join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                         where notification.NotificationId == notificationId && notification.PublishedAt == null
+                         select new { notification, task, resource }).SingleOrDefaultAsync(cancellationToken);
+        return row is null ? null : new PendingCollectionFailureNotification(
+            row.notification.NotificationId, row.task.TaskId,
+            new(row.resource.Type, row.resource.Provider, row.resource.ResourceId), new(row.task.DefinitionId),
+            Enum.Parse<CollectionTaskStatus>(row.notification.Status), row.notification.ErrorCode,
+            row.notification.ErrorMessage, row.notification.AttemptCount, row.notification.FailedAt);
+    }
+
     public async Task<IReadOnlyList<PendingCollectionFailureNotification>> GetActionableFailureNotificationsAsync(
         DateTimeOffset now, int maxCount, CancellationToken cancellationToken = default)
     {
@@ -1789,6 +1805,23 @@ public sealed class CollectionPlatformStore
             item.PublishedAt = now;
             item.PublishAttemptCount++;
             item.LastPublishError = null;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkFailureNotificationPublishFailedAsync(Guid notificationId, DateTimeOffset now,
+        string error, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var item = await db.FailureNotifications.SingleAsync(x => x.NotificationId == notificationId,
+                cancellationToken);
+            item.AvailableAt = now.AddSeconds(5);
+            item.PublishAttemptCount++;
+            item.LastPublishError = error;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }

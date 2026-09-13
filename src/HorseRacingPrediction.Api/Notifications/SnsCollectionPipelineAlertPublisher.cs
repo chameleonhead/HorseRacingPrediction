@@ -8,7 +8,7 @@ namespace HorseRacingPrediction.Api.Notifications;
 /// <summary>
 /// <see cref="JobFailureNotificationOptions.Enabled"/> のON/OFFに関わらず、常にSNSへ送信する。
 /// トピックはSNSサブスクリプションの管理側（運用者）が別途作成する前提のため、こちら側の設定で
-/// 送信有無を制御しない。TopicArn未設定の場合のみ、送信できない旨をログに残してスキップする。
+/// 送信有無を制御しない。TopicArn未設定の場合はログを残し、再試行のため例外を送出する。
 /// </summary>
 public sealed class SnsCollectionPipelineAlertPublisher : ICollectionPipelineAlertPublisher
 {
