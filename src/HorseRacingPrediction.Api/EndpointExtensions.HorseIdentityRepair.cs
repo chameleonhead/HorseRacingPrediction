@@ -15,6 +15,7 @@ public static partial class EndpointExtensions
 
     private static void MapHorseIdentityRepairEndpoints(RouteGroupBuilder group)
     {
+        MapSubjectIdentificationRepairEndpoints(group);
         group.MapGet("/admin/repairs/20260913-jra-horse-identity",
             async (IDbContextProvider<EventStoreDbContext> provider, CollectionPlatformStore collectionStore,
                 CancellationToken token) =>

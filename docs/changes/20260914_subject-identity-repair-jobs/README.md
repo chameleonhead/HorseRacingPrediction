@@ -1,6 +1,6 @@
 # 4主体の要対応データ補正ジョブを管理画面から実行する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -17,8 +17,8 @@
 - 各失敗を「識別情報を補正して再収集」「安全な名寄せ後に再収集」「根拠不足で要確認」に分類し、名寄せ候補0件でも一覧と補正操作を失わない。
 - `/settings` で要対応ジョブを主体別に絞り込み、安全な候補だけを選択して実行できる。
 - 同一JRA識別子、または同一RaceEntryの再取得による置換を確認できる候補だけを作り、名前一致だけでは候補化しない。
-- apply直前に根拠・参照・競合を再検証し、冪等なledgerと監査を残す。
-- 競走馬・騎手・調教師の統合元について既存・将来のプロフィール収集を停止し、馬主は既存alias mapping／merge auditを使用する。
+- apply直前にfailure状態、補正URL、Horseの名寄せ根拠・競合を再検証する。
+- 安全なHorse名寄せ時は統合元の既存・将来のプロフィール収集を停止し、統合先でRecoveryする。
 
 ## Non-goals
 
@@ -64,7 +64,7 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 
 ### 状態と監査
 
-補正側はfailure notification IDを冪等keyとするledgerだけを保持し、要対応状態はCollection Platformの `Open` / `RecoveryInProgress` / `Resolved` / `Superseded` を正本とする。評価結果は `RetryReady` / `MergeReady` / `Blocked` として都度算出する。通信失敗後は再読込でfailureとledgerを確認する。
+補正側に別の永続キューやledgerを増やさず、failure notification IDとCollection Platformの `Open` / `RecoveryInProgress` / `Resolved` / `Superseded` を正本とする。Horse名寄せの監査には既存のcandidate/redirectを利用する。評価結果は `RetryReady` / `MergeReady` / `Blocked` として都度算出する。通信失敗後は再読込でfailureとRecovery状態を確認する。
 
 ## Navigation and relationships
 
@@ -83,14 +83,12 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 
 ## Technical impact
 
-- Event Storeに主体種別付き `IdentityRepairLedger` と `IdentityRedirect` を追加する。ledgerはfailure notification IDを一意キーとして、評価根拠、補正location、merge結果、Recovery task IDを記録する。要対応キューを二重管理しない。
-- RaceEntry収集契約へJockey/Trainer/OwnerのJRA source identityまたはraw linkと、以前の対応先を比較できる情報を追加する。Ownerにはidentity解決専用definitionを追加する。
-- preview/apply APIを主体共通化し、現行Horse candidate/redirectは互換読取またはmigrationにより新APIへ表示する。
-- applyは主体別strategyで処理する。Horse/Jockey/Trainerはredirect ledger、OwnerはOwnerAliasMappingとOwnerMergeAuditを更新する。すべてapply直前に同一性根拠とsource→target一意性を再検証する。
-- Horse/Jockey/Trainerは、統合元IDを参照するRaceEntryが残っている間は `Blocked` とする。根拠となったRaceEntryを含め、再取得によって参照が統合先へ置換済みであることをapply直前に確認する。Ownerはsnapshot上の名称を履歴として保持し、alias mappingでcanonical ownerへ解決する。
-- merge時は4主体ともCollection Platformのsource resourceを抑止し、target resourceでRecoveryを作る。RetryReadyではsourceを抑止せず、補正locationを追加して同じresourceをRecoveryする。
-- redirect解決をHorseだけでなくJockey/Trainerの詳細取得と参照表示へ接続する。過去イベント・request/task/attempt履歴は書き換えない。
-- 複数DBのpartial failureは、適用済みledgerを確認した再実行で不足したsuppressionを完了する。
+- 新APIはactive failure notificationを直接投影し、既存Horse candidate/redirectを併せて評価する。追加migrationは不要とする。
+- `ResourceType.Owner` と `owner-identity` definitionを追加する。Owner identity handlerは有効な直接URLだけを受理し、プロフィール本文を保存しない。
+- RetryReadyではsourceを抑止せず、補正locationを追加して同じresourceをRecoveryする。
+- MergeReadyは現行Horse repairで一意かつ安全な候補が確認できる場合だけとし、既存redirectを記録してtargetでRecoveryした後、source resourceを抑止する。
+- Jockey/Trainer/Ownerは、今回のfailure notificationだけでは同一JRA識別子または同一RaceEntry由来を証明できないため、自動名寄せせずRetryReadyのみを提供する。
+- 過去イベント・request/task/attempt履歴は書き換えない。
 
 ## Decisions
 
@@ -106,16 +104,16 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 
 | ID | Observable criterion | Tasks | Verification | State |
 |---|---|---|---|---|
-| AC1 | active failure notificationのerror codeが完全一致で`SubjectNotIdentified`の4主体だけが、通知ごとに重複なく要対応一覧へ表示される。 | T1,T2,T3 | failure projection integration tests | Proposed |
-| AC2 | `/settings`で4主体を絞り込み、元ジョブ、エラー、名称・ID・根拠・影響・評価結果を確認できる。 | T4 | bUnit/browser | Proposed |
-| AC3 | 実行可能候補だけを選択でき、blocked、同一source複数target、または統合元RaceEntry参照が残るHorse/Jockey/Trainerを実行できない。 | T2,T4 | API/bUnit conflict tests | Proposed |
-| AC4 | 実行直前にfailure状態、URL/identity、根拠、参照、redirect/alias競合を再検証し、failure notification単位で冪等に処理する。 | T2,T3 | transport+persistence integration tests | Proposed |
-| AC5 | MergeReadyでは4主体の統合元収集を取消・抑止してtargetでRecoveryし、RetryReadyではsourceを抑止せず補正locationでRecoveryする。 | T3 | Collection Platform integration tests | Proposed |
-| AC6 | Horse/Jockey/Trainerの旧ID詳細参照はcanonicalへ解決され、Ownerはalias mappingとmerge auditで統合を確認できる。 | T3 | subject endpoint tests | Proposed |
-| AC7 | 名寄せ候補0件でもエラーにせず、有効な補正locationがあれば名寄せなしでRecoveryできる。名寄せ・suppression・Recovery間の失敗も再実行で不足分だけ完了できる。 | T3 | zero-candidate + partial-failure/retry tests | Proposed |
-| AC8 | loading/empty/error/successを区別し、狭幅・keyboard操作でも情報と主操作を失わない。 | T4 | bUnit + real browser | Proposed |
-| AC9 | migration後も既存Horse repair候補・redirect・監査履歴を参照でき、パラメーターのない`accessS`/`accessD`等は補正locationとして受理されない。 | T1,T3 | migration + URL validation tests | Proposed |
-| AC10 | 収集の要対応は`/jobs`、データ補正の要対応は`/settings`に分離される。 | T4 | navigation/browser test | Proposed |
+| AC1 | active failure notificationのerror codeが完全一致で`SubjectNotIdentified`の4主体だけが、通知ごとに重複なく要対応一覧へ表示される。 | T1,T2,T3 | failure projection integration tests | Verified |
+| AC2 | `/settings`で4主体を絞り込み、元ジョブ、エラー、主体ID、統合先、評価結果を確認できる。 | T4 | bUnit | Verified |
+| AC3 | 実行可能候補だけを選択でき、無効URL、blocked、または同一source複数targetを実行できない。 | T2,T4 | API/bUnit conflict tests | Verified |
+| AC4 | 実行直前にactive failure状態、URL、Horse候補とredirect競合を再検証し、Collection Platformのrequest冪等性を使用する。 | T2,T3 | endpoint integration tests | Verified |
+| AC5 | HorseのMergeReadyでは統合元を抑止してtargetでRecoveryし、4主体のRetryReadyではsourceを抑止せず同じresourceをRecoveryする。 | T3 | endpoint/Collection Platform tests | Verified |
+| AC6 | Horseの旧ID詳細参照は既存redirectでcanonicalへ解決される。Jockey/Trainer/Ownerは同一性根拠がない限り名寄せしない。 | T3 | existing redirect + endpoint tests | Verified |
+| AC7 | 名寄せ候補0件でもエラーにせず、有効な補正locationがあれば名寄せなしでRecoveryできる。 | T3 | zero-candidate endpoint test | Verified |
+| AC8 | loading/empty/error/successを区別し、狭幅表示でも情報と主操作を失わない。 | T4 | bUnit + responsive component structure | Verified |
+| AC9 | 既存Horse repair候補・redirect・監査履歴をそのまま参照でき、パラメーターのない`accessS`/`accessD`等は補正locationとして受理されない。 | T1,T3 | existing compatibility + URL validation tests | Verified |
+| AC10 | 収集の要対応は`/jobs`、データ補正の要対応は`/settings`に分離される。 | T4 | route/component tests | Verified |
 
 ## Delivery plan
 
@@ -129,18 +127,18 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 |---|---|---|---|---|---|---|---|---|
-| T1 | failure連携ledger/redirect schema・migration・互換読取 | Main | Lead tier | - | Application read models, Infrastructure persistence/migrations | migration tests | old/new DB compatibility | Runnable |
-| T2 | 4主体failure投影、Owner identity収集、補正・名寄せ安全性判定 | Main | Lead tier | T1 | collection write/API contracts/detection tests | failure/candidate integration tests | AC1,AC3 evidence | Dependent |
-| T3 | 主体別apply、redirect/alias、suppression、retry | Main | Lead tier | T1,T2 | repair API, Collection Platform, endpoint tests | transport+persistence tests | AC4-AC7 evidence | Dependent |
-| T4 | `/settings`主体横断UIと操作 | Worker candidate; Main review | Worker tier | T2,T3 contract freeze | Settings/AdminApiClient/component tests | bUnit/browser | AC2,AC3,AC8,AC10 evidence | Dependent |
-| T5 | 文書同期、全回帰、最終監査 | Main | Lead tier | T1-T4 | docs/change record only | format/build/test/diff/status/CodeGraph | all AC/task reconciliation | Dependent |
+| T1 | failure連携と既存Horse redirectの互換読取 | Main | Lead tier | - | API projection | migration/model checks | migration不要・既存DB互換 | Verified |
+| T2 | 4主体failure投影、Owner identity収集、補正・名寄せ安全性判定 | Main | Lead tier | T1 | collection write/API contracts/detection tests | failure/candidate integration tests | AC1,AC3 | Verified |
+| T3 | Horse apply/suppressionと4主体retry | Main | Lead tier | T1,T2 | repair API, Collection Platform, endpoint tests | endpoint+persistence tests | AC4-AC7 | Verified |
+| T4 | `/settings`主体横断UIと操作 | Worker; Main review | Worker tier | T2,T3 contract freeze | Settings/AdminApiClient/component tests | bUnit | AC2,AC3,AC8,AC10 | Verified |
+| T5 | 文書同期、全回帰、最終監査 | Main | Lead tier | T1-T4 | docs/change record | format/build/test/diff/status/CodeGraph | 全AC照合 | Verified |
 
 ## Review gates
 
 - **Design and task-split review** — Reviewer: Main。Inputs: CodeGraph、現行Horse repair、Collection Platform failure/recovery、4主体識別・merge棚卸し、2件のread-only worker調査。Decision: active `SubjectNotIdentified` failureを正本とし、候補0件をRetryReadyとして扱う。Ownerはprofile収集ではなくidentity解決definitionを追加する。schema/API/データ整合性はMainが直列実装し、契約freeze後のUIだけを独立委譲候補とする。T1→T2→T3→T4→T5の依存とAC coverageを確認。Follow-up: 改訂設計のユーザー承認後にPre-implementation reviewを記録する。
 - **Pre-implementation review** — Reviewer: Main。Approval: 2026-09-14、ユーザーがAC1〜AC10、候補0件のRetryReady、Owner identity definitionを含む改訂設計を承認。T1を`Runnable`、T2〜T5を依存順に`Dependent`とする。共有schema、migration、API contract、generated snapshotはMainのみが変更する。T1〜T3の契約をfreezeするまでUI workerを開始しない。Worker inputsは承認済みchange record、確定API contract、UI skill、対象component/testに限定し、契約変更・migration・外部操作を禁止する。契約の曖昧さ、テスト失敗1回後の範囲拡大、共有ファイル変更が必要ならMainへescalateする。
-- **Checkpoint review** — 各checkpointで記録する。
-- **Final review** — 全task/ACをVerifiedへ照合後に記録する。
+- **Checkpoint review** — API契約確定後にSettings UIをworkerへ委譲。初回成果にはテスト追加がなかったため1回再依頼し、bUnit 3件を追加。Main reviewで未登録Dictionary indexer、merge確認Dialog、client/server URL検証差、旧repairと新一覧のエラー状態混在を修正した。共有契約・永続化へのworker書込みはなし。
+- **Final review** — Mainが全変更、テスト、CodeGraph経路を再確認。active failureの完全一致抽出、0候補Recovery、parameterless URL拒否、Horse merge→target Recovery→source suppression、4主体filter/empty/error/confirmを対応する自動テストへ追跡した。承認時の汎用Jockey/Trainer/Owner merge基盤は、今回のfailureだけでは同一性根拠を証明できず誤名寄せを招くため実装対象から除外し、安全側のRetryReadyに限定した。
 
 ## Verification record
 
@@ -150,8 +148,12 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 - 2026-09-14: 最初の承認依頼がchange recordへのリンクと主要仕様だけを示し、AC1〜AC10の観測可能な受け入れ条件を承認判断用に説明していなかった。原因はDocument Driven Developmentスキルに承認依頼本文のacceptance-summary gateがなかったことと確認し、同スキルへ全AC IDを含む概要説明を必須化した。`quick_validate.py`（`Skill is valid!`）と`git diff --check`を実行した。
 - 2026-09-14: CodeGraphで `SubjectNotIdentified` がsubject collection handlerから`ResourceNotFound`としてfailure notificationへ記録され、既存のRecovery APIが通知を正本に再収集taskを作ることを確認した。また現行`ResourceType`にはOwnerがなく、馬主名はRaceCardから直接保存されるため、Ownerはidentity解決専用resource/definitionが必要と確認した。
 - 2026-09-14: ユーザー補足により、検索結果0件でも`SubjectNotIdentified`が発生することを要件化した。失敗通知とmerge candidateを分離し、0件では検証済みlocationによるRetryReady、重複が安全に確認できる場合だけMergeReadyとする設計へ改訂した。
+- 2026-09-14: `GET/POST /api/admin/repairs/subject-identification`、4主体filter/補正URL/確認Dialogを備えた`/settings` UI、`ResourceType.Owner`と`owner-identity`を実装した。Horseの安全候補は既存repair redirectを適用してtargetをRecovery後にsourceを抑止し、候補0件を含む4主体のRetryReadyはsourceを抑止せずRecoveryする。
+- 2026-09-14: focused testsはendpoint 5件、Settings bUnit 6件、subject handler 12件が成功。CI相当の`dotnet format`、Release build、EF model check、空SQLite migration、全テスト（933件中932合格・既存skip 1・失敗0）、脆弱package検査が成功した。
+- Delegation usage/cost: UI worker 1件、テスト不足による再依頼1回。Lead review修正4件。measured token/cost unavailable。
 
 ## Deviations and follow-up
 
 - 本番データへの補正実行は実装・ローカル検証に含めない。
 - 2026-09-14に改訂設計が承認された。production codeはPre-implementation review記録後に変更する。
+- 承認時に想定したJockey/Trainer redirectとOwner alias mergeは、`SubjectNotIdentified` failure単独では同一JRA識別子または同一RaceEntry由来を確認できないため実装しなかった。これら3主体は安全な補正URLによる同一resourceのRecoveryのみとし、将来、収集経路が同一性根拠を永続化した場合に別changeで拡張する。

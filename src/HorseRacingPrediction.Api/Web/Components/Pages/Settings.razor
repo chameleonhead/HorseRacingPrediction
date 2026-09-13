@@ -14,6 +14,86 @@
     <FluentMessageBar Intent="@MessageIntent.Success" Title="データ補正が完了しました">@success</FluentMessageBar>
 }
 
+<section class="entity-section settings-section" aria-labelledby="subject-repair-heading">
+    <p class="eyebrow">要対応データ補正</p>
+    <h2 id="subject-repair-heading">主体識別情報の補正</h2>
+    <p class="section-description">SubjectNotIdentified になった競走馬・騎手・調教師・馬主を確認し、必要なJRA URLを指定して再収集します。</p>
+    <div class="subject-summary" role="status">
+        <span>要対応 <strong>@FilteredSubjectCandidates.Count(x => SubjectActionable(x))</strong> 件</span>
+        <span>要確認 <strong>@FilteredSubjectCandidates.Count(x => !SubjectActionable(x))</strong> 件</span>
+        <label class="repair-filter">対象種別
+            <select aria-label="主体種別で絞り込み" @bind="subjectFilter">
+                <option value="">すべて</option>
+                <option value="Horse">競走馬</option>
+                <option value="Jockey">騎手</option>
+                <option value="Trainer">調教師</option>
+                <option value="Owner">馬主</option>
+            </select>
+        </label>
+        <FluentButton Appearance="@Appearance.Stealth" OnClick="@LoadAsync" Disabled="busy">再読込</FluentButton>
+    </div>
+    @if (subjectLoading && subjectCandidates.Count == 0)
+    {
+        <UiState Kind="loading" Title="要対応データ補正を読み込んでいます" />
+    }
+    else if (!subjectLoading && FilteredSubjectCandidates.Count == 0)
+    {
+        <UiState Title="現在、要対応の主体識別失敗はありません" Message="SubjectNotIdentified の収集失敗が発生すると、ここに表示されます。" />
+    }
+    else
+    {
+        <div class="repair-grid">
+            <FluentDataGrid Items="@FilteredSubjectCandidates.AsQueryable()" TGridItem="SubjectIdentificationRepairCandidateResponse" aria-label="主体識別情報の補正候補">
+                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(context)" CheckStateChanged="@(value => SetSubjectSelected(context, value == true))" Disabled="@(!SubjectActionable(context) || busy)" aria-label="@($"{SubjectTypeLabel(context.SubjectType)} {context.SubjectId}を選択")" /></TemplateColumn>
+                <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@SubjectStatusLabel(context)" Tone="@(SubjectActionable(context) ? "success" : "warning")" /></TemplateColumn>
+                <TemplateColumn Title="主体"><span>@SubjectTypeLabel(context.SubjectType)</span><small>@context.SubjectId</small>@if(context.MergeTargetId is not null){<small>統合先: @context.MergeTargetId</small>}</TemplateColumn>
+                <TemplateColumn Title="元の収集ジョブ"><span>@context.DefinitionId</span><small>@context.TaskId</small></TemplateColumn>
+                <TemplateColumn Title="エラー"><span>@(context.ErrorMessage ?? "—")</span><small>@context.Evaluation</small></TemplateColumn>
+                <TemplateColumn Title="補正JRA URL"><FluentTextField aria-label="@($"{context.SubjectId}の補正JRA URL")" Placeholder="https://www.jra.go.jp/JRADB/access..." Value="@GetCorrection(context.NotificationId)" ValueChanged="@(value => SetCorrection(context.NotificationId, value))" /><small>@(context.SuggestedUrl ?? context.BlockingReason ?? "任意")</small></TemplateColumn>
+            </FluentDataGrid>
+        </div>
+        <div class="repair-cards" aria-label="主体識別情報の補正候補">
+            @foreach (var candidate in FilteredSubjectCandidates)
+            {
+                <article class="repair-card">
+                    <div class="repair-card-status">
+                        <FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(candidate)" CheckStateChanged="@(value => SetSubjectSelected(candidate, value == true))" Disabled="@(!SubjectActionable(candidate) || busy)" aria-label="@($"{SubjectTypeLabel(candidate.SubjectType)} {candidate.SubjectId}を選択")" />
+                        <RaceOpsStatusBadge Label="@SubjectStatusLabel(candidate)" Tone="@(SubjectActionable(candidate) ? "success" : "warning")" />
+                    </div>
+                    <dl>
+                        <dt>主体</dt><dd>@SubjectTypeLabel(candidate.SubjectType)<small>@candidate.SubjectId</small>@if(candidate.MergeTargetId is not null){<small>統合先: @candidate.MergeTargetId</small>}</dd>
+                        <dt>収集ジョブ</dt><dd>@candidate.DefinitionId<small>@candidate.TaskId</small></dd>
+                        <dt>エラー</dt><dd>@(candidate.ErrorMessage ?? "—")</dd>
+                        <dt>補正JRA URL</dt><dd><FluentTextField aria-label="@($"{candidate.SubjectId}の補正JRA URL")" Placeholder="https://www.jra.go.jp/JRADB/access..." Value="@GetCorrection(candidate.NotificationId)" ValueChanged="@(value => SetCorrection(candidate.NotificationId, value))" /></dd>
+                        <dt>判定</dt><dd>@(SubjectActionable(candidate) ? "実行可能" : candidate.BlockingReason)</dd>
+                    </dl>
+                </article>
+            }
+        </div>
+        <div class="repair-actions">
+            <span>@selectedSubjects.Count 件を選択</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingSubjects = true)" Disabled="@(busy || selectedSubjects.Count == 0)">選択した補正を確認</FluentButton>
+        </div>
+    }
+</section>
+
+<FluentDialog Hidden="@(!confirmingSubjects)" HiddenChanged="@(hidden => confirmingSubjects = !hidden)"
+              Modal="true" TrapFocus="true" AriaLabelledby="subject-repair-confirm-title"
+              Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="subject-repair-confirm-title">選択した@(selectedSubjects.Count)件を補正しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>識別情報を補正して再収集します。名寄せ対象は統合元の収集を停止し、統合先で再収集します。</p>
+        @if (SelectedSubjectCandidates.Any(x => x.Evaluation == "MergeReady"))
+        {
+            <div class="warning-note" role="alert">名寄せはこの画面から取り消せません。過去の収集履歴は削除しません。</div>
+        }
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@(() => confirmingSubjects = false)" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteSubjectRepairsAsync" Disabled="@busy">@(busy ? "補正中…" : "補正して再収集")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 <section class="entity-section settings-section" aria-labelledby="repair-heading">
     <p class="eyebrow">データ補正</p>
     <h2 id="repair-heading">JRA競走馬識別子の不具合修復</h2>
@@ -140,6 +220,16 @@
     private bool loading = true;
     private bool busy;
     private bool confirming;
+    private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> subjectCandidates = [];
+    private readonly HashSet<Guid> selectedSubjects = [];
+    private readonly Dictionary<Guid, string?> correctionUrls = [];
+    private string subjectFilter = string.Empty;
+    private bool subjectLoading = true;
+    private bool confirmingSubjects;
+    private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
+        string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
+    private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
+        subjectCandidates.Where(x => selectedSubjects.Contains(x.NotificationId));
     private int SafeCount => candidates.Count(x => x.SafeToApply);
     private int BlockedCount => candidates.Count - SafeCount;
     private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
@@ -163,7 +253,81 @@
             errors = ["補正候補を読み込めませんでした。時間をおいて再読込してください。"];
         }
         finally { loading = false; }
+        try
+        {
+            subjectLoading = true;
+            var subjectPreview = await Api.GetSubjectIdentificationRepairPreviewAsync();
+            subjectCandidates = subjectPreview?.Candidates.Where(x => x.NotificationId != Guid.Empty).ToArray() ?? [];
+            selectedSubjects.RemoveWhere(id => subjectCandidates.All(x => x.NotificationId != id || !SubjectActionable(x)));
+            foreach (var candidate in subjectCandidates)
+                if (!correctionUrls.ContainsKey(candidate.NotificationId))
+                    correctionUrls[candidate.NotificationId] = candidate.SuggestedUrl;
+        }
+        catch (Exception)
+        {
+            subjectCandidates = [];
+            errors = errors.Append("主体識別情報の要対応ジョブを読み込めませんでした。時間をおいて再読込してください。")
+                .ToArray();
+        }
+        finally { subjectLoading = false; }
     }
+
+    private bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
+        candidate.SafeToExecute || IsValidCorrectionUrl(correctionUrls.GetValueOrDefault(candidate.NotificationId));
+    private string? GetCorrection(Guid id) => correctionUrls.GetValueOrDefault(id);
+    private void SetCorrection(Guid id, string? value)
+    {
+        correctionUrls[id] = value;
+        var candidate = subjectCandidates.FirstOrDefault(x => x.NotificationId == id);
+        if (candidate is not null && !SubjectActionable(candidate)) selectedSubjects.Remove(id);
+    }
+
+    private bool SubjectSelected(Guid id) => selectedSubjects.Contains(id);
+    private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);
+    private void SetSubjectSelected(SubjectIdentificationRepairCandidateResponse candidate, bool value)
+    {
+        if (value && SubjectActionable(candidate)) selectedSubjects.Add(candidate.NotificationId);
+        else selectedSubjects.Remove(candidate.NotificationId);
+    }
+
+    private static bool IsValidCorrectionUrl(string? value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && uri.Scheme is "http" or "https"
+            && string.Equals(uri.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(uri.Query.TrimStart('?'))
+            && uri.Query.Contains('=', StringComparison.Ordinal)
+            && uri.AbsolutePath.StartsWith("/JRADB/access", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task ExecuteSubjectRepairsAsync()
+    {
+        if (selectedSubjects.Count == 0 || busy) return;
+        busy = true; errors = []; success = null;
+        try
+        {
+            var items = selectedSubjects.Select(id => new ExecuteSubjectIdentificationRepairItem(id, correctionUrls.GetValueOrDefault(id))).ToArray();
+            var result = await Api.ExecuteSubjectIdentificationRepairAsync(items);
+            if (!result.Success || result.Value is null)
+            {
+                errors = result.Errors.Count == 0 ? ["主体識別情報の補正を実行できませんでした。再読込してください。"] : result.Errors;
+                return;
+            }
+            success = $"{result.Value.SelectedCount} 件を確認し、収集タスク {result.Value.CreatedTaskCount} 件を作成しました。";
+            selectedSubjects.Clear();
+            await LoadAsync();
+        }
+        catch (Exception) { errors = ["補正の完了状態を確認できませんでした。再読込して状態を確認してください。"]; }
+        finally { confirmingSubjects = false; busy = false; }
+    }
+
+    private string SubjectStatusLabel(SubjectIdentificationRepairCandidateResponse candidate) =>
+        !SubjectActionable(candidate) ? "要確認" : candidate.Evaluation == "MergeReady" ? "名寄せ後に再収集" : "再収集可能";
+
+    private static string SubjectTypeLabel(ResourceType type) => type switch
+    {
+        ResourceType.Horse => "競走馬", ResourceType.Jockey => "騎手", ResourceType.Trainer => "調教師", ResourceType.Owner => "馬主", _ => type.ToString()
+    };
 
     private bool IsSelected(string id) => selected.Contains(id);
     private void SetSelected(string id, bool value)

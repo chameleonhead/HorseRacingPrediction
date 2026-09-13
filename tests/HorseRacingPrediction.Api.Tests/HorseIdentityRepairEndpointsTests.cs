@@ -14,6 +14,165 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class HorseIdentityRepairEndpointsTests
 {
     [TestMethod]
+    public async Task SubjectNotIdentified_WithSafeHorseCandidate_MergesSuppressesAndRecoversTarget()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"統合再収集馬{suffix}";
+        var sourceId = DeterministicIdGenerator.BuildHorseId(name);
+        var sourceUrl = $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud00{suffix}/45";
+        var targetId = DeterministicIdGenerator.BuildHorseId(name, sourceUrl);
+        var raceId = $"race-{Guid.NewGuid()}";
+        await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: sourceId));
+        await http.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(name, name, null, null, HorseId: targetId));
+        await http.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 9, 14), "TOKYO", 2, "統合再収集", raceId));
+        await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new { EntryCount = 1 });
+        const string entryId = "merge-recovery-entry";
+        await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(sourceId, 1, null, null, 1, 55, "M", 3, null, null,
+                EntryId: entryId, HorseName: name));
+        await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl));
+
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+            1, "test", false);
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", sourceId),
+            new("horse-profile"), 1, CollectionReason.Discovery, now, explicitUrl: new Uri(sourceUrl));
+        var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "識別失敗",
+                new Uri(sourceUrl), new Uri(sourceUrl)));
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.SubjectId == sourceId);
+        Assert.AreEqual("MergeReady", candidate.Evaluation);
+        Assert.AreEqual(targetId, candidate.MergeTargetId);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest(
+                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+        var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.AreEqual(1, result!.MergedCount);
+        Assert.IsTrue((await store.GetTasksAsync()).Any(x => x.Resource.Id == targetId
+            && x.Status == CollectionTaskStatus.Ready));
+        await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() => store.RequestAsync(
+            new(ResourceType.Horse, "JRA", sourceId), new("horse-profile"), 1,
+            CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
+    public async Task SubjectIdentificationPreview_IncludesExactFailureForAllFourSubjectTypesOnly()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var subjectTypes = new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer, ResourceType.Owner };
+        foreach (var type in subjectTypes)
+        {
+            var definition = new CollectionDefinitionId($"{type.ToString().ToLowerInvariant()}-identity");
+            await store.RegisterDefinitionAsync(definition, type.ToString(), type, 1, "test", false);
+            var receipt = await store.RequestAsync(new(type, "JRA", $"{type}-id"), definition, 1,
+                CollectionReason.Discovery, now);
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            var url = new Uri($"https://www.jra.go.jp/JRADB/accessU.html?CNAME={type}-identity");
+            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件", url, url));
+        }
+        await store.RegisterDefinitionAsync(new("race-test"), "Race", ResourceType.Race, 1, "test", false);
+        var excluded = await store.RequestAsync(new(ResourceType.Race, "JRA", "race-id"), new("race-test"), 1,
+            CollectionReason.Discovery, now);
+        var excludedLease = await store.AcquireAsync(excluded.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(excluded.TaskId, excludedLease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "race"));
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+
+        CollectionAssert.AreEquivalent(subjectTypes, preview!.Candidates.Select(x => x.SubjectType).ToArray());
+        Assert.IsTrue(preview.Candidates.All(x => x.SafeToExecute));
+    }
+
+    [TestMethod]
+    public async Task SubjectNotIdentified_WithNoMergeCandidate_CanRecoverFromValidatedUrl()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+            1, "test", false);
+        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"unresolved-{Guid.NewGuid():N}");
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud001234567890/01");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, new("horse-profile"), 1,
+            CollectionReason.Discovery, now, explicitUrl: url);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", url, url));
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
+        Assert.AreEqual("RetryReady", candidate.Evaluation);
+        Assert.IsTrue(candidate.SafeToExecute);
+        Assert.IsNull(candidate.HorseMergeCandidateId, "候補0件は通常の再収集として扱う必要があります。");
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest(
+                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
+        Assert.AreEqual(1, result!.CreatedTaskCount);
+        Assert.IsEmpty((await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10))
+            .Where(x => x.NotificationId == candidate.NotificationId));
+    }
+
+    [TestMethod]
+    public async Task SubjectNotIdentified_ParameterlessJraUrl_IsBlockedAndRejected()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer,
+            1, "test", false);
+        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"unresolved-{Guid.NewGuid():N}");
+        var invalid = new Uri("https://www.jra.go.jp/JRADB/accessD.html");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, new("trainer-profile"), 1,
+            CollectionReason.Discovery, now, explicitUrl: invalid);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", invalid, invalid));
+        var failure = (await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10)).Single();
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.NotificationId == failure.NotificationId);
+        Assert.AreEqual("Blocked", candidate.Evaluation);
+        Assert.IsFalse(candidate.SafeToExecute);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest(
+                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId, invalid.AbsoluteUri)]));
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "パラメーター");
+    }
+
+    [TestMethod]
     public async Task RecordedRaceEntryReplacement_CanBePreviewedAndAppliedIdempotently()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

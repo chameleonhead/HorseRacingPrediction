@@ -9,6 +9,7 @@ public enum ResourceType
     Horse,
     Jockey,
     Trainer,
+    Owner,
 }
 
 public readonly record struct ResourceKey(ResourceType Type, string Provider, string Id)

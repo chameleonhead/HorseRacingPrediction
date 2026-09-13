@@ -11,7 +11,8 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
-    CollectionDefinitionId Definition, string SubjectType, string IdPrefix);
+    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool SupportsNameDiscovery = true,
+    bool PersistProfile = true);
 
 public static class JraSubjectCollectionDefinitions
 {
@@ -20,6 +21,7 @@ public static class JraSubjectCollectionDefinitions
         new(ResourceType.Horse, new("horse-profile"), "Horse", "horse"),
         new(ResourceType.Jockey, new("jockey-profile"), "Jockey", "jockey"),
         new(ResourceType.Trainer, new("trainer-profile"), "Trainer", "trainer"),
+        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false, false),
     ];
 
     public static JraSubjectCollectionDefinition For(ResourceType type) =>
@@ -90,6 +92,10 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         if (page is null)
         {
+            if (!descriptor.SupportsNameDiscovery)
+                return IdentificationFailure(task,
+                    "馬主を識別できるJRA URLがありません。補正画面でURLを指定してください。",
+                    "MissingLocation", null, null, locationOutcomes);
             // A persisted source URL is useful while validating that URL, but must not constrain
             // discovery after the URL itself has failed. Keep the stable name/birth-date identity
             // and let navigation discover the subject's current official URL.
@@ -115,19 +121,19 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         {
             return IdentificationFailure(task, ex, locationOutcomes);
         }
-        try
-        {
-            await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            // EventFlow read models are eventually consistent. A subject discovered from a race can
-            // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
-            return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
-                ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1),
-                LocationOutcomes: locationOutcomes);
-        }
+        if (descriptor.PersistProfile) try
+            {
+                await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // EventFlow read models are eventually consistent. A subject discovered from a race can
+                // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
+                return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
+                    ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1),
+                    LocationOutcomes: locationOutcomes);
+            }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
         {
             await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);

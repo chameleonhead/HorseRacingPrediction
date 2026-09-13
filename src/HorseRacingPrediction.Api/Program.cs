@@ -215,6 +215,7 @@ await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", 
 await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner, 1, "Initial", false);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 // 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、

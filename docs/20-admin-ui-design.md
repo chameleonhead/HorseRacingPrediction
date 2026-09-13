@@ -209,7 +209,7 @@ erDiagram
 
 ### 5.8 その他設定 `/settings`
 
-運用ナビゲーションの「その他設定」は、通常のオブジェクト編集や収集管理では扱えない低頻度の管理操作を置くSettings Pageとする。現在は「データ補正」区分に `20260913-jra-horse-identity-repair` だけを表示し、今回のJRA競走馬識別子欠落不具合で記録された候補以外を入力・追加できない。
+運用ナビゲーションの「その他設定」は、通常のオブジェクト編集や収集管理では扱えない低頻度の管理操作を置くSettings Pageとする。上段の「要対応データ補正」には、Collection Platformでactiveな `SubjectNotIdentified` failure notificationを競走馬・騎手・調教師・馬主ごとに表示する。下段には、従来の `20260913-jra-horse-identity-repair` 専用候補を互換機能として残す。
 
 - repairの名称・ID、未処理候補数、安全候補数、要確認数を表示する
 - 候補には統合元／統合先の馬名とID、JRA identity、根拠レース、安全性判定と理由を表示し、Horse／レース詳細へリンクする
@@ -224,7 +224,7 @@ erDiagram
 
 詳細な対象境界、interaction、wireframe、受け入れ基準は [JRA競走馬識別子の不具合修復を管理画面から実行する](changes/20260914_horse-identity-repair-admin-ui/README.md) を参照する。
 
-後継設計では、同じ安全境界を競走馬・騎手・調教師・馬主の主体別「要対応データ補正」へ拡張する。対象の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブ、エラー、根拠と影響を確認して、識別情報の補正再収集または安全な場合だけ名寄せ後の再収集を実行する。名寄せ候補0件も正常に扱い、名前一致だけでは名寄せしない。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。設計・承認・実装状況は [4主体の要対応データ補正ジョブを管理画面から実行する](changes/20260914_subject-identity-repair-jobs/README.md) を参照する。
+要対応データ補正の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブとエラーを確認して、検証済みJRA URLによる再収集を実行する。名寄せ候補0件も正常に扱う。現時点で自動名寄せするのは、既存のHorse repairが同一JRA識別子または同一RaceEntry由来の一意な統合先を証明できる競走馬だけである。騎手・調教師・馬主は失敗通知だけを同一性の根拠にせず、URL補正と同一主体の再収集に限定する。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。設計・実装状況は [4主体の要対応データ補正ジョブを管理画面から実行する](changes/20260914_subject-identity-repair-jobs/README.md) を参照する。
 
 ### 5.9 レース一覧 `/races`
 

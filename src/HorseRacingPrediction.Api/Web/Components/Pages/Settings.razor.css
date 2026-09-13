@@ -2,6 +2,8 @@
 .settings-section h2 { margin: 0; }
 .repair-id { color: var(--neutral-foreground-hint); margin: 0; }
 .repair-summary, .repair-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+.repair-filter { align-items: center; display: inline-flex; gap: 6px; margin-left: auto; }
+.repair-filter select { min-height: 32px; }
 .repair-summary fluent-button { margin-left: auto; }
 .repair-grid { min-width: 0; overflow-wrap: anywhere; }
 .repair-grid small, .repair-card small { color: var(--neutral-foreground-hint); display: block; margin-top: 4px; overflow-wrap: anywhere; }
@@ -10,6 +12,8 @@
 .repair-confirm-list { max-height: 240px; overflow: auto; }
 .warning-note { background: var(--neutral-fill-secondary-rest); border-left: 3px solid var(--status-warning-foreground-1); padding: 12px; }
 @media (max-width: 760px) {
+    .repair-filter { margin-left: 0; width: 100%; }
+    .repair-filter select { flex: 1; }
     .repair-grid { display: none; }
     .repair-cards { display: grid; gap: 12px; }
     .repair-card { border-top: 1px solid var(--neutral-stroke-rest); padding-top: 12px; }

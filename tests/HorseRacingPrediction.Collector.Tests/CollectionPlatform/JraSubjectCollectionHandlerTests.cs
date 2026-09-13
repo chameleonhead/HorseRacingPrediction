@@ -13,6 +13,55 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
+    public async Task OwnerIdentity_WithoutLocation_BecomesActionableIdentificationFailure()
+    {
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator(),
+            }, new RecordingProfileSink());
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
+            CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
+            new Dictionary<string, string> { ["name"] = "テスト馬主" });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
+        StringAssert.Contains(completion.ErrorMessage, "URL");
+    }
+
+    [TestMethod]
+    public async Task OwnerIdentity_WithValidatedLocation_SucceedsWithoutProfileWrite()
+    {
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessO.html?CNAME=owner-001");
+        var sink = new RecordingProfileSink();
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    DirectUrlFactory = _ => new JraSubjectPage(
+                        new JraSubjectProfileDto("Owner", "テスト馬主", "owner-001", url.AbsoluteUri,
+                            new Dictionary<string, string>(), DateTimeOffset.UtcNow), [], null),
+                },
+            }, sink);
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
+            CollectionReason.Recovery, CollectionLane.Normal, 70, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
+            new Dictionary<string, string> { ["name"] = "テスト馬主" },
+            [new(1, url, ResourceLocationSource.Manual, ResourceLocationStatus.Unknown, null)]);
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsEmpty(sink.Saves);
+    }
+
+    [TestMethod]
     public async Task ProfileLocationFailure_FallsBackByNameWithoutFailedSourceIdentity()
     {
         var failedUrl = new Uri("https://www.jra.go.jp/broken/horse-a");
