@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -319,7 +319,8 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
 ## Deviations and follow-up
 
 - migration apply は管理APIでpipeline pauseを必須とし、Store側でも旧・新active taskがゼロであることを検証する。未送信outboxはterminal task IDを保持したまま移行され、worker側の世代・状態検証で安全に無視できるため、個別のゼロ件前提にはしなかった。
-- レース全体の公式取止を示す専用JRAページ標本は現行parser契約に存在しない。馬単位の取消・除外・競走中止・失格は従来どおり結果として保存する。レース全体の取止ページを取得できた時点で、推測せず終端化するparser fixtureを別途追加する。
+- レース全体の公式取止は、競走番号または「この競走」「本競走」を伴う明示文言だけを終端として扱うfixtureを追加した。
+  馬単位の取消・除外・競走中止・失格は従来どおり結果として保存し、曖昧な文言から取止を推測しない。
 
 2026-09-14 の初回実装では、以下が未完了のまま誤って `Implemented` とした。完了ゲート違反を確認したため
 `Approved` へ戻し、closure ledgerとして追跡する。
@@ -329,11 +330,21 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
 | F1 公式取止を推測せず終端化する | Verified | レース全体の公式取止fixtureと、個別馬の競走中止を誤認しないparser/workflow/handlerテスト |
 | F2 結果未公開の段階的backoffを設定化する | Verified | 当日は短間隔、過去日は経過日数に応じて上限まで延長するhandlerテストと設定binding |
 | F3 管理画面で待機理由と次回確認時刻を表示する | Verified | `JobDetailComponentTests.ResultPublicationWait_ShowsReasonAndNextCheckProminently` |
-| F4 実collection DB migrationをpreview/applyする | Dependent | 対象DB特定、backup、pause/drain、preview、apply、件数検証 |
-| F5 実JRAページで直近の出馬表→結果と馬主補完を確認する | Dependent | bounded live smokeの取得・domain保存証跡 |
+| F4 実collection DB migrationをpreview/applyする | Verified | API使用DBとrepository直下DBを個別backupし、各々pause→apply→再preview→resume。旧対象0件、errors 0件 |
+| F5 実JRAページで直近の出馬表→結果と馬主補完を確認する | Verified | JRA External smoke 4件成功。現在週RaceCard、workflow保存時の全OwnerName、同一画面のレース切替、完了済み結果を確認 |
 
 次の実行順は F1 → F2 → F3 → focused/full test → F4/F5 の対象環境確認と安全な適用である。
 
 2026-09-14: F1〜F3を実装した。focused test（Scraping 84件、Collector 14件、API component 12件）と
 solution test（Scraping 240件成功・1件skip、Collector 179件、API 192件、その他全project失敗0）が成功し、
 `git diff --check` と CodeGraph sync も成功した。
+
+2026-09-14: collection DB候補を設定解決結果と照合した。API content root配下DBと、過去のrepository root実行で
+作成されたDBをそれぞれ停止中にバックアップし、管理APIでpreview、pipeline pause、apply、再preview、resumeを実行した。
+両DBとも旧 `race-card` / `race-result` 対象は0件で、移行件数0、補完投入0、errors 0だった。したがって既存履歴を
+失う変更は発生せず、移行経路の実DB適用と冪等性を確認した。
+
+2026-09-14: JRA実サイトに対するbounded smokeを実行し、`現在週RaceCard取得`、
+`RaceCardWorkflow_直近開催日の出馬表収集が成功する`、`現在週RaceCardを連続取得_表示中ページからレース番号で切り替える`、
+`完了済みRaceResult取得` の4件が成功した。出馬表entriesの馬主名が全件非空でdomain writeへ渡ること、表示中ページから
+レース番号を切り替えられること、結果ページへ到達して結果を解析できることを確認した。
