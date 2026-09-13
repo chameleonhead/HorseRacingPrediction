@@ -458,7 +458,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(6L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(7L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -712,8 +712,37 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 6;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 7;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
+    }
+
+    [TestMethod]
+    public async Task Startup_Version7ConvertsExistingUtcValuesToTimezoneLessJst()
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse", ResourceType.Horse, 1, "initial", false);
+        await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial,
+            new DateTimeOffset(2026, 9, 13, 15, 30, 0, TimeSpan.Zero));
+        var databasePath = Path.Combine(_directory, "collection-platform.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var downgrade = connection.CreateCommand();
+            downgrade.CommandText = """
+                DELETE FROM collection_schema_history WHERE version = 7;
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (6, '2026-09-13T15:00:00+00:00');
+                UPDATE collection_tasks SET CreatedAt = '2026-09-13T15:30:00.0000000+00:00';
+                """;
+            await downgrade.ExecuteNonQueryAsync();
+        }
+
+        _ = CreateStore();
+
+        await using var verification = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        await verification.OpenAsync();
+        await using var command = verification.CreateCommand();
+        command.CommandText = "SELECT CreatedAt FROM collection_tasks LIMIT 1;";
+        Assert.AreEqual("2026-09-14 00:30:00.000", await command.ExecuteScalarAsync());
     }
 
     [TestMethod]

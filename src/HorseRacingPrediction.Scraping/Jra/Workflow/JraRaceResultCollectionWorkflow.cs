@@ -186,18 +186,18 @@ public sealed class JraRaceResultCollectionWorkflow
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
             ? null
             : new RecordWeatherObservationRequest(
-                DateTimeOffset.UtcNow, WeatherCode: null, resultPage.WeatherText,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), WeatherCode: null, resultPage.WeatherText,
                 TemperatureCelsius: null, HumidityPercent: null, WindDirectionCode: null, WindSpeedMeterPerSecond: null);
 
         var trackCondition = string.IsNullOrWhiteSpace(resultPage.TrackConditionText)
             ? null
             : new RecordTrackConditionRequest(
-                DateTimeOffset.UtcNow, TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), TurfConditionCode: null, DirtConditionCode: null, resultPage.TrackConditionText);
 
         var payouts = resultPage.Payouts is null || winningEntry is null
             ? null
             : new DeclarePayoutResultRequest(
-                DateTimeOffset.UtcNow,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 ToPayoutEntries(resultPage.Payouts.WinPayouts),
                 ToPayoutEntries(resultPage.Payouts.PlacePayouts),
                 ToPayoutEntries(resultPage.Payouts.QuinellaPayouts),

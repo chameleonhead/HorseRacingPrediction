@@ -7,9 +7,6 @@ namespace HorseRacingPrediction.Predictor.Scheduling;
 
 public sealed class PredictionExecutionService : BackgroundService
 {
-    private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
-        OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
-
     private readonly PredictionExecutionOptions _options;
     private readonly IPredictionSchedule _schedule;
     private readonly CollectionReadinessClient _collectionReadiness;
@@ -78,7 +75,7 @@ public sealed class PredictionExecutionService : BackgroundService
 
     private async Task RunOneCycleAsync(CancellationToken cancellationToken)
     {
-        var now = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Jst);
+        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
         var minAge = TimeSpan.FromMinutes(Math.Max(0, _options.PredictionMinAgeMinutes));
 
         var candidates = await _schedule

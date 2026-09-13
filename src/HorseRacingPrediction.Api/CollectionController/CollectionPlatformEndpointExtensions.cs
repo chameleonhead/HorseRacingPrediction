@@ -67,11 +67,11 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapGet("/dashboard", async (CollectionPlatformStore store, CancellationToken token) =>
         {
             var progressTask = store.GetProgressAsync(token);
-            var notificationsTask = store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var notificationsTask = store.GetActionableFailureNotificationsAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(), 10000, token);
             var backfillsTask = store.GetBackfillBatchesAsync(token);
             await Task.WhenAll(progressTask, notificationsTask, backfillsTask);
             return Results.Ok(new CollectionOperationsDashboard(await progressTask,
-                CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, DateTimeOffset.UtcNow));
+                CollectionFailureGrouping.Build(await notificationsTask), await backfillsTask, HorseRacingPrediction.Contracts.Time.JstTime.Now()));
         });
         admin.MapGet("/readiness/{raceId}", async (string raceId, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetReadinessAsync(raceId, token)));
@@ -80,27 +80,27 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapPost("/pipeline/pause", async (PauseCollectionPipelineRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
         {
-            await store.SetPausedAsync(true, request.Reason, DateTimeOffset.UtcNow, token);
+            await store.SetPausedAsync(true, request.Reason, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.NoContent();
         });
         admin.MapPost("/pipeline/resume", async (CollectionPlatformStore store, CancellationToken token) =>
         {
-            await store.SetPausedAsync(false, null, DateTimeOffset.UtcNow, token);
+            await store.SetPausedAsync(false, null, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.NoContent();
         });
         admin.MapPost("/tasks/{taskId:guid}/cancel", async (Guid taskId, CollectionPlatformStore store,
-            CancellationToken token) => await store.CancelTaskAsync(taskId, DateTimeOffset.UtcNow, token)
+            CancellationToken token) => await store.CancelTaskAsync(taskId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                 ? Results.NoContent() : Results.Conflict());
         admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetActionableFailureNotificationsAsync(
-                DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), Math.Clamp(limit ?? 100, 1, 1000), token)));
         admin.MapGet("/failure-notifications/unpublished", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetUnpublishedFailureNotificationsAsync(
-                DateTimeOffset.UtcNow, Math.Clamp(limit ?? 100, 1, 1000), token)));
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), Math.Clamp(limit ?? 100, 1, 1000), token)));
         admin.MapGet("/failure-notifications/groups", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) =>
         {
-            var notifications = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow,
+            var notifications = await store.GetActionableFailureNotificationsAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 Math.Clamp(limit ?? 5000, 1, 10000), token);
             return Results.Ok(CollectionFailureGrouping.Build(notifications));
         });
@@ -109,7 +109,7 @@ public static class CollectionPlatformEndpointExtensions
         {
             try
             {
-                var result = await store.GetActionableFailureGroupPageAsync(groupKey, DateTimeOffset.UtcNow,
+                var result = await store.GetActionableFailureGroupPageAsync(groupKey, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                     search, page ?? 1, pageSize ?? 50, token);
                 return result is null ? Results.NotFound() : Results.Ok(result);
             }
@@ -126,7 +126,7 @@ public static class CollectionPlatformEndpointExtensions
                 return Results.BadRequest(new { message = "At least one notification is required." });
             if (selectedIds.Count > 10000)
                 return Results.BadRequest(new { message = "At most 10000 notifications can be recovered at once." });
-            var pending = await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10000, token);
+            var pending = await store.GetActionableFailureNotificationsAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(), 10000, token);
             var selected = pending.Where(x => selectedIds.Contains(x.NotificationId)).ToList();
             if (selected.Count != selectedIds.Count)
                 return Results.Conflict(new { message = "Some failures are no longer pending. Refresh and try again." });
@@ -136,7 +136,7 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapPost("/failure-notifications/groups/{groupKey}/recover", async (string groupKey,
             RecoverCollectionFailureGroupRequest request, CollectionPlatformStore store, CancellationToken token) =>
         {
-            var match = await store.GetActionableFailureGroupAsync(groupKey, DateTimeOffset.UtcNow, token);
+            var match = await store.GetActionableFailureGroupAsync(groupKey, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             if (match.MatchingGroupCount == 0) return Results.NotFound();
             if (match.MatchingGroupCount > 1)
                 return Results.Conflict(new { message = "The failure group key matches multiple groups." });
@@ -148,7 +148,7 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapPost("/failure-notifications/{notificationId:guid}/published", async (Guid notificationId,
             CollectionPlatformStore store, CancellationToken token) =>
         {
-            await store.MarkFailureNotificationPublishedAsync(notificationId, DateTimeOffset.UtcNow, token);
+            await store.MarkFailureNotificationPublishedAsync(notificationId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.NoContent();
         });
         admin.MapGet("/states/{type}/{provider}/{resourceId}/{definition}", async (
@@ -175,7 +175,7 @@ public static class CollectionPlatformEndpointExtensions
                 && request.ExplicitUrl is not null)
                 return Results.BadRequest(new { message = "ExplicitUrl must be an absolute HTTP(S) URL." });
             var receipt = await store.RequestAsync(new(request.ResourceType, request.Provider, request.ResourceId),
-                new(request.DefinitionId), request.RequestedRevision, request.Reason, DateTimeOffset.UtcNow,
+                new(request.DefinitionId), request.RequestedRevision, request.Reason, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
                 request.Attributes, token);
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
@@ -200,7 +200,7 @@ public static class CollectionPlatformEndpointExtensions
             };
             var currentRevision = await store.GetCurrentRevisionAsync(definition, token);
             var receipt = await store.RequestAsync(resource, definition, currentRevision, CollectionReason.ManualRefresh,
-                DateTimeOffset.UtcNow, lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
                 attributes: identified.Attributes, cancellationToken: token);
             return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", identified with { Receipt = receipt });
         });
@@ -224,7 +224,7 @@ public static class CollectionPlatformEndpointExtensions
                 return Results.Conflict(new { message = "Selection changed after preview; preview again before executing." });
             var batchId = string.IsNullOrWhiteSpace(request.BatchId) ? $"manual:{Guid.NewGuid():N}" : request.BatchId;
             return Results.Accepted(value: await store.ExecuteBulkRequestAsync(new(request.DefinitionId),
-                request.RequestedRevision, request.Reason, targets, DateTimeOffset.UtcNow, batchId,
+                request.RequestedRevision, request.Reason, targets, HorseRacingPrediction.Contracts.Time.JstTime.Now(), batchId,
                 request.Lane, request.Priority, token));
         });
         admin.MapPost("/revisions/preview", async (RevisionImpactPreviewRequest request,
@@ -237,14 +237,14 @@ public static class CollectionPlatformEndpointExtensions
         {
             var impact = BuildImpact(request.Impact);
             var affected = await store.AddRevisionAndApplyImpactAsync(new(request.DefinitionId), request.Revision,
-                request.Description, impact, conditions, DateTimeOffset.UtcNow, token);
+                request.Description, impact, conditions, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Ok(new CollectionRevisionApplyResult(request.DefinitionId, request.Revision, affected));
         });
         admin.MapPost("/revisions/{definition}/{revision:int}/recollect", async (string definition, int revision,
             RevisionRecollectionRequest request, CollectionPlatformStore store,
             IEnumerable<INamedRevisionImpactCondition> conditions, CancellationToken token) => Results.Accepted(
             value: await store.ExpandRevisionRecollectionAsync(new(definition), revision, conditions,
-                DateTimeOffset.UtcNow, request.Lane, request.Priority, token)));
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), request.Lane, request.Priority, token)));
         admin.MapGet("/revisions/{definition}/{revision:int}/progress", async (string definition, int revision,
             CollectionPlatformStore store, IEnumerable<INamedRevisionImpactCondition> conditions,
             CancellationToken token) => Results.Ok(await store.GetRevisionRecollectionProgressAsync(
@@ -260,7 +260,7 @@ public static class CollectionPlatformEndpointExtensions
                 ? $"{request.Provider.Trim().ToLowerInvariant()}:{request.Year:D4}-{request.Month:D2}"
                 : request.BatchId;
             var batch = await store.CreateOrResumeBackfillBatchAsync(batchId, request.Provider,
-                from, to, DateTimeOffset.UtcNow, token);
+                from, to, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", batch);
         });
         admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
@@ -280,7 +280,7 @@ public static class CollectionPlatformEndpointExtensions
                 var state = await store.GetStateAsync(hole.Resource, hole.Definition, token);
                 var receipt = await store.RequestAsync(hole.Resource, hole.Definition,
                     Math.Max(1, state?.RequiredRevision ?? state?.AppliedRevision ?? 1), CollectionReason.Recovery,
-                    DateTimeOffset.UtcNow, CollectionLane.Background, (int)CollectionPriority.Background,
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now(), CollectionLane.Background, (int)CollectionPriority.Background,
                     batchId: recoveryBatchId, cancellationToken: token);
                 if (receipt.CreatedTask) created++;
             }
@@ -293,7 +293,7 @@ public static class CollectionPlatformEndpointExtensions
         {
             if (request.Correlation is not null && !request.Correlation.IsSupported())
                 return Results.BadRequest(new { Error = "The collection attempt correlation is invalid." });
-            var lease = await store.AcquireAsync(taskId, request.DispatchGeneration, DateTimeOffset.UtcNow,
+            var lease = await store.AcquireAsync(taskId, request.DispatchGeneration, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), request.Correlation, token);
             if (lease is not null)
                 return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease));
@@ -305,7 +305,7 @@ public static class CollectionPlatformEndpointExtensions
         {
             Uri.TryCreate(request.RequestedUrl, UriKind.Absolute, out var requestedUrl);
             Uri.TryCreate(request.FinalUrl, UriKind.Absolute, out var finalUrl);
-            var accepted = await store.CompleteAttemptAsync(taskId, request.LeaseToken, DateTimeOffset.UtcNow,
+            var accepted = await store.CompleteAttemptAsync(taskId, request.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 new(request.Result, request.ErrorCode, request.ErrorMessage, requestedUrl, finalUrl,
                     request.HttpStatusCode, request.PageIdentification, request.RetryAt, request.NextCollectionAt,
                     request.LocationOutcomes), token);
@@ -313,7 +313,7 @@ public static class CollectionPlatformEndpointExtensions
         });
         worker.MapPost("/tasks/{taskId:guid}/heartbeat", async (Guid taskId,
             HeartbeatCollectionTaskRequest request, CollectionPlatformStore store, CancellationToken token) =>
-            await store.HeartbeatAsync(taskId, request.LeaseToken, DateTimeOffset.UtcNow,
+            await store.HeartbeatAsync(taskId, request.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), token)
                 ? Results.NoContent() : Results.Conflict());
         return endpoints;
@@ -345,7 +345,7 @@ public static class CollectionPlatformEndpointExtensions
             var revision = requestedRevision ?? state?.RequiredRevision
                 ?? throw new InvalidOperationException("Collection state was not found for a pending failure.");
             var receipt = await store.RequestAsync(failure.Resource, failure.Definition,
-                revision, CollectionReason.Recovery, DateTimeOffset.UtcNow, lane, priority,
+                revision, CollectionReason.Recovery, HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority,
                 cancellationToken: token);
             if (receipt.CreatedTask) created++;
             taskIds.Add(receipt.TaskId);

@@ -241,7 +241,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             catch (JraCollectionException ex) when (IsCurrentOrFuture(task.EffectiveDate))
             {
                 return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
-                    ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(30),
+                    ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(30),
                     LocationOutcomes: locationOutcomes);
             }
         }
@@ -249,7 +249,7 @@ public sealed class JraRaceCardCollectionHandler(IJraSessionFactory sessions,
             await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests, cancellationToken)
                 .ConfigureAwait(false);
         if (predictionSchedule is not null)
-            await predictionSchedule.EnqueueAsync([result.RaceId!], DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+            await predictionSchedule.EnqueueAsync([result.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         var requestedUrl = successfulLocation ?? ToUri(result.SourceUrl);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: requestedUrl,
             FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceCard:JRA:{task.Resource.Id}",
@@ -362,7 +362,7 @@ public sealed class JraRaceResultCollectionHandler(IJraSessionFactory sessions,
         if (!result.IsOfficiallyConfirmed)
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
                 "Race result is not officially confirmed.", RequestedUrl: ToUri(result.SourceUrl),
-                RetryAt: DateTimeOffset.UtcNow.AddMinutes(10), LocationOutcomes: locationOutcomes);
+                RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(10), LocationOutcomes: locationOutcomes);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl),
                 FinalUrl: ToUri(result.SourceUrl), PageIdentification: $"RaceResult:JRA:{task.Resource.Id}",
                 LocationOutcomes: locationOutcomes)

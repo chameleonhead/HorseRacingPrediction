@@ -12,7 +12,7 @@ public sealed class CollectionScheduleService(CollectionPlatformStore store,
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
             var reclaimed = await store.ReclaimExpiredLeasesAsync(now, stoppingToken).ConfigureAwait(false);
             if (reclaimed > 0) logger.LogWarning("Reclaimed {Count} expired collection leases.", reclaimed);
             foreach (var state in await store.GetDueStatesAsync(now, cancellationToken: stoppingToken).ConfigureAwait(false))

@@ -154,7 +154,7 @@ else
     private IReadOnlyList<CollectionFailureGroup> failures = [];
     private IReadOnlyList<BackfillBatchSnapshot> backfills = [];
     private IReadOnlyList<string> loadErrors = [], operationErrors = [];
-    private string backfillYear = DateTime.Today.Year.ToString(), backfillMonth = DateTime.Today.Month.ToString();
+    private string backfillYear = JstTime.Today().Year.ToString(), backfillMonth = JstTime.Today().Month.ToString();
     private string revisionDefinition = "race-result", revisionText = "1", successMessage = string.Empty;
     private string revisionScope = "All", revisionDescription = string.Empty, revisionResourceIds = string.Empty;
     private string revisionFrom = string.Empty, revisionTo = string.Empty, revisionNamedCondition = "race-result:dead-heat-before-rev5";
@@ -308,7 +308,7 @@ else
         => values.TryGetValue(key, out var value) ? value : 0;
     private static string LaneLabel(CollectionLane lane) => lane switch { CollectionLane.Realtime => "リアルタイム", CollectionLane.Normal => "通常", _ => "バックグラウンド" };
     private static string PriorityLabel(int value) => value >= 90 ? $"緊急 ({value})" : value >= 70 ? $"高 ({value})" : value <= 20 ? $"低 ({value})" : $"通常 ({value})";
-    private static string Time(DateTimeOffset value) => value.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+    private static string Time(DateTimeOffset value) => JstTime.Format(value);
     private static string FailureGroupHref(CollectionFailureGroup value) => $"/jobs/failures/{Uri.EscapeDataString(value.GroupKey)}?returnUrl={Uri.EscapeDataString("/jobs/operations?tab=failures")}";
     private static CollectionProgressSnapshot EmptyProgress() => new(new Dictionary<ResourceType,int>(), new Dictionary<CollectionStateStatus,int>(), new Dictionary<CollectionLane,int>(), new Dictionary<int,int>(), new Dictionary<string,int>(), 0);
 }

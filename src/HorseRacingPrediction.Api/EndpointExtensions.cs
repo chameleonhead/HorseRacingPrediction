@@ -504,7 +504,7 @@ public static partial class EndpointExtensions
                     var command = new DeclareRaceResultCommand(
                         new RaceId(raceId),
                         request.WinningHorseName,
-                        request.DeclaredAt ?? DateTimeOffset.UtcNow);
+                        request.DeclaredAt ?? HorseRacingPrediction.Contracts.Time.JstTime.Now());
 
                     var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                     return result.IsSuccess
@@ -862,7 +862,7 @@ public static partial class EndpointExtensions
                     try
                     {
                         var resultCommand = new DeclareRaceResultCommand(
-                            raceId, request.WinningHorseName, request.DeclaredAt ?? DateTimeOffset.UtcNow,
+                            raceId, request.WinningHorseName, request.DeclaredAt ?? HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                             stewardReportText: request.StewardReportText);
                         await commandBus.PublishAsync(resultCommand, cancellationToken).ConfigureAwait(false);
                     }
@@ -2048,7 +2048,7 @@ public static partial class EndpointExtensions
                 using var dbContext = dbContextProvider.CreateContext();
                 var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
                 if (owners.All(x => x.OwnerId != ownerId)) return Results.NotFound();
-                var now = DateTimeOffset.UtcNow;
+                var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
                 var normalized = NormalizeOwnerName(request.DisplayName.Trim());
                 if (normalized.Length == 0) return Results.BadRequest(new[] { "表示名を入力してください。" });
                 var mapping = await dbContext.OwnerAliasMappings.SingleOrDefaultAsync(x => x.NormalizedAlias == normalized, cancellationToken).ConfigureAwait(false);
@@ -2095,7 +2095,7 @@ public static partial class EndpointExtensions
                 if (target is null || source is null) return Results.NotFound();
 
                 var actor = "Admin UI";
-                var now = DateTimeOffset.UtcNow;
+                var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
                 foreach (var alias in source.NameVariants)
                 {
                     var normalized = NormalizeOwnerName(alias);

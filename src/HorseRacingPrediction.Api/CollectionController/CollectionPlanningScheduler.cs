@@ -16,9 +16,10 @@ public sealed class CollectionPlanningScheduler : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
             var planningBucketHour = now.Hour / 3 * 3;
-            var bucket = new DateTimeOffset(now.Year, now.Month, now.Day, planningBucketHour, 0, 0, TimeSpan.Zero);
+            var bucket = new DateTimeOffset(now.Year, now.Month, now.Day, planningBucketHour, 0, 0,
+                HorseRacingPrediction.Contracts.Time.JstTime.Offset);
             var resource = new ResourceKey(ResourceType.Race, "JRA", $"discovery:{bucket:yyyyMMddHH}");
             var definition = new CollectionDefinitionId("race-discovery");
             // A planning bucket is a logical resource. Once registered, its state is the durable
@@ -26,7 +27,7 @@ public sealed class CollectionPlanningScheduler : BackgroundService
             if (await _store.GetStateAsync(resource, definition, stoppingToken).ConfigureAwait(false) is null)
                 await _store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
                     CollectionLane.Realtime, (int)CollectionPriority.High,
-                    effectiveDate: DateOnly.FromDateTime(now.UtcDateTime),
+                    effectiveDate: DateOnly.FromDateTime(now.DateTime),
                     cancellationToken: stoppingToken).ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken).ConfigureAwait(false);
         }

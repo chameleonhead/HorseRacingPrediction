@@ -29,7 +29,7 @@ else
             @if (race.CourseLayout is not null) { <dt>コース補足</dt><dd>@race.CourseLayout</dd> }
             @if (race.OverallPaceText is not null) { <dt>ラップ・上り</dt><dd>@race.OverallPaceText</dd> }
             @if (race.CornerPassagesText is not null) { <dt>コーナー通過</dt><dd>@race.CornerPassagesText</dd> }
-            <dt>結果確定</dt><dd>@race.ResultDeclaredAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</dd>
+            <dt>結果確定</dt><dd>@JstTime.Format(race.ResultDeclaredAt, "yyyy-MM-dd HH:mm")</dd>
             <dt>勝ち馬</dt>
             <dd>
                 @if (!string.IsNullOrEmpty(race.WinningHorseId))

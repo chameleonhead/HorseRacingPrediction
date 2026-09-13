@@ -120,7 +120,7 @@ else if (detail is not null)
     private static string FailureStatusLabel(CollectionFailureResolutionStatus value)=>value switch{CollectionFailureResolutionStatus.Open=>"要対応",CollectionFailureResolutionStatus.RecoveryInProgress=>"再取得処理中",CollectionFailureResolutionStatus.Resolved=>"解決済み",CollectionFailureResolutionStatus.Superseded=>"新しい障害へ更新",_=>value.ToString()};
     private static string LocationSourceLabel(ResourceLocationSource value)=>value switch{ResourceLocationSource.Explicit=>"手動指定",ResourceLocationSource.Generated=>"規則から生成",ResourceLocationSource.Discovered=>"探索で発見",ResourceLocationSource.Redirected=>"転送先",ResourceLocationSource.Manual=>"管理者登録",_=>value.ToString()};
     private static string LocationStatusLabel(ResourceLocationStatus value)=>value switch{ResourceLocationStatus.Unknown=>"未確認",ResourceLocationStatus.Active=>"利用可能",ResourceLocationStatus.Suspect=>"要再確認",ResourceLocationStatus.Invalid=>"利用不可",_=>value.ToString()};
-    private static string Time(DateTimeOffset? value)=>value?.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")??"—";
+    private static string Time(DateTimeOffset? value)=>JstTime.Format(value, "yyyy/MM/dd HH:mm:ss");
     private static string Duration(CollectionAttemptSummary value)=>value.FinishedAt is null?"実行中":$"{Math.Max(0,(value.FinishedAt.Value-value.StartedAt).TotalSeconds):0.0} 秒";
     private async Task CopyUrlAsync(string value){try{await JS.InvokeVoidAsync("navigator.clipboard.writeText",value);operationMessage="URLをクリップボードへコピーしました。";}catch(JSException){operationErrors=["URLをコピーできませんでした。表示されたURLを選択してコピーしてください。"];}}
 }

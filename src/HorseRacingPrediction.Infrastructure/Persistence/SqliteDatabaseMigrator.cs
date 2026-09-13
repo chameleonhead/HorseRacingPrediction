@@ -109,7 +109,10 @@ public sealed class SqliteDatabaseMigrator
         if (initialMigration is null)
             throw new InvalidOperationException("InitialEventStore migrationが見つかりません。");
 
-        var baselineMigrations = isCurrentEnsureCreatedSchema ? migrations : (IReadOnlyCollection<string>)[initialMigration];
+        var baselineMigrations = isCurrentEnsureCreatedSchema
+            ? migrations.Where(migration =>
+                !migration.EndsWith("_StandardizeJstDateTimes", StringComparison.Ordinal)).ToList()
+            : (IReadOnlyCollection<string>)[initialMigration];
         if (isPreviousEnsureCreatedSchema)
         {
             await using var columnCommand = connection.CreateCommand();

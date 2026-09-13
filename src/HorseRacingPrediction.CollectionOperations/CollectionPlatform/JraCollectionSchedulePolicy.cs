@@ -2,12 +2,9 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 public sealed class JraCollectionSchedulePolicy : ICollectionSchedulePolicy
 {
-    private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
-        OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
-
     public CollectionSchedule Evaluate(ResourceKey resource, CollectionStateSnapshot state, DateTimeOffset now)
     {
-        var localNow = TimeZoneInfo.ConvertTime(now, Jst);
+        var localNow = HorseRacingPrediction.Contracts.Time.JstTime.Convert(now);
         var date = ParseDate(resource.Id);
         return resource.Type switch
         {

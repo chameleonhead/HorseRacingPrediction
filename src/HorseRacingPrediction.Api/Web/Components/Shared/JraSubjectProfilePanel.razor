@@ -10,7 +10,7 @@
         <dl class="detail-grid">
             @foreach (var field in profile.Fields) { <dt>@field.Key</dt><dd>@field.Value</dd> }
         </dl>
-        <p class="hint">取得日時 @profile.AcquiredAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · <a href="@profile.SourceUrl" target="_blank" rel="noopener">JRAの取得元</a></p>
+        <p class="hint">取得日時 @JstTime.Format(profile.AcquiredAt) · <a href="@profile.SourceUrl" target="_blank" rel="noopener">JRAの取得元</a></p>
     }
 </section>
 

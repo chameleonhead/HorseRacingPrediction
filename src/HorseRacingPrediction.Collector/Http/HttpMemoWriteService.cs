@@ -24,7 +24,7 @@ public sealed class HttpMemoWriteService : IMemoWriteService
             AuthorId: authorId,
             MemoType: memoType,
             Content: content,
-            CreatedAt: DateTimeOffset.UtcNow,
+            CreatedAt: HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             Subjects:
             [
                 new MemoSubjectDto("Race", raceId)
@@ -61,7 +61,7 @@ public sealed class HttpMemoWriteService : IMemoWriteService
             AuthorId: authorId,
             MemoType: memoType,
             Content: content,
-            CreatedAt: DateTimeOffset.UtcNow,
+            CreatedAt: HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             Subjects: [new MemoSubjectDto("Race", raceId)],
             Links: null,
             MemoId: memoId);

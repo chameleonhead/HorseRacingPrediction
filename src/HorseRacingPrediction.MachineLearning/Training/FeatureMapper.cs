@@ -58,7 +58,9 @@ public static class FeatureMapper
 
         var daysFromLastRace = horseHistory is null
             ? 999f
-            : (float)horseHistory.GetDaysFromLastRace(raceDate == default ? DateOnly.FromDateTime(DateTime.Today) : raceDate);
+            : (float)horseHistory.GetDaysFromLastRace(raceDate == default
+                ? HorseRacingPrediction.Contracts.Time.JstTime.Today()
+                : raceDate);
 
         return new HorseEntryFeatureInput
         {

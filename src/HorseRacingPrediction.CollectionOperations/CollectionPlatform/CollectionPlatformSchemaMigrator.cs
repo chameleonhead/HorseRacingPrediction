@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 6;
+    internal const int CurrentVersion = 7;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -57,7 +57,7 @@ internal static class CollectionPlatformSchemaMigrator
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
                     cancellationToken, transaction, ("$version", (object)CurrentVersion),
-                    ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                    ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
                 version = CurrentVersion;
             }
             else
@@ -82,7 +82,7 @@ internal static class CollectionPlatformSchemaMigrator
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
                     cancellationToken, transaction, ("$version", (object)baselineVersion),
-                    ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O")))
+                    ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                     .ConfigureAwait(false);
                 version = baselineVersion;
             }
@@ -117,7 +117,7 @@ internal static class CollectionPlatformSchemaMigrator
                     ON collection_failure_notifications (TaskId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (2, $appliedAt);
                 """, cancellationToken, transaction,
-                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
             version = 2;
         }
 
@@ -136,7 +136,7 @@ internal static class CollectionPlatformSchemaMigrator
                     ON collection_backfill_batches (Provider, "From", "To");
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (3, $appliedAt);
                 """, cancellationToken, transaction,
-                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
             version = 3;
         }
 
@@ -153,7 +153,7 @@ internal static class CollectionPlatformSchemaMigrator
                     ON collection_failure_notifications (RecoveryTaskId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (4, $appliedAt);
                 """, cancellationToken, transaction,
-                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
             version = 4;
         }
 
@@ -168,7 +168,7 @@ internal static class CollectionPlatformSchemaMigrator
                     ON collection_task_outbox (DispatchedAt, ReservedUntilUnixMilliseconds);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (5, $appliedAt);
                 """, cancellationToken, transaction,
-                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
             version = 5;
         }
 
@@ -185,7 +185,36 @@ internal static class CollectionPlatformSchemaMigrator
                     ON collection_attempts (ExecutionBatchId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (6, $appliedAt);
                 """, cancellationToken, transaction,
-                ("$appliedAt", (object)DateTimeOffset.UtcNow.ToString("O"))).ConfigureAwait(false);
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now()))).ConfigureAwait(false);
+            version = 6;
+        }
+
+        if (version < 7)
+        {
+            var dateTimeColumns = new Dictionary<string, string[]>
+            {
+                ["collection_resources"] = ["CreatedAt"],
+                ["collection_revisions"] = ["CreatedAt"],
+                ["collection_states"] = ["LastCollectedAt", "NextCollectionAt", "UpdatedAt"],
+                ["collection_requests"] = ["RequestedAt"],
+                ["collection_tasks"] = ["AvailableAt", "CreatedAt", "UpdatedAt", "StartedAt", "FinishedAt", "LeaseExpiresAt", "CancellationRequestedAt"],
+                ["collection_attempts"] = ["StartedAt", "FinishedAt"],
+                ["resource_locations"] = ["DiscoveredAt", "LastVerifiedAt", "LastFailedAt"],
+                ["collection_task_outbox"] = ["AvailableAt", "DispatchedAt", "CreatedAt"],
+                ["collection_platform_controls"] = ["UpdatedAt"],
+                ["collection_failure_notifications"] = ["FailedAt", "AvailableAt", "PublishedAt", "RecoveryStartedAt", "ResolvedAt"],
+                ["collection_backfill_batches"] = ["CreatedAt", "ExpansionCompletedAt"]
+            };
+            foreach (var (table, columns) in dateTimeColumns)
+            foreach (var column in columns)
+                await NormalizeStoredDateTimeAsync(connection, transaction, table, column, cancellationToken)
+                    .ConfigureAwait(false);
+
+            await ExecuteAsync(connection,
+                "INSERT INTO collection_schema_history (version, applied_at) VALUES (7, $appliedAt);",
+                cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -201,6 +230,19 @@ internal static class CollectionPlatformSchemaMigrator
         command.CommandText = $"SELECT COALESCE(MAX(version), 0) FROM {HistoryTable};";
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
     }
+
+    private static Task NormalizeStoredDateTimeAsync(SqliteConnection connection, SqliteTransaction transaction,
+        string table, string column, CancellationToken cancellationToken) =>
+        ExecuteAsync(connection, $$"""
+            UPDATE "{{table}}"
+            SET "{{column}}" = strftime('%Y-%m-%d %H:%M:%f', "{{column}}", '+9 hours')
+            WHERE "{{column}}" IS NOT NULL
+              AND (
+                substr("{{column}}", -1, 1) = 'Z'
+                OR instr(substr("{{column}}", 12), '+') > 0
+                OR instr(substr("{{column}}", 12), '-') > 0
+              );
+            """, cancellationToken, transaction);
 
     private static async Task<HashSet<string>> ReadExistingModelTablesAsync(SqliteConnection connection,
         SqliteTransaction transaction, CancellationToken cancellationToken)

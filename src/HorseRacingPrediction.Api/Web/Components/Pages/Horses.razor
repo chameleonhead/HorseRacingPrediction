@@ -62,8 +62,8 @@ else
     }
     private async Task GoAsync(int value) { page = value; await LoadAsync(); }
     private void UpdateUrl() => NavigateIfChanged(Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString("/horses", new Dictionary<string, string?> { ["query"] = query, ["sex"] = sexCode, ["minAge"] = minAge?.ToString(), ["maxAge"] = maxAge?.ToString(), ["page"] = page.ToString() }.Where(x => !string.IsNullOrWhiteSpace(x.Value))));
-    private DateOnly? BirthDateFrom => maxAge is null ? null : DateOnly.FromDateTime(DateTime.Today).AddYears(-(maxAge.Value + 1)).AddDays(1);
-    private DateOnly? BirthDateTo => minAge is null ? null : DateOnly.FromDateTime(DateTime.Today).AddYears(-minAge.Value);
+    private DateOnly? BirthDateFrom => maxAge is null ? null : JstTime.Today().AddYears(-(maxAge.Value + 1)).AddDays(1);
+    private DateOnly? BirthDateTo => minAge is null ? null : JstTime.Today().AddYears(-minAge.Value);
     private void NavigateIfChanged(string uri)
     {
         if (Navigation.ToAbsoluteUri(Navigation.Uri).PathAndQuery == Navigation.ToAbsoluteUri(uri).PathAndQuery) return;

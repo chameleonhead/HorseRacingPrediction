@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using HorseRacingPrediction.CollectionOperations.Persistence;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.PredictionScheduling;
@@ -22,6 +23,7 @@ public sealed class PredictionScheduleStore : IPredictionSchedule
             .Options;
         using var db = CreateDb();
         db.Database.EnsureCreated();
+        NormalizeStoredDateTimes(db);
     }
 
     public async Task EnqueueAsync(IEnumerable<string> raceIds, DateTimeOffset now,
@@ -123,7 +125,7 @@ public sealed class PredictionScheduleStore : IPredictionSchedule
             entity.LeaseToken = null;
             entity.LeaseExpiresAt = null;
             entity.LastError = error;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            entity.UpdatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now();
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -131,6 +133,36 @@ public sealed class PredictionScheduleStore : IPredictionSchedule
     }
 
     private PredictionScheduleDbContext CreateDb() => new(_dbOptions);
+
+    private static void NormalizeStoredDateTimes(PredictionScheduleDbContext db)
+    {
+        var statements = new[]
+        {
+            NormalizeSql("FirstQueuedAt"),
+            NormalizeSql("AvailableAt"),
+            NormalizeSql("LeaseExpiresAt"),
+            NormalizeSql("UpdatedAt")
+        };
+#pragma warning disable EF1002 // Statements contain only the closed identifier list above; there is no external input.
+        foreach (var statement in statements)
+            db.Database.ExecuteSqlRaw(statement);
+#pragma warning restore EF1002
+
+        static string NormalizeSql(string column) => column switch
+        {
+            "FirstQueuedAt" or "AvailableAt" or "LeaseExpiresAt" or "UpdatedAt" => $$"""
+                UPDATE prediction_candidates
+                SET "{{column}}" = strftime('%Y-%m-%d %H:%M:%f', "{{column}}", '+9 hours')
+                WHERE "{{column}}" IS NOT NULL
+                  AND (
+                    substr("{{column}}", -1, 1) = 'Z'
+                    OR instr(substr("{{column}}", 12), '+') > 0
+                    OR instr(substr("{{column}}", 12), '-') > 0
+                  );
+                """,
+            _ => throw new ArgumentOutOfRangeException(nameof(column))
+        };
+    }
 }
 
 internal enum PredictionCandidateStatus { Ready, Running, Succeeded }
@@ -151,6 +183,12 @@ internal sealed class PredictionScheduleDbContext(DbContextOptions<PredictionSch
     : DbContext(options)
 {
     public DbSet<PredictionCandidateEntity> Candidates => Set<PredictionCandidateEntity>();
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTimeOffset>().HaveConversion<JstDateTimeOffsetConverter>();
+        configurationBuilder.Properties<DateTimeOffset?>().HaveConversion<NullableJstDateTimeOffsetConverter>();
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<PredictionCandidateEntity>(entity =>

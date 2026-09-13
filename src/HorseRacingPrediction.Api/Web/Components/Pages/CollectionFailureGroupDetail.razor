@@ -71,5 +71,5 @@ else if (pageData is not null)
     private static string ResourceLabel(ResourceKey value)=>$"{ResourceTypeLabel(value.Type)} ・ {value.Provider}";
     private static string ResourceTypeLabel(ResourceType v)=>v switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>v.ToString()};
     private static string DefinitionLabel(CollectionDefinitionId v)=>v.Value switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>v.Value};
-    private static string Time(DateTimeOffset value)=>value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
+    private static string Time(DateTimeOffset value)=>JstTime.Format(value, "yyyy/MM/dd HH:mm:ss");
 }

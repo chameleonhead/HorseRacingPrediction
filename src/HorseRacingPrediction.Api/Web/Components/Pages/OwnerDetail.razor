@@ -23,7 +23,7 @@ else
     <section class="detail-group" aria-label="名寄せ履歴"><section class="detail-card detail-section">
         <h3>名寄せ履歴</h3>
         @if (owner.MergeHistory.Count == 0) { <p class="hint">名寄せ履歴はありません。</p> }
-        else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@audit.CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm") · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
+        else { <ol class="audit-list">@foreach (var audit in owner.MergeHistory) { <li><div><strong>@string.Join(" / ", audit.SourceNames)</strong><span class="hint">@JstTime.Format(audit.CreatedAt) · @audit.ActorId</span></div><div><span>@audit.Reason</span></div></li> }</ol> }
     </section></section>
     <section class="detail-group" aria-label="出走履歴"><section class="entity-section detail-section">
         <h3>所有馬の出走履歴</h3>

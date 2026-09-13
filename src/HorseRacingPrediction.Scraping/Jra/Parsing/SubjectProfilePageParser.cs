@@ -57,7 +57,7 @@ public static class SubjectProfilePageParser
         }
         var nextView = snapshot.Links.FirstOrDefault(l => Regex.IsMatch(Normalize(l.Title), @"^(次へ|次のページ|次の[0-9]+件|次)$"));
         var next = nextView is null ? null : new PageLinkSnapshot(nextView.Url, nextView.Title);
-        return new(new(subjectType, name, sourceIdentity, snapshot.Url, fields, DateTimeOffset.UtcNow), races.DistinctBy(x => x.Key).ToArray(), next);
+        return new(new(subjectType, name, sourceIdentity, snapshot.Url, fields, HorseRacingPrediction.Contracts.Time.JstTime.Now()), races.DistinctBy(x => x.Key).ToArray(), next);
     }
     public static void Validate(JraSubjectPage page, JraSubjectIdentity expected)
     {

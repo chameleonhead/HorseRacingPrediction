@@ -43,8 +43,7 @@ public sealed class CalendarTools
     [Description("現在の日本時間（JST）の日時を取得します。年月日・曜日・時分を返します。")]
     public string GetCurrentDateTime()
     {
-        var jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-        var now = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), jst);
+        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now(_timeProvider);
         var dayOfWeek = now.ToString("dddd", JapaneseCulture);
         return $"{now:yyyy年M月d日}（{dayOfWeek}）{now:H時m分}";
     }
@@ -60,8 +59,7 @@ public sealed class CalendarTools
         DateOnly date;
         if (string.IsNullOrWhiteSpace(baseDate))
         {
-            var jst = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
-            var now = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), jst);
+            var now = HorseRacingPrediction.Contracts.Time.JstTime.Now(_timeProvider);
             date = DateOnly.FromDateTime(now.DateTime);
         }
         else

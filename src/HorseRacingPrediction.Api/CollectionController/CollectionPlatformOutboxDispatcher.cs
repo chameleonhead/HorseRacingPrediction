@@ -37,7 +37,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
 
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
         var remaining = (await store.GetPendingDispatchesAsync(now,
             Math.Max(100, _options.DispatchBatchSize * 20), cancellationToken).ConfigureAwait(false))
             .Where(x => x.Definition.Value == "race-odds" || _options.AggregationDelayMilliseconds <= 0
@@ -72,7 +72,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
                     continue;
                 var receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
                 if (!await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
-                        envelopeId, receipt.MessageId, DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false))
+                        envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false))
                     logger.LogWarning("Collection envelope was sent but its outbox reservation could not be finalized. EnvelopeId={EnvelopeId}", envelopeId);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }

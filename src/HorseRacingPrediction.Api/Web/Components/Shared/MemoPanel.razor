@@ -34,7 +34,7 @@
                         {
                             <div class="memo-header">
                                 <span class="pill">@memo.MemoType</span>
-                                <span class="hint">@memo.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span>
+                                <span class="hint">@JstTime.Format(memo.CreatedAt, "yyyy-MM-dd HH:mm")</span>
                                 @if (memo.Subjects.Count > 1)
                                 {
                                     @foreach (var s in memo.Subjects)
@@ -144,7 +144,7 @@
                 AuthorId: null,
                 MemoType: newMemoType!,
                 Content: newContent!,
-                CreatedAt: DateTimeOffset.UtcNow,
+                CreatedAt: JstTime.Now(),
                 Subjects: new[] { new MemoSubjectDto(SubjectType, SubjectId) });
 
             var result = await Api.CreateMemoAsync(request);

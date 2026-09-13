@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Web;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
+using HorseRacingPrediction.Contracts.Time;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
@@ -16,7 +17,14 @@ namespace HorseRacingPrediction.Api.Web.ApiBrowsing;
 /// </summary>
 public sealed partial class AdminApiClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JstDateTimeOffsetJsonConverter());
+        return options;
+    }
 
     private readonly HttpClient _httpClient;
 

@@ -104,7 +104,7 @@ public sealed partial class JraNavigator
         _browser = browser;
         _pageReader = pageReader;
         _logger = logger ?? NullLogger<JraNavigator>.Instance;
-        _today = today ?? (() => DateOnly.FromDateTime(DateTime.Today));
+        _today = today ?? (() => HorseRacingPrediction.Contracts.Time.JstTime.Today());
         _raceCardLookupPeriodDays = raceCardLookupPeriodDays ?? DefaultRaceCardLookupPeriodDays;
     }
 

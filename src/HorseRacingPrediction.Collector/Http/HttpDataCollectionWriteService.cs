@@ -671,7 +671,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         var request = new
         {
-            DeclaredAt = DateTimeOffset.UtcNow,
+            DeclaredAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             WinPayouts = ParsePayoutsForRequest(winPayoutsJson),
             PlacePayouts = ParsePayoutsForRequest(placePayoutsJson),
             QuinellaPayouts = ParsePayoutsForRequest(quinellaPayoutsJson),
@@ -797,7 +797,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 AuthorId = (string?)"Collector",
                 MemoType = "SourceCitation",
                 Content = title ?? "JRAサイトからの自動取得",
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 Subjects = subjects.Select(s => new { s.SubjectType, s.SubjectId }).ToList(),
                 Links = new[]
                 {

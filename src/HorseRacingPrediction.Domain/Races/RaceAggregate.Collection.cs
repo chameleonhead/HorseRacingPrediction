@@ -42,7 +42,8 @@ public partial class RaceAggregate
             || _state.WinningHorseId != data.WinningHorseId
             || (data.StewardReportText is not null && data.StewardReportText != _state.StewardReportText)
             || _state.Status < RaceStatus.ResultDeclared))
-            Emit(new RaceResultDeclared(data.WinningHorseName, _state.ResultDeclaredAt ?? DateTimeOffset.UtcNow,
+            Emit(new RaceResultDeclared(data.WinningHorseName,
+                _state.ResultDeclaredAt ?? HorseRacingPrediction.Domain.Time.JstClock.Now,
                 data.WinningHorseId, data.StewardReportText ?? _state.StewardReportText));
 
         if (data.Results is not null)

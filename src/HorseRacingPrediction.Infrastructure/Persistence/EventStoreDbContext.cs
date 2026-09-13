@@ -6,12 +6,20 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Linq.Expressions;
 using System.Text.Json;
+using HorseRacingPrediction.Contracts.Time;
 
 namespace HorseRacingPrediction.Infrastructure.Persistence;
 
 public class EventStoreDbContext : DbContext
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JstStoredDateTimeOffsetJsonConverter());
+        return options;
+    }
 
     public DbSet<HorseReadModel> Horses => Set<HorseReadModel>();
     public DbSet<JockeyReadModel> Jockeys => Set<JockeyReadModel>();
@@ -31,6 +39,12 @@ public class EventStoreDbContext : DbContext
     public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
         : base(options)
     {
+    }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTimeOffset>().HaveConversion<JstDateTimeOffsetConverter>();
+        configurationBuilder.Properties<DateTimeOffset?>().HaveConversion<NullableJstDateTimeOffsetConverter>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

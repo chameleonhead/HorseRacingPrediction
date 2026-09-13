@@ -64,8 +64,8 @@ else
 @code {
     private static readonly IReadOnlyList<PeriodPreset> StandardPeriodPresets =
         [new("today", "今日"), new("week", "今週"), new("confirmed", "結果確定"), new("all", "すべて")];
-    private DateOnly? from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
-    private DateOnly? to = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly? from = JstTime.Today().AddDays(-30);
+    private DateOnly? to = JstTime.Today();
     private string? racecourse;
     private int? raceNo;
     private string? raceName;
@@ -233,7 +233,7 @@ else
     }
     private async Task ApplyPeriodAsync(string preset)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = JstTime.Today();
         switch (preset)
         {
             case "today": from = today; to = today; status = null; break;
@@ -251,8 +251,8 @@ else
     }
     private bool IsPresetActive(string preset) => preset switch
     {
-        "today" => from == DateOnly.FromDateTime(DateTime.Today) && to == from && status is null,
-        "week" => from == DateOnly.FromDateTime(DateTime.Today.AddDays(-((int)DateTime.Today.DayOfWeek + 6) % 7)) && status is null,
+        "today" => from == JstTime.Today() && to == from && status is null,
+        "week" => from == JstTime.Today().AddDays(-((int)JstTime.Today().DayOfWeek + 6) % 7) && status is null,
         "confirmed" => from is null && to is null && status == RaceStatus.ResultDeclared,
         "all" => from is null && to is null && status is null,
         _ => false

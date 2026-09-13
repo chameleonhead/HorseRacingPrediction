@@ -80,7 +80,7 @@ public sealed class CollectionPlatformStore
                     Revision = currentRevision,
                     Description = revisionDescription,
                     MayRequireRecollection = mayRequireRecollection,
-                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 });
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -744,7 +744,7 @@ public sealed class CollectionPlatformStore
                              && task.LeaseToken == leaseToken
                          select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= DateTimeOffset.UtcNow) return false;
+        if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
         var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(row.AttributesJson);
         return string.Equals(row.ResourceId, raceId, StringComparison.Ordinal)
             || (attributes?.TryGetValue("domainRaceId", out var domainRaceId) == true

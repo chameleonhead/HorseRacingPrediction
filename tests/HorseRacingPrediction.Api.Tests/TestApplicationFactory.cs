@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Time;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -39,6 +40,8 @@ internal static class TestApplicationFactory
             opts.Key = TestApiKey;
         });
         builder.Services.AddSingleton<ApiKeyEndpointFilter>();
+        builder.Services.ConfigureHttpJsonOptions(options =>
+            options.SerializerOptions.Converters.Add(new JstDateTimeOffsetJsonConverter()));
         builder.Services.Configure<CollectionPlatformOptions>(options =>
         {
             options.StateDirectory = Path.Combine(Path.GetTempPath(), "horse-racing-api-tests", Guid.NewGuid().ToString("N"));

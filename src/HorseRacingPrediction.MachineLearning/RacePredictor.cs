@@ -90,7 +90,7 @@ public sealed class RacePredictor : IRacePredictor
         var frontRunnerCount = entries.Count(e => e.RunningStyleCode == "先");
         var paceType = leaderCount >= 3 ? "HiPace" : leaderCount == 2 ? "MidPace" : "SlowPace";
         var fieldSizeEffect = Math.Min(100f, (fieldSize - 6) * 100f / 12f);
-        var raceDate = raceContext.RaceDate ?? DateOnly.FromDateTime(DateTime.Today);
+        var raceDate = raceContext.RaceDate ?? HorseRacingPrediction.Contracts.Time.JstTime.Today();
 
         var inputTasks = entries.Select(async entry =>
         {

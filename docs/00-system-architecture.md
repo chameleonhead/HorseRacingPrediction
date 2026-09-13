@@ -11,6 +11,12 @@ Collector のローカル/Lambda共通実行と、収集タスク・管理画面
 
 収集対象、収集定義、抽出 revision、状態、取得理由、task/attempt、URL 候補、Realtime/Backfill の優先制御を Resource 中心へ統一する次期設計は [26-collection-platform-design.md](26-collection-platform-design.md) を正本とする。既存収集ジョブ実装は一括 cutover で置換し、smoke test 後に旧 job data/key と旧 main SQS queue/DLQ を同じ切替内で削除する。本設計は2026-09-11に承認され、実装中である。cutover 完了までは以下の現行動作が有効である。
 
+## 共通時刻基準
+
+システム内の絶対時刻は `DateTimeOffset` で表し、利用者への表示と、日付境界・発走時刻到達・実行可否・期限・再試行などの業務判断は JST（UTC+09:00）を基準とする。データベースにはJSTの壁時計値だけをタイムゾーンなしで保存し、Entity Framework Core標準の `ValueConverter` により、書き込み時は `DateTimeKind.Unspecified` の `DateTime`、読み出し時はJSTの `DateTimeOffset(+09:00)` として変換する。現在時刻は注入可能な共通clockから取得し、ホストOSのローカルタイムゾーンには依存しない。競馬開催日の `DateOnly` と公式発走時刻の `TimeOnly` はJSTの暦として解釈する。
+
+外部プロトコルがUnix epochまたはUTCを要求する場合は外部境界の形式を維持し、境界でJSTとの間を変換する。JSON APIはoffset付き日時を使用し、DB表現とは分離する。経過時間、走破タイム、ラップタイムは時刻ではなくdurationであり、タイムゾーン変換の対象外とする。既存のUTCまたは他offsetの保存値は、表す瞬間を変えずタイムゾーンなしのJST壁時計値へ移行する。詳細と検証結果は [システム全体の時刻基準をJSTへ統一する](changes/20260913_jst-time-standardization/README.md) を参照する。本変更は2026-09-13に実装済みである。
+
 ## 方針転換の背景
 
 | # | 当初の前提 | 現在の前提 | 理由 |

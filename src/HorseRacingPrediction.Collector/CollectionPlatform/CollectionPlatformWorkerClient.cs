@@ -43,7 +43,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
             await CompleteAsync(notification.TaskId, task.LeaseToken,
                 new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
                     "Collector execution was cancelled or reached its deadline.",
-                    RetryAt: DateTimeOffset.UtcNow.AddMinutes(1)), report.Token).ConfigureAwait(false);
+                    RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)), report.Token).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex)

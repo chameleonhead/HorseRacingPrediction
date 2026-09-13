@@ -35,6 +35,7 @@ public sealed class JobDetailComponentTests
         StringAssert.Contains(cut.Markup, "再取得処理中");
         StringAssert.Contains(cut.Markup, "解決済み");
         StringAssert.Contains(cut.Markup, "実行バッチ");
+        StringAssert.Contains(cut.Markup, "JST");
         StringAssert.Contains(cut.Markup, "/jobs/execution-batches/33333333-3333-3333-3333-333333333333");
         Assert.AreEqual(1, cut.FindComponents<FluentButton>()
             .Count(x => x.Markup.Contains("このタスクを取り消す</")));

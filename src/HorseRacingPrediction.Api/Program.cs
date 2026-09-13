@@ -12,6 +12,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Domain.Races;
+using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.MachineLearning;
@@ -44,6 +45,8 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeysDirectory))
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new JstDateTimeOffsetJsonConverter()));
 
 builder.Services.AddAdminAuthentication();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HorseRacingPrediction.Contracts.Time;
 using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
@@ -8,8 +9,15 @@ public sealed record LocalCollectionQueueMessage(long MessageId, CollectionDispa
 
 public sealed class LocalCollectionQueue
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly string _connectionString;
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JstStoredDateTimeOffsetJsonConverter());
+        return options;
+    }
 
     public LocalCollectionQueue(string databasePath)
     {
@@ -31,6 +39,14 @@ public sealed class LocalCollectionQueue
             );
             """;
         command.ExecuteNonQuery();
+        command.CommandText = """
+            UPDATE local_collection_messages
+            SET visible_at = CASE WHEN substr(visible_at, -1, 1) = 'Z' OR instr(substr(visible_at, 12), '+') > 0 OR instr(substr(visible_at, 12), '-') > 0
+                                  THEN strftime('%Y-%m-%d %H:%M:%f', visible_at, '+9 hours') ELSE visible_at END,
+                created_at = CASE WHEN substr(created_at, -1, 1) = 'Z' OR instr(substr(created_at, 12), '+') > 0 OR instr(substr(created_at, 12), '-') > 0
+                                  THEN strftime('%Y-%m-%d %H:%M:%f', created_at, '+9 hours') ELSE created_at END;
+            """;
+        command.ExecuteNonQuery();
     }
 
     public async Task<long> SendAsync(CollectionDispatchEnvelope envelope, CancellationToken token = default)
@@ -39,7 +55,7 @@ public sealed class LocalCollectionQueue
         await using var command = connection.CreateCommand();
         command.CommandText = "INSERT INTO local_collection_messages(body, visible_at, created_at) VALUES($body,$now,$now)";
         command.Parameters.AddWithValue("$body", JsonSerializer.Serialize(envelope, JsonOptions));
-        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", JstTime.ToDatabaseString(JstTime.Now()));
         await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         command.CommandText = "SELECT last_insert_rowid();";
         command.Parameters.Clear();
@@ -57,7 +73,7 @@ public sealed class LocalCollectionQueue
             SELECT message_id, body, receive_count FROM local_collection_messages
             WHERE dead_letter=0 AND visible_at <= $now ORDER BY message_id LIMIT 1
             """;
-        select.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        select.Parameters.AddWithValue("$now", JstTime.ToDatabaseString(JstTime.Now()));
         await using var reader = await select.ExecuteReaderAsync(token).ConfigureAwait(false);
         if (!await reader.ReadAsync(token).ConfigureAwait(false)) return null;
         var id = reader.GetInt64(0);
@@ -68,7 +84,7 @@ public sealed class LocalCollectionQueue
         await using var update = connection.CreateCommand();
         update.Transaction = (SqliteTransaction)transaction;
         update.CommandText = "UPDATE local_collection_messages SET visible_at=$visible, receipt_handle=$receipt, receive_count=$count WHERE message_id=$id";
-        update.Parameters.AddWithValue("$visible", DateTimeOffset.UtcNow.Add(visibilityTimeout).ToString("O"));
+        update.Parameters.AddWithValue("$visible", JstTime.ToDatabaseString(JstTime.Now().Add(visibilityTimeout)));
         update.Parameters.AddWithValue("$receipt", receipt);
         update.Parameters.AddWithValue("$count", count);
         update.Parameters.AddWithValue("$id", id);
@@ -90,7 +106,7 @@ public sealed class LocalCollectionQueue
         await using var connection = Open();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT SUM(CASE WHEN dead_letter=0 AND visible_at <= $now THEN 1 ELSE 0 END), SUM(CASE WHEN dead_letter=0 AND visible_at > $now THEN 1 ELSE 0 END), SUM(dead_letter) FROM local_collection_messages";
-        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", JstTime.ToDatabaseString(JstTime.Now()));
         await using var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
         await reader.ReadAsync(token).ConfigureAwait(false);
         return (reader.IsDBNull(0) ? 0 : reader.GetInt64(0), reader.IsDBNull(1) ? 0 : reader.GetInt64(1), reader.IsDBNull(2) ? 0 : reader.GetInt64(2));
@@ -102,7 +118,7 @@ public sealed class LocalCollectionQueue
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Parameters.AddWithValue("$receipt", receipt);
-        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$now", JstTime.ToDatabaseString(JstTime.Now()));
         command.Parameters.AddWithValue("$max", max);
         await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
     }

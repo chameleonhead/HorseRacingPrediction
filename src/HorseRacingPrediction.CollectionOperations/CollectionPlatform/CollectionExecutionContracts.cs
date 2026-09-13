@@ -120,7 +120,7 @@ public sealed class CollectionTaskExecutor(CollectionPlatformStore store, Collec
         {
             result = CollectionAttemptFailureClassifier.FromException(ex);
         }
-        return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, DateTimeOffset.UtcNow,
+        return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             result, completionToken).ConfigureAwait(false);
     }
 }

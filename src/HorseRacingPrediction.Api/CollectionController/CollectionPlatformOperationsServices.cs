@@ -28,7 +28,7 @@ public sealed class CollectionPlatformWatchdogService(
     {
         if ((await store.GetPipelineStateAsync(cancellationToken).ConfigureAwait(false)).IsPaused)
             return new(0, 0, 0);
-        var result = await store.RunWatchdogAsync(DateTimeOffset.UtcNow,
+        var result = await store.RunWatchdogAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             Math.Max(1, _options.MaxJobDispatchAttempts),
             TimeSpan.FromMinutes(Math.Max(1, _options.DispatchGraceMinutes)), cancellationToken).ConfigureAwait(false);
         if (result.ReclaimedLeases + result.RedispatchedTasks + result.DeadLetteredTasks > 0)
@@ -75,7 +75,7 @@ public sealed class CollectionPlatformDeadLetterReconciler(
                     throw new JsonException("DLQ message did not contain a supported dispatch envelope.");
                 foreach (var task in envelope.Tasks)
                     reconciled += await store.ReconcileDeadLetterAsync(task.TaskId,
-                        task.DispatchGeneration, DateTimeOffset.UtcNow,
+                        task.DispatchGeneration, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                         $"Worker envelope {envelope.EnvelopeId} exhausted delivery and entered the dead-letter queue.",
                         cancellationToken).ConfigureAwait(false) ? 1 : 0;
                 await queue.DeleteDeadLetterMessageAsync(message.ReceiptHandle, cancellationToken).ConfigureAwait(false);
@@ -100,7 +100,7 @@ public sealed class CollectionBackfillRecoveryService(
         {
             try
             {
-                var resumed = await store.ResumeIncompleteBackfillBatchesAsync(DateTimeOffset.UtcNow, stoppingToken)
+                var resumed = await store.ResumeIncompleteBackfillBatchesAsync(HorseRacingPrediction.Contracts.Time.JstTime.Now(), stoppingToken)
                     .ConfigureAwait(false);
                 if (resumed > 0) logger.LogWarning("Resumed {Count} incomplete backfill batch expansions.", resumed);
             }

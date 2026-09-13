@@ -16,7 +16,7 @@ public sealed class PredictionTicketCreated : AggregateEvent<PredictionTicketAgg
         PredictorId = predictorId;
         ConfidenceScore = confidenceScore;
         SummaryComment = summaryComment;
-        PredictedAt = DateTimeOffset.UtcNow;
+        PredictedAt = HorseRacingPrediction.Domain.Time.JstClock.Now;
     }
 
     public string RaceId { get; }

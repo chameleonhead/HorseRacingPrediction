@@ -111,7 +111,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             // EventFlow read models are eventually consistent. A subject discovered from a race can
             // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
-                ex.Message, RetryAt: DateTimeOffset.UtcNow.AddMinutes(1),
+                ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1),
                 LocationOutcomes: locationOutcomes);
         }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)

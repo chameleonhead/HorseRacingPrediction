@@ -173,5 +173,5 @@ static bool HasLambdaTimeRemaining()
 {
     var value = Environment.GetEnvironmentVariable("AWS_LAMBDA_DEADLINE_MS");
     return !long.TryParse(value, out var deadlineMilliseconds)
-           || DateTimeOffset.UtcNow < DateTimeOffset.FromUnixTimeMilliseconds(deadlineMilliseconds).AddMinutes(-1);
+           || HorseRacingPrediction.Contracts.Time.JstTime.Now() < DateTimeOffset.FromUnixTimeMilliseconds(deadlineMilliseconds).AddMinutes(-1);
 }

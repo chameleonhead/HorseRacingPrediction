@@ -13,8 +13,6 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 public sealed partial class JraRaceCardCollectionWorkflow
     : IJraRaceCardCollectionWorkflow
 {
-    private static readonly TimeZoneInfo Jst = TimeZoneInfo.FindSystemTimeZoneById(
-        OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
     private readonly JraSession _session;
     private readonly IDataCollectionWriteService _writeService;
     private readonly TimeProvider _timeProvider;
@@ -93,7 +91,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
         var errors = new List<string>();
         var outcomes = new List<RaceCardRaceOutcome>();
         var racecourseName = RaceCourseNames.GetJraName(course);
-        var nowJst = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), Jst);
+        var nowJst = HorseRacingPrediction.Contracts.Time.JstTime.Now(_timeProvider);
         var todayJst = DateOnly.FromDateTime(nowJst.Date);
         var allRacesClosed = raceList.Races.Count > 0;
 
