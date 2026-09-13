@@ -1545,6 +1545,13 @@ public sealed class CollectionPlatformStore
     public async Task<CollectionWatchdogResult> RunWatchdogAsync(DateTimeOffset now, int maxDispatchAttempts,
         TimeSpan dispatchGrace, CancellationToken cancellationToken = default)
     {
+        // A successful queue send is durable evidence that a Ready task is waiting in the transport.
+        // Queue backlog duration is unbounded, so elapsed time cannot distinguish a lost message from
+        // a healthy message that has not reached a worker yet. Redelivering here creates duplicates and
+        // can exhaust DispatchGeneration before the original message is ever received. Transport delivery
+        // failures are reconciled through the DLQ; only expired acquired leases are recovered here.
+        _ = maxDispatchAttempts;
+        _ = dispatchGrace;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -1553,45 +1560,9 @@ public sealed class CollectionPlatformStore
             var runningBefore = await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
             await ReclaimExpiredAsync(db, now, cancellationToken).ConfigureAwait(false);
             var reclaimed = runningBefore - await db.Tasks.CountAsync(x => x.Status == CollectionTaskStatus.Running, cancellationToken);
-            var tasks = await db.Tasks.Where(x => x.Status == CollectionTaskStatus.Ready).ToListAsync(cancellationToken);
-            var redispatched = 0;
-            var deadLettered = 0;
-            foreach (var task in tasks.Where(x => x.UpdatedAt <= now.Subtract(dispatchGrace)))
-            {
-                if (await db.DispatchOutbox.AnyAsync(x => x.TaskId == task.TaskId && x.DispatchedAt == null, cancellationToken))
-                    continue;
-                if (task.DispatchGeneration >= maxDispatchAttempts)
-                {
-                    task.Status = CollectionTaskStatus.DeadLetter;
-                    task.FinishedAt = now;
-                    var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == task.TaskId, cancellationToken);
-                    if (active is not null) db.ActiveTasks.Remove(active);
-                    var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
-                        && x.DefinitionId == task.DefinitionId, cancellationToken);
-                    state.Status = CollectionStateStatus.Failed;
-                    state.UpdatedAt = now;
-                    await QueueFailureNotificationAsync(db, task, "DispatchAttemptsExceeded", null, now,
-                        cancellationToken).ConfigureAwait(false);
-                    deadLettered++;
-                }
-                else
-                {
-                    task.DispatchGeneration++;
-                    task.UpdatedAt = now;
-                    db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
-                    {
-                        OutboxId = Guid.NewGuid(),
-                        TaskId = task.TaskId,
-                        DispatchGeneration = task.DispatchGeneration,
-                        AvailableAt = now,
-                        CreatedAt = now
-                    });
-                    redispatched++;
-                }
-            }
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new(reclaimed, redispatched, deadLettered);
+            return new(reclaimed, 0, 0);
         }
         finally { _gate.Release(); }
     }

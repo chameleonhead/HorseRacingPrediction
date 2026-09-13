@@ -9,18 +9,13 @@ public sealed class CollectionJobWatchdogOptions
     public int IntervalMinutes { get; set; } = 5;
 
     /// <summary>
-    /// Ready ジョブへの再ディスパッチ（SQS再送出）を許容する最大回数。
-    /// これを超えたジョブは DeadLetter として打ち切り、再送を止める（Fail Fast）。
+    /// 互換性のため保持する旧設定。送信済みReadyジョブはキュー滞留時間だけでは
+    /// 配送喪失と判定できないため、Watchdogから再送しない。
     /// </summary>
     public int MaxJobDispatchAttempts { get; set; } = 5;
 
     /// <summary>
-    /// ジョブが直近にSQSへディスパッチされてから、まだWorker（Lambda）がリースを
-    /// 取得しておらず Ready のまま残っている場合でも、この分数が経過するまでは
-    /// 再ディスパッチしない猶予期間。Workerが未着手なだけの正常なジョブを二重に
-    /// SQSへ送出してしまい、実際には1回しか失敗していないのに再送出回数
-    /// （<see cref="MaxJobDispatchAttempts"/>）だけが余分に積み上がるのを防ぐ。
-    /// Lambdaの実行時間（最大15分）を考慮した値にすること。
+    /// 互換性のため保持する旧設定。Readyジョブの経過時間による再送判定には使用しない。
     /// </summary>
     public int DispatchGraceMinutes { get; set; } = 20;
 

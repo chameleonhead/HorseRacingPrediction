@@ -546,7 +546,7 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
-    public async Task Watchdog_RedispatchesStalledReadyTaskThenDeadLettersAtLimit()
+    public async Task Watchdog_DoesNotRedispatchReadyTaskThatMayStillBeWaitingInQueue()
     {
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
@@ -554,14 +554,12 @@ public sealed class CollectionPlatformStoreTests
         var firstOutbox = (await store.GetPendingDispatchesAsync(now, 10)).Single();
         await store.MarkDispatchedAsync(firstOutbox.OutboxId, now);
 
-        var recovered = await store.RunWatchdogAsync(now.AddMinutes(2), 2, TimeSpan.FromMinutes(1));
-        Assert.AreEqual(1, recovered.RedispatchedTasks);
-        var secondOutbox = (await store.GetPendingDispatchesAsync(now.AddMinutes(2), 10)).Single();
-        await store.MarkDispatchedAsync(secondOutbox.OutboxId, now.AddMinutes(2));
+        var recovered = await store.RunWatchdogAsync(now.AddHours(2), 2, TimeSpan.FromMinutes(1));
 
-        var exhausted = await store.RunWatchdogAsync(now.AddMinutes(4), 2, TimeSpan.FromMinutes(1));
-        Assert.AreEqual(1, exhausted.DeadLetteredTasks);
-        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+        Assert.AreEqual(0, recovered.RedispatchedTasks);
+        Assert.AreEqual(0, recovered.DeadLetteredTasks);
+        Assert.IsEmpty(await store.GetPendingDispatchesAsync(now.AddHours(2), 10));
+        Assert.AreEqual(CollectionTaskStatus.Ready,
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
     }
 
