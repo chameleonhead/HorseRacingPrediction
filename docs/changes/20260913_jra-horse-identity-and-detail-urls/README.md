@@ -114,3 +114,4 @@ DiscoveryがRaceCard/RaceResult子requestを作る際、詳細URLはHTTPS、JRA�
 - 設計では別テーブルのexternal identity mappingとAPI側resolve-or-registerを想定したが、実装は正規化JRA identityからUUIDv5相当のcanonical Horse IDを決定論的に生成する方式とした。同一identityの同時Workerが同じIDへ収束する受け入れ結果を、追加mappingの整合性管理なしで満たす。
 - legacy Horseをその場で改名するのではなく、同じRaceEntryをcanonical IDで再登録してEventFlow projectionの参照を移し、その事実から専用repair候補を記録する。applyは参照残存がないことを再検証してsource redirectを確定する。
 - 本番配備、repair dry-run、manifest確認、apply、ビッグヒーロー再取得は未実施。実装完了とは分離し、配備後にAC8/AC9の実測結果を本記録へ追記する。
+- repairを管理画面から確認・実行するfollow-upは [JRA競走馬識別子の不具合修復を管理画面から実行する](../20260914_horse-identity-repair-admin-ui/README.md) で設計する。
