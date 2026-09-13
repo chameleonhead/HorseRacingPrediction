@@ -158,7 +158,8 @@ public sealed class JobDetailComponentTests
             LatestAttemptResult = CollectionAttemptResult.ResourceNotYetAvailable,
             LatestAttemptErrorCode = "RaceResultNotYetAvailable",
             NextCollectionAt = next,
-        }) { BaseAddress = new Uri("http://localhost") };
+        })
+        { BaseAddress = new Uri("http://localhost") };
         await using var context = CreateContext(app.Services, http);
 
         var cut = RenderDetail(context);

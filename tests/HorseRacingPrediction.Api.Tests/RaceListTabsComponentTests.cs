@@ -4,6 +4,7 @@ using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
+using HorseRacingPrediction.Contracts.Time;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,7 +50,7 @@ public sealed class RaceListTabsComponentTests
 
         await cut.InvokeAsync(() => cut.FindComponent<FluentTabs>().Instance.ActiveTabIdChanged.InvokeAsync("today"));
 
-        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        var today = JstTime.Today().ToString("yyyy-MM-dd");
         cut.WaitForAssertion(() =>
         {
             var navigation = context.Services.GetRequiredService<NavigationManager>();
@@ -76,7 +77,7 @@ public sealed class RaceListTabsComponentTests
             CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(new PagedResponse<RaceSummaryResponse>(
-                [new("R001", DateOnly.FromDateTime(DateTime.Today), "06", 1, "テストレース",
+                [new("R001", JstTime.Today(), "06", 1, "テストレース",
                     HorseRacingPrediction.Contracts.RaceStatus.ResultDeclared, 16, "テストホース", DateTimeOffset.UtcNow)],
                 1, 50, 1, 1))
             });

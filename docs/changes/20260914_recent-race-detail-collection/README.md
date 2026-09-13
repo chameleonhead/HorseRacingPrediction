@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -348,3 +348,25 @@ solution test（Scraping 240件成功・1件skip、Collector 179件、API 192件
 `RaceCardWorkflow_直近開催日の出馬表収集が成功する`、`現在週RaceCardを連続取得_表示中ページからレース番号で切り替える`、
 `完了済みRaceResult取得` の4件が成功した。出馬表entriesの馬主名が全件非空でdomain writeへ渡ること、表示中ページから
 レース番号を切り替えられること、結果ページへ到達して結果を解析できることを確認した。
+
+## CI failure closure (2026-09-14)
+
+push `95bec01` のUbuntu CIで、ローカル完了判定に含めていなかったworkflow固有ゲートが失敗したため、本記録を
+`Approved`へ戻した。利用者の修正指示により以下をExecution Modeで閉じる。
+
+| ID | Finding | Owner / tier | Write scope | Verification / completion evidence | State |
+| --- | --- | --- | --- | --- | --- |
+| CI1 | `dotnet format --verify-no-changes` が今回の変更箇所を含む未整形コードを検出 | Main / Lead | formatter対象C#、本記録 | workflowと同じformat検証がexit 0 | Verified |
+| CI2 | `SelectingToday_UpdatesUrlAndSelectsTodayPanel` がrunnerのローカル日付をJSTの「今日」と比較 | Main / Lead | `RaceListTabsComponentTests.cs`、本記録 | `JstTime.Today()`へ統一しRelease全test成功 | Verified |
+| CI3 | 修正push後の`app-ci`と`app-deploy`を終端まで確認 | Main / Lead | GitHub Actions（監視のみ） | 同一commitの両workflowがsuccess | Runnable |
+| CI4 | コミット前にCIのformat検証が抜けるprocess gapを修正 | Main / Lead | `.codex/skills/document-driven-development/SKILL.md`、本記録 | skill validator成功、exact format gate再実行 | Verified |
+
+Pre-implementation review: CI1とCI2は独立原因だがformatterが共有ファイルを書き換えるため主担当で直列実行する。
+CI3はcommit/push後にのみRunnableとなる。失敗ログのrunnerは`ubuntu-latest`、失敗commandは
+`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`およびRelease testである。
+CI4は、既存のpush後CI parity規則だけではコミット前format実行を保証できず実際に漏れたため、DDDのCommit Checkpointsへ
+「source/test commitの最終編集後にworkflowと同一のformat検証を実行し、formatter適用後は後続gateも再実行する」条件を追加する。
+
+Checkpoint review: `dotnet format`でCI指摘4ファイルを整形し、日付テストをJST基準へ統一した。skill validator、
+workflowと同一のformat検証、Release build、pending migration確認、空SQLiteへの全migration適用、Release全test
+（External除外、失敗0）、脆弱package確認（該当0）が成功した。CI3だけを修正commitのpush後に確認する。

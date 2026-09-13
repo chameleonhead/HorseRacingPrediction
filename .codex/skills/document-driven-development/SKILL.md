@@ -75,6 +75,7 @@ When the repository contains `.codegraph/`, treat its index as a derived verific
 
 - For large or long-running changes, commit at verified checkpoints instead of waiting for the entire change set to finish. Good checkpoint boundaries include document/design updates, API or state-model changes, UI slices, tests, and final documentation synchronization.
 - Before each checkpoint commit, update the change record or working notes with the completed scope, remaining work, and verification result that justifies the commit.
+- Before every commit containing source or test code, inspect the repository CI workflow and run its exact formatting verification command after the final edit (currently `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`). If it reports changes, apply the formatter, then rerun the verification and every workflow-equivalent build/test gate affected by the formatted files before committing. A successful build or `git diff --check` does not replace this gate.
 - Do not mix unrelated objectives in one checkpoint commit. If a checkpoint reveals a separate fix, commit it separately or leave it unstaged until the relevant scope is verified.
 
 ## Document Rules

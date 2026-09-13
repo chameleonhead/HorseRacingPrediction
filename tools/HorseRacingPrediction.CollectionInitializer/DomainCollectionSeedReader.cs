@@ -46,9 +46,17 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
 
     private static string CanonicalCourse(string value) => value switch
     {
-        "札幌" => "Sapporo", "函館" => "Hakodate", "福島" => "Fukushima", "新潟" => "Niigata",
-        "東京" => "Tokyo", "中山" => "Nakayama", "中京" => "Chukyo", "京都" => "Kyoto",
-        "阪神" => "Hanshin", "小倉" => "Kokura", _ => value,
+        "札幌" => "Sapporo",
+        "函館" => "Hakodate",
+        "福島" => "Fukushima",
+        "新潟" => "Niigata",
+        "東京" => "Tokyo",
+        "中山" => "Nakayama",
+        "中京" => "Chukyo",
+        "京都" => "Kyoto",
+        "阪神" => "Hanshin",
+        "小倉" => "Kokura",
+        _ => value,
     };
 
     private static async Task ReadProfilesAsync(SqliteConnection connection, List<CollectionInitializationSeed> seeds,

@@ -1784,24 +1784,39 @@ public sealed class CollectionPlatformStore
                 {
                     var request = new CollectionRequestEntity
                     {
-                        RequestId = Guid.NewGuid(), ResourcePk = target.ResourcePk, DefinitionId = "race-detail",
-                        RequestedRevision = 1, Reason = CollectionReason.DefinitionChanged, RequestedAt = now,
+                        RequestId = Guid.NewGuid(),
+                        ResourcePk = target.ResourcePk,
+                        DefinitionId = "race-detail",
+                        RequestedRevision = 1,
+                        Reason = CollectionReason.DefinitionChanged,
+                        RequestedAt = now,
                     };
                     var task = new CollectionTaskEntity
                     {
-                        TaskId = Guid.NewGuid(), RequestId = request.RequestId, ResourcePk = target.ResourcePk,
-                        DefinitionId = "race-detail", RequestedRevision = 1, Status = CollectionTaskStatus.Ready,
-                        Lane = CollectionLane.Realtime, Priority = (int)CollectionPriority.High,
-                        AvailableAt = now, CreatedAt = now, UpdatedAt = now, DispatchGeneration = 1,
+                        TaskId = Guid.NewGuid(),
+                        RequestId = request.RequestId,
+                        ResourcePk = target.ResourcePk,
+                        DefinitionId = "race-detail",
+                        RequestedRevision = 1,
+                        Status = CollectionTaskStatus.Ready,
+                        Lane = CollectionLane.Realtime,
+                        Priority = (int)CollectionPriority.High,
+                        AvailableAt = now,
+                        CreatedAt = now,
+                        UpdatedAt = now,
+                        DispatchGeneration = 1,
                     };
                     db.Requests.Add(request);
                     db.Tasks.Add(task);
                     db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                        { ResourcePk = target.ResourcePk, DefinitionId = "race-detail", TaskId = task.TaskId });
+                    { ResourcePk = target.ResourcePk, DefinitionId = "race-detail", TaskId = task.TaskId });
                     db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                     {
-                        OutboxId = Guid.NewGuid(), TaskId = task.TaskId, DispatchGeneration = 1,
-                        AvailableAt = now, CreatedAt = now,
+                        OutboxId = Guid.NewGuid(),
+                        TaskId = task.TaskId,
+                        DispatchGeneration = 1,
+                        AvailableAt = now,
+                        CreatedAt = now,
                     });
                     supplementCount++;
                 }
@@ -2667,11 +2682,16 @@ public sealed class CollectionPlatformStore
     {
         canonical = value.Trim() switch
         {
-            "札幌" or "Sapporo" => "Sapporo", "函館" or "Hakodate" => "Hakodate",
-            "福島" or "Fukushima" => "Fukushima", "新潟" or "Niigata" => "Niigata",
-            "東京" or "Tokyo" => "Tokyo", "中山" or "Nakayama" => "Nakayama",
-            "中京" or "Chukyo" => "Chukyo", "京都" or "Kyoto" => "Kyoto",
-            "阪神" or "Hanshin" => "Hanshin", "小倉" or "Kokura" => "Kokura",
+            "札幌" or "Sapporo" => "Sapporo",
+            "函館" or "Hakodate" => "Hakodate",
+            "福島" or "Fukushima" => "Fukushima",
+            "新潟" or "Niigata" => "Niigata",
+            "東京" or "Tokyo" => "Tokyo",
+            "中山" or "Nakayama" => "Nakayama",
+            "中京" or "Chukyo" => "Chukyo",
+            "京都" or "Kyoto" => "Kyoto",
+            "阪神" or "Hanshin" => "Hanshin",
+            "小倉" or "Kokura" => "Kokura",
             _ => string.Empty,
         };
         return canonical.Length > 0;
@@ -2690,8 +2710,10 @@ public sealed class CollectionPlatformStore
     {
         static int Rank(ResourceLocationStatus value) => value switch
         {
-            ResourceLocationStatus.Active => 4, ResourceLocationStatus.Unknown => 3,
-            ResourceLocationStatus.Suspect => 2, _ => 1,
+            ResourceLocationStatus.Active => 4,
+            ResourceLocationStatus.Unknown => 3,
+            ResourceLocationStatus.Suspect => 2,
+            _ => 1,
         };
         if (Rank(source.Status) > Rank(target.Status)) target.Status = source.Status;
         if (source.DiscoveredAt < target.DiscoveredAt) target.DiscoveredAt = source.DiscoveredAt;
