@@ -1,6 +1,6 @@
 # モデル階層に応じたエージェント分業と change record レビューを標準化する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -191,7 +191,7 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 | T8 | 完了前自己監査とスキル自己改善ゲートを追加する | Worker draft + Main integration | Cost efficient + High capability | T7 | orchestration/failure skills | validator、反例再実行 | 自己監査からskill更新・再検証へ接続 | Verified |
 | T9 | 状態語彙とzero-open-item判定を全運用スキルで統一する | Worker draft + Main integration | Cost efficient + High capability | T7 | AGENTS.md、DDD、format、orchestration/failure skills | diff review、validator | approved-scope未達を全状態で遮断 | Verified |
 | T10 | AC↔Task↔Verification ledgerと実行証拠を補完して再監査する | Worker audit + Main integration | Cost efficient + High capability | T8, T9 | 本記録 | closure audit、全validator、git checks | 全AC・全task Verified | Verified |
-| T11 | 修正後の反証テスト、最終監査、記録更新、分離コミットを行う | Independent worker + Main | Cost efficient evaluator + High capability final review | T8-T10 | Read-only + 本変更 | counterexample replay、closure ledger、validator、git checks | open itemゼロとcommit | In progress |
+| T11 | 修正後の反証テスト、最終監査、記録更新、分離コミットを行う | Independent worker + Main | Cost efficient evaluator + High capability final review | T8-T10 | Read-only + 本変更 | counterexample replay、closure ledger、validator、git checks | open itemゼロとcommit | Verified |
 
 ## Design and task-split review
 
@@ -262,18 +262,19 @@ Approved へ移行した直後、コード変更前に実行計画を再確認�
 - 2026-09-14: 修正後の独立forward testで、(1) worker自己申告と単体テストだけの完了、(2)未達ACを残した完了、(3)軽微な単一ファイル修正を評価した。前2件は完了を拒否し、3件目は台帳やskill更新を強制しないため合格とした。
 - 2026-09-14: `$env:PYTHONUTF8='1'` の上で全8skillへ `quick_validate.py` を実行し8件成功。placeholder検索ではchange-record/handoffの明示的テンプレートだけが残り、TODO/TBD/未実装placeholderはなかった。責務検索と全diffの主担当レビューで、通常委譲、DDD、failure、UI設計、UI検証の正本が分離されていることを確認した。
 - 2026-09-14: 修正後の `git diff --check -- AGENTS.md .codex/skills docs/changes/20260914_model-tiered-agent-orchestration/README.md` が成功した。
+- 2026-09-14: self-auditとclosure修正をcommit `536e4db` (`Add orchestration completion self-audit`) として分離コミットした。`git status`で既存collector文書3件と別change recordだけが未コミットで残り、本変更が混在していないことを確認した。
 
 ## Final review
 
 - Reviewer: 高能力モデルの主担当。
 - Inputs: Approved change record、commit `5061490`、3件の独立再監査、修正後の反証テスト、全diff、全8skill validator、placeholder/責務検索、`git diff --check`、`git status`。
-- Decision: Pass。AC1-AC10は本ledgerの証拠へ追跡でき、T1-T10はVerified。高能力モデルの計画・統合・最終レビューを中心に据え、軽微な誤りへ過剰な台帳やskill更新を要求しない。T11の分離コミットだけを残す。
-- Follow-up: 本変更だけをstage・commitし、commit後にStatusとT11を最終更新する。モデル提供状況・価格は固定せず、将来の実績でroutingを狭く調整する。外部タスク管理pluginは導入しない。
+- Decision: Pass。AC1-AC10とT1-T11は本ledgerと検証記録へ追跡でき、未完了項目はない。高能力モデルの計画・統合・最終レビューを中心に据え、軽微な誤りへ過剰な台帳やskill更新を要求しない。
+- Follow-up: モデル提供状況・価格は固定せず、将来の実績でroutingを狭く調整する。外部タスク管理pluginは導入しない。
 - Record location: 本節 `#final-review`。
 
 ## Completion evidence
 
-各ACのtask、検証、実証結果、記録先は `Acceptance-criterion closure ledger` を正本とする。T11のcommit証拠は完了更新時に追記する。
+各ACのtask、検証、実証結果、記録先は `Acceptance-criterion closure ledger` を正本とする。T11の実装証拠はcommit `536e4db` と本完了記録である。
 
 ## Implementation result
 
