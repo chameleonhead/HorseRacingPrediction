@@ -108,8 +108,13 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: new(2026, 9, 13));
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, DispatchBatchSize = 10,
-                    MaxInFlightEnvelopes = 1, AggregationDelayMilliseconds = 0 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 10,
+                    MaxInFlightEnvelopes = 1,
+                    AggregationDelayMilliseconds = 0
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -145,8 +150,13 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: date, attributes: attributes);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, AggregationDelayMilliseconds = 0,
-                    MaxInFlightEnvelopes = 1, RaceDayMaxTasks = 24 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    AggregationDelayMilliseconds = 0,
+                    MaxInFlightEnvelopes = 1,
+                    RaceDayMaxTasks = 24
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -179,8 +189,13 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                     CollectionReason.Discovery, now, CollectionLane.Realtime, 80, attributes: attributes);
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, AggregationDelayMilliseconds = 0,
-                    MaxInFlightEnvelopes = 1, WeekendSubjectsMaxTasks = 12 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    AggregationDelayMilliseconds = 0,
+                    MaxInFlightEnvelopes = 1,
+                    WeekendSubjectsMaxTasks = 12
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
@@ -210,8 +225,12 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                     CollectionReason.Initial, now, CollectionLane.Realtime, 80,
                     effectiveDate: new DateOnly(2026, 9, 10 + index));
             var queue = new RecordingQueue();
-            var queueOptions = Options.Create(new CollectionQueueOptions { Enabled = true,
-                AggregationDelayMilliseconds = 0, MaxInFlightEnvelopes = 1 });
+            var queueOptions = Options.Create(new CollectionQueueOptions
+            {
+                Enabled = true,
+                AggregationDelayMilliseconds = 0,
+                MaxInFlightEnvelopes = 1
+            });
             var first = new CollectionPlatformOutboxDispatcher(store1, queue, queueOptions,
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
             var second = new CollectionPlatformOutboxDispatcher(store2, queue, queueOptions,
@@ -246,8 +265,13 @@ public sealed class CollectionPlatformOutboxDispatcherTests
                     });
             var queue = new RecordingQueue();
             var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
-                Options.Create(new CollectionQueueOptions { Enabled = true, AggregationDelayMilliseconds = 0,
-                    MaxInFlightEnvelopes = 1, RaceDayMaxTasks = 24 }),
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    AggregationDelayMilliseconds = 0,
+                    MaxInFlightEnvelopes = 1,
+                    RaceDayMaxTasks = 24
+                }),
                 NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
 
             await dispatcher.DispatchOnceAsync(CancellationToken.None);

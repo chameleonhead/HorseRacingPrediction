@@ -13,6 +13,44 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
+    public async Task ProfileLocationFailure_FallsBackByNameWithoutFailedSourceIdentity()
+    {
+        var failedUrl = new Uri("https://www.jra.go.jp/broken/horse-a");
+        JraSubjectIdentity? discoveryIdentity = null;
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new HttpRequestException("gone"),
+                SubjectFactory = identity =>
+                {
+                    discoveryIdentity = identity;
+                    return SubjectPage("A", []);
+                },
+            },
+        };
+        var task = SubjectTask("horse-a", "A", new Dictionary<string, string>
+        {
+            ["birthDate"] = "2020-01-01",
+            ["sourceIdentity"] = failedUrl.AbsoluteUri,
+        }) with
+        {
+            Locations = [new(1, failedUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]
+        };
+
+        var completion = await new JraSubjectProfileCollectionHandler(
+                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsNotNull(discoveryIdentity);
+        Assert.AreEqual("A", discoveryIdentity.Name);
+        Assert.AreEqual(new DateOnly(2020, 1, 1), discoveryIdentity.BirthDate);
+        Assert.IsNull(discoveryIdentity.SourceIdentity);
+        Assert.HasCount(1, completion.LocationOutcomes!);
+    }
+
+    [TestMethod]
     public async Task RaceCard_DiscoversHorseJockeyTrainer_AndProfilesAreWrittenByTheirHandlers()
     {
         var date = new DateOnly(2026, 9, 12);

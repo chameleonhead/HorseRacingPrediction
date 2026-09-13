@@ -171,6 +171,7 @@ public sealed class CollectionOperationsEndpointTests
                         id == "H002" ? null : new Uri($"https://example.test/{id}"),
                         new Uri($"https://example.test/{id}/final"), 200,
                         "horse-profile"));
+                await store.SetPausedAsync(false, null, now.AddSeconds(2));
             }
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();

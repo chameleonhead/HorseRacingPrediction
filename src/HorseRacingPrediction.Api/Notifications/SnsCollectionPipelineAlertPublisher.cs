@@ -33,13 +33,14 @@ public sealed class SnsCollectionPipelineAlertPublisher : ICollectionPipelineAle
             _logger.LogWarning(
                 "収集ジョブ停止アラートを送信できません（JobFailureNotifications:TopicArn が未設定）。Reason={Reason}",
                 reason);
-            return;
+            throw new InvalidOperationException("JobFailureNotifications:TopicArn is required for pipeline alerts.");
         }
 
         await _sns.PublishAsync(new PublishRequest
         {
             TopicArn = _options.TopicArn,
-            Message = $"HRP ALERT: Collection pipeline stopped.\n{reason}\nDlqFailureCount={dlqFailureCount}",
+            Message = $"HRP ALERT: Collection pipeline stopped.\n{reason}\nFailureCount={dlqFailureCount}"
+                + (string.IsNullOrWhiteSpace(_options.AdminBaseUrl) ? string.Empty : $"\nJobs={_options.AdminBaseUrl.TrimEnd('/')}/jobs"),
             MessageAttributes = new Dictionary<string, MessageAttributeValue>
             {
                 ["AWS.SNS.SMS.SMSType"] = new()

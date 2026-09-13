@@ -543,6 +543,56 @@ public sealed class CollectionPlatformStoreTests
         var notifications = await store.GetPendingFailureNotificationsAsync(now.AddSeconds(1), 10);
         Assert.HasCount(1, notifications);
         Assert.AreEqual("DeadLetterQueue", notifications[0].ErrorCode);
+        var pipeline = await store.GetPipelineStateAsync();
+        Assert.IsTrue(pipeline.IsPaused);
+        StringAssert.Contains(pipeline.Reason, notifications[0].NotificationId.ToString("D"));
+    }
+
+    [TestMethod]
+    public async Task ResourceNotFound_IsUnavailableWithoutPausingPipeline()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
+
+        Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+        Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+    }
+
+    [TestMethod]
+    public async Task Recovery_RepairsTerminalActiveReferenceAndCreatesFreshTask()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now,
+            attributes: new Dictionary<string, string> { ["name"] = "A" });
+        var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "Broken"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
+        await using (var connection = new SqliteConnection(
+                         $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO collection_active_tasks (ResourcePk, DefinitionId, TaskId)
+                SELECT ResourcePk, DefinitionId, TaskId FROM collection_tasks WHERE TaskId = $taskId;
+                """;
+            command.Parameters.AddWithValue("$taskId", failed.TaskId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
+            now.AddMinutes(1));
+
+        Assert.IsTrue(recovery.CreatedTask);
+        Assert.AreNotEqual(failed.TaskId, recovery.TaskId);
+        Assert.IsNotNull(await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
     }
 
     [TestMethod]
@@ -580,6 +630,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(day1.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "BrokenDay", "fixture failure"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
         var day2 = tasks.Single(x => x.Resource.Id == "backfill:20260102");
         var successLease = await store.AcquireAsync(day2.TaskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(successLease);
@@ -618,6 +669,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
         Assert.HasCount(1, (await store.GetBackfillBatchAsync("jra:recovery"))!.Holes);
 
         var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
@@ -646,6 +698,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now,
             new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(1));
 
         var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
             now, CollectionLane.Background, (int)CollectionPriority.Background,
@@ -673,6 +726,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(failedTask.TaskId, failedLease.LeaseToken, now,
             new(CollectionAttemptResult.PermanentFailure, "BrokenDay"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(1));
 
         var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
             now.AddMinutes(-1), CollectionLane.Background, (int)CollectionPriority.Background,
@@ -1013,6 +1067,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(failedLease);
         await store.CompleteAttemptAsync(failed.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Broken"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
         var open = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
 
         await store.MarkFailureNotificationPublishedAsync(open.NotificationId, now.AddMinutes(1));
@@ -1056,6 +1111,7 @@ public sealed class CollectionPlatformStoreTests
         var firstLease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
         await store.CompleteAttemptAsync(first.TaskId, firstLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Old"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(1));
         var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
         await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease!.LeaseToken, now.AddMinutes(2),

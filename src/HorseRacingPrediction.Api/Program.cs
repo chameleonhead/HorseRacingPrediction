@@ -182,6 +182,7 @@ builder.Services.Configure<JobFailureNotificationOptions>(jobFailureNotification
 // 運用側で作成済みの前提で、アプリ側の設定トグルで送信有無を左右させないため。
 builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ => new AmazonSimpleNotificationServiceClient());
 builder.Services.AddSingleton<ICollectionPipelineAlertPublisher, SnsCollectionPipelineAlertPublisher>();
+builder.Services.AddHostedService<CollectionPipelineAlertDispatchService>();
 builder.Services.AddHostedService<CollectionPlanningScheduler>();
 
 builder.Services.AddEventFlow(options =>

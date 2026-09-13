@@ -90,9 +90,13 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         if (page is null)
         {
+            // A persisted source URL is useful while validating that URL, but must not constrain
+            // discovery after the URL itself has failed. Keep the stable name/birth-date identity
+            // and let navigation discover the subject's current official URL.
+            var discoveryIdentity = identity with { SourceIdentity = null };
             try
             {
-                page = await session.Navigate.ToSubjectProfileAsync(identity, cancellationToken).ConfigureAwait(false);
+                page = await session.Navigate.ToSubjectProfileAsync(discoveryIdentity, cancellationToken).ConfigureAwait(false);
             }
             catch (JraSubjectIdentificationException ex)
             {
@@ -105,7 +109,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         try
         {
-            SubjectProfilePageParser.Validate(page, identity);
+            SubjectProfilePageParser.Validate(page, identity with { SourceIdentity = null });
         }
         catch (JraSubjectIdentificationException ex)
         {

@@ -184,6 +184,18 @@ public sealed class CollectionPlatformStore
                 && x.DefinitionId == definition.Value, cancellationToken);
             if (active is not null)
             {
+                var activeStatus = await db.Tasks.Where(x => x.TaskId == active.TaskId)
+                    .Select(x => (CollectionTaskStatus?)x.Status).SingleOrDefaultAsync(cancellationToken);
+                if (activeStatus is null || activeStatus is CollectionTaskStatus.Succeeded
+                    or CollectionTaskStatus.Failed or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)
+                {
+                    db.ActiveTasks.Remove(active);
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    active = null;
+                }
+            }
+            if (active is not null)
+            {
                 if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh)
                     await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
                         active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
@@ -651,6 +663,7 @@ public sealed class CollectionPlatformStore
                     ? CollectionStateStatus.Unavailable : CollectionStateStatus.Failed;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 await QueueFailureNotificationAsync(db, task, completion.ErrorCode, completion.ErrorMessage, now,
+                    pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound,
                     cancellationToken).ConfigureAwait(false);
             }
             state.UpdatedAt = now;
@@ -1600,7 +1613,7 @@ public sealed class CollectionPlatformStore
             state.UpdatedAt = now;
             var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
             if (active is not null) db.ActiveTasks.Remove(active);
-            await QueueFailureNotificationAsync(db, task, "DeadLetterQueue", errorMessage, now, cancellationToken)
+            await QueueFailureNotificationAsync(db, task, "DeadLetterQueue", errorMessage, now, true, cancellationToken)
                 .ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1985,7 +1998,7 @@ public sealed class CollectionPlatformStore
 
     private static async Task QueueFailureNotificationAsync(CollectionPlatformDbContext db,
         CollectionTaskEntity task, string? errorCode, string? errorMessage, DateTimeOffset now,
-        CancellationToken cancellationToken)
+        bool pausePipeline, CancellationToken cancellationToken)
     {
         var previous = await db.FailureNotifications.Where(x => x.ResolutionStatus
             == CollectionFailureResolutionStatus.Open || x.ResolutionStatus
@@ -1997,9 +2010,10 @@ public sealed class CollectionPlatformStore
             item.ResolutionStatus = CollectionFailureResolutionStatus.Superseded;
             item.ResolvedAt = now;
         }
+        var notificationId = Guid.NewGuid();
         db.FailureNotifications.Add(new CollectionFailureNotificationEntity
         {
-            NotificationId = Guid.NewGuid(),
+            NotificationId = notificationId,
             TaskId = task.TaskId,
             Status = task.Status.ToString(),
             ErrorCode = errorCode,
@@ -2009,6 +2023,22 @@ public sealed class CollectionPlatformStore
             AvailableAt = now,
             ResolutionStatus = CollectionFailureResolutionStatus.Open,
         });
+        if (pausePipeline)
+        {
+            var control = await db.Controls.SingleOrDefaultAsync(x => x.ControlId == "pipeline", cancellationToken);
+            if (control is null)
+            {
+                control = new CollectionPlatformControlEntity { ControlId = "pipeline" };
+                db.Controls.Add(control);
+            }
+            if (!control.IsPaused)
+            {
+                control.IsPaused = true;
+                control.Reason = $"Unexpected collection failure notification {notificationId:D}: "
+                    + $"Task={task.TaskId:D}; Error={errorCode ?? "Unknown"}; {errorMessage}";
+                control.UpdatedAt = now;
+            }
+        }
     }
 
     private static IQueryable<FailureRow> FailureQuery(CollectionPlatformDbContext db, long? resourcePk = null,
@@ -2038,7 +2068,8 @@ public sealed class CollectionPlatformStore
     private static async Task StartFailureRecoveryAsync(CollectionPlatformDbContext db, long resourcePk,
         string definitionId, Guid recoveryTaskId, DateTimeOffset now, CancellationToken token)
     {
-        var failures = await db.FailureNotifications.Where(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open)
+        var failures = await db.FailureNotifications.Where(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open
+                || x.ResolutionStatus == CollectionFailureResolutionStatus.RecoveryInProgress)
             .Join(db.Tasks.Where(x => x.ResourcePk == resourcePk && x.DefinitionId == definitionId),
                 x => x.TaskId, x => x.TaskId, (failure, _) => failure).ToListAsync(token);
         foreach (var failure in failures)

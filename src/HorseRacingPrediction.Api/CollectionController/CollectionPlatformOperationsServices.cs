@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HorseRacingPrediction.Api.Notifications;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.Options;
 
@@ -108,5 +109,45 @@ public sealed class CollectionBackfillRecoveryService(
             catch (Exception ex) { logger.LogError(ex, "Incomplete backfill recovery failed."); }
             await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken).ConfigureAwait(false);
         }
+    }
+}
+
+public sealed class CollectionPipelineAlertDispatchService(
+    CollectionPlatformStore store,
+    ICollectionPipelineAlertPublisher publisher,
+    ILogger<CollectionPipelineAlertDispatchService> logger) : BackgroundService
+{
+    private const string Prefix = "Unexpected collection failure notification ";
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await RunOnceAsync(stoppingToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception ex) { logger.LogError(ex, "Collection pipeline alert dispatch failed; it will be retried."); }
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    internal async Task<bool> RunOnceAsync(CancellationToken cancellationToken)
+    {
+        var pipeline = await store.GetPipelineStateAsync(cancellationToken).ConfigureAwait(false);
+        if (!pipeline.IsPaused || pipeline.Reason is null || !pipeline.Reason.StartsWith(Prefix, StringComparison.Ordinal))
+            return false;
+        var end = pipeline.Reason.IndexOf(':', Prefix.Length);
+        if (end < 0 || !Guid.TryParse(pipeline.Reason[Prefix.Length..end], out var notificationId)) return false;
+        var notification = (await store.GetUnpublishedFailureNotificationsAsync(
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), 10000, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(x => x.NotificationId == notificationId);
+        if (notification is null) return false;
+        var reason = $"Incident={notification.NotificationId:D}; Task={notification.TaskId:D}; "
+            + $"Resource={notification.Resource.Type}/{notification.Resource.Provider}/{notification.Resource.Id}; "
+            + $"Definition={notification.Definition}; Error={notification.ErrorCode ?? "Unknown"}; "
+            + $"OccurredAt={notification.FailedAt:O}; {notification.ErrorMessage}";
+        await publisher.PublishCollectionStoppedAsync(reason, 1, cancellationToken).ConfigureAwait(false);
+        await store.MarkFailureNotificationPublishedAsync(notification.NotificationId,
+            HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+        return true;
     }
 }

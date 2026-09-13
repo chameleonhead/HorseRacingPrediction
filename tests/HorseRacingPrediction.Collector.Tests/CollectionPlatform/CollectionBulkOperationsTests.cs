@@ -82,6 +82,8 @@ public sealed class CollectionBulkOperationsTests
         var lease = await store.AcquireAsync(receipt.TaskId, 1, Now, TimeSpan.FromDays(5));
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, finishedAt, new(result)));
+        if (result != CollectionAttemptResult.Succeeded)
+            await store.SetPausedAsync(false, null, finishedAt.AddTicks(1));
     }
     private sealed class TemporaryDirectory : IDisposable
     {

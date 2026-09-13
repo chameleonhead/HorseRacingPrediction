@@ -206,9 +206,9 @@ internal static class CollectionPlatformSchemaMigrator
                 ["collection_backfill_batches"] = ["CreatedAt", "ExpansionCompletedAt"]
             };
             foreach (var (table, columns) in dateTimeColumns)
-            foreach (var column in columns)
-                await NormalizeStoredDateTimeAsync(connection, transaction, table, column, cancellationToken)
-                    .ConfigureAwait(false);
+                foreach (var column in columns)
+                    await NormalizeStoredDateTimeAsync(connection, transaction, table, column, cancellationToken)
+                        .ConfigureAwait(false);
 
             await ExecuteAsync(connection,
                 "INSERT INTO collection_schema_history (version, applied_at) VALUES (7, $appliedAt);",
