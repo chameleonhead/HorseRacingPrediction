@@ -136,6 +136,7 @@ RaceCard等から同じ `RaceId + EntryId` を再登録した際に、HorseId、
 - 2026-09-14: `codegraph explore`で現行Horse候補のトリガー→candidate→preview/apply→suppression→UIを確認した。
 - 2026-09-14: read-only worker 2件で、4主体の識別子・merge・参照関係と、repair UI／収集failureとの責務差を並行棚卸しした。両成果をMainが実コードとCodeGraphで照合し、Ownerに安定外部IDとCollection resourceがないこと、Jockey/Trainerにsource identity伝播がないことを確認した。
 - Delegation usage/cost: measured token/cost unavailable。read-only調査2件、再試行0、escalation0。書込なし。Lead decision: 設計入力として採用。
+- 2026-09-14: 最初の承認依頼がchange recordへのリンクと主要仕様だけを示し、AC1〜AC10の観測可能な受け入れ条件を承認判断用に説明していなかった。原因はDocument Driven Developmentスキルに承認依頼本文のacceptance-summary gateがなかったことと確認し、同スキルへ全AC IDを含む概要説明を必須化した。`quick_validate.py`（`Skill is valid!`）と`git diff --check`を実行した。
 
 ## Deviations and follow-up
 
