@@ -45,6 +45,11 @@ public sealed class CollectionAdministrationComponentTests
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "表示する収集処理はありません"));
         await ClickFluentButtonAsync(cut, "収集を依頼");
         await ClickButtonAsync(cut, "複数をまとめて再取得");
+        var definitionOptions = cut.Find("select[aria-label='情報の種類']").QuerySelectorAll("option")
+            .Select(x => x.TextContent.Trim()).ToArray();
+        CollectionAssert.Contains(definitionOptions, "レース詳細");
+        CollectionAssert.DoesNotContain(definitionOptions, "出馬表");
+        CollectionAssert.DoesNotContain(definitionOptions, "レース結果");
         await SelectAsync(cut, "対象の選び方", "SpecificResources");
         cut.WaitForAssertion(() => Assert.IsTrue(cut.FindComponents<FluentButton>()
             .Last(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled));
@@ -167,6 +172,35 @@ public sealed class CollectionAdministrationComponentTests
         Assert.AreEqual(ResourceType.Horse, handler.LastManualRequest.ResourceType);
         Assert.AreEqual("H002", handler.LastManualRequest.ResourceId);
         Assert.AreEqual("horse-profile", handler.LastManualRequest.DefinitionId);
+    }
+
+    [TestMethod]
+    public async Task RaceQuickAction_CreatesOnlyUnifiedRaceDetailRequest()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集状況"));
+        await ClickFluentButtonAsync(cut, "収集を依頼");
+        StringAssert.Contains(cut.Markup, "レース詳細");
+        Assert.IsFalse(cut.FindAll("button").Any(x => x.TextContent.Trim() is "出馬表" or "レース結果"));
+        await ClickButtonAsync(cut, "レース詳細");
+        var target = cut.FindComponents<FluentTextField>().Single(x => x.Instance.Label?.ToString() == "対象ID");
+        await cut.InvokeAsync(() => target.Instance.ValueChanged.InvokeAsync("20260912:Nakayama:11"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Last(x => x.Markup.Contains("収集を依頼</")).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => Assert.AreEqual(1, handler.ManualRequests));
+        Assert.IsNotNull(handler.LastManualRequest);
+        Assert.AreEqual(ResourceType.Race, handler.LastManualRequest.ResourceType);
+        Assert.AreEqual("race-detail", handler.LastManualRequest.DefinitionId);
+        Assert.AreEqual(CollectionLane.Realtime, handler.LastManualRequest.Lane);
+        Assert.AreEqual(100, handler.LastManualRequest.Priority);
     }
 
     [TestMethod]

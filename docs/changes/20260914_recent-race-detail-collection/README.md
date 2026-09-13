@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -380,3 +380,45 @@ production再起動、health checkまで成功した。CI1〜CI4に未完了項�
 Delegation record: CIログとworkflowのread-only調査をWorker tierへ1件委譲し、再試行0、write 0で、run ID、runner OS、
 失敗command、failure locationを取得した。主担当がraw logとworkflowを照合して採用し、修正・skill更新・全検証・監視を担当した。
 利用量の測定値は取得不可。独立調査により原因特定が並行化され、reworkは発生しなかった。
+
+## Integration gap closure (2026-09-14)
+
+利用者の本番画面確認により、「出馬表の収集」と「レース結果の収集」が別ジョブとして残ることが判明した。
+承認済み受け入れ基準に含まれる旧definitionの全入口廃止と本番データ移行が未達だったため、本記録を`Approved`へ戻す。
+利用者の分析・修正指示により、以下をExecution Modeで閉じる。
+
+| ID | Finding | Owner / tier | Write scope | Verification / completion evidence | State |
+| --- | --- | --- | --- | --- | --- |
+| IG1 | Jobs画面の単一・一括手動依頼が`race-card`/`race-result`を生成可能 | Main / Lead | Jobs UIとcomponent tests | レース詳細1項目だけを表示し、`ResourceType.Race + race-detail` requestを検証 | Runnable |
+| IG2 | revision・失敗・batch画面の既定値／表示名が旧definitionのまま | Main / Lead | collection administration UIとtests | active UIは`race-detail`を使用し、旧履歴だけ互換表示 | Runnable |
+| IG3 | migration APIは実装済みだがproduction deployから一度も実行されない | Main / Lead | deploy workflow、必要なAPI/store契約、tests | pause/drain/apply/resumeが本番deployment pathで成功し、冪等再実行可能 | Runnable |
+| IG4 | CodeGraphのtyped caller確認だけで文字列ベースUI・deploy surfaceを見落とした | Main / Lead | DDD skill、本記録 | legacy literal inventory gateを追加してvalidator成功 | Runnable |
+| IG5 | 修正後の実画面・CI/CD・production migrationを確認 | Main / Lead | verification、GitHub Actions、本番read-only確認 | 全関連test、両workflow、production画面／移行report成功 | Dependent |
+
+Pre-implementation review: IG1/IG2は同じRazor表示・入力契約を共有するため主担当で直列化する。IG3はデータ移行を
+含むため主担当が実装し、既存のpauseとactive-task guardを維持する。IG4は実証済みの探索漏れに限定したskill更新とする。
+現在の未コミット3ファイル（`docs/20-admin-ui-design.md`、subject identity change recordとmock）は利用者の別作業として保持し、
+本変更へ混在させない。
+
+### Legacy surface inventory
+
+| Identifier | Surface / path | Classification | Verification evidence |
+| --- | --- | --- | --- |
+| `race-card`, `race-result` | `Jobs.razor` の手動・一括依頼候補 | active → removed | `RaceQuickAction_CreatesOnlyUnifiedRaceDetailRequest`で候補が`race-detail` 1件かつ作成requestが`ResourceType.Race`であることを検証 |
+| `race-card`, `race-result` | `appsettings.json` のdefinition別並列数 | active → removed | production設定は`race-detail`だけを設定し、repository literal searchで旧設定0件 |
+| `race-card`, `race-result` | `CollectionPlatformStore.MergeLegacyRaceDetailsAsync` | migration-only | preview/applyのstore testとproduction deployment stepで検証 |
+| `race-result:dead-heat-before-rev5` | revisionの定義済み条件 | history compatibility | 旧結果の再抽出条件としてのみ保持し、新規revision既定値は`race-detail` |
+| `race-card`, `race-result` | job・failure・batch詳細の表示辞書 | history compatibility | 既存履歴を「（旧）」付きで表示し、`race-detail`表示を追加 |
+| `ResourceType.RaceCard`, `ResourceType.RaceResult` | collector内のページ識別と統合handler | active implementation detail | `race-detail` 1 task内で出馬表／結果ページを取得する内部ページ種別であり、独立task生成入口ではない |
+
+### Cutover execution matrix
+
+| Step | Target / owner | Evidence | State |
+| --- | --- | --- | --- |
+| Backup | production Lightsail / deploy workflow | deploy前にcollection-platform DBを世代バックアップ | Connected |
+| Deploy replacement API | production Lightsail / GitHub Actions | health check成功後にmigrationへ進む | Connected |
+| Pause and drain | production collection pipeline / GitHub Actions | pause後、legacy/unified active taskの409だけをresume・待機・再試行 | Connected |
+| Apply | production collection-platform DB / migration API | `migrations/race-detail/apply`を実行 | Connected |
+| Post-check | production collection-platform DB / migration API | previewの`sourceResources == 0`かつ`errors`空を`jq`で検証 | Connected |
+| Resume | production collection pipeline / EXIT trap | 成否にかかわらずresumeを実行 | Connected |
+| Deployment evidence | production / Main | workflow runとmigration reportを記録 | Dependent |

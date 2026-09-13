@@ -240,6 +240,49 @@ jobs:
           echo "API did not become healthy after deploy" >&2
           exit 1
 
+      - name: Migrate legacy race collection jobs
+        env:
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        run: |
+          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
+          resume() {
+            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" "$base/pipeline/resume" >/dev/null || true
+          }
+          trap resume EXIT
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error -X POST \
+              -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
+              --data '{"reason":"deployment race-detail migration"}' \
+              "$base/pipeline/pause" >/dev/null
+            response="$(curl --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+              -w $'\n%{http_code}' "$base/migrations/race-detail/apply")"
+            status="${response##*$'\n'}"
+            body="${response%$'\n'*}"
+            if [ "$status" = "200" ]; then
+              preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+                "$base/migrations/race-detail/preview")"
+              if [ "$(jq '.sourceResources' <<<"$preview")" != "0" ] || \
+                 [ "$(jq '.errors | length' <<<"$preview")" != "0" ]; then
+                echo "Legacy race collection migration did not converge: $preview" >&2
+                exit 1
+              fi
+              echo "Legacy race collection migration completed: $body"
+              exit 0
+            fi
+            resume
+            if [ "$status" = "409" ] && grep -q 'active task(s)' <<<"$body"; then
+              echo "Waiting for active race collection tasks to drain (attempt $attempt/30)..."
+              sleep 10
+              continue
+            fi
+            echo "Legacy race collection migration failed (HTTP $status): $body" >&2
+            exit 1
+          done
+          echo "Timed out waiting for race collection tasks to drain." >&2
+          exit 1
+
   deploy-collector-lambda:
     needs: build-and-push
     runs-on: ubuntu-latest

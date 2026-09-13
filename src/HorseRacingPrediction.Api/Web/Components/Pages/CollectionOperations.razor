@@ -114,7 +114,7 @@ else
                 <h2>新しい抽出仕様を登録</h2>
                 <p>影響範囲を先に確認し、表示された対象だけに新しい版を適用します。</p>
                 <div class="operations-form-row">
-                    <div class="operations-field"><FluentTextField Label="収集内容" Placeholder="例: race-result" @bind-Value="revisionDefinition" /></div>
+                    <div class="operations-field"><FluentTextField Label="収集内容" Placeholder="例: race-detail" @bind-Value="revisionDefinition" /></div>
                     <div class="operations-field"><FluentTextField Label="版" @bind-Value="revisionText" /></div>
                     <div class="operations-field"><label class="filter-select">影響範囲<select aria-label="影響範囲" @bind="revisionScope" @bind:after="ResetRevisionPreview"><option value="All">すべて</option><option value="SpecificResources">対象IDを指定</option><option value="DateRange">日付範囲</option><option value="NamedCondition">定義済み条件</option></select></label></div>
                 </div>
@@ -155,7 +155,7 @@ else
     private IReadOnlyList<BackfillBatchSnapshot> backfills = [];
     private IReadOnlyList<string> loadErrors = [], operationErrors = [];
     private string backfillYear = JstTime.Today().Year.ToString(), backfillMonth = JstTime.Today().Month.ToString();
-    private string revisionDefinition = "race-result", revisionText = "1", successMessage = string.Empty;
+    private string revisionDefinition = "race-detail", revisionText = "1", successMessage = string.Empty;
     private string revisionScope = "All", revisionDescription = string.Empty, revisionResourceIds = string.Empty;
     private string revisionFrom = string.Empty, revisionTo = string.Empty, revisionNamedCondition = "race-result:dead-heat-before-rev5";
     private RevisionImpactPreview? revisionPreview;
@@ -246,7 +246,7 @@ else
         DateOnly? from = null, to = null;
         if (scope == RevisionImpactScopeType.SpecificResources)
         {
-            var type = revisionDefinition switch { "horse-profile" => ResourceType.Horse, "jockey-profile" => ResourceType.Jockey, "trainer-profile" => ResourceType.Trainer, "race-odds" => ResourceType.RaceOdds, "race-result" => ResourceType.RaceResult, _ => ResourceType.RaceCard };
+            var type = revisionDefinition switch { "horse-profile" => ResourceType.Horse, "jockey-profile" => ResourceType.Jockey, "trainer-profile" => ResourceType.Trainer, "race-odds" => ResourceType.RaceOdds, _ => ResourceType.Race };
             resources = revisionResourceIds.Split([',', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().Select(id => new ResourceKey(type, "JRA", id)).ToList();
             if (resources.Count == 0) { operationErrors = ["対象IDを1件以上入力してください。"]; return false; }
         }

@@ -43,6 +43,23 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
+    public void DeployWorkflow_MigratesLegacyRaceJobsAfterHealthCheck()
+    {
+        var migration = DeployWorkflow.IndexOf("- name: Migrate legacy race collection jobs", StringComparison.Ordinal);
+        var healthCheck = DeployWorkflow.LastIndexOf("- name: Verify deployment health", migration,
+            StringComparison.Ordinal);
+
+        Assert.IsGreaterThanOrEqualTo(0, healthCheck);
+        Assert.IsGreaterThan(healthCheck, migration);
+        StringAssert.Contains(DeployWorkflow, "$base/pipeline/pause");
+        StringAssert.Contains(DeployWorkflow, "$base/migrations/race-detail/apply");
+        StringAssert.Contains(DeployWorkflow, "$base/migrations/race-detail/preview");
+        StringAssert.Contains(DeployWorkflow, "$base/pipeline/resume");
+        StringAssert.Contains(DeployWorkflow, "jq '.sourceResources'");
+        StringAssert.Contains(DeployWorkflow, "jq '.errors | length'");
+    }
+
+    [TestMethod]
     public void Terraform_ConnectsLambdaDirectlyToResourceCollectionQueue()
     {
         var mapping = ResourceBlock(Main, "collector_queue", "aws_lambda_event_source_mapping");
