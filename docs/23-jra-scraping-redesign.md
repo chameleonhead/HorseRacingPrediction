@@ -525,6 +525,13 @@ public sealed record RaceEntry(
 馬主・生産者・調教師・馬体重をDOM上のclass付き要素から識別し、表示順だけに依存しない。
 `OwnerName`は馬プロフィールの現在値と、レース時点の出走スナップショットの両方へ保存する。
 
+2026-09-14 時点で、過去日を結果収集だけに振り分ける自動探索により、開催後に初めて発見した直近レースの
+`OwnerName` が欠落する問題が確認された。提案中の統合レース詳細ワークフローでは、
+`RaceCardLookupPeriod` を「古い出馬表への無意味な探索を避ける」目的に加えて取得元選択にも使用し、
+期間内は出馬表を先に保存してから現在ページの結果リンクを優先する。期間外だけ結果へ直接遷移する。
+従来の RaceResult 内部における Current/Recent/Historical の経路分岐は引き続き独立しており、出馬表取得後の
+fallback でのみ使用する。設計と実装状況は [直近レースの出馬表・結果を一体収集する](changes/20260914_recent-race-detail-collection/README.md) を参照する。
+
 ---
 
 ## JraRaceResultPage
