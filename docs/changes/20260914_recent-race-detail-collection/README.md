@@ -326,10 +326,14 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
 
 | Finding | State | Completion evidence |
 | --- | --- | --- |
-| F1 公式取止を推測せず終端化する | Runnable | parser/page/workflow/handlerのfixtureテストと終端state |
-| F2 結果未公開の段階的backoffを設定化する | Runnable | 当日・翌日以降のretry時刻テスト |
-| F3 管理画面で待機理由と次回確認時刻を表示する | Runnable | component/API projectionテスト |
+| F1 公式取止を推測せず終端化する | Verified | レース全体の公式取止fixtureと、個別馬の競走中止を誤認しないparser/workflow/handlerテスト |
+| F2 結果未公開の段階的backoffを設定化する | Verified | 当日は短間隔、過去日は経過日数に応じて上限まで延長するhandlerテストと設定binding |
+| F3 管理画面で待機理由と次回確認時刻を表示する | Verified | `JobDetailComponentTests.ResultPublicationWait_ShowsReasonAndNextCheckProminently` |
 | F4 実collection DB migrationをpreview/applyする | Dependent | 対象DB特定、backup、pause/drain、preview、apply、件数検証 |
 | F5 実JRAページで直近の出馬表→結果と馬主補完を確認する | Dependent | bounded live smokeの取得・domain保存証跡 |
 
 次の実行順は F1 → F2 → F3 → focused/full test → F4/F5 の対象環境確認と安全な適用である。
+
+2026-09-14: F1〜F3を実装した。focused test（Scraping 84件、Collector 14件、API component 12件）と
+solution test（Scraping 240件成功・1件skip、Collector 179件、API 192件、その他全project失敗0）が成功し、
+`git diff --check` と CodeGraph sync も成功した。

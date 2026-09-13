@@ -6,6 +6,7 @@ using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
+using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -49,6 +50,27 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_OfficialCancellation_CompletesWithoutWaitingForPayouts()
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var race = new RaceId(date, RaceCourse.Tokyo, 11);
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [], [],
+                "https://example.test/result/11", IsOfficiallyConfirmed: false, IsOfficiallyCancelled: true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(CreateTask(ResourceType.Race, "race-detail", date),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        StringAssert.StartsWith(completion.PageIdentification, "RaceDetailOfficialCancellation:");
+    }
+
+    [TestMethod]
     public async Task RaceDetail_ResultNotPublished_IsAvailabilityWaitEvenOutsideCardWindow()
     {
         var date = new DateOnly(2026, 9, 1);
@@ -57,9 +79,14 @@ public sealed class JraDirectCollectionHandlerTests
             ThrowOnCollect = new JraNavigationException("result is not published",
                 HorseRacingPrediction.Scraping.Jra.Navigation.JraNavigationFailureReason.NotYetPublished),
         };
+        var now = new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero);
         var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
             _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
-            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
+            timeProvider: new FixedTimeProvider(now), options: Options.Create(new RaceDetailCollectionOptions
+            {
+                HistoricalResultInitialRetryMinutes = 7,
+                HistoricalResultMaxRetryMinutes = 45,
+            }));
 
         var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.Race, "JRA", "20260901:Tokyo:11"), new("race-detail"), 1,
@@ -70,7 +97,7 @@ public sealed class JraDirectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
         Assert.AreEqual("RaceResultNotYetAvailable", completion.ErrorCode);
-        Assert.IsNotNull(completion.RetryAt);
+        Assert.AreEqual(now.AddMinutes(45), completion.RetryAt);
     }
 
     [TestMethod]

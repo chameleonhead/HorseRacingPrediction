@@ -22,6 +22,7 @@ builder.Services.AddOptions<ApiClientOptions>()
 builder.Services.AddHttpAgentServices();
 
 builder.Services.AddJraScraping();
+builder.Services.Configure<RaceDetailCollectionOptions>(builder.Configuration.GetSection("RaceDetailCollection"));
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDetailCollectionHandler>();
 builder.Services.Configure<RaceDiscoveryCollectionOptions>(builder.Configuration.GetSection("RaceDiscoveryCollection"));
 builder.Services.AddSingleton<ICollectionDefinitionHandler, JraRaceDiscoveryCollectionHandler>();

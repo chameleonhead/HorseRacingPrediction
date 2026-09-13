@@ -15,6 +15,14 @@ public sealed class RaceDiscoveryCollectionOptions
     public int NearPublicationRetryMinutes { get; set; } = 180;
     public int DistantPublicationCheckHourJst { get; set; } = 9;
 }
+
+public sealed class RaceDetailCollectionOptions
+{
+    public int ResultCheckGraceMinutes { get; set; } = 5;
+    public int SameDayResultRetryMinutes { get; set; } = 10;
+    public int HistoricalResultInitialRetryMinutes { get; set; } = 30;
+    public int HistoricalResultMaxRetryMinutes { get; set; } = 360;
+}
 public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory sessions,
     JraScheduleCollectionWorkflowFactory schedules, ICollectionRequestSink requests,
     IOptions<RaceDiscoveryCollectionOptions>? options = null, TimeProvider? timeProvider = null)
@@ -177,9 +185,11 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
 public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     JraRaceCardCollectionWorkflowFactory cardWorkflows,
     JraRaceResultCollectionWorkflowFactory resultWorkflows, IPredictionSchedule? predictionSchedule = null,
-    ICollectionRequestSink? requests = null, TimeProvider? timeProvider = null) : ICollectionDefinitionHandler
+    ICollectionRequestSink? requests = null, TimeProvider? timeProvider = null,
+    IOptions<RaceDetailCollectionOptions>? options = null) : ICollectionDefinitionHandler
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+    private readonly RaceDetailCollectionOptions _options = options?.Value ?? new();
     public CollectionDefinitionId DefinitionId => new("race-detail");
     public ResourceType ResourceType => ResourceType.Race;
 
@@ -295,17 +305,23 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         catch (JraNavigationException ex)
         {
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message,
-                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), RetryAt: _time.GetUtcNow().AddMinutes(10),
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), RetryAt: NextResultRetry(raceId.Date),
                 LocationOutcomes: locationOutcomes);
         }
         if (raceResult.Errors.Count > 0)
             return new(CollectionAttemptResult.ValidationFailure, "DomainWriteRejected",
                 string.Join("; ", raceResult.Errors), RequestedUrl: ToUri(raceResult.SourceUrl),
                 LocationOutcomes: locationOutcomes);
+        if (raceResult.IsOfficiallyCancelled)
+            return new(CollectionAttemptResult.Succeeded,
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
+                FinalUrl: ToUri(raceResult.SourceUrl),
+                PageIdentification: $"RaceDetailOfficialCancellation:JRA:{task.Resource.Id}",
+                LocationOutcomes: locationOutcomes);
         if (!raceResult.IsOfficiallyConfirmed)
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
                 "Race result is not officially confirmed.", RequestedUrl: ToUri(raceResult.SourceUrl),
-                RetryAt: _time.GetUtcNow().AddMinutes(10), LocationOutcomes: locationOutcomes);
+                RetryAt: NextResultRetry(raceId.Date), LocationOutcomes: locationOutcomes);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
             FinalUrl: ToUri(raceResult.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
             LocationOutcomes: locationOutcomes);
@@ -325,9 +341,20 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var jst = TimeZoneInfo.FindSystemTimeZoneById(
             OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
         var time = attributes.TryGetValue("startTime", out var value) && TimeOnly.TryParse(value, out var parsed)
-            ? parsed.AddMinutes(5) : new TimeOnly(9, 35);
+            ? parsed.AddMinutes(Math.Max(0, _options.ResultCheckGraceMinutes)) : new TimeOnly(9, 35);
         var local = date.ToDateTime(time, DateTimeKind.Unspecified);
         return new DateTimeOffset(local, jst.GetUtcOffset(local)).ToUniversalTime();
+    }
+
+    private DateTimeOffset NextResultRetry(DateOnly raceDate)
+    {
+        var daysElapsed = Math.Max(0, TodayJst().DayNumber - raceDate.DayNumber);
+        if (daysElapsed == 0)
+            return _time.GetUtcNow().AddMinutes(Math.Max(1, _options.SameDayResultRetryMinutes));
+        var exponent = Math.Clamp(daysElapsed - 1, 0, 10);
+        var minutes = Math.Min(Math.Max(1, _options.HistoricalResultMaxRetryMinutes),
+            Math.Max(1, _options.HistoricalResultInitialRetryMinutes) * Math.Pow(2, exponent));
+        return _time.GetUtcNow().AddMinutes(minutes);
     }
 
     internal static RaceId ParseRaceId(LeasedCollectionTask task)

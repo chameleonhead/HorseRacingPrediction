@@ -82,16 +82,17 @@ public sealed class RaceResultPageParser
         SemanticPageSnapshot source)
     {
         var snapshot = JraSnapshotView.Create(source);
-        return FindResultTable(snapshot) is not null;
+        return FindResultTable(snapshot) is not null || IsOfficiallyCancelled(snapshot);
     }
 
     public IJraPage Parse(
         SemanticPageSnapshot source)
     {
         var snapshot = JraSnapshotView.Create(source);
-        var table =
-            FindResultTable(snapshot)
-            ?? throw new JraPageParseException(
+        var officiallyCancelled = IsOfficiallyCancelled(snapshot);
+        var table = FindResultTable(snapshot);
+        if (table is null && !officiallyCancelled)
+            throw new JraPageParseException(
                 JraPageKind.RaceResult,
                 snapshot.Url,
                 "レース結果テーブルを取得できませんでした。");
@@ -105,16 +106,16 @@ public sealed class RaceResultPageParser
         var number =
             ParseRaceNumber(snapshot);
 
-        var raceName =
-            ParseRaceName(snapshot);
+        var raceName = officiallyCancelled
+            ? $"{RaceCourseNames.GetJraName(course)}{number}R"
+            : ParseRaceName(snapshot);
 
-        var results =
-            ParseResults(table, snapshot.Url);
+        IReadOnlyList<RaceResultEntry> results = table is null ? [] : ParseResults(table, snapshot.Url);
 
         // 依頼書29節: RaceResult全体Validationとして「結果行が1件以上存在する」ことを
         // 必須とする。着順テーブル自体は見つかったが結果行が0件の場合、成績なしの
         // レース結果ページとして正常扱いにはせず、Parser異常として検知する。
-        if (results.Count == 0)
+        if (results.Count == 0 && !officiallyCancelled)
         {
             throw new JraPageStructureException(
                 JraPageKind.RaceResult,
@@ -140,7 +141,7 @@ public sealed class RaceResultPageParser
                 string.Join(",", duplicateHorseNumbers));
         }
 
-        var inferredStarterCount = Math.Max(results.Count, results.Max(result => result.HorseNumber));
+        var inferredStarterCount = results.Count == 0 ? 0 : Math.Max(results.Count, results.Max(result => result.HorseNumber));
         var invalidPopularity = results.FirstOrDefault(result => result.Popularity > inferredStarterCount);
         if (invalidPopularity is not null)
         {
@@ -158,8 +159,7 @@ public sealed class RaceResultPageParser
         var trackConditionText =
             ParseTrackConditionText(snapshot);
 
-        var payouts =
-            ParsePayouts(snapshot, table);
+        var payouts = table is null ? null : ParsePayouts(snapshot, table);
 
         var courseSpec =
             ParseCourseSpec(snapshot, raceName);
@@ -194,7 +194,16 @@ public sealed class RaceResultPageParser
             ParseRaceConditions(snapshot),
             ParseSectionalTimes(snapshot),
             additionalPrizeMoneyByPosition,
-            ParseStewardReport(snapshot));
+            ParseStewardReport(snapshot),
+            officiallyCancelled);
+    }
+
+    private static bool IsOfficiallyCancelled(JraSnapshotView snapshot)
+    {
+        var text = string.Join(' ', new[] { snapshot.Title, snapshot.MainText }.Concat(snapshot.Headings));
+        return Regex.IsMatch(text,
+            @"(?:第?\s*\d{1,2}\s*競走|この競走|本競走)\s*(?:は|を)?\s*(?:取り止め|取止め|取りやめ|中止)(?:ました|とします|となりました)?",
+            RegexOptions.CultureInvariant);
     }
 
     private static readonly Regex MeetingRegex = new(

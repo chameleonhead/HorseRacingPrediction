@@ -25,7 +25,8 @@ public sealed record JraRaceResultPage(
     string? RaceConditions = null,
     IReadOnlyList<string>? SectionalTimes = null,
     IReadOnlyDictionary<int, decimal>? AdditionalPrizeMoneyByPosition = null,
-    string? StewardReportText = null)
+    string? StewardReportText = null,
+    bool IsOfficiallyCancelled = false)
     : IJraPage
 {
     public JraPageKind Kind =>

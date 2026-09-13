@@ -108,6 +108,10 @@ public sealed class JraRaceResultCollectionWorkflow
             "JRAレース結果",
             cancellationToken);
 
+        if (resultPage.IsOfficiallyCancelled)
+            return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], [], resultPage.Url,
+                IsOfficiallyConfirmed: false, IsOfficiallyCancelled: true);
+
         var errors = new List<string>();
 
         // 実運用で、結果ページのパース失敗時に馬番=0・馬名=空のプレースホルダー値の

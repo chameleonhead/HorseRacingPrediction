@@ -35,6 +35,22 @@ public sealed class JraRaceResultCollectionWorkflowTests
             entries);
 
     [TestMethod]
+    public async Task CollectAsync_OfficialCancellation_IsTerminalWithoutDomainResultWrite()
+    {
+        var page = CreateResultPage(TestRaceId) with { IsOfficiallyCancelled = true };
+        var (session, _, writeService) = CreateContext(
+            new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
+        await using var sessionScope = session;
+
+        var result = await new JraRaceResultCollectionWorkflow(session, writeService).CollectAsync(TestRaceId);
+
+        Assert.IsTrue(result.IsOfficiallyCancelled);
+        Assert.IsFalse(result.IsOfficiallyConfirmed);
+        Assert.IsEmpty(result.Errors);
+        Assert.IsEmpty(writeService.DeclareRaceResultBulkCalls);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_1着2着3着_それぞれDeclareRaceEntryResultAsyncが呼ばれる()
     {
         var entries = new[]

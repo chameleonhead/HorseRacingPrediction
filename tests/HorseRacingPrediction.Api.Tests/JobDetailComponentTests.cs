@@ -145,6 +145,30 @@ public sealed class JobDetailComponentTests
     }
 
     [TestMethod]
+    public async Task ResultPublicationWait_ShowsReasonAndNextCheckProminently()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var next = new DateTimeOffset(2026, 9, 14, 7, 40, 0, TimeSpan.Zero);
+        using var http = new HttpClient(new JobDetailHandler
+        {
+            ActiveFailureStatus = null,
+            LatestTaskStatus = CollectionTaskStatus.RetryWaiting,
+            LatestAttemptResult = CollectionAttemptResult.ResourceNotYetAvailable,
+            LatestAttemptErrorCode = "RaceResultNotYetAvailable",
+            NextCollectionAt = next,
+        }) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = RenderDetail(context);
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "レース結果の公開を待っています"));
+        StringAssert.Contains(cut.Markup, "JRAの結果公開後に自動再試行します");
+        StringAssert.Contains(cut.Markup, "2026/09/14 16:40:00");
+    }
+
+    [TestMethod]
     [DataRow(null, "実行タスクなし")]
     [DataRow(CollectionTaskStatus.Succeeded, "完了")]
     public async Task InactiveOrMissingTask_DoesNotShowActiveTaskMessage(
@@ -251,6 +275,9 @@ public sealed class JobDetailComponentTests
         public CollectionFailureResolutionStatus? ActiveFailureStatus { get; init; } =
             CollectionFailureResolutionStatus.RecoveryInProgress;
         public CollectionTaskStatus? LatestTaskStatus { get; init; } = CollectionTaskStatus.Pending;
+        public CollectionAttemptResult LatestAttemptResult { get; init; } = CollectionAttemptResult.Succeeded;
+        public string? LatestAttemptErrorCode { get; init; }
+        public DateTimeOffset? NextCollectionAt { get; init; }
         public int ManualRequests { get; private set; }
         public int CancelRequests { get; private set; }
         public int RequestHistoryPage { get; private set; } = 1;
@@ -290,7 +317,7 @@ public sealed class JobDetailComponentTests
                     latestStatus, CollectionLane.Realtime, 90, 1, now, 0)
                 : null;
             var detail = new CollectionResourceDetail(
-                new(Resource, Definition, 1, 1, now.AddHours(-1), null, CollectionStateStatus.Pending),
+                new(Resource, Definition, 1, 1, now.AddHours(-1), NextCollectionAt, CollectionStateStatus.Pending),
                 [],
                 [new(Guid.NewGuid(), 1, CollectionReason.Backfill, now.AddHours(-2), null, "2026-09")],
                 [
@@ -299,8 +326,8 @@ public sealed class JobDetailComponentTests
                     new(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Succeeded,
                         CollectionLane.Normal, 50, 1, now.AddDays(-1), 1),
                 ],
-                [new(Guid.NewGuid(), ActiveTaskId, 1, now, now.AddSeconds(2), CollectionAttemptResult.Succeeded,
-                    null, null, null, null, null, null, ExecutionBatchId, Guid.NewGuid(),
+                [new(Guid.NewGuid(), ActiveTaskId, 1, now, now.AddSeconds(2), LatestAttemptResult,
+                    LatestAttemptErrorCode, null, null, null, null, null, ExecutionBatchId, Guid.NewGuid(),
                     "sqs-message", "lambda-request", 1, 2)],
                 RequestTotal: 30, TaskTotal: 2, AttemptTotal: 1, LatestTask: latestTask,
                 TaskHistoryPage: TaskHistoryPage, AttemptHistoryPage: 1,

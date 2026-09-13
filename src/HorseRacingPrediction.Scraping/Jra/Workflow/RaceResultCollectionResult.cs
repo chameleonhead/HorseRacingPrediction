@@ -22,4 +22,5 @@ public sealed record RaceResultCollectionResult(
     IReadOnlyList<int> SavedHorseNumbers,
     IReadOnlyList<string> Errors,
     string? SourceUrl = null,
-    bool IsOfficiallyConfirmed = true);
+    bool IsOfficiallyConfirmed = true,
+    bool IsOfficiallyCancelled = false);

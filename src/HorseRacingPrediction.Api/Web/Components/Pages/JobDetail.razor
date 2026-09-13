@@ -40,6 +40,12 @@ else if (detail is not null)
             }
         </FluentMessageBar>
     }
+    @if (AvailabilityWaitAttempt is { } waiting)
+    {
+        <FluentMessageBar Intent="@MessageIntent.Warning" Title="@AvailabilityTitle(waiting.ErrorCode)">
+            <span>@AvailabilityExplanation(waiting.ErrorCode) 次回確認: @Time(detail.State?.NextCollectionAt ?? LatestTask?.AvailableAt)</span>
+        </FluentMessageBar>
+    }
     @if (DomainUrl is not null)
     {
         <div class="action-row"><FluentButton Href="@DomainUrl">@ResourceTypeLabel の業務データを開く</FluentButton></div>
@@ -80,8 +86,9 @@ else if (detail is not null)
     private CollectionTaskSummary? LatestTask=>detail?.LatestTask;
     private PendingCollectionFailureNotification? ActiveFailure=>detail?.Failures?.Where(x=>x.ResolutionStatus is CollectionFailureResolutionStatus.Open or CollectionFailureResolutionStatus.RecoveryInProgress).OrderByDescending(x=>x.FailedAt).FirstOrDefault();
     private CollectionAttemptSummary? ActiveFailureAttempt=>ActiveFailure is null?null:detail?.Attempts.Where(x=>x.TaskId==ActiveFailure.TaskId).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
+    private CollectionAttemptSummary? AvailabilityWaitAttempt=>LatestTask?.Status!=CollectionTaskStatus.RetryWaiting?null:detail?.Attempts.Where(x=>x.TaskId==LatestTask.TaskId&&x.Result==CollectionAttemptResult.ResourceNotYetAvailable).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
     private string ResourceTypeLabel=>Type switch{ResourceType.Race=>"レース",ResourceType.RaceCard=>"出馬表",ResourceType.RaceOdds=>"オッズ",ResourceType.RaceResult=>"レース結果",ResourceType.Horse=>"競走馬",ResourceType.Jockey=>"騎手",ResourceType.Trainer=>"調教師",_=>ResourceTypeName};
-    private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>DefinitionId};
+    private string DefinitionLabel=>DefinitionId switch{"race-discovery"=>"開催レースの探索","race-detail"=>"レース詳細の収集","race-card"=>"出馬表の収集","race-odds"=>"オッズの収集","race-result"=>"レース結果の収集","horse-profile"=>"競走馬情報の収集","jockey-profile"=>"騎手情報の収集","trainer-profile"=>"調教師情報の収集",_=>DefinitionId};
     private string ResourceDescription=>$"{ResourceTypeLabel} ・ {Provider} ・ {ResourceId}";
     private string? DomainUrl=>Type switch{ResourceType.Horse=>$"/horses/{Uri.EscapeDataString(ResourceId)}",ResourceType.Jockey=>$"/jockeys/{Uri.EscapeDataString(ResourceId)}",ResourceType.Trainer=>$"/trainers/{Uri.EscapeDataString(ResourceId)}",_=>null};
     private string BackHref=>!string.IsNullOrWhiteSpace(ReturnUrl)&&ReturnUrl.StartsWith("/jobs",StringComparison.Ordinal)&&!ReturnUrl.StartsWith("//",StringComparison.Ordinal)?ReturnUrl:"/jobs";
@@ -109,6 +116,8 @@ else if (detail is not null)
     private async Task CancelAsync(CollectionTaskSummary task){operationErrors=[];operationMessage=null;busy=true;try{var result=await Api.CancelCollectionTaskAsync(task.TaskId);if(result.Success){operationMessage=$"タスク {ShortId(task.TaskId)} を取り消しました。";await LoadAsync();}else operationErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){operationErrors=["管理APIに接続できないため、タスクを取り消せませんでした。もう一度お試しください。"]; }finally{busy=false;}}
     private static bool IsActive(CollectionTaskStatus value)=>value is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
     private static string ActiveTaskTitle(CollectionTaskStatus value)=>value==CollectionTaskStatus.Running?"再取得を実行しています":"再取得を待っています";
+    private static string AvailabilityTitle(string? code)=>code switch{"RaceNotStarted"=>"発走時刻を待っています","RaceResultNotYetAvailable"=>"レース結果の公開を待っています","ResultNotConfirmed"=>"レース結果の確定を待っています",_=>"情報の公開を待っています"};
+    private static string AvailabilityExplanation(string? code)=>code switch{"RaceNotStarted"=>"出馬表は取得済みです。発走後に結果を確認します。","RaceResultNotYetAvailable"=>"出馬表を保持したまま、JRAの結果公開後に自動再試行します。","ResultNotConfirmed"=>"現在の情報は未確定です。確定結果が公開された後に自動再試行します。",_=>"公開状況を次回予定時刻に自動確認します。"};
     private static string ShortId(Guid value)=>value.ToString("D")[..8];
     private string BatchUrl(Guid value)=>$"/jobs/execution-batches/{value:D}?returnUrl={Uri.EscapeDataString(NavigationPath)}";
     private string NavigationPath=>$"/jobs/{Uri.EscapeDataString(ResourceTypeName)}/{Uri.EscapeDataString(Provider)}/{Uri.EscapeDataString(ResourceId)}/{Uri.EscapeDataString(DefinitionId)}";

@@ -47,6 +47,31 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_OfficialRaceCancellationWithoutResultTable_ReturnsTerminalCancellationPage()
+    {
+        var section = new TestPageSection("レース結果", "第11競走は取り止めとなりました", [], [], [],
+            ["2026年9月5日 中山 11R", "JRA 日本中央競馬会"]);
+        var snapshot = new TestPageSnapshot(Url, "2026年9月5日 中山 11R レース結果", [section]);
+        var parser = new RaceResultPageParser();
+
+        Assert.IsTrue(parser.CanParse(snapshot));
+        var page = (JraRaceResultPage)parser.Parse(snapshot);
+        Assert.IsTrue(page.IsOfficiallyCancelled);
+        Assert.IsEmpty(page.Results);
+        Assert.AreEqual(new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11), page.RaceId);
+    }
+
+    [TestMethod]
+    public void CanParse_HorseLevelRaceInterruptionTextAlone_DoesNotBecomeRaceCancellation()
+    {
+        var section = new TestPageSection("お知らせ", "6番馬は競走中止", [], [], [],
+            ["2026年9月5日 中山 11R"]);
+        var snapshot = new TestPageSnapshot(Url, "JRA", [section]);
+
+        Assert.IsFalse(new RaceResultPageParser().CanParse(snapshot));
+    }
+
+    [TestMethod]
     public void Parse_ResultTimesAndEstimatedFurlongColumnAreNotRaceStartOrPace()
     {
         var original = BuildSnapshot();
