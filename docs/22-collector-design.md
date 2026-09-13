@@ -158,7 +158,7 @@ JRA 抽出サービス `JraTesting/JraJsonExtractionService` は、Collector 内
 
 JRA競走馬は表示名ではなく、JRA公開プロフィールから抽出したProvider固有identityを強い一意キーとして扱う。RaceCardで取得したプロフィールlinkはHorse解決、RaceEntry保存、horse-profile collection requestまで失わず伝播する。同名でidentityが異なる競走馬は別主体であり、名称一致だけで統合・選択しない。
 
-同一JRA identityが複数の内部Horseへ結び付いた場合、または同じRaceEntryからlegacy Horse参照とJRA identity付きHorseが同時に確認できた場合に限り、自動名寄せできる。名寄せは参照をcanonical Horseへ付け替え、統合元IDのredirectと監査を残し、再実行しても結果が増えないことを必須とする。詳細な選択規則と移行範囲は[変更記録](changes/20260913_jra-horse-identity-and-detail-urls/README.md)を正本とする。
+通常収集はHorseの名寄せを実行しない。同じRaceEntryからJRA identityを取得でき、既存Horseがidentity未設定なら、そのHorseへmappingを付与して新規重複を防ぐ。今回の不具合ですでに生じた重複だけは、dry-runで固定したmanifestを再検証して適用するversioned repairで統合する。repairは参照をcanonical Horseへ付け替え、統合元IDのredirect、ledger、監査を残し、再実行しても結果が増えないことを必須とする。詳細な対象条件と移行範囲は[変更記録](changes/20260913_jra-horse-identity-and-detail-urls/README.md)を正本とする。
 
 RaceCard/RaceResultの子requestへ保存するExplicit URLは、HTTP(S)・JRA正規host・期待pathに加えて、単一かつ非空の詳細指定パラメーターと対象Resourceとの整合を検証する。パラメーターなしの `/JRADB/accessD.html` と `/JRADB/accessS.html` は開催選択Discoveryの起点としてのみ利用し、詳細取得Locationには登録しない。検証済み詳細URLを得られない場合は、URLを推測せず通常Navigator Discoveryへフォールバックする。
 
