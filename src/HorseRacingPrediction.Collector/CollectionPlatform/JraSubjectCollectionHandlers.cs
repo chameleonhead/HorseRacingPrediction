@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
@@ -44,10 +46,12 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
 }
 
 public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinition descriptor,
-    IJraSessionFactory sessions, IJraSubjectProfileSink sink, ICollectionRequestSink? requests = null)
+    IJraSessionFactory sessions, IJraSubjectProfileSink sink, ICollectionRequestSink? requests = null,
+    TimeProvider? timeProvider = null)
     : ICollectionDefinitionHandler
 {
     private const int MaximumDiscoveryDepth = 3;
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public CollectionDefinitionId DefinitionId => descriptor.Definition;
     public ResourceType ResourceType => descriptor.ResourceType;
 
@@ -111,7 +115,10 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 LocationOutcomes: locationOutcomes);
         }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
+        {
             await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
+            await DiscoverHorseRaceHistoryAsync(task, page, session.Navigate, requests, cancellationToken).ConfigureAwait(false);
+        }
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
             PageIdentification: $"{descriptor.SubjectType}Profile:JRA:{task.Resource.Id}",
             LocationOutcomes: locationOutcomes);
@@ -161,4 +168,75 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var marker = value.IndexOfAny(['(', '（']);
         return (marker < 0 ? value : value[..marker]).Trim();
     }
+
+    private async Task DiscoverHorseRaceHistoryAsync(LeasedCollectionTask task, JraSubjectPage firstPage,
+        HorseRacingPrediction.Scraping.Jra.Navigation.IJraNavigator navigator,
+        ICollectionRequestSink sink, CancellationToken cancellationToken)
+    {
+        var jst = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
+        var priorityUntil = ParseDate(task.Attributes.GetValueOrDefault("weekendPriorityUntil"));
+        var prioritized = priorityUntil is not null && priorityUntil >= today;
+        var lane = prioritized ? CollectionLane.Realtime : CollectionLane.Background;
+        var priority = prioritized ? (int)CollectionPriority.High : (int)CollectionPriority.Background;
+        var seenPages = new HashSet<string>(StringComparer.Ordinal);
+        JraSubjectPage? page = firstPage;
+        while (page is not null)
+        {
+            if (!seenPages.Add(string.Join('|', page.Races.Select(x => x.Key))))
+                throw new JraCollectionException("出走履歴のページ送りが進みません。");
+            foreach (var history in page.Races.Where(x => x.ExclusionReason is null && x.Link is not null))
+            {
+                var url = CollectionHttpUrl.Resolve(history.Link!.Url, page.Url);
+                if (!TryResolveRaceResult(url, history, out var resource, out var effectiveDate, out var attributes))
+                    continue;
+                var requestAttributes = new Dictionary<string, string>(attributes)
+                {
+                    ["requestedByHorseId"] = task.Resource.Id,
+                    ["requestedByHorseName"] = task.Attributes.GetValueOrDefault("name") ?? string.Empty,
+                };
+                if (priorityUntil is not null)
+                    requestAttributes["weekendPriorityUntil"] = priorityUntil.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                await sink.RequestAsync(resource, new("race-result"), CollectionReason.Discovery, lane, priority,
+                    url, effectiveDate, requestAttributes, cancellationToken).ConfigureAwait(false);
+            }
+            page = await navigator.NextHorseHistoryPageAsync(page, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool TryResolveRaceResult(Uri? url, HorseHistoryRaceLink history, out ResourceKey resource,
+        out DateOnly effectiveDate, out IReadOnlyDictionary<string, string> attributes)
+    {
+        resource = default!;
+        effectiveDate = default;
+        attributes = new Dictionary<string, string>();
+        if (url is null || !string.Equals(url.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(url.AbsolutePath, "/JRADB/accessS.html", StringComparison.Ordinal)) return false;
+        var match = Regex.Match(Uri.UnescapeDataString(url.Query),
+            @"(?:^|[?&])CNAME=pw01sde10(?<course>\d{2})\d{8}(?<number>\d{2})(?<date>\d{8})/",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success || !DateOnly.TryParseExact(match.Groups["date"].Value, "yyyyMMdd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out effectiveDate)
+            || !int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number)
+            || number is < 1 or > 12 || !CourseCodes.TryGetValue(match.Groups["course"].Value, out var course)
+            || history.Date != effectiveDate || RaceCourseNames.Parse(history.Course) != course) return false;
+        resource = new(ResourceType.RaceResult, "JRA", $"{effectiveDate:yyyyMMdd}:{course}:{number}");
+        attributes = new Dictionary<string, string>
+        {
+            ["course"] = RaceCourseNames.GetJraName(course),
+            ["number"] = number.ToString(CultureInfo.InvariantCulture),
+        };
+        return true;
+    }
+
+    private static readonly IReadOnlyDictionary<string, RaceCourse> CourseCodes =
+        new Dictionary<string, RaceCourse>(StringComparer.Ordinal)
+        {
+            ["01"] = RaceCourse.Sapporo, ["02"] = RaceCourse.Hakodate,
+            ["03"] = RaceCourse.Fukushima, ["04"] = RaceCourse.Niigata,
+            ["05"] = RaceCourse.Tokyo, ["06"] = RaceCourse.Nakayama,
+            ["07"] = RaceCourse.Chukyo, ["08"] = RaceCourse.Kyoto,
+            ["09"] = RaceCourse.Hanshin, ["10"] = RaceCourse.Kokura,
+        };
 }

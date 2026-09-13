@@ -294,6 +294,31 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceCardAsync_RaceListOddsVariant_GeneratesAndValidatesCardVariant()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";
+        const string oddsVariant = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604011120260905/2F";
+        const string cardVariant = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604011120260905/2F";
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(MeetingSelectionUrl,
+            BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshotWithCardLink(raceListUrl, oddsVariant));
+        browser.SetSnapshot(cardVariant, BuildRaceCardSnapshot(cardVariant));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var page = await navigator.ToRaceCardAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11));
+
+        Assert.AreEqual(JraPageKind.RaceCard, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, cardVariant);
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, oddsVariant);
+    }
+
+    [TestMethod]
     public async Task ToRaceCardAsync_UsesSplitNumberAndRaceCardLinksWithTheSameUrl()
     {
         const string raceListUrl = "https://www.jra.go.jp/keiba/sample/racelist/";

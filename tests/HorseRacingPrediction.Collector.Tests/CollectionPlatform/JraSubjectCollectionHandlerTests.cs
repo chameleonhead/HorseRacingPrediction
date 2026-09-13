@@ -102,6 +102,52 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task WeekendHorseProfile_DiscoversPastRaceResultsAsRealtimeUntilRaceDay()
+    {
+        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var historyDate = new DateOnly(2026, 9, 6);
+        var historyUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604020520260906/2F");
+        var page = SubjectPage("A", [new(historyDate, "中山", "過去走", new(historyUrl.AbsoluteUri, "結果", "content"), null)]);
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(descriptor,
+            new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page } },
+            new RecordingProfileSink(), requests,
+            new FixedTimeProvider(new(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)));
+
+        await handler.CollectAsync(SubjectTask("horse-a", "A",
+            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }), CancellationToken.None);
+
+        var request = requests.Requests.Single();
+        Assert.AreEqual(ResourceType.RaceResult, request.Resource.Type);
+        Assert.AreEqual("20260906:Nakayama:5", request.Resource.Id);
+        Assert.AreEqual(CollectionLane.Realtime, request.Lane);
+        Assert.AreEqual((int)CollectionPriority.High, request.Priority);
+        Assert.AreEqual(historyDate, request.EffectiveDate);
+        Assert.AreEqual(historyUrl, request.ExplicitUrl);
+    }
+
+    [TestMethod]
+    public async Task WeekendHorseProfile_AfterRaceDay_DemotesPastRaceResultsToBackground()
+    {
+        var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
+        var historyDate = new DateOnly(2026, 9, 6);
+        var historyUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604020520260906/2F");
+        var page = SubjectPage("A", [new(historyDate, "中山", "過去走", new(historyUrl.AbsoluteUri, "結果", "content"), null)]);
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(descriptor,
+            new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page } },
+            new RecordingProfileSink(), requests,
+            new FixedTimeProvider(new(2026, 9, 20, 0, 0, 0, TimeSpan.Zero)));
+
+        await handler.CollectAsync(SubjectTask("horse-a", "A",
+            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }), CancellationToken.None);
+
+        var request = requests.Requests.Single();
+        Assert.AreEqual(CollectionLane.Background, request.Lane);
+        Assert.AreEqual((int)CollectionPriority.Background, request.Priority);
+    }
+
+    [TestMethod]
     public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
@@ -185,6 +231,13 @@ public sealed class JraSubjectCollectionHandlerTests
         },
     };
 
+    private static JraSubjectPage SubjectPage(string name, IReadOnlyList<HorseHistoryRaceLink> races)
+    {
+        var url = $"https://www.jra.go.jp/profile/{name}";
+        return new(new JraSubjectProfileDto("Horse", name, url, url,
+            new Dictionary<string, string> { ["生年月日"] = "2020年1月1日" }, DateTimeOffset.UtcNow), races, null);
+    }
+
     private static LeasedCollectionTask SubjectTask(string id, string name,
         IReadOnlyDictionary<string, string> inherited)
     {
@@ -201,13 +254,13 @@ public sealed class JraSubjectCollectionHandlerTests
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add(new(resource, definition, lane, priority, effectiveDate, attributes));
+            Requests.Add(new(resource, definition, lane, priority, explicitUrl, effectiveDate, attributes));
             return Task.CompletedTask;
         }
     }
 
     private sealed record Request(ResourceKey Resource, CollectionDefinitionId Definition,
-        CollectionLane Lane, int Priority, DateOnly EffectiveDate,
+        CollectionLane Lane, int Priority, Uri? ExplicitUrl, DateOnly EffectiveDate,
         IReadOnlyDictionary<string, string> Attributes);
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

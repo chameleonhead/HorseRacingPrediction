@@ -321,6 +321,11 @@ public sealed partial class JraNavigator
                 ?? throw new JraNavigationException(
                     $"URLを解決できません: {summary.RaceCardUrl}");
 
+            // 開催一覧のレース番号リンクは、同じaccessDでも初期表示がオッズになる
+            // pw01dde01 を返すことがある。出馬表の規則候補 pw01dde10 を先に試し、
+            // 最終的な正否は下段のページ種別・RaceId検証で判断する。
+            resolvedUrl = ToRaceCardCandidateUrl(resolvedUrl);
+
             await _browser.NavigateAsync(
                 resolvedUrl,
                 cancellationToken);
@@ -382,6 +387,15 @@ public sealed partial class JraNavigator
         }
 
         return raceCard;
+    }
+
+    private static string ToRaceCardCandidateUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(uri.AbsolutePath, "/JRADB/accessD.html", StringComparison.Ordinal)) return url;
+        return Regex.Replace(url, "(?<=[?&]CNAME=)pw01dde01", "pw01dde10",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private async Task<JraRaceCardPage?> TryNavigateFromCurrentPageAsync(

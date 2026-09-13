@@ -171,3 +171,13 @@ RaceCardでは一覧のURL候補がオッズタブを指す場合があり、候
 検証結果: CIと同じRelease solution buildは警告0・エラー0、`TestCategory!=External`は
 Contracts 38、Domain 96、Application 56、Infrastructure 11、MachineLearning 14、Agents 106、
 Scraping 211、Collector 149、Api 178（skip 1）が成功した。
+
+追加の本番確認で、開催一覧の `pw01dde01...` URLが同じレースのオッズ初期表示を示し、
+出馬表候補は `pw01dde10...` になることを確認した。この規則URLを候補として生成し、
+従来どおりページ種別とRaceIdの完全一致を満たす場合だけ採用する。URLをResource identityにはしない。
+
+また、開催週の出走馬についてはプロフィール内の出走履歴リンクを、URLから日付・競馬場・
+レース番号を同定でき、表示行とも一致する場合に限って通常の `RaceResult` Resourceへ展開する。
+`weekendPriorityUntil` までに処理された履歴はRealtime・High、期限後に処理された履歴は
+Background・Backgroundとする。通常の馬プロフィールから発見した履歴もBackgroundへ流し、
+開催週関連が収束した後の空き容量でBackfillできるようにする。
