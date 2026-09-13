@@ -1,6 +1,6 @@
 # 直近レースの出馬表・結果を一体収集する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -389,11 +389,11 @@ Delegation record: CIログとworkflowのread-only調査をWorker tierへ1件委
 
 | ID | Finding | Owner / tier | Write scope | Verification / completion evidence | State |
 | --- | --- | --- | --- | --- | --- |
-| IG1 | Jobs画面の単一・一括手動依頼が`race-card`/`race-result`を生成可能 | Main / Lead | Jobs UIとcomponent tests | レース詳細1項目だけを表示し、`ResourceType.Race + race-detail` requestを検証 | Runnable |
-| IG2 | revision・失敗・batch画面の既定値／表示名が旧definitionのまま | Main / Lead | collection administration UIとtests | active UIは`race-detail`を使用し、旧履歴だけ互換表示 | Runnable |
-| IG3 | migration APIは実装済みだがproduction deployから一度も実行されない | Main / Lead | deploy workflow、必要なAPI/store契約、tests | pause/drain/apply/resumeが本番deployment pathで成功し、冪等再実行可能 | Runnable |
-| IG4 | CodeGraphのtyped caller確認だけで文字列ベースUI・deploy surfaceを見落とした | Main / Lead | DDD skill、本記録 | legacy literal inventory gateを追加してvalidator成功 | Runnable |
-| IG5 | 修正後の実画面・CI/CD・production migrationを確認 | Main / Lead | verification、GitHub Actions、本番read-only確認 | 全関連test、両workflow、production画面／移行report成功 | Dependent |
+| IG1 | Jobs画面の単一・一括手動依頼が`race-card`/`race-result`を生成可能 | Main / Lead | Jobs UIとcomponent tests | レース詳細1項目だけを表示し、`ResourceType.Race + race-detail` requestを検証 | Verified |
+| IG2 | revision・失敗・batch画面の既定値／表示名が旧definitionのまま | Main / Lead | collection administration UIとtests | active UIは`race-detail`を使用し、旧履歴だけ互換表示 | Verified |
+| IG3 | migration APIは実装済みだがproduction deployから一度も実行されない | Main / Lead | deploy workflow、必要なAPI/store契約、tests | pause/active cutover/apply/resumeが本番deployment pathで成功し、冪等再実行可能 | Verified |
+| IG4 | CodeGraphのtyped caller確認だけで文字列ベースUI・deploy surfaceを見落とした | Main / Lead | DDD skill、本記録 | legacy surface inventoryとcutover matrix gateを追加してvalidator成功 | Verified |
+| IG5 | 修正後の実画面・CI/CD・production migrationを確認 | Main / Lead | verification、GitHub Actions、本番read-only確認 | 全関連test、両workflow、production health／移行report成功 | Verified |
 
 Pre-implementation review: IG1/IG2は同じRazor表示・入力契約を共有するため主担当で直列化する。IG3はデータ移行を
 含むため主担当が実装し、既存のpauseとactive-task guardを維持する。IG4は実証済みの探索漏れに限定したskill更新とする。
@@ -421,9 +421,24 @@ Pre-implementation review: IG1/IG2は同じRazor表示・入力契約を共有�
 | Apply | production collection-platform DB / migration API | `migrations/race-detail/apply`を実行 | Connected |
 | Post-check | production collection-platform DB / migration API | previewの`sourceResources == 0`かつ`errors`空を`jq`で検証 | Connected |
 | Resume | production collection pipeline / EXIT trap | 成否にかかわらずresumeを実行 | Connected |
-| Deployment evidence | production / Main | workflow runとmigration reportを記録 | Dependent |
+| Deployment evidence | production / Main | run `34776934080`: health 200、migration errors 0、全job成功 | Verified |
 
 Checkpoint: 初回production run `34775988941`では旧active taskが30回のdrain待機後も残り、migration stepが安全に失敗した。
 旧handlerが既にruntime登録されていないためpending taskはdrain不能であることを確認した。apply transactionで対象active taskをcancelし、
 未送信outboxを閉じてから履歴移行と`race-detail`補完task生成を行うよう修正した。
 `LegacyRaceMigration_CancelsActiveLegacyTaskAndQueuesUnifiedReplacement`を追加し、旧taskのCancelled化と統合taskのReady生成を検証した。
+
+### Integration gap closure result
+
+- Commit: `bf5c172`（UI・設定・deployment入口・skill）、`241f7b8`（active taskの原子的cutover）
+- Local focused tests: API component 12件、migration/deploy contract 9件、すべて成功
+- Formatting: 対象ファイルの`dotnet format --verify-no-changes`成功、CI formatting成功
+- Skill validation: `quick_validate.py .codex/skills/document-driven-development`成功
+- CodeGraph: production変更後に`codegraph sync .`を実行し、index up-to-dateを確認
+- CI: app-ci run `34776934180`成功
+- Production deployment: app-deploy run `34776934080`成功、health HTTP 200
+- Production migration: sourceResources 1,215、targetResources 1,191、requests 3,169、tasks 2,463、attempts 1,661、
+  locations 443、states 1,215、supplementRequests 793、errors 0
+- Design delta: 当初のdrain待機はhandler廃止済みlegacy taskを完了できなかったため、pipeline停止中に対象active taskをcancelし、
+  同一transactionで履歴移行と統合補完task生成を行うcutoverへ変更した。データを捨てず、旧task履歴はCancelledとして保持する。
+- Final review: IG1〜IG5および承認済み受け入れ基準を実装・テスト・production evidenceへ追跡し、未完了状態なし。
