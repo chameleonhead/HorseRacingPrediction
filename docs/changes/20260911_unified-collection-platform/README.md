@@ -264,6 +264,10 @@ Implementation status is tracked in [acceptance-matrix.md](acceptance-matrix.md)
 
 ## Deviations and follow-up
 
+### 2026-09-13 local soak closure
+
+2時間のローカルソークテスト結果、検出したReady Task再配送誤判定、グレード欠落の追加防御、復旧結果は [local-soak-test-20260913.md](local-soak-test-20260913.md) に記録した。直近開催日の出馬表・前週結果、賞金・付加賞・競走中の出来事を実データで確認し、監視周期経過後に誤った`DispatchAttemptsExceeded`が再発しないことを確認した。
+
 ### 2026-09-12 review closure continuation
 
 本番SQS/Lambda異常系の追加監査では、at-least-onceの重複配信は既存のdispatch generation・lease・active guardで冪等化されている一方、transport障害も1回でDLQへ送る設定と、通知version未検証を検出した。source queueのmaxReceiveCountを3とし、`contractVersion: 1`を必須化した。旧/破損通知はTask acquisitionを実行せず、DLQ reconcilerでも業務Taskを変更しない。Lambda Throttles alarmを追加し、SQSトリガーに作用しないasync invoke failure destinationと不要権限を削除した。運用runbookにはAPI停止、timeout/crash、重複、poison、DLQ reconciliation中断、throttling、cutover失敗の期待動作と証跡を追加した。ローカル検証はAPI 162件成功・外部依存1件skip、Collector 112件成功、Release build警告0・エラー0。実AWS上のplan/apply/redriveはU10のmaintenance workとして残る。

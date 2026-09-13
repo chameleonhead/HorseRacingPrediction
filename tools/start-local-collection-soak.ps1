@@ -1,4 +1,8 @@
-param([int]$DurationMinutes = 120)
+param(
+    [int]$DurationMinutes = 120,
+    [string[]]$RecentDates = @(),
+    [switch]$SkipBackfill
+)
 
 $ErrorActionPreference = "Stop"
 $runId = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -41,10 +45,30 @@ for ($attempt = 0; $attempt -lt 30; $attempt++) {
 if (!$healthy) { throw "Local API did not become healthy. See $apiError" }
 
 $headers = @{ "X-Api-Key" = "dev-api-key" }
-$backfillMonth = (Get-Date).AddMonths(-1)
-$body = @{ provider = "JRA"; year = $backfillMonth.Year; month = $backfillMonth.Month; batchId = "soak:$runId" } | ConvertTo-Json
-Invoke-RestMethod "http://127.0.0.1:5177/api/admin/collection/backfills" -Method Post -Headers $headers `
-    -ContentType "application/json" -Body $body | Out-Null
+foreach ($recentDate in $RecentDates) {
+    $date = [DateOnly]::ParseExact($recentDate, "yyyy-MM-dd")
+    $compactDate = $date.ToString("yyyyMMdd")
+    $body = @{
+        resourceType = 0
+        provider = "JRA"
+        resourceId = "discovery:$compactDate"
+        definitionId = "race-discovery"
+        requestedRevision = 1
+        reason = 2
+        lane = 0
+        priority = 100
+        effectiveDate = $recentDate
+    } | ConvertTo-Json
+    Invoke-RestMethod "http://127.0.0.1:5177/api/admin/collection/requests" -Method Post -Headers $headers `
+        -ContentType "application/json" -Body $body | Out-Null
+}
+
+if (!$SkipBackfill) {
+    $backfillMonth = (Get-Date).AddMonths(-1)
+    $body = @{ provider = "JRA"; year = $backfillMonth.Year; month = $backfillMonth.Month; batchId = "soak:$runId" } | ConvertTo-Json
+    Invoke-RestMethod "http://127.0.0.1:5177/api/admin/collection/backfills" -Method Post -Headers $headers `
+        -ContentType "application/json" -Body $body | Out-Null
+}
 
 $env:ApiClient__BaseUrl = "http://127.0.0.1:5177"
 $env:ApiClient__ApiKey = "dev-api-key"
