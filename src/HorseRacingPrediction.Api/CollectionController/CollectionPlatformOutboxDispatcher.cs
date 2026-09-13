@@ -38,36 +38,39 @@ public sealed class CollectionPlatformOutboxDispatcher(
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
         var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
-        var remaining = (await store.GetPendingDispatchesAsync(now,
-            Math.Max(100, _options.DispatchBatchSize * 20), cancellationToken).ConfigureAwait(false))
+        // DB outbox is the priority queue. Consider every due row so a recently-created
+        // Realtime task cannot be hidden behind an older Background page.
+        var remaining = (await store.GetPendingDispatchesAsync(now, int.MaxValue, cancellationToken).ConfigureAwait(false))
             .Where(x => x.Definition.Value == "race-odds" || _options.AggregationDelayMilliseconds <= 0
                 || x.CreatedAt <= now.AddMilliseconds(-_options.AggregationDelayMilliseconds)).ToList();
         for (var sent = 0; sent < Math.Max(1, _options.DispatchBatchSize) && remaining.Count > 0; sent++)
         {
             var selected = _allocator.Select(remaining.Select(x => new FairCollectionCandidate(
-                x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now);
+                    x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now,
+                await store.GetConsecutiveRealtimeDispatchCountAsync(cancellationToken).ConfigureAwait(false));
             if (selected is null) break;
             var item = remaining.Single(x => x.Notification.TaskId == selected.TaskId);
-            var definitionLimit = _options.DefinitionMaxTasks.GetValueOrDefault(item.Definition.Value,
-                _options.EnvelopeMaxTasks);
-            var maxTasks = Math.Max(1, Math.Min(_options.EnvelopeMaxTasks, definitionLimit));
+            var compatibility = CreateCompatibility(item);
+            var maxTasks = GetMaxTasks(compatibility, item);
             var group = remaining.Where(x => IsCompatible(item, x))
-                .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt).ThenBy(x => x.Notification.TaskId)
+                .OrderBy(x => RouteCourse(x)).ThenBy(x => RouteRaceNumber(x)).ThenBy(x => RouteType(x))
+                .ThenByDescending(x => x.Priority).ThenBy(x => x.CreatedAt).ThenBy(x => x.Notification.TaskId)
                 .Take(maxTasks).ToList();
             var envelopeId = Guid.NewGuid();
-            var envelope = CreateEnvelope(envelopeId, item, group);
+            var envelope = CreateEnvelope(envelopeId, compatibility, group);
             while (group.Count > 1 && JsonSerializer.SerializeToUtf8Bytes(envelope).Length
                    > Math.Clamp(_options.EnvelopeMaxPayloadBytes, 1, 256_000))
             {
                 group.RemoveAt(group.Count - 1);
-                envelope = CreateEnvelope(envelopeId, item, group);
+                envelope = CreateEnvelope(envelopeId, compatibility, group);
             }
             foreach (var grouped in group) remaining.Remove(grouped);
             var reservationToken = Guid.NewGuid().ToString("N");
             try
             {
-                if (!await store.TryReserveDispatchesAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
+                if (!await store.TryReserveDispatchesWithinCapacityAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
                         envelopeId, now, TimeSpan.FromSeconds(Math.Max(10, _options.OutboxReservationSeconds)),
+                        Math.Max(1, _options.MaxInFlightEnvelopes),
                         cancellationToken).ConfigureAwait(false))
                     continue;
                 var receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
@@ -84,14 +87,49 @@ public sealed class CollectionPlatformOutboxDispatcher(
     }
 
     private static bool IsCompatible(PendingCollectionDispatch first, PendingCollectionDispatch candidate)
-        => string.Equals(first.Resource.Provider, candidate.Resource.Provider, StringComparison.OrdinalIgnoreCase)
-           && first.Definition == candidate.Definition
-           && first.EffectiveDate == candidate.EffectiveDate
-           && first.Lane == candidate.Lane;
+        => CreateCompatibility(first) is var key
+           && CreateCompatibility(candidate) is var other
+           && string.Equals(key.Provider, other.Provider, StringComparison.OrdinalIgnoreCase)
+           && key.GroupKind == other.GroupKind && string.Equals(key.GroupKey, other.GroupKey, StringComparison.Ordinal)
+           && key.EffectiveDate == other.EffectiveDate && key.Lane == other.Lane;
 
-    private static CollectionDispatchEnvelope CreateEnvelope(Guid envelopeId, PendingCollectionDispatch first,
-        IReadOnlyList<PendingCollectionDispatch> group) => new(envelopeId,
-        new(first.Resource.Provider, first.Definition, first.EffectiveDate, first.Lane),
+    private static CollectionDispatchEnvelope CreateEnvelope(Guid envelopeId, CollectionDispatchCompatibilityKey compatibility,
+        IReadOnlyList<PendingCollectionDispatch> group) => new(envelopeId, compatibility,
         group.Select(x => new CollectionDispatchTaskReference(x.Notification.TaskId,
             x.Notification.DispatchGeneration)).ToArray());
+
+    private static CollectionDispatchCompatibilityKey CreateCompatibility(PendingCollectionDispatch item)
+    {
+        if (item.EffectiveDate.HasValue && item.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult)
+            return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
+                CollectionDispatchGroupKind.RaceDay, item.EffectiveDate.Value.ToString("yyyy-MM-dd"));
+        if (item.Resource.Type == ResourceType.Horse
+            && item.Attributes?.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
+            return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
+                CollectionDispatchGroupKind.WeekendSubjects, weekend);
+        return new(item.Resource.Provider, item.Definition, item.EffectiveDate, item.Lane,
+            CollectionDispatchGroupKind.Definition, item.Definition.Value);
+    }
+
+    private int GetMaxTasks(CollectionDispatchCompatibilityKey key, PendingCollectionDispatch item)
+    {
+        var groupLimit = key.GroupKind switch
+        {
+            CollectionDispatchGroupKind.RaceDay => _options.RaceDayMaxTasks,
+            CollectionDispatchGroupKind.WeekendSubjects => _options.WeekendSubjectsMaxTasks,
+            _ => _options.DefinitionMaxTasks.GetValueOrDefault(item.Definition.Value, _options.EnvelopeMaxTasks),
+        };
+        return Math.Max(1, groupLimit);
+    }
+
+    private static string RouteCourse(PendingCollectionDispatch item)
+        => item.Attributes?.GetValueOrDefault("course") ?? string.Empty;
+    private static int RouteRaceNumber(PendingCollectionDispatch item)
+        => int.TryParse(item.Attributes?.GetValueOrDefault("number"), out var number) ? number : int.MaxValue;
+    private static int RouteType(PendingCollectionDispatch item) => item.Resource.Type switch
+    {
+        ResourceType.RaceCard => 0,
+        ResourceType.RaceResult => 1,
+        _ => 2,
+    };
 }

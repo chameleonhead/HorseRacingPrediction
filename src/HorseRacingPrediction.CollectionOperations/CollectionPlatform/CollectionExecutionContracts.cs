@@ -44,8 +44,10 @@ public sealed class CollectionLaneAllocator
         _maxConsecutiveRealtime = maxConsecutiveRealtime;
     }
 
-    public FairCollectionCandidate? Select(IEnumerable<FairCollectionCandidate> candidates, DateTimeOffset now)
+    public FairCollectionCandidate? Select(IEnumerable<FairCollectionCandidate> candidates, DateTimeOffset now,
+        int? consecutiveRealtime = null)
     {
+        if (consecutiveRealtime.HasValue) _consecutiveRealtime = Math.Max(0, consecutiveRealtime.Value);
         var due = candidates.Where(x => x.AvailableAt <= now).ToList();
         if (due.Count == 0) return null;
         var hasBackground = due.Any(x => x.Lane == CollectionLane.Background);

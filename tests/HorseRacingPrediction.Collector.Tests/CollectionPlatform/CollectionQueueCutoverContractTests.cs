@@ -9,6 +9,7 @@ public sealed class CollectionQueueCutoverContractTests
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
+    private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
 
     [TestMethod]
     public void Terraform_DefinesOnlyResourceCollectionQueuePair()
@@ -68,6 +69,7 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(Main, "resource \"aws_cloudwatch_metric_alarm\" \"collector_lambda_throttles\"");
         Assert.IsFalse(Main.Contains("aws_lambda_function_event_invoke_config", StringComparison.Ordinal),
             "SQS event source mappings must use the queue redrive policy, not Lambda async invoke settings.");
+        StringAssert.Contains(ApiSettings, "\"MaxInFlightEnvelopes\": 1");
     }
 
     [TestMethod]

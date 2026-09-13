@@ -35,3 +35,4 @@
 11. 旧 job store/runner/scheduler/API/UI を新基盤の恒久互換層として残さない。
 12. 旧 job data/key は移行せず cutover 時に削除し、新状態と未完了 work は Domain Data と Discovery から再構築する。
 13. 旧 main SQS queue と旧 DLQ は新 queue の smoke test 後、同じ cutover 内で削除する。
+14. 実行多重度1の間はDB outboxを優先度付き待機場所とし、未解決Envelopeがなくなった時だけ次のEnvelopeをSQSへ送る。次Envelopeは送信時点のlane、priority、aging、公平配分で選ぶ。session互換性は同一Definitionに限定せず、レース系の同一開催日、出走馬プロフィール系の同一週末を単位とし、安全上限超過と別日分はDBで分割待機する。共有session内では検証済みLocationまたは現在画面の短絡遷移を優先し、identity不一致時だけ完全探索へfallbackする。詳細と検証結果は[収集キューの実行容量連動ディスパッチ](changes/20260913_capacity-aware-collection-dispatch/README.md)を参照する。2026-09-13に実装済みである。

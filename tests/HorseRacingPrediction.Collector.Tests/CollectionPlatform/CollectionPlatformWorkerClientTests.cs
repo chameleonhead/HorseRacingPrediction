@@ -186,6 +186,31 @@ public sealed class CollectionPlatformWorkerClientTests
         Assert.AreEqual(0, factory.CreateCallCount);
     }
 
+    [TestMethod]
+    public async Task RaceDayCompatibility_AllowsRaceResultWhenEnvelopeLeaderIsRaceCard()
+    {
+        var taskId = Guid.NewGuid();
+        var date = new DateOnly(2026, 9, 13);
+        var lease = new LeasedCollectionTask(taskId, Guid.NewGuid(), new(ResourceType.RaceResult, "JRA", "RESULT"),
+            new("race-result"), 1, CollectionReason.Initial, CollectionLane.Realtime, 100,
+            "lease", DateTimeOffset.UtcNow.AddMinutes(15), date,
+            new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" });
+        var transport = new AcquireStatusTransport(new(CollectionTaskAcquireStatus.Acquired, lease));
+        var handler = new ResultCountingHandler();
+        var client = new CollectionPlatformWorkerClient(
+            new HttpClient(transport) { BaseAddress = new("https://api.test/") },
+            new CollectionDefinitionHandlerRegistry([handler]));
+        var factory = new FakeJraSessionFactory();
+
+        await JraSessionExecutionScope.ExecuteAsync(factory,
+            token => client.ExecuteAsync(new(taskId, 1), token), CancellationToken.None,
+            new("JRA", new("race-card"), date, CollectionLane.Realtime,
+                CollectionDispatchGroupKind.RaceDay, "2026-09-13"));
+
+        Assert.AreEqual(1, handler.CallCount);
+        Assert.IsNotNull(transport.CompletionBody);
+    }
+
     private sealed class CancellingHandler(Action cancel) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
@@ -223,6 +248,18 @@ public sealed class CollectionPlatformWorkerClientTests
         public int CallCount { get; private set; }
         public CollectionDefinitionId DefinitionId => new("race-card");
         public ResourceType ResourceType => ResourceType.RaceCard;
+        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
+        {
+            CallCount++;
+            return Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded));
+        }
+    }
+
+    private sealed class ResultCountingHandler : ICollectionDefinitionHandler
+    {
+        public int CallCount { get; private set; }
+        public CollectionDefinitionId DefinitionId => new("race-result");
+        public ResourceType ResourceType => ResourceType.RaceResult;
         public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             CallCount++;

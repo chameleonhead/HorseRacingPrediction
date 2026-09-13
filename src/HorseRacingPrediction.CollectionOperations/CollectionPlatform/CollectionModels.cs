@@ -169,29 +169,37 @@ public sealed record CollectionDispatchTaskReference(Guid TaskId, long DispatchG
     public bool IsSupported() => TaskId != Guid.Empty && DispatchGeneration > 0;
 }
 
+public enum CollectionDispatchGroupKind { Definition, RaceDay, WeekendSubjects }
+
 public sealed record CollectionDispatchCompatibilityKey(string Provider, CollectionDefinitionId Definition,
-    DateOnly? EffectiveDate, CollectionLane Lane)
+    DateOnly? EffectiveDate, CollectionLane Lane,
+    CollectionDispatchGroupKind GroupKind = CollectionDispatchGroupKind.Definition, string? GroupKey = null)
 {
-    public bool IsSupported() => !string.IsNullOrWhiteSpace(Provider) && !string.IsNullOrWhiteSpace(Definition.Value);
+    public bool IsSupported() => !string.IsNullOrWhiteSpace(Provider)
+        && (GroupKind == CollectionDispatchGroupKind.Definition
+            ? !string.IsNullOrWhiteSpace(Definition.Value)
+            : !string.IsNullOrWhiteSpace(GroupKey));
 }
 
 public sealed record CollectionDispatchEnvelope(Guid EnvelopeId, CollectionDispatchCompatibilityKey Compatibility,
-    IReadOnlyList<CollectionDispatchTaskReference> Tasks, int ContractVersion = 1)
+    IReadOnlyList<CollectionDispatchTaskReference> Tasks, int ContractVersion = 2)
 {
-    public const int CurrentContractVersion = 1;
+    public const int CurrentContractVersion = 2;
 
     public bool IsSupported()
-        => ContractVersion == CurrentContractVersion
+        => ContractVersion is 1 or CurrentContractVersion
            && EnvelopeId != Guid.Empty
            && Compatibility is not null
            && Compatibility.IsSupported()
+           && (ContractVersion != 1 || Compatibility.GroupKind == CollectionDispatchGroupKind.Definition)
            && Tasks is { Count: > 0 }
            && Tasks.All(x => x is not null && x.IsSupported())
            && Tasks.Select(x => x.TaskId).Distinct().Count() == Tasks.Count;
 }
 public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNotification Notification,
     ResourceKey Resource, CollectionDefinitionId Definition, DateOnly? EffectiveDate,
-    CollectionLane Lane, int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
+    CollectionLane Lane, int Priority, DateTimeOffset AvailableAt, DateTimeOffset CreatedAt,
+    IReadOnlyDictionary<string, string>? Attributes = null);
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
     DateTimeOffset AvailableAt, int AttemptCount);

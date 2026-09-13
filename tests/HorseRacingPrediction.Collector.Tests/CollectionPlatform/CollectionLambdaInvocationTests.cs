@@ -139,6 +139,19 @@ public sealed class CollectionLambdaInvocationTests
     }
 
     [TestMethod]
+    public async Task VersionOneEnvelope_RemainsExecutableDuringRollingUpgrade()
+    {
+        var envelope = Envelope(1) with { ContractVersion = 1 };
+        var executed = 0;
+
+        var response = await CollectionLambdaInvocation.ExecuteAsync(Event("version-one", envelope),
+            (_, _) => { executed++; return Task.CompletedTask; });
+
+        Assert.AreEqual(1, executed);
+        Assert.IsEmpty(response.BatchItemFailures);
+    }
+
+    [TestMethod]
     public async Task TimeMarginReached_LeavesEnvelopeForRedeliveryWithoutStartingMoreTasks()
     {
         var envelope = Envelope(3);

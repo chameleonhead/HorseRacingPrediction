@@ -59,10 +59,21 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
     }
 
     private static bool IsCompatible(LeasedCollectionTask task, CollectionDispatchCompatibilityKey expected)
-        => string.Equals(task.Resource.Provider, expected.Provider, StringComparison.Ordinal)
-           && task.Definition == expected.Definition
-           && task.EffectiveDate == expected.EffectiveDate
-           && task.Lane == expected.Lane;
+    {
+        if (!string.Equals(task.Resource.Provider, expected.Provider, StringComparison.Ordinal)
+            || task.Lane != expected.Lane) return false;
+        return expected.GroupKind switch
+        {
+            CollectionDispatchGroupKind.RaceDay => task.Resource.Type is ResourceType.RaceCard or ResourceType.RaceResult
+                && task.EffectiveDate.HasValue
+                && string.Equals(task.EffectiveDate.Value.ToString("yyyy-MM-dd"), expected.GroupKey,
+                    StringComparison.Ordinal),
+            CollectionDispatchGroupKind.WeekendSubjects => task.Resource.Type == ResourceType.Horse
+                && task.Attributes.TryGetValue("weekendPriorityUntil", out var weekend)
+                && string.Equals(weekend, expected.GroupKey, StringComparison.Ordinal),
+            _ => task.Definition == expected.Definition && task.EffectiveDate == expected.EffectiveDate,
+        };
+    }
 
     private async Task CompleteAsync(Guid taskId, string leaseToken, CollectionAttemptCompletion completion,
         CancellationToken cancellationToken)

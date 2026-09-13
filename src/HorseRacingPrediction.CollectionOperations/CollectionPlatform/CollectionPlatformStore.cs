@@ -1146,7 +1146,74 @@ public sealed class CollectionPlatformStore
                 new CollectionTaskNotification(x.outbox.TaskId, x.outbox.DispatchGeneration),
                 new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
                 new CollectionDefinitionId(x.task.DefinitionId), x.resource.EffectiveDate,
-                x.task.Lane, x.task.Priority, x.outbox.AvailableAt, x.outbox.CreatedAt)).ToList();
+                x.task.Lane, x.task.Priority, x.outbox.AvailableAt, x.outbox.CreatedAt,
+                JsonSerializer.Deserialize<Dictionary<string, string>>(x.resource.AttributesJson) ?? [])).ToList();
+    }
+
+    public async Task<int> GetConsecutiveRealtimeDispatchCountAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var rows = await (from outbox in db.DispatchOutbox.AsNoTracking()
+                          join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                          where outbox.DispatchedAt != null && outbox.EnvelopeId != null
+                          select new { outbox.EnvelopeId, outbox.DispatchedAt, task.Lane })
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var envelopes = rows.GroupBy(x => x.EnvelopeId!.Value)
+            .Select(x => new { DispatchedAt = x.Max(y => y.DispatchedAt)!.Value, Lane = x.First().Lane })
+            .OrderByDescending(x => x.DispatchedAt);
+        var count = 0;
+        foreach (var envelope in envelopes)
+        {
+            if (envelope.Lane != CollectionLane.Realtime) break;
+            count++;
+        }
+        return count;
+    }
+
+    public async Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,
+        string reservationToken, Guid envelopeId, DateTimeOffset now, TimeSpan duration, int maxInFlightEnvelopes,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = outboxIds.Distinct().ToArray();
+        if (ids.Length == 0 || string.IsNullOrWhiteSpace(reservationToken) || envelopeId == Guid.Empty) return false;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+                return false;
+
+            var currentGeneration = from outbox in db.DispatchOutbox
+                                    join task in db.Tasks on outbox.TaskId equals task.TaskId
+                                    where outbox.EnvelopeId != null && outbox.DispatchedAt != null
+                                          && outbox.DispatchGeneration == task.DispatchGeneration
+                                          && (task.Status == CollectionTaskStatus.Ready
+                                              || task.Status == CollectionTaskStatus.Running)
+                                    select outbox.EnvelopeId;
+            var inFlight = await currentGeneration.Distinct().CountAsync(cancellationToken).ConfigureAwait(false);
+            var reserved = await db.DispatchOutbox
+                .Where(x => x.DispatchedAt == null && x.EnvelopeId != null
+                            && x.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds())
+                .Select(x => x.EnvelopeId).Distinct().CountAsync(cancellationToken).ConfigureAwait(false);
+            if (inFlight + reserved >= Math.Max(1, maxInFlightEnvelopes)) return false;
+
+            var rows = await db.DispatchOutbox.Where(x => ids.Contains(x.OutboxId) && x.DispatchedAt == null
+                    && (x.ReservedUntilUnixMilliseconds == null
+                        || x.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds()))
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (rows.Count != ids.Length) return false;
+            foreach (var row in rows)
+            {
+                row.ReservationToken = reservationToken;
+                row.ReservedUntilUnixMilliseconds = now.Add(duration).ToUnixTimeMilliseconds();
+                row.EnvelopeId = envelopeId;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
     }
 
     public async Task<bool> TryReserveDispatchesAsync(IReadOnlyCollection<Guid> outboxIds, string reservationToken,

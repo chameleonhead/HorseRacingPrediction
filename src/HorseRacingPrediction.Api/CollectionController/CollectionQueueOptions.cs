@@ -13,7 +13,10 @@ public sealed class CollectionQueueOptions
     public string DeadLetterQueueName { get; set; } = "horse-racing-prediction-collector-dlq";
     public int DispatchIntervalSeconds { get; set; } = 5;
     public int DispatchBatchSize { get; set; } = 10;
+    public int MaxInFlightEnvelopes { get; set; } = 1;
     public int EnvelopeMaxTasks { get; set; } = 12;
+    public int RaceDayMaxTasks { get; set; } = 24;
+    public int WeekendSubjectsMaxTasks { get; set; } = 12;
     public int EnvelopeMaxPayloadBytes { get; set; } = 250_000;
     public int OutboxReservationSeconds { get; set; } = 60;
     public int AggregationDelayMilliseconds { get; set; } = 2_000;

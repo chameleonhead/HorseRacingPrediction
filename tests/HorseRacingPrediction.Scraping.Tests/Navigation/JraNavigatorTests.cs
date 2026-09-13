@@ -593,6 +593,28 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceResultAsync_FromSameRaceCard_UsesResultLinkWithoutReturningToResultTop()
+    {
+        const string raceCardUrl = "https://www.jra.go.jp/keiba/sample/card/0905/11/";
+        const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/11/";
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(raceCardUrl);
+        browser.SetSnapshot(raceCardUrl, BuildRaceCardSnapshot(raceCardUrl, "11R"));
+        browser.SetLinks(raceCardUrl, [new TestPageLink(raceResultUrl, "11レース結果")]);
+        browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl, "11R"));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+        var race = new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11);
+
+        var page = await navigator.ToRaceResultAsync(race);
+
+        Assert.AreEqual(race, ((JraRaceResultPage)page).RaceId);
+        CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, ResultSelectionUrl);
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, KeibaTopUrl);
+    }
+
+    [TestMethod]
     public async Task ToRaceResultAsync_ShortcutOpensOtherCourse_FallsBackToRequestedMeeting()
     {
         const string currentUrl = "https://www.jra.go.jp/keiba/sample/result/hanshin/1/";
