@@ -40,10 +40,13 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            await CompleteAsync(notification.TaskId, task.LeaseToken,
+            var cancelled = CollectionAttemptFailureClassifier.WithTaskContext(
                 new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
                     "Collector execution was cancelled or reached its deadline.",
-                    RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)), report.Token).ConfigureAwait(false);
+                    RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)),
+                task);
+            await CompleteAsync(notification.TaskId, task.LeaseToken,
+                cancelled, report.Token).ConfigureAwait(false);
             throw;
         }
         catch (Exception ex)
@@ -51,6 +54,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
             completion = CollectionAttemptFailureClassifier.FromException(ex);
         }
 
+        completion = CollectionAttemptFailureClassifier.WithTaskContext(completion, task);
         await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);
     }
 

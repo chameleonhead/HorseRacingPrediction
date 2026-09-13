@@ -78,6 +78,8 @@ public sealed class CollectionPlatformWorkerClientTests
         Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
             document.RootElement.GetProperty("result").GetInt32());
         Assert.AreEqual("CollectorTimeout", document.RootElement.GetProperty("errorCode").GetString());
+        Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
+            document.RootElement.GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]
@@ -101,6 +103,9 @@ public sealed class CollectionPlatformWorkerClientTests
 
         using var document = JsonDocument.Parse(transport.CompletionBody!);
         Assert.AreEqual((int)expectedResult, document.RootElement.GetProperty("result").GetInt32());
+        Assert.AreEqual(statusCode, document.RootElement.GetProperty("httpStatusCode").GetInt32());
+        Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
+            document.RootElement.GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]
@@ -120,6 +125,8 @@ public sealed class CollectionPlatformWorkerClientTests
         using var document = JsonDocument.Parse(transport.CompletionBody!);
         Assert.AreEqual((int)CollectionAttemptResult.TransientFailure,
             document.RootElement.GetProperty("result").GetInt32());
+        Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H1",
+            document.RootElement.GetProperty("pageIdentification").GetString());
     }
 
     [TestMethod]

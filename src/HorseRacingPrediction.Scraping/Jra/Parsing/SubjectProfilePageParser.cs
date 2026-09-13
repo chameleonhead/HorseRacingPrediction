@@ -62,11 +62,19 @@ public static class SubjectProfilePageParser
     public static void Validate(JraSubjectPage page, JraSubjectIdentity expected)
     {
         if (page.Profile.SubjectType != expected.SubjectType || Normalize(page.Profile.Name) != Normalize(expected.Name))
-            throw new JraCollectionException("同定不能: 取得したプロフィールの名前が対象と一致しません。");
+            throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.ProfileNameMismatch, expected.SubjectType, expected.Name,
+                page.Profile.Name, finalUrl: page.Url);
         if (expected.BirthDate is { } birth && (!TryDate(page.Profile.Fields.GetValueOrDefault("生年月日") ?? "", out var found) || found != birth))
-            throw new JraCollectionException("同定不能: 生年月日が対象と一致しません。");
+            throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.BirthDateMismatch, expected.SubjectType, expected.Name,
+                page.Profile.Name, finalUrl: page.Url);
         if (expected.SourceIdentity is not null && expected.SourceIdentity != page.Profile.SourceIdentity)
-            throw new JraCollectionException("同定不能: 公開識別子が保存済み情報と一致しません。");
+            throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.SourceIdentityMismatch, expected.SubjectType, expected.Name,
+                page.Profile.Name,
+                [new(page.Profile.Name, page.Profile.SourceIdentity ?? page.Url)],
+                expected.SourceIdentity, page.Url);
     }
     public static bool TryDate(string value, out DateOnly date) => DateOnly.TryParseExact(value.Trim(),
         new[] { "yyyy年M月d日", "yyyy/MM/dd", "yyyy/M/d" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);

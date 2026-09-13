@@ -5,6 +5,7 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
+using HorseRacingPrediction.Scraping.Jra.Parsing;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -216,6 +217,41 @@ public sealed class JraSubjectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
         Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task ProfileNavigation_StructuredIdentificationFailure_PreservesBoundedEvidenceWithoutRetry()
+    {
+        var requested = "https://www.jra.go.jp/search?q=missing";
+        var final = "https://www.jra.go.jp/profile/observed";
+        var candidates = Enumerable.Range(1, 6)
+            .Select(index => new JraSubjectIdentificationCandidate($"candidate-{index}",
+                $"https://www.jra.go.jp/profile/{index}"))
+            .ToArray();
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                SubjectFactory = _ => throw new JraSubjectIdentificationException(
+                    JraSubjectIdentificationFailureKind.MultipleCandidates,
+                    "Horse", "missing", candidates: candidates, requestedUrl: requested, finalUrl: final),
+            },
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink());
+
+        var completion = await handler.CollectAsync(
+            SubjectTask("horse-missing", "missing", new Dictionary<string, string>()), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
+        Assert.AreEqual("SubjectIdentification:MultipleCandidates", completion.PageIdentification);
+        Assert.AreEqual(requested, completion.RequestedUrl?.AbsoluteUri);
+        Assert.AreEqual(final, completion.FinalUrl?.AbsoluteUri);
+        Assert.IsNull(completion.RetryAt);
+        StringAssert.Contains(completion.ErrorMessage, "期待=Horse:missing");
+        StringAssert.Contains(completion.ErrorMessage, "candidate-5");
+        Assert.IsFalse(completion.ErrorMessage!.Contains("candidate-6", StringComparison.Ordinal));
     }
 
     private static FakeJraSessionFactory SubjectSessions(string name, IReadOnlyDictionary<string, string> fields) => new()

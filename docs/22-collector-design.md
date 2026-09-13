@@ -55,6 +55,10 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 
 馬・調教師の /api/admin/subjects/{kind}/{id}/collection/profile と馬の collection/history がSubjectProfileRefresh / HorseHistoryDiscoveryを登録する。履歴探索の親ジョブが、全ページからHorseHistoryRace子ジョブを作る。地方・海外等はHorseHistoryExcludedとして理由を保存し配送しない。探索完了を永続チェックポイントに記録し、再開・再試行は成功済み子を維持して失敗分だけ投入する。新規依頼では保存済みレースも再更新する。常駐・単発とも稼働中CollectionExecutionServiceが実行し、下表の旧補完Workerには依存しない。[決定と検証](changes/20260908_subject-refresh-horse-history/README.md)を参照。
 
+JRA公開プロフィールの同定失敗は、要求した種別・氏名、公開検索候補、取得ページから解析した氏名、要求URL・最終URLを試行履歴へ残す。氏名・生年月日・保存済み公開識別子の一致条件は緩和せず、自動再試行を追加しない。検索結果なし、複数候補、取得プロフィールとの不一致は従来どおり1回の試行で `SubjectNotIdentified` / `ResourceNotFound` として対象を利用不可・要対応にする。候補情報は公開情報だけを最大5件保持し、HTML本文や認証情報は保存しない。[変更設計と受け入れ基準](changes/20260913_subject-identification-error-recovery/README.md)を参照。
+
+全収集ハンドラーの失敗試行には、ハンドラーがより具体的なページ判定を返さない場合でも、実行境界で収集定義とResource keyをページ判定欄へ補完する。`HttpRequestException` がHTTP statusを持つ場合は保存する。取得処理が信頼できるURLを提示できない場合はURLを推測せず未記録とし、エラー分類と再試行可否はこの診断補完によって変更しない。
+
 | クラス | 役割 |
 |---|---|
 | `IJraResultDateDiscoveryService` / `JraResultMonthDateDiscoveryService` | 月単位で未取得の結果日付を発見する |

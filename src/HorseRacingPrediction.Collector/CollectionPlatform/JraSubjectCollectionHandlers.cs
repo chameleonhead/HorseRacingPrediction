@@ -94,13 +94,23 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             {
                 page = await session.Navigate.ToSubjectProfileAsync(identity, cancellationToken).ConfigureAwait(false);
             }
+            catch (JraSubjectIdentificationException ex)
+            {
+                return IdentificationFailure(task, ex, locationOutcomes);
+            }
             catch (JraCollectionException ex) when (ex.Message.Contains("同定不能", StringComparison.Ordinal))
             {
-                return new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", ex.Message,
-                    LocationOutcomes: locationOutcomes);
+                return IdentificationFailure(task, ex.Message, null, null, null, locationOutcomes);
             }
         }
-        SubjectProfilePageParser.Validate(page, identity);
+        try
+        {
+            SubjectProfilePageParser.Validate(page, identity);
+        }
+        catch (JraSubjectIdentificationException ex)
+        {
+            return IdentificationFailure(task, ex, locationOutcomes);
+        }
         try
         {
             await sink.SaveAsync(descriptor.SubjectType, task.Resource.Id, page.Profile, cancellationToken)
@@ -125,6 +135,26 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;
+
+    private static CollectionAttemptCompletion IdentificationFailure(LeasedCollectionTask task,
+        JraSubjectIdentificationException exception, IReadOnlyList<ResourceLocationOutcome> locationOutcomes) =>
+        IdentificationFailure(task, exception.Message, exception.Kind.ToString(), exception.RequestedUrl,
+            exception.FinalUrl, locationOutcomes);
+
+    private static CollectionAttemptCompletion IdentificationFailure(LeasedCollectionTask task,
+        string message, string? failureKind, string? requestedUrl, string? finalUrl,
+        IReadOnlyList<ResourceLocationOutcome> locationOutcomes)
+    {
+        return new(
+            CollectionAttemptResult.ResourceNotFound,
+            "SubjectNotIdentified", message,
+            ToUri(requestedUrl), ToUri(finalUrl),
+            PageIdentification: failureKind is null ? "SubjectIdentification:Legacy" : $"SubjectIdentification:{failureKind}",
+            LocationOutcomes: locationOutcomes);
+    }
+
+    private static Uri? ToUri(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
 
     private static async Task DiscoverHorseReferencesAsync(LeasedCollectionTask task, JraSubjectProfileDto profile,
         ICollectionRequestSink sink, CancellationToken cancellationToken)

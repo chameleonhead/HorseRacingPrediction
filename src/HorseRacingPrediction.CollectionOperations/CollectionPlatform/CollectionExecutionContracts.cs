@@ -91,8 +91,19 @@ public static class CollectionAttemptFailureClassifier
             TimeoutException or TaskCanceledException => CollectionAttemptResult.TransientFailure,
             _ => CollectionAttemptResult.PermanentFailure,
         };
-        return new(result, exception.GetType().Name, exception.Message);
+        return new(result, exception.GetType().Name, exception.Message,
+            HttpStatusCode: (exception as HttpRequestException)?.StatusCode is { } status ? (int)status : null);
     }
+
+    public static CollectionAttemptCompletion WithTaskContext(
+        CollectionAttemptCompletion completion, LeasedCollectionTask task) =>
+        completion.Result == CollectionAttemptResult.Succeeded || completion.PageIdentification is not null
+            ? completion
+            : completion with
+            {
+                PageIdentification =
+                    $"Definition={task.Definition.Value}; Resource={task.Resource.Type}:{task.Resource.Provider}:{task.Resource.Id}",
+            };
 }
 
 public sealed class CollectionTaskExecutor(CollectionPlatformStore store, CollectionDefinitionHandlerRegistry handlers)
@@ -120,6 +131,7 @@ public sealed class CollectionTaskExecutor(CollectionPlatformStore store, Collec
         {
             result = CollectionAttemptFailureClassifier.FromException(ex);
         }
+        result = CollectionAttemptFailureClassifier.WithTaskContext(result, task);
         return await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
             result, completionToken).ConfigureAwait(false);
     }

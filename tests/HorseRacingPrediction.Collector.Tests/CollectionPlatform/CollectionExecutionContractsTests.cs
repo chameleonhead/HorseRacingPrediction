@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.Options;
+using System.Net;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 
@@ -45,6 +46,33 @@ public sealed class CollectionExecutionContractsTests
     }
 
     [TestMethod]
+    public void FailureClassifier_PreservesAvailableHttpStatus()
+    {
+        var completion = CollectionAttemptFailureClassifier.FromException(
+            new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable));
+
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, completion.Result);
+        Assert.AreEqual(503, completion.HttpStatusCode);
+    }
+
+    [TestMethod]
+    public void TaskContext_FillsMissingIdentificationAndPreservesSpecificIdentification()
+    {
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Horse, "JRA", "horse-1"), new("horse-profile"), 1,
+            CollectionReason.Initial, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), null, new Dictionary<string, string>());
+
+        var fallback = CollectionAttemptFailureClassifier.WithTaskContext(
+            new(CollectionAttemptResult.PermanentFailure, "Failure"), task);
+        var specific = CollectionAttemptFailureClassifier.WithTaskContext(
+            new(CollectionAttemptResult.UnexpectedPage, "Failure", PageIdentification: "LoginPage"), task);
+
+        Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:horse-1", fallback.PageIdentification);
+        Assert.AreEqual("LoginPage", specific.PageIdentification);
+    }
+
+    [TestMethod]
     public async Task LocalExecutor_CancellationIsPersistedAsRetryableWithIndependentCompletionToken()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"local-executor-cancel-{Guid.NewGuid():N}");
@@ -69,6 +97,8 @@ public sealed class CollectionExecutionContractsTests
             Assert.IsTrue(task.AvailableAt > DateTimeOffset.UtcNow);
             var attempts = await store.GetAttemptsAsync(request.TaskId);
             Assert.AreEqual(CollectionAttemptResult.TransientFailure, attempts.Single().Result);
+            Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H-CANCEL",
+                attempts.Single().PageIdentification);
         }
         finally
         {

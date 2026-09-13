@@ -53,6 +53,7 @@ public sealed partial class JraNavigator
     {
         await OpenHorseSearchAsync(subject.Name, token);
         var found = new List<(PageLinkSnapshot Link, int Page)>();
+        var observed = new List<PageLinkSnapshot>();
         var pages = new HashSet<string>();
         var pageNumber = 0;
         while (true)
@@ -64,6 +65,7 @@ public sealed partial class JraNavigator
             var links = view.Links.Select(l => new PageLinkSnapshot(l.Url, l.Title)).ToArray();
             var candidates = links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
                 .DistinctBy(l => l.Url).ToArray();
+            observed.AddRange(candidates);
             foreach (var link in candidates)
             {
                 if (subject.SourceIdentity is not null && link.Url != subject.SourceIdentity) continue;
@@ -78,8 +80,15 @@ public sealed partial class JraNavigator
             if (next is null) break;
             await _browser.ClickLinkAsync(next, token); pageNumber++;
         }
-        if (found.Count != 1) throw new JraCollectionException(found.Count == 0
-            ? "同定不能: 公開検索から対象馬を確認できませんでした。" : "同定不能: 同名の馬が複数います。生年月日を登録して再依頼してください。");
+        var recordedCandidates = observed.DistinctBy(x => x.Url).Select(x =>
+            new JraSubjectIdentificationCandidate(x.Title, x.Url)).ToArray();
+        if (found.Count != 1)
+            throw new JraSubjectIdentificationException(
+                found.Count == 0
+                    ? JraSubjectIdentificationFailureKind.NoCandidate
+                    : JraSubjectIdentificationFailureKind.MultipleCandidates,
+                subject.SubjectType, subject.Name, candidates: recordedCandidates,
+                requestedUrl: subject.SourceIdentity, finalUrl: _browser.CurrentUrl);
         await OpenHorseSearchAsync(subject.Name, token);
         for (var i = 0; i < found[0].Page; i++)
         {
@@ -93,7 +102,14 @@ public sealed partial class JraNavigator
         await _browser.ClickLinkAsync(selected, token);
         var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(token), "Horse");
         page = page with { Profile = page.Profile with { SourceIdentity = selected.Url } };
-        SubjectProfilePageParser.Validate(page, subject);
+        try
+        {
+            SubjectProfilePageParser.Validate(page, subject);
+        }
+        catch (JraSubjectIdentificationException ex)
+        {
+            throw ex.WithNavigation(recordedCandidates, selected.Url, _browser.CurrentUrl);
+        }
         return page;
     }
 

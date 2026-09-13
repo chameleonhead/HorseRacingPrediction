@@ -28,7 +28,23 @@ public sealed class SubjectProfilePageParserTests
         Assert.AreEqual("テストホース", page.Profile.Name); Assert.AreEqual("父馬", page.Profile.Fields["父"]);
         Assert.AreEqual(71, page.Races.Count); Assert.AreEqual(70, page.Races.Count(x => x.ExclusionReason is null));
         Assert.IsNotNull(page.Races.Last().ExclusionReason);
-        Assert.Throws<JraCollectionException>(() => SubjectProfilePageParser.Validate(page, new("Horse", "テストホース", new(2023, 4, 11))));
-        Assert.Throws<JraCollectionException>(() => SubjectProfilePageParser.Validate(page, new("Horse", "別馬")));
+        var birthMismatch = Assert.ThrowsExactly<JraSubjectIdentificationException>(() =>
+            SubjectProfilePageParser.Validate(page, new("Horse", "テストホース", new(2023, 4, 11))));
+        Assert.AreEqual(JraSubjectIdentificationFailureKind.BirthDateMismatch, birthMismatch.Kind);
+        Assert.AreEqual("テストホース", birthMismatch.ActualName);
+        Assert.AreEqual(snapshot.Url, birthMismatch.FinalUrl);
+
+        var nameMismatch = Assert.ThrowsExactly<JraSubjectIdentificationException>(() =>
+            SubjectProfilePageParser.Validate(page, new("Horse", "別馬")));
+        Assert.AreEqual(JraSubjectIdentificationFailureKind.ProfileNameMismatch, nameMismatch.Kind);
+        Assert.AreEqual("別馬", nameMismatch.ExpectedName);
+        Assert.AreEqual("テストホース", nameMismatch.ActualName);
+
+        var sourceMismatch = Assert.ThrowsExactly<JraSubjectIdentificationException>(() =>
+            SubjectProfilePageParser.Validate(page,
+                new("Horse", "テストホース", SourceIdentity: "https://www.jra.go.jp/expected")));
+        Assert.AreEqual(JraSubjectIdentificationFailureKind.SourceIdentityMismatch, sourceMismatch.Kind);
+        Assert.AreEqual("https://www.jra.go.jp/expected", sourceMismatch.RequestedUrl);
+        Assert.AreEqual(snapshot.Url, sourceMismatch.FinalUrl);
     }
 }
