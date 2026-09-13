@@ -36,11 +36,31 @@ internal static class JraRaceLinkSelector
             return absolute.AbsoluteUri;
         }
 
-        return Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) &&
-               Uri.TryCreate(origin, url, out var resolved) &&
-               resolved.Scheme is "http" or "https"
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) ||
+            origin.Scheme is not ("http" or "https"))
+        {
+            return baseUrl is null ? url : null;
+        }
+
+        // On Unix, Uri can interpret a root-relative path as an absolute file URI.
+        // Join it to the HTTP origin explicitly so URL equivalence is platform independent.
+        if (url.StartsWith("/", StringComparison.Ordinal) && !url.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Uri.TryCreate(origin.GetLeftPart(UriPartial.Authority) + url, UriKind.Absolute, out var rootRelative)
+                ? rootRelative.AbsoluteUri
+                : null;
+        }
+
+        if (url.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Uri.TryCreate($"{origin.Scheme}:{url}", UriKind.Absolute, out var protocolRelative)
+                ? protocolRelative.AbsoluteUri
+                : null;
+        }
+
+        return Uri.TryCreate(url, UriKind.Relative, out var relative) && Uri.TryCreate(origin, relative, out var resolved)
             ? resolved.AbsoluteUri
-            : baseUrl is null ? url : null;
+            : null;
     }
 
     private sealed record Candidate(string RawUrl, string? NormalizedUrl, string Label);

@@ -70,3 +70,4 @@
 - 2026-09-13: 新規セッションの対象中山10R相当、現在週RaceCard、完了済みRaceResultの実サイト取得が成功した。
 - 2026-09-13: Discovery handlerが相対RaceCard URLを発見元ページ基準のHTTPS URLへ変換して依頼する既存テストを再確認した。
 - 2026-09-13: 初回CIでLinuxが`/JRADB/...`を`file:`絶対URIとして分類する実行環境差を検出した。絶対HTTP(S)だけを直接採用し、それ以外はHTTP(S)基準URLで解決するよう修正した。
+- 2026-09-13: 2回目のCIでLinuxのbase URL結合もroot-relative値を`file:`として維持することを確認した。`/path`はHTTP(S) originへ明示結合し、protocol-relativeと通常のrelativeを別処理にした。
