@@ -49,6 +49,10 @@
 待機する。再試行時も 5 日境界の内側なら出馬表を先に再取得し、出走取消・騎手変更・馬体重等の更新を
 取り込んでから結果を確認する。
 
+同じ開催日のレースを一括して「結果あり／なし」にしない。例えば 12R の発走前に 1R〜8R の結果だけが公開済みなら、
+1R〜8R は個別に完了し、9R〜12R はそれぞれの発走時刻と公開状態に応じて待機する。他レースの未公開を理由に、
+公開済みレースの保存や同日後続レースの出馬表更新を止めない。
+
 ## Documentation updates
 
 - `docs/22-collector-design.md`: 自動収集の実行単位、5 日境界、出馬表から結果への連続遷移を現行運用として追記する。Collector の現行動作の正本である。
@@ -92,6 +96,24 @@ Location、Request、Task、Failure は `race-detail` へ統合する。Attempt 
 出馬表保存が失敗した場合、結果だけを成功させて `race-detail` を Current にしない。結果保存が部分失敗した場合も
 同様に retryable/validation failure とし、既存データを消さない。結果未公開は業務上の待機状態として次回時刻を持つ。
 
+### 結果未公開・未確定の扱い
+
+結果取得の要否と再試行時刻はレース単位で判定する。
+
+- 発走前: 結果ページへ遷移せず、公式発走時刻後の最初の確認時刻まで待機する。
+- 発走時刻後で結果リンク／結果ページが未公開: 通信・解析失敗にせず `ResourceNotYetAvailable` として待機する。
+- 結果ページはあるが確定結果が揃っていない: 取得済みの出馬表を保持し、結果未確定として待機する。
+- 同日内で結果公開済みと未公開のレースが混在: 公開済みレースだけ Current にし、未公開レースだけを再試行する。
+- 通信失敗、想定外ページ、Race ID 不一致、domain write 拒否: 未公開とは区別し、既存分類どおり retryable failure または
+  validation/unexpected failure として記録する。
+- JRA が公式に競走中止・取止を示し、結果が今後公開されないことを識別できた場合: 通常の結果待ちを終了し、
+  「公式取止」として完了可能な非結果状態を保存する。識別できない欠落を推測で取止扱いにはしない。
+
+最初の結果確認時刻は公式発走時刻を基準とし、発走時刻が不明な当日レースだけ安全な既定時刻を使う。
+未公開中は同じ active task を `RetryWaiting` に戻し、新しい task を増殖させない。短間隔での無制限再試行を避けるため、
+当日は既存の結果確認間隔、日付経過後は段階的な backoff を適用するが、直近5日の間は再試行ごとに出馬表を先に
+再取得する。具体的な間隔は設定値とし、状態画面に次回確認時刻と「結果公開待ち」を表示する。
+
 ### Location と状態
 
 現行 Location schema は URL のページ種別を持たず、request の explicit URL も 1 件である。本変更では列を追加せず、
@@ -130,7 +152,9 @@ canonical resource ID は JRA の日付・競馬場・レース番号を使用�
 4. State は required revision 1 とし、期間外は旧 Result が Current の場合、直近の当日・過去日は旧 Card と Result が
    ともに Current の場合だけ AppliedRevision 1 / Current にする。未来日は旧 Card の取得状態を保持しつつ、結果確認時刻を
    NextCollectionAt に持つ非 Current 状態にする。複合条件を最後に満たした時刻を LastCollectedAt とする。
-5. 直近で Card または Result が不足する Race には `DefinitionChanged` reason の補完 request を作る。移行した terminal task
+   当日で一部レースの結果だけが公開済みの場合も各 Race を独立判定し、未公開レースを失敗や Current にしない。
+5. 直近で Card または Result が不足する Race には `DefinitionChanged` reason の補完 request を作る。結果未公開・未確定は
+   次回確認時刻付きの待機 task として作り、移行した terminal task
    が通常 discovery の同 revision 重複抑止に該当しても、補完が省略されない理由種別を使う。
 6. 旧 active guard/outbox がゼロ、統合後の参照切れ・重複・件数差がないことを検証して旧 definition を無効化する。
    smoke test 完了まではバックアップからDB全体を戻せる状態を維持し、成功後も旧 provenance は削除しない。
@@ -183,6 +207,11 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 - 直近の結果公開済みレースは、出馬表の保存成功前に結果だけで Current にならない。
 - 直近の結果未公開レースは出馬表を保存し、失敗ではなく次回確認時刻付きの待機状態になる。
 - 未来レースは出馬表を保存し、結果取得を試みず次回確認時刻付きの待機状態になる。
+- 同一開催日で結果公開済み・発走後未公開・未発走が混在しても、レースごとに Current・結果公開待ち・発走待ちを独立して保持する。
+- 発走前には結果ページへ遷移せず、公式発走時刻後に最初の結果確認を行う。
+- 発走後に結果リンクがない場合と、結果ページに未確定情報しかない場合を正常な公開待ちとして扱い、全体停止対象のfailureにしない。
+- 結果公開待ちの再試行は同じactive taskを使用し、taskやrequestを反復生成せず、次回確認時刻と理由を管理画面から確認できる。
+- 公式な競走中止・取止を識別できたレースは無限に結果待ちせず、推測を用いない終端状態になる。
 - 出馬表から取得した馬主が Horse の現在プロフィールとレース時点 Entry の両方へ保存され、欠落値の再取得で既存値を消さない。
 - 出馬表から結果への現在ページ短絡を優先し、リンク欠落・identity 不一致時は完全探索へ fallback する。
 - 出馬表・結果の通信、parse、domain write の部分失敗後に再試行でき、重複配信・lease expiry・再起動でも結果が冪等になる。
@@ -206,6 +235,7 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 | --- | --- | --- |
 | 5 日境界と取得順 | Not started | 実装承認待ち |
 | 統合 task と状態遷移 | Not started | 実装承認待ち |
+| 結果公開待ちと同日混在 | Not started | 実装承認待ち |
 | 馬主補完 | Not started | 実装承認待ち |
 | navigation fallback | Not started | 実装承認待ち |
 | retry/restart/idempotency | Not started | 実装承認待ち |
@@ -231,8 +261,8 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・待機・Current状態テスト | AC「5日境界」「統合task」へ接続したテスト結果 | Proposed |
-| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、未公開、部分失敗テスト | 馬主と結果を同一leaseで保存する実行証跡 | Proposed |
+| T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・発走待ち・公開待ち・Current・取止テスト | AC「5日境界」「統合task」「結果公開待ち」へ接続したテスト結果 | Proposed |
+| T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、同日混在、未公開、未確定、部分失敗テスト | 馬主と公開済み結果を同一leaseで保存し未公開だけ待機する実行証跡 | Proposed |
 | T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Proposed |
 | T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Proposed |
 | T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Proposed |
@@ -273,6 +303,9 @@ T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 
   現行schemaでは Request/Task/Location/State が resource/definition を直接保持し、Attempt/Failure/Outbox は Task ID を
   参照するため、IDを維持した付替えが可能である。一方で移行元definition/revisionを失わないprovenance列と、Location・
   State衝突の明示的な統合規則が必要と判断した。
+- 2026-09-14: 利用者の指摘により、同日すべての結果が同時公開される前提を明示的に排除した。発走前、発走後未公開、
+  ページ公開済み未確定、公式結果公開済み、公式取止をレース単位で分け、未公開・未確定は failure ではなく同じ active
+  task の待機状態として再試行する設計とした。
 - 2026-09-14: プロダクションコードは未変更。実装は本記録の明示承認待ち。
 
 ## Deviations and follow-up
