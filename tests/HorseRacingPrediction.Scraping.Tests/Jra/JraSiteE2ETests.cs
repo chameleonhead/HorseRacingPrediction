@@ -158,7 +158,7 @@ public sealed class JraSiteE2ETests
     public async Task 初出走RaceCard取得_馬体重を保持し増減をnullにする()
     {
         using var cts = new CancellationTokenSource(TestTimeout);
-        const string debutRaceUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1006202604020520260906/25";
+        const string debutRaceUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604020520260906/25";
 
         await _browser.NavigateAsync(debutRaceUrl, cts.Token);
         var page = await _session.Pages.ReadAsync(cts.Token);

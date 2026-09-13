@@ -11,7 +11,20 @@ public sealed class RaceOddsPageParser(TimeProvider? timeProvider = null) : IJra
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     public JraPageKind Kind => JraPageKind.RaceOdds;
     public int Priority => 95;
-    public bool CanParse(SemanticPageSnapshot source) => JraSnapshotView.Create(source).Tables.Any(IsOddsTable);
+    public bool CanParse(SemanticPageSnapshot source)
+    {
+        var snapshot = JraSnapshotView.Create(source);
+        // JRAの出馬表には「単勝オッズ(人気)」列も含まれる。テーブル見出しだけで
+        // 判定すると有効な出馬表をオッズページとして誤認するため、ページ自身が
+        // 出馬表を名乗っている場合はRaceCardPageParserへ委ねる。
+        if (snapshot.Title.Contains("出馬表", StringComparison.Ordinal)
+            || snapshot.Headings.Any(heading => heading.Contains("出馬表", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        return snapshot.Tables.Any(IsOddsTable);
+    }
     public IJraPage Parse(SemanticPageSnapshot source)
     {
         var snapshot = JraSnapshotView.Create(source);
