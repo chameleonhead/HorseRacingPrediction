@@ -174,11 +174,18 @@ public static class CollectionPlatformEndpointExtensions
             if (!CollectionHttpUrl.TryCreate(request.ExplicitUrl, out var explicitUrl)
                 && request.ExplicitUrl is not null)
                 return Results.BadRequest(new { message = "ExplicitUrl must be an absolute HTTP(S) URL." });
-            var receipt = await store.RequestAsync(new(request.ResourceType, request.Provider, request.ResourceId),
-                new(request.DefinitionId), request.RequestedRevision, request.Reason, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
-                request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
-                request.Attributes, token);
-            return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
+            try
+            {
+                var receipt = await store.RequestAsync(new(request.ResourceType, request.Provider, request.ResourceId),
+                    new(request.DefinitionId), request.RequestedRevision, request.Reason, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                    request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
+                    request.Attributes, token);
+                return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
+            }
+            catch (CollectionResourceSuppressedException)
+            {
+                return Results.Conflict(new { message = "補正済みのため収集対象外です。" });
+            }
         });
         admin.MapPost("/requests/by-url", async (CreateExplicitUrlCollectionRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
@@ -199,10 +206,17 @@ public static class CollectionPlatformEndpointExtensions
                 _ => (int)CollectionPriority.Normal,
             };
             var currentRevision = await store.GetCurrentRevisionAsync(definition, token);
-            var receipt = await store.RequestAsync(resource, definition, currentRevision, CollectionReason.ManualRefresh,
-                HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
-                attributes: identified.Attributes, cancellationToken: token);
-            return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", identified with { Receipt = receipt });
+            try
+            {
+                var receipt = await store.RequestAsync(resource, definition, currentRevision, CollectionReason.ManualRefresh,
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
+                    attributes: identified.Attributes, cancellationToken: token);
+                return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", identified with { Receipt = receipt });
+            }
+            catch (CollectionResourceSuppressedException)
+            {
+                return Results.Conflict(new { message = "補正済みのため収集対象外です。" });
+            }
         });
         admin.MapPost("/requests/bulk/preview", async (BulkCollectionOperationRequest request,
             CollectionPlatformStore store, [FromServices] IDbContextProvider<EventStoreDbContext> domain,

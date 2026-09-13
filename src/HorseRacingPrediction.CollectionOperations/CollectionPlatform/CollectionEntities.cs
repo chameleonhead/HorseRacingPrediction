@@ -11,6 +11,16 @@ public sealed class CollectionResourceEntity
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+public sealed class CollectionResourceSuppressionEntity
+{
+    public ResourceType Type { get; set; }
+    public string Provider { get; set; } = string.Empty;
+    public string ResourceId { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public string RepairId { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class CollectionDefinitionEntity
 {
     public string DefinitionId { get; set; } = string.Empty;

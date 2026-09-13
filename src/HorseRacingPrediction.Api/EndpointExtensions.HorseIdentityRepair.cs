@@ -5,6 +5,7 @@ using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 namespace HorseRacingPrediction.Api;
 
@@ -15,15 +16,17 @@ public static partial class EndpointExtensions
     private static void MapHorseIdentityRepairEndpoints(RouteGroupBuilder group)
     {
         group.MapGet("/admin/repairs/20260913-jra-horse-identity",
-            async (IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
+            async (IDbContextProvider<EventStoreDbContext> provider, CollectionPlatformStore collectionStore,
+                CancellationToken token) =>
             {
                 using var db = provider.CreateContext();
-                return Results.Ok(await BuildHorseIdentityRepairPreviewAsync(db, token).ConfigureAwait(false));
+                return Results.Ok(await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false));
             });
 
         group.MapPost("/admin/repairs/20260913-jra-horse-identity/apply",
             async (ApplyHorseIdentityRepairRequest request,
-                IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>
+                IDbContextProvider<EventStoreDbContext> provider, CollectionPlatformStore collectionStore,
+                CancellationToken token) =>
             {
                 if (request.CandidateIds is null || request.CandidateIds.Count == 0)
                     return Results.BadRequest(new[] { "dry-run manifestのCandidateIdを指定してください。" });
@@ -49,7 +52,7 @@ public static partial class EndpointExtensions
 
                 var pendingIds = requestedCandidates.Where(x => x.AppliedAt == null)
                     .Select(x => x.CandidateId).ToHashSet(StringComparer.Ordinal);
-                var preview = await BuildHorseIdentityRepairPreviewAsync(db, token).ConfigureAwait(false);
+                var preview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token).ConfigureAwait(false);
                 var selected = preview.Candidates.Where(x => pendingIds.Contains(x.CandidateId)).ToArray();
                 if (selected.Length != pendingIds.Count)
                     return Results.Conflict(new[] { "未処理CandidateIdをdry-run manifestで再検証できません。" });
@@ -84,13 +87,25 @@ public static partial class EndpointExtensions
                 }
                 await db.SaveChangesAsync(token).ConfigureAwait(false);
                 await transaction.CommitAsync(token).ConfigureAwait(false);
+                var disabled = 0;
+                var running = 0;
+                foreach (var candidate in requestedCandidates)
+                {
+                    var suppression = await collectionStore.SuppressResourceAsync(
+                        new ResourceKey(ResourceType.Horse, "JRA", candidate.SourceHorseId),
+                        "JRA競走馬識別子の不具合修復により統合元データを削除済みです。",
+                        HorseIdentityRepairId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
+                        .ConfigureAwait(false);
+                    disabled += suppression.CancelledTasks;
+                    running += suppression.RunningCancellationRequests;
+                }
                 return Results.Ok(new ApplyHorseIdentityRepairResponse(HorseIdentityRepairId, applied,
-                    completed.Length));
+                    completed.Length, disabled, running));
             });
     }
 
     private static async Task<HorseIdentityRepairPreviewResponse> BuildHorseIdentityRepairPreviewAsync(
-        EventStoreDbContext db, CancellationToken token)
+        EventStoreDbContext db, CollectionPlatformStore collectionStore, CancellationToken token)
     {
         var candidates = await db.HorseIdentityRepairCandidates.AsNoTracking()
             .Where(x => x.RepairId == HorseIdentityRepairId && x.AppliedAt == null)
@@ -103,8 +118,9 @@ public static partial class EndpointExtensions
         foreach (var candidate in candidates)
         {
             string? blocked = null;
-            if (!horses.TryGetValue(candidate.SourceHorseId, out var source)
-                || !horses.TryGetValue(candidate.TargetHorseId, out var target))
+            horses.TryGetValue(candidate.SourceHorseId, out var source);
+            horses.TryGetValue(candidate.TargetHorseId, out var target);
+            if (source is null || target is null)
                 blocked = "sourceまたはtarget Horseが存在しません。";
             else if (redirects.TryGetValue(candidate.SourceHorseId, out var redirect)
                      && !string.Equals(redirect.TargetHorseId, candidate.TargetHorseId, StringComparison.Ordinal))
@@ -125,8 +141,12 @@ public static partial class EndpointExtensions
                 else if (!string.Equals(source.NormalizedName, target.NormalizedName, StringComparison.Ordinal))
                     blocked = "sourceとtargetの正規化名が一致しません。";
             }
+            var collectionTasks = await collectionStore.GetResourceSuppressionPreviewAsync(
+                new ResourceKey(ResourceType.Horse, "JRA", candidate.SourceHorseId), token).ConfigureAwait(false);
+            var raceName = races.SingleOrDefault(x => x.RaceId == candidate.RaceId)?.RaceName;
             result.Add(new(candidate.CandidateId, candidate.SourceHorseId, candidate.TargetHorseId,
-                candidate.JraIdentity, candidate.RaceId, candidate.EntryId, blocked is null, blocked));
+                candidate.JraIdentity, candidate.RaceId, candidate.EntryId, blocked is null, blocked,
+                source?.RegisteredName, target?.RegisteredName, raceName, collectionTasks.TotalTasks));
         }
         return new(HorseIdentityRepairId, result);
     }

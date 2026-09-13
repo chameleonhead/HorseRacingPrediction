@@ -1,0 +1,215 @@
+@page "/settings"
+@attribute [Authorize]
+@inject AdminApiClient Api
+
+<RaceOpsPageHeader Section="運用" Title="その他設定"
+                   Description="通常の編集や収集管理とは別の、低頻度の管理操作です。">
+    <Actions>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="@LoadAsync" Disabled="@busy">再読込</FluentButton>
+    </Actions>
+</RaceOpsPageHeader>
+
+@if (success is not null)
+{
+    <FluentMessageBar Intent="@MessageIntent.Success" Title="データ補正が完了しました">@success</FluentMessageBar>
+}
+
+<section class="entity-section settings-section" aria-labelledby="repair-heading">
+    <p class="eyebrow">データ補正</p>
+    <h2 id="repair-heading">JRA競走馬識別子の不具合修復</h2>
+    <p class="section-description">今回の収集不具合で記録された候補だけを補正します。補正処理はデータ収集ジョブとは別に実行されます。</p>
+    <p class="repair-id">Repair: <code>@RepairId</code></p>
+
+    @if (errors.Count > 0)
+    {
+        <RaceOpsAlert Title="補正候補を処理できませんでした" Messages="@errors" />
+        <p class="hint">候補を再読込し、状態と判定理由を確認してください。失敗した操作では新しい対象を追加しません。</p>
+    }
+
+    @if (loading && candidates.Count == 0)
+    {
+        <UiState Kind="loading" Title="補正候補を読み込んでいます" />
+    }
+    else if (!loading && candidates.Count == 0)
+    {
+        <UiState Title="現在、補正できる候補はありません"
+                 Message="対象RaceCardを再取得した後、この画面を再読込してください。" />
+    }
+    else
+    {
+        <div class="repair-summary" role="status">
+            <span>安全 <strong>@SafeCount</strong> 件</span>
+            <span>要確認 <strong>@BlockedCount</strong> 件</span>
+            <FluentButton Appearance="@Appearance.Stealth" OnClick="@SelectAllSafe" Disabled="@(busy || SafeCount == 0)">
+                安全な候補をすべて選択
+            </FluentButton>
+        </div>
+
+        <div class="repair-grid">
+            <FluentDataGrid Items="@candidates.AsQueryable()" TGridItem="HorseIdentityRepairCandidateResponse"
+                            aria-label="JRA競走馬識別子の補正候補">
+                <TemplateColumn Title="選択">
+                    <FluentCheckbox ThreeState="true" ShowIndeterminate="false" CheckState="@IsSelected(context.CandidateId)"
+                                    CheckStateChanged="@(value => SetSelected(context.CandidateId, value == true))"
+                                    Disabled="@(!context.SafeToApply || busy)"
+                                    aria-label="@($"{context.SourceHorseName ?? context.SourceHorseId}を選択")" />
+                </TemplateColumn>
+                <TemplateColumn Title="状態">
+                    <RaceOpsStatusBadge Label="@(context.SafeToApply ? "安全" : "要確認")"
+                                        Tone="@(context.SafeToApply ? "success" : "warning")" />
+                </TemplateColumn>
+                <TemplateColumn Title="統合元">
+                    <a href="@HorseUrl(context.SourceHorseId)">@(context.SourceHorseName ?? "名称不明")</a>
+                    <small>@context.SourceHorseId</small>
+                </TemplateColumn>
+                <TemplateColumn Title="統合先">
+                    <a href="@HorseUrl(context.TargetHorseId)">@(context.TargetHorseName ?? "名称不明")</a>
+                    <small>@context.TargetHorseId</small>
+                </TemplateColumn>
+                <TemplateColumn Title="根拠">
+                    <a href="@RaceUrl(context.RaceId)">@(context.RaceName ?? context.RaceId)</a>
+                    <small>@context.JraIdentity</small>
+                </TemplateColumn>
+                <TemplateColumn Title="影響・判定">
+                    <span>収集タスク @context.CollectionTasksToDisable 件を無効化</span>
+                    <small>@(context.SafeToApply ? "適用可能" : context.BlockingReason)</small>
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
+
+        <div class="repair-cards" aria-label="JRA競走馬識別子の補正候補">
+            @foreach (var candidate in candidates)
+            {
+                <article class="repair-card">
+                    <div class="repair-card-status">
+                        <FluentCheckbox ThreeState="true" ShowIndeterminate="false" CheckState="@IsSelected(candidate.CandidateId)"
+                                        CheckStateChanged="@(value => SetSelected(candidate.CandidateId, value == true))"
+                                        Disabled="@(!candidate.SafeToApply || busy)"
+                                        aria-label="@($"{candidate.SourceHorseName ?? candidate.SourceHorseId}を選択")" />
+                        <RaceOpsStatusBadge Label="@(candidate.SafeToApply ? "安全" : "要確認")"
+                                            Tone="@(candidate.SafeToApply ? "success" : "warning")" />
+                    </div>
+                    <dl>
+                        <dt>統合元</dt><dd><a href="@HorseUrl(candidate.SourceHorseId)">@(candidate.SourceHorseName ?? "名称不明")</a><small>@candidate.SourceHorseId</small></dd>
+                        <dt>統合先</dt><dd><a href="@HorseUrl(candidate.TargetHorseId)">@(candidate.TargetHorseName ?? "名称不明")</a><small>@candidate.TargetHorseId</small></dd>
+                        <dt>根拠</dt><dd><a href="@RaceUrl(candidate.RaceId)">@(candidate.RaceName ?? candidate.RaceId)</a><small>@candidate.JraIdentity</small></dd>
+                        <dt>影響</dt><dd>収集タスク @candidate.CollectionTasksToDisable 件を無効化</dd>
+                        <dt>判定</dt><dd>@(candidate.SafeToApply ? "適用可能" : candidate.BlockingReason)</dd>
+                    </dl>
+                </article>
+            }
+        </div>
+
+        <div class="repair-actions">
+            <span>@selected.Count 件を選択</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@OpenConfirmation"
+                          Disabled="@(busy || selected.Count == 0)">選択した候補を補正</FluentButton>
+        </div>
+    }
+</section>
+
+<FluentDialog Hidden="@(!confirming)" HiddenChanged="@(hidden => confirming = !hidden)"
+              Modal="true" TrapFocus="true" AriaLabelledby="repair-confirm-title"
+              Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="repair-confirm-title">選択した@(selected.Count)件を補正しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <ul class="repair-confirm-list">
+            @foreach (var candidate in SelectedCandidates)
+            {
+                <li><strong>@(candidate.SourceHorseName ?? candidate.SourceHorseId)</strong> → <strong>@(candidate.TargetHorseName ?? candidate.TargetHorseId)</strong></li>
+            }
+        </ul>
+        <div class="warning-note" role="alert">
+            統合元IDは統合先へのredirectとして保持します。統合元の未完了収集タスクを無効化し、以後の収集対象から除外します。過去の収集履歴は削除しません。この画面から取り消すことはできません。
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@CloseConfirmation" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@ApplyAsync" Disabled="@busy">
+            @(busy ? "補正中…" : "補正を実行")
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@code {
+    private const string RepairId = "20260913-jra-horse-identity-repair";
+    private IReadOnlyList<HorseIdentityRepairCandidateResponse> candidates = [];
+    private readonly HashSet<string> selected = new(StringComparer.Ordinal);
+    private IReadOnlyList<string> errors = [];
+    private string? success;
+    private bool loading = true;
+    private bool busy;
+    private bool confirming;
+    private int SafeCount => candidates.Count(x => x.SafeToApply);
+    private int BlockedCount => candidates.Count - SafeCount;
+    private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
+        candidates.Where(x => selected.Contains(x.CandidateId));
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        errors = [];
+        try
+        {
+            var preview = await Api.GetHorseIdentityRepairPreviewAsync();
+            candidates = preview?.Candidates ?? [];
+            selected.RemoveWhere(id => candidates.All(x => x.CandidateId != id || !x.SafeToApply));
+        }
+        catch (Exception)
+        {
+            candidates = [];
+            errors = ["補正候補を読み込めませんでした。時間をおいて再読込してください。"];
+        }
+        finally { loading = false; }
+    }
+
+    private bool IsSelected(string id) => selected.Contains(id);
+    private void SetSelected(string id, bool value)
+    {
+        if (value && candidates.Any(x => x.CandidateId == id && x.SafeToApply)) selected.Add(id);
+        else selected.Remove(id);
+    }
+    private void SelectAllSafe()
+    {
+        selected.Clear();
+        foreach (var candidate in candidates.Where(x => x.SafeToApply)) selected.Add(candidate.CandidateId);
+    }
+    private void OpenConfirmation() { if (selected.Count > 0) confirming = true; }
+    private void CloseConfirmation() { if (!busy) confirming = false; }
+
+    private async Task ApplyAsync()
+    {
+        if (selected.Count == 0 || busy) return;
+        busy = true;
+        errors = [];
+        success = null;
+        try
+        {
+            var result = await Api.ApplyHorseIdentityRepairAsync(selected.ToArray());
+            if (!result.Success || result.Value is null)
+            {
+                errors = result.Errors.Count == 0
+                    ? ["補正を実行できませんでした。候補を再読込してください。"]
+                    : result.Errors;
+                return;
+            }
+            success = $"{result.Value.AppliedCount} 件を補正し、{result.Value.SkippedCount} 件は処理済みとしてスキップしました。収集タスク {result.Value.DisabledCollectionTaskCount} 件を無効化し、実行中 {result.Value.RunningCancellationRequestCount} 件へ取消を要求しました。";
+            selected.Clear();
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            errors = ["補正の完了状態を確認できませんでした。候補を再読込して状態と判定理由を確認してください。"];
+        }
+        finally
+        {
+            confirming = false;
+            busy = false;
+        }
+    }
+
+    private static string HorseUrl(string id) => $"/horses/{Uri.EscapeDataString(id)}";
+    private static string RaceUrl(string id) => $"/races/{Uri.EscapeDataString(id)}";
+}

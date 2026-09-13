@@ -6,6 +6,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatformDbContext> options) : DbContext(options)
 {
     public DbSet<CollectionResourceEntity> Resources => Set<CollectionResourceEntity>();
+    public DbSet<CollectionResourceSuppressionEntity> ResourceSuppressions => Set<CollectionResourceSuppressionEntity>();
     public DbSet<CollectionDefinitionEntity> Definitions => Set<CollectionDefinitionEntity>();
     public DbSet<CollectionRevisionEntity> Revisions => Set<CollectionRevisionEntity>();
     public DbSet<CollectionRevisionImpactEntity> RevisionImpacts => Set<CollectionRevisionImpactEntity>();
@@ -33,6 +34,13 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_resources"); e.HasKey(x => x.ResourcePk);
             e.HasIndex(x => new { x.Type, x.Provider, x.ResourceId }).IsUnique();
             e.Property(x => x.Type).HasConversion<string>();
+        });
+        modelBuilder.Entity<CollectionResourceSuppressionEntity>(e =>
+        {
+            e.ToTable("collection_resource_suppressions");
+            e.HasKey(x => new { x.Type, x.Provider, x.ResourceId });
+            e.Property(x => x.Type).HasConversion<string>();
+            e.HasIndex(x => x.RepairId);
         });
         modelBuilder.Entity<CollectionDefinitionEntity>(e =>
         {

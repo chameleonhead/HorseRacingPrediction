@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -37,6 +39,13 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
             new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
                 EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).StatusCode);
+        var collectionStore = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var sourceResource = new ResourceKey(ResourceType.Horse, "JRA", sourceId);
+        const int revision = 1;
+        await collectionStore.RegisterDefinitionAsync(new("horse-profile"), "Horse profile",
+            ResourceType.Horse, revision, "test", false);
+        var sourceTask = await collectionStore.RequestAsync(sourceResource, new("horse-profile"), revision,
+            CollectionReason.ManualRefresh, DateTimeOffset.UtcNow);
 
         var preview = await http.GetFromJsonAsync<HorseIdentityRepairPreviewResponse>(
             "/api/admin/repairs/20260913-jra-horse-identity");
@@ -48,6 +57,13 @@ public sealed class HorseIdentityRepairEndpointsTests
         var apply = await http.PostAsJsonAsync("/api/admin/repairs/20260913-jra-horse-identity/apply",
             new ApplyHorseIdentityRepairRequest([candidate.CandidateId]));
         Assert.AreEqual(HttpStatusCode.OK, apply.StatusCode);
+        var applied = await apply.Content.ReadFromJsonAsync<ApplyHorseIdentityRepairResponse>();
+        Assert.AreEqual(1, applied!.DisabledCollectionTaskCount);
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await collectionStore.GetTasksAsync()).Single(x => x.TaskId == sourceTask.TaskId).Status);
+        await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() =>
+            collectionStore.RequestAsync(sourceResource, new("horse-profile"), revision,
+                CollectionReason.ManualRefresh, DateTimeOffset.UtcNow));
         var oldProfile = await http.GetAsync($"/api/horses/{sourceId}");
         Assert.AreEqual(HttpStatusCode.OK, oldProfile.StatusCode);
         var resolved = await oldProfile.Content.ReadFromJsonAsync<HorseRacingPrediction.Contracts.HorseReadModel>();

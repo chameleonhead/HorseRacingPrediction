@@ -100,6 +100,18 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
     DateTimeOffset? NextCollectionAt, CollectionStateStatus Status);
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
+public sealed record CollectionResourceSuppressionResult(int CancelledTasks, int RunningCancellationRequests);
+public sealed record CollectionResourceSuppressionPreview(int PendingTasks, int RunningTasks)
+{
+    public int TotalTasks => PendingTasks + RunningTasks;
+}
+
+public sealed class CollectionResourceSuppressedException(ResourceKey resource, string reason)
+    : InvalidOperationException($"Collection resource {resource.Type}/{resource.Provider}/{resource.Id} is suppressed: {reason}")
+{
+    public ResourceKey Resource { get; } = resource;
+    public string SuppressionReason { get; } = reason;
+}
 
 public enum CollectionTaskAcquireStatus
 {

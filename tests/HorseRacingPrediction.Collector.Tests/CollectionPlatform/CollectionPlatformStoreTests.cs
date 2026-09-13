@@ -545,7 +545,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(8L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(9L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -853,7 +853,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 8;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 9;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1229,5 +1229,67 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionFailureResolutionStatus.Open, actionable.ResolutionStatus);
         Assert.IsNull(actionable.RecoveryTaskId);
         Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+    }
+
+    [TestMethod]
+    public async Task SuppressResource_CancelsPendingTasksAndRejectsFutureRequests()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+
+        var result = await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1",
+            now.AddMinutes(1));
+
+        Assert.AreEqual(1, result.CancelledTasks);
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+        await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() =>
+            store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddMinutes(2)));
+        var canonical = new ResourceKey(ResourceType.Horse, "JRA", "H456");
+        Assert.IsTrue((await store.RequestAsync(canonical, HorseProfile, 7, CollectionReason.Initial,
+            now.AddMinutes(2))).CreatedTask);
+    }
+
+    [TestMethod]
+    public async Task SuppressResource_RunningTaskIsCancellationRequestedAndOperationIsIdempotent()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        var first = await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1",
+            now.AddMinutes(1));
+        var second = await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1",
+            now.AddMinutes(2));
+
+        Assert.AreEqual(1, first.RunningCancellationRequests);
+        Assert.AreEqual(0, second.RunningCancellationRequests);
+        Assert.IsFalse(await store.HeartbeatAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(2),
+            TimeSpan.FromMinutes(5)));
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(3),
+            new(CollectionAttemptResult.Cancelled)));
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+    }
+
+    [TestMethod]
+    public async Task SuppressResource_SupersedesActionableFailureNotifications()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "Deleted source horse"));
+        Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10));
+
+        await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1", now.AddMinutes(2));
+
+        Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10));
     }
 }

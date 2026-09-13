@@ -1,6 +1,6 @@
 # JRA競走馬識別子の不具合修復を管理画面から実行する
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -104,19 +104,19 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 
 | ID | Observable criterion | State |
 |---|---|---|
-| AC1 | 左ナビゲーションの「運用」から「データ補正」を開け、直接URL再訪でもCookie認証後に表示できる。 | Not started |
-| AC2 | preview読込中、候補0件、通信失敗をそれぞれ区別し、空・失敗時に再読込方法を表示する。 | Not started |
-| AC3 | 各候補でsource/targetの馬名とID、JRA identity、根拠レース、safe/blocked状態、blocked理由を確認し、Horse/レース詳細へ遷移できる。 | Not started |
-| AC4 | safe候補だけを個別または一括選択でき、blocked候補や候補0件では補正実行を開始できない。Candidate IDを手入力できない。 | Not started |
-| AC5 | 実行前Dialogに選択対象、redirect保持、取消不可を表示し、戻る場合は変更せず、実行中の二重送信を防ぐ。 | Not started |
-| AC6 | 実行すると選択したCandidate IDだけを既存apply APIへ送り、成功時にapplied/skipped件数を表示して最新previewへ更新する。 | Not started |
-| AC7 | apply時再検証の競合・blocked・通信失敗では、変更成否と次の行動を操作領域に表示し、選択外候補を変更しない。 | Not started |
-| AC8 | ページはkeyboard操作可能で、状態を文言で表し、狭幅でも対象・根拠・理由・主操作を失わず横overflowを生じない。 | Not started |
-| AC9 | repair applyはCollectionRequest/Taskを作らず、通常のデータ収集ジョブ一覧に補正処理を表示しない。 | Not started |
-| AC10 | apply後、統合元Horseの非終端収集タスクは取消または取消要求済みとなり、キュー済み配送は取得されず、履歴は保持される。 | Not started |
-| AC11 | suppression後の統合元Horseへ新規収集を要求してもtaskは作られず、canonical Horseへの収集は通常どおり作成される。 | Not started |
-| AC12 | repair保存後・suppression前に失敗して再実行しても不足した無効化を完了し、redirect、ledger、suppression、監査を重複させない。 | Not started |
-| AC13 | bUnit、repair API統合テスト、Collection Platformの取消・配送・再要求テスト、API全体テスト、実ブラウザーの通常・空・失敗・狭幅確認が成功する。 | Not started |
+| AC1 | 左ナビゲーションの「運用」から「その他設定」を開け、直接URL再訪でもCookie認証後に表示できる。 | Verified |
+| AC2 | preview読込中、候補0件、通信失敗をそれぞれ区別し、空・失敗時に再読込方法を表示する。 | Verified |
+| AC3 | 各候補でsource/targetの馬名とID、JRA identity、根拠レース、safe/blocked状態、blocked理由を確認し、Horse/レース詳細へ遷移できる。 | Verified |
+| AC4 | safe候補だけを個別または一括選択でき、blocked候補や候補0件では補正実行を開始できない。Candidate IDを手入力できない。 | Verified |
+| AC5 | 実行前Dialogに選択対象、redirect保持、取消不可を表示し、戻る場合は変更せず、実行中の二重送信を防ぐ。 | Verified |
+| AC6 | 実行すると選択したCandidate IDだけを既存apply APIへ送り、成功時にapplied/skipped件数を表示して最新previewへ更新する。 | Verified |
+| AC7 | apply時再検証の競合・blocked・通信失敗では、変更成否と次の行動を操作領域に表示し、選択外候補を変更しない。 | Verified |
+| AC8 | ページはkeyboard操作可能で、状態を文言で表し、狭幅でも対象・根拠・理由・主操作を失わず横overflowを生じない。 | Verified |
+| AC9 | repair applyはCollectionRequest/Taskを作らず、通常のデータ収集ジョブ一覧に補正処理を表示しない。 | Verified |
+| AC10 | apply後、統合元Horseの非終端収集タスクは取消または取消要求済みとなり、キュー済み配送は取得されず、履歴は保持される。 | Verified |
+| AC11 | suppression後の統合元Horseへ新規収集を要求してもtaskは作られず、canonical Horseへの収集は通常どおり作成される。 | Verified |
+| AC12 | repair保存後・suppression前に失敗して再実行しても不足した無効化を完了し、redirect、ledger、suppression、監査を重複させない。 | Verified |
+| AC13 | bUnit、repair API統合テスト、Collection Platformの取消・配送・再要求テスト、API全体テスト、実ブラウザーの通常・空・失敗・狭幅確認が成功する。 | Verified |
 
 ## Delivery plan
 
@@ -134,6 +134,18 @@ Primary ActionでFluent Dialogを開き、選択件数、統合元／統合先�
 - 2026-09-14: 実装前セルフレビューを行い、収集管理へ混在させず、repair固有ページからサーバーpreviewに列挙された候補だけを操作する案とした。
 - 2026-09-14: ユーザー指定により画面名を「その他設定」とし、補正実行はデータ収集ジョブと別系統にした。名寄せ後は削除済み統合元Horseの既存・将来の収集をsuppressionし、履歴は保持する設計へ拡張した。
 - 2026-09-14: ユーザーが更新後の設計を明示的に承認したため、StatusをApprovedとしてExecution Modeへ移行した。
+- 2026-09-14: `/settings`、ナビゲーション、preview/apply client、候補一覧、safe選択、確認Dialog、結果・失敗表示を実装した。bUnitでsafe/blocked選択、適用対象、空、読込失敗を検証した。
+- 2026-09-14: Collection Platform schema v9へHorse resource suppressionを追加した。統合元の非終端task取消、Runningの取消要求、未配送outbox無効化、未解決failure通知のsupersede、新規単体・bulk要求拒否、bulk自動選択除外を実装した。
+- 2026-09-14: repair endpoint統合テストで、補正適用、source task取消、redirect、再要求拒否、再適用skipを検証した。Collection Platform storeテスト58件、solution全体931件（成功929、skip 2）が成功し、その後に追加したsuppressionのHTTP 409テストを含む関連5件も成功した。
+- 2026-09-14: ローカルの実ブラウザーで、認証後の空表示、通常候補、確認Dialog、390px狭幅のカードreflowを確認した。狭幅のdocument scroll widthは375pxで横overflowなし。通信失敗表示はbUnitで再現し、実ブラウザーの停止中サーバーを利用した不安定な再現は採用しなかった。
+- 2026-09-14: 最終production edit後に `codegraph sync .` を実行し、最新状態を確認した。`Settings.ApplyAsync` → `AdminApiClient.ApplyHorseIdentityRepairAsync` → repair endpoint → `CollectionPlatformStore.SuppressResourceAsync` の実経路と、suppressionのAPI・storeテストからの呼出しを `codegraph explore` で再確認した。
+
+## Implementation result
+
+- 補正は同期の専用管理APIのままとし、CollectionRequest/Taskを生成しない。
+- 適用済み候補も再実行時にsuppressionを確認するため、Event Store commit後のCollection Platform連携失敗から再開できる。
+- suppressionは履歴を削除せず、旧Horseを以後の収集・再収集対象から除外する。管理APIの新規要求ではHTTP 409と「補正済みのため収集対象外です。」を返す。
+- 設計との差分はない。本番データへの補正実行は行っていない。
 
 ## Deviations and follow-up
 

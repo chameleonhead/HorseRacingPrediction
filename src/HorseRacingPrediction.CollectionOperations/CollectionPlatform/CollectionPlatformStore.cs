@@ -118,6 +118,11 @@ public sealed class CollectionPlatformStore
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             var definitionEntity = await db.Definitions.SingleOrDefaultAsync(x => x.DefinitionId == definition.Value, cancellationToken)
                 ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
+            var suppression = await db.ResourceSuppressions.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.Type == resource.Type && x.Provider == resource.Provider && x.ResourceId == resource.Id,
+                cancellationToken).ConfigureAwait(false);
+            if (suppression is not null)
+                throw new CollectionResourceSuppressedException(resource, suppression.Reason);
             if (!definitionEntity.Enabled || definitionEntity.ResourceType != resource.Type)
                 throw new InvalidOperationException($"Definition {definition} cannot collect {resource.Type}.");
             if (requestedRevision > definitionEntity.CurrentRevision
@@ -308,6 +313,17 @@ public sealed class CollectionPlatformStore
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await ValidateBulkRequestAsync(db, definition, requestedRevision, normalized, cancellationToken)
                 .ConfigureAwait(false);
+            var suppressions = await db.ResourceSuppressions.AsNoTracking().ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var suppressed = normalized.FirstOrDefault(target => suppressions.Any(x =>
+                x.Type == target.Resource.Type && x.Provider == target.Resource.Provider
+                && x.ResourceId == target.Resource.Id));
+            if (suppressed is not null)
+            {
+                var suppressionReason = suppressions.Single(x => x.Type == suppressed.Resource.Type
+                    && x.Provider == suppressed.Resource.Provider && x.ResourceId == suppressed.Resource.Id).Reason;
+                throw new CollectionResourceSuppressedException(suppressed.Resource, suppressionReason);
+            }
             var receipts = new List<CollectionRequestReceipt>(normalized.Count);
             var created = 0;
             foreach (var target in normalized)
@@ -418,6 +434,8 @@ public sealed class CollectionPlatformStore
         var rows = await (from state in db.States.AsNoTracking()
                           join resource in db.Resources.AsNoTracking() on state.ResourcePk equals resource.ResourcePk
                           where state.DefinitionId == definition.Value
+                                && !db.ResourceSuppressions.Any(x => x.Type == resource.Type
+                                    && x.Provider == resource.Provider && x.ResourceId == resource.ResourceId)
                           select new { state, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
         return rows.Where(x => (!lastCollectedBefore.HasValue || x.state.LastCollectedAt <= lastCollectedBefore
                                 || x.state.LastCollectedAt == null)
@@ -1583,6 +1601,118 @@ public sealed class CollectionPlatformStore
             return true;
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionResourceSuppressionResult> SuppressResourceAsync(
+        ResourceKey resource, string reason, string repairId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var suppression = await db.ResourceSuppressions.SingleOrDefaultAsync(x =>
+                x.Type == resource.Type && x.Provider == resource.Provider && x.ResourceId == resource.Id,
+                cancellationToken).ConfigureAwait(false);
+            if (suppression is null)
+            {
+                db.ResourceSuppressions.Add(new CollectionResourceSuppressionEntity
+                {
+                    Type = resource.Type,
+                    Provider = resource.Provider,
+                    ResourceId = resource.Id,
+                    Reason = reason,
+                    RepairId = repairId,
+                    CreatedAt = now,
+                });
+            }
+            else if (!string.Equals(suppression.RepairId, repairId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Resource {resource} is suppressed by another operation.");
+            }
+
+            var resourcePk = await db.Resources.Where(x => x.Type == resource.Type
+                    && x.Provider == resource.Provider && x.ResourceId == resource.Id)
+                .Select(x => (long?)x.ResourcePk).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var cancelled = 0;
+            var running = 0;
+            if (resourcePk is not null)
+            {
+                var tasks = await db.Tasks.Where(x => x.ResourcePk == resourcePk.Value
+                        && x.Status != CollectionTaskStatus.Succeeded
+                        && x.Status != CollectionTaskStatus.Failed
+                        && x.Status != CollectionTaskStatus.Cancelled
+                        && x.Status != CollectionTaskStatus.DeadLetter)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var task in tasks)
+                {
+                    var newlyRequested = !task.CancellationRequestedAt.HasValue;
+                    task.CancellationRequestedAt ??= now;
+                    task.UpdatedAt = now;
+                    if (newlyRequested) task.DispatchGeneration++;
+                    if (task.Status == CollectionTaskStatus.Running)
+                    {
+                        if (newlyRequested) running++;
+                        continue;
+                    }
+                    task.Status = CollectionTaskStatus.Cancelled;
+                    task.FinishedAt = now;
+                    cancelled++;
+                }
+                var activeTaskIds = tasks.Where(x => x.Status == CollectionTaskStatus.Cancelled)
+                    .Select(x => x.TaskId).ToArray();
+                var active = await db.ActiveTasks.Where(x => activeTaskIds.Contains(x.TaskId))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                db.ActiveTasks.RemoveRange(active);
+                var outbox = await db.DispatchOutbox.Where(x => activeTaskIds.Contains(x.TaskId)
+                        && x.DispatchedAt == null).ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var item in outbox) item.DispatchedAt = now;
+                var states = await db.States.Where(x => x.ResourcePk == resourcePk.Value)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var state in states)
+                {
+                    state.Status = CollectionStateStatus.Unavailable;
+                    state.NextCollectionAt = null;
+                    state.UpdatedAt = now;
+                }
+                var resourceTaskIds = await db.Tasks.Where(x => x.ResourcePk == resourcePk.Value)
+                    .Select(x => x.TaskId).ToArrayAsync(cancellationToken).ConfigureAwait(false);
+                var failures = await db.FailureNotifications.Where(x => resourceTaskIds.Contains(x.TaskId)
+                        && (x.ResolutionStatus == CollectionFailureResolutionStatus.Open
+                            || x.ResolutionStatus == CollectionFailureResolutionStatus.RecoveryInProgress))
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var failure in failures)
+                {
+                    failure.ResolutionStatus = CollectionFailureResolutionStatus.Superseded;
+                    failure.ResolvedAt = now;
+                }
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(cancelled, running);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionResourceSuppressionPreview> GetResourceSuppressionPreviewAsync(
+        ResourceKey resource, CancellationToken cancellationToken = default)
+    {
+        resource = resource.Normalize();
+        await using var db = CreateDbContext();
+        var resourcePk = await db.Resources.AsNoTracking().Where(x => x.Type == resource.Type
+                && x.Provider == resource.Provider && x.ResourceId == resource.Id)
+            .Select(x => (long?)x.ResourcePk).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (resourcePk is null) return new(0, 0);
+        var statuses = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == resourcePk.Value
+                && x.Status != CollectionTaskStatus.Succeeded
+                && x.Status != CollectionTaskStatus.Failed
+                && x.Status != CollectionTaskStatus.Cancelled
+                && x.Status != CollectionTaskStatus.DeadLetter)
+            .Select(x => x.Status).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return new(statuses.Count(x => x != CollectionTaskStatus.Running),
+            statuses.Count(x => x == CollectionTaskStatus.Running));
     }
 
     public async Task<bool> HeartbeatAsync(Guid taskId, string leaseToken, DateTimeOffset now,

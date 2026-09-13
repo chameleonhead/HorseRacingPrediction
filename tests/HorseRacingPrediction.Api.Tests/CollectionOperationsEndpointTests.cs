@@ -32,6 +32,29 @@ public sealed class CollectionOperationsEndpointTests
     }
 
     [TestMethod]
+    public async Task CreateRequest_ForSuppressedResource_ReturnsConflict()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            var resource = new ResourceKey(ResourceType.Horse, "JRA", "merged-source");
+            await store.SuppressResourceAsync(resource, "Merged horse was deleted", "repair-1",
+                DateTimeOffset.UtcNow);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var response = await client.PostAsJsonAsync("/api/admin/collection/requests",
+                new CreateCollectionRequest(ResourceType.Horse, "JRA", "merged-source", "horse-profile", 1,
+                    CollectionReason.ManualRefresh));
+
+            Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+            StringAssert.Contains(await response.Content.ReadAsStringAsync(), "補正済みのため収集対象外です");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task PublishedFailure_RemainsActionableButLeavesUnpublishedFeed()
     {
         var directory = CreateDirectory();

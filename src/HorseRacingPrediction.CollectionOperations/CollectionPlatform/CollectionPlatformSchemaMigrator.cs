@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 8;
+    internal const int CurrentVersion = 9;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -79,6 +79,7 @@ internal static class CollectionPlatformSchemaMigrator
                     ? existing.Contains("collection_backfill_batches")
                         ? hasResolution ? hasOutboxReservation ? hasAttemptCorrelation ? 7 : 5 : 4 : 3 : 2
                     : 1;
+                if (existing.Contains("collection_resource_suppressions")) baselineVersion = 9;
                 await ExecuteAsync(connection,
                     $"INSERT INTO {HistoryTable} (version, applied_at) VALUES ($version, $appliedAt);",
                     cancellationToken, transaction, ("$version", (object)baselineVersion),
@@ -224,6 +225,27 @@ internal static class CollectionPlatformSchemaMigrator
                 CREATE INDEX IF NOT EXISTS IX_collection_tasks_ResourcePk_DefinitionId_RequestedRevision_CreatedAt
                     ON collection_tasks (ResourcePk, DefinitionId, RequestedRevision, CreatedAt);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (8, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+            version = 8;
+        }
+
+        if (version < 9)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_resource_suppressions (
+                    Type TEXT NOT NULL,
+                    Provider TEXT NOT NULL,
+                    ResourceId TEXT NOT NULL,
+                    Reason TEXT NOT NULL,
+                    RepairId TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    CONSTRAINT PK_collection_resource_suppressions PRIMARY KEY (Type, Provider, ResourceId)
+                );
+                CREATE INDEX IF NOT EXISTS IX_collection_resource_suppressions_RepairId
+                    ON collection_resource_suppressions (RepairId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (9, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);
