@@ -667,10 +667,13 @@ public sealed class CollectionPlatformStore
     {
         if (outcomes is null or { Count: 0 }) return [];
         if (outcomes.Count > MaxLocationOutcomesPerCompletion
-            || outcomes.Any(x => x.LocationId <= 0 || x.Result == CollectionAttemptResult.Running)) return null;
+            || outcomes.Any(x => x.LocationId < 0 || x.Result == CollectionAttemptResult.Running)) return null;
 
         var normalized = new List<ResourceLocationOutcome>();
-        foreach (var group in outcomes.GroupBy(x => x.LocationId))
+        // LocationId=0 represents an explicit URL that has not been persisted as a
+        // ResourceLocation yet. RequestedUrl below promotes it after a successful
+        // collection, so it has no existing location row to validate or update here.
+        foreach (var group in outcomes.Where(x => x.LocationId > 0).GroupBy(x => x.LocationId))
         {
             var first = group.First();
             if (group.Any(x => x.Result != first.Result

@@ -268,8 +268,10 @@ public sealed class CollectionPlatformStoreTests
         var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual(url, lease.Locations![0].Url);
-        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
-            new(CollectionAttemptResult.Succeeded, RequestedUrl: url, FinalUrl: url));
+        Assert.AreEqual(0, lease.Locations[0].LocationId);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, RequestedUrl: url, FinalUrl: url,
+                LocationOutcomes: [new(lease.Locations[0].LocationId, CollectionAttemptResult.Succeeded)])));
 
         var locations = await store.ResolveLocationsAsync(Horse, HorseProfile);
         Assert.HasCount(1, locations);
