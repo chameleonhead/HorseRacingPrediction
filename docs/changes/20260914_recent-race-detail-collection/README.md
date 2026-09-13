@@ -67,11 +67,14 @@
 handler は既存の出馬表・結果 parser と domain write workflow を
 順に再利用する。Odds と参照主体プロフィールは従来どおり別 definition とする。
 
-既存の未完了 `race-card` / `race-result` task を新旧 handler で二重実行しない。切替時に active task を drain し、
-新しい discovery/scheduler から `race-detail` request を再構築する。現行ストアは definition 登録のたびに
+既存の `race-card` / `race-result` 収集データは捨てたり別履歴として残したりせず、cutover 時のデータ移行で
+`race-detail` へマージする。切替時に active task を drain し、移行済み状態から不足する直近レースだけに
+`race-detail` request を作成する。現行ストアは definition 登録のたびに
 `Enabled=true` へ戻し、無効化 API を持たないため、旧 definition を明示的に無効化するストア操作を追加する。
 無効化後は新規 request と Recovery を拒否し、runtime handler 登録、scheduler/locator 分岐、管理操作の caller を
-除去する。旧 terminal task/attempt/location/state と definition 行は監査履歴として保持する。
+除去する。旧 definition と revision 行は移行元を説明するメタデータとして保持するが、運用上の Resource、State、
+Location、Request、Task、Failure は `race-detail` へ統合する。Attempt ID、Task ID、Request ID、日時、結果、URL、
+エラー、batch ID は変更せず、移行元 definition/revision を専用 provenance 項目へ保存して監査可能性を維持する。
 
 ### 日付境界
 
@@ -103,13 +106,37 @@ handler は既存の出馬表・結果 parser と domain write workflow を
 
 ### 原因修復
 
-切替後の discovery は直近 5 日を再探索し、既に結果だけ Current のレースにも `race-detail` request を作る。
+データ移行は、旧 `race-card` と `race-result` の状態を日付 policy に従って一つの `race-detail` 状態へマージする。
+直近 5 日で結果だけ Current のレースは統合状態を Current にせず、移行トランザクション内で補完 request を作る。
 これにより今回の週末分を含む出馬表を再取得し、既存 Horse/Entry の欠落馬主を非 null 値で補完する。
 
-Domain Data から状態を再構築する initializer も `ResourceType.Race + race-detail` へ変更する。Entry が存在するだけでは
-直近レースを Current とせず、結果確定済みであっても直近期間なら補完 request の対象にする。期間外で結果確定済みの
-レースだけを Current seed にできる。canonical resource ID は JRA の日付・競馬場・レース番号を使用し、domain Race ID
-は `domainRaceId` attribute に保持する。
+通常のアップグレードは既存 collection DB のマージ migration を正とし、Domain Data からの再構築で代用しない。
+空DB・災害復旧用 initializer も同じ `ResourceType.Race + race-detail` と completeness policy を使うよう変更する。
+canonical resource ID は JRA の日付・競馬場・レース番号を使用し、domain Race ID は `domainRaceId` attribute に保持する。
+
+### データ移行規則
+
+移行は収集全体を pause し、実行中 lease と未送信 envelope がなくなったことを確認してから単一 DB transaction で行う。
+事前にDBバックアップと dry-run レポートを作り、次の順でマージする。
+
+1. 旧 RaceCard/RaceResult resource の `EffectiveDate`、`course`、`number`、`domainRaceId` と Domain Data を照合し、
+   canonical `ResourceType.Race / yyyyMMdd:Course:Number` を決定する。識別不能・競合が1件でもあれば apply 前に中止し、
+   URL や名前から推測しない。
+2. `race-detail` revision 1 と対象 Race resource を作る。旧 request/task は ID と全実行情報を維持したまま対象 resource と
+   `race-detail` へ付け替え、元の definition/revision を provenance 列へ退避する。Attempt、failure notification、batch、
+   outbox の task/request 参照は ID が変わらないため維持する。
+3. Location は対象 Race + `race-detail` へ付け替える。同一 URL が衝突する場合、`Active > Unknown > Suspect > Invalid` を
+   状態優先順とし、最古の discovered、最新の verified/failed と対応する failure code を残して1件へ統合する。
+4. State は required revision 1 とし、期間外は旧 Result が Current の場合、直近の当日・過去日は旧 Card と Result が
+   ともに Current の場合だけ AppliedRevision 1 / Current にする。未来日は旧 Card の取得状態を保持しつつ、結果確認時刻を
+   NextCollectionAt に持つ非 Current 状態にする。複合条件を最後に満たした時刻を LastCollectedAt とする。
+5. 直近で Card または Result が不足する Race には `DefinitionChanged` reason の補完 request を作る。移行した terminal task
+   が通常 discovery の同 revision 重複抑止に該当しても、補完が省略されない理由種別を使う。
+6. 旧 active guard/outbox がゼロ、統合後の参照切れ・重複・件数差がないことを検証して旧 definition を無効化する。
+   smoke test 完了まではバックアップからDB全体を戻せる状態を維持し、成功後も旧 provenance は削除しない。
+
+migration は dry-run と apply を同じ変換器で実行し、旧/新 resource 数、state 判定別件数、Location 重複数、履歴 task/attempt
+件数、補完 request 件数、識別不能・競合・参照切れを出力する。部分適用や「移行できた分だけ成功」は認めない。
 
 ### 既存副作用の維持
 
@@ -123,6 +150,11 @@ Domain Data から状態を再構築する initializer も `ResourceType.Race + 
 
 タスク順序の競合を構造的になくし、同一セッションの現在ページから短絡遷移できる。直近レースの完了条件に
 「出馬表と結果の両方」を持たせられるため、結果だけ成功して馬主欠落を見逃さない。
+
+### 採用: 既存収集データを migration でマージする
+
+既存の成功・失敗・URL・試行・batch を引き継ぎ、全件再探索によるJRAアクセスと運用履歴の分断を避ける。
+IDを維持し、移行元 definition/revision を provenance として残すことで、統合後の画面からも過去試行を追跡できる。
 
 ### 採用: 境界日を含む `today - 5 days`
 
@@ -156,8 +188,13 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 - 出馬表・結果の通信、parse、domain write の部分失敗後に再試行でき、重複配信・lease expiry・再起動でも結果が冪等になる。
 - 自動探索は同一 Race ID に `race-card` と `race-result` の別 active task を作らない。
 - runtime で旧 `race-card` / `race-result` handler が登録されず、新規 scheduler/discovery/manual request に旧 definition の caller がない。
-- 旧 definition は無効化され、新規 request と Recovery を作れない一方、既存 terminal task/attempt/location/state を管理画面で参照できる。
-- 切替後の直近 5 日再探索により、結果だけ取得済みだったレースの馬主欠落を補完できる。
+- 旧 definition は無効化され、新規 request と Recovery を作れない一方、マージ済みの既存 terminal task/attempt/location/state を `race-detail` の管理画面で参照できる。
+- dry-run が全旧 RaceCard/Result resource の canonical Race 対応、件数、競合、参照切れ、補完対象をDB変更なしで表示する。
+- 識別不能または競合が1件でもある migration は何も変更せず失敗し、再実行可能である。
+- apply 後は旧 Resource/State/Location/Request/Task/Failure が `race-detail` へマージされ、Request/Task/Attempt IDと履歴内容、batch関連が維持される。
+- Location衝突とState統合が文書化した優先規則どおりで、移行前後の件数差を説明できる。
+- 移行元 definition/revision が provenance として参照でき、統合後の管理画面から過去試行を追跡できる。
+- 直近 5 日で結果だけ取得済みだったレースには補完 request が確実に作られ、馬主欠落を補完できる。
 - Domain Data initializer は canonical JRA Race ID の `ResourceType.Race + race-detail` 状態を冪等に構築し、直近の結果確定済みレースを補完対象から除外しない。
 - 出馬表由来の Horse/Jockey/Trainer request、予測スケジュール、引用元と、結果由来の払戻・天候・馬場の保存が維持される。
 - 常駐、`--once` / Lambda、同一開催日 microbatch のすべてで同じ境界と実行順になる。
@@ -173,7 +210,8 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 | navigation fallback | Not started | 実装承認待ち |
 | retry/restart/idempotency | Not started | 実装承認待ち |
 | 旧 definition cutover | Not started | 実装承認待ち |
-| initializer と補完投入 | Not started | 実装承認待ち |
+| collection data migration と補完投入 | Not started | 実装承認待ち |
+| initializer（空DB・災害復旧） | Not started | 実装承認待ち |
 | 既存副作用の維持 | Not started | 実装承認待ち |
 | 実行形態・関連機能回帰 | Not started | 実装承認待ち |
 
@@ -182,11 +220,12 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 1. `ResourceType.Race + race-detail` definition、日付 policy、状態・schedule 契約を追加し、境界の単体テストを作る。
 2. 出馬表 workflow と結果 workflow を同一 session で順次実行する handler を接続し、短絡遷移と fallback をテストする。
 3. discovery、backfill、subject reference、manual/recovery、schedule、URL resolver を `race-detail` request へ切り替える。
-4. initializer を統合状態へ変更し、直近 5 日の補完 request と期間外 Current seed を冪等に構築する。
-5. active な旧 task の drain、旧 definition 無効化、新状態の再構築、直近 5 日の再探索を実行可能な cutover 手順として実装・検証する。
-6. 旧 handler/登録/caller を除去し、CodeGraph と検索で production caller がゼロであることを確認する。
-7. 実 transport・persistence 境界を通る happy path、未公開待機、部分失敗、再起動、重複配信を検証する。
-8. 正本ドキュメント、matrix、検証記録、設計との差分と残課題を更新する。
+4. dry-run/apply 共通の collection data migration を実装し、既存状態・Location・全履歴をマージして不足分の補完 request を作る。
+5. 空DB・災害復旧用 initializer を統合状態へ変更し、直近補完と期間外 Current seed を冪等に構築する。
+6. active な旧 task の drain、migration、旧 definition 無効化を実行可能な cutover 手順として実装・検証する。
+7. 旧 handler/登録/caller を除去し、CodeGraph と検索で production caller がゼロであることを確認する。
+8. 実 transport・persistence 境界を通る happy path、未公開待機、部分失敗、再起動、重複配信を検証する。
+9. 正本ドキュメント、matrix、検証記録、設計との差分と残課題を更新する。
 
 ## Task plan
 
@@ -195,21 +234,24 @@ JRA URL path/CNAME と取得ページの identity から安全に判別でき、
 | T1 | 統合definition、5日policy、schedule/state契約 | Main | High capability | - | CollectionOperations model/store/policy、対象テスト | 境界・待機・Current状態テスト | AC「5日境界」「統合task」へ接続したテスト結果 | Proposed |
 | T2 | 同一sessionの出馬表→結果handler | Main | High capability | T1 | Collector handler、Scraping navigation/workflow、対象テスト | 短絡、fallback、未公開、部分失敗テスト | 馬主と結果を同一leaseで保存する実行証跡 | Proposed |
 | T3 | 全producer/URL resolver/dispatch互換性の切替 | Main | High capability | T1,T2 | Api/Collector の discovery・subject・manual・dispatcher | callerテスト、microbatchテスト | 旧definition新規callerゼロ、全入口がrace-detailへ接続 | Proposed |
-| T4 | initializerと直近補完 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 直近結果済みを補完対象にする初期化レポート | Proposed |
-| T5 | 旧definition停止とcutover | Main | High capability | T3,T4 | definition lifecycle、運用切替、関連テスト・文書 | drain/disable/recovery拒否/履歴参照テスト | 二重実行なし、旧履歴保持、rollback可能な順序 | Proposed |
-| T6 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Proposed |
+| T4 | 既存collection dataのマージmigration | Main | High capability | T1,T3 | Store/schema migrator、管理API/CLI、対象テスト | dry-run無変更、transaction rollback、全entity/衝突/state/provenanceテスト | 旧データを統合し補完requestを作る移行レポート | Proposed |
+| T5 | 空DB initializerの統合 | Main | High capability | T1,T3 | CollectionInitializer、初期化store、対象テスト | dry-run/execute冪等性、境界seedテスト | 災害復旧でも同じ統合状態になるレポート | Proposed |
+| T6 | 旧definition停止とcutover | Main | High capability | T4,T5 | definition lifecycle、運用切替、関連テスト・文書 | pause/drain/migrate/disable/recovery拒否/履歴参照/rollbackテスト | 二重実行なし、統合履歴保持、rollback可能な順序 | Proposed |
+| T7 | end-to-end回帰と文書同期 | Main | High capability | T2,T3,T4,T5,T6 | 統合テスト、change record、正本文書 | transport/persistence happy path、再起動・重複、関連solution test、CodeGraph sync | 全AC Verified、検証記録と差分・残課題更新 | Proposed |
 
 T1 は5日境界・統合状態、T2 は取得順・馬主・navigation・部分失敗、T3 は全入口・microbatch・旧caller、
-T4 は既存欠落補完、T5 は二重実行防止・履歴保持、T6 は実経路と全回帰の受け入れ基準を担当する。
+T4 は既存履歴・状態のマージと欠落補完、T5 は空DB復旧、T6 は二重実行防止・切替、T7 は実経路と全回帰の
+受け入れ基準を担当する。
 
 ## Review gates
 
 - **Design and task-split review (2026-09-14, Main):** 現行の Resource/Definition、Location、request deduplication、
   handler registry、dispatcher、initializer を確認した。`ResourceType.Race` 再利用、Location schema 非変更、旧definitionの
-  明示無効化を採用し、T1〜T6 ですべての受け入れ基準と検証をカバーできると判断した。未解決の設計判断はない。
+  明示無効化に加え、既存 collection data をID・provenance付きで物理マージする方針を採用した。T1〜T7 で
+  すべての受け入れ基準と検証をカバーできると判断した。未解決の設計判断はない。
 - **Pre-implementation review:** 承認後、コード変更前に各 task の `Runnable` / `Dependent` / `Externally blocked` を更新し、
   実際の未コミット変更との write scope 衝突を再確認する。
-- **Checkpoint review:** T1/T2、T3/T4、T5/T6 の各検証可能な境界で diff、テスト、matrix、CodeGraph を確認する。
+- **Checkpoint review:** T1/T2、T3/T4、T5/T6、T7 の各検証可能な境界で diff、テスト、matrix、CodeGraph を確認する。
 - **Final review:** 全 task と受け入れ基準が Verified、旧 production caller と runtime 登録がゼロ、直近補完経路が
   実 transport/persistence 境界で成功した場合だけ Implemented とする。
 
@@ -227,6 +269,10 @@ T4 は既存欠落補完、T5 は二重実行防止・履歴保持、T6 は実�
   拒否する明示的な definition lifecycle が必要と確認した。
 - 2026-09-14: initializer が現在 `RaceCard` と `RaceResult` を domain Race ID で別 seed にしているため、canonical JRA
   Race ID の統合seedと直近補完投入へ変更が必要と確認した。
+- 2026-09-14: 利用者の指定により、通常アップグレードは再構築ではなく既存 collection data のマージ migration とした。
+  現行schemaでは Request/Task/Location/State が resource/definition を直接保持し、Attempt/Failure/Outbox は Task ID を
+  参照するため、IDを維持した付替えが可能である。一方で移行元definition/revisionを失わないprovenance列と、Location・
+  State衝突の明示的な統合規則が必要と判断した。
 - 2026-09-14: プロダクションコードは未変更。実装は本記録の明示承認待ち。
 
 ## Deviations and follow-up
