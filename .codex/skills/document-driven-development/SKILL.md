@@ -40,6 +40,17 @@ A resource rename or declarative replacement plan is not evidence of this order 
 
 At each substantial checkpoint, review the diff against the acceptance-criterion matrix before reporting progress. For cross-process workflows, explicitly inspect cancellation, timeout, retry, lease expiry, duplicate delivery, multi-instance concurrency, and partial failure. Record blocking findings as unfinished work; do not present scaffolding, disconnected components, or passing isolated tests as an implemented capability.
 
+## CodeGraph Index Freshness
+
+When the repository contains `.codegraph/`, treat its index as a derived verification artifact whose freshness must follow source changes.
+
+- Use CodeGraph before text search when locating code, as required by the repository instructions.
+- After a coherent edit slice that adds, removes, renames, or changes production symbols or call relationships, run `codegraph sync .` before relying on `explore`, `impact`, `callers`, `callees`, or `affected` for post-change conclusions.
+- At minimum, sync after the final production-code edit and before each checkpoint commit or final handoff. Sync earlier when the next implementation decision depends on the changed graph. Documentation-only or non-code artifact changes do not require a sync.
+- Prefer incremental `codegraph sync .`. Use `codegraph index .` only when sync fails to restore a usable index, the index is corrupt, or CodeGraph configuration/language coverage changed.
+- After syncing, re-query the changed entry points and critical callers. For replacement work, verify that prohibited legacy symbols have zero production callers and are no longer runtime-registered; a pre-edit graph is not evidence.
+- Record the sync command and relevant graph verification in the change record's verification record. If syncing fails, record the failure and do not claim graph-based traceability or replacement completion.
+
 ## Commit Checkpoints
 
 - For large or long-running changes, commit at verified checkpoints instead of waiting for the entire change set to finish. Good checkpoint boundaries include document/design updates, API or state-model changes, UI slices, tests, and final documentation synchronization.
