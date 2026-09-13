@@ -133,6 +133,27 @@ public sealed class JraSnapshotViewTests
         Assert.Contains("Next race", view.Actions.Select(action => action.Text));
     }
 
+    [TestMethod]
+    public void Create_PrefersRawHrefWhenParsedUriLostRootRelativeMeaning()
+    {
+        var snapshot = Snapshot(Row(Cell("Value"))) with
+        {
+            Links =
+            [
+                new PageLinkSnapshot
+                {
+                    Text = "10レース",
+                    RawHref = "/JRADB/accessD.html?CNAME=card10",
+                    Url = new Uri("file:///JRADB/accessD.html?CNAME=card10"),
+                },
+            ],
+        };
+
+        var link = JraSnapshotView.Create(snapshot).Links.Single();
+
+        Assert.AreEqual("/JRADB/accessD.html?CNAME=card10", link.Url);
+    }
+
     private static PageSnapshot Snapshot(params PageTableRowSnapshot[] rows)
         => new()
         {

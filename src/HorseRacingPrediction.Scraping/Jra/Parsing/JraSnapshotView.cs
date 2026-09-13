@@ -16,7 +16,7 @@ internal sealed class JraSnapshotView
         Headings = source.FindHeadings().Select(node => node.GetEffectiveText())
             .Where(text => !string.IsNullOrWhiteSpace(text)).Select(text => text!).Distinct(StringComparer.Ordinal).ToArray();
         Links = source.Links.Select(link => new JraLinkView(
-            link.Url?.ToString() ?? link.RawHref ?? string.Empty,
+            link.RawHref ?? link.Url?.ToString() ?? string.Empty,
             new[] { link.Text, link.AccessibleName, link.Title }
                 .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty)).ToArray();
         Actions = source.FindByKind(PageContentKind.Button).Concat(source.FindByKind(PageContentKind.Link))
