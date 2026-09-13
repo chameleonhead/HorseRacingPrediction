@@ -1027,6 +1027,28 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task LegacyRaceMigration_CancelsActiveLegacyTaskAndQueuesUnifiedReplacement()
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(new("race-card"), "Race card", ResourceType.RaceCard, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
+        var now = new DateTimeOffset(2026, 9, 14, 1, 0, 0, TimeSpan.Zero);
+        var attributes = new Dictionary<string, string> { ["course"] = "中山", ["number"] = "11" };
+        var legacy = await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "legacy-card"),
+            new("race-card"), 1, CollectionReason.Initial, now, effectiveDate: new(2026, 9, 13),
+            attributes: attributes);
+
+        var applied = await store.MergeLegacyRaceDetailsAsync(true, now.AddMinutes(1));
+
+        Assert.IsEmpty(applied.Errors);
+        Assert.AreEqual(1, applied.SupplementRequests);
+        var tasks = await store.GetTasksAsync();
+        Assert.AreEqual(CollectionTaskStatus.Cancelled, tasks.Single(x => x.TaskId == legacy.TaskId).Status);
+        Assert.IsTrue(tasks.Any(x => x.TaskId != legacy.TaskId && x.Definition.Value == "race-detail"
+            && x.Status == CollectionTaskStatus.Ready));
+    }
+
+    [TestMethod]
     public async Task Readiness_CountsOnlyActiveRequestsForRequestedRace()
     {
         var store = CreateStore();

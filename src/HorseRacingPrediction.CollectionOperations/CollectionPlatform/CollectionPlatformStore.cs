@@ -1650,14 +1650,15 @@ public sealed class CollectionPlatformStore
                 errors.Add("The enabled race-detail revision 1 definition must be registered before migration.");
             var activeCount = await db.ActiveTasks.CountAsync(x => legacyPks.Contains(x.ResourcePk), cancellationToken)
                 .ConfigureAwait(false);
-            if (activeCount > 0) errors.Add($"Legacy race collection has {activeCount} active task(s); drain them first.");
+            if (!execute && activeCount > 0)
+                errors.Add($"Legacy race collection has {activeCount} active task(s); apply will cancel them.");
             var targetIds = mapped.Select(x => x.Id).Distinct().ToArray();
             var activeTargetCount = await db.ActiveTasks.Join(db.Resources.Where(x => x.Type == ResourceType.Race
                         && targetIds.Contains(x.ResourceId)), active => active.ResourcePk, resource => resource.ResourcePk,
                     (active, _) => active)
                 .CountAsync(x => x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
-            if (activeTargetCount > 0)
-                errors.Add($"Unified race collection has {activeTargetCount} active task(s); drain them first.");
+            if (!execute && activeTargetCount > 0)
+                errors.Add($"Unified race collection has {activeTargetCount} active task(s); apply will cancel them.");
             if (errors.Count > 0 || !execute)
             {
                 var previewGroups = mapped.Select(x => (x.Source.Provider, x.Id)).Distinct().Count();
@@ -1684,6 +1685,26 @@ public sealed class CollectionPlatformStore
             }
 
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var activeRaceTasks = await (from active in db.ActiveTasks
+                                         join task in db.Tasks on active.TaskId equals task.TaskId
+                                         join resource in db.Resources on active.ResourcePk equals resource.ResourcePk
+                                         where legacyPks.Contains(resource.ResourcePk)
+                                             || (resource.Type == ResourceType.Race
+                                                 && targetIds.Contains(resource.ResourceId)
+                                                 && active.DefinitionId == "race-detail")
+                                         select new { active, task }).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var item in activeRaceTasks)
+            {
+                item.task.CancellationRequestedAt = now;
+                item.task.Status = CollectionTaskStatus.Cancelled;
+                item.task.FinishedAt = now;
+                item.task.UpdatedAt = now;
+                db.ActiveTasks.Remove(item.active);
+                var pending = await db.DispatchOutbox.Where(x => x.TaskId == item.task.TaskId && x.DispatchedAt == null)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var outbox in pending) outbox.DispatchedAt = now;
+            }
             var requestCount = 0;
             var taskCount = 0;
             var attemptCount = 0;

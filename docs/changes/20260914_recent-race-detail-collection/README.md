@@ -417,8 +417,13 @@ Pre-implementation review: IG1/IG2は同じRazor表示・入力契約を共有�
 | --- | --- | --- | --- |
 | Backup | production Lightsail / deploy workflow | deploy前にcollection-platform DBを世代バックアップ | Connected |
 | Deploy replacement API | production Lightsail / GitHub Actions | health check成功後にmigrationへ進む | Connected |
-| Pause and drain | production collection pipeline / GitHub Actions | pause後、legacy/unified active taskの409だけをresume・待機・再試行 | Connected |
+| Pause and active cutover | production collection pipeline / GitHub Actions | pause後、handler廃止済みでdrain不能なlegacy taskと競合するunified taskを同一transactionでcancelし、統合履歴と補完taskへ切替 | Connected |
 | Apply | production collection-platform DB / migration API | `migrations/race-detail/apply`を実行 | Connected |
 | Post-check | production collection-platform DB / migration API | previewの`sourceResources == 0`かつ`errors`空を`jq`で検証 | Connected |
 | Resume | production collection pipeline / EXIT trap | 成否にかかわらずresumeを実行 | Connected |
 | Deployment evidence | production / Main | workflow runとmigration reportを記録 | Dependent |
+
+Checkpoint: 初回production run `34775988941`では旧active taskが30回のdrain待機後も残り、migration stepが安全に失敗した。
+旧handlerが既にruntime登録されていないためpending taskはdrain不能であることを確認した。apply transactionで対象active taskをcancelし、
+未送信outboxを閉じてから履歴移行と`race-detail`補完task生成を行うよう修正した。
+`LegacyRaceMigration_CancelsActiveLegacyTaskAndQueuesUnifiedReplacement`を追加し、旧taskのCancelled化と統合taskのReady生成を検証した。
