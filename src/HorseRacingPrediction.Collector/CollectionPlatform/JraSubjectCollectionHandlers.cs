@@ -233,10 +233,15 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     private static readonly IReadOnlyDictionary<string, RaceCourse> CourseCodes =
         new Dictionary<string, RaceCourse>(StringComparer.Ordinal)
         {
-            ["01"] = RaceCourse.Sapporo, ["02"] = RaceCourse.Hakodate,
-            ["03"] = RaceCourse.Fukushima, ["04"] = RaceCourse.Niigata,
-            ["05"] = RaceCourse.Tokyo, ["06"] = RaceCourse.Nakayama,
-            ["07"] = RaceCourse.Chukyo, ["08"] = RaceCourse.Kyoto,
-            ["09"] = RaceCourse.Hanshin, ["10"] = RaceCourse.Kokura,
+            ["01"] = RaceCourse.Sapporo,
+            ["02"] = RaceCourse.Hakodate,
+            ["03"] = RaceCourse.Fukushima,
+            ["04"] = RaceCourse.Niigata,
+            ["05"] = RaceCourse.Tokyo,
+            ["06"] = RaceCourse.Nakayama,
+            ["07"] = RaceCourse.Chukyo,
+            ["08"] = RaceCourse.Kyoto,
+            ["09"] = RaceCourse.Hanshin,
+            ["10"] = RaceCourse.Kokura,
         };
 }
