@@ -207,16 +207,19 @@ erDiagram
 - 実行前に既存の日次状態と影響を表示
 - 完了後は対象日で絞り込んだ収集ジョブ一覧へ遷移
 
-### 5.8 データ補正 `/settings`
+### 5.8 その他設定 `/settings`
 
-運用ナビゲーションの「データ補正」は、通常のオブジェクト編集では扱えない、範囲を固定したversioned repairを実行する独立ページとする。現在は `20260913-jra-horse-identity-repair` だけを表示し、今回のJRA競走馬識別子欠落不具合で記録された候補以外を入力・追加できない。
+運用ナビゲーションの「その他設定」は、通常のオブジェクト編集や収集管理では扱えない低頻度の管理操作を置くSettings Pageとする。現在は「データ補正」区分に `20260913-jra-horse-identity-repair` だけを表示し、今回のJRA競走馬識別子欠落不具合で記録された候補以外を入力・追加できない。
 
 - repairの名称・ID、未処理候補数、安全候補数、要確認数を表示する
 - 候補には統合元／統合先の馬名とID、JRA identity、根拠レース、安全性判定と理由を表示し、Horse／レース詳細へリンクする
 - safe候補だけをcheckboxで選択できる。blocked候補の安全性をUIから上書きしない
 - 選択後は確認Dialogで対象、統合元IDをredirectとして保持すること、画面から取消できないことを示してから実行する
 - UIは既存repair APIのdry-run manifestとapply時再検証を必ず利用し、DbContextやdomain commandを直接実行しない
-- 成功時はapplied／既処理skip件数を表示して再読込する。競合・blocked時は変更されなかったことと再読込を案内する
+- 成功時はapplied／既処理skip／無効化した収集タスク件数を表示して再読込する。競合・blocked時は変更されなかったことと再読込を案内する
+- 補正実行自体は同期の専用管理APIであり、CollectionRequest/Taskやqueue messageを作らず、収集管理一覧へ混在させない
+- 適用後は削除済み統合元Horseを収集対象外として永続化し、既存の非終端タスクを取消、実行中タスクへ取消要求を出し、キュー済み配送を無効化する。過去のrequest/task/attempt履歴は監査用に保持する
+- 補正済み統合元Horseへの将来の収集要求はtaskを作らず対象外と応答する。canonical Horseの収集は継続する
 - loading、empty、errorを区別する。狭幅では候補を縦積みにし、対象・根拠・判定理由・操作を省略しない
 
 詳細な対象境界、interaction、wireframe、受け入れ基準は [JRA競走馬識別子の不具合修復を管理画面から実行する](changes/20260914_horse-identity-repair-admin-ui/README.md) を参照する。
