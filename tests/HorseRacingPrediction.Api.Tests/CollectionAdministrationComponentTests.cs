@@ -57,6 +57,37 @@ public sealed class CollectionAdministrationComponentTests
     }
 
     [TestMethod]
+    public async Task FailureGroups_ShowComparableFieldsAndAllGroupsLinkForLongValues()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var now = new DateTimeOffset(2026, 9, 14, 14, 20, 0, TimeSpan.FromHours(9));
+        var groups = Enumerable.Range(1, 7).Select(index => new CollectionFailureGroup(
+            $"group-{index}", new("race-detail"), CollectionTaskStatus.Failed,
+            index == 1 ? "UnexpectedPageWithAnExtremelyLongClassificationWithoutSpaces" : $"Error{index}",
+            index == 1 ? new string('長', 120) : $"障害内容 {index}", 20 - index,
+            now.AddHours(-index), now.AddMinutes(-index), [], [])).ToArray();
+        var handler = new ResourceHandler { FailureGroups = groups };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Jobs>();
+
+        cut.WaitForAssertion(() => Assert.HasCount(6, cut.FindAll("a.failure-group")));
+        var first = cut.Find("a.failure-group");
+        StringAssert.Contains(first.TextContent, "UnexpectedPageWithAnExtremelyLongClassificationWithoutSpaces");
+        StringAssert.Contains(first.TextContent, "レース詳細の収集");
+        StringAssert.Contains(first.TextContent, "19 件");
+        StringAssert.Contains(first.TextContent, "最新発生");
+        StringAssert.Contains(first.TextContent, "詳細を見る");
+        StringAssert.Contains(first.GetAttribute("aria-label"), "対象19件の詳細を見る");
+        var all = cut.Find("a.failure-groups-all");
+        StringAssert.Contains(all.TextContent, "すべての障害（7 原因）を見る");
+        Assert.AreEqual("/jobs/operations?tab=failures", all.GetAttribute("href"));
+    }
+
+    [TestMethod]
     public async Task ResourceSelection_LinksToIndependentDetailPage()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -273,6 +304,7 @@ public sealed class CollectionAdministrationComponentTests
 
     private sealed class ResourceHandler : HttpMessageHandler
     {
+        public IReadOnlyList<CollectionFailureGroup> FailureGroups { get; init; } = [];
         private static readonly ResourceKey Resource = new(ResourceType.Horse, "jra", "H001");
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
         public int ManualRequests { get; private set; }
@@ -335,6 +367,7 @@ public sealed class CollectionAdministrationComponentTests
                     }),
                 "/api/admin/collection/pipeline" => new HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPipelineState(false, null, DateTimeOffset.UtcNow),
                 "/api/admin/collection/failure-notifications" => Array.Empty<PendingCollectionFailureNotification>(),
+                "/api/admin/collection/failure-notifications/groups" => FailureGroups,
                 "/api/admin/collection/backfills" => Array.Empty<BackfillBatchSnapshot>(),
                 _ when request.RequestUri.AbsolutePath.StartsWith("/api/admin/collection/resources/") =>
                     new CollectionResourceDetail(new(Resource, Definition, 0, 1, null, null,

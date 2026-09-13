@@ -1415,7 +1415,18 @@ public sealed class CollectionPlatformStore
                                                    || x.task.CreatedAt >= request.CreatedFrom.Value)
                                                   && (!request.CreatedTo.HasValue
                                                       || x.task.CreatedAt <= request.CreatedTo.Value))
-                .OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.TaskId).ToList();
+                .OrderBy(x => x.task.Status == CollectionTaskStatus.Succeeded)
+                .ThenBy(x => x.task.Lane switch
+                {
+                    CollectionLane.Realtime => 0,
+                    CollectionLane.Normal => 1,
+                    CollectionLane.Background => 2,
+                    _ => 3,
+                })
+                .ThenByDescending(x => x.task.Priority)
+                .ThenBy(x => x.task.DefinitionId, StringComparer.Ordinal)
+                .ThenBy(x => x.task.TaskId)
+                .ToList();
             return new(filtered.Count, page, pageSize, filtered.Skip((page - 1) * pageSize).Take(pageSize)
                 .Select(x => new CollectionTaskSummary(x.task.TaskId,
                     new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
@@ -1424,9 +1435,16 @@ public sealed class CollectionPlatformStore
         }
 
         var totalCount = await query.CountAsync(cancellationToken).ConfigureAwait(false);
-        // SQLite cannot order DateTimeOffset columns. TaskId is used as the stable tie-breaker;
-        // priority remains the primary operational ordering for the administration list.
-        var rows = await query.OrderByDescending(x => x.task.Priority).ThenBy(x => x.task.TaskId)
+        // Keep actionable work ahead of completed history, then mirror the stable part of the
+        // dispatcher precedence. Aging and starvation prevention are intentionally runtime-only.
+        var rows = await query
+            .OrderBy(x => x.task.Status == CollectionTaskStatus.Succeeded)
+            .ThenBy(x => x.task.Lane == CollectionLane.Realtime ? 0
+                : x.task.Lane == CollectionLane.Normal ? 1
+                : x.task.Lane == CollectionLane.Background ? 2 : 3)
+            .ThenByDescending(x => x.task.Priority)
+            .ThenBy(x => x.task.DefinitionId)
+            .ThenBy(x => x.task.TaskId)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var items = rows.Select(x => new CollectionTaskSummary(x.task.TaskId,

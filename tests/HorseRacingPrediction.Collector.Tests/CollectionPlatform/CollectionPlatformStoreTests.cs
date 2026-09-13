@@ -222,6 +222,44 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task SearchTasks_OrdersIncompleteBeforeSucceeded_ThenLanePriorityAndDefinitionAcrossPages()
+    {
+        var store = await CreateStoreAsync();
+        var alpha = new CollectionDefinitionId("alpha-profile");
+        var beta = new CollectionDefinitionId("beta-profile");
+        await store.RegisterDefinitionAsync(alpha, "Alpha", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(beta, "Beta", ResourceType.Horse, 1, "initial", false);
+        var now = new DateTimeOffset(2026, 9, 14, 0, 0, 0, TimeSpan.Zero);
+
+        var completedRealtime = await store.RequestAsync(new(ResourceType.Horse, "JRA", "COMPLETED"), beta, 1,
+            CollectionReason.Initial, now, CollectionLane.Realtime, 100);
+        await CompleteAsync(store, completedRealtime, now);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "BACKGROUND"), alpha, 1,
+            CollectionReason.Initial, now.AddMinutes(1), CollectionLane.Background, 100);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "NORMAL"), alpha, 1,
+            CollectionReason.Initial, now.AddMinutes(2), CollectionLane.Normal, 100);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-LOW"), alpha, 1,
+            CollectionReason.Initial, now.AddMinutes(3), CollectionLane.Realtime, 80);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-BETA"), beta, 1,
+            CollectionReason.Initial, now.AddMinutes(4), CollectionLane.Realtime, 90);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "REALTIME-ALPHA"), alpha, 1,
+            CollectionReason.Initial, now.AddMinutes(5), CollectionLane.Realtime, 90);
+
+        var firstPage = await store.SearchTasksAsync(new(Page: 1, PageSize: 3));
+        var secondPage = await store.SearchTasksAsync(new(Page: 2, PageSize: 3));
+        var createdFrom = await store.SearchTasksAsync(new(CreatedFrom: now, Page: 1, PageSize: 10));
+        var expected = new[]
+        {
+            "REALTIME-ALPHA", "REALTIME-BETA", "REALTIME-LOW", "NORMAL", "BACKGROUND", "COMPLETED",
+        };
+
+        Assert.AreEqual(6, firstPage.TotalCount);
+        CollectionAssert.AreEqual(expected[..3], firstPage.Items.Select(x => x.Resource.Id).ToArray());
+        CollectionAssert.AreEqual(expected[3..], secondPage.Items.Select(x => x.Resource.Id).ToArray());
+        CollectionAssert.AreEqual(expected, createdFrom.Items.Select(x => x.Resource.Id).ToArray());
+    }
+
+    [TestMethod]
     public async Task Request_RejectsRevisionNotRegisteredByDefinition()
     {
         var store = await CreateStoreAsync();

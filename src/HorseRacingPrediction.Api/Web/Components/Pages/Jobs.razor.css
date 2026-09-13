@@ -107,17 +107,18 @@
 .failure-groups {
     display: grid;
     gap: 8px;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: 1fr;
 }
 
 .failure-group {
+    align-items: center;
     border: 1px solid var(--neutral-stroke-rest);
     border-left: 3px solid var(--status-danger-foreground-1);
     border-radius: 5px;
     color: inherit;
     display: grid;
-    gap: 6px 12px;
-    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 8px 16px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) max-content max-content minmax(0, 2fr) max-content;
     padding: 12px;
     text-decoration: none;
 }
@@ -127,27 +128,56 @@
     background: var(--neutral-layer-2);
 }
 
-.failure-group span:first-child {
-    display: grid;
-    gap: 2px;
+.failure-group > span {
+    min-width: 0;
 }
 
-.failure-group small,
+.failure-cause,
+.failure-definition,
+.failure-latest,
+.failure-message {
+    overflow-wrap: anywhere;
+}
+
+.failure-cause {
+    color: var(--neutral-foreground-rest);
+}
+
+.failure-definition,
+.failure-latest,
 .failure-message {
     color: var(--neutral-foreground-hint);
+}
+
+.failure-field-label {
+    display: none;
 }
 
 .failure-count {
     color: var(--status-danger-foreground-1);
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .failure-message {
-    grid-column: 1 / -1;
     line-height: 1.45;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.failure-affordance,
+.failure-groups-all {
+    color: var(--accent-fill-rest);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.failure-groups-all {
+    display: block;
+    margin-top: 10px;
+    text-align: right;
+    text-decoration: none;
 }
 
 .collection-kind-grid {
@@ -269,5 +299,51 @@
     .failure-groups,
     .date-fields {
         grid-template-columns: 1fr;
+    }
+
+    .failure-group {
+        align-items: start;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        min-height: 44px;
+    }
+
+    .failure-cause {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .failure-count {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .failure-definition,
+    .failure-latest,
+    .failure-message,
+    .failure-affordance {
+        grid-column: 1 / -1;
+    }
+
+    .failure-field-label {
+        display: inline;
+        font-size: 0.78rem;
+        font-weight: 400;
+        margin-right: 6px;
+    }
+
+    .failure-message {
+        display: -webkit-box;
+        overflow: hidden;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+    }
+
+    .failure-affordance {
+        justify-self: end;
+    }
+
+    .failure-groups-all {
+        text-align: left;
     }
 }

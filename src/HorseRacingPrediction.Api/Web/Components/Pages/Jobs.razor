@@ -63,13 +63,20 @@
         <div class="failure-groups">
             @foreach (var group in FailureGroups.Take(6))
             {
-                <a class="failure-group" href="@FailureGroupHref(group)">
-                    <span><strong>@(string.IsNullOrWhiteSpace(group.ErrorCode) ? "原因未分類" : group.ErrorCode)</strong><small>@DefinitionLabel(group.Definition)</small></span>
-                    <span class="failure-count">@group.Count 件</span>
+                <a class="failure-group" href="@FailureGroupHref(group)" aria-label="@FailureGroupAriaLabel(group)">
+                    <span class="failure-cause"><strong>@(string.IsNullOrWhiteSpace(group.ErrorCode) ? "原因未分類" : group.ErrorCode)</strong></span>
+                    <span class="failure-definition"><span class="failure-field-label">ジョブ種類</span>@DefinitionLabel(group.Definition)</span>
+                    <span class="failure-count"><span class="failure-field-label">対象</span>@group.Count 件</span>
+                    <span class="failure-latest"><span class="failure-field-label">最新発生</span>@Time(group.LastFailedAt)</span>
                     <span class="failure-message">@(string.IsNullOrWhiteSpace(group.ErrorMessage) ? "詳細画面で実行履歴を確認してください。" : group.ErrorMessage)</span>
+                    <span class="failure-affordance">詳細を見る <span aria-hidden="true">›</span></span>
                 </a>
             }
         </div>
+        @if (FailureGroups.Count > 6)
+        {
+            <a class="failure-groups-all" href="/jobs/operations?tab=failures">すべての障害（@FailureGroups.Count 原因）を見る <span aria-hidden="true">›</span></a>
+        }
     </section>
 }
 
@@ -243,6 +250,7 @@ else
     private string StatusTabLabel(FilterOption option)=>$"{option.Label}  {ViewCount(option.Value)}";
     private string DetailHref(CollectionTaskSummary item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private string FailureGroupHref(CollectionFailureGroup item){var back="/"+Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/failures/{Uri.EscapeDataString(item.GroupKey)}?returnUrl={Uri.EscapeDataString(back)}";}
+    private static string FailureGroupAriaLabel(CollectionFailureGroup item){var cause=string.IsNullOrWhiteSpace(item.ErrorCode)?"原因未分類":item.ErrorCode;return $"{DefinitionLabel(item.Definition)}、{cause}、対象{item.Count}件の詳細を見る";}
     private string StateDetailHref(CollectionStateSnapshot item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
     private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
