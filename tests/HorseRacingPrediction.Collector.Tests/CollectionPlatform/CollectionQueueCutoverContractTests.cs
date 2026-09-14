@@ -65,7 +65,7 @@ public sealed class CollectionQueueCutoverContractTests
     {
         StringAssert.Contains(MaintenanceWorkflow, "APPLY-PENDING-COLLECTION-REPAIRS");
         StringAssert.Contains(MaintenanceWorkflow, "/pipeline/pause");
-        StringAssert.Contains(MaintenanceWorkflow, "status=Acquired&limit=1");
+        StringAssert.Contains(MaintenanceWorkflow, "status=Running&limit=1");
         StringAssert.Contains(MaintenanceWorkflow, "select(.safeToApply)");
         StringAssert.Contains(MaintenanceWorkflow, "select(.safeToExecute)");
         StringAssert.Contains(MaintenanceWorkflow, "Horse repair idempotency check passed.");

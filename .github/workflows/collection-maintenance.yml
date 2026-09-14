@@ -84,7 +84,7 @@ jobs:
               "$api/admin/collection/pipeline/pause" >/dev/null
             for attempt in $(seq 1 30); do
               curl --fail --silent --show-error -H "$auth" \
-                "$api/admin/collection/tasks?status=Acquired&limit=1" > "$work/acquired.json"
+                "$api/admin/collection/tasks?status=Running&limit=1" > "$work/acquired.json"
               [ "$(jq 'length' "$work/acquired.json")" = 0 ] && break
               [ "$attempt" = 30 ] && { echo "Active leases did not drain." >&2; exit 1; }
               sleep 10
