@@ -100,6 +100,7 @@ public sealed class CollectionAdministrationComponentTests
         var cut = context.Render<Jobs>();
         await ClickButtonAsync(cut, "待機中");
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "H001"));
+        Assert.IsTrue(handler.LatestOnlyRequests > 0);
         StringAssert.Contains(cut.Markup, "競走馬情報の収集");
         StringAssert.Contains(cut.Markup, "登録待ち");
         var link = cut.FindAll("a").Single(x => x.TextContent.Contains("H001"));
@@ -144,7 +145,7 @@ public sealed class CollectionAdministrationComponentTests
         Assert.IsTrue(tabs.Instance.ShowActiveIndicator);
         var activePanel = cut.Find("#attention-panel");
         StringAssert.Contains(activePanel.InnerHtml, "収集処理の絞り込み");
-        CollectionAssert.IsSubsetOf(new[] { "要対応", "処理中", "待機中", "最近完了", "収集対象", "直近の処理" },
+        CollectionAssert.IsSubsetOf(new[] { "要対応", "処理中", "待機中", "最近完了", "収集対象", "最新の処理" },
             cut.FindComponents<FluentTab>().Select(x => x.Instance.Label?.ToString()?.Split("  ")[0]).ToArray());
         Assert.AreEqual(1, handler.TaskSearchRequests);
         Assert.AreEqual(1, handler.TaskViewCountRequests);
@@ -312,13 +313,18 @@ public sealed class CollectionAdministrationComponentTests
         public int ExplicitUrlRequests { get; private set; }
         public int TaskSearchRequests { get; private set; }
         public int TaskViewCountRequests { get; private set; }
+        public int LatestOnlyRequests { get; private set; }
         public CreateCollectionRequest? LastManualRequest { get; private set; }
         public CreateExplicitUrlCollectionRequest? LastExplicitUrlRequest { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.RequestUri!.AbsolutePath == "/api/admin/collection/tasks/search")
+            {
                 TaskSearchRequests++;
+                if (request.RequestUri.Query.Contains("latestOnly=true", StringComparison.OrdinalIgnoreCase))
+                    LatestOnlyRequests++;
+            }
             if (request.RequestUri.AbsolutePath == "/api/admin/collection/task-view-counts")
                 TaskViewCountRequests++;
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests/bulk/preview"))

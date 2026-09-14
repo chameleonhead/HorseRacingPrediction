@@ -222,6 +222,38 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task SearchLatestTasks_GroupsBeforeFilteringAndCountsTheLatestState()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
+        var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+            CollectionReason.Initial, now);
+        var failedLease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(failedLease);
+        await store.CompleteAttemptAsync(failed.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "OldFailure", "old failure only"));
+        var latest = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+            CollectionReason.ManualRefresh, now.AddMinutes(1));
+
+        var allLatest = await store.SearchTasksAsync(new(LatestOnly: true));
+        var failedLatest = await store.SearchTasksAsync(new(Statuses: [CollectionTaskStatus.Failed],
+            LatestOnly: true));
+        var oldErrorLatest = await store.SearchTasksAsync(new(ErrorSearch: "OldFailure", LatestOnly: true));
+        var history = await store.SearchTasksAsync(new(Statuses: [CollectionTaskStatus.Failed]));
+        var counts = await store.GetTaskViewCountsAsync();
+
+        Assert.AreEqual(1, allLatest.TotalCount);
+        Assert.AreEqual(latest.TaskId, allLatest.Items.Single().TaskId);
+        Assert.AreEqual(CollectionTaskStatus.Ready, allLatest.Items.Single().Status);
+        Assert.AreEqual(0, failedLatest.TotalCount);
+        Assert.AreEqual(0, oldErrorLatest.TotalCount);
+        Assert.AreEqual(1, history.TotalCount, "The superseded failed task remains available as history.");
+        Assert.AreEqual(1, counts.Counts["waiting"]);
+        Assert.AreEqual(0, counts.Counts["recent"]);
+        Assert.AreEqual(1, counts.Counts["all"]);
+    }
+
+    [TestMethod]
     public async Task SearchTasks_OrdersIncompleteBeforeSucceeded_ThenLanePriorityAndDefinitionAcrossPages()
     {
         var store = await CreateStoreAsync();

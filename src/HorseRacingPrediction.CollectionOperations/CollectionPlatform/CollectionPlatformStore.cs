@@ -1369,6 +1369,10 @@ public sealed class CollectionPlatformStore
                     join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
                     select new { task, resource };
 
+        if (request.LatestOnly)
+            return await SearchLatestTasksAsync(db, request, page, pageSize, cancellationToken)
+                .ConfigureAwait(false);
+
         if (request.Statuses is { Count: > 0 })
         {
             var statuses = request.Statuses.Distinct().ToArray();
@@ -1454,19 +1458,108 @@ public sealed class CollectionPlatformStore
         return new(totalCount, page, pageSize, items);
     }
 
+    private static async Task<CollectionTaskPage> SearchLatestTasksAsync(CollectionPlatformDbContext db,
+        CollectionTaskQuery request, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var allRows = await (from task in db.Tasks.AsNoTracking()
+                             join resource in db.Resources.AsNoTracking()
+                                 on task.ResourcePk equals resource.ResourcePk
+                             select new TaskSearchRow(task, resource))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        IEnumerable<TaskSearchRow> filtered = allRows
+            .GroupBy(x => new { x.Task.ResourcePk, x.Task.DefinitionId })
+            .Select(group => group.OrderByDescending(x => x.Task.CreatedAt)
+                .ThenByDescending(x => x.Task.TaskId).First());
+
+        if (request.Statuses is { Count: > 0 })
+        {
+            var statuses = request.Statuses.Distinct().ToHashSet();
+            filtered = filtered.Where(x => statuses.Contains(x.Task.Status));
+        }
+        if (request.ActionableOnly)
+        {
+            var actionableTaskIds = (await db.FailureNotifications.AsNoTracking()
+                    .Where(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open)
+                    .Select(x => x.TaskId).ToListAsync(cancellationToken).ConfigureAwait(false))
+                .ToHashSet();
+            filtered = filtered.Where(x => actionableTaskIds.Contains(x.Task.TaskId));
+        }
+        if (request.ResourceType.HasValue)
+            filtered = filtered.Where(x => x.Resource.Type == request.ResourceType.Value);
+        if (!string.IsNullOrWhiteSpace(request.Provider))
+        {
+            var provider = request.Provider.Trim().ToUpperInvariant();
+            filtered = filtered.Where(x => x.Resource.Provider == provider);
+        }
+        if (!string.IsNullOrWhiteSpace(request.DefinitionId))
+        {
+            var definition = request.DefinitionId.Trim();
+            filtered = filtered.Where(x => x.Task.DefinitionId == definition);
+        }
+        if (request.Lane.HasValue)
+            filtered = filtered.Where(x => x.Task.Lane == request.Lane.Value);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            filtered = filtered.Where(x => x.Resource.ResourceId.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || x.Resource.Provider.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || x.Task.DefinitionId.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(request.ErrorSearch))
+        {
+            var error = request.ErrorSearch.Trim();
+            var matchingTaskIds = (await db.Attempts.AsNoTracking()
+                    .Where(x => (x.ErrorCode != null && x.ErrorCode.Contains(error))
+                        || (x.ErrorMessage != null && x.ErrorMessage.Contains(error)))
+                    .Select(x => x.TaskId).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false))
+                .ToHashSet();
+            filtered = filtered.Where(x => matchingTaskIds.Contains(x.Task.TaskId));
+        }
+        if (request.CreatedFrom.HasValue)
+            filtered = filtered.Where(x => x.Task.CreatedAt >= request.CreatedFrom.Value);
+        if (request.CreatedTo.HasValue)
+            filtered = filtered.Where(x => x.Task.CreatedAt <= request.CreatedTo.Value);
+
+        var ordered = filtered
+            .OrderBy(x => x.Task.Status == CollectionTaskStatus.Succeeded)
+            .ThenBy(x => x.Task.Lane switch
+            {
+                CollectionLane.Realtime => 0,
+                CollectionLane.Normal => 1,
+                CollectionLane.Background => 2,
+                _ => 3,
+            })
+            .ThenByDescending(x => x.Task.Priority)
+            .ThenBy(x => x.Task.DefinitionId, StringComparer.Ordinal)
+            .ThenBy(x => x.Task.TaskId)
+            .ToList();
+        var items = ordered.Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(x => new CollectionTaskSummary(x.Task.TaskId,
+                new ResourceKey(x.Resource.Type, x.Resource.Provider, x.Resource.ResourceId),
+                new CollectionDefinitionId(x.Task.DefinitionId), x.Task.Status, x.Task.Lane, x.Task.Priority,
+                x.Task.RequestedRevision, x.Task.AvailableAt, x.Task.AttemptCount)).ToList();
+        return new(ordered.Count, page, pageSize, items);
+    }
+
+    private sealed record TaskSearchRow(CollectionTaskEntity Task, CollectionResourceEntity Resource);
+
     public async Task<CollectionTaskViewCounts> GetTaskViewCountsAsync(
         CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
-        var counts = await db.Tasks.AsNoTracking().GroupBy(x => x.Status)
-            .Select(x => new { Status = x.Key, Count = x.Count() })
-            .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken).ConfigureAwait(false);
+        var tasks = await db.Tasks.AsNoTracking().ToListAsync(cancellationToken).ConfigureAwait(false);
+        var latestTasks = tasks.GroupBy(x => new { x.ResourcePk, x.DefinitionId })
+            .Select(group => group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.TaskId).First())
+            .ToList();
+        var counts = latestTasks.GroupBy(x => x.Status).ToDictionary(x => x.Key, x => x.Count());
         int Count(params CollectionTaskStatus[] statuses) => statuses.Sum(x => counts.GetValueOrDefault(x));
-        var actionableCount = await db.Tasks.AsNoTracking().CountAsync(task =>
-            (task.Status == CollectionTaskStatus.Failed || task.Status == CollectionTaskStatus.DeadLetter)
-            && db.FailureNotifications.Any(notification => notification.TaskId == task.TaskId
-                && notification.ResolutionStatus == CollectionFailureResolutionStatus.Open), cancellationToken)
-            .ConfigureAwait(false);
+        var openFailureTaskIds = (await db.FailureNotifications.AsNoTracking()
+                .Where(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open)
+                .Select(x => x.TaskId).ToListAsync(cancellationToken).ConfigureAwait(false))
+            .ToHashSet();
+        var actionableCount = latestTasks.Count(task =>
+            task.Status is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter
+            && openFailureTaskIds.Contains(task.TaskId));
         return new(new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["attention"] = actionableCount,

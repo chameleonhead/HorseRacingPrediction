@@ -232,7 +232,8 @@ public sealed record CollectionTaskQuery(
     string? ErrorSearch = null,
     int Page = 1,
     int PageSize = 50,
-    bool ActionableOnly = false);
+    bool ActionableOnly = false,
+    bool LatestOnly = false);
 
 public sealed record CollectionTaskPage(int TotalCount, int Page, int PageSize,
     IReadOnlyList<CollectionTaskSummary> Items);

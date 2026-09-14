@@ -20,7 +20,7 @@ public static class CollectionPlatformEndpointExtensions
                 ? Results.Ok(batch) : Results.NotFound());
         admin.MapGet("/tasks/search", async (string? statuses, ResourceType? resourceType, string? provider,
             string? definitionId, CollectionLane? lane, string? search, string? errorSearch, DateTimeOffset? createdFrom,
-            DateTimeOffset? createdTo, bool? actionableOnly, int? page, int? pageSize, CollectionPlatformStore store,
+            DateTimeOffset? createdTo, bool? actionableOnly, bool? latestOnly, int? page, int? pageSize, CollectionPlatformStore store,
             CancellationToken token) =>
         {
             IReadOnlyCollection<CollectionTaskStatus>? parsedStatuses = null;
@@ -39,7 +39,7 @@ public static class CollectionPlatformEndpointExtensions
                 return Results.BadRequest(new { message = "createdFrom must not be later than createdTo." });
             return Results.Ok(await store.SearchTasksAsync(new(parsedStatuses, resourceType, provider,
                 definitionId, lane, search, createdFrom, createdTo, errorSearch, page ?? 1, pageSize ?? 50,
-                actionableOnly ?? false), token));
+                actionableOnly ?? false, latestOnly ?? false), token));
         });
         admin.MapGet("/states/search", async (string? statuses, ResourceType? resourceType, string? provider,
             string? definitionId, string? search, int? page, int? pageSize, CollectionPlatformStore store,
