@@ -12,6 +12,14 @@ Store each record at `docs/changes/yyyyMMdd_<change-name>/README.md`. `yyyyMMdd`
 - Created: YYYY-MM-DD
 - Updated: YYYY-MM-DD
 
+## Completion summary
+
+| Dimension | State | Evidence or remaining work |
+| --- | --- | --- |
+| Code | Not started | <evidence or next action> |
+| Verification | Not started | <evidence or next action> |
+| Deployment/operation | Not started | <evidence, next action, or Not applicable> |
+
 ## Context
 ## Goals
 ## Non-goals
@@ -22,6 +30,10 @@ Store each record at `docs/changes/yyyyMMdd_<change-name>/README.md`. `yyyyMMdd`
 ## Technical impact
 ## Decisions
 ## Acceptance criteria
+
+| ID | Observable criterion | Tasks | Verification | State |
+| --- | --- | --- | --- | --- |
+| AC1 | <observable outcome> | T1 | <evidence> | Not started |
 ## Delivery plan
 ## Task plan
 For multi-task or multi-agent changes, use this table (a short single task may use equivalent bullets):
@@ -50,6 +62,10 @@ Status meanings:
 - `Approved`: The user explicitly confirmed the documented design; implementation may begin.
 - `Implemented`: Approved scope is implemented and its verification record is complete.
 - `Superseded`: Another linked record replaces this proposal.
+
+Use these four values exactly. Do not add parenthetical qualifiers such as `Implemented (deployment pending)`. When code, verification, and deployment or operations differ, keep the whole-record Status at the least complete acceptance-blocking stage and describe the partial states in `Completion summary`.
+
+Acceptance-criterion states are `Not started`, `Connected`, and `Verified`. Every AC table includes a State column. `Implemented` requires every approved AC to be `Verified`; prose, a passing build, or a later change record does not replace updating the originating AC row and verification record.
 
 For UI work, store mocks in `mocks/`. A text wireframe is appropriate for information hierarchy and responsive behavior. Use an image or runnable prototype only when spatial or visual details cannot be reviewed reliably in text.
 

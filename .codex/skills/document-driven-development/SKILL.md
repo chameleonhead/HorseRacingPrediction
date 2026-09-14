@@ -63,6 +63,23 @@ A resource rename or declarative replacement plan is not evidence of this order 
 
 At each substantial checkpoint, review the diff against the acceptance-criterion matrix before reporting progress. For cross-process workflows, explicitly inspect cancellation, timeout, retry, lease expiry, duplicate delivery, multi-instance concurrency, and partial failure. Record blocking findings as unfinished work; do not present scaffolding, disconnected components, or passing isolated tests as an implemented capability.
 
+## Status Reconciliation Gate
+
+Use only the exact record statuses `Proposed`, `Approved`, `Implemented`, and `Superseded`. Do not qualify a status with parentheses or free text. `Implemented` means the entire approved scope is complete; code completion while deployment or an acceptance-blocking operation remains unfinished stays `Approved`.
+
+When code, verification, deployment, or an operational action can complete at different times, add a `Completion summary` with separate `Code`, `Verification`, and `Deployment/operation` states. Inventory or status-review requests must report these dimensions separately from the record Status; never infer that `Approved` means code is unimplemented.
+
+Every acceptance-criteria table must include a state column using `Not started`, `Connected`, or `Verified`. Before each checkpoint commit and final response, reconcile `Status`, every AC state, every task state, and prose describing remaining work. Treat these as blockers:
+
+- a non-canonical Status;
+- `Implemented` with any AC other than `Verified`;
+- all ACs `Verified` while the record remains `Approved`, unless an explicit task or completion-summary item identifies the remaining approved work;
+- remaining work recorded only in prose and absent from the task/AC ledger.
+
+If completion evidence is produced in another change record, deployment run, incident follow-up, or later task, assign a closure owner and update the originating record's AC state, verification record, completion summary, and Status in the same work cycle. A link from the later record without reconciliation of the originating record is incomplete evidence handling.
+
+For repeated audits, use `scripts/validate_change_records.py` on the changed records. Treat its output as a diagnostic gate, not authorization to rewrite historical records or weaken acceptance criteria.
+
 ## CodeGraph Index Freshness
 
 When the repository contains `.codegraph/`, treat its index as a derived verification artifact whose freshness must follow source changes.
