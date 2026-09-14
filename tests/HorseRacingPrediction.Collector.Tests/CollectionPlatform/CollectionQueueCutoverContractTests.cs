@@ -9,6 +9,7 @@ public sealed class CollectionQueueCutoverContractTests
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
+    private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
 
     [TestMethod]
@@ -57,6 +58,20 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(DeployWorkflow, "$base/pipeline/resume");
         StringAssert.Contains(DeployWorkflow, "jq '.sourceResources'");
         StringAssert.Contains(DeployWorkflow, "jq '.errors | length'");
+    }
+
+    [TestMethod]
+    public void MaintenanceWorkflow_GatesAndRecoversProductionRepairsSafely()
+    {
+        StringAssert.Contains(MaintenanceWorkflow, "APPLY-PENDING-COLLECTION-REPAIRS");
+        StringAssert.Contains(MaintenanceWorkflow, "/pipeline/pause");
+        StringAssert.Contains(MaintenanceWorkflow, "status=Acquired&limit=1");
+        StringAssert.Contains(MaintenanceWorkflow, "select(.safeToApply)");
+        StringAssert.Contains(MaintenanceWorkflow, "select(.safeToExecute)");
+        StringAssert.Contains(MaintenanceWorkflow, "Horse repair idempotency check passed.");
+        StringAssert.Contains(MaintenanceWorkflow, "/pipeline/resume");
+        StringAssert.Contains(MaintenanceWorkflow, "SubscriptionArn!='PendingConfirmation'");
+        StringAssert.Contains(MaintenanceWorkflow, "aws sns publish");
     }
 
     [TestMethod]

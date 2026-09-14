@@ -1,0 +1,167 @@
+name: collection-maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview is read-only; apply executes safe repairs and one SNS smoke test.
+        required: true
+        type: choice
+        options:
+          - preview
+          - apply
+        default: preview
+      confirmation:
+        description: Enter APPLY-PENDING-COLLECTION-REPAIRS when mode is apply.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: horse-racing-prediction-production-maintenance
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate execution gate
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$MODE" = apply ] && [ "$CONFIRMATION" != APPLY-PENDING-COLLECTION-REPAIRS ]; then
+            echo "Apply confirmation did not match." >&2
+            exit 1
+          fi
+
+      - name: Preview or apply production repairs
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DIRECTORY: /opt/horse-racing-prediction/app
+          MODE: ${{ inputs.mode }}
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          envs: APP_DIRECTORY,MODE,DOMAIN_NAME,LIGHTSAIL_HOST,API_KEY
+          script: |
+            set -eu
+            domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+            api="https://${domain}/api"
+            auth="X-Api-Key: $API_KEY"
+            work="$(mktemp -d)"
+            cleanup() {
+              if [ "$MODE" = apply ]; then
+                curl --fail --silent --show-error -X POST -H "$auth" \
+                  "$api/admin/collection/pipeline/resume" >/dev/null || true
+              fi
+              rm -rf -- "$work"
+            }
+            trap cleanup EXIT
+
+            curl --fail --silent --show-error -H "$auth" \
+              "$api/admin/repairs/20260913-jra-horse-identity" > "$work/horse.json"
+            curl --fail --silent --show-error -H "$auth" \
+              "$api/admin/repairs/subject-identification" > "$work/subject.json"
+            horse_total="$(jq '.candidates | length' "$work/horse.json")"
+            horse_safe="$(jq '[.candidates[] | select(.safeToApply)] | length' "$work/horse.json")"
+            horse_blocked="$(jq '[.candidates[] | select(.safeToApply | not)] | length' "$work/horse.json")"
+            subject_total="$(jq '.candidates | length' "$work/subject.json")"
+            subject_safe="$(jq '[.candidates[] | select(.safeToExecute)] | length' "$work/subject.json")"
+            subject_blocked="$(jq '[.candidates[] | select(.safeToExecute | not)] | length' "$work/subject.json")"
+            echo "Horse repair preview: total=$horse_total safe=$horse_safe blocked=$horse_blocked"
+            echo "Subject recovery preview: total=$subject_total safe=$subject_safe blocked=$subject_blocked"
+            jq -r '.candidates[] | select(.safeToApply | not) | "Horse blocked: \(.candidateId) — \(.blockingReason)"' "$work/horse.json"
+            jq -r '.candidates[] | select(.safeToExecute | not) | "Subject blocked: \(.subjectType)/\(.subjectId) — \(.blockingReason)"' "$work/subject.json"
+
+            if [ "$MODE" != apply ]; then
+              exit 0
+            fi
+            curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' \
+              --data '{"reason":"approved pending collection repairs"}' \
+              "$api/admin/collection/pipeline/pause" >/dev/null
+            for attempt in $(seq 1 30); do
+              curl --fail --silent --show-error -H "$auth" \
+                "$api/admin/collection/tasks?status=Acquired&limit=1" > "$work/acquired.json"
+              [ "$(jq 'length' "$work/acquired.json")" = 0 ] && break
+              [ "$attempt" = 30 ] && { echo "Active leases did not drain." >&2; exit 1; }
+              sleep 10
+            done
+
+            jq '{candidateIds: [.candidates[] | select(.safeToApply) | .candidateId]}' \
+              "$work/horse.json" > "$work/horse-apply.json"
+            if [ "$horse_safe" -gt 0 ]; then
+              curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' \
+                --data-binary "@$work/horse-apply.json" \
+                "$api/admin/repairs/20260913-jra-horse-identity/apply" > "$work/horse-result.json"
+              jq '{repairId, applied, alreadyApplied, disabledCollectionTaskCount, runningCancellationRequestCount}' \
+                "$work/horse-result.json"
+              curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' \
+                --data-binary "@$work/horse-apply.json" \
+                "$api/admin/repairs/20260913-jra-horse-identity/apply" > "$work/horse-repeat.json"
+              test "$(jq '.applied' "$work/horse-repeat.json")" = 0
+              echo "Horse repair idempotency check passed."
+            fi
+
+            curl --fail --silent --show-error -H "$auth" \
+              "$api/admin/repairs/subject-identification" > "$work/subject-after-horse.json"
+            jq '{items: [.candidates[] | select(.safeToExecute) | {notificationId}]}' \
+              "$work/subject-after-horse.json" > "$work/subject-execute.json"
+            subject_apply_count="$(jq '.items | length' "$work/subject-execute.json")"
+            if [ "$subject_apply_count" -gt 0 ]; then
+              curl --fail --silent --show-error -X POST -H "$auth" -H 'Content-Type: application/json' \
+                --data-binary "@$work/subject-execute.json" \
+                "$api/admin/repairs/subject-identification/execute" > "$work/subject-result.json"
+              jq '{selectedCount, createdTaskCount, reusedTaskCount, mergedCount, disabledCollectionTaskCount, runningCancellationRequestCount}' \
+                "$work/subject-result.json"
+            fi
+            curl --fail --silent --show-error -H "$auth" \
+              "$api/admin/repairs/20260913-jra-horse-identity" > "$work/horse-final.json"
+            echo "Remaining horse candidates: $(jq '.candidates | length' "$work/horse-final.json")"
+
+  sns-smoke:
+    if: inputs.mode == 'apply'
+    needs: repair
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+      - name: Verify SMS subscription and publish one smoke message
+        working-directory: infra/collector-lambda
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_STATE_KEY: ${{ secrets.TF_STATE_KEY }}
+          TF_STATE_REGION: ${{ secrets.TF_STATE_REGION }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=$TF_STATE_KEY" \
+            -backend-config="region=$TF_STATE_REGION"
+          topic="$(terraform output -raw collector_alert_topic_arn)"
+          confirmed="$(aws sns list-subscriptions-by-topic --topic-arn "$topic" \
+            --query "length(Subscriptions[?Protocol=='sms' && SubscriptionArn!='PendingConfirmation'])" \
+            --output text)"
+          if [ "$confirmed" -lt 1 ]; then
+            echo "No confirmed SMS subscription exists." >&2
+            exit 1
+          fi
+          message_id="$(aws sns publish --topic-arn "$topic" \
+            --subject 'HorseRacingPrediction maintenance smoke test' \
+            --message 'TEST ONLY: approved collection maintenance SNS delivery verification.' \
+            --message-attributes '{"AWS.SNS.SMS.SMSType":{"DataType":"String","StringValue":"Transactional"}}' \
+            --query MessageId --output text)"
+          test -n "$message_id"
+          echo "SNS smoke publish succeeded; confirmed SMS subscriptions=$confirmed."
