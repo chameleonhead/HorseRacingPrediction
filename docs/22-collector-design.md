@@ -33,7 +33,7 @@
 
 Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを登録する。同一対象の実行中依頼は原子的に重複抑止し、監査とoutboxを保存する。CollectionExecutionServiceの常駐・--once両経路で指定レースを再取得する。元ジョブや日別取得状態には依存しない。未公開は待機、部分失敗は失敗として扱う。[決定と検証](changes/20260908_race-detail-reacquisition/README.md)を参照。
 
-馬主欠落など開催日全体の修復では、Api管理画面からJSTの日付を1つ指定して `RaceDayReacquisition` ジョブを登録する。ジョブはAPI登録状況に依存せずJRA公式の開催日程とレース一覧から同日の全レースを再発見し、1つのブラウザーセッション内で全対象を順次再取得する。レース単位の集約子ジョブは作成しない。出馬表はJSTの対象日が `RaceCardLookupPeriod` 内の場合だけ取得し、当日以前は結果・払戻を取得する。未登録レースも決定論的IDを割り当て、最初に得た公式基本情報から新規登録する。過去検索が重賞結果へ直接遷移して一覧を返さない場合は、その公式開催場の1R～12Rを同じジョブの個別取得対象として欠落を防ぐ。1レースの非致命的失敗後も残りを処理し、最後に失敗対象を日付ジョブへ集約する。日付ジョブの完了条件は、JRA公式開催日程で開催なしを確認できた場合、または公式に特定した当該日の全レースを取得・保存できた場合に限る。開催有無・全対象を確定できない場合、未公開・未取得・保存失敗・タイムアウトが1件でもある場合は完了にしない。自動取得終了マーカーは解除しない。変更設計は [開催日再取得を単一ジョブで一括実行する](changes/20260909_single-job-race-day-reacquisition/README.md) を参照し、元実装の履歴は [開催日単位でJRAレースデータを再取得する](changes/20260909_race-day-reacquisition/README.md) に保持する。
+旧 `RaceDayReacquisition` は統合収集基盤へのcutoverで削除済みであり、現在の日付探索は `ResourceType.Race / race-discovery` requestをoutbox/SQS経由でCollectorへ配送し、発見したレースをcanonical `race-detail` requestへ展開する。月次Backfillは既存stateのある日を省略する未取得補完である。2026-09-15 提案の期間再取得では、JSTの包括範囲を1日1 discovery taskへ展開し、完了済みの日も明示的な手動再取得として再実行する。同一batchの再送とactive taskは重複抑止し、terminal後の別batchは新しい履歴を作る。詳細は[期間を指定してレース情報を再取得する](changes/20260915_race-period-recollection/README.md)を正とし、承認・実装までは現行経路を変更しない。旧単日設計は [開催日再取得を単一ジョブで一括実行する](changes/20260909_single-job-race-day-reacquisition/README.md) に履歴として保持する。
 
 | クラス | 役割 |
 |---|---|
