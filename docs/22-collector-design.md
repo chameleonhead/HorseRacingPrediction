@@ -33,7 +33,7 @@
 
 Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを登録する。同一対象の実行中依頼は原子的に重複抑止し、監査とoutboxを保存する。CollectionExecutionServiceの常駐・--once両経路で指定レースを再取得する。元ジョブや日別取得状態には依存しない。未公開は待機、部分失敗は失敗として扱う。[決定と検証](changes/20260908_race-detail-reacquisition/README.md)を参照。
 
-旧 `RaceDayReacquisition` は統合収集基盤へのcutoverで削除済みであり、現在の日付探索は `ResourceType.Race / race-discovery` requestをoutbox/SQS経由でCollectorへ配送し、発見したレースをcanonical `race-detail` requestへ展開する。月次Backfillは既存stateのある日を省略する未取得補完である。2026-09-15 提案の期間再取得では、JSTの包括範囲を1日1 discovery taskへ展開し、完了済みの日も明示的な手動再取得として再実行する。同一batchの再送とactive taskは重複抑止し、terminal後の別batchは新しい履歴を作る。詳細は[期間を指定してレース情報を再取得する](changes/20260915_race-period-recollection/README.md)を正とし、承認・実装までは現行経路を変更しない。旧単日設計は [開催日再取得を単一ジョブで一括実行する](changes/20260909_single-job-race-day-reacquisition/README.md) に履歴として保持する。
+旧 `RaceDayReacquisition` は統合収集基盤へのcutoverで削除済みであり、現在の日付探索は `ResourceType.Race / race-discovery` requestをoutbox/SQS経由でCollectorへ配送し、発見したレースをcanonical `race-detail` requestへ展開する。月次Backfillは既存stateのある日を省略する未取得補完である。期間再取得では、JSTの包括範囲を1日1 discovery taskへ展開し、完了済みの日も `PeriodRecollection` として再実行する。同一batchの再送とactive taskは重複抑止し、terminal後の別batchは新しい履歴を作る。詳細と検証は[期間を指定してレース情報を再取得する](changes/20260915_race-period-recollection/README.md)を正とする。旧単日設計は [開催日再取得を単一ジョブで一括実行する](changes/20260909_single-job-race-day-reacquisition/README.md) に履歴として保持する。
 
 | クラス | 役割 |
 |---|---|

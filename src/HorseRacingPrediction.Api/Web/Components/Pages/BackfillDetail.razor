@@ -2,8 +2,8 @@
 @attribute [Authorize]
 @inject AdminApiClient Api
 
-<RaceOpsPageHeader Section="運用 / 過去データ収集" Title="過去データ収集の詳細" Description="期間全体の進捗と、後から再取得できる未収集箇所を確認します。">
-    <Actions><FluentButton Href="/jobs/operations">収集運用へ戻る</FluentButton><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton></Actions>
+<RaceOpsPageHeader Section="@PageSection" Title="@PageTitle" Description="期間全体の進捗と、後から再取得できる未収集箇所を確認します。">
+    <Actions><FluentButton Href="@ReturnHref">@ReturnLabel</FluentButton><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton></Actions>
 </RaceOpsPageHeader>
 
 @if (loading) { <UiState Kind="loading" Title="進捗を読み込んでいます" /> }
@@ -29,6 +29,11 @@ else
 
 @code {
     [Parameter] public string BatchId { get; set; } = string.Empty;
+    private bool IsPeriodRecollection => BatchId.StartsWith("recollection:", StringComparison.OrdinalIgnoreCase);
+    private string PageSection => IsPeriodRecollection ? "運用 / 期間指定のレース再取得" : "運用 / 過去データ収集";
+    private string PageTitle => IsPeriodRecollection ? "期間指定のレース再取得" : "過去データ収集の詳細";
+    private string ReturnHref => IsPeriodRecollection ? "/jobs" : "/jobs/operations";
+    private string ReturnLabel => IsPeriodRecollection ? "収集管理へ戻る" : "収集運用へ戻る";
     private bool loading = true, busy; private BackfillBatchSnapshot? batch; private IReadOnlyList<string> errors = []; private string message = string.Empty;
     protected override async Task OnParametersSetAsync() => await LoadAsync();
     private async Task LoadAsync() { loading = batch is null; errors = []; try { batch = await Api.GetBackfillBatchAsync(BatchId); } catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { errors = ["収集APIへ接続できませんでした。"]; } finally { loading = false; } }

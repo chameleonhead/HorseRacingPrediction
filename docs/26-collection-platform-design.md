@@ -36,7 +36,7 @@
 5. Initial、Backfill、refresh、definition change、manual、recovery は同じ経路を使う。
 6. 同じ Resource + Definition の active task は一件とする。Initial、Backfill、Discovery による通常登録は Resource + Definition + requested revision が既登録なら terminal status にかかわらず request/task/outbox を増やさない。requested revision の更新、ScheduledRefresh、DefinitionChanged、ManualRefresh、Recovery は再取得を許可し、terminal task は複数許容する。詳細は[収集済み対象の通常タスク重複登録抑止](changes/20260913_skip-duplicate-collection-registration/README.md)を参照する。
 7. Backfill と Realtime は同じ状態正本を使い lane と公平配分で制御する。
-   2026-09-15 提案: 管理画面からの期間レース再取得は Backfill と区別し、JST の包括日付範囲を1日1 `race-discovery` taskへ展開する。既存 state があっても terminal task 後の明示的再取得を許可し、同じ batch の再送と active task だけを重複抑止する。詳細は[期間を指定してレース情報を再取得する](changes/20260915_race-period-recollection/README.md)を正とし、承認・実装までは現行の月次Backfillのみを維持する。
+   2026-09-15 実装: 管理画面からの期間レース再取得は Backfill と区別し、JST の包括日付範囲を1日1 `race-discovery` taskへ展開する。既存 state があっても terminal task 後の明示的再取得を許可し、同じ batch の再送と active task だけを重複抑止する。詳細と検証は[期間を指定してレース情報を再取得する](changes/20260915_race-period-recollection/README.md)を正とする。
 8. state は Projection であり、request/task/attempt/domain write outcome が監査根拠である。
 9. URL 一時障害は location の恒久無効を意味しない。
 10. パラメーターなしのJRA `access*.html` は主体を識別する終端locationではないため、Subject Discovery/Recoveryの取得先として使用・再保存しない。Horse/Jockey/TrainerはResource属性の名前等からNavigator Discoveryを行い、OwnerはRaceEntry由来の名前で内部identityを解決する。
