@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 10;
+    internal const int CurrentVersion = 11;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -274,6 +274,19 @@ internal static class CollectionPlatformSchemaMigrator
                         cancellationToken, transaction).ConfigureAwait(false);
             await ExecuteAsync(connection, """
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (10, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 11)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_tasks", "MetadataJson", cancellationToken)
+                    .ConfigureAwait(false))
+                await ExecuteAsync(connection, "ALTER TABLE collection_tasks ADD COLUMN MetadataJson TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (11, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);

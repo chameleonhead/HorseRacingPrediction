@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -65,7 +66,8 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
 
 public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinition descriptor,
     IJraSessionFactory sessions, IJraSubjectProfileSink sink, ICollectionRequestSink? requests = null,
-    TimeProvider? timeProvider = null, IOwnerIdentityVerifier? ownerIdentities = null)
+    TimeProvider? timeProvider = null, IOwnerIdentityVerifier? ownerIdentities = null,
+    IDataCollectionWriteService? entityWriter = null)
     : ICollectionDefinitionHandler
 {
     private const int MaximumDiscoveryDepth = 3;
@@ -201,7 +203,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     private static Uri? ToUri(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
 
-    private static async Task DiscoverHorseReferencesAsync(LeasedCollectionTask task, JraSubjectProfileDto profile,
+    private async Task DiscoverHorseReferencesAsync(LeasedCollectionTask task, JraSubjectProfileDto profile,
         ICollectionRequestSink sink, CancellationToken cancellationToken)
     {
         var depth = int.TryParse(task.Attributes.GetValueOrDefault("discoveryDepth"), out var parsed) ? parsed : 0;
@@ -222,8 +224,14 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                      .Select(x => (x.Type, Name: x.Name!.Trim())).Distinct())
         {
             var child = JraSubjectCollectionDefinitions.For(reference.Type);
-            var childId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
-                child.IdPrefix, reference.Name);
+            var childId = reference.Type switch
+            {
+                ResourceType.Trainer when entityWriter is not null => await entityWriter.UpsertTrainerAsync(
+                    reference.Name, null, null, cancellationToken).ConfigureAwait(false),
+                ResourceType.Horse when entityWriter is not null => await entityWriter.UpsertHorseAsync(
+                    reference.Name, null, null, null, cancellationToken).ConfigureAwait(false),
+                _ => DeterministicIdGenerator.BuildEntityId(child.IdPrefix, reference.Name),
+            };
             if (ancestors.Contains(childId)) continue;
             await sink.RequestAsync(new(reference.Type, "JRA", childId), child.Definition,
                 CollectionReason.Discovery, CollectionLane.Background, Math.Max(10, task.Priority - 10), null,
@@ -233,6 +241,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                     ["name"] = reference.Name,
                     ["discoveryDepth"] = (depth + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
                     ["discoveryAncestors"] = string.Join('|', ancestors.Order()),
+                    ["discoveredFromType"] = task.Resource.Type.ToString(),
+                    ["discoveredFromProvider"] = task.Resource.Provider,
+                    ["discoveredFromId"] = task.Resource.Id,
                 }, cancellationToken).ConfigureAwait(false);
         }
     }

@@ -8,6 +8,33 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 [TestClass]
 public sealed class CollectionPlatformStoreTests
 {
+    [TestMethod]
+    public async Task TaskMetadata_RemainsImmutableWhenLaterRequestUpdatesResourceAttributes()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "original", ["sourceIdentity"] = "source-1" });
+        var reused = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddMinutes(1),
+            attributes: new Dictionary<string, string> { ["name"] = "updated", ["sourceIdentity"] = "source-2" });
+
+        Assert.AreEqual(first.TaskId, reused.TaskId);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual("original", lease.Attributes["name"]);
+        Assert.AreEqual("source-1", lease.Attributes["sourceIdentity"]);
+    }
+
+    [TestMethod]
+    public async Task TaskMetadata_RejectsSecretBearingKeysBeforePersistence()
+    {
+        var store = await CreateStoreAsync();
+        await Assert.ThrowsExactlyAsync<ArgumentException>(() => store.RequestAsync(Horse, HorseProfile, 7,
+            CollectionReason.Initial, DateTimeOffset.UtcNow,
+            attributes: new Dictionary<string, string> { ["authorizationToken"] = "secret" }));
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
     private string _directory = null!;
     private static readonly CollectionDefinitionId HorseProfile = new("horse-profile");
     private static readonly ResourceKey Horse = new(ResourceType.Horse, "jra", "H123");
@@ -615,7 +642,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(10L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(11L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -923,7 +950,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 10;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 11;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 

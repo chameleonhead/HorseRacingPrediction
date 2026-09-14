@@ -34,7 +34,8 @@ foreach (var descriptor in JraSubjectCollectionDefinitions.All)
             services.GetRequiredService<IJraSessionFactory>(),
             services.GetRequiredService<IJraSubjectProfileSink>(),
             services.GetRequiredService<ICollectionRequestSink>(),
-            ownerIdentities: services.GetRequiredService<IOwnerIdentityVerifier>()));
+            ownerIdentities: services.GetRequiredService<IOwnerIdentityVerifier>(),
+            entityWriter: services.GetRequiredService<HorseRacingPrediction.ApiClient.IDataCollectionWriteService>()));
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>

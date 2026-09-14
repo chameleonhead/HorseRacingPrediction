@@ -9,6 +9,14 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 public sealed class CollectionPlatformStore
 {
     private const int MaxLocationOutcomesPerCompletion = 100;
+    private static readonly HashSet<string> AllowedTaskMetadataKeys = new(StringComparer.Ordinal)
+    {
+        "backfillDate", "batchId", "birthDate", "course", "discoveredFromId", "discoveredFromProvider",
+        "discoveredFromType", "discoveryAncestors", "discoveryDepth", "domainRaceId", "name", "number",
+        "date", "day", "distance", "entries", "layout", "meeting", "month", "observations", "observedAt",
+        "owner", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
+        "sourceIdentity", "sourceUrl", "startTime", "trainer", "weekendPriorityUntil", "weight", "year",
+    };
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate;
@@ -106,6 +114,7 @@ public sealed class CollectionPlatformStore
         IReadOnlyDictionary<string, string>? attributes = null, CancellationToken cancellationToken = default)
     {
         resource = resource.Normalize();
+        var metadataJson = SerializeTaskMetadata(attributes);
         if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
             throw new ArgumentException("Provider and resource id are required.", nameof(resource));
         if (requestedRevision < 1) throw new ArgumentOutOfRangeException(nameof(requestedRevision));
@@ -242,6 +251,7 @@ public sealed class CollectionPlatformStore
                 CreatedAt = requestedAt,
                 UpdatedAt = requestedAt,
                 DispatchGeneration = 1,
+                MetadataJson = metadataJson,
             };
             db.Tasks.Add(task);
             db.ActiveTasks.Add(new CollectionActiveTaskEntity
@@ -328,6 +338,7 @@ public sealed class CollectionPlatformStore
             var created = 0;
             foreach (var target in normalized)
             {
+                var metadataJson = SerializeTaskMetadata(target.Attributes);
                 var resource = await db.Resources.SingleOrDefaultAsync(x => x.Type == target.Resource.Type
                     && x.Provider == target.Resource.Provider && x.ResourceId == target.Resource.Id, cancellationToken);
                 if (resource is null)
@@ -384,6 +395,7 @@ public sealed class CollectionPlatformStore
                         CreatedAt = requestedAt,
                         UpdatedAt = requestedAt,
                         DispatchGeneration = 1,
+                        MetadataJson = metadataJson,
                     };
                     taskId = task.TaskId;
                     db.Tasks.Add(task);
@@ -511,7 +523,7 @@ public sealed class CollectionPlatformStore
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
                 task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
                 resource.EffectiveDate,
-                JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? [], candidates);
+                DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), candidates);
         }
         finally { _gate.Release(); }
     }
@@ -665,6 +677,7 @@ public sealed class CollectionPlatformStore
                             CreatedAt = now,
                             UpdatedAt = now,
                             DispatchGeneration = 1,
+                            MetadataJson = task.MetadataJson,
                         };
                         db.Tasks.Add(followUp);
                         db.ActiveTasks.Add(new CollectionActiveTaskEntity
@@ -896,7 +909,8 @@ public sealed class CollectionPlatformStore
         var taskRows = await taskQuery.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.TaskId)
             .Skip(Offset(taskHistoryPage, historyPageSize)).Take(historyPageSize).ToListAsync(cancellationToken);
         var tasks = taskRows.Select(x => new CollectionTaskSummary(x.TaskId, resource, definition, x.Status,
-            x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount)).ToList();
+            x.Lane, x.Priority, x.RequestedRevision, x.AvailableAt, x.AttemptCount,
+            DeserializeTaskMetadata(x.MetadataJson ?? item.AttributesJson))).ToList();
         var taskIds = taskQuery.Select(x => x.TaskId);
         var attemptQuery = db.Attempts.AsNoTracking().Where(x => taskIds.Contains(x.TaskId));
         var attemptTotal = await attemptQuery.CountAsync(cancellationToken);
@@ -912,7 +926,8 @@ public sealed class CollectionPlatformStore
             stateEntity.NextCollectionAt, stateEntity.Status);
         var latestTask = latestTaskRow is null ? null : new CollectionTaskSummary(latestTaskRow.TaskId,
             resource, definition, latestTaskRow.Status, latestTaskRow.Lane, latestTaskRow.Priority,
-            latestTaskRow.RequestedRevision, latestTaskRow.AvailableAt, latestTaskRow.AttemptCount);
+            latestTaskRow.RequestedRevision, latestTaskRow.AvailableAt, latestTaskRow.AttemptCount,
+            DeserializeTaskMetadata(latestTaskRow.MetadataJson ?? item.AttributesJson));
         var failureRows = await FailureQuery(db, item.ResourcePk, definition.Value)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         failureRows = failureRows.OrderByDescending(x => x.Notification.FailedAt).ToList();
@@ -1937,6 +1952,7 @@ public sealed class CollectionPlatformStore
                         CreatedAt = now,
                         UpdatedAt = now,
                         DispatchGeneration = 1,
+                        MetadataJson = target.AttributesJson,
                     };
                     db.Requests.Add(request);
                     db.Tasks.Add(task);
@@ -2837,6 +2853,39 @@ public sealed class CollectionPlatformStore
                 if (!string.IsNullOrWhiteSpace(pair.Value)) result[pair.Key] = pair.Value;
         return result;
     }
+
+    private static string SerializeTaskMetadata(IReadOnlyDictionary<string, string>? metadata)
+    {
+        if (metadata is null || metadata.Count == 0) return "{}";
+        if (metadata.Count > 32)
+            throw new ArgumentException("Task metadata cannot contain more than 32 keys.", nameof(metadata));
+        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        var totalLength = 0;
+        foreach (var pair in metadata)
+        {
+            var key = pair.Key?.Trim() ?? string.Empty;
+            var value = pair.Value?.Trim() ?? string.Empty;
+            if (key.Length is < 1 or > 64 || value.Length > 2048)
+                throw new ArgumentException("Task metadata key or value exceeds its limit.", nameof(metadata));
+            if (!AllowedTaskMetadataKeys.Contains(key))
+                throw new ArgumentException($"Task metadata key '{key}' is not supported.", nameof(metadata));
+            if (key.Contains("password", StringComparison.OrdinalIgnoreCase)
+                || key.Contains("cookie", StringComparison.OrdinalIgnoreCase)
+                || key.Contains("authorization", StringComparison.OrdinalIgnoreCase)
+                || key.Contains("token", StringComparison.OrdinalIgnoreCase)
+                || key.Contains("secret", StringComparison.OrdinalIgnoreCase)
+                || key.Contains("html", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException($"Task metadata key '{key}' is not allowed.", nameof(metadata));
+            totalLength += key.Length + value.Length;
+            if (totalLength > 8192)
+                throw new ArgumentException("Task metadata exceeds the total size limit.", nameof(metadata));
+            normalized[key] = value;
+        }
+        return JsonSerializer.Serialize(normalized);
+    }
+
+    private static IReadOnlyDictionary<string, string> DeserializeTaskMetadata(string json)
+        => JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
 
     private static void MergeLocation(ResourceLocationEntity target, ResourceLocationEntity source)
     {

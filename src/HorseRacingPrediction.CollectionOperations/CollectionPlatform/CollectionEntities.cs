@@ -96,6 +96,7 @@ public sealed class CollectionTaskEntity
     public DateTimeOffset? CancellationRequestedAt { get; set; }
     public string? OriginDefinitionId { get; set; }
     public int? OriginRequestedRevision { get; set; }
+    public string? MetadataJson { get; set; }
 }
 
 public sealed class CollectionPlatformControlEntity

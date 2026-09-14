@@ -218,7 +218,8 @@ public sealed record PendingCollectionDispatch(Guid OutboxId, CollectionTaskNoti
     IReadOnlyDictionary<string, string>? Attributes = null);
 public sealed record CollectionTaskSummary(Guid TaskId, ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, CollectionLane Lane, int Priority, int RequestedRevision,
-    DateTimeOffset AvailableAt, int AttemptCount);
+    DateTimeOffset AvailableAt, int AttemptCount,
+    IReadOnlyDictionary<string, string>? Metadata = null);
 
 public sealed record CollectionTaskQuery(
     IReadOnlyCollection<CollectionTaskStatus>? Statuses = null,

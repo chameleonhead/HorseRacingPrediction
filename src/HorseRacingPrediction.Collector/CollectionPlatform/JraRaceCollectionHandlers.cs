@@ -399,9 +399,16 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 ["name"] = subject.Name,
                 ["requestedByRaceId"] = requestedByRaceId,
                 ["weekendPriorityUntil"] = effectiveDate.ToString("yyyy-MM-dd"),
+                ["discoveredFromType"] = task.Resource.Type.ToString(),
+                ["discoveredFromProvider"] = task.Resource.Provider,
+                ["discoveredFromId"] = task.Resource.Id,
             };
             if (JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
-                attributes["sourceIdentity"] = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)!.ToString();
+            {
+                var sourceUrl = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)!.ToString();
+                attributes["sourceIdentity"] = sourceUrl;
+                attributes["sourceUrl"] = sourceUrl;
+            }
             await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
                 CollectionReason.Discovery, lane, priority,
                 JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity),
