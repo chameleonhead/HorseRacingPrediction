@@ -1660,22 +1660,26 @@ public sealed class RaceResultPageParser
             if (bodyWeightIndex >= 0 && bodyWeightIndex < row.Count && !string.IsNullOrWhiteSpace(row[bodyWeightIndex]))
             {
                 var bodyWeightText = row[bodyWeightIndex].Trim();
-                var bodyWeightMatch = BodyWeightRegex.Match(bodyWeightText);
 
-                if (!bodyWeightMatch.Success)
+                if (bodyWeightText != "計不")
                 {
-                    throw new JraValueParseException(
-                        JraPageKind.RaceResult,
-                        url,
-                        "BodyWeight",
-                        bodyWeightText);
-                }
+                    var bodyWeightMatch = BodyWeightRegex.Match(bodyWeightText);
 
-                bodyWeight = int.Parse(bodyWeightMatch.Groups["weight"].Value);
+                    if (!bodyWeightMatch.Success)
+                    {
+                        throw new JraValueParseException(
+                            JraPageKind.RaceResult,
+                            url,
+                            "BodyWeight",
+                            bodyWeightText);
+                    }
 
-                if (bodyWeightMatch.Groups["change"].Success)
-                {
-                    bodyWeightChange = int.Parse(bodyWeightMatch.Groups["change"].Value);
+                    bodyWeight = int.Parse(bodyWeightMatch.Groups["weight"].Value);
+
+                    if (bodyWeightMatch.Groups["change"].Success)
+                    {
+                        bodyWeightChange = int.Parse(bodyWeightMatch.Groups["change"].Value);
+                    }
                 }
             }
 

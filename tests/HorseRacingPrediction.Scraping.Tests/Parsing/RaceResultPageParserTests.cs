@@ -812,7 +812,7 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
-    public void Parse_馬体重が値ありで解析不能な場合はエラーになる()
+    public void Parse_計不の馬体重を欠損として解析できる()
     {
         var table = new TestPageTable(
             Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "馬体重"],
@@ -828,10 +828,34 @@ public sealed class RaceResultPageParserTests
 
         var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
 
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        Assert.IsNull(page.Results[0].BodyWeight);
+        Assert.IsNull(page.Results[0].BodyWeightChange);
+    }
+
+    [TestMethod]
+    public void Parse_未知の馬体重が値ありの場合はエラーになる()
+    {
+        var table = new TestPageTable(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "馬体重"],
+            Rows: [["1", "1", "テストホースA", "騎手A", "1:33.4", "不明"]]);
+
+        var section = new TestPageSection(
+            title: "レース結果",
+            mainText: "天候 晴 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "テストステークス"]);
+
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
+
         var ex = Assert.ThrowsExactly<JraValueParseException>(
             () => new RaceResultPageParser().Parse(snapshot));
 
         Assert.AreEqual("BodyWeight", ex.FieldName);
+        Assert.AreEqual("不明", ex.RawValue);
     }
 
     [TestMethod]
