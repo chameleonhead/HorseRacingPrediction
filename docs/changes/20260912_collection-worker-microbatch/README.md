@@ -1,6 +1,6 @@
 # 収集Workerの同一セッション・マイクロバッチ化
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-12
 - Updated: 2026-09-12
@@ -101,25 +101,27 @@ Envelope作成時はOutbox行を短いreservation leaseで確保し、複数API 
 
 ## Acceptance criteria
 
-1. 同日RaceCard 12件を1 DispatchEnvelope/SQS message/1 invocationで受け、Playwright session factoryの呼出しが1回になる。
-2. 各Taskに独立したAttemptが作られ、9件成功・1件ParseFailureを個別に確定できる。
-3. 1件のAcquire conflictまたは重複配信が他11件の処理を妨げない。
-4. session初期化失敗は対象groupをretryableとし、永続的なResource failureにしない。
-5. 実行途中のsession破損後、未処理Taskは再配信またはretryable状態となり、処理済みTaskは重複完了しない。
-6. Lambda残り時間不足時は未着手Taskを含むEnvelope messageを再配信し、再配信時は完了済みTaskをskipする。
-7. RealtimeがBackgroundに埋もれず、既存のstarvation防止を維持する。
-8. ローカルqueue実行も複数messageを取得し、同じbatch executorでsessionを共有する。
-9. 1件実行は既存と同じ結果になり、Direct URL、fallback、Location検証を維持する。
-10. Envelope最大Task数、Outbox集約猶予、definition別最大件数を設定可能にする。
-11. 同日12 RaceCardの試験でbrowser起動回数、総時間、Task成功率を記録し、単件方式との比較をchange recordへ残す。
-12. SQS/LambdaのEnvelope再配信を自動テストし、全Task参照が永続的に解決したmessageだけが削除される契約を検証する。
-13. APIがretryable completionを受理した場合、旧generation messageは成功応答となり、新generation messageだけが後続実行を担当する。
-14. 古いgenerationのSQS再配信はAcquire conflictでackされ、新しいAttemptを作らない。
-15. batch途中でLambdaが終了しても、Complete済みTask、retryable完了済みTask、未着手recordを混同しない。
-16. AttemptからExecutionBatchId、SQS message ID、Lambda request IDを確認でき、運用画面から同一batchのTaskへ遷移できる。
-17. Envelopeに含まれないTaskをbatch executorが先取りしない。
-18. 同じOutbox行が複数dispatcherに予約されず、Send成功・DB更新失敗による重複EnvelopeでもAttemptを二重生成しない。
-19. DLQ reconciliationはEnvelope内の未解決Taskだけを対象とし、完了済みTaskをFailedへ戻さない。
+| ID | Criterion | State |
+|---|---|---|
+| AC1 | 同日RaceCard 12件を1 DispatchEnvelope/SQS message/1 invocationで受け、Playwright session factoryの呼出しが1回になる。 | Verified |
+| AC2 | 各Taskに独立したAttemptが作られ、9件成功・1件ParseFailureを個別に確定できる。 | Verified |
+| AC3 | 1件のAcquire conflictまたは重複配信が他11件の処理を妨げない。 | Verified |
+| AC4 | session初期化失敗は対象groupをretryableとし、永続的なResource failureにしない。 | Verified |
+| AC5 | 実行途中のsession破損後、未処理Taskは再配信またはretryable状態となり、処理済みTaskは重複完了しない。 | Verified |
+| AC6 | Lambda残り時間不足時は未着手Taskを含むEnvelope messageを再配信し、再配信時は完了済みTaskをskipする。 | Verified |
+| AC7 | RealtimeがBackgroundに埋もれず、既存のstarvation防止を維持する。 | Verified |
+| AC8 | ローカルqueue実行も複数messageを取得し、同じbatch executorでsessionを共有する。 | Verified |
+| AC9 | 1件実行は既存と同じ結果になり、Direct URL、fallback、Location検証を維持する。 | Verified |
+| AC10 | Envelope最大Task数、Outbox集約猶予、definition別最大件数を設定可能にする。 | Verified |
+| AC11 | 同日12 RaceCardの試験でbrowser起動回数、総時間、Task成功率を記録し、単件方式との比較をchange recordへ残す。 | Verified |
+| AC12 | SQS/LambdaのEnvelope再配信を自動テストし、全Task参照が永続的に解決したmessageだけが削除される契約を検証する。 | Verified |
+| AC13 | APIがretryable completionを受理した場合、旧generation messageは成功応答となり、新generation messageだけが後続実行を担当する。 | Verified |
+| AC14 | 古いgenerationのSQS再配信はAcquire conflictでackされ、新しいAttemptを作らない。 | Verified |
+| AC15 | batch途中でLambdaが終了しても、Complete済みTask、retryable完了済みTask、未着手recordを混同しない。 | Verified |
+| AC16 | AttemptからExecutionBatchId、SQS message ID、Lambda request IDを確認でき、運用画面から同一batchのTaskへ遷移できる。 | Verified |
+| AC17 | Envelopeに含まれないTaskをbatch executorが先取りしない。 | Verified |
+| AC18 | 同じOutbox行が複数dispatcherに予約されず、Send成功・DB更新失敗による重複EnvelopeでもAttemptを二重生成しない。 | Verified |
+| AC19 | DLQ reconciliationはEnvelope内の未解決Taskだけを対象とし、完了済みTaskをFailedへ戻さない。 | Verified |
 
 ## Delivery plan
 
@@ -140,6 +142,8 @@ Envelope作成時はOutbox行を短いreservation leaseで確保し、複数API 
 - 2026-09-12: schema v6を追記し、TaskのAcquire時にAttemptへ`ExecutionBatchId`、`DispatchEnvelopeId`、SQS message ID、Lambda request ID、バッチ内順序・件数を保存するようにした。v4/v5のmigrationは変更せず、既存DBはv6へ前進適用される。Resourceの試行履歴から実行バッチ詳細へ遷移でき、同じバッチで実行された各Resourceの収集詳細へ移動できる。ローカルqueueは`local-{messageId}`を配送IDとして記録し、Lambda由来ではないことを区別する。
 - 2026-09-12: 実行バッチ詳細に処理件数、開始・終了、所要時間、Envelope/SQS/Lambda識別子、Task別の順序・結果を表示した。集約された「直近batch件数・平均Task数・browser起動時間」のダッシュボードProjectionは、独立した永続集計モデルが必要になるため今回の最小実装には含めず、Attempt相関から確認できる個別batch表示を先行した。browser起動時間の集約表示はfollow-upとする。
 - 2026-09-12: `CollectionPlatformStoreTests`（49件）と`CollectionLambdaInvocationTests`を含む対象テストが成功し、相関情報の永続化、同一batchの2 Task参照、SQS/Lambda識別子と順序の伝搬を確認した。`JobDetailComponentTests`（6件）が成功し、試行履歴からbatch詳細への導線、batch詳細からResource詳細への導線、運用識別子の表示を確認した。API/Collector Release buildは警告0・エラー0。
+- 2026-09-15: 後続の本番記録を逆参照してAC11を閉じた。導入前は108 invocation、最大1,939.8MB、平均2.24秒、導入後は8 invocation、最大1,149.2MB、平均118.74秒で、同一invocationへ複数Taskが集約され、反映後の`ERR_INSUFFICIENT_RESOURCES`再発がないことを確認した。根拠は[収集障害の調査画面](../20260913_collection-failure-investigation-ui/README.md)のproduction verificationに保存している。
+- 2026-09-15: 現行HEADでRelease build、非External solution tests（Contracts 43、Domain 96、Application 56、Infrastructure 13、ML 14、Agents 106、Scraping 224、Collector 195、API 203成功・1 skip）を再実行し、AC1–AC19を実装・自動テスト・本番実測へ再追跡した。
 
 ## Implementation deviation
 

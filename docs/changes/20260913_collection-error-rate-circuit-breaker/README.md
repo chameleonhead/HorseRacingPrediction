@@ -75,9 +75,9 @@ SNSは停止への状態遷移ごとに一つ送る。送信失敗時は未送�
 | AC3 | 正常な未公開、対象なし、取消、成功、再試行可能な中間状態では停止しない。 | Verified |
 | AC4 | 停止SNSにインシデントID、対象Task・Resource、error code・概要、発生時刻、管理画面URLが含まれる。 | Verified |
 | AC5 | SNS送信失敗時も停止は維持され、再起動後を含めて送信成功まで再試行される。送信済みインシデントは通常周期で再送しない。 | Verified |
-| AC6 | 手動再開後、再開前に確定済みの失敗だけを理由に即時再停止せず、新たな想定外terminal failureで再停止する。 | Connected |
+| AC6 | 手動再開後、再開前に確定済みの失敗だけを理由に即時再停止せず、新たな想定外terminal failureで再停止する。 | Verified |
 | AC7 | DLQ reconciliationとwatchdog terminal化も一発停止の対象となり、Attemptなしの失敗でも停止する。 | Verified |
-| AC8 | TopicArn未設定、IAM拒否、SNS一時障害がログと管理状態で識別でき、配備時の空ARN gateが維持される。 | Connected |
+| AC8 | TopicArn未設定、IAM拒否、SNS一時障害がログと管理状態で識別でき、配備時の空ARN gateが維持される。 | Verified |
 | AC9 | 実SNS topicへのpublish smoke testと、SMS subscriptionが存在し確認済みであることを配備後に確認する。 | Not started |
 
 ## Delivery plan
@@ -101,6 +101,7 @@ SNSは停止への状態遷移ごとに一つ送る。送信失敗時は未送�
 - 再レビュ後に`dotnet format HorseRacingPrediction.sln --no-restore`、Release build、非ExternalのScraping 214件、Collector 169件、API 185件（1件skip）を再実行し、すべて成功した。
 - `ResourceNotFound`では停止しないテスト、DLQ一発停止テスト、停止通知を一度だけpublishするテストが成功した。
 - `dotnet format HorseRacingPrediction.sln --no-restore`を実行した。Release buildは警告0・エラー0。Collector 160件成功、Api 184件成功・外部依存1件skip。
+- 2026-09-15: 現行HEADのStore再開・新規terminal failure、SNS失敗状態永続化・再起動後再送、deploy workflowの空TopicArn gateを再監査し、Release非External solution testsの成功によりAC6/AC8をVerifiedへ更新した。
 
 ## Deviations and follow-up
 

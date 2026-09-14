@@ -65,13 +65,13 @@
 | ID | Observable criterion | State |
 |---|---|---|
 | AC1 | 競走馬の保存済みURLがエラーでも、名称＋生年月日で一意の候補を取得して保存できる。 | Verified |
-| AC2 | 騎手・調教師の保存済みURLがエラーでも、公開名簿の正規化名称で一意の候補を取得して保存できる。 | Connected |
+| AC2 | 騎手・調教師の保存済みURLがエラーでも、公開名簿の正規化名称で一意の候補を取得して保存できる。 | Verified |
 | AC3 | URLが別対象を返した場合は保存せず、名称フォールバックで同一性を再検証する。 | Verified |
 | AC4 | 同名候補が複数で生年月日等で一意にできない場合は保存せず、候補付きの同定失敗を記録する。 | Verified |
 | AC5 | URL失敗Locationと名称フォールバック成功LocationがAttempt詳細に記録され、成功URLが次回の優先Locationになる。 | Verified |
 | AC6 | Failed、DeadLetter、DispatchAttemptsExceededのResourceを再取得すると、元属性を保持した新しいRecovery taskが作成される。 | Verified |
 | AC7 | terminal・不存在Taskを指す古いactive rowがあってもatomicに修復され、新しいRecovery taskが作成される。 | Verified |
-| AC8 | 失敗した／孤立したRecoveryInProgressを再Recoveryでき、新Task成功時に元FailureがResolvedになる。 | Connected |
+| AC8 | 失敗した／孤立したRecoveryInProgressを再Recoveryでき、新Task成功時に元FailureがResolvedになる。 | Verified |
 | AC9 | 正常なactive taskがある場合は重複Taskを作らず、そのTaskへRecovery状態を関連付ける。 | Verified |
 | AC10 | pipeline停止中はRecovery要求を保持するが配送・lease取得せず、再開後に実行する。 | Verified |
 | AC11 | 現在未解決のURL関連Failureをpreview後に一括再投入し、対象件数、作成Task、再利用Taskを検証記録へ残す。 | Not started |
@@ -94,6 +94,7 @@
 - active rowがterminal・不存在Taskを指す場合、同じRequest transaction内で古い参照を削除して新しいRecovery taskを作るよう修正した。RecoveryInProgressも新Taskへ付け替える。
 - URL失敗→名称・生年月日探索成功、terminal active参照修復、新Task lease取得の統合テストが成功した。
 - `dotnet format HorseRacingPrediction.sln --no-restore`を実行した。Release buildは警告0・エラー0。Collector 160件成功、Api 184件成功・外部依存1件skip。
+- 2026-09-15: 現行HEADの騎手・調教師handler、terminal/stale active row、RecoveryInProgress再関連付けと解決処理を再監査し、focused testsおよびRelease非External solution testsの成功によりAC2/AC8をVerifiedへ更新した。
 
 ## Deviations and follow-up
 

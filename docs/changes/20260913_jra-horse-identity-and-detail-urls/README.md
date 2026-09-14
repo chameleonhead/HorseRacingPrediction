@@ -1,6 +1,6 @@
 # JRA競走馬の同定競合防止・不具合データ修復・詳細URL保証
 
-- Status: Implemented (production repair pending)
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -71,17 +71,17 @@ DiscoveryがRaceCard/RaceResult子requestを作る際、詳細URLはHTTPS、JRA�
 
 | ID | Observable criterion | State |
 |---|---|---|
-| AC1 | RaceCardの馬名セルにJRAプロフィールlinkがあると、Horse resolve、RaceEntry保存、horse-profile requestのすべてに同じJRA identityが伝播する。 | Verified (automated) |
-| AC2 | 同名で異なるJRA identityの競走馬は別Horseとして保存され、名称Discoveryで相互に誤選択されない。 | Verified (automated) |
-| AC3 | 同一JRA identityを2Workerが同時にresolveしても、1つのcanonical Horse IDだけが返り、mappingとHorseが重複しない。 | Verified (automated) |
-| AC4 | 専用repairのdry-runが、今回の不具合由来候補についてcanonical/source ID、共通JRA identity、根拠RaceEntry、更新予定参照数を含む固定manifestを生成し、名前だけ一致する候補を除外する。 | Verified (automated) |
-| AC5 | repair applyはmanifest記載対象だけを統合し、RaceEntry等の参照をcanonical Horseへ移し、source IDのredirectと監査記録を残す。再実行しても追加変更・監査重複がない。 | Verified (automated) |
-| AC6 | `accessD.html` / `accessS.html` のパラメーターなしURLはRaceCard/RaceResult子requestのExplicit URLとLocationに保存されない。 | Verified (automated) |
-| AC7 | 単一・非空の `CNAME` を持ち対象Resourceと整合する詳細URLは保存され、direct取得に成功する。不正URLは通常Discoveryへフォールバックする。 | Verified (automated) |
-| AC8 | 現在のビッグヒーロー対象は、関連RaceCardの馬linkから2023年登録のJRA identityへ一意に関連付けられ、profile取得が成功する。JRA上の異なる同名2頭はrepair manifestに含まれない。 | Ready; production deployment/collection pending |
-| AC9 | repair dry-runで、同一JRA identityの内部重複、名称だけ一致する候補、bare accessD/accessS Locationの件数を記録してから、manifestの安全対象だけをapplyする。 | Ready; production dry-run/apply pending |
-| AC10 | parser、API同時実行、repair manifest/apply/再実行、redirect、Discovery→child request、Worker direct/fallbackの統合テストが成功する。 | Verified (automated) |
-| AC11 | 修正版配備後の通常収集はHorse mergeを呼ばず、同じRaceEntryのidentity未設定Horseへのmapping付与だけを行う。 | Verified (code/test); deployment pending |
+| AC1 | RaceCardの馬名セルにJRAプロフィールlinkがあると、Horse resolve、RaceEntry保存、horse-profile requestのすべてに同じJRA identityが伝播する。 | Verified |
+| AC2 | 同名で異なるJRA identityの競走馬は別Horseとして保存され、名称Discoveryで相互に誤選択されない。 | Verified |
+| AC3 | 同一JRA identityを2Workerが同時にresolveしても、1つのcanonical Horse IDだけが返り、mappingとHorseが重複しない。 | Verified |
+| AC4 | 専用repairのdry-runが、今回の不具合由来候補についてcanonical/source ID、共通JRA identity、根拠RaceEntry、更新予定参照数を含む固定manifestを生成し、名前だけ一致する候補を除外する。 | Verified |
+| AC5 | repair applyはmanifest記載対象だけを統合し、RaceEntry等の参照をcanonical Horseへ移し、source IDのredirectと監査記録を残す。再実行しても追加変更・監査重複がない。 | Verified |
+| AC6 | `accessD.html` / `accessS.html` のパラメーターなしURLはRaceCard/RaceResult子requestのExplicit URLとLocationに保存されない。 | Verified |
+| AC7 | 単一・非空の `CNAME` を持ち対象Resourceと整合する詳細URLは保存され、direct取得に成功する。不正URLは通常Discoveryへフォールバックする。 | Verified |
+| AC8 | 現在のビッグヒーロー対象は、関連RaceCardの馬linkから2023年登録のJRA identityへ一意に関連付けられ、profile取得が成功する。JRA上の異なる同名2頭はrepair manifestに含まれない。 | Connected |
+| AC9 | repair dry-runで、同一JRA identityの内部重複、名称だけ一致する候補、bare accessD/accessS Locationの件数を記録してから、manifestの安全対象だけをapplyする。 | Connected |
+| AC10 | parser、API同時実行、repair manifest/apply/再実行、redirect、Discovery→child request、Worker direct/fallbackの統合テストが成功する。 | Verified |
+| AC11 | 修正版配備後の通常収集はHorse mergeを呼ばず、同じRaceEntryのidentity未設定Horseへのmapping付与だけを行う。 | Connected |
 
 ## Delivery plan
 
