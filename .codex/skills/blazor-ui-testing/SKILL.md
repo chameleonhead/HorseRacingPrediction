@@ -35,26 +35,6 @@ bUnitを優先する。
 内部実装ではなく
 ユーザーから観測可能な挙動をテストする。
 
-### 日付・時刻の再現性
-
-「今日」「未来日」「過去日」などの判定を含むテストは、OS の `DateTime.Now`、
-`DateTime.Today`、または runner のローカルタイムゾーンを直接使わない。本番コードが使う
-共有時刻源（このリポジトリでは `JstTime.Today()` / `JstTime.Now()`）か、テストから固定できる
-clockを使い、入力日と期待値を同じ時刻基準から生成する。
-
-CIがローカルと異なるOSまたはタイムゾーンで動く場合、少なくとも日付境界を扱う変更では、
-変更したテストファイルに `DateTime.Now` / `DateTime.Today` 等のhost-local clockが残っていないことを
-検索し、CIと同じ構成・filterでテストする。失敗ログでUTC/JST等のずれが観測された場合は、
-単なるtimeout延長で隠さず、共有clockへの統一を回帰条件とする。
-
-### 非同期ロードの再現性
-
-component testが初期ロード後のUI状態を検証する場合、外部host、実HTTP server、共有DB、他testの
-負荷に完了時刻を依存させない。テスト対象の画面契約に必要な応答は専用fake handler/serviceから即時かつ
-決定的に返し、完了後の観測可能な状態を `WaitForAssertion` 等で待つ。CIだけでloading表示が残る場合は、
-まず未完了requestと実依存を特定してfake境界へ置き換える。render数が進んでいるだけの失敗を
-timeout延長やretryで隠さない。
-
 ## Browser Test
 
 実ブラウザーでしか確認できない重要フローは

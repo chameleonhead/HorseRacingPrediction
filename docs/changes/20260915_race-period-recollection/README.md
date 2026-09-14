@@ -10,7 +10,7 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Complete | 期間preview/submit、Store batch、Collector、管理UI、進捗詳細を接続済み |
-| Verification | Complete | focused、Release build/API/full non-external suite、browser、CodeGraph、formatを完了 |
+| Verification | Complete | CIで観測した全失敗のclosure ledgerを解消し、最終remote workflowも成功 |
 | Deployment/operation | Complete | ローカル開発環境で 2026-09-12〜2026-09-13 (JST) の2日を1 batchとして受付済み |
 
 ## Context
@@ -138,10 +138,19 @@ T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を
 - 2026-09-15: ローカル管理画面で 2026-09-12〜2026-09-13 をpreviewし、2日間、新規2件、既存0件として batch `recollection:admin-ui:c69638b9b3964b94a1704bcaaf920ad3` をHTTP 202で受付。batch詳細で対象期間と探索日2/2を確認。検証用一時API keyは保存・記録せず、ローカルhostは確認後停止した。
 - 2026-09-15: push `f1c0ac3` の GitHub Actions `app-ci` run `34879575640` と `app-deploy` run `34879575664` は、Ubuntu runner上のUTC日付と本番validationのJST日付がずれ、未来日component testが1件失敗した。raw failed log、runner、workflow commandを確認して原因を特定した。
 - 2026-09-15: component testを `JstTime.Today()` に統一し、変更ファイルにhost-local `DateTime.Now` / `DateTime.Today` が残っていないことを検索で確認。`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release build（警告0、エラー0）、CIと同じ `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --collect:"XPlat Code Coverage" --filter "TestCategory!=External"` が成功（全project成功、API 207成功・既存skip 1）。
-- 2026-09-15: `.codex/skills/blazor-ui-testing/SKILL.md` にOS/タイムゾーン非依存の日付テストgateを追加し、skill-creator validatorをUTF-8モードで実行して `Skill is valid!` を確認。remote workflowの終端結果はpush後に追記する。
-- 2026-09-15: 修正push `fb451bf` では `app-ci` run `34881155710` が成功し、日付境界の修正を確認。一方 `app-deploy` run `34881155723` は既知の `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` が初期loading中のまま2秒を超え失敗した。実HTTP serverへの6件の並列requestに依存するcomponent testだったため、empty-state契約を即時応答する専用fake handlerへ切り替え、スキルに非同期ロードを実依存から分離するgateを追加した。
-- 2026-09-15: empty-state component testをRelease構成で5回連続実行して全件成功。formatter、Release build（警告0、エラー0）、`app-deploy` と同じsolution全体の非External testも成功（API 207成功・既存skip 1を含む全project成功）。skill validatorも再度成功。最終remote workflow結果はpush後に確認する。
+- 2026-09-15: 初回是正では `.codex/skills/blazor-ui-testing/SKILL.md` に日付境界の規則を追加しvalidator成功を確認したが、後続失敗の見落としを説明できない局所対処だったため最終是正で取り下げた。
+- 2026-09-15: 修正push `fb451bf` では `app-ci` run `34881155710` が成功し、日付境界の修正を確認。一方 `app-deploy` run `34881155723` は既知の `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` が初期loading中のまま2秒を超え失敗した。実HTTP serverへの6件の並列requestに依存するcomponent testだったため、empty-state契約を即時応答する専用fake handlerへ切り替えた。
+- 2026-09-15: empty-state component testをRelease構成で5回連続実行して全件成功。formatter、Release build（警告0、エラー0）、`app-deploy` と同じsolution全体の非External testも成功（API 207成功・既存skip 1を含む全project成功）。
+- 2026-09-15: fix commit `1320c6c` の `app-ci` run `34882301946` と `app-deploy` run `34882301969` はともに成功。failure ledgerに未解決項目がないことを確認した。
+- 2026-09-15: 局所的なBlazor規則を取り下げ、`.codex/skills/learn-from-implementation-failures/SKILL.md` の横断的なfailure closure gateへ置換。変更した両skillをskill-creator validatorで検証し、いずれも `Skill is valid!`。
 ## Deviations and follow-up
 
 - 設計との差分なし。既存Backfill詳細を期間再取得でも再利用するが、batch prefixに応じてページ見出しと戻り先を「期間指定のレース再取得」「収集管理へ戻る」へ切り替えた。
-- 2026-09-15 CI failure retrospective: GitHub Actions (`ubuntu-latest`) で `RacePeriodRecollection_InvalidRanges_DoNotCallPreviewAndPreserveInputs` が失敗した。テストがhost-local `DateTime.Now`から日付を作り、本番validationはJST `JstTime.Today()`を使っていたため、UTCでは未来日ケースが当日扱いとなったことが直接原因。ローカルでCI commandを実行したがWindows/JST環境だけだったこと、変更テスト内のhost-local clock検索をfinal gateに含めなかったことがworkflow上の原因。テストを共有JST clockへ統一し、`.codex/skills/blazor-ui-testing/SKILL.md` に日付境界のOS/タイムゾーン非依存gateを追加した。修正後のCI同等検証とremote workflow結果を下記Verification recordへ追記する。
+- 2026-09-15 CI failure retrospective: GitHub Actions (`ubuntu-latest`) で `RacePeriodRecollection_InvalidRanges_DoNotCallPreviewAndPreserveInputs` が失敗した。直接原因はテストのhost-local日付と本番validationのJST日付の不一致。さらに、実装中のfull-suiteで既に `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` の失敗を観測していたにもかかわらず、単独再実行の成功だけで未解決の失敗を閉じたため、次のpushで同じ失敗を再発させた。影響箇所を見落としたworkflow上の根本原因は、必須verificationで観測した全失敗を原因・処置・元コマンド再成功まで追跡するledgerがなかったこと。個別のBlazor/date規則追加は重複・局所対処として取り下げ、`.codex/skills/learn-from-implementation-failures/SKILL.md` に技術領域横断のObserved verification failure closure gateを追加した。
+
+### Verification failure ledger
+
+| Failure | Classification and cause | Disposition and evidence | State |
+| --- | --- | --- | --- |
+| `RacePeriodRecollection_InvalidRanges_DoNotCallPreviewAndPreserveInputs` | Environment mismatch: host-local dateとJST clockの不一致 | testを共有JST clockへ統一。元のsolution test成功、Ubuntu `app-ci` run `34881155710`成功 | Verified |
+| `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` | Order/load-dependent: component testが実HTTP serverへの並列request完了時刻に依存 | 即時fake handlerへ分離。focused 5回連続成功、元のsolution test成功、Ubuntu `app-ci` / `app-deploy`成功 | Verified |

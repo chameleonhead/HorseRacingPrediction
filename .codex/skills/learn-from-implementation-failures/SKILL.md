@@ -83,6 +83,18 @@ A correction must change a future decision and have an observable completion con
 
 Do not add reminders such as "be careful" or "test thoroughly." Replace them with a specific artifact, query, test, or invariant.
 
+## Observed verification failure closure gate
+
+Treat every failure observed in an approved change's required verification commands as an open completion item, even when it is not caused by the current diff or a focused rerun later passes.
+
+- On the first failure, add one ledger entry to the change record with the original command, failing test or step, observed output, and current classification: deterministic regression, environment mismatch, order/load-dependent failure, unrelated confirmed defect, or unknown. Do not classify from a passing rerun alone.
+- Close the entry only with a verified cause and disposition: fix the product/test/environment and rerun the original failing command successfully; or prove with repository evidence that the defect is unrelated to the approved outcome and assign it to an explicit follow-up owner without blocking any acceptance criterion. “Could not reproduce,” “passed alone,” and “likely flaky” are not dispositions.
+- After fixing one failure, reconcile the ledger before pushing or declaring completion. A later failure from the same original verification run is not a new surprise if it was already recorded; it remains an open item until independently closed.
+- For intermittent failures, reproduce under the dimension suggested by the evidence—full-suite concurrency, repeated execution, runner OS/time zone, shared state, ordering, or network boundary—and remove the uncontrolled dependency or assert the invariant. Increasing a timeout or retry count is acceptable only when measured behavior establishes the intended bound and the test still detects a stuck operation.
+- Before final handoff, require both zero open verification failures and a successful rerun of every original command that produced one. Include remote workflow runs when push health is part of delivery.
+
+The observable correction is a failure ledger in which each observed failure has cause evidence, disposition, and a successful rerun of its original command; an isolated green rerun cannot erase an earlier red full-suite result.
+
 ## CI parity and push closure
 
 When a pushed change fails continuous integration after local verification, treat the mismatch between the local gate and the repository workflow as the demonstrated delivery failure.
