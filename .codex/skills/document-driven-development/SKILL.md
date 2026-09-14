@@ -51,6 +51,7 @@ Before describing a slice as complete, trace each acceptance criterion through t
 - Test at least one end-to-end happy path and the critical failure/restart path through the actual transport and persistence boundary.
 - Verify operational invariants at the layer that enforces them. If priority is enforced by a dispatcher, test the dispatcher; if URL fallback is required, test the locator plus handler path.
 - Treat new code calling a component that creates legacy work as continued legacy usage, even when wrapped by a new handler.
+- For capabilities registered or seeded outside the main application, maintain an entry-point matrix before completion. Enumerate every production bootstrap, initializer, importer/seed reader, scheduler, manual-operation surface, and compatibility adapter that can create or dispatch the affected work. For each affected resource/definition pair, prove registration, type mapping, required metadata, and terminal handler resolution at every applicable entry point. Searching only the main runtime registration or testing only the primary UI/API path is insufficient; an unclassified alternate entry point is an open completion item.
 
 ## Cutover Gate
 

@@ -1,6 +1,6 @@
 # 主体識別の再収集でパラメーターなしURLを使用しない
 
-- Status: Implemented
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -102,3 +102,17 @@
 ## Deviations and follow-up
 
 - JRAサイトへの通信自体は廃止していない。Horse/Jockey/Trainerは保存済みの選択ページURLを使わず、Navigatorによる公式プロフィール探索を行う。
+
+## Post-completion audit closure ledger
+
+2026-09-14、ユーザーの完了確認を受けてalternate entry pointまで再監査し、前回の完了判定を撤回した。直接原因はMain APIのruntime registrationと主要UI/API/handlerテストだけで完了判定し、Collection Initializerとseed/import、Owner terminal side effectを列挙しなかったことである。再利用可能なworkflow不足として、Document Driven DevelopmentのImplementation Traceability Gateへ全bootstrap/initializer/importer/manual surfaceのentry-point matrixを追加し、skill validatorで検証する。
+
+Skill checkpoint: `.codex/skills/document-driven-development/SKILL.md`へentry-point matrix gateを追加し、`skill-creator/scripts/quick_validate.py`が`Skill is valid!`で成功した。これにより、主要APIだけの登録確認では完了にできず、alternate bootstrapとseed/importの未分類hitがclosure itemになる。
+
+| ID | Finding | Required evidence | State |
+|---|---|---|---|
+| F1 | Collection Initializerが`jockey-profile`を登録しない。 | initializer registration testで4主体definitionを確認 | Runnable |
+| F2 | Domain profile seed readerがJockeyを判定・seedできない。 | Horse/Jockey/Trainerのprofile seed mapping test | Runnable |
+| F3 | Owner handlerがOwner/aliasの存在を確認せず名前だけで成功する。 | RaceEntry producerからcanonical Owner IDを渡し、handlerが登録済みOwnerを検証するintegration test | Runnable |
+| F4 | previewが名前欠落failureを実行可能と表示し得る。 | preview/applyがresource metadataを検証し、MissingNameをBlockedにするAPI/UI test | Runnable |
+| F5 | 全production entry pointとdefinition/type/metadata/handler対応の再監査がない。 | entry-point matrixとrepository literal inventory、CodeGraph、全回帰 | Dependent |
