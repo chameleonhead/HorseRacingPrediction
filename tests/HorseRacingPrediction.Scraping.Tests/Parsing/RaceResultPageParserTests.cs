@@ -835,6 +835,29 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_増減値のない馬体重を解析できる()
+    {
+        var table = new TestPageTable(
+            Headers: ["着順", "馬番", "馬名", "騎手", "タイム", "馬体重"],
+            Rows: [["1", "1", "サトノカルナバル", "R.キング", "1:46.7", "518"]]);
+
+        var section = new TestPageSection(
+            title: "レース結果",
+            mainText: "天候 曇 芝 良",
+            links: [],
+            actions: [],
+            tables: [table],
+            headings: ["JRA 日本中央競馬会", "2025年2月16日 東京 11R", "共同通信杯"]);
+
+        var snapshot = new TestPageSnapshot(Url, "レース結果 JRA", [section]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        Assert.AreEqual(518, page.Results[0].BodyWeight);
+        Assert.IsNull(page.Results[0].BodyWeightChange);
+    }
+
+    [TestMethod]
     public void Parse_未知の券種はエラーになる()
     {
         var table = new TestPageTable(

@@ -1242,7 +1242,7 @@ public sealed class RaceResultPageParser
     }
 
     private static readonly Regex BodyWeightRegex =
-        new(@"^(?<weight>\d{3})\s*\((?:(?<change>[+-]?\d+)|(?<debut>初出走))\)$",
+        new(@"^(?<weight>\d{3})(?:\s*\((?:(?<change>[+-]?\d+)|(?<debut>初出走))\))?$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // 降着（依頼書18節）。着順欄に確定順位と元の入線順位が
