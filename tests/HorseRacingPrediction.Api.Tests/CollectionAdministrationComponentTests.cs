@@ -35,10 +35,11 @@ public sealed class CollectionAdministrationComponentTests
     [TestMethod]
     public async Task EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview()
     {
-        var (app, client) = await TestApplicationFactory.CreateAsync();
+        var (app, original) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
-        using var http = client;
-        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        using var ignored = original;
+        using var http = new HttpClient(new ResourceHandler { EmptyPlatform = true })
+        { BaseAddress = new Uri("http://localhost") };
         await using var context = CreateContext(app.Services, http);
 
         var cut = context.Render<Jobs>();
@@ -379,6 +380,7 @@ public sealed class CollectionAdministrationComponentTests
 
     private sealed class ResourceHandler : HttpMessageHandler
     {
+        public bool EmptyPlatform { get; init; }
         public IReadOnlyList<CollectionFailureGroup> FailureGroups { get; init; } = [];
         private static readonly ResourceKey Resource = new(ResourceType.Horse, "jra", "H001");
         private static readonly CollectionDefinitionId Definition = new("horse-profile");
@@ -444,12 +446,17 @@ public sealed class CollectionAdministrationComponentTests
                 "/api/admin/collection/tasks" => new[] { new CollectionTaskSummary(Guid.NewGuid(), Resource,
                     Definition, CollectionTaskStatus.Pending, CollectionLane.Normal, 50, 1,
                     DateTimeOffset.UtcNow, 0) },
+                "/api/admin/collection/tasks/search" when EmptyPlatform => new CollectionTaskPage(0, 1, 50, []),
                 "/api/admin/collection/tasks/search" => new CollectionTaskPage(1, 1, 50,
                     [new CollectionTaskSummary(Guid.NewGuid(), Resource, Definition, CollectionTaskStatus.Pending,
                         CollectionLane.Normal, 50, 1, DateTimeOffset.UtcNow, 0)]),
                 "/api/admin/collection/states/search" => new CollectionStatePage(1, 1, 50,
                     [new CollectionStateSnapshot(Resource, Definition, 1, 1, DateTimeOffset.UtcNow, null,
                         CollectionStateStatus.Current)]),
+                "/api/admin/collection/progress" when EmptyPlatform => new CollectionProgressSnapshot(
+                    new Dictionary<ResourceType, int>(), new Dictionary<CollectionStateStatus, int>(),
+                    new Dictionary<CollectionLane, int>(), new Dictionary<int, int>(),
+                    new Dictionary<string, int>(), 0),
                 "/api/admin/collection/progress" => new CollectionProgressSnapshot(
                     new Dictionary<ResourceType, int> { [ResourceType.Horse] = 1 },
                     new Dictionary<CollectionStateStatus, int> { [CollectionStateStatus.Pending] = 1 },

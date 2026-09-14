@@ -139,6 +139,8 @@ T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を
 - 2026-09-15: push `f1c0ac3` の GitHub Actions `app-ci` run `34879575640` と `app-deploy` run `34879575664` は、Ubuntu runner上のUTC日付と本番validationのJST日付がずれ、未来日component testが1件失敗した。raw failed log、runner、workflow commandを確認して原因を特定した。
 - 2026-09-15: component testを `JstTime.Today()` に統一し、変更ファイルにhost-local `DateTime.Now` / `DateTime.Today` が残っていないことを検索で確認。`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release build（警告0、エラー0）、CIと同じ `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --collect:"XPlat Code Coverage" --filter "TestCategory!=External"` が成功（全project成功、API 207成功・既存skip 1）。
 - 2026-09-15: `.codex/skills/blazor-ui-testing/SKILL.md` にOS/タイムゾーン非依存の日付テストgateを追加し、skill-creator validatorをUTF-8モードで実行して `Skill is valid!` を確認。remote workflowの終端結果はpush後に追記する。
+- 2026-09-15: 修正push `fb451bf` では `app-ci` run `34881155710` が成功し、日付境界の修正を確認。一方 `app-deploy` run `34881155723` は既知の `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` が初期loading中のまま2秒を超え失敗した。実HTTP serverへの6件の並列requestに依存するcomponent testだったため、empty-state契約を即時応答する専用fake handlerへ切り替え、スキルに非同期ロードを実依存から分離するgateを追加した。
+- 2026-09-15: empty-state component testをRelease構成で5回連続実行して全件成功。formatter、Release build（警告0、エラー0）、`app-deploy` と同じsolution全体の非External testも成功（API 207成功・既存skip 1を含む全project成功）。skill validatorも再度成功。最終remote workflow結果はpush後に確認する。
 ## Deviations and follow-up
 
 - 設計との差分なし。既存Backfill詳細を期間再取得でも再利用するが、batch prefixに応じてページ見出しと戻り先を「期間指定のレース再取得」「収集管理へ戻る」へ切り替えた。
