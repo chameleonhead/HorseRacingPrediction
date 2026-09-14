@@ -1,6 +1,6 @@
 # URL失敗時の名称フォールバックと障害ジョブ再開
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -74,7 +74,7 @@
 | AC8 | 失敗した／孤立したRecoveryInProgressを再Recoveryでき、新Task成功時に元FailureがResolvedになる。 | Verified |
 | AC9 | 正常なactive taskがある場合は重複Taskを作らず、そのTaskへRecovery状態を関連付ける。 | Verified |
 | AC10 | pipeline停止中はRecovery要求を保持するが配送・lease取得せず、再開後に実行する。 | Verified |
-| AC11 | 現在未解決のURL関連Failureをpreview後に一括再投入し、対象件数、作成Task、再利用Taskを検証記録へ残す。 | Not started |
+| AC11 | 現在未解決のURL関連Failureをpreview後に一括再投入し、対象件数、作成Task、再利用Taskを検証記録へ残す。 | Verified |
 | AC12 | URL失敗→名称探索→保存のhandler統合テストと、terminal/stale recoveryのStore/API統合テストが成功する。 | Verified |
 
 ## Delivery plan
@@ -95,7 +95,8 @@
 - URL失敗→名称・生年月日探索成功、terminal active参照修復、新Task lease取得の統合テストが成功した。
 - `dotnet format HorseRacingPrediction.sln --no-restore`を実行した。Release buildは警告0・エラー0。Collector 160件成功、Api 184件成功・外部依存1件skip。
 - 2026-09-15: 現行HEADの騎手・調教師handler、terminal/stale active row、RecoveryInProgress再関連付けと解決処理を再監査し、focused testsおよびRelease非External solution testsの成功によりAC2/AC8をVerifiedへ更新した。
+- 2026-09-15: production preview run `34872379869` とapply run `34872777840` で主体同定Failure候補が合計0件（safe 0、blocked 0）であることを確認した。applyではpipelineをpauseしRunning taskのdrain後に再previewし、作成・再利用対象なしのままresumeしたため、AC11をVerifiedとした。
 
 ## Deviations and follow-up
 
-- 実装は完了したが、本番配備後の既存Failure一括Recovery（AC11）が未実施のためStatusはApprovedのままとする。
+- production previewで対象Failureが0件だったためRecovery taskは作成しなかった。0件を正常な収束結果として記録した。

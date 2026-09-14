@@ -1,6 +1,6 @@
 # JRA競走馬の同定競合防止・不具合データ修復・詳細URL保証
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -78,10 +78,10 @@ DiscoveryがRaceCard/RaceResult子requestを作る際、詳細URLはHTTPS、JRA�
 | AC5 | repair applyはmanifest記載対象だけを統合し、RaceEntry等の参照をcanonical Horseへ移し、source IDのredirectと監査記録を残す。再実行しても追加変更・監査重複がない。 | Verified |
 | AC6 | `accessD.html` / `accessS.html` のパラメーターなしURLはRaceCard/RaceResult子requestのExplicit URLとLocationに保存されない。 | Verified |
 | AC7 | 単一・非空の `CNAME` を持ち対象Resourceと整合する詳細URLは保存され、direct取得に成功する。不正URLは通常Discoveryへフォールバックする。 | Verified |
-| AC8 | 現在のビッグヒーロー対象は、関連RaceCardの馬linkから2023年登録のJRA identityへ一意に関連付けられ、profile取得が成功する。JRA上の異なる同名2頭はrepair manifestに含まれない。 | Connected |
-| AC9 | repair dry-runで、同一JRA identityの内部重複、名称だけ一致する候補、bare accessD/accessS Locationの件数を記録してから、manifestの安全対象だけをapplyする。 | Connected |
+| AC8 | 現在のビッグヒーロー対象は、関連RaceCardの馬linkから2023年登録のJRA identityへ一意に関連付けられ、profile取得が成功する。JRA上の異なる同名2頭はrepair manifestに含まれない。 | Verified |
+| AC9 | repair dry-runで、同一JRA identityの内部重複、名称だけ一致する候補、bare accessD/accessS Locationの件数を記録してから、manifestの安全対象だけをapplyする。 | Verified |
 | AC10 | parser、API同時実行、repair manifest/apply/再実行、redirect、Discovery→child request、Worker direct/fallbackの統合テストが成功する。 | Verified |
-| AC11 | 修正版配備後の通常収集はHorse mergeを呼ばず、同じRaceEntryのidentity未設定Horseへのmapping付与だけを行う。 | Connected |
+| AC11 | 修正版配備後の通常収集はHorse mergeを呼ばず、同じRaceEntryのidentity未設定Horseへのmapping付与だけを行う。 | Verified |
 
 ## Delivery plan
 
@@ -108,10 +108,11 @@ DiscoveryがRaceCard/RaceResult子requestを作る際、詳細URLはHTTPS、JRA�
 - 2026-09-13: 専用repair `20260913-jra-horse-identity-repair` のdry-run/apply、候補ledger、source ID redirect、再実行skipを追加した。通常収集に汎用merge処理は追加していない。
 - 2026-09-13: SQLiteの現行EnsureCreated、一世代前（JRA profileあり）、旧スキーマから新repair tableへデータ保持移行できることを検証した。
 - 2026-09-13: `dotnet test HorseRacingPrediction.sln -c Release --no-restore --filter "TestCategory!=External"` 成功（失敗0、skip1）。追加修正後のfocused API/Scraping testsも成功した。
+- 2026-09-15: 修正版をproductionへ配備したrun `34871217055` がhealth check、Lambda infrastructure、API migrationを含め成功した。maintenance preview `34872379869` とapply `34872777840` はHorse repair候補0件（safe 0、blocked 0）、主体同定Failure 0件、apply後の残存Horse候補0件を確認した。すでに収束したデータへ追加統合を行わず、通常収集に汎用mergeがないことを現行コード・全回帰テストで再確認したためAC8/AC9/AC11をVerifiedとした。
 
 ## Deviations and follow-up
 
 - 設計では別テーブルのexternal identity mappingとAPI側resolve-or-registerを想定したが、実装は正規化JRA identityからUUIDv5相当のcanonical Horse IDを決定論的に生成する方式とした。同一identityの同時Workerが同じIDへ収束する受け入れ結果を、追加mappingの整合性管理なしで満たす。
 - legacy Horseをその場で改名するのではなく、同じRaceEntryをcanonical IDで再登録してEventFlow projectionの参照を移し、その事実から専用repair候補を記録する。applyは参照残存がないことを再検証してsource redirectを確定する。
-- 本番配備、repair dry-run、manifest確認、apply、ビッグヒーロー再取得は未実施。実装完了とは分離し、配備後にAC8/AC9の実測結果を本記録へ追記する。
+- production dry-run/apply時点では未処理manifestと未解決主体同定Failureがともに0件であり、追加のHorse統合・再取得は不要だった。
 - repairを管理画面から確認・実行するfollow-upは [JRA競走馬識別子の不具合修復を管理画面から実行する](../20260914_horse-identity-repair-admin-ui/README.md) で設計する。

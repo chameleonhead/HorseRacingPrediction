@@ -50,7 +50,7 @@ Apiの /api/admin/races/{raceId}/reacquisition がRaceReacquisitionジョブを�
 
 収集全体停止は、手動、タイムアウト、watchdog、DLQのいずれで発生しても、dispatchと新規leaseだけを止める「収集のみ停止」とする。管理サイト、業務データの読み書き、ジョブ状態・監査・保留・リラン・再取得依頼、実行中Workerの結果報告は利用可能に保つ。新しく登録した収集ジョブは停止解除まで待機する。DB初期化は別の排他メンテナンス状態とし、通常の変更系APIを拒否するが、Blazor接続、状態確認、再開・復旧経路は遮断しない。詳細は [収集全体停止中も管理サイトを利用可能にする](changes/20260909_collection-pause-site-access/README.md) を参照する。
 
-新収集基盤で想定外エラーがterminal failureとして確定した最初の1件で同じ全体停止へ遷移し、停止インシデントをSNS通知する設計は、[想定外収集エラーによる全体停止とSNS通知](changes/20260913_collection-error-rate-circuit-breaker/README.md)を正本とする。停止は新規dispatch・lease取得を抑止し、実行中Workerは強制終了しない。正常な未公開・対象なし・取消と再試行可能な中間状態は停止対象外とする。SNS障害時も停止を優先し、未送信インシデントを永続化して再送する。2026-09-13現在は提案段階であり、現行の新基盤には自動停止・SNS送信の呼び出し経路が接続されていない。
+新収集基盤で想定外エラーがterminal failureとして確定した最初の1件で同じ全体停止へ遷移し、停止インシデントをSNS通知する設計は、[想定外収集エラーによる全体停止とSNS通知](changes/20260913_collection-error-rate-circuit-breaker/README.md)を正本とする。停止は新規dispatch・lease取得を抑止し、実行中Workerは強制終了しない。正常な未公開・対象なし・取消と再試行可能な中間状態は停止対象外とする。SNS障害時も停止を優先し、未送信インシデントを永続化して再送する。terminal failure、DLQ、watchdogからのatomic停止と、永続インシデントを送信・再送するproduction経路は実装・配備済みである。
 
 プロフィール収集で保存済みURLが失敗した場合、失敗URLの識別子を検索条件から外して名称（競走馬は利用可能なら生年月日も併用）から再同定する設計と、終端Task・孤立した復旧状態から新しいRecovery taskを作る規則は、[URL失敗時の名称フォールバックと障害ジョブ再開](changes/20260913_subject-url-fallback-recovery/README.md)を正本とする。2026-09-13現在は提案段階である。
 

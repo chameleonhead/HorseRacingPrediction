@@ -1,6 +1,6 @@
 # 想定外収集エラーによる全体停止とSNS通知
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-13
 - Updated: 2026-09-13
@@ -78,7 +78,7 @@ SNSは停止への状態遷移ごとに一つ送る。送信失敗時は未送�
 | AC6 | 手動再開後、再開前に確定済みの失敗だけを理由に即時再停止せず、新たな想定外terminal failureで再停止する。 | Verified |
 | AC7 | DLQ reconciliationとwatchdog terminal化も一発停止の対象となり、Attemptなしの失敗でも停止する。 | Verified |
 | AC8 | TopicArn未設定、IAM拒否、SNS一時障害がログと管理状態で識別でき、配備時の空ARN gateが維持される。 | Verified |
-| AC9 | 実SNS topicへのpublish smoke testと、SMS subscriptionが存在し確認済みであることを配備後に確認する。 | Not started |
+| AC9 | 実SNS topicへのpublish smoke testと、SMS subscriptionが存在し確認済みであることを配備後に確認する。 | Verified |
 
 ## Delivery plan
 
@@ -102,8 +102,8 @@ SNSは停止への状態遷移ごとに一つ送る。送信失敗時は未送�
 - `ResourceNotFound`では停止しないテスト、DLQ一発停止テスト、停止通知を一度だけpublishするテストが成功した。
 - `dotnet format HorseRacingPrediction.sln --no-restore`を実行した。Release buildは警告0・エラー0。Collector 160件成功、Api 184件成功・外部依存1件skip。
 - 2026-09-15: 現行HEADのStore再開・新規terminal failure、SNS失敗状態永続化・再起動後再送、deploy workflowの空TopicArn gateを再監査し、Release非External solution testsの成功によりAC6/AC8をVerifiedへ更新した。
+- 2026-09-15: production maintenance run `34872777840` でSNS topicをAWS APIから解決し、confirmed SMS subscription 1件を確認した後、`TEST ONLY` と明記したsmoke messageを一度publishした。MessageIdの返却を確認し、AC9をVerifiedとした。
 
 ## Deviations and follow-up
 
-- 実環境でSNS topicのpublish履歴そのものは取得できないため、配備後smoke testを受け入れ基準に含める。
-- 実装は完了したが、実SNS publish smoke test未実施のためStatusはApprovedのままとする。
+- 実環境でSNS topicのpublish履歴そのものは取得できないため、production workflow runとMessageId返却を配備後smoke testの証拠とする。

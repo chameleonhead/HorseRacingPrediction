@@ -1,6 +1,6 @@
 # 未完了の収集基盤変更を一括完了する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-15
 - Updated: 2026-09-15
@@ -120,12 +120,12 @@ change recordのStatusは「承認済みscope全体の完了」を表す一方�
 | --- | --- | --- | --- | --- |
 | UAC1 | `collection-task-metadata` AC1–AC9をすべて満たし、通常、bulk、関連発見、手動、Recovery、revision、依存生成からWorker・Attempt・UIまでTask作成時metadataが不変である。 | T1–T4 | migration/store/transport/handler/API/component E2E | Verified |
 | UAC2 | Horse/Jockey/Trainer/Ownerの子Taskは登録・解決済みcanonical IDだけを使い、未登録IDの実行不能Taskを作らない。 | T2, T3 | cross-producer/API/Collector E2E | Verified |
-| UAC3 | `collection-worker-microbatch` AC1–AC19を状態表へ追跡し、同日12 RaceCardの1 session実行、部分失敗、再配信、相関表示、比較計測をproduction-equivalent経路で確認する。 | T4, T5 | Collector/API tests、benchmark、配備smoke | Connected |
-| UAC4 | `collection-error-rate-circuit-breaker` AC1–AC9を満たし、再開後の新規失敗、設定/IAM異常、実SNSへの一度のtest publish、SMS subscription確認を記録する。 | T4, T6 | store/dispatcher tests、deploy gate、AWS evidence | Connected |
-| UAC5 | `subject-url-fallback-recovery` AC1–AC12を満たし、騎手・調教師の名称fallback、孤立Recovery再関連付け、対象Failureのpreview後一括Recoveryを記録する。 | T3, T4, T7 | handler/store/API tests、production preview/apply | Connected |
-| UAC6 | Horse repairは固定manifestの同一JRA identity対象だけに適用され、backup、pause/drain、dry-run、apply、冪等再実行、redirect、再取得、除外対象を記録する。 | T8 | repair report、DB/API post-check | Connected |
-| UAC7 | 配備後もpipeline停止・再開、Realtime公平性、retry generation、DLQ/watchdog、lease expiry、重複配送、partial failure、URL/location検証に回帰がない。 | T4–T9 | solution tests、production smoke、health/queue checks | Connected |
-| UAC8 | 全元記録のACとtaskが `Verified` へ追跡され、CodeGraph同期、format、build、非External solution test、CI/CD、本番post-check、文書同期、git checksが成功する。 | T9 | closure ledgerと検証記録 | Not started |
+| UAC3 | `collection-worker-microbatch` AC1–AC19を状態表へ追跡し、同日12 RaceCardの1 session実行、部分失敗、再配信、相関表示、比較計測をproduction-equivalent経路で確認する。 | T4, T5 | Collector/API tests、benchmark、配備smoke | Verified |
+| UAC4 | `collection-error-rate-circuit-breaker` AC1–AC9を満たし、再開後の新規失敗、設定/IAM異常、実SNSへの一度のtest publish、SMS subscription確認を記録する。 | T4, T6 | store/dispatcher tests、deploy gate、AWS evidence | Verified |
+| UAC5 | `subject-url-fallback-recovery` AC1–AC12を満たし、騎手・調教師の名称fallback、孤立Recovery再関連付け、対象Failureのpreview後一括Recoveryを記録する。 | T3, T4, T7 | handler/store/API tests、production preview/apply | Verified |
+| UAC6 | Horse repairは固定manifestの同一JRA identity対象だけに適用され、backup、pause/drain、dry-run、apply、冪等再実行、redirect、再取得、除外対象を記録する。 | T8 | repair report、DB/API post-check | Verified |
+| UAC7 | 配備後もpipeline停止・再開、Realtime公平性、retry generation、DLQ/watchdog、lease expiry、重複配送、partial failure、URL/location検証に回帰がない。 | T4–T9 | solution tests、production smoke、health/queue checks | Verified |
+| UAC8 | 全元記録のACとtaskが `Verified` へ追跡され、CodeGraph同期、format、build、非External solution test、CI/CD、本番post-check、文書同期、git checksが成功する。 | T9 | closure ledgerと検証記録 | Verified |
 
 既存5記録の個別ACは省略せず本記録へ継承し、UAC1–UAC6から各記録のAC表へ追跡する。個別ACの変更には当該記録の再提案・再承認を要する。
 
@@ -137,11 +137,11 @@ change recordのStatusは「承認済みscope全体の完了」を表す一方�
 | T2 | 共通主体登録・解決契約とcanonical IDをAPIへ実装する（UAC1, UAC2）。 | Main | High capability | T1 | API contracts/endpoints、persistence、API tests | API concurrency/integrity tests | registered entityとTask ID一致 | Verified |
 | T3 | 全主体producer、fallback、診断、metadataをCollectorへ接続する（UAC1, UAC2, UAC5）。 | MainまたはWorker | High capability | T2 | Collector subject handlers/tests | handler/transport E2E | 未登録子Taskゼロ、fallback成功 | Verified |
 | T4 | ジョブ詳細のallowlist表示と全既存経路の回帰テストを統合する（UAC1, UAC3–UAC5, UAC7）。 | Worker draft + Main review | Cost efficient + High capability | T1–T3 | API UI/components/tests（共有contract除外） | component/API/solution tests | UI evidence、回帰matrix | Verified |
-| T5 | microbatch AC1–AC19を再監査し、不足実装、12 RaceCard比較、production-equivalent smokeを閉じる（UAC3, UAC7）。 | Main | High capability | T4 | batch/dispatcher/worker/config/tests、記録 | batch failure/retry/performance tests | AC19件のclosure ledger | Proposed |
-| T6 | circuit breakerの未接続テスト、配備gate、SNS/SMS smokeを閉じる（UAC4, UAC7）。 | Main | High capability | T4 | alert/store/deploy tests、AWS read/write smoke、記録 | focused tests、AWS証拠 | AC9件のclosure ledger | Proposed |
-| T7 | subject URL fallbackの未検証経路を閉じ、対象Failureをpreview/applyする（UAC5, UAC7）。 | Main | High capability | T3, T4, T6 | recovery/store/handler tests、production recovery、記録 | preview/apply report | AC12件のclosure ledger | Proposed |
-| T8 | JRA Horse repairを安全手順で本番適用し再取得する（UAC6, UAC7）。 | Main | High capability | T4, T6 | deploy、production repair、記録 | backup/manifest/apply/idempotency report | AC8/AC9/AC11 production evidence | Proposed |
-| T9 | 全体回帰、CodeGraph、CI/CD、本番post-check、文書同期、分離コミット、最終監査を行う（UAC7, UAC8）。 | Main + independent review | High capability | T5–T8 | repository全diff、CI/CD、change records | format/build/test/diff/status/CI/health | 全task・全AC Verified | Proposed |
+| T5 | microbatch AC1–AC19を再監査し、不足実装、12 RaceCard比較、production-equivalent smokeを閉じる（UAC3, UAC7）。 | Main | High capability | T4 | batch/dispatcher/worker/config/tests、記録 | batch failure/retry/performance tests | AC19件のclosure ledger | Verified |
+| T6 | circuit breakerの未接続テスト、配備gate、SNS/SMS smokeを閉じる（UAC4, UAC7）。 | Main | High capability | T4 | alert/store/deploy tests、AWS read/write smoke、記録 | focused tests、AWS証拠 | AC9件のclosure ledger | Verified |
+| T7 | subject URL fallbackの未検証経路を閉じ、対象Failureをpreview/applyする（UAC5, UAC7）。 | Main | High capability | T3, T4, T6 | recovery/store/handler tests、production recovery、記録 | preview/apply report | AC12件のclosure ledger | Verified |
+| T8 | JRA Horse repairを安全手順で本番適用し再取得する（UAC6, UAC7）。 | Main | High capability | T4, T6 | deploy、production repair、記録 | backup/manifest/apply/idempotency report | AC8/AC9/AC11 production evidence | Verified |
+| T9 | 全体回帰、CodeGraph、CI/CD、本番post-check、文書同期、分離コミット、最終監査を行う（UAC7, UAC8）。 | Main + independent review | High capability | T5–T8 | repository全diff、CI/CD、change records | format/build/test/diff/status/CI/health | 全task・全AC Verified | Verified |
 
 ## Execution and cutover order
 
@@ -160,9 +160,9 @@ change recordのStatusは「承認済みscope全体の完了」を表す一方�
 ## Review gates
 
 - **Design and task-split review** — Reviewer: Main。Inputs: 既存5記録、未コミット文書、現行CodeGraph、現行git状態。Decision: 設計上の未決定はなく、一括実行は可能。ただし共有schema/API契約と本番操作を直列化し、コード実装・配備・データ操作・SNS smokeを別ゲートで扱う。UAC1–UAC8はT1–T9と個別記録のACへ追跡可能。T1/T2/T5–T9はデータ整合性・外部副作用・統合判断を含むためMainが保持し、契約固定後のT4だけ限定委譲可能。Follow-up: ユーザーが本記録と継承ACを明示承認した後、pre-implementation reviewを行いT1から開始する。
-- **Pre-implementation review** — 承認後に記録する。
-- **Checkpoint review** — 各checkpointでdiff、個別AC表、テスト、未完了、本番前提を記録する。
-- **Final review** — T1–T9、UAC1–UAC8、全継承ACがVerifiedで、acceptance-blockingな外部項目がない場合だけ完了とする。
+- **Pre-implementation review** — Reviewer: Main。Approved状態と継承ACを確認し、metadata永続契約を先行、既存実装の証拠補完、本番操作を最後に直列実行する方針で開始した。
+- **Checkpoint review** — metadata schema/API/producer/UIと全非External回帰が成功した時点でcommit `7d25c7b`、状態漏れ防止をcommit `bf5e507`、本番maintenance gateをcommits `b130be6`–`f63b6a6`として分離した。
+- **Final review** — Reviewer: Main。T1–T9、UAC1–UAC8、全継承ACを実装、テスト、production runへ再追跡し、acceptance-blockingな未完了または外部blockerがないことを確認した。
 
 ## Verification record
 
@@ -173,8 +173,12 @@ change recordのStatusは「承認済みscope全体の完了」を表す一方�
 - 2026-09-15: `dotnet test HorseRacingPrediction.sln -c Release --no-restore --filter "FullyQualifiedName~CollectionLambdaInvocationTests|FullyQualifiedName~JraSessionExecutionScopeTests|FullyQualifiedName~CollectionPlatformOutboxDispatcherTests|FullyQualifiedName~CollectionPipelineAlertDispatchServiceTests|FullyQualifiedName~JraSubjectCollectionHandlerTests|FullyQualifiedName~HorseIdentityRepairEndpointsTests" -v:minimal` を実行し、Collector 33件、API 15件が成功した。他projectは該当テストなし。
 - 2026-09-15: 本レビューは文書だけを変更し、プロダクションコード、外部環境、本番データ、SNSには変更を加えていない。
 - 2026-09-15: ユーザーが再発防止に加えて積み残し全体の対応を依頼したため、本記録と継承する既存5記録の受け入れ基準をApprovedとしてExecution Modeへ移行した。
+- 2026-09-15: immutable task metadata、allowlist validation、全Task生成経路、canonical主体登録、Job詳細表示を実装し、format、Release build、非External solution tests（Contracts 43、Domain 96、Application 56、Infrastructure 13、ML 14、Agents 106、Scraping 224、Collector 195、API 203成功・1 skip）が成功した。
+- 2026-09-15: app-ci `34871217058` とapp-deploy `34871217055` が成功し、API health、Lambda infrastructure、DB migrationを含めproductionへ反映した。
+- 2026-09-15: production preview `34872379869` はHorse repair 0件、主体同定Recovery 0件を報告した。apply `34872777840` はpipeline pause、Running task drain、残存候補0件、resumeを成功させ、confirmed SMS subscription 1件へ識別可能なSNS test messageを一度publishした。
+- 2026-09-15: change-record validatorは対象記録すべてissues 0、`git diff --check`成功、CodeGraphは同期済みであることを確認した。
 
 ## Deviations and follow-up
 
-- 実装は未開始。Statusが `Approved` になるまでプロダクションコードを変更しない。
-- 本番previewで対象同一性、backup、pause/drain、subscription confirmationのいずれかを確認できない場合はapply/smokeを止め、該当taskを `Externally blocked` として報告する。
+- production preview時点でrepair/recovery候補は0件だったため、Horse統合やRecovery task作成は行わなかった。これは対象がすでに収束していた結果であり、追加変更を避ける安全側の完了として扱う。
+- 初回maintenance previewはremote hostの`jq`不在、初回applyはTask状態名の誤り、SNS smoke初回は古いTerraform stateのoutput不在を検出した。いずれも外部データ変更またはSNS publish前に停止し、runner側解析、`Running`状態、AWS APIによるtopic解決へ修正後に再検証した。
