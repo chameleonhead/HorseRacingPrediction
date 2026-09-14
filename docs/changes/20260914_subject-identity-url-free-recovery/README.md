@@ -1,6 +1,6 @@
 # 主体識別の再収集でパラメーターなしURLを使用しない
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -86,7 +86,7 @@
 ## Review gates
 
 - **Design and task-split review** — Main。現行handler/API/RaceEntryモデルを確認。URL分類、3主体の既存name Discovery、Ownerの論理収集、UIのURL任意化は順序依存があるためMainが直列実装する。AC1〜AC8にproduction pathとテストを割り当てた。
-- **Pre-implementation review** — 承認後に記録する。
+- **Pre-implementation review** — Main。2026-09-14、ユーザーがAC1〜AC8を承認。URL分類→handler/API→UI→回帰検証を直列に実施する。変更対象はsubject identity production pathと対応テスト、change recordに限定し、既存のcollection priority作業に属する未コミットファイルは変更・stageしない。全作業を`Runnable`として開始する。
 - **Checkpoint review** — 実装checkpointで記録する。
 - **Final review** — 全ACをVerifiedへ照合後に記録する。
 
