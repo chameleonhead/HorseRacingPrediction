@@ -40,19 +40,13 @@ jobs:
           fi
 
       - name: Preview or apply production repairs
-        uses: appleboy/ssh-action@v1.0.3
+        shell: bash
         env:
-          APP_DIRECTORY: /opt/horse-racing-prediction/app
           MODE: ${{ inputs.mode }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USERNAME }}
-          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
-          envs: APP_DIRECTORY,MODE,DOMAIN_NAME,LIGHTSAIL_HOST,API_KEY
-          script: |
+        run: |
             set -eu
             domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
             api="https://${domain}/api"
