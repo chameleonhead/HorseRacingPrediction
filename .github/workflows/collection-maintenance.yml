@@ -144,7 +144,13 @@ jobs:
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=$TF_STATE_KEY" \
             -backend-config="region=$TF_STATE_REGION"
-          topic="$(terraform output -raw collector_alert_topic_arn)"
+          topic="$(aws sns list-topics \
+            --query "Topics[?ends_with(TopicArn, ':horse-racing-prediction-collector-alerts')].TopicArn | [0]" \
+            --output text)"
+          if [ -z "$topic" ] || [ "$topic" = None ]; then
+            echo "Collector alert topic was not found." >&2
+            exit 1
+          fi
           confirmed="$(aws sns list-subscriptions-by-topic --topic-arn "$topic" \
             --query "length(Subscriptions[?Protocol=='sms' && SubscriptionArn!='PendingConfirmation'])" \
             --output text)"
