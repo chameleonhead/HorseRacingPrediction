@@ -5,6 +5,7 @@ using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
 using HorseRacingPrediction.Api.Web.Components.Pages;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts.Time;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -294,7 +295,7 @@ public sealed class CollectionAdministrationComponentTests
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "開始日は終了日以前にしてください"));
         Assert.AreEqual("2026-09-13", from.GetAttribute("value"));
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
+        var today = JstTime.Today();
         from.Change(today.AddDays(-31).ToString("yyyy-MM-dd"));
         to.Change(today.ToString("yyyy-MM-dd"));
         await ClickFluentButtonAsync(cut, "対象を確認");
@@ -428,7 +429,7 @@ public sealed class CollectionAdministrationComponentTests
             {
                 ExplicitUrlRequests++;
                 LastExplicitUrlRequest = await request.Content!.ReadFromJsonAsync<CreateExplicitUrlCollectionRequest>(cancellationToken);
-                return await Ok(new ExplicitUrlCollectionResult(true, Resource, Definition, DateOnly.FromDateTime(DateTime.Today),
+                return await Ok(new ExplicitUrlCollectionResult(true, Resource, Definition, JstTime.Today(),
                     new Dictionary<string, string>(), LastExplicitUrlRequest!.Url, null, null,
                     new CollectionRequestReceipt(Guid.NewGuid(), Guid.NewGuid(), true)));
             }

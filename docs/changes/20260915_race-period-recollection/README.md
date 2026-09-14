@@ -136,8 +136,10 @@ T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を
 - 2026-09-15: `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External" -v:minimal` は並列負荷中、既存 `EmptyPlatform_ShowsEmptyStateAndBulkRequiresPreview` がloading表示のまま既定時間を超えて1件失敗。他のprojectは成功。対象単独再実行は1件成功、その後API project全208件は成功（207成功、既存skip 1）し、表示不整合の再現なし。
 - 2026-09-15: 最終UI変更後のcomponent/JobDetail focused tests 24件成功。`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、`codegraph sync .`、`git diff --check` 成功。
 - 2026-09-15: ローカル管理画面で 2026-09-12〜2026-09-13 をpreviewし、2日間、新規2件、既存0件として batch `recollection:admin-ui:c69638b9b3964b94a1704bcaaf920ad3` をHTTP 202で受付。batch詳細で対象期間と探索日2/2を確認。検証用一時API keyは保存・記録せず、ローカルhostは確認後停止した。
-- 実装検証は承認後に記録する。
-
+- 2026-09-15: push `f1c0ac3` の GitHub Actions `app-ci` run `34879575640` と `app-deploy` run `34879575664` は、Ubuntu runner上のUTC日付と本番validationのJST日付がずれ、未来日component testが1件失敗した。raw failed log、runner、workflow commandを確認して原因を特定した。
+- 2026-09-15: component testを `JstTime.Today()` に統一し、変更ファイルにhost-local `DateTime.Now` / `DateTime.Today` が残っていないことを検索で確認。`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release build（警告0、エラー0）、CIと同じ `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --collect:"XPlat Code Coverage" --filter "TestCategory!=External"` が成功（全project成功、API 207成功・既存skip 1）。
+- 2026-09-15: `.codex/skills/blazor-ui-testing/SKILL.md` にOS/タイムゾーン非依存の日付テストgateを追加し、skill-creator validatorをUTF-8モードで実行して `Skill is valid!` を確認。remote workflowの終端結果はpush後に追記する。
 ## Deviations and follow-up
 
 - 設計との差分なし。既存Backfill詳細を期間再取得でも再利用するが、batch prefixに応じてページ見出しと戻り先を「期間指定のレース再取得」「収集管理へ戻る」へ切り替えた。
+- 2026-09-15 CI failure retrospective: GitHub Actions (`ubuntu-latest`) で `RacePeriodRecollection_InvalidRanges_DoNotCallPreviewAndPreserveInputs` が失敗した。テストがhost-local `DateTime.Now`から日付を作り、本番validationはJST `JstTime.Today()`を使っていたため、UTCでは未来日ケースが当日扱いとなったことが直接原因。ローカルでCI commandを実行したがWindows/JST環境だけだったこと、変更テスト内のhost-local clock検索をfinal gateに含めなかったことがworkflow上の原因。テストを共有JST clockへ統一し、`.codex/skills/blazor-ui-testing/SKILL.md` に日付境界のOS/タイムゾーン非依存gateを追加した。修正後のCI同等検証とremote workflow結果を下記Verification recordへ追記する。
