@@ -2403,6 +2403,67 @@ public sealed class CollectionPlatformStore
         return (await GetBackfillBatchAsync(batchId, cancellationToken).ConfigureAwait(false))!;
     }
 
+    public async Task<RacePeriodRecollectionReceipt> CreateOrResumeRacePeriodRecollectionAsync(
+        string batchId, string provider, DateOnly from, DateOnly to, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) throw new ArgumentException("Batch id is required.", nameof(batchId));
+        if (from > to) throw new ArgumentException("Recollection start date must be on or before end date.", nameof(from));
+        provider = provider.Trim().ToUpperInvariant();
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var batch = await db.BackfillBatches.SingleOrDefaultAsync(x => x.BatchId == batchId, cancellationToken);
+            if (batch is null)
+            {
+                db.BackfillBatches.Add(new BackfillBatchEntity
+                {
+                    BatchId = batchId,
+                    Provider = provider,
+                    From = from,
+                    To = to,
+                    CreatedAt = now
+                });
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else if (batch.Provider != provider || batch.From != from || batch.To != to)
+                throw new InvalidOperationException($"Recollection batch '{batchId}' already exists with another range.");
+        }
+        finally { _gate.Release(); }
+
+        var created = 0;
+        var reused = 0;
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var resource = new ResourceKey(ResourceType.Race, provider, $"recollection:{date:yyyyMMdd}");
+            var receipt = await RequestAsync(resource, new("race-discovery"), 1,
+                CollectionReason.PeriodRecollection, now, CollectionLane.Background,
+                (int)CollectionPriority.Background, batchId: batchId, effectiveDate: date,
+                attributes: new Dictionary<string, string>
+                {
+                    ["batchId"] = batchId,
+                    ["backfillDate"] = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                }, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (receipt.CreatedTask) created++; else reused++;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var batch = await db.BackfillBatches.SingleAsync(x => x.BatchId == batchId, cancellationToken);
+            batch.ExpansionCompletedAt ??= now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+
+        var snapshot = (await GetBackfillBatchAsync(batchId, cancellationToken).ConfigureAwait(false))!;
+        return new(snapshot, created, reused);
+    }
+
     public async Task<BackfillBatchSnapshot?> GetBackfillBatchAsync(string batchId,
         CancellationToken cancellationToken = default)
     {

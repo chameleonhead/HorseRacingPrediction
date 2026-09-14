@@ -31,6 +31,7 @@ public enum CollectionReason
     DefinitionChanged,
     ManualRefresh,
     Recovery,
+    PeriodRecollection,
 }
 
 public enum CollectionStateStatus
@@ -322,6 +323,10 @@ public sealed record BackfillBatchSnapshot(string BatchId, DateOnly From, DateOn
     DateTimeOffset? ExpansionCompletedAt);
 public sealed record BackfillHole(ResourceKey Resource, CollectionDefinitionId Definition,
     CollectionTaskStatus Status, string? ErrorCode, string? ErrorMessage);
+public sealed record RacePeriodRecollectionPreview(DateOnly From, DateOnly To, int InclusiveDays,
+    string Provider);
+public sealed record RacePeriodRecollectionReceipt(BackfillBatchSnapshot Batch, int TasksCreated,
+    int TasksReused);
 public sealed record CollectionInitializationSeed(ResourceKey Resource, CollectionDefinitionId Definition,
     int AppliedRevision, DateTimeOffset CollectedAt, DateOnly? EffectiveDate,
     IReadOnlyDictionary<string, string> Attributes, Uri? SourceUrl = null, bool IsComplete = true);

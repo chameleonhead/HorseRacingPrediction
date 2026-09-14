@@ -12,6 +12,77 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionOperationsEndpointTests
 {
     [TestMethod]
+    public async Task RacePeriodRecollection_ValidatesRangeWithoutCreatingTasks()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+
+            using var reversed = await client.PostAsJsonAsync("/api/admin/collection/race-period-recollections",
+                new CreateRacePeriodRecollectionRequest(new(2026, 9, 13), new(2026, 9, 12)));
+            using var tooLong = await client.PostAsJsonAsync("/api/admin/collection/race-period-recollections",
+                new CreateRacePeriodRecollectionRequest(new(2026, 7, 1), new(2026, 8, 1)));
+
+            Assert.AreEqual(HttpStatusCode.BadRequest, reversed.StatusCode);
+            Assert.AreEqual(HttpStatusCode.BadRequest, tooLong.StatusCode);
+            Assert.IsEmpty(await store.GetTasksAsync());
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
+    public async Task RacePeriodRecollection_IsInclusiveIdempotentPerBatch_AndRerunsTerminalDays()
+    {
+        var directory = CreateDirectory();
+        try
+        {
+            var store = await CreateStoreAsync(directory);
+            await using var app = await CreateApplicationAsync(store);
+            using var client = app.GetTestClient();
+            var request = new CreateRacePeriodRecollectionRequest(new(2026, 9, 12), new(2026, 9, 13),
+                BatchId: "recollection:test-1");
+
+            using var firstResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/race-period-recollections", request);
+            var first = await firstResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+            using var duplicateResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/race-period-recollections", request);
+            var duplicate = await duplicateResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+
+            Assert.AreEqual(HttpStatusCode.Accepted, firstResponse.StatusCode);
+            Assert.AreEqual(2, first!.Batch.ExpectedDiscoveryDays);
+            Assert.AreEqual(2, first.TasksCreated);
+            Assert.AreEqual(0, duplicate!.TasksCreated);
+            Assert.AreEqual(2, duplicate.TasksReused);
+            var firstTasks = await store.GetTasksAsync();
+            Assert.HasCount(2, firstTasks);
+            CollectionAssert.AreEquivalent(new[] { "recollection:20260912", "recollection:20260913" },
+                firstTasks.Select(x => x.Resource.Id).ToArray());
+
+            foreach (var task in firstTasks)
+            {
+                var lease = await store.AcquireAsync(task.TaskId, 1,
+                    DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+                await store.CompleteAttemptAsync(task.TaskId, lease!.LeaseToken, DateTimeOffset.UtcNow,
+                    new(CollectionAttemptResult.Succeeded));
+            }
+
+            using var rerunResponse = await client.PostAsJsonAsync(
+                "/api/admin/collection/race-period-recollections",
+                request with { BatchId = "recollection:test-2" });
+            var rerun = await rerunResponse.Content.ReadFromJsonAsync<RacePeriodRecollectionReceipt>();
+
+            Assert.AreEqual(HttpStatusCode.Accepted, rerunResponse.StatusCode);
+            Assert.AreEqual(2, rerun!.TasksCreated);
+            Assert.HasCount(4, await store.GetTasksAsync());
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task CreateRequest_RejectsFileUrl()
     {
         var directory = CreateDirectory();
@@ -385,6 +456,8 @@ public sealed class CollectionOperationsEndpointTests
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
         { StateDirectory = directory }));
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse", ResourceType.Horse,
+            1, "initial", false);
+        await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
             1, "initial", false);
         return store;
     }

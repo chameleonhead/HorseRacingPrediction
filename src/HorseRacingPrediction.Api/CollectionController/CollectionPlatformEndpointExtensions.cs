@@ -289,6 +289,26 @@ public static class CollectionPlatformEndpointExtensions
                 from, to, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", batch);
         });
+        admin.MapPost("/race-period-recollections/preview", (CreateRacePeriodRecollectionRequest request) =>
+        {
+            var validation = ValidateRacePeriodRecollection(request);
+            return validation is null
+                ? Results.Ok(new RacePeriodRecollectionPreview(request.From, request.To,
+                    request.To.DayNumber - request.From.DayNumber + 1, request.Provider.Trim().ToUpperInvariant()))
+                : Results.BadRequest(new { message = validation });
+        });
+        admin.MapPost("/race-period-recollections", async (CreateRacePeriodRecollectionRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var validation = ValidateRacePeriodRecollection(request);
+            if (validation is not null) return Results.BadRequest(new { message = validation });
+            var batchId = string.IsNullOrWhiteSpace(request.BatchId)
+                ? $"recollection:{request.From:yyyyMMdd}-{request.To:yyyyMMdd}:{Guid.NewGuid():N}"
+                : request.BatchId.Trim();
+            var receipt = await store.CreateOrResumeRacePeriodRecollectionAsync(batchId, request.Provider,
+                request.From, request.To, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
+            return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", receipt);
+        });
         admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetBackfillBatchesAsync(token)));
         admin.MapGet("/backfills/{batchId}", async (string batchId, CollectionPlatformStore store,
@@ -425,6 +445,18 @@ public static class CollectionPlatformEndpointExtensions
         }
         return await store.ExcludeSuppressedResourcesAsync(targets, token).ConfigureAwait(false);
     }
+
+    private static string? ValidateRacePeriodRecollection(CreateRacePeriodRecollectionRequest request)
+    {
+        if (!string.Equals(request.Provider?.Trim(), "JRA", StringComparison.OrdinalIgnoreCase))
+            return "Provider must be JRA.";
+        if (request.From > request.To) return "開始日は終了日以前にしてください。";
+        if (request.To > HorseRacingPrediction.Contracts.Time.JstTime.Today())
+            return "未来日のレースは再取得できません。";
+        if (request.To.DayNumber - request.From.DayNumber + 1 > 31)
+            return "期間は31日以内にしてください。";
+        return null;
+    }
 }
 
 public sealed record CreateCollectionRequest(ResourceType ResourceType, string Provider, string ResourceId,
@@ -470,6 +502,8 @@ public sealed record CollectionOperationsDashboard(CollectionProgressSnapshot Pr
 public sealed record RevisionRecollectionRequest(CollectionLane Lane = CollectionLane.Background,
     int Priority = (int)CollectionPriority.Background);
 public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);
+public sealed record CreateRacePeriodRecollectionRequest(DateOnly From, DateOnly To, string Provider = "JRA",
+    string? BatchId = null);
 
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,
