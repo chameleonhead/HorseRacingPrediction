@@ -138,6 +138,24 @@ public sealed class HorseIdentityRepairSettingsComponentTests
     }
 
     [TestMethod]
+    public async Task SubjectRepair_MissingNameCannotBeSelected()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new SubjectRepairHandler(missingNameOnly: true))
+        { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<Settings>();
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "主体名がないため再収集できません"));
+        var candidate = cut.FindComponents<FluentCheckbox>()
+            .First(x => x.Markup.Contains("owner-missing", StringComparison.Ordinal));
+        Assert.IsTrue(candidate.Instance.Disabled);
+    }
+
+    [TestMethod]
     public async Task SubjectRepair_EmptyAndErrorStatesRemainActionable()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -213,7 +231,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             CancellationToken cancellationToken) => throw new HttpRequestException("offline");
     }
 
-    private sealed class SubjectRepairHandler(bool parameterlessOnly = false) : HttpMessageHandler
+    private sealed class SubjectRepairHandler(bool parameterlessOnly = false, bool missingNameOnly = false)
+        : HttpMessageHandler
     {
         public List<ExecuteSubjectIdentificationRepairItem> Executed { get; } = [];
 
@@ -222,7 +241,10 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         {
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("subject-identification", StringComparison.Ordinal) == true)
             {
-                var items = parameterlessOnly
+                var items = missingNameOnly
+                    ? new[] { Subject("owner-missing", ResourceType.Owner, "Blocked", false, null,
+                        "主体名がないため再収集できません。", 4) }
+                    : parameterlessOnly
                     ? new[] { Subject("trainer-1", ResourceType.Trainer, "RetryReady", true, null, null, 3) }
                     : new[]
                     {

@@ -14,6 +14,38 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class HorseIdentityRepairEndpointsTests
 {
     [TestMethod]
+    public async Task SubjectNotIdentified_MissingName_IsBlockedBeforeRecovery()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner,
+            1, "test", false);
+        var resource = new ResourceKey(ResourceType.Owner, "JRA", $"missing-{Guid.NewGuid():N}");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, new("owner-identity"), 1,
+            CollectionReason.Discovery, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
+                PageIdentification: "SubjectIdentification:MissingName"));
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
+        Assert.AreEqual("Blocked", candidate.Evaluation);
+        Assert.IsFalse(candidate.SafeToExecute);
+        StringAssert.Contains(candidate.BlockingReason, "主体名");
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest(
+                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [TestMethod]
     public async Task SubjectNotIdentified_WithSafeHorseCandidate_MergesSuppressesAndRecoversTarget()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

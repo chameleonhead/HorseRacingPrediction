@@ -1,6 +1,6 @@
 # 主体識別の再収集でパラメーターなしURLを使用しない
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -111,8 +111,33 @@ Skill checkpoint: `.codex/skills/document-driven-development/SKILL.md`へentry-p
 
 | ID | Finding | Required evidence | State |
 |---|---|---|---|
-| F1 | Collection Initializerが`jockey-profile`を登録しない。 | initializer registration testで4主体definitionを確認 | Runnable |
-| F2 | Domain profile seed readerがJockeyを判定・seedできない。 | Horse/Jockey/Trainerのprofile seed mapping test | Runnable |
-| F3 | Owner handlerがOwner/aliasの存在を確認せず名前だけで成功する。 | RaceEntry producerからcanonical Owner IDを渡し、handlerが登録済みOwnerを検証するintegration test | Runnable |
-| F4 | previewが名前欠落failureを実行可能と表示し得る。 | preview/applyがresource metadataを検証し、MissingNameをBlockedにするAPI/UI test | Runnable |
-| F5 | 全production entry pointとdefinition/type/metadata/handler対応の再監査がない。 | entry-point matrixとrepository literal inventory、CodeGraph、全回帰 | Dependent |
+| F1 | Collection Initializerが`jockey-profile`を登録しない。 | initializer registration testで4主体definitionを確認 | Verified |
+| F2 | Domain profile seed readerがJockeyを判定・seedできない。 | Horse/Jockey/Trainerのprofile seed mapping test | Verified |
+| F3 | Owner handlerがOwner/aliasの存在を確認せず名前だけで成功する。 | RaceEntry producerからcanonical Owner IDを渡し、handlerが登録済みOwnerを検証するintegration test | Verified |
+| F4 | previewが名前欠落failureを実行可能と表示し得る。 | preview/applyがresource metadataを検証し、MissingNameをBlockedにするAPI/UI test | Verified |
+| F5 | 全production entry pointとdefinition/type/metadata/handler対応の再監査がない。 | entry-point matrixとrepository literal inventory、CodeGraph、全回帰 | Verified |
+
+### Production entry-point matrix
+
+| Entry point | Horse | Jockey | Trainer | Owner | Completion evidence |
+|---|---|---|---|---|---|
+| API startup definition registration | `horse-profile` | `jockey-profile` | `trainer-profile` | `owner-identity` | `Api/Program.cs` literal inventory |
+| Collector handler registration | profile handler | profile handler | profile handler | URL-free identity handler + canonical Owner existence verification | `JraSubjectCollectionDefinitions.All` and DI registration; handler/API-client tests |
+| Collection Initializer bootstrap | registered | registered | registered | registered | CLI execute test asserts all 4 definitions |
+| Existing domain profile seed import | Horse table | Jockey table | Trainer table | Not applicable: Owner has no profile body/read-model seed | seed-reader integration test asserts type/definition/location mapping |
+| RaceEntry discovery producer | name + birth date metadata | name metadata | name metadata | name metadata and deterministic canonical resource ID | RaceCard child-request test |
+| Horse profile recursive discovery | Horse references | Not applicable | Trainer references | Not applicable | profile discovery tests; only references present on that page are produced |
+| `/settings` correction operation | retry/unique safe merge | retry | retry | retry | API and bUnit tests for all resource types and MissingName blocking |
+| Generic manual collection request | supported definition | supported definition | supported definition | intentionally excluded: Owner IDs must originate from RaceEntry/correction workflow | classified operational boundary; prevents arbitrary Owner identity jobs |
+
+OwnerのRaceEntry producerは名前から既存と同じ決定的IDを作る。終端handlerはそのIDが内部Owner APIに実在する場合だけ成功し、404または検証器未登録なら`SubjectNotIdentified/OwnerNotRegistered`とする。統合後の旧IDや未登録IDを名前だけで成功扱いしない。
+
+### Audit verification
+
+- F1/F2: Collection InitializerのCLI executeとdomain seed fixtureにJockeyを追加し、4definition登録およびHorse/Jockey/Trainer seed mappingを確認した。
+- F3: Owner内部API verifierを追加し、200のみ成功、404は`SubjectNotIdentified`、プロフィール本文は保存しないことを確認した。
+- F4: failure attemptの`SubjectIdentification:MissingName`をpreviewでBlocked、executeでConflictにし、API/bUnitで確認した。
+- F5: repository literal inventoryとCodeGraphで上記入口を照合し、未分類のproduction entry pointがないことを確認した。
+- Focused tests: API/UI 13件、Collector/Initializer 23件が成功した。並列build時に一度だけcompiler processのfile lockが発生したため直列で再実行し、成功した。
+- Final verification: formatter成功、Release build警告0・エラー0、全947件中946件成功・既存skip 1・失敗0。EF pending model changesなし。transitiveを含むNuGet脆弱packageなし。`git diff --check`とCodeGraph同期を完了した。
+- Final review: F1〜F5とAC1〜AC8はすべてproduction path・automated test・上記入口分類へ追跡可能で、承認済み範囲に`Runnable`、`In progress`、`Dependent`、`Externally blocked`は残っていない。

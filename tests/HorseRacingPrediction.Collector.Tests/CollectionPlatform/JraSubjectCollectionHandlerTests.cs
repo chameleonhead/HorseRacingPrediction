@@ -13,6 +13,17 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
+    public async Task OwnerIdentityApiClient_DistinguishesRegisteredAndMissingOwners()
+    {
+        using var http = new HttpClient(new OwnerLookupHandler())
+        { BaseAddress = new Uri("https://api.test/") };
+        var client = new OwnerIdentityApiClient(http);
+
+        Assert.IsTrue(await client.ExistsAsync("owner-known", CancellationToken.None));
+        Assert.IsFalse(await client.ExistsAsync("owner-missing", CancellationToken.None));
+    }
+
+    [TestMethod]
     public async Task IdentityWithoutName_RemainsSubjectNotIdentified()
     {
         var handler = new JraSubjectProfileCollectionHandler(
@@ -38,7 +49,7 @@ public sealed class JraSubjectCollectionHandlerTests
             JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
             {
                 ConfigureNavigator = () => new FakeJraNavigator(),
-            }, new RecordingProfileSink());
+            }, new RecordingProfileSink(), ownerIdentities: new StubOwnerIdentityVerifier(true));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
             CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
@@ -67,7 +78,7 @@ public sealed class JraSubjectCollectionHandlerTests
                         new JraSubjectProfileDto("Owner", "テスト馬主", "owner-001", url.AbsoluteUri,
                             new Dictionary<string, string>(), DateTimeOffset.UtcNow), [], null),
                 },
-            }, sink);
+            }, sink, ownerIdentities: new StubOwnerIdentityVerifier(true));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.Owner, "JRA", "owner-a"), new("owner-identity"), 1,
             CollectionReason.Recovery, CollectionLane.Normal, 70, "lease",
@@ -81,6 +92,25 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.IsEmpty(sink.Saves);
         Assert.IsNull(completion.RequestedUrl);
         Assert.IsNull(completion.FinalUrl);
+    }
+
+    [TestMethod]
+    public async Task OwnerIdentity_UnknownCanonicalOwner_RemainsSubjectNotIdentified()
+    {
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory(),
+            new RecordingProfileSink(), ownerIdentities: new StubOwnerIdentityVerifier(false));
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Owner, "JRA", "owner-unknown"), new("owner-identity"), 1,
+            CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
+            new Dictionary<string, string> { ["name"] = "未登録馬主" });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
+        Assert.AreEqual("SubjectIdentification:OwnerNotRegistered", completion.PageIdentification);
     }
 
     [TestMethod]
@@ -216,7 +246,8 @@ public sealed class JraSubjectCollectionHandlerTests
                     },
                 },
             };
-            var handler = new JraSubjectProfileCollectionHandler(descriptor, profileSessions, profileSink);
+            var handler = new JraSubjectProfileCollectionHandler(descriptor, profileSessions, profileSink,
+                ownerIdentities: new StubOwnerIdentityVerifier(true));
             var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
                 request.Resource, request.Definition, 1, CollectionReason.Discovery, CollectionLane.Normal, 30,
                 "lease", DateTimeOffset.UtcNow.AddMinutes(5), date, request.Attributes), CancellationToken.None);
@@ -448,6 +479,21 @@ public sealed class JraSubjectCollectionHandlerTests
             Requests.Add(new(resource, definition, lane, priority, explicitUrl, effectiveDate, attributes));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubOwnerIdentityVerifier(bool exists) : IOwnerIdentityVerifier
+    {
+        public Task<bool> ExistsAsync(string ownerId, CancellationToken cancellationToken) =>
+            Task.FromResult(exists);
+    }
+
+    private sealed class OwnerLookupHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(
+            request.RequestUri!.AbsolutePath.EndsWith("owner-known", StringComparison.Ordinal)
+                ? System.Net.HttpStatusCode.OK
+                : System.Net.HttpStatusCode.NotFound));
     }
 
     private sealed record Request(ResourceKey Resource, CollectionDefinitionId Definition,

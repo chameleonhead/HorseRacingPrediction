@@ -95,6 +95,7 @@ public static class CollectionInitializerCommand
     {
         await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "Initial", false, token);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false, token);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "Initial", false, token);
         await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false, token);
         await store.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner, 1, "Initial", false, token);
     }

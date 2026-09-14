@@ -66,17 +66,29 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
         command.CommandText = """
             SELECT p.SubjectId, p.SourceUrl, p.AcquiredAt,
                    CASE WHEN h.HorseId IS NOT NULL THEN 'Horse'
+                        WHEN j.JockeyId IS NOT NULL THEN 'Jockey'
                         WHEN t.TrainerId IS NOT NULL THEN 'Trainer' END
             FROM JraSubjectProfileReadModel p
             LEFT JOIN Horses h ON h.HorseId = p.SubjectId
+            LEFT JOIN Jockeys j ON j.JockeyId = p.SubjectId
             LEFT JOIN Trainers t ON t.TrainerId = p.SubjectId;
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             if (reader.IsDBNull(3) || !Uri.TryCreate(reader.GetString(1), UriKind.Absolute, out var sourceUrl)) continue;
-            var type = reader.GetString(3) == "Horse" ? ResourceType.Horse : ResourceType.Trainer;
-            var definition = type == ResourceType.Horse ? "horse-profile" : "trainer-profile";
+            var type = reader.GetString(3) switch
+            {
+                "Horse" => ResourceType.Horse,
+                "Jockey" => ResourceType.Jockey,
+                _ => ResourceType.Trainer,
+            };
+            var definition = type switch
+            {
+                ResourceType.Horse => "horse-profile",
+                ResourceType.Jockey => "jockey-profile",
+                _ => "trainer-profile",
+            };
             var acquiredAt = DateTimeOffset.Parse(reader.GetString(2));
             seeds.Add(new(new(type, "JRA", reader.GetString(0)), new(definition), 1,
                 acquiredAt, null, new Dictionary<string, string>(), sourceUrl));

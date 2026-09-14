@@ -33,7 +33,8 @@ foreach (var descriptor in JraSubjectCollectionDefinitions.All)
         new JraSubjectProfileCollectionHandler(descriptor,
             services.GetRequiredService<IJraSessionFactory>(),
             services.GetRequiredService<IJraSubjectProfileSink>(),
-            services.GetRequiredService<ICollectionRequestSink>()));
+            services.GetRequiredService<ICollectionRequestSink>(),
+            ownerIdentities: services.GetRequiredService<IOwnerIdentityVerifier>()));
 builder.Services.AddSingleton<CollectionDefinitionHandlerRegistry>();
 
 builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client) =>
@@ -61,6 +62,15 @@ builder.Services.AddHttpClient<JraSubjectProfileApiClient>((services, client) =>
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IJraSubjectProfileSink>(services =>
     services.GetRequiredService<JraSubjectProfileApiClient>());
+builder.Services.AddHttpClient<OwnerIdentityApiClient>((services, client) =>
+    {
+        var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
+        client.BaseAddress = new Uri(options.BaseUrl);
+        client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
+    })
+    .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
+builder.Services.AddSingleton<IOwnerIdentityVerifier>(services =>
+    services.GetRequiredService<OwnerIdentityApiClient>());
 builder.Services.AddHttpClient<RaceOddsSnapshotApiClient>((services, client) =>
     {
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;

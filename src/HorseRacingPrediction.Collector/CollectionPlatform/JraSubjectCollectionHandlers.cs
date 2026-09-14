@@ -34,6 +34,23 @@ public interface IJraSubjectProfileSink
         CancellationToken cancellationToken);
 }
 
+public interface IOwnerIdentityVerifier
+{
+    Task<bool> ExistsAsync(string ownerId, CancellationToken cancellationToken);
+}
+
+public sealed class OwnerIdentityApiClient(HttpClient client) : IOwnerIdentityVerifier
+{
+    public async Task<bool> ExistsAsync(string ownerId, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            $"api/owners/{Uri.EscapeDataString(ownerId)}?take=1", cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return false;
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+}
+
 public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectProfileSink
 {
     public async Task SaveAsync(string subjectType, string subjectId, JraSubjectProfileDto profile,
@@ -48,7 +65,7 @@ public sealed class JraSubjectProfileApiClient(HttpClient client) : IJraSubjectP
 
 public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinition descriptor,
     IJraSessionFactory sessions, IJraSubjectProfileSink sink, ICollectionRequestSink? requests = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null, IOwnerIdentityVerifier? ownerIdentities = null)
     : ICollectionDefinitionHandler
 {
     private const int MaximumDiscoveryDepth = 3;
@@ -67,8 +84,14 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
             task.Attributes.GetValueOrDefault("sourceIdentity"));
         if (descriptor.ResourceType == ResourceType.Owner)
+        {
+            if (ownerIdentities is null || !await ownerIdentities.ExistsAsync(
+                    task.Resource.Id, cancellationToken).ConfigureAwait(false))
+                return IdentificationFailure(task, "RaceEntryに対応する馬主を確認できません。",
+                    "OwnerNotRegistered", null, null, []);
             return new(CollectionAttemptResult.Succeeded,
                 PageIdentification: $"OwnerIdentity:JRA:{task.Resource.Id}");
+        }
         await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
             .ConfigureAwait(false);
         var session = sessionLease.Session;

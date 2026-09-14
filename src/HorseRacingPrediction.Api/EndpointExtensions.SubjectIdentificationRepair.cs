@@ -52,6 +52,11 @@ public static partial class EndpointExtensions
                     var failure = byId[item.NotificationId];
                     var detail = await collectionStore.GetResourceDetailPagedAsync(
                         failure.Resource, failure.Definition, cancellationToken: token).ConfigureAwait(false);
+                    if (HasMissingNameFailure(detail, failure.TaskId))
+                        return Results.Conflict(new[]
+                        {
+                            $"{failure.Resource.Type}/{failure.Resource.Id}: 主体名がないため再収集できません。",
+                        });
                     var storedUrl = detail?.Attempts
                         .Where(x => x.TaskId == failure.TaskId && x.ErrorCode == SubjectNotIdentifiedErrorCode)
                         .OrderByDescending(x => x.StartedAt)
@@ -151,6 +156,7 @@ public static partial class EndpointExtensions
                 .OrderByDescending(x => x.StartedAt)
                 .SelectMany(x => new[] { x.FinalUrl, x.RequestedUrl })
                 .FirstOrDefault(IsValidCorrectionUrl);
+            var missingName = HasMissingNameFailure(detail, failure.TaskId);
             var merges = failure.Resource.Type == ResourceType.Horse
                 ? horsePreview.Candidates.Where(x => x.SourceHorseId == failure.Resource.Id).ToArray()
                 : [];
@@ -158,7 +164,8 @@ public static partial class EndpointExtensions
             var redirectedTarget = failure.Resource.Type == ResourceType.Horse
                 ? horseRedirects.GetValueOrDefault(failure.Resource.Id)
                 : null;
-            var blocked = merges.Length > 1 ? "同じ統合元に複数の統合先候補があります。"
+            var blocked = missingName ? "主体名がないため再収集できません。"
+                : merges.Length > 1 ? "同じ統合元に複数の統合先候補があります。"
                 : merge is { SafeToApply: false } ? merge.BlockingReason
                 : null;
             var ready = blocked is null;
@@ -176,6 +183,12 @@ public static partial class EndpointExtensions
             or ResourceType.Trainer or ResourceType.Owner;
 
     internal static bool IsValidCorrectionUrl(string? value) => TryCreateCorrectionUrl(value, out _);
+
+    private static bool HasMissingNameFailure(CollectionResourceDetail? detail, Guid taskId) =>
+        detail?.Attempts.Any(x => x.TaskId == taskId
+            && x.ErrorCode == SubjectNotIdentifiedErrorCode
+            && string.Equals(x.PageIdentification, "SubjectIdentification:MissingName",
+                StringComparison.Ordinal)) == true;
 
     private static async Task ApplyHorseMergeAsync(EventStoreDbContext db,
         HorseIdentityRepairCandidateResponse candidate, CancellationToken token)

@@ -31,23 +31,25 @@ public sealed class CollectionPlatformInitializationTests
         await CreateDomainFixtureAsync(domainPath);
         var seeds = await new DomainCollectionSeedReader(domainPath).ReadAsync(
             new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero));
-        Assert.HasCount(2, seeds); // unified race detail + cited horse; legacy_jobs is deliberately ignored
+        Assert.HasCount(3, seeds); // unified race detail + cited horse/jockey; legacy_jobs is deliberately ignored
         var store = await CreateStoreAsync();
 
         var preview = await store.InitializeFromDomainDataAsync(seeds, dryRun: true);
-        Assert.AreEqual(2, preview.ResourcesAdded);
-        Assert.AreEqual(2, preview.StatesAdded);
-        Assert.AreEqual(1, preview.LocationsAdded);
+        Assert.AreEqual(3, preview.ResourcesAdded);
+        Assert.AreEqual(3, preview.StatesAdded);
+        Assert.AreEqual(2, preview.LocationsAdded);
         Assert.IsNull(await store.GetStateAsync(new(ResourceType.RaceCard, "JRA", "race-1"), new("race-card")));
 
         var applied = await store.InitializeFromDomainDataAsync(seeds, dryRun: false);
-        Assert.AreEqual(2, applied.ResourcesAdded);
-        Assert.AreEqual(2, applied.StatesAdded);
-        Assert.AreEqual(1, applied.LocationsAdded);
+        Assert.AreEqual(3, applied.ResourcesAdded);
+        Assert.AreEqual(3, applied.StatesAdded);
+        Assert.AreEqual(2, applied.LocationsAdded);
         Assert.AreEqual(CollectionStateStatus.Current,
             (await store.GetStateAsync(new(ResourceType.Race, "JRA", "20240106:Tokyo:1"), new("race-detail")))!.Status);
         Assert.HasCount(1, await store.ResolveLocationsAsync(new(ResourceType.Horse, "JRA", "horse-1"),
             new("horse-profile")));
+        Assert.HasCount(1, await store.ResolveLocationsAsync(new(ResourceType.Jockey, "JRA", "jockey-1"),
+            new("jockey-profile")));
 
         var repeated = await store.InitializeFromDomainDataAsync(seeds, dryRun: false);
         Assert.AreEqual(0, repeated.ResourcesAdded);
@@ -69,6 +71,22 @@ public sealed class CollectionPlatformInitializationTests
         Assert.AreEqual(0, exitCode);
         Assert.IsFalse(Directory.Exists(target));
         Assert.IsFalse(File.Exists(Path.Combine(target, "collection-platform.db")));
+    }
+
+    [TestMethod]
+    public async Task CliExecute_RegistersAllSubjectDefinitions()
+    {
+        var domainPath = Path.Combine(_directory, "domain.db");
+        var target = Path.Combine(_directory, "state");
+        await CreateDomainFixtureAsync(domainPath);
+
+        Assert.AreEqual(0, await CollectionInitializerCommand.RunAsync(
+            ["--domain-db", domainPath, "--state-dir", target, "--execute"],
+            new StringWriter(), new StringWriter()));
+
+        var databasePath = Path.Combine(target, "collection-platform.db");
+        Assert.AreEqual(4, await ReadScalarAsync(databasePath,
+            "SELECT COUNT(*) FROM collection_definitions WHERE DefinitionId IN ('horse-profile','jockey-profile','trainer-profile','owner-identity');"));
     }
 
     [TestMethod]
@@ -118,6 +136,7 @@ public sealed class CollectionPlatformInitializationTests
         }));
         await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "initial", false);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "initial", false);
+        await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "initial", false);
         await store.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "initial", false);
         return store;
     }
@@ -131,12 +150,15 @@ public sealed class CollectionPlatformInitializationTests
             CREATE TABLE RaceSummaries (RaceId TEXT, RaceDate TEXT, RacecourseCode TEXT, RaceNumber INTEGER,
                 EntryCount INTEGER, ResultDeclaredAt TEXT);
             CREATE TABLE Horses (HorseId TEXT);
+            CREATE TABLE Jockeys (JockeyId TEXT);
             CREATE TABLE Trainers (TrainerId TEXT);
             CREATE TABLE JraSubjectProfileReadModel (SubjectId TEXT, SourceUrl TEXT, AcquiredAt TEXT);
             CREATE TABLE legacy_jobs (JobId TEXT, Url TEXT);
             INSERT INTO RaceSummaries VALUES ('race-1','2024-01-06','東京',1,16,'2024-01-06T07:00:00+00:00');
             INSERT INTO Horses VALUES ('horse-1');
+            INSERT INTO Jockeys VALUES ('jockey-1');
             INSERT INTO JraSubjectProfileReadModel VALUES ('horse-1','https://example.test/horse/1','2024-01-06T01:00:00+00:00');
+            INSERT INTO JraSubjectProfileReadModel VALUES ('jockey-1','https://example.test/jockey/1','2024-01-06T01:30:00+00:00');
             INSERT INTO legacy_jobs VALUES ('old-job','https://should-not-be-imported.test/');
             """;
         await command.ExecuteNonQueryAsync();
