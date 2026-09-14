@@ -45,6 +45,7 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.RaceOdds));
         Assert.IsTrue(sink.Requests.All(x => x.Resource.Id == "20260912:Tokyo:11"));
         Assert.AreEqual("15:30", sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).Attributes["startTime"]);
+        Assert.IsTrue(sink.Requests.All(x => x.Reason == CollectionReason.Discovery));
     }
 
     [TestMethod]
@@ -154,6 +155,47 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
 
         CollectionAssert.AreEqual(new[] { date }, visited);
         Assert.IsTrue(sink.Requests.All(x => x.Attributes.GetValueOrDefault("batchId") == "jra:2020-01"));
+        Assert.IsTrue(sink.Requests.All(x => x.Reason == CollectionReason.Backfill));
+    }
+
+    [TestMethod]
+    public async Task PeriodRecollection_VisitsOnlyItsEffectiveDateAndPropagatesBatchMetadata()
+    {
+        var date = new DateOnly(2020, 1, 5);
+        var visited = new List<DateOnly>();
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceResultListFactory = (target, course) => new JraRaceResultPage(
+                    "https://example.test/result/1", new(target, course, 1), "race", []),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = target =>
+            {
+                visited.Add(target);
+                return target == date ? [RaceCourse.Tokyo] : [];
+            },
+        };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "period-recollection:20200105"), new("race-discovery"), 1,
+            CollectionReason.PeriodRecollection, CollectionLane.Background, 10, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["batchId"] = "period:2020-01-05" });
+
+        await handler.CollectAsync(task, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { date }, visited);
+        Assert.HasCount(1, sink.Requests);
+        Assert.AreEqual(ResourceType.Race, sink.Requests[0].Resource.Type);
+        Assert.AreEqual(new CollectionDefinitionId("race-detail"), sink.Requests[0].Definition);
+        Assert.AreEqual(CollectionReason.PeriodRecollection, sink.Requests[0].Reason);
+        Assert.AreEqual(date, sink.Requests[0].EffectiveDate);
+        Assert.AreEqual("period:2020-01-05", sink.Requests[0].Attributes["batchId"]);
     }
 
     [TestMethod]
@@ -330,14 +372,14 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
 
     private sealed class RecordingSink : ICollectionRequestSink
     {
-        public List<(ResourceKey Resource, CollectionDefinitionId Definition,
-            IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
+        public List<(ResourceKey Resource, CollectionDefinitionId Definition, CollectionReason Reason,
+            DateOnly EffectiveDate, IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
         { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add((resource, definition, attributes, explicitUrl));
+            Requests.Add((resource, definition, reason, effectiveDate, attributes, explicitUrl));
             return Task.CompletedTask;
         }
     }

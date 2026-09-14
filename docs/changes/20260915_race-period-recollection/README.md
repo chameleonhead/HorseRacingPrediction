@@ -88,14 +88,14 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | `/jobs` の収集依頼から、JSTの開始日・終了日を使って期間再取得を確認・送信できる | T2, T3 | component test + browser scenario | Not started |
-| AC2 | 2026-09-12〜2026-09-13 を指定すると、両端を含む2日としてpreviewされる | T2, T3 | deterministic date test | Not started |
-| AC3 | 未入力、逆転、未来日、31日超過は入力付近に理由を表示し、APIに依頼を作らない | T1, T3 | endpoint/component validation tests | Not started |
-| AC4 | 各対象日に1件の `race-discovery` request/task が現在基盤へ永続化・dispatchされ、DB未登録レースを含む当日の公式レースが `race-detail` へ展開される | T1, T2, T4 | Store/API/E2E transport tests | Not started |
-| AC5 | 既に成功済みの日も新しい期間依頼で再取得され、同じ送信の再試行とactive taskは重複実行されない | T1, T2, T4 | terminal rerun/idempotency/concurrency tests | Not started |
-| AC6 | 期間と日別の待機・成功・失敗・開催なしを追跡でき、失敗箇所を再依頼できる | T2, T3, T4 | API projection/component tests | Not started |
-| AC7 | 月次Backfill、通常の単一Resource再取得、pause/retry/lease/outboxに回帰がない | T2, T4 | existing regression suite | Not started |
-| AC8 | desktop/狭幅で主要操作と日付・エラーが失われず、ラベル、keyboard focus、busy、status/alertが利用できる | T3, T4 | browser responsive/accessibility check | Not started |
+| AC1 | `/jobs` の収集依頼から、JSTの開始日・終了日を使って期間再取得を確認・送信できる | T2, T3 | component test + browser scenario | Verified |
+| AC2 | 2026-09-12〜2026-09-13 を指定すると、両端を含む2日としてpreviewされる | T2, T3 | deterministic date test | Verified |
+| AC3 | 未入力、逆転、未来日、31日超過は入力付近に理由を表示し、APIに依頼を作らない | T1, T3 | endpoint/component validation tests | Verified |
+| AC4 | 各対象日に1件の `race-discovery` request/task が現在基盤へ永続化・dispatchされ、DB未登録レースを含む当日の公式レースが `race-detail` へ展開される | T1, T2, T4 | Store/API/E2E transport tests | Connected |
+| AC5 | 既に成功済みの日も新しい期間依頼で再取得され、同じ送信の再試行とactive taskは重複実行されない | T1, T2, T4 | terminal rerun/idempotency/concurrency tests | Verified |
+| AC6 | 期間と日別の待機・成功・失敗・開催なしを追跡でき、失敗箇所を再依頼できる | T2, T3, T4 | API projection/component tests | Connected |
+| AC7 | 月次Backfill、通常の単一Resource再取得、pause/retry/lease/outboxに回帰がない | T2, T4 | existing regression suite | Connected |
+| AC8 | desktop/狭幅で主要操作と日付・エラーが失われず、ラベル、keyboard focus、busy、status/alertが利用できる | T3, T4 | browser responsive/accessibility check | Verified |
 | AC9 | 実装・検証後、ローカル開発環境に 2026-09-12〜2026-09-13 の期間再取得依頼が1 batchとして登録され、受付結果を確認できる | T5 | local API/UI receipt and batch detail | Not started |
 
 ## Delivery plan
@@ -111,9 +111,9 @@
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | API契約、範囲validation、Store batch展開と冪等性を実装する (AC3, AC4, AC5) | Main | Lead tier | - | CollectionPlatform API/Store models and focused tests | Store/API tests | request/task/batch assertions | Verified |
-| T2 | reason、dispatcher、collector discovery/detail伝播と回帰を実装する (AC1, AC4, AC5, AC6, AC7) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Collector/dispatcher and focused tests | transport/E2E tests | persisted envelope and downstream requests | Runnable |
-| T3 | `/jobs` の開始日・終了日フォーム、preview、受付表示を実装する (AC1, AC2, AC3, AC6, AC8) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Blazor page/client/component tests | bUnit + browser | observable workflow evidence | Runnable |
-| T4 | 全diff、設計適合、回帰、CodeGraph、format/build/testを検証する (AC4-AC8) | Main | Lead tier | T1, T2, T3 | change record/docs; production read-only review | CI-equivalent gates | commands/results and AC matrix | Dependent |
+| T2 | reason、dispatcher、collector discovery/detail伝播と回帰を実装する (AC1, AC4, AC5, AC6, AC7) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Collector/dispatcher and focused tests | transport/E2E tests | persisted envelope and downstream requests | Verified |
+| T3 | `/jobs` の開始日・終了日フォーム、preview、受付表示を実装する (AC1, AC2, AC3, AC6, AC8) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Blazor page/client/component tests | bUnit + browser | observable workflow evidence | Verified |
+| T4 | 全diff、設計適合、回帰、CodeGraph、format/build/testを検証する (AC4-AC8) | Main | Lead tier | T1, T2, T3 | change record/docs; production read-only review | CI-equivalent gates | commands/results and AC matrix | Runnable |
 | T5 | ローカル環境へ先週末の依頼を登録し受付を確認する (AC9) | Main | Lead tier | T4 | local application state only | batch receipt/detail | batch ID and accepted dates (credentials not recorded) | Dependent |
 
 T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を共有しない。formatter、solution-wide generated output、change record、正本文書は Main が所有する。
@@ -131,6 +131,7 @@ T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を
 - 2026-09-15: read-only delegated discovery 2件をMainがソースと照合。現行Backfillが既存stateを省略するため再取得要件を満たさないこと、旧単日ジョブがcutover済みであることを確認。
 - 2026-09-15: ユーザーが開始日・終了日のみとする修正を指定し、AC1/AC2、mock、task planへ反映したうえで明示承認。Statusを `Approved` とし、Pre-implementation reviewを完了。
 - 2026-09-15: T1 contract freeze。期間preview/submit API、1〜31日の過去・当日validation、batch単位の冪等性、terminal後の別batch再実行を実装。`dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore --filter "FullyQualifiedName~RacePeriodRecollection" -v:minimal` 成功（2件）。T2/T3を `Runnable` とした。
+- 2026-09-15 Checkpoint review: MainがT2/T3の全diffを承認設計と照合。T2は `PeriodRecollection` を対象日だけ探索し、batch/date/reasonを `race-detail` へ伝播。Collector focused tests 12件成功。T3は開始日・終了日のみ、preview gate、field error、busy、受付結果、同一送信batch ID、進捗linkを実装。API component/JobDetail focused tests 26件成功。実ブラウザーでdesktopの導線、逆転error時の入力保持、2026-09-12〜13の2日previewを確認し、320px幅で `scrollWidth=320`、主要情報・操作の保持を確認。worker成果は修正1件（同一送信batch ID固定とfield error近接表示）後に採用。delegated usage/costは取得不能、再作業1回。
 - 実装検証は承認後に記録する。
 
 ## Deviations and follow-up

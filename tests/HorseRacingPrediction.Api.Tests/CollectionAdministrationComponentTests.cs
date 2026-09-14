@@ -236,6 +236,79 @@ public sealed class CollectionAdministrationComponentTests
     }
 
     [TestMethod]
+    public async Task RacePeriodRecollection_PreviewsInclusiveDays_AndShowsAcceptedBatchLink()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集状況"));
+
+        await ClickFluentButtonAsync(cut, "収集を依頼");
+        await ClickButtonAsync(cut, "期間を指定してレースを再取得");
+        cut.Find("input[aria-label='開始日']").Change("2026-09-12");
+        cut.Find("input[aria-label='終了日']").Change("2026-09-13");
+        Assert.IsTrue(cut.FindComponents<FluentButton>()
+            .First(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled);
+
+        await ClickFluentButtonAsync(cut, "対象を確認");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "2 日間"));
+        Assert.AreEqual(1, handler.RacePeriodPreviews);
+        Assert.IsFalse(cut.FindComponents<FluentButton>()
+            .First(x => x.Markup.Contains("再取得を依頼</")).Instance.Disabled);
+        await ClickFluentButtonAsync(cut, "再取得を依頼");
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "再取得を受け付けました"));
+        StringAssert.Contains(cut.Markup, "新規 2 件、既存 0 件");
+        var link = cut.FindAll("a").Single(x => x.TextContent.Contains("進捗を確認"));
+        StringAssert.Contains(link.GetAttribute("href"), "/jobs/backfills/recollection%3Acomponent-test");
+        Assert.AreEqual(1, handler.RacePeriodRequests);
+        Assert.AreEqual(new DateOnly(2026, 9, 12), handler.LastRacePeriodRequest?.From);
+        Assert.AreEqual(new DateOnly(2026, 9, 13), handler.LastRacePeriodRequest?.To);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(handler.LastRacePeriodRequest?.BatchId));
+    }
+
+    [TestMethod]
+    public async Task RacePeriodRecollection_InvalidRanges_DoNotCallPreviewAndPreserveInputs()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new ResourceHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Jobs>();
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "収集状況"));
+        await ClickFluentButtonAsync(cut, "収集を依頼");
+        await ClickButtonAsync(cut, "期間を指定してレースを再取得");
+        var from = cut.Find("input[aria-label='開始日']");
+        var to = cut.Find("input[aria-label='終了日']");
+
+        from.Change("2026-09-13");
+        to.Change("2026-09-12");
+        await ClickFluentButtonAsync(cut, "対象を確認");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "開始日は終了日以前にしてください"));
+        Assert.AreEqual("2026-09-13", from.GetAttribute("value"));
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        from.Change(today.AddDays(-31).ToString("yyyy-MM-dd"));
+        to.Change(today.ToString("yyyy-MM-dd"));
+        await ClickFluentButtonAsync(cut, "対象を確認");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "期間は31日以内にしてください"));
+
+        from.Change(today.ToString("yyyy-MM-dd"));
+        to.Change(today.AddDays(1).ToString("yyyy-MM-dd"));
+        await ClickFluentButtonAsync(cut, "対象を確認");
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "未来日のレースは再取得できません"));
+        Assert.AreEqual(0, handler.RacePeriodPreviews);
+        Assert.AreEqual(0, handler.RacePeriodRequests);
+    }
+
+    [TestMethod]
     public async Task ExplicitUrlAction_RequiresOnlyUrlAndUsesIdentificationEndpoint()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -311,11 +384,14 @@ public sealed class CollectionAdministrationComponentTests
         public int ManualRequests { get; private set; }
         public int Previews { get; private set; }
         public int ExplicitUrlRequests { get; private set; }
+        public int RacePeriodPreviews { get; private set; }
+        public int RacePeriodRequests { get; private set; }
         public int TaskSearchRequests { get; private set; }
         public int TaskViewCountRequests { get; private set; }
         public int LatestOnlyRequests { get; private set; }
         public CreateCollectionRequest? LastManualRequest { get; private set; }
         public CreateExplicitUrlCollectionRequest? LastExplicitUrlRequest { get; private set; }
+        public CreateRacePeriodRecollectionRequest? LastRacePeriodRequest { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -331,6 +407,22 @@ public sealed class CollectionAdministrationComponentTests
             {
                 Previews++;
                 return await Ok(new CollectionBulkPreview(Definition, 1, 1, [Resource]));
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/race-period-recollections/preview"))
+            {
+                RacePeriodPreviews++;
+                LastRacePeriodRequest = await request.Content!.ReadFromJsonAsync<CreateRacePeriodRecollectionRequest>(cancellationToken);
+                return await Ok(new RacePeriodRecollectionPreview(LastRacePeriodRequest!.From,
+                    LastRacePeriodRequest.To, LastRacePeriodRequest.To.DayNumber - LastRacePeriodRequest.From.DayNumber + 1,
+                    "JRA"));
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/race-period-recollections"))
+            {
+                RacePeriodRequests++;
+                LastRacePeriodRequest = await request.Content!.ReadFromJsonAsync<CreateRacePeriodRecollectionRequest>(cancellationToken);
+                var batch = new BackfillBatchSnapshot("recollection:component-test", LastRacePeriodRequest!.From,
+                    LastRacePeriodRequest.To, 2, 2, 2, 0, 0, 0, [], DateTimeOffset.UtcNow, null);
+                return await Ok(new RacePeriodRecollectionReceipt(batch, 2, 0));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/requests/by-url"))
             {

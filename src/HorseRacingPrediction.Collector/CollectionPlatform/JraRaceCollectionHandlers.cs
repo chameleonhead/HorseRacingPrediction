@@ -42,8 +42,10 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             .ConfigureAwait(false);
         var session = sessionLease.Session;
         var schedule = schedules(session);
-        var firstOffset = task.Reason == CollectionReason.Backfill ? 0 : -7;
-        var lastOffset = task.Reason == CollectionReason.Backfill ? 0 : 7;
+        var isSingleDayDiscovery = task.Reason is CollectionReason.Backfill
+            or CollectionReason.PeriodRecollection;
+        var firstOffset = isSingleDayDiscovery ? 0 : -7;
+        var lastOffset = isSingleDayDiscovery ? 0 : 7;
         DateOnly? earliestUnpublishedDate = null;
         string? unpublishedMessage = null;
         for (var offset = firstOffset; offset <= lastOffset; offset++)
@@ -131,7 +133,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
                     }
                     await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"),
-                        task.Reason == CollectionReason.Backfill ? CollectionReason.Backfill : CollectionReason.Discovery,
+                        task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
+                            ? task.Reason
+                            : CollectionReason.Discovery,
                         historical ? CollectionLane.Background : CollectionLane.Realtime,
                         historical ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
                 }

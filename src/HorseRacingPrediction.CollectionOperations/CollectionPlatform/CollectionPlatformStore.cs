@@ -229,7 +229,8 @@ public sealed class CollectionPlatformStore
             }
             if (active is not null)
             {
-                if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh)
+                if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
+                    or CollectionReason.PeriodRecollection)
                     await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
                         active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -264,7 +265,8 @@ public sealed class CollectionPlatformStore
                 AvailableAt = requestedAt,
                 CreatedAt = requestedAt,
             });
-            if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh)
+            if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
+                or CollectionReason.PeriodRecollection)
                 await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
                     task.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
             var state = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk

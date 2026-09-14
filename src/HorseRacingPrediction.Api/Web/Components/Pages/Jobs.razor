@@ -131,6 +131,7 @@ else
                     <button type="button" class="collection-kind" @onclick="() => ChooseCreate(kind)"><strong>@kind.Label</strong><span>@kind.Description</span></button>
                 }
                 <button type="button" class="collection-kind collection-kind-secondary" @onclick="ChooseExplicitUrl"><strong>URLから収集</strong><span>JRAページを識別し、対応する収集対象を自動で登録します</span></button>
+                <button type="button" class="collection-kind collection-kind-secondary" @onclick="ChooseRacePeriodRecollection"><strong>期間を指定してレースを再取得</strong><span>開始日と終了日を指定し、対象日数を確認してから依頼します</span></button>
                 <button type="button" class="collection-kind collection-kind-secondary" @onclick="OpenBulkFromCreate"><strong>複数をまとめて再取得</strong><span>対象IDをまとめて指定し、確認後に依頼します</span></button>
             </div>
         }
@@ -143,6 +144,26 @@ else
                 {
                     <FluentTextField Label="JRAページのURL" Placeholder="https://www.jra.go.jp/JRADB/..." Required="true" @bind-Value="createUrl" />
                 }
+                else if(createType == "RacePeriodRecollection")
+                {
+                    <div class="date-fields">
+                        <label>開始日 <span aria-hidden="true">*</span><input type="date" aria-label="開始日" required @bind="racePeriodFrom" @bind:after="ResetRacePeriodResult" /></label>
+                        <label>終了日 <span aria-hidden="true">*</span><input type="date" aria-label="終了日" required @bind="racePeriodTo" @bind:after="ResetRacePeriodResult" /></label>
+                    </div>
+                    @if(!string.IsNullOrEmpty(racePeriodFieldError)){<p class="validation-message" role="alert">@racePeriodFieldError</p>}
+                    @if(racePeriodPreview is not null)
+                    {
+                        <FluentMessageBar Intent="@MessageIntent.Info" Title="対象期間を確認しました">@racePeriodPreview.From.ToString("yyyy年M月d日") から @racePeriodPreview.To.ToString("yyyy年M月d日") まで（@racePeriodPreview.InclusiveDays 日間）のレース情報を再取得します。</FluentMessageBar>
+                    }
+                    @if(racePeriodReceipt is not null)
+                    {
+                        <FluentMessageBar Intent="@MessageIntent.Success" Title="再取得を受け付けました">@racePeriodReceipt.Batch.From.ToString("yyyy年M月d日") から @racePeriodReceipt.Batch.To.ToString("yyyy年M月d日") まで（@racePeriodReceipt.Batch.ExpectedDiscoveryDays 日間）を受け付けました。新規 @racePeriodReceipt.TasksCreated 件、既存 @racePeriodReceipt.TasksReused 件です。 <a href="@RacePeriodBatchHref">進捗を確認</a></FluentMessageBar>
+                    }
+                    @if(busy)
+                    {
+                        <div class="collection-refreshing" role="status"><FluentProgressRing /> 依頼内容を処理しています</div>
+                    }
+                }
                 else
                 {
                     <FluentTextField Label="対象ID" Placeholder="@CreatePlaceholder" Required="true" @bind-Value="createResourceId" />
@@ -153,7 +174,7 @@ else
             @if(createErrors.Count>0){<UiState Kind="error" Title="収集を依頼できません" Message="@string.Join(" ", createErrors)" />}
         }
     </FluentDialogBody>
-    <FluentDialogFooter><FluentButton OnClick="@(() => showCreate = false)">キャンセル</FluentButton>@if(!string.IsNullOrEmpty(createType)){<FluentButton Appearance="@Appearance.Accent" OnClick="CreateRequestAsync" Disabled="busy">収集を依頼</FluentButton>}</FluentDialogFooter>
+    <FluentDialogFooter><FluentButton OnClick="@(() => showCreate = false)">@(racePeriodReceipt is null ? "キャンセル" : "閉じる")</FluentButton>@if(createType == "RacePeriodRecollection" && racePeriodReceipt is null){<FluentButton OnClick="PreviewRacePeriodRecollectionAsync" Disabled="busy">対象を確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="CreateRacePeriodRecollectionAsync" Disabled="@(busy || racePeriodPreview is null)">再取得を依頼</FluentButton>}else if(!string.IsNullOrEmpty(createType) && createType != "RacePeriodRecollection"){<FluentButton Appearance="@Appearance.Accent" OnClick="CreateRequestAsync" Disabled="busy">収集を依頼</FluentButton>}</FluentDialogFooter>
 </FluentDialog>
 
 <FluentDialog Hidden="@(!showPause)" HiddenChanged="@(h => showPause = !h)" Modal="true" TrapFocus="true" AriaLabelledby="pause-title" Style="width:min(520px,calc(100vw - 32px));">
@@ -198,7 +219,9 @@ else
     [SupplyParameterFromQuery(Name="error")] public string? ErrorFilterQuery { get; set; }
     private string view = "attention", query = "", filter = "", resourceFilter = "", statusFilter = "", laneFilter = "", providerFilter = "", errorFilter = "", bulkType = "Horse", provider = "JRA", definition = "horse-profile", revision = "1", ids = "", bulkSelection = "Failed", bulkTrainerId = "";
     private string createType = "", createDefinition = "", createProvider = "JRA", createResourceId = "", createUrl = "";
+    private string racePeriodBatchId = "", racePeriodFieldError = "";
     private DateOnly? bulkFrom, bulkTo;
+    private DateOnly? racePeriodFrom, racePeriodTo;
     private DateTime? bulkLastCollectedBefore;
     private int page = 1;
     private bool loading = true, refreshing, busy, showCreate, showBulk, showPause, initialized, autoRefresh = true;
@@ -216,6 +239,8 @@ else
     private CollectionProgressSnapshot? progress;
     private CollectionPipelineState? pipeline;
     private CollectionBulkPreview? preview;
+    private RacePeriodRecollectionPreview? racePeriodPreview;
+    private RacePeriodRecollectionReceipt? racePeriodReceipt;
 
     private IReadOnlyList<CollectionFailureGroup> FailureGroups => failureGroups.OrderByDescending(x => x.Count).ToList();
 
@@ -253,15 +278,21 @@ else
     private static string FailureGroupAriaLabel(CollectionFailureGroup item){var cause=string.IsNullOrWhiteSpace(item.ErrorCode)?"原因未分類":item.ErrorCode;return $"{DefinitionLabel(item.Definition)}、{cause}、対象{item.Count}件の詳細を見る";}
     private string StateDetailHref(CollectionStateSnapshot item){var back=Navigation.ToBaseRelativePath(Navigation.Uri);return $"/jobs/{item.Resource.Type}/{Uri.EscapeDataString(item.Resource.Provider)}/{Uri.EscapeDataString(item.Resource.Id)}/{Uri.EscapeDataString(item.Definition.Value)}?returnUrl={Uri.EscapeDataString("/"+back)}";}
     private void OpenCreate(){ResetCreateType();showCreate=true;}
-    private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];}
+    private void ResetCreateType(){createType="";createDefinition="";createProvider="JRA";createResourceId="";createUrl="";createErrors=[];racePeriodFrom=null;racePeriodTo=null;racePeriodPreview=null;racePeriodReceipt=null;racePeriodBatchId="";racePeriodFieldError="";}
     private void ChooseCreate(CollectionKind kind){createType=kind.Type;createDefinition=kind.Definition;createResourceId="";createUrl="";createErrors=[];}
     private void ChooseExplicitUrl(){createType="ExplicitUrl";createDefinition="explicit-url";createResourceId="";createUrl="";createErrors=[];}
+    private void ChooseRacePeriodRecollection(){createType="RacePeriodRecollection";createDefinition="race-period-recollection";createErrors=[];racePeriodPreview=null;racePeriodReceipt=null;racePeriodBatchId=$"recollection:admin-ui:{Guid.NewGuid():N}";racePeriodFieldError="";}
     private void OpenBulkFromCreate(){showCreate=false;OpenBulk();}
     private async Task CreateRequestAsync(){createErrors=[];if(createType=="ExplicitUrl"){await CreateExplicitUrlRequestAsync();return;}if(!Enum.TryParse<ResourceType>(createType,out var type)||string.IsNullOrWhiteSpace(createResourceId)){createErrors=["対象IDを入力してください。"];return;}if(!string.IsNullOrWhiteSpace(createUrl)&&!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["取得先URLを正しい形式で入力してください。"];return;}var lane=type is ResourceType.Race or ResourceType.RaceOdds?CollectionLane.Realtime:CollectionLane.Normal;var priority=type switch{ResourceType.RaceOdds=>90,ResourceType.Race=>100,_=>50};busy=true;try{var r=await Api.RequestCollectionAsync(new(type,createProvider.Trim(),createResourceId.Trim(),createDefinition,1,CollectionReason.ManualRefresh,lane,priority,string.IsNullOrWhiteSpace(createUrl)?null:createUrl.Trim()));if(r.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=r.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。処理一覧を更新して確認してください。"]; }finally{busy=false;}}
     private async Task CreateExplicitUrlRequestAsync(){if(!Uri.TryCreate(createUrl,UriKind.Absolute,out _)){createErrors=["JRAページのURLを正しい形式で入力してください。"];return;}busy=true;try{var result=await Api.RequestCollectionByUrlAsync(createUrl.Trim());if(result.Success){showCreate=false;view="waiting";page=1;await LoadAsync();}else createErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。入力したURLを保持しています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}
-    private string CreateTitle=>createType=="ExplicitUrl"?"URLから収集":string.IsNullOrEmpty(createDefinition)?"収集を依頼":DefinitionLabel(new(createDefinition));
-    private string CreateGuidance=>createType=="ExplicitUrl"?"JRAの出馬表またはレース結果ページのURLを貼り付けてください。対象のレースと収集内容を自動で識別します。":createType is "Race" or "RaceOdds"?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。";
+    private string CreateTitle=>createType switch{"ExplicitUrl"=>"URLから収集","RacePeriodRecollection"=>"期間を指定してレースを再取得",_=>string.IsNullOrEmpty(createDefinition)?"収集を依頼":DefinitionLabel(new(createDefinition))};
+    private string CreateGuidance=>createType switch{"ExplicitUrl"=>"JRAの出馬表またはレース結果ページのURLを貼り付けてください。対象のレースと収集内容を自動で識別します。","RacePeriodRecollection"=>"開始日と終了日を指定してください。両端の日を含む最大31日間を、日ごとに再取得します。",_=>createType is "Race" or "RaceOdds"?"レースIDを指定します。URLが分かる場合は直接指定できます。":"JRAの対象IDまたは、このシステムで表示されている対象IDを指定します。"};
     private string CreatePlaceholder=>createType is "Race" or "RaceOdds"?"例: 20260912:Nakayama:11":"一覧や詳細に表示されている対象ID";
+    private string? RacePeriodBatchHref=>racePeriodReceipt is null?null:$"/jobs/backfills/{Uri.EscapeDataString(racePeriodReceipt.Batch.BatchId)}";
+    private void ResetRacePeriodResult(){racePeriodPreview=null;racePeriodReceipt=null;createErrors=[];racePeriodFieldError="";}
+    private CreateRacePeriodRecollectionRequest? RacePeriodRequest(){racePeriodFieldError="";if(!racePeriodFrom.HasValue){racePeriodFieldError="開始日を入力してください。";createErrors=[racePeriodFieldError];return null;}if(!racePeriodTo.HasValue){racePeriodFieldError="終了日を入力してください。";createErrors=[racePeriodFieldError];return null;}if(racePeriodFrom>racePeriodTo){racePeriodFieldError="開始日は終了日以前にしてください。";createErrors=[racePeriodFieldError];return null;}if(racePeriodTo>JstTime.Today()){racePeriodFieldError="未来日のレースは再取得できません。";createErrors=[racePeriodFieldError];return null;}if(racePeriodTo.Value.DayNumber-racePeriodFrom.Value.DayNumber+1>31){racePeriodFieldError="期間は31日以内にしてください。";createErrors=[racePeriodFieldError];return null;}return new(racePeriodFrom.Value,racePeriodTo.Value,BatchId:racePeriodBatchId);}
+    private async Task PreviewRacePeriodRecollectionAsync(){racePeriodPreview=null;racePeriodReceipt=null;createErrors=[];var request=RacePeriodRequest();if(request is null)return;busy=true;try{var result=await Api.PreviewRacePeriodRecollectionAsync(request);if(result.Success)racePeriodPreview=result.Value;else createErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["対象を確認できませんでした。入力した期間は保持されています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}
+    private async Task CreateRacePeriodRecollectionAsync(){if(racePeriodPreview is null)return;createErrors=[];var request=RacePeriodRequest();if(request is null)return;busy=true;try{var result=await Api.CreateRacePeriodRecollectionAsync(request);if(result.Success){racePeriodReceipt=result.Value;racePeriodPreview=null;}else createErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){createErrors=["依頼結果を確認できませんでした。入力した期間は保持されています。処理一覧を更新して確認してください。"]; }finally{busy=false;}}
     private void OpenPause(){pauseReason="";pauseErrors=[];showPause=true;}
     private Task PauseAsync()=>PipelineAsync(true);private Task ResumeAsync()=>PipelineAsync(false);private async Task PipelineAsync(bool pause){busy=true;try{var r=pause?await Api.PauseCollectionPipelineAsync(pauseReason.Trim()):await Api.ResumeCollectionPipelineAsync();if(!r.Success){if(pause)pauseErrors=r.Errors;else errors=r.Errors;}else{showPause=false;await LoadAsync();}}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){if(pause)pauseErrors=["管理APIに接続できません。入力した理由は保持されています。"];else errors=["管理APIに接続できません。もう一度お試しください。"];}finally{busy=false;}}
     private void OpenBulk(){showBulk=true;bulkSelection="Failed";bulkType="Horse";BulkTypeChanged();preview=null;bulkErrors=[];}

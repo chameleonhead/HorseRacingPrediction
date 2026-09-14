@@ -208,6 +208,16 @@ public sealed partial class AdminApiClient
         => SendCollectionPlatformAsync<CollectionBulkExecution>(HttpMethod.Post,
             $"{CollectionPlatformPath}/requests/bulk", request, token);
 
+    public Task<AdminApiResult<RacePeriodRecollectionPreview>> PreviewRacePeriodRecollectionAsync(
+        CreateRacePeriodRecollectionRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<RacePeriodRecollectionPreview>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/race-period-recollections/preview", request, token);
+
+    public Task<AdminApiResult<RacePeriodRecollectionReceipt>> CreateRacePeriodRecollectionAsync(
+        CreateRacePeriodRecollectionRequest request, CancellationToken token = default)
+        => SendCollectionPlatformAsync<RacePeriodRecollectionReceipt>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/race-period-recollections", request, token);
+
     private async Task<AdminApiResult<T>> SendCollectionPlatformAsync<T>(HttpMethod method, string path,
         object body, CancellationToken token)
     {
