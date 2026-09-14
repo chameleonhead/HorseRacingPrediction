@@ -383,6 +383,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 (ResourceType.Horse, entry.HorseName, entry.HorseSourceIdentity),
                 (ResourceType.Jockey, entry.JockeyName, null),
                 (ResourceType.Trainer, entry.TrainerName, null),
+                (ResourceType.Owner, entry.OwnerName, null),
             })
             .Where(x => !string.IsNullOrWhiteSpace(x.Name))
             .Select(x => (x.Type, Name: x.Name!.Trim(), x.SourceIdentity))

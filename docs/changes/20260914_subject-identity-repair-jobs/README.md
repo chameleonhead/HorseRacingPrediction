@@ -157,3 +157,4 @@ Collection Platformのactive failure notificationを正本とし、error codeが
 - 本番データへの補正実行は実装・ローカル検証に含めない。
 - 2026-09-14に改訂設計が承認された。production codeはPre-implementation review記録後に変更する。
 - 承認時に想定したJockey/Trainer redirectとOwner alias mergeは、`SubjectNotIdentified` failure単独では同一JRA識別子または同一RaceEntry由来を確認できないため実装しなかった。これら3主体は安全な補正URLによる同一resourceのRecoveryのみとし、将来、収集経路が同一性根拠を永続化した場合に別changeで拡張する。
+- 補正URL必須とparameterless URL拒否の仕様は、後続の [主体識別の再収集でパラメーターなしURLを使用しない](../20260914_subject-identity-url-free-recovery/README.md) により、URLなしRecoveryとparameterless URL無視へ変更した。

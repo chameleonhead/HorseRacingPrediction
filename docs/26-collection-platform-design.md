@@ -38,6 +38,7 @@
 7. Backfill と Realtime は同じ状態正本を使い lane と公平配分で制御する。
 8. state は Projection であり、request/task/attempt/domain write outcome が監査根拠である。
 9. URL 一時障害は location の恒久無効を意味しない。
+10. パラメーターなしのJRA `access*.html` は主体を識別する終端locationではないため、Subject Discovery/Recoveryの取得先として使用・再保存しない。Horse/Jockey/TrainerはResource属性の名前等からNavigator Discoveryを行い、OwnerはRaceEntry由来の名前で内部identityを解決する。
 10. domain write 成功前に applied revision と Current 状態を進めない。
 11. 旧 job store/runner/scheduler/API/UI を新基盤の恒久互換層として残さない。
 12. 旧 job data/key は移行せず cutover 時に削除し、新状態と未完了 work は Domain Data と Discovery から再構築する。

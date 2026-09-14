@@ -140,7 +140,7 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
-    public async Task SubjectNotIdentified_ParameterlessJraUrl_IsBlockedAndRejected()
+    public async Task SubjectNotIdentified_ParameterlessJraUrl_IsIgnoredAndRecoveredWithoutUrl()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -162,14 +162,18 @@ public sealed class HorseIdentityRepairEndpointsTests
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.NotificationId == failure.NotificationId);
-        Assert.AreEqual("Blocked", candidate.Evaluation);
-        Assert.IsFalse(candidate.SafeToExecute);
+        Assert.AreEqual("RetryReady", candidate.Evaluation);
+        Assert.IsTrue(candidate.SafeToExecute);
+        Assert.IsNull(candidate.SuggestedUrl);
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
                 [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId, invalid.AbsoluteUri)]));
-        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
-        StringAssert.Contains(await response.Content.ReadAsStringAsync(), "パラメーター");
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
+        Assert.AreEqual(1, result!.CreatedTaskCount);
+        var detail = await store.GetResourceDetailPagedAsync(resource, new("trainer-profile"));
+        Assert.IsNull(detail!.Requests.OrderByDescending(x => x.RequestedAt).First().ExplicitUrl);
     }
 
     [TestMethod]

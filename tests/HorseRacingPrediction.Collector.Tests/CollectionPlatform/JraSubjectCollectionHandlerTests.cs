@@ -13,7 +13,26 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
-    public async Task OwnerIdentity_WithoutLocation_BecomesActionableIdentificationFailure()
+    public async Task IdentityWithoutName_RemainsSubjectNotIdentified()
+    {
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory(),
+            new RecordingProfileSink());
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Owner, "JRA", "owner-missing"), new("owner-identity"), 1,
+            CollectionReason.Recovery, CollectionLane.Normal, 70, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 14),
+            new Dictionary<string, string>());
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
+        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
+        Assert.AreEqual("SubjectIdentification:MissingName", completion.PageIdentification);
+    }
+
+    [TestMethod]
+    public async Task OwnerIdentity_WithoutLocation_UsesRaceEntryNameWithoutNavigation()
     {
         var handler = new JraSubjectProfileCollectionHandler(
             JraSubjectCollectionDefinitions.For(ResourceType.Owner), new FakeJraSessionFactory
@@ -28,9 +47,10 @@ public sealed class JraSubjectCollectionHandlerTests
 
         var completion = await handler.CollectAsync(task, CancellationToken.None);
 
-        Assert.AreEqual(CollectionAttemptResult.ResourceNotFound, completion.Result);
-        Assert.AreEqual("SubjectNotIdentified", completion.ErrorCode);
-        StringAssert.Contains(completion.ErrorMessage, "URL");
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.AreEqual("OwnerIdentity:JRA:owner-a", completion.PageIdentification);
+        Assert.IsNull(completion.RequestedUrl);
+        Assert.IsNull(completion.FinalUrl);
     }
 
     [TestMethod]
@@ -59,6 +79,44 @@ public sealed class JraSubjectCollectionHandlerTests
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
         Assert.IsEmpty(sink.Saves);
+        Assert.IsNull(completion.RequestedUrl);
+        Assert.IsNull(completion.FinalUrl);
+    }
+
+    [TestMethod]
+    [DataRow("https://www.jra.go.jp/JRADB/accessR.html")]
+    [DataRow("https://www.jra.go.jp/JRADB/accessK.html")]
+    [DataRow("https://www.jra.go.jp/JRADB/accessS.html")]
+    [DataRow("https://www.jra.go.jp/JRADB/accessD.html")]
+    public async Task ParameterlessSelectionLocation_IsIgnoredAndNameDiscoveryIsUsed(string rawUrl)
+    {
+        var directNavigations = 0;
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ =>
+                {
+                    directNavigations++;
+                    throw new AssertFailedException("選択ページURLへ遷移してはいけません。");
+                },
+                SubjectFactory = _ => SubjectPage("A", []),
+            },
+        };
+        var task = SubjectTask("horse-a", "A", new Dictionary<string, string>()) with
+        {
+            Locations = [new(1, new Uri(rawUrl), ResourceLocationSource.Discovered,
+                ResourceLocationStatus.Active, null)],
+        };
+
+        var completion = await new JraSubjectProfileCollectionHandler(
+                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.AreEqual(0, directNavigations);
+        Assert.AreEqual("NonTerminalJraUrlIgnored", completion.LocationOutcomes!.Single().ErrorCode);
+        Assert.AreNotEqual(rawUrl, completion.RequestedUrl?.AbsoluteUri);
     }
 
     [TestMethod]
@@ -107,7 +165,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var cardUrl = new Uri("https://example.test/card/11");
         const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106188/45";
         var card = new JraRaceCardPage(cardUrl.AbsoluteUri, race, "test", new(15, 30),
-            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師",
+            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師", "テスト馬主",
                 HorseSourceIdentity: horseUrl)]);
         var sessions = new FakeJraSessionFactory
         {
@@ -127,7 +185,8 @@ public sealed class JraSubjectCollectionHandlerTests
             CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, raceResult.Result);
-        CollectionAssert.AreEquivalent(new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer },
+        CollectionAssert.AreEquivalent(new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer,
+                ResourceType.Owner },
             requests.Requests.Select(x => x.Resource.Type).ToArray());
         Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
         Assert.IsTrue(requests.Requests.All(x => x.Priority == (int)CollectionPriority.High));
@@ -166,7 +225,8 @@ public sealed class JraSubjectCollectionHandlerTests
 
         CollectionAssert.AreEquivalent(new[] { "Horse", "Jockey", "Trainer" },
             profileSink.Saves.Select(x => x.SubjectType).ToArray());
-        CollectionAssert.AreEquivalent(requests.Requests.Select(x => x.Resource.Id).ToArray(),
+        CollectionAssert.AreEquivalent(requests.Requests.Where(x => x.Resource.Type != ResourceType.Owner)
+                .Select(x => x.Resource.Id).ToArray(),
             profileSink.Saves.Select(x => x.SubjectId).ToArray());
     }
 

@@ -17,7 +17,7 @@
 <section class="entity-section settings-section" aria-labelledby="subject-repair-heading">
     <p class="eyebrow">要対応データ補正</p>
     <h2 id="subject-repair-heading">主体識別情報の補正</h2>
-    <p class="section-description">SubjectNotIdentified になった競走馬・騎手・調教師・馬主を確認し、必要なJRA URLを指定して再収集します。</p>
+    <p class="section-description">SubjectNotIdentified になった競走馬・騎手・調教師・馬主を確認し、保存済みの主体情報から再収集します。</p>
     <div class="subject-summary" role="status">
         <span>要対応 <strong>@FilteredSubjectCandidates.Count(x => SubjectActionable(x))</strong> 件</span>
         <span>要確認 <strong>@FilteredSubjectCandidates.Count(x => !SubjectActionable(x))</strong> 件</span>
@@ -49,7 +49,7 @@
                 <TemplateColumn Title="主体"><span>@SubjectTypeLabel(context.SubjectType)</span><small>@context.SubjectId</small>@if(context.MergeTargetId is not null){<small>統合先: @context.MergeTargetId</small>}</TemplateColumn>
                 <TemplateColumn Title="元の収集ジョブ"><span>@context.DefinitionId</span><small>@context.TaskId</small></TemplateColumn>
                 <TemplateColumn Title="エラー"><span>@(context.ErrorMessage ?? "—")</span><small>@context.Evaluation</small></TemplateColumn>
-                <TemplateColumn Title="補正JRA URL"><FluentTextField aria-label="@($"{context.SubjectId}の補正JRA URL")" Placeholder="https://www.jra.go.jp/JRADB/access..." Value="@GetCorrection(context.NotificationId)" ValueChanged="@(value => SetCorrection(context.NotificationId, value))" /><small>@(context.SuggestedUrl ?? context.BlockingReason ?? "任意")</small></TemplateColumn>
+                <TemplateColumn Title="再収集方法"><span>URLを指定せず主体情報から探索</span><small>@(context.BlockingReason ?? "保存済みの名前等を使用します")</small></TemplateColumn>
             </FluentDataGrid>
         </div>
         <div class="repair-cards" aria-label="主体識別情報の補正候補">
@@ -64,7 +64,7 @@
                         <dt>主体</dt><dd>@SubjectTypeLabel(candidate.SubjectType)<small>@candidate.SubjectId</small>@if(candidate.MergeTargetId is not null){<small>統合先: @candidate.MergeTargetId</small>}</dd>
                         <dt>収集ジョブ</dt><dd>@candidate.DefinitionId<small>@candidate.TaskId</small></dd>
                         <dt>エラー</dt><dd>@(candidate.ErrorMessage ?? "—")</dd>
-                        <dt>補正JRA URL</dt><dd><FluentTextField aria-label="@($"{candidate.SubjectId}の補正JRA URL")" Placeholder="https://www.jra.go.jp/JRADB/access..." Value="@GetCorrection(candidate.NotificationId)" ValueChanged="@(value => SetCorrection(candidate.NotificationId, value))" /></dd>
+                        <dt>再収集方法</dt><dd>URLを指定せず主体情報から探索</dd>
                         <dt>判定</dt><dd>@(SubjectActionable(candidate) ? "実行可能" : candidate.BlockingReason)</dd>
                     </dl>
                 </article>
@@ -222,7 +222,6 @@
     private bool confirming;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> subjectCandidates = [];
     private readonly HashSet<Guid> selectedSubjects = [];
-    private readonly Dictionary<Guid, string?> correctionUrls = [];
     private string subjectFilter = string.Empty;
     private bool subjectLoading = true;
     private bool confirmingSubjects;
@@ -259,9 +258,6 @@
             var subjectPreview = await Api.GetSubjectIdentificationRepairPreviewAsync();
             subjectCandidates = subjectPreview?.Candidates.Where(x => x.NotificationId != Guid.Empty).ToArray() ?? [];
             selectedSubjects.RemoveWhere(id => subjectCandidates.All(x => x.NotificationId != id || !SubjectActionable(x)));
-            foreach (var candidate in subjectCandidates)
-                if (!correctionUrls.ContainsKey(candidate.NotificationId))
-                    correctionUrls[candidate.NotificationId] = candidate.SuggestedUrl;
         }
         catch (Exception)
         {
@@ -272,15 +268,8 @@
         finally { subjectLoading = false; }
     }
 
-    private bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
-        candidate.SafeToExecute || IsValidCorrectionUrl(correctionUrls.GetValueOrDefault(candidate.NotificationId));
-    private string? GetCorrection(Guid id) => correctionUrls.GetValueOrDefault(id);
-    private void SetCorrection(Guid id, string? value)
-    {
-        correctionUrls[id] = value;
-        var candidate = subjectCandidates.FirstOrDefault(x => x.NotificationId == id);
-        if (candidate is not null && !SubjectActionable(candidate)) selectedSubjects.Remove(id);
-    }
+    private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
+        candidate.SafeToExecute;
 
     private bool SubjectSelected(Guid id) => selectedSubjects.Contains(id);
     private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);
@@ -290,23 +279,13 @@
         else selectedSubjects.Remove(candidate.NotificationId);
     }
 
-    private static bool IsValidCorrectionUrl(string? value)
-    {
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
-            && uri.Scheme is "http" or "https"
-            && string.Equals(uri.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(uri.Query.TrimStart('?'))
-            && uri.Query.Contains('=', StringComparison.Ordinal)
-            && uri.AbsolutePath.StartsWith("/JRADB/access", StringComparison.OrdinalIgnoreCase);
-    }
-
     private async Task ExecuteSubjectRepairsAsync()
     {
         if (selectedSubjects.Count == 0 || busy) return;
         busy = true; errors = []; success = null;
         try
         {
-            var items = selectedSubjects.Select(id => new ExecuteSubjectIdentificationRepairItem(id, correctionUrls.GetValueOrDefault(id))).ToArray();
+            var items = selectedSubjects.Select(id => new ExecuteSubjectIdentificationRepairItem(id)).ToArray();
             var result = await Api.ExecuteSubjectIdentificationRepairAsync(items);
             if (!result.Success || result.Value is null)
             {

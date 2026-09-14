@@ -228,7 +228,7 @@ erDiagram
 
 詳細な対象境界、interaction、wireframe、受け入れ基準は [JRA競走馬識別子の不具合修復を管理画面から実行する](changes/20260914_horse-identity-repair-admin-ui/README.md) を参照する。
 
-要対応データ補正の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブとエラーを確認して、検証済みJRA URLによる再収集を実行する。名寄せ候補0件も正常に扱う。現時点で自動名寄せするのは、既存のHorse repairが同一JRA識別子または同一RaceEntry由来の一意な統合先を証明できる競走馬だけである。騎手・調教師・馬主は失敗通知だけを同一性の根拠にせず、URL補正と同一主体の再収集に限定する。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。設計・実装状況は [4主体の要対応データ補正ジョブを管理画面から実行する](changes/20260914_subject-identity-repair-jobs/README.md) を参照する。
+要対応データ補正の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブとエラーを確認して、保存済みの主体情報による再収集を実行する。補正URLの入力は要求しない。パラメーターなしのJRA `access*.html` は主体locationとして使わず、競走馬・騎手・調教師は名前等から公式プロフィールを探索し、馬主はRaceEntry由来の名前で内部identityを解決する。名寄せ候補0件も正常に扱う。自動名寄せするのは、既存のHorse repairが同一JRA識別子または同一RaceEntry由来の一意な統合先を証明できる競走馬だけである。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。詳細は [URLを使わない主体識別Recovery](changes/20260914_subject-identity-url-free-recovery/README.md) を参照する。
 
 ### 5.9 レース一覧 `/races`
 

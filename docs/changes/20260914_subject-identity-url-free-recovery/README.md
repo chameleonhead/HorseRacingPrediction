@@ -1,6 +1,6 @@
 # 主体識別の再収集でパラメーターなしURLを使用しない
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-14
 - Updated: 2026-09-14
@@ -60,20 +60,21 @@
 
 | ID | Observable criterion | Verification | State |
 |---|---|---|---|
-| AC1 | parameterless `accessR/K/S/D` および同種のJRA `access*.html` が既存locationまたは画面入力にあっても、エラーにせず無視してRecoveryできる。 | handler/API integration tests | Proposed |
-| AC2 | Horse/Jockey/Trainerは補正URLなしで、保存済みの名前等からDiscoveryを実行し、取得したプロフィールの主体種別・名前を検証する。 | subject handler tests | Proposed |
-| AC3 | Ownerは補正URLなしでRaceEntry由来の馬主名を解決し、プロフィール本文を取得・保存しない。名前欠落・競合は識別失敗になる。 | owner identity tests | Proposed |
-| AC4 | `/settings` はURL入力を必須にせず、4主体の実行可能なfailureを「URLなしで再収集」できる。 | bUnit/API tests | Proposed |
-| AC5 | URLなしRecoveryではsourceを抑止しない。安全なHorse merge時だけtargetをRecovery後にsourceを抑止する。 | endpoint/Collection Platform tests | Proposed |
-| AC6 | parameterless URLを新しいrequest location、成功source identity、attemptのRequestedUrlとして再利用しない。 | persistence integration tests | Proposed |
-| AC7 | 同名競合、主体名欠落、またはHorseの複数merge targetはBlocked/SubjectNotIdentifiedとなり、自動名寄せされない。 | conflict tests | Proposed |
-| AC8 | 既存のパラメーター付き正規プロフィールURLによる収集と、従来Horse repairのredirect/監査は回帰しない。 | regression tests | Proposed |
+| AC1 | parameterless `accessR/K/S/D` および同種のJRA `access*.html` が既存locationまたは画面入力にあっても、エラーにせず無視してRecoveryできる。 | handler/API integration tests | Verified |
+| AC2 | Horse/Jockey/Trainerは補正URLなしで、保存済みの名前等からDiscoveryを実行し、取得したプロフィールの主体種別・名前を検証する。 | subject handler tests | Verified |
+| AC3 | Ownerは補正URLなしでRaceEntry由来の馬主名を解決し、プロフィール本文を取得・保存しない。名前欠落は識別失敗になる。 | owner identity tests | Verified |
+| AC4 | `/settings` はURL入力を必須にせず、4主体の実行可能なfailureを「URLなしで再収集」できる。 | bUnit/API tests | Verified |
+| AC5 | URLなしRecoveryではsourceを抑止しない。安全なHorse merge時だけtargetをRecovery後にsourceを抑止する。 | endpoint/Collection Platform tests | Verified |
+| AC6 | parameterless URLを新しいrequest location、成功source identity、attemptのRequestedUrlとして再利用しない。 | persistence integration tests | Verified |
+| AC7 | 主体名欠落、Discoveryの同名競合、またはHorseの複数merge targetはBlocked/SubjectNotIdentifiedとなり、自動名寄せされない。 | conflict tests | Verified |
+| AC8 | 既存のパラメーター付き正規プロフィールURLによる収集と、従来Horse repairのredirect/監査は回帰しない。 | regression tests | Verified |
 
 ## Documentation updates
 
-- `docs/changes/20260914_subject-identity-repair-jobs/README.md`: 実装済み機能の後続変更として本recordを参照し、parameterless URLの扱いを「拒否」から「無視」へ置き換える。
-- `docs/26-collection-platform-design.md`: locationの適格性とURLなしsubject Discovery/RecoveryをCollection Platformの正本へ反映する。現在、別作業の未コミット変更があるため、承認後に競合しないhunkとして更新する。
-- `docs/20-admin-ui-design.md`: `/settings` の補正URLを任意入力へ変更する。現在、別作業の未コミット変更があるため、承認後に競合しないhunkとして更新する。
+- `docs/changes/20260914_subject-identity-repair-jobs/README.md`: 本recordを後続変更として参照し、parameterless URL拒否をURLなしRecoveryへ置き換えた。
+- `docs/26-collection-platform-design.md`: locationの適格性とURLなしsubject Discovery/RecoveryをCollection Platformの正本へ反映した。
+- `docs/20-admin-ui-design.md`: `/settings` が補正URLを要求しない現行操作へ更新した。
+- `docs/22-collector-design.md`: 別変更の未コミット差分を保持した。既存の「詳細URLがなければ通常Navigator Discoveryへフォールバックする」という記載が本変更と整合することを確認した。
 
 ## Delivery plan
 
@@ -87,14 +88,17 @@
 
 - **Design and task-split review** — Main。現行handler/API/RaceEntryモデルを確認。URL分類、3主体の既存name Discovery、Ownerの論理収集、UIのURL任意化は順序依存があるためMainが直列実装する。AC1〜AC8にproduction pathとテストを割り当てた。
 - **Pre-implementation review** — Main。2026-09-14、ユーザーがAC1〜AC8を承認。URL分類→handler/API→UI→回帰検証を直列に実施する。変更対象はsubject identity production pathと対応テスト、change recordに限定し、既存のcollection priority作業に属する未コミットファイルは変更・stageしない。全作業を`Runnable`として開始する。
-- **Checkpoint review** — 実装checkpointで記録する。
-- **Final review** — 全ACをVerifiedへ照合後に記録する。
+- **Checkpoint review** — Main。APIは空またはparameterless補正URLを`null`へ正規化し、UIはURL入力を撤去。Subject handlerはparameterless locationを遷移せず記録し、Horse/Jockey/Trainerをname Discoveryへ接続。OwnerはRaceEntry名から作成されたresourceを外部遷移なしで完了する。focused testsでAPI/UI 11件、Collector 17件が成功。最終照合で名前欠落時の例外を発見し、`SubjectNotIdentified/MissingName`へ修正した。
+- **Final review** — Main。AC1〜AC8を実装経路とテストへ照合。URL分類→Recovery requestの`ExplicitUrl=null`→handlerのname Discovery/Owner identity→成功、ならびにHorse merge時だけのtarget Recovery/source suppressionを確認した。別作業の未コミット差分を変更セットへ含めない。
 
 ## Verification record
 
 - 2026-09-14: CodeGraphと実コードで、現行Horse/Jockey/Trainer handlerはlocation失敗後にname Discoveryへ移る一方、Ownerは`SupportsNameDiscovery=false`のためlocationなしで識別失敗になることを確認した。
 - 2026-09-14: 現行repair API/UIはquery parameter付きJRA URLを必須とし、parameterless `access*.html` をBadRequest/Blockedにすることを確認した。
+- 2026-09-14: `accessR/K/S/D` のparameterless locationを遷移しないDataRow test、URLなしRecovery request、Owner URLなし完了・プロフィール非保存、RaceCardから4主体request、Settings URL入力撤去をfocused testsで検証した。
+- 2026-09-14: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功。Release buildは警告0・エラー0。全回帰は941件中940合格・既存skip 1・失敗0。`codegraph sync .`後にSettings→API→Recovery、RaceEntry→4主体request、handler→Discovery/Owner identity、Horse merge suppressionの接続を確認した。
+- 2026-09-14: EF pending model changesなし。transitiveを含むNuGet脆弱packageなし。
 
 ## Deviations and follow-up
 
-- Production codeは未変更。ユーザー承認後に実装する。
+- JRAサイトへの通信自体は廃止していない。Horse/Jockey/Trainerは保存済みの選択ページURLを使わず、Navigatorによる公式プロフィール探索を行う。

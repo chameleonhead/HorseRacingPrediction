@@ -45,7 +45,7 @@ public static partial class EndpointExtensions
                 using var db = provider.CreateContext();
                 var horsePreview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token)
                     .ConfigureAwait(false);
-                var plans = new List<(PendingCollectionFailureNotification Failure, Uri Url, int Revision,
+                var plans = new List<(PendingCollectionFailureNotification Failure, Uri? Url, int Revision,
                     HorseIdentityRepairCandidateResponse? Merge, string? RedirectTarget)>();
                 foreach (var item in request.Items)
                 {
@@ -58,10 +58,10 @@ public static partial class EndpointExtensions
                         .SelectMany(x => new[] { x.FinalUrl, x.RequestedUrl })
                         .FirstOrDefault(IsValidCorrectionUrl);
                     var rawUrl = string.IsNullOrWhiteSpace(item.CorrectionUrl) ? storedUrl : item.CorrectionUrl;
-                    if (!TryCreateCorrectionUrl(rawUrl, out var correctionUrl))
+                    if (!TryNormalizeCorrectionUrl(rawUrl, out var correctionUrl))
                         return Results.BadRequest(new[]
                         {
-                            $"{failure.Resource.Type}/{failure.Resource.Id}: パラメーターを含む有効なJRA URLを指定してください。",
+                            $"{failure.Resource.Type}/{failure.Resource.Id}: JRAの主体プロフィールURLとして解釈できません。",
                         });
                     var state = await collectionStore.GetStateAsync(failure.Resource, failure.Definition, token)
                         .ConfigureAwait(false);
@@ -87,7 +87,7 @@ public static partial class EndpointExtensions
                                     && x.RepairId == HorseIdentityRepairId)
                                 .Select(x => x.TargetHorseId).SingleOrDefaultAsync(token).ConfigureAwait(false);
                     }
-                    plans.Add((failure, correctionUrl!, state.RequiredRevision, merge, redirectTarget));
+                    plans.Add((failure, correctionUrl, state.RequiredRevision, merge, redirectTarget));
                 }
 
                 var receipts = new List<CollectionRequestReceipt>(plans.Count);
@@ -160,7 +160,6 @@ public static partial class EndpointExtensions
                 : null;
             var blocked = merges.Length > 1 ? "同じ統合元に複数の統合先候補があります。"
                 : merge is { SafeToApply: false } ? merge.BlockingReason
-                : suggestedUrl is null ? "有効なJRA URLを確認できません。補正URLを入力してください。"
                 : null;
             var ready = blocked is null;
             result.Add(new(failure.NotificationId, failure.TaskId, failure.Resource.Type,
@@ -213,4 +212,20 @@ public static partial class EndpointExtensions
         url = parsed;
         return true;
     }
+
+    private static bool TryNormalizeCorrectionUrl(string? value, out Uri? url)
+    {
+        url = null;
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        if (IsParameterlessJraAccessUrl(value)) return true;
+        return TryCreateCorrectionUrl(value, out url);
+    }
+
+    internal static bool IsParameterlessJraAccessUrl(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && uri.Scheme is "http" or "https"
+        && string.Equals(uri.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+        && uri.AbsolutePath.StartsWith("/JRADB/access", StringComparison.OrdinalIgnoreCase)
+        && uri.AbsolutePath.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+        && string.IsNullOrWhiteSpace(uri.Query.TrimStart('?'));
 }

@@ -112,37 +112,29 @@ public sealed class HorseIdentityRepairSettingsComponentTests
     }
 
     [TestMethod]
-    public async Task SubjectRepair_BlockedParameterlessUrlRequiresValidCorrectionUrl()
+    public async Task SubjectRepair_ParameterlessUrlIsNotRequestedFromOperator()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
         using var ignored = original;
-        var handler = new SubjectRepairHandler(blockedOnly: true);
+        var handler = new SubjectRepairHandler(parameterlessOnly: true);
         using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
         await using var context = CreateContext(app.Services, http);
 
         var cut = context.Render<Settings>();
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "要確認"));
-        var blocked = cut.FindComponents<FluentCheckbox>()
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "URLを指定せず主体情報から探索"));
+        Assert.IsEmpty(cut.FindComponents<FluentTextField>());
+        var candidate = cut.FindComponents<FluentCheckbox>()
             .First(x => x.Markup.Contains("trainer-1", StringComparison.Ordinal));
-        Assert.IsTrue(blocked.Instance.Disabled);
-
-        var url = cut.FindComponents<FluentTextField>()
-            .First(x => x.Markup.Contains("trainer-1", StringComparison.Ordinal));
-        await cut.InvokeAsync(() => url.Instance.ValueChanged.InvokeAsync("https://www.jra.go.jp/JRADB/accessD.html?CNAME=trainer-identity"));
-        cut.WaitForAssertion(() => Assert.IsFalse(cut.FindComponents<FluentCheckbox>()
-            .First(x => x.Markup.Contains("trainer-1", StringComparison.Ordinal)).Instance.Disabled));
-
-        blocked = cut.FindComponents<FluentCheckbox>()
-            .First(x => x.Markup.Contains("trainer-1", StringComparison.Ordinal));
-        await cut.InvokeAsync(() => blocked.Instance.CheckStateChanged.InvokeAsync(true));
+        Assert.IsFalse(candidate.Instance.Disabled);
+        await cut.InvokeAsync(() => candidate.Instance.CheckStateChanged.InvokeAsync(true));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(x => x.Markup.Contains("選択した補正を確認")).Instance.OnClick.InvokeAsync());
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
             .Single(x => x.Markup.Contains("補正して再収集")).Instance.OnClick.InvokeAsync());
 
         cut.WaitForAssertion(() => Assert.HasCount(1, handler.Executed));
-        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessD.html?CNAME=trainer-identity", handler.Executed.Single().CorrectionUrl);
+        Assert.IsNull(handler.Executed.Single().CorrectionUrl);
     }
 
     [TestMethod]
@@ -221,7 +213,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             CancellationToken cancellationToken) => throw new HttpRequestException("offline");
     }
 
-    private sealed class SubjectRepairHandler(bool blockedOnly = false) : HttpMessageHandler
+    private sealed class SubjectRepairHandler(bool parameterlessOnly = false) : HttpMessageHandler
     {
         public List<ExecuteSubjectIdentificationRepairItem> Executed { get; } = [];
 
@@ -230,8 +222,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         {
             if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath.EndsWith("subject-identification", StringComparison.Ordinal) == true)
             {
-                var items = blockedOnly
-                    ? new[] { Subject("trainer-1", ResourceType.Trainer, "Blocked", false, null, "URLが必要です。", 3) }
+                var items = parameterlessOnly
+                    ? new[] { Subject("trainer-1", ResourceType.Trainer, "RetryReady", true, null, null, 3) }
                     : new[]
                     {
                         Subject("horse-1", ResourceType.Horse, "RetryReady", true, "https://www.jra.go.jp/JRADB/accessU.html?CNAME=horse-identity", null, 1),

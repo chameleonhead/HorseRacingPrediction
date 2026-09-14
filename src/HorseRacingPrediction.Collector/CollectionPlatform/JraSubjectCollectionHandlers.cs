@@ -11,8 +11,7 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
-    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool SupportsNameDiscovery = true,
-    bool PersistProfile = true);
+    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile = true);
 
 public static class JraSubjectCollectionDefinitions
 {
@@ -21,7 +20,7 @@ public static class JraSubjectCollectionDefinitions
         new(ResourceType.Horse, new("horse-profile"), "Horse", "horse"),
         new(ResourceType.Jockey, new("jockey-profile"), "Jockey", "jockey"),
         new(ResourceType.Trainer, new("trainer-profile"), "Trainer", "trainer"),
-        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false, false),
+        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false),
     ];
 
     public static JraSubjectCollectionDefinition For(ResourceType type) =>
@@ -60,11 +59,16 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
     {
-        var name = task.Attributes.GetValueOrDefault("name")
-            ?? throw new InvalidOperationException("Subject name attribute is required.");
+        var name = task.Attributes.GetValueOrDefault("name");
+        if (string.IsNullOrWhiteSpace(name))
+            return IdentificationFailure(task, "主体名がないため識別できません。", "MissingName",
+                null, null, []);
         var identity = new JraSubjectIdentity(descriptor.SubjectType, name,
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
             task.Attributes.GetValueOrDefault("sourceIdentity"));
+        if (descriptor.ResourceType == ResourceType.Owner)
+            return new(CollectionAttemptResult.Succeeded,
+                PageIdentification: $"OwnerIdentity:JRA:{task.Resource.Id}");
         await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
             .ConfigureAwait(false);
         var session = sessionLease.Session;
@@ -72,6 +76,12 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
         {
+            if (IsParameterlessJraAccessUrl(location.Url))
+            {
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(
+                    location, "NonTerminalJraUrlIgnored"));
+                continue;
+            }
             try
             {
                 var candidate = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
@@ -92,10 +102,6 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         if (page is null)
         {
-            if (!descriptor.SupportsNameDiscovery)
-                return IdentificationFailure(task,
-                    "馬主を識別できるJRA URLがありません。補正画面でURLを指定してください。",
-                    "MissingLocation", null, null, locationOutcomes);
             // A persisted source URL is useful while validating that URL, but must not constrain
             // discovery after the URL itself has failed. Keep the stable name/birth-date identity
             // and let navigation discover the subject's current official URL.
@@ -145,6 +151,12 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;
+
+    private static bool IsParameterlessJraAccessUrl(Uri url) =>
+        string.Equals(url.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+        && url.AbsolutePath.StartsWith("/JRADB/access", StringComparison.OrdinalIgnoreCase)
+        && url.AbsolutePath.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+        && string.IsNullOrWhiteSpace(url.Query.TrimStart('?'));
 
     private static CollectionAttemptCompletion IdentificationFailure(LeasedCollectionTask task,
         JraSubjectIdentificationException exception, IReadOnlyList<ResourceLocationOutcome> locationOutcomes) =>
