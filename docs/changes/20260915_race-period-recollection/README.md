@@ -1,6 +1,6 @@
 # 期間を指定してレース情報を再取得する
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-15
 - Updated: 2026-09-15
@@ -42,7 +42,7 @@
 主要利用者は管理画面から収集を運用する利用者であり、開始地点は `/jobs` の `収集を依頼`、完了状態は期間バッチの受付と追跡導線の表示である。
 
 - `収集を依頼` ダイアログに `期間を指定してレースを再取得` を追加する。新しいサイドバーメニューは追加しない。
-- フォームは `先週末` preset、`開始日`、`終了日`、固定値 `JRA` を表示する。日付は JST、両端を含む。2026-09-15 に preset を選ぶと 2026-09-12〜2026-09-13 になる。
+- フォームは `開始日`、`終了日`、固定値 `JRA` を表示する。日付は JST、両端を含む。相対期間の preset は設けない。
 - 入力は開始日、終了日の順に並べ、狭幅では縦積みにする。各入力にラベルと近接したエラーを表示する。
 - `内容を確認` で対象日数、期間、再発見対象、更新対象、除外対象を表示し、その後の `再取得を依頼` だけを primary action とする。
 - 受付後は入力を閉じ、期間、受付日数、新規 task 数、実行中 task への集約数と期間詳細への導線を表示する。通信失敗時は入力を保持する。
@@ -72,10 +72,6 @@
 
 ## Decisions
 
-### 採用: 暦上の直前土曜日・日曜日
-
-`先週末` は操作日の直前に完了した土曜日と日曜日とする。祝日月曜や金曜開催を暗黙に含めず、必要なら明示日付で範囲を広げる。表示する解決済み日付により誤解を防ぐ。
-
 ### 採用: 1 batch、1日1 discovery task
 
 日ごとの再試行・進捗と Lambda 実行上限を維持し、現行 dispatcher の同日 microbatch と `race-detail` 展開を再利用する。期間全体を1 taskに詰めない。
@@ -92,8 +88,8 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | `/jobs` の収集依頼から、JSTの開始日・終了日と `先週末` preset を使って期間再取得を確認・送信できる | T2, T3 | component test + browser scenario | Not started |
-| AC2 | 2026-09-15 JST の `先週末` は 2026-09-12〜2026-09-13 と表示され、包括2日としてpreviewされる | T2, T3 | deterministic date test | Not started |
+| AC1 | `/jobs` の収集依頼から、JSTの開始日・終了日を使って期間再取得を確認・送信できる | T2, T3 | component test + browser scenario | Not started |
+| AC2 | 2026-09-12〜2026-09-13 を指定すると、両端を含む2日としてpreviewされる | T2, T3 | deterministic date test | Not started |
 | AC3 | 未入力、逆転、未来日、31日超過は入力付近に理由を表示し、APIに依頼を作らない | T1, T3 | endpoint/component validation tests | Not started |
 | AC4 | 各対象日に1件の `race-discovery` request/task が現在基盤へ永続化・dispatchされ、DB未登録レースを含む当日の公式レースが `race-detail` へ展開される | T1, T2, T4 | Store/API/E2E transport tests | Not started |
 | AC5 | 既に成功済みの日も新しい期間依頼で再取得され、同じ送信の再試行とactive taskは重複実行されない | T1, T2, T4 | terminal rerun/idempotency/concurrency tests | Not started |
@@ -114,18 +110,18 @@
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | API契約、範囲validation、Store batch展開と冪等性を実装する (AC3, AC4, AC5) | Main | Lead tier | - | CollectionPlatform API/Store models and focused tests | Store/API tests | request/task/batch assertions | Proposed |
-| T2 | reason、dispatcher、collector discovery/detail伝播と回帰を実装する (AC1, AC4, AC5, AC6, AC7) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Collector/dispatcher and focused tests | transport/E2E tests | persisted envelope and downstream requests | Proposed |
-| T3 | `/jobs` の期間フォーム、preview、受付表示を実装する (AC1, AC2, AC3, AC6, AC8) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Blazor page/client/component tests | bUnit + browser | observable workflow evidence | Proposed |
-| T4 | 全diff、設計適合、回帰、CodeGraph、format/build/testを検証する (AC4-AC8) | Main | Lead tier | T1, T2, T3 | change record/docs; production read-only review | CI-equivalent gates | commands/results and AC matrix | Proposed |
-| T5 | ローカル環境へ先週末の依頼を登録し受付を確認する (AC9) | Main | Lead tier | T4 | local application state only | batch receipt/detail | batch ID and accepted dates (credentials not recorded) | Proposed |
+| T1 | API契約、範囲validation、Store batch展開と冪等性を実装する (AC3, AC4, AC5) | Main | Lead tier | - | CollectionPlatform API/Store models and focused tests | Store/API tests | request/task/batch assertions | Runnable |
+| T2 | reason、dispatcher、collector discovery/detail伝播と回帰を実装する (AC1, AC4, AC5, AC6, AC7) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Collector/dispatcher and focused tests | transport/E2E tests | persisted envelope and downstream requests | Dependent |
+| T3 | `/jobs` の開始日・終了日フォーム、preview、受付表示を実装する (AC1, AC2, AC3, AC6, AC8) | Worker候補、Main統合 | Worker tier | T1 contract freeze | Blazor page/client/component tests | bUnit + browser | observable workflow evidence | Dependent |
+| T4 | 全diff、設計適合、回帰、CodeGraph、format/build/testを検証する (AC4-AC8) | Main | Lead tier | T1, T2, T3 | change record/docs; production read-only review | CI-equivalent gates | commands/results and AC matrix | Dependent |
+| T5 | ローカル環境へ先週末の依頼を登録し受付を確認する (AC9) | Main | Lead tier | T4 | local application state only | batch receipt/detail | batch ID and accepted dates (credentials not recorded) | Dependent |
 
 T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を共有しない。formatter、solution-wide generated output、change record、正本文書は Main が所有する。
 
 ## Review gates
 
 - **Design and task-split review** — Reviewer: Main。Inputs: CodeGraph、現行 UI/API/Store/Collector、既存 docs/change records、D1/D2 read-only discovery。Decision: 旧単日ジョブを復活せず、Backfillと期間再取得を分離し、T1契約後のみT2/T3を並列化する。ACは全てtask/verificationへ対応済み。Follow-up: ユーザー承認を得る。
-- **Pre-implementation review** — 承認後、全taskのfrontier、worker contract、非重複write scopeを記録する。
+- **Pre-implementation review** — 2026-09-15、Reviewer: Main。ユーザー承認とpreset削除指示を反映。T1を `Runnable`、T2/T3をT1契約確定待ちの `Dependent`、T4/T5を先行task待ちの `Dependent` とした。T1はMainがAPI/Store契約とfocused testsを所有し、T1検証後にT2/T3へ非重複scopeのworker contractを渡す。scope拡大、契約矛盾、verification失敗後の追加修正はMainへescalateする。
 - **Checkpoint review** — 各実装sliceでMainがdiff、tests、AC matrix、worker evidenceを確認する。
 - **Final review** — 全task/AC、実transport、browser、format/build/test、ローカル受付を照合してから `Implemented` とする。
 
@@ -133,8 +129,9 @@ T2/T3 は T1 の契約確定後にのみ並列化し、相互の write scope を
 
 - 2026-09-15: `codegraph explore` で管理UI、API、Store、dispatcher、collectorの現行呼出経路を確認。
 - 2026-09-15: read-only delegated discovery 2件をMainがソースと照合。現行Backfillが既存stateを省略するため再取得要件を満たさないこと、旧単日ジョブがcutover済みであることを確認。
+- 2026-09-15: ユーザーが開始日・終了日のみとする修正を指定し、AC1/AC2、mock、task planへ反映したうえで明示承認。Statusを `Approved` とし、Pre-implementation reviewを完了。
 - 実装検証は承認後に記録する。
 
 ## Deviations and follow-up
 
-- 承認前のため実装・ローカル再取得依頼は未実施。
+- 実装・ローカル再取得依頼は未実施。
