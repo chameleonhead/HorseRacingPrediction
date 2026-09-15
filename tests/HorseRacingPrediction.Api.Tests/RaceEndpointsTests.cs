@@ -176,6 +176,25 @@ public class RaceEndpointsTests
         Assert.AreEqual("InvalidHorseNumber", body.Outcomes[0].ErrorCode);
     }
 
+    [TestMethod]
+    public async Task DeclareRaceResultBulk_InvalidRaceState_MutatesNeitherRaceNorRelatedSubjects()
+    {
+        var eventsBefore = CountStoredEvents();
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
+            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 14), $"PREVALIDATE-{Guid.NewGuid():N}", 2,
+                "事前検証", EntryCount: 1,
+                Entries: [new(1, 1, "1:40.0", null, null, null, null, HorseName: "残してはいけない馬")]),
+            JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(body);
+        Assert.IsNotEmpty(body.Errors);
+        Assert.AreEqual("Failed", body.Outcomes![0].Status);
+        Assert.AreEqual("RaceBulkValidationFailed", body.Outcomes[0].ErrorCode);
+        Assert.AreEqual(eventsBefore, CountStoredEvents());
+    }
+
     private static int CountStoredEvents()
     {
         var provider = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>();

@@ -2,6 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Contracts;
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.EventStores;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -130,6 +134,14 @@ public class HorseEndpointsTests
         Assert.IsTrue(responses.All(response => response.StatusCode == HttpStatusCode.OK));
         Assert.IsNotNull(profile);
         Assert.AreEqual("同時登録馬", profile.RegisteredName);
+        Assert.AreEqual(1, CountSubjectEvents(horseId));
+    }
+
+    private static int CountSubjectEvents(string aggregateId)
+    {
+        var provider = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>();
+        using var db = provider.CreateContext();
+        return db.Set<EventEntity>().Count(item => item.AggregateId == aggregateId);
     }
 
     [TestMethod]

@@ -2,6 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Contracts;
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.EventStores;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -113,6 +117,28 @@ public class TrainerEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(profile);
         Assert.AreEqual("新規調教師", profile.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task UpdateTrainerProfile_ConcurrentReplay_AddsOneEvent()
+    {
+        var trainerId = $"trainer-{Guid.NewGuid()}";
+        var request = new UpdateTrainerProfileRequest("同時調教師", "同時調教師", "JRA");
+
+        var responses = await Task.WhenAll(
+            _client.PutAsJsonAsync($"/api/trainers/{trainerId}", request, JsonOptions),
+            _client.PutAsJsonAsync($"/api/trainers/{trainerId}", request, JsonOptions));
+        await _client.PutAsJsonAsync($"/api/trainers/{trainerId}", request, JsonOptions);
+
+        Assert.IsTrue(responses.All(response => response.StatusCode == HttpStatusCode.OK));
+        Assert.AreEqual(1, CountSubjectEvents(trainerId));
+    }
+
+    private static int CountSubjectEvents(string aggregateId)
+    {
+        var provider = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>();
+        using var db = provider.CreateContext();
+        return db.Set<EventEntity>().Count(item => item.AggregateId == aggregateId);
     }
 
     [TestMethod]

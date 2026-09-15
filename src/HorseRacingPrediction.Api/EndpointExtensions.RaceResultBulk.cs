@@ -83,19 +83,6 @@ public static partial class EndpointExtensions
             outcomes.Add(new("Entry", key, "Accepted"));
         }
 
-        try
-        {
-            await EnsureRelatedSubjectsBulkAsync(accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)),
-                commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
-        {
-            const string errorCode = "RelatedSubjectUpsertFailed";
-            errors.Add($"関連主体登録エラー: {ex.Message}");
-            MarkAcceptedOutcomesFailed(outcomes, errorCode, ex.Message);
-            return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
-        }
-
         var gradeCode = ResolveCollectedGradeCode(request.GradeCode, request.RaceName, existing?.RaceName);
         var data = new BulkRaceResultData(
             request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
@@ -119,6 +106,29 @@ public static partial class EndpointExtensions
 
         try
         {
+            ValidateCollectedRaceResultBulk(data, existing);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            errors.Add($"レース一括登録エラー: {ex.Message}");
+            MarkAcceptedOutcomesFailed(outcomes, "RaceBulkValidationFailed", ex.Message);
+            return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+        }
+
+        try
+        {
+            await EnsureRelatedSubjectsBulkAsync(accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)),
+                commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            errors.Add($"関連主体登録エラー: {ex.Message}");
+            MarkAcceptedOutcomesFailed(outcomes, "RelatedSubjectUpsertFailed", ex.Message);
+            return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+        }
+
+        try
+        {
             var result = await commandBus.PublishAsync(new ApplyBulkRaceResultCommand(raceId, data), cancellationToken)
                 .ConfigureAwait(false);
             if (!result.IsSuccess)
@@ -131,10 +141,45 @@ public static partial class EndpointExtensions
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
             errors.Add($"レース一括登録エラー: {ex.Message}");
-            MarkAcceptedOutcomesFailed(outcomes, "RaceBulkValidationFailed", ex.Message);
+            MarkAcceptedOutcomesFailed(outcomes, "RaceBulkCommandFailed", ex.Message);
         }
 
         return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+    }
+
+    private static void ValidateCollectedRaceResultBulk(BulkRaceResultData data,
+        RacePredictionContextReadModel? existing)
+    {
+        if (data.RaceDate == default) throw new ArgumentException("Race date is required.");
+        if (string.IsNullOrWhiteSpace(data.RacecourseCode)) throw new ArgumentException("Racecourse code is required.");
+        if (data.RaceNumber <= 0) throw new ArgumentException("Race number must be positive.");
+        if (string.IsNullOrWhiteSpace(data.RaceName)) throw new ArgumentException("Race name is required.");
+        if (data.EntryCount is <= 0) throw new ArgumentException("Entry count must be positive when specified.");
+        if (!string.IsNullOrWhiteSpace(data.WinningHorseName) && data.DeclaredAt is null)
+            throw new ArgumentException("Declared time is required with a winning horse.");
+        if (data.Entries.Select(item => item.EntryId).Distinct(StringComparer.Ordinal).Count() != data.Entries.Count
+            || data.Entries.Select(item => item.HorseNumber).Distinct().Count() != data.Entries.Count)
+            throw new ArgumentException("Incoming race entries must be unique.");
+        if (data.EntryResults.Select(item => item.EntryId).Distinct(StringComparer.Ordinal).Count()
+            != data.EntryResults.Count)
+            throw new ArgumentException("Entry result IDs must be unique.");
+
+        var knownEntryIds = (existing?.Entries ?? []).Select(item => item.EntryId)
+            .Concat(data.Entries.Select(item => item.EntryId)).ToHashSet(StringComparer.Ordinal);
+        if (data.EntryResults.Any(item => !knownEntryIds.Contains(item.EntryId)))
+            throw new ArgumentException("Every entry result must reference a registered or incoming entry.");
+
+        var effectiveStatus = existing?.Status ?? RaceStatus.Draft;
+        if (effectiveStatus == RaceStatus.Draft && data.EntryCount is > 0)
+            effectiveStatus = RaceStatus.CardPublished;
+        if (!string.IsNullOrWhiteSpace(data.WinningHorseName) && effectiveStatus < RaceStatus.ResultDeclared)
+            effectiveStatus = RaceStatus.ResultDeclared;
+        if (data.Entries.Count > 0 && effectiveStatus == RaceStatus.Draft)
+            throw new ArgumentException("Entries require a published race card.");
+        if (data.EntryResults.Count > 0 && effectiveStatus < RaceStatus.ResultDeclared)
+            throw new ArgumentException("Entry results require a declared race result.");
+        if (data.Payouts is not null && effectiveStatus < RaceStatus.ResultDeclared)
+            throw new ArgumentException("Payouts require a declared race result.");
     }
 
     private static IReadOnlyList<PayoutEntry> ToPayoutEntries(IReadOnlyList<Shared.PayoutEntryDto>? values)
