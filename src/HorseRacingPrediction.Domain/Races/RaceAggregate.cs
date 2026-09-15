@@ -162,7 +162,10 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         int? finishPosition = null, string? officialTime = null,
         string? marginText = null, string? lastThreeFurlongTime = null,
         string? abnormalResultCode = null, decimal? prizeMoney = null,
-        string? cornerPositions = null, decimal? additionalPrizeMoney = null)
+        string? cornerPositions = null, decimal? additionalPrizeMoney = null,
+        int? popularity = null, int? originalFinishPosition = null,
+        bool isDeadHeat = false, decimal? average1F = null,
+        string? horseId = null, string? jockeyId = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -172,7 +175,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
 
         Emit(new EntryResultDeclared(entryId, finishPosition, officialTime,
             marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney, cornerPositions,
-            additionalPrizeMoney: additionalPrizeMoney));
+            popularity, originalFinishPosition, isDeadHeat, average1F, horseId, jockeyId,
+            additionalPrizeMoney));
     }
 
     public void DeclarePayoutResult(DateTimeOffset declaredAt,

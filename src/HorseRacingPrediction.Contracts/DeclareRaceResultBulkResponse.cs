@@ -1,10 +1,17 @@
 namespace HorseRacingPrediction.Contracts;
 
 /// <summary>
-/// 一括登録の結果。個々の項目（結果宣言・各馬の成績・天候・馬場状態・払戻）は
-/// 1件失敗しても他の項目の登録は継続するため、失敗した項目は例外にせず
-/// <see cref="Errors"/> に文言として集約して返す。
+/// 一括登録の結果。入力単位の採否は <see cref="Outcomes"/>、互換用の要約は
+/// <see cref="Errors"/> に格納する。受理されたレース更新は一つの集約コミットとして適用する。
 /// </summary>
 public sealed record DeclareRaceResultBulkResponse(
     string RaceId,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<DeclareRaceResultBulkItemOutcome>? Outcomes = null);
+
+public sealed record DeclareRaceResultBulkItemOutcome(
+    string Scope,
+    string Key,
+    string Status,
+    string? ErrorCode = null,
+    string? Message = null);

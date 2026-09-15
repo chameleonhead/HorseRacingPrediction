@@ -3,6 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Contracts;
+using EventFlow.EntityFramework;
+using EventFlow.EntityFramework.EventStores;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -114,6 +118,69 @@ public class RaceEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(race);
         Assert.AreEqual("G2", race.GradeCode);
+    }
+
+    [TestMethod]
+    public async Task DeclareRaceResultBulk_WithEighteenEntries_PersistsOnceAndReplayAddsNoEvents()
+    {
+        var date = new DateOnly(2026, 9, 13);
+        var course = $"BULK-{Guid.NewGuid():N}";
+        const int raceNumber = 12;
+        var observedAt = new DateTimeOffset(2026, 9, 13, 16, 0, 0, TimeSpan.FromHours(9));
+        var entries = Enumerable.Range(1, 18).Select(number => new RaceResultEntryBulkDto(
+            number, number, $"1:{30 + number:00}.0", null, $"3{number % 10}.0", null,
+            1_000_000m - number, $"一括馬{number}", $"一括騎手{number}", $"一括調教師{number}",
+            number, 55m, number % 2 == 0 ? "F" : "M", 3, number,
+            450 + number, number % 3, number, false, $"馬主{number}", $"{number}", 12.3m,
+            AdditionalPrizeMoney: 10_000m)).ToArray();
+        var request = new DeclareRaceResultBulkRequest(date, course, raceNumber, "一括登録検証",
+            EntryCount: 18, WinningHorseName: "一括馬1", DeclaredAt: observedAt, Entries: entries,
+            Weather: new(observedAt, "SUNNY", "晴", 24m, 50m, "N", 2m),
+            TrackCondition: new(observedAt, "GOOD", "GOOD", "良"),
+            Payouts: new(observedAt, [new("1", 250m)], null, null, null, null));
+
+        var first = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var firstBody = await first.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+        var raceId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(date, course, raceNumber);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
+        var eventsAfterFirst = CountStoredEvents();
+        var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var eventsAfterReplay = CountStoredEvents();
+
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
+        Assert.IsNotNull(firstBody);
+        Assert.IsEmpty(firstBody.Errors);
+        Assert.HasCount(18, firstBody.Outcomes!);
+        Assert.IsTrue(firstBody.Outcomes!.All(item => item.Status == "Accepted"));
+        Assert.IsNotNull(race);
+        Assert.HasCount(18, race.Entries);
+        Assert.HasCount(18, race.EntryResults);
+        Assert.AreEqual(1, race.EntryResults[0].Popularity);
+        Assert.AreEqual(12.3m, race.EntryResults[0].Average1F);
+        Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode);
+        Assert.AreEqual(eventsAfterFirst, eventsAfterReplay);
+    }
+
+    [TestMethod]
+    public async Task DeclareRaceResultBulk_InvalidEntries_ReturnsStructuredRejections()
+    {
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
+            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 14), $"INVALID-{Guid.NewGuid():N}", 1,
+                "入力検証", Entries: [new(0, null, null, null, null, null, null)]), JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(body);
+        Assert.HasCount(1, body.Outcomes!);
+        Assert.AreEqual("Rejected", body.Outcomes![0].Status);
+        Assert.AreEqual("InvalidHorseNumber", body.Outcomes[0].ErrorCode);
+    }
+
+    private static int CountStoredEvents()
+    {
+        var provider = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>();
+        using var db = provider.CreateContext();
+        return db.Set<EventEntity>().Count();
     }
 
     [TestMethod]
