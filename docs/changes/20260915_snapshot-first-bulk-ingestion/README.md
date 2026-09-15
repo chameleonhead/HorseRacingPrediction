@@ -1,6 +1,6 @@
 # Snapshot-first collection and bulk ingestion
 
-- Status: Approved
+- Status: Proposed
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-15
 - Updated: 2026-09-16
@@ -9,7 +9,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | The user approved the race-detail-only, default-off pilot on 2026-09-16; T1 is runnable. |
+| Code | Not started | The user withdrew the pilot approval on 2026-09-16 pending phase-timing evidence. |
 | Verification | Not started | The approved implementation must pass the tests and performance comparison in this record. |
 | Deployment/operation | Not started | No AWS capacity increase or new paid service is planned for the initial release. |
 
@@ -199,13 +199,13 @@ Rejected as the only artifact. It is compact but loses the normalized collected 
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Freeze `race-detail` normalized payload, acquire-issued capture key, receipt, `Applying` handoff and structured outcomes. Covers AC1–AC3, AC7, AC10. | Main | Lead tier | Playwright efficiency AC1–AC9 Verified and final baseline frozen | `Contracts`, `ApiClient`, contract tests | Serialization/version/hash/state tests | Reviewed pilot contract | Runnable |
+| T1 | Freeze `race-detail` normalized payload, acquire-issued capture key, receipt, `Applying` handoff and structured outcomes. Covers AC1–AC3, AC7, AC10. | Main | Lead tier | Playwright efficiency AC1–AC9 Verified, final baseline frozen, and renewed user approval after phase timing | `Contracts`, `ApiClient`, contract tests | Serialization/version/hash/state tests | Reviewed pilot contract | Dependent |
 | T2 | Implement default-off API inbox/outbox, task handoff, bounded processor, replay checkpoints and cancellation. Covers AC2–AC7, AC10, AC11. | Main | Lead tier | T1 | `CollectionOperations` schema/store/migration and API tests | Restart/fault/replay/expiry/cancellation tests | Durable pilot persistence path | Dependent |
 | T3 | Connect a bounded `race-detail` Collector pilot using one session, browser release and one ingestion call. Covers AC1, AC3, AC4, AC6, AC8, AC10, AC11. | Main | Lead tier | T1,T2 | Collector race-detail pilot and tests | Canary flag, partial capture, response loss and equivalence | Default-off pilot path | Dependent |
 | T4 | Add only the race-card/result/reference ingestion adapter required by the pilot; generic aggregate/query optimization is excluded. Covers AC3–AC5, AC8, AC10. | Main | Lead tier | T1,T2 | Pilot-specific API/Application adapter and tests; no generic runtime optimization | HTTP count, item outcomes, replay and equivalence | Correct one-call pilot application | Dependent |
 | T5 | Measure fixed-corpus and bounded-canary outcomes and decide stop/general-rollout proposal. Covers AC7–AC10. | Worker | Worker tier | T2–T4 | Pilot metrics/reports and this record | Baseline/candidate p50/p95, GB-seconds, HTTP/failure comparison | Evidence-backed go/no-go | Dependent |
 
-T1–T5 are the only pilot tasks. The Playwright prerequisite and application/runtime work are now fully Verified, and the user approved this pilot on 2026-09-16, so T1 is `Runnable`; T2–T5 remain `Dependent` on the task dependencies shown above. The subject expansion record remains separate and does not become runnable through approval of this pilot.
+T1–T5 are the only pilot tasks. The Playwright prerequisite and application/runtime work are fully Verified, but the user withdrew pilot approval on 2026-09-16 until phase timing is available. All tasks are therefore `Dependent`; the subject expansion record remains separate.
 
 ## Review gates
 
@@ -243,5 +243,6 @@ T1–T5 are the only pilot tasks. The Playwright prerequisite and application/ru
 
 ## Deviations and follow-up
 
+- 2026-09-16: The user withdrew approval before production implementation and requested phase-timing logs first. The record returned to `Proposed`; a later implementation requires renewed explicit approval based on measured evidence.
 - A later evidence-based change may persist full compressed semantic snapshots in private object storage and run a separate non-Playwright processor. It is intentionally outside this initial no-new-service scope.
 - PostgreSQL/RDS migration and collector fleet parallelism remain separate decisions after the per-browser work reduction is measured.
