@@ -1,15 +1,15 @@
 # Snapshot-first collection and bulk ingestion
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-15
-- Updated: 2026-09-15
+- Updated: 2026-09-16
 
 ## Completion summary
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | User approval is required before production changes. |
+| Code | Not started | The user approved the race-detail-only, default-off pilot on 2026-09-16; T1 is runnable. |
 | Verification | Not started | The approved implementation must pass the tests and performance comparison in this record. |
 | Deployment/operation | Not started | No AWS capacity increase or new paid service is planned for the initial release. |
 
@@ -199,18 +199,18 @@ Rejected as the only artifact. It is compact but loses the normalized collected 
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Freeze `race-detail` normalized payload, acquire-issued capture key, receipt, `Applying` handoff and structured outcomes. Covers AC1–AC3, AC7, AC10. | Main | Lead tier | Playwright efficiency AC1–AC9 Verified and final baseline frozen | `Contracts`, `ApiClient`, contract tests | Serialization/version/hash/state tests | Reviewed pilot contract | Dependent |
+| T1 | Freeze `race-detail` normalized payload, acquire-issued capture key, receipt, `Applying` handoff and structured outcomes. Covers AC1–AC3, AC7, AC10. | Main | Lead tier | Playwright efficiency AC1–AC9 Verified and final baseline frozen | `Contracts`, `ApiClient`, contract tests | Serialization/version/hash/state tests | Reviewed pilot contract | Runnable |
 | T2 | Implement default-off API inbox/outbox, task handoff, bounded processor, replay checkpoints and cancellation. Covers AC2–AC7, AC10, AC11. | Main | Lead tier | T1 | `CollectionOperations` schema/store/migration and API tests | Restart/fault/replay/expiry/cancellation tests | Durable pilot persistence path | Dependent |
 | T3 | Connect a bounded `race-detail` Collector pilot using one session, browser release and one ingestion call. Covers AC1, AC3, AC4, AC6, AC8, AC10, AC11. | Main | Lead tier | T1,T2 | Collector race-detail pilot and tests | Canary flag, partial capture, response loss and equivalence | Default-off pilot path | Dependent |
 | T4 | Add only the race-card/result/reference ingestion adapter required by the pilot; generic aggregate/query optimization is excluded. Covers AC3–AC5, AC8, AC10. | Main | Lead tier | T1,T2 | Pilot-specific API/Application adapter and tests; no generic runtime optimization | HTTP count, item outcomes, replay and equivalence | Correct one-call pilot application | Dependent |
 | T5 | Measure fixed-corpus and bounded-canary outcomes and decide stop/general-rollout proposal. Covers AC7–AC10. | Worker | Worker tier | T2–T4 | Pilot metrics/reports and this record | Baseline/candidate p50/p95, GB-seconds, HTTP/failure comparison | Evidence-backed go/no-go | Dependent |
 
-T1–T5 are the only pilot tasks and remain `Dependent` until the Playwright record is fully Verified and its final baseline is frozen. The subject and application/runtime records own their files and gates independently; none becomes runnable through approval of this pilot.
+T1–T5 are the only pilot tasks. The Playwright prerequisite and application/runtime work are now fully Verified, and the user approved this pilot on 2026-09-16, so T1 is `Runnable`; T2–T5 remain `Dependent` on the task dependencies shown above. The subject expansion record remains separate and does not become runnable through approval of this pilot.
 
 ## Review gates
 
 - **Design and task-split review** — 2026-09-15, reviewer: Main plus independent R10/R12. Earlier reviews established the technical contracts but left one record with coupled browser, runtime, pilot and subject scopes. R10 rejected the first extraction because formal subject ACs, canonical scope, DB ownership and prerequisite states still overlapped. Follow-up limits this record to default-off `race-detail` pilot AC1–AC11; Playwright, application/runtime and subject expansion now have separate Proposed records, exclusive task scopes and explicit dependencies. R12 returned `PASS` for all four records and verified this record neither implements nor credits the other scopes. No production or AWS changes occurred. Measured agent usage/cost was unavailable; revision count is the efficiency proxy.
-- **Pre-implementation review** — Pending approval. Classify tasks and record exact worker contracts before code changes.
+- **Pre-implementation review** — 2026-09-16, reviewer: Main. The user approved the next change after both prerequisite efficiency records reached `Implemented`. T1 is `Runnable`; T2–T5 are `Dependent` in contract→durable store→Collector/adapter→measurement order. Main retains public contract, task-state, persistence, integration and final acceptance ownership. Read-only workers may inventory existing contracts/state transitions and persistence extension points without modifying source. Production edits start only from the reviewed T1 contract. Escalate on incompatible task-state serialization, destructive migration, lease-fencing ambiguity, cross-database atomicity assumptions, browser-concurrency changes, or any requirement to enable the pilot by default. No AWS mutation or subject expansion is authorized.
 - **Checkpoint review** — Pending implementation.
 - **Final review** — Pending implementation and full evidence reconciliation.
 
