@@ -29,6 +29,10 @@ public interface IWebBrowser : IAsyncDisposable
     /// </summary>
     Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default);
 
+    /// <summary>本文を返さず、後続の Semantic Snapshot 取得を前提に遷移する。</summary>
+    async Task NavigateForSnapshotAsync(string url, CancellationToken cancellationToken = default)
+        => _ = await NavigateAsync(url, cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// 現在のページで指定テキストを持つ要素をクリックし、
     /// 遷移・更新後のページ本文テキストを返す。
@@ -38,6 +42,14 @@ public interface IWebBrowser : IAsyncDisposable
     /// <param name="cancellationToken">キャンセルトークン</param>
     /// <returns>クリック後のページ本文テキスト</returns>
     Task<string> ClickAsync(string text, CancellationToken cancellationToken = default);
+
+    /// <summary>本文を返さず、後続の Semantic Snapshot 取得を前提にクリックする。</summary>
+    async Task ClickForSnapshotAsync(string text, CancellationToken cancellationToken = default)
+        => _ = await ClickAsync(text, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>取得済みリンクを、本文を返さずクリックする。</summary>
+    async Task ClickLinkForSnapshotAsync(PageLinkSnapshot link, CancellationToken cancellationToken = default)
+        => _ = await ClickLinkAsync(link, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// 現在のページで指定ラベルに対応する選択項目を変更し、
@@ -52,6 +64,12 @@ public interface IWebBrowser : IAsyncDisposable
         string optionText,
         CancellationToken cancellationToken = default);
 
+    async Task SelectOptionForSnapshotAsync(
+        string fieldText,
+        string optionText,
+        CancellationToken cancellationToken = default)
+        => _ = await SelectOptionAsync(fieldText, optionText, cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// 指定したセクション見出しの近傍にあるアクション要素をクリックし、
     /// 更新後のページ本文テキストを返す。
@@ -65,6 +83,12 @@ public interface IWebBrowser : IAsyncDisposable
         string actionText,
         CancellationToken cancellationToken = default);
 
+    async Task ClickActionInSectionForSnapshotAsync(
+        string sectionText,
+        string actionText,
+        CancellationToken cancellationToken = default)
+        => _ = await ClickActionInSectionAsync(sectionText, actionText, cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// 現在のページの本文テキストを取得する。
     /// 動的コンテンツの再読み込みや、クリック後の確認に使用する。
@@ -75,6 +99,10 @@ public interface IWebBrowser : IAsyncDisposable
     /// 現在のページをSemantic Snapshotとして取得する。
     /// </summary>
     Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>直前の typed action が readiness を保証済みの場合、追加待機せず Snapshot を取得する。</summary>
+    Task<SemanticPageSnapshot> CapturePageSnapshotAsync(CancellationToken cancellationToken = default)
+        => GetPageSnapshotAsync(cancellationToken);
 
     /// <summary>
     /// 現在のページからリンク（&lt;a&gt; 要素の href）を抽出する。
@@ -103,6 +131,9 @@ public interface IWebBrowser : IAsyncDisposable
     /// </summary>
     Task<string> GoBackAsync(CancellationToken cancellationToken = default);
 
+    async Task GoBackForSnapshotAsync(CancellationToken cancellationToken = default)
+        => _ = await GoBackAsync(cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// 現在ページに存在するフォーム構造を抽出する。
     /// </summary>
@@ -117,6 +148,12 @@ public interface IWebBrowser : IAsyncDisposable
         string value,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException("SetFieldValueAsync is not implemented.");
+
+    async Task SetFieldValueForSnapshotAsync(
+        string fieldLabelOrName,
+        string value,
+        CancellationToken cancellationToken = default)
+        => _ = await SetFieldValueAsync(fieldLabelOrName, value, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// 指定したラベルまたは name に対応するチェックボックス状態を設定する。
@@ -134,5 +171,10 @@ public interface IWebBrowser : IAsyncDisposable
         string? formLabel = null,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException("SubmitFormAsync is not implemented.");
+
+    async Task SubmitFormForSnapshotAsync(
+        string? formLabel = null,
+        CancellationToken cancellationToken = default)
+        => _ = await SubmitFormAsync(formLabel, cancellationToken).ConfigureAwait(false);
 
 }

@@ -20,7 +20,7 @@ public sealed partial class JraNavigator
     public async Task<IJraPage> ToUrlAsync(Uri url, CancellationToken cancellationToken = default)
     {
         if (url.Scheme is not ("http" or "https")) throw new ArgumentException("HTTP(S) URL is required.", nameof(url));
-        await _browser.NavigateAsync(url.AbsoluteUri, cancellationToken).ConfigureAwait(false);
+        await _browser.NavigateForSnapshotAsync(url.AbsoluteUri, cancellationToken).ConfigureAwait(false);
         return await _pageReader.ReadAsync(cancellationToken).ConfigureAwait(false);
     }
     private readonly IWebBrowser _browser;
@@ -115,7 +115,7 @@ public sealed partial class JraNavigator
             "JRA navigation start. Destination=KeibaTop CurrentUrl={CurrentUrl}",
             _browser.CurrentUrl);
 
-        await _browser.NavigateAsync(
+        await _browser.NavigateForSnapshotAsync(
             JraUrls.KeibaTop,
             cancellationToken);
 
@@ -144,7 +144,7 @@ public sealed partial class JraNavigator
                 JraNavigationLinks.Calendar,
                 cancellationToken))
         {
-            await _browser.NavigateAsync(
+            await _browser.NavigateForSnapshotAsync(
                 JraUrls.Calendar,
                 cancellationToken);
         }
@@ -321,7 +321,7 @@ public sealed partial class JraNavigator
                 ?? throw new JraNavigationException(
                     $"URLを解決できません: {summary.RaceCardUrl}");
 
-            await _browser.NavigateAsync(
+            await _browser.NavigateForSnapshotAsync(
                 resolvedUrl,
                 cancellationToken);
         }
@@ -345,7 +345,7 @@ public sealed partial class JraNavigator
         {
             try
             {
-                await _browser.ClickAsync(JraNavigationLinks.RaceCard[0], cancellationToken);
+                await _browser.ClickForSnapshotAsync(JraNavigationLinks.RaceCard[0], cancellationToken);
                 page = await _pageReader.ReadAsync(cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -486,7 +486,7 @@ public sealed partial class JraNavigator
             return null;
         }
 
-        await _browser.ClickAsync(candidate, cancellationToken);
+        await _browser.ClickForSnapshotAsync(candidate, cancellationToken);
         return await ReadAndValidateRaceCardAsync(target, cancellationToken);
     }
 
@@ -503,7 +503,7 @@ public sealed partial class JraNavigator
             return false;
         }
 
-        await _browser.ClickAsync(candidate, cancellationToken);
+        await _browser.ClickForSnapshotAsync(candidate, cancellationToken);
         return true;
     }
 
@@ -520,7 +520,7 @@ public sealed partial class JraNavigator
             return false;
         }
 
-        await _browser.ClickAsync(candidate, cancellationToken);
+        await _browser.ClickForSnapshotAsync(candidate, cancellationToken);
         return true;
     }
 
@@ -742,7 +742,7 @@ public sealed partial class JraNavigator
         {
             try
             {
-                await _browser.ClickAsync(targetText, cancellationToken).ConfigureAwait(false);
+                await _browser.ClickForSnapshotAsync(targetText, cancellationToken).ConfigureAwait(false);
                 return;
             }
             catch (InvalidOperationException ex) when (IsMissingClickTarget(ex, targetText))
@@ -933,19 +933,19 @@ public sealed partial class JraNavigator
         await ToHistoricalRaceSearchAsync(cancellationToken);
         LogDiagStep("ToHistoricalRaceSearchAsync", date, course, stopwatch);
 
-        await _browser.SelectOptionAsync(
+        await _browser.SelectOptionForSnapshotAsync(
             "年",
             date.Year.ToString(),
             cancellationToken);
         LogDiagStep("SelectOptionAsync(年)", date, course, stopwatch);
 
-        await _browser.SelectOptionAsync(
+        await _browser.SelectOptionForSnapshotAsync(
             "月",
             date.Month.ToString(),
             cancellationToken);
         LogDiagStep("SelectOptionAsync(月)", date, course, stopwatch);
 
-        await _browser.ClickActionInSectionAsync(
+        await _browser.ClickActionInSectionForSnapshotAsync(
             "開催年月",
             "検索",
             cancellationToken);
@@ -983,11 +983,11 @@ public sealed partial class JraNavigator
         // Task16実サイト確認で判明: 競馬メニューの「レース結果」はhrefを持つ通常の
         // リンクではなく、クリックで遷移するJS要素（同一URL上でPOSTしたかのように
         // 内容が切り替わる）。GetLinksAsync では検出できないため ClickAsync を使う。
-        await _browser.NavigateAsync(
+        await _browser.NavigateForSnapshotAsync(
             JraUrls.KeibaTop,
             cancellationToken);
 
-        await _browser.ClickAsync(
+        await _browser.ClickForSnapshotAsync(
             JraNavigationLinks.RaceResult[0],
             cancellationToken);
     }
@@ -1021,7 +1021,7 @@ public sealed partial class JraNavigator
                 continue;
             }
 
-            await _browser.NavigateAsync(
+            await _browser.NavigateForSnapshotAsync(
                 url,
                 cancellationToken);
 
@@ -1069,7 +1069,7 @@ public sealed partial class JraNavigator
             ?? throw new JraNavigationException(
                 $"URLを解決できません: {target.Url}");
 
-        await _browser.NavigateAsync(
+        await _browser.NavigateForSnapshotAsync(
             url,
             cancellationToken);
     }
@@ -1090,11 +1090,11 @@ public sealed partial class JraNavigator
         RaceCourse course,
         CancellationToken cancellationToken)
     {
-        await _browser.NavigateAsync(
+        await _browser.NavigateForSnapshotAsync(
             JraUrls.KeibaTop,
             cancellationToken);
 
-        await _browser.ClickAsync(
+        await _browser.ClickForSnapshotAsync(
             JraNavigationLinks.RaceCard[0],
             cancellationToken);
 
@@ -1163,7 +1163,7 @@ public sealed partial class JraNavigator
                 reason);
         }
 
-        await _browser.ClickAsync(
+        await _browser.ClickForSnapshotAsync(
             buttonText,
             cancellationToken);
     }
@@ -1260,7 +1260,7 @@ public sealed partial class JraNavigator
             return false;
         }
 
-        await _browser.NavigateAsync(
+        await _browser.NavigateForSnapshotAsync(
             url,
             cancellationToken);
 

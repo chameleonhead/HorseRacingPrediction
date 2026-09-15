@@ -131,7 +131,16 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
         };
 
-    public async Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
+    public Task<string> NavigateAsync(string url, CancellationToken cancellationToken = default)
+        => NavigateCoreAsync(url, includeContent: true, cancellationToken);
+
+    public async Task NavigateForSnapshotAsync(string url, CancellationToken cancellationToken = default)
+        => _ = await NavigateCoreAsync(url, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> NavigateCoreAsync(
+        string url,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -145,7 +154,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         }).WaitAsync(cancellationToken);
 
         await WaitForPageSettledAsync(cancellationToken);
-        var content = await GetPageContentAsync(cancellationToken);
+        var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation(
             "Browser navigate complete. Url={Url} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
             url,
@@ -154,7 +163,16 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return content;
     }
 
-    public async Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
+    public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
+        => ClickCoreAsync(text, includeContent: true, cancellationToken);
+
+    public async Task ClickForSnapshotAsync(string text, CancellationToken cancellationToken = default)
+        => _ = await ClickCoreAsync(text, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> ClickCoreAsync(
+        string text,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -182,7 +200,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
                 text,
                 href,
                 resolvedHref);
-            return await NavigateAsync(resolvedHref!, cancellationToken);
+            return await NavigateCoreAsync(resolvedHref!, includeContent, cancellationToken);
         }
 
         await target.ScrollIntoViewIfNeededAsync();
@@ -206,7 +224,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         }
 
         await WaitForPageSettledAsync(cancellationToken);
-        var content = await GetPageContentAsync(cancellationToken);
+        var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation(
             "Browser click complete. Text={Text} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
             text,
@@ -215,10 +233,23 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return content;
     }
 
-    public async Task<string> SelectOptionAsync(
+    public Task<string> SelectOptionAsync(
         string fieldText,
         string optionText,
         CancellationToken cancellationToken = default)
+        => SelectOptionCoreAsync(fieldText, optionText, includeContent: true, cancellationToken);
+
+    public async Task SelectOptionForSnapshotAsync(
+        string fieldText,
+        string optionText,
+        CancellationToken cancellationToken = default)
+        => _ = await SelectOptionCoreAsync(fieldText, optionText, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> SelectOptionCoreAsync(
+        string fieldText,
+        string optionText,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -256,7 +287,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         }.Where(value => value.Label is not null || value.Value is not null || value.Index is not null).ToArray());
 
         await WaitForPageSettledAsync(cancellationToken);
-        var content = await GetPageContentAsync(cancellationToken);
+        var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation(
             "Browser select complete. Field={Field} Option={Option} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
             fieldText,
@@ -266,10 +297,23 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return content;
     }
 
-    public async Task<string> ClickActionInSectionAsync(
+    public Task<string> ClickActionInSectionAsync(
         string sectionText,
         string actionText,
         CancellationToken cancellationToken = default)
+        => ClickActionInSectionCoreAsync(sectionText, actionText, includeContent: true, cancellationToken);
+
+    public async Task ClickActionInSectionForSnapshotAsync(
+        string sectionText,
+        string actionText,
+        CancellationToken cancellationToken = default)
+        => _ = await ClickActionInSectionCoreAsync(sectionText, actionText, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> ClickActionInSectionCoreAsync(
+        string sectionText,
+        string actionText,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -303,7 +347,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         await _page.WaitForTimeoutAsync(500);
         await WaitForPageSettledAsync(cancellationToken);
 
-        var content = await GetPageContentAsync(cancellationToken);
+        var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation(
             "Browser section action click complete. Section={Section} Action={Action} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
             sectionText,
@@ -320,8 +364,13 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
         await WaitForPageSettledAsync(cancellationToken);
 
-        var rawText = await ReadPageTextAsync();
-        return NormalizeText(rawText);
+        return await ReadNormalizedPageTextAsync(cancellationToken);
+    }
+
+    private async Task<string> ReadNormalizedPageTextAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return NormalizeText(await ReadPageTextAsync());
     }
 
     public async Task<IReadOnlyList<PageLinkSnapshot>> GetLinksAsync(
@@ -343,12 +392,22 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return links;
     }
 
-    public async Task<SemanticPageSnapshot> GetPageSnapshotAsync(
-        CancellationToken cancellationToken = default)
+    public Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default)
+        => CapturePageSnapshotCoreAsync(waitForReadiness: true, cancellationToken);
+
+    public Task<SemanticPageSnapshot> CapturePageSnapshotAsync(CancellationToken cancellationToken = default)
+        => CapturePageSnapshotCoreAsync(waitForReadiness: false, cancellationToken);
+
+    private async Task<SemanticPageSnapshot> CapturePageSnapshotCoreAsync(
+        bool waitForReadiness,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        await WaitForPageSettledAsync(cancellationToken).ConfigureAwait(false);
+        if (waitForReadiness)
+        {
+            await WaitForPageSettledAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         var startedAt = Stopwatch.GetTimestamp();
         var snapshot = await _pageSnapshotter.CaptureAsync(_page, cancellationToken: cancellationToken)
@@ -386,7 +445,13 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return NavigateAsync(searchUrl, cancellationToken);
     }
 
-    public async Task<string> GoBackAsync(CancellationToken cancellationToken = default)
+    public Task<string> GoBackAsync(CancellationToken cancellationToken = default)
+        => GoBackCoreAsync(includeContent: true, cancellationToken);
+
+    public async Task GoBackForSnapshotAsync(CancellationToken cancellationToken = default)
+        => _ = await GoBackCoreAsync(includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> GoBackCoreAsync(bool includeContent, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -397,7 +462,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         });
 
         await WaitForPageSettledAsync(cancellationToken);
-        var content = await GetPageContentAsync(cancellationToken);
+        var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation("Browser go back complete. CurrentUrl={CurrentUrl} ContentLength={ContentLength}", CurrentUrl, content.Length);
         return content;
     }
@@ -433,10 +498,23 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return forms;
     }
 
-    public async Task<string> SetFieldValueAsync(
+    public Task<string> SetFieldValueAsync(
         string fieldLabelOrName,
         string value,
         CancellationToken cancellationToken = default)
+        => SetFieldValueCoreAsync(fieldLabelOrName, value, includeContent: true, cancellationToken);
+
+    public async Task SetFieldValueForSnapshotAsync(
+        string fieldLabelOrName,
+        string value,
+        CancellationToken cancellationToken = default)
+        => _ = await SetFieldValueCoreAsync(fieldLabelOrName, value, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> SetFieldValueCoreAsync(
+        string fieldLabelOrName,
+        string value,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -455,7 +533,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         await field.ScrollIntoViewIfNeededAsync();
         await field.FillAsync(value ?? string.Empty).WaitAsync(cancellationToken);
         await WaitForPageSettledAsync(cancellationToken);
-        return await GetPageContentAsync(cancellationToken);
+        return includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
     }
 
     public async Task<string> SetCheckboxAsync(
@@ -491,9 +569,20 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         return await GetPageContentAsync(cancellationToken);
     }
 
-    public async Task<string> SubmitFormAsync(
+    public Task<string> SubmitFormAsync(
         string? formLabel = null,
         CancellationToken cancellationToken = default)
+        => SubmitFormCoreAsync(formLabel, includeContent: true, cancellationToken);
+
+    public async Task SubmitFormForSnapshotAsync(
+        string? formLabel = null,
+        CancellationToken cancellationToken = default)
+        => _ = await SubmitFormCoreAsync(formLabel, includeContent: false, cancellationToken).ConfigureAwait(false);
+
+    private async Task<string> SubmitFormCoreAsync(
+        string? formLabel,
+        bool includeContent,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -518,7 +607,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         }
 
         await WaitForPageSettledAsync(cancellationToken);
-        return await GetPageContentAsync(cancellationToken);
+        return includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
     }
 
     public async ValueTask DisposeAsync()
@@ -561,7 +650,21 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     {
         cancellationToken.ThrowIfCancellationRequested();
         await TryWaitForLoadStateAsync(LoadState.DOMContentLoaded);
-        await TryWaitForLoadStateAsync(LoadState.Load);
+        try
+        {
+            await _page.WaitForFunctionAsync(
+                """() => document.readyState !== 'loading' && !!document.body && (document.body.innerText.trim().length > 0 || !!document.querySelector('table,form,a[href],[role=main],main,article'))""",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 3_000 });
+        }
+        catch (TimeoutException)
+        {
+            // 空ページや継続更新ページでも、Snapshot 側の診断へ進める。
+        }
+        catch (PlaywrightException)
+        {
+            // ナビゲーション競合時は Snapshot 側で現在状態を診断する。
+        }
         cancellationToken.ThrowIfCancellationRequested();
     }
 
@@ -936,61 +1039,48 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     /// まとめて取得し、フィルタリング・重複排除はC#側で行うことで往復回数を
     /// アンカー数に依らず一定（1回）にする。
     /// </summary>
-    private async Task<ILocator?> FindClickableLocatorAsync(string text, CancellationToken cancellationToken)
+    private async Task<IElementHandle?> FindClickableLocatorAsync(string text, CancellationToken cancellationToken)
     {
         var target = NormalizeForMatch(text);
         var candidates = _page.Locator("a[href], button, [role='button'], [role='link'], [role='tab'], input[type='button'], input[type='submit'], summary, [onclick]");
-        var candidateCount = await candidates.CountAsync();
-
-        ILocator? bestLocator = null;
-        var bestScore = int.MaxValue;
-        var bestTextLength = int.MaxValue;
-        var bestRegionPriority = int.MaxValue;
-
-        for (var index = 0; index < candidateCount; index++)
+        for (var attempt = 0; attempt < 2; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var descriptors = await candidates.EvaluateAllAsync<ClickableDescriptor[]>(
+                """items => items.map((e,index) => ({ index, text:(e.innerText||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim().toLowerCase(), region:e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content', visible:!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) }))""");
+            var ranked = descriptors
+                .Where(item => item.Visible && item.Text.Contains(target, StringComparison.Ordinal))
+                .Select(item => new
+                {
+                    Item = item,
+                    Score = item.Text == target ? 0 : item.Text.StartsWith(target, StringComparison.Ordinal) ? 1 : 2,
+                    Region = item.Region == "content" ? 0 : item.Region == "header" ? 1 : item.Region == "footer" ? 2 : 3,
+                })
+                .OrderBy(item => item.Score)
+                .ThenBy(item => item.Region)
+                .ThenBy(item => item.Item.Text.Length)
+                .ToArray();
+            if (ranked.Length == 0) return null;
+            if (ranked.Length > 1 && ranked[0].Score == ranked[1].Score && ranked[0].Region == ranked[1].Region && ranked[0].Item.Text.Length == ranked[1].Item.Text.Length)
+                throw new InvalidOperationException($"テキスト '{text}' に一致するクリック可能要素が一意ではありません。");
 
-            var candidate = candidates.Nth(index);
-            if (!await IsElementRenderedAsync(candidate))
-            {
-                continue;
-            }
-
-            var candidateText = await GetLocatorTextAsync(candidate);
-            var normalizedCandidateText = NormalizeForMatch(candidateText);
-            if (!normalizedCandidateText.Contains(target, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var score = normalizedCandidateText == target
-                ? 0
-                : normalizedCandidateText.StartsWith(target, StringComparison.Ordinal)
-                    ? 1
-                    : 2;
-
-            var region = await DetermineRegionAsync(candidate);
-            var regionPriority = region switch
-            {
-                "content" => 0,
-                "header" => 1,
-                "footer" => 2,
-                _ => 3,
-            };
-
-            if (score < bestScore
-                || (score == bestScore && regionPriority < bestRegionPriority)
-                || (score == bestScore && regionPriority == bestRegionPriority && normalizedCandidateText.Length < bestTextLength))
-            {
-                bestLocator = candidate;
-                bestScore = score;
-                bestRegionPriority = regionPriority;
-                bestTextLength = normalizedCandidateText.Length;
-            }
+            var selected = ranked[0].Item;
+            var handle = await candidates.Nth(selected.Index).ElementHandleAsync();
+            if (handle is null) continue;
+            if (await handle.EvaluateAsync<bool>(
+                    """(e,wanted) => e.isConnected && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && (e.innerText||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim().toLowerCase()===wanted.text && (e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content')===wanted.region""",
+                    new { text = selected.Text, region = selected.Region }))
+                return handle;
         }
+        return null;
+    }
 
-        return bestLocator;
+    private sealed class ClickableDescriptor
+    {
+        public int Index { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public string Region { get; set; } = string.Empty;
+        public bool Visible { get; set; }
     }
 
     private async Task<ILocator?> FindSelectLocatorAsync(string fieldText, CancellationToken cancellationToken)
@@ -1087,26 +1177,30 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     {
         var links = new List<PageLinkSnapshot>();
         var seenLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        await AddLinksFromSearchResultsAsync(links, seenLinks, limit, cancellationToken);
-        if (links.Count >= limit)
-        {
-            return links;
-        }
-
+        cancellationToken.ThrowIfCancellationRequested();
         var anchors = _page.Locator("a[href]");
-        var anchorCount = await anchors.CountAsync();
-        for (var index = 0; index < anchorCount && links.Count < limit; index++)
+        var host = Uri.TryCreate(_page.Url, UriKind.Absolute, out var currentUri)
+            ? currentUri.Host.ToLowerInvariant()
+            : string.Empty;
+        var descriptors = await anchors.EvaluateAllAsync<BrowserLinkDescriptor[]>(
+            """(items, host) => items.map((e, index) => { const text=(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim(); const region=e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content'; const searchResult=host.includes('google.')?!!e.closest('#search')&&!!e.querySelector('h3'):host.includes('bing.')?!!e.closest('#b_results')&&!!e.closest('h2'):false; return { index, url:e.getAttribute('href')||'', title:text, ariaLabel:e.getAttribute('aria-label')||'', titleAttribute:e.getAttribute('title')||'', region, searchResult }; })""",
+            host);
+
+        foreach (var descriptor in descriptors.OrderByDescending(item => item.SearchResult).ThenBy(item => item.Index))
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var anchor = anchors.Nth(index);
-            var link = await CreateLinkAsync(anchor);
-            if (link is null || !seenLinks.Add(LinkIdentity(link)))
+            if (links.Count >= limit) break;
+            if (string.IsNullOrWhiteSpace(descriptor.Url) ||
+                IsDomainSearchPseudoActionAnchor(descriptor.Title, descriptor.AriaLabel, descriptor.TitleAttribute, descriptor.Url))
             {
                 continue;
             }
 
+            var link = new PageLinkSnapshot(
+                descriptor.Url,
+                string.IsNullOrWhiteSpace(descriptor.Title) ? descriptor.Url : NormalizeText(descriptor.Title),
+                descriptor.Region);
+            if (!seenLinks.Add(LinkIdentity(link))) continue;
             links.Add(link);
         }
 
@@ -1115,6 +1209,17 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
     private static string LinkIdentity(PageLinkSnapshot link)
         => $"{link.Url}\u001f{link.Title}\u001f{link.Region}";
+
+    private sealed class BrowserLinkDescriptor
+    {
+        public int Index { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string AriaLabel { get; set; } = string.Empty;
+        public string TitleAttribute { get; set; } = string.Empty;
+        public string Region { get; set; } = string.Empty;
+        public bool SearchResult { get; set; }
+    }
 
     private async Task<bool> DismissHeaderSearchModalIfVisibleAsync(CancellationToken cancellationToken)
     {

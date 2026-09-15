@@ -33,7 +33,7 @@ public sealed class JraPageReader
         CancellationToken cancellationToken = default)
     {
         var snapshot =
-            await _browser.GetPageSnapshotAsync(
+            await _browser.CapturePageSnapshotAsync(
                 cancellationToken: cancellationToken);
 
         return Parse(snapshot);

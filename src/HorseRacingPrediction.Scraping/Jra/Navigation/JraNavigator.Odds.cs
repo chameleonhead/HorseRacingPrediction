@@ -13,7 +13,7 @@ public sealed partial class JraNavigator
         var odds = links.FirstOrDefault(x => x.Title.Contains("オッズ", StringComparison.Ordinal));
         if (odds is null) throw new JraNavigationException("対象レースのオッズリンクが見つかりません。",
             JraNavigationFailureReason.NotYetPublished);
-        await _browser.ClickLinkAsync(odds, cancellationToken).ConfigureAwait(false);
+        await _browser.ClickLinkForSnapshotAsync(odds, cancellationToken).ConfigureAwait(false);
         return await _pageReader.ReadAsync(cancellationToken).ConfigureAwait(false);
     }
 }
