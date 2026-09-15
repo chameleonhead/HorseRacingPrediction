@@ -716,12 +716,10 @@ public sealed partial class JraNavigator
         // href を持つ通常のリンクではなくクリックで遷移するJS要素であるため、
         // GetLinksAsync によるURL探索ではなく ClickAsync を使う必要がある。
         // 「過去レース結果検索」も同じメニュー階層に表示されるボタンであり、同様の
-        // 前提で ClickAsync に切り替えた（このボタン自体からの遷移先ページ構造・
-        // フォーム項目名は本タスクでは実サイトに対して未検証）。
+        // 前提で ClickAsync を使う。JS遷移後に対象が遅れて現れる場合があるため、
+        // Historical経路に限って上限付きでクリック対象を再探索する。
         await NavigateToRaceResultTopAsync(cancellationToken);
-        await _browser.ClickAsync(
-            JraNavigationLinks.HistoricalRaceSearch[0],
-            cancellationToken);
+        await ClickHistoricalRaceSearchAsync(cancellationToken);
 
         var page =
             await _pageReader.ReadAsync(
@@ -734,6 +732,44 @@ public sealed partial class JraNavigator
 
         return page;
     }
+
+    private async Task ClickHistoricalRaceSearchAsync(CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+        var targetText = JraNavigationLinks.HistoricalRaceSearch[0];
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await _browser.ClickAsync(targetText, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (InvalidOperationException ex) when (IsMissingClickTarget(ex, targetText))
+            {
+                if (attempt == maxAttempts)
+                {
+                    throw new JraNavigationException(
+                        $"JRAのクリック対象が見つかりませんでした。Target={targetText}, CurrentUrl={_browser.CurrentUrl ?? "(unknown)"}",
+                        ex);
+                }
+
+                _logger.LogInformation(
+                    ex,
+                    "JRA navigation waiting for delayed click target. Target={Target} Attempt={Attempt}/{MaxAttempts} CurrentUrl={CurrentUrl}",
+                    targetText,
+                    attempt,
+                    maxAttempts,
+                    _browser.CurrentUrl);
+
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static bool IsMissingClickTarget(InvalidOperationException exception, string targetText)
+        => exception.Message.Contains(targetText, StringComparison.Ordinal)
+           && exception.Message.Contains("クリック可能要素が見つかりませんでした", StringComparison.Ordinal);
 
     /// <summary>
     /// 「現在開催週」とみなす期間。レース日が今日から前後3日以内であれば

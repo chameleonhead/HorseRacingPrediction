@@ -717,6 +717,49 @@ public sealed class JraNavigatorTests
         Assert.IsTrue(browser.SelectOptionCalls.Count > 0);
     }
 
+    [TestMethod]
+    public async Task ToHistoricalRaceSearchAsync_TargetAppearsAfterFirstFailure_RetriesAndSucceeds()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetMissingClickFailures("過去レース結果検索", 1);
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var page = await navigator.ToHistoricalRaceSearchAsync();
+
+        Assert.AreEqual(searchUrl, page.Url);
+        Assert.AreEqual(
+            2,
+            browser.ClickedTexts.Count(text => text == "過去レース結果検索"));
+    }
+
+    [TestMethod]
+    public async Task ToHistoricalRaceSearchAsync_TargetRemainsMissing_ThrowsDiagnosticNavigationException()
+    {
+        const string resultSelectionUrl = "https://www.jra.go.jp/keiba/sample/result/selection/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", resultSelectionUrl);
+        browser.SetMissingClickFailures("過去レース結果検索", 3);
+
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToHistoricalRaceSearchAsync());
+
+        StringAssert.Contains(exception.Message, resultSelectionUrl);
+        StringAssert.Contains(exception.Message, "過去レース結果検索");
+        Assert.AreEqual(
+            3,
+            browser.ClickedTexts.Count(text => text == "過去レース結果検索"));
+    }
+
     private static TestPageSnapshot BuildRaceListSnapshotWithTwoRaces(
         string url,
         IEnumerable<TestPageLink>? links = null)

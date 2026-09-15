@@ -16,6 +16,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
     private readonly Dictionary<string, List<PageLinkSnapshot>> _linksByUrl = new();
     private readonly Dictionary<string, List<PageFormSnapshot>> _formsByUrl = new();
     private readonly Dictionary<string, string> _clickDestinationsByText = new();
+    private readonly Dictionary<string, int> _remainingMissingClickFailuresByText = new();
 
     /// <summary>
     /// SubmitFormAsyncが呼ばれた際に遷移する先のURL。テストで事前に設定する。
@@ -62,6 +63,13 @@ internal sealed class FakeWebBrowser : IWebBrowser
     public void SetClickDestination(string text, string url)
         => _clickDestinationsByText[text] = url;
 
+    /// <summary>
+    /// 指定したクリック対象が遅れて表示される状況を再現する。
+    /// ClickAsyncは指定回数だけ実ブラウザーと同じ不在エラーを送出し、その後は通常動作に戻る。
+    /// </summary>
+    public void SetMissingClickFailures(string text, int count)
+        => _remainingMissingClickFailuresByText[text] = count;
+
     public List<string> ClickedTexts { get; } = [];
 
     /// <summary>
@@ -103,6 +111,13 @@ internal sealed class FakeWebBrowser : IWebBrowser
     public Task<string> ClickAsync(string text, CancellationToken cancellationToken = default)
     {
         ClickedTexts.Add(text);
+
+        if (_remainingMissingClickFailuresByText.TryGetValue(text, out var remaining) && remaining > 0)
+        {
+            _remainingMissingClickFailuresByText[text] = remaining - 1;
+            throw new InvalidOperationException(
+                $"テキスト '{text}' に一致するクリック可能要素が見つかりませんでした。");
+        }
 
         if (_clickDestinationsByText.TryGetValue(text, out var url))
         {
