@@ -7,6 +7,7 @@ using HorseRacingPrediction.Scraping.Jra;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using HorseRacingPrediction.PredictionScheduling;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -44,6 +45,7 @@ builder.Services.AddHttpClient<CollectionPlatformWorkerClient>((services, client
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
+    .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddHttpClient<CollectionRequestApiClient>((services, client) =>
     {
@@ -51,6 +53,7 @@ builder.Services.AddHttpClient<CollectionRequestApiClient>((services, client) =>
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
+    .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<ICollectionRequestSink>(services =>
     services.GetRequiredService<CollectionRequestApiClient>());
@@ -60,6 +63,7 @@ builder.Services.AddHttpClient<JraSubjectProfileApiClient>((services, client) =>
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
+    .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IJraSubjectProfileSink>(services =>
     services.GetRequiredService<JraSubjectProfileApiClient>());
@@ -69,6 +73,7 @@ builder.Services.AddHttpClient<OwnerIdentityApiClient>((services, client) =>
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
+    .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IOwnerIdentityVerifier>(services =>
     services.GetRequiredService<OwnerIdentityApiClient>());
@@ -77,7 +82,8 @@ builder.Services.AddHttpClient<RaceOddsSnapshotApiClient>((services, client) =>
         var options = services.GetRequiredService<IOptions<ApiClientOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
-    }).AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
+    }).AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
+      .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IRaceOddsSnapshotSink>(services => services.GetRequiredService<RaceOddsSnapshotApiClient>());
 builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>
     {
@@ -85,6 +91,7 @@ builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((ser
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     })
+    .AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
     .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 var app = builder.Build();
 
@@ -101,6 +108,8 @@ if (runLocalQueue)
         {
             var worker = app.Services.GetRequiredService<CollectionPlatformWorkerClient>();
             var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
+            var sessionLogger = app.Services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("CollectionSessionRuntime");
             await JraSessionExecutionScope.ExecuteAsync(sessionFactory, async cancellationToken =>
             {
                 var executionBatchId = Guid.NewGuid();
@@ -113,7 +122,8 @@ if (runLocalQueue)
                     await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), cancellationToken)
                         .ConfigureAwait(false);
                 }
-            }, CancellationToken.None, message.Envelope.Compatibility).ConfigureAwait(false);
+            }, CancellationToken.None, message.Envelope.Compatibility, message.Envelope.Tasks.Count,
+                sessionLogger).ConfigureAwait(false);
             await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -148,10 +158,13 @@ else if (runOnce)
             throw new InvalidOperationException("A resource collection SQS event is required.");
         var worker = app.Services.GetRequiredService<CollectionPlatformWorkerClient>();
         var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
+        var sessionLogger = app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("CollectionSessionRuntime");
         var response = await CollectionLambdaInvocation.ExecuteAsync(await File.ReadAllTextAsync(eventPath, cts.Token),
             worker.ExecuteAsync, HasLambdaTimeRemaining, cts.Token,
              (envelope, operation, cancellationToken) => JraSessionExecutionScope.ExecuteAsync(
-                  sessionFactory, operation, cancellationToken, envelope.Compatibility),
+                  sessionFactory, operation, cancellationToken, envelope.Compatibility,
+                  envelope.Tasks.Count, sessionLogger),
              requestId).ConfigureAwait(false);
         var responsePath = Environment.GetEnvironmentVariable("COLLECTOR_RESPONSE_PATH")
             ?? "/tmp/collector-response.json";

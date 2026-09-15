@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Collector.Http;
 using Microsoft.Extensions.Logging;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -31,6 +32,61 @@ public sealed class CollectionPlatformWorkerTelemetryTests
     }
 
     [TestMethod]
+    public async Task HandlerInternalApi_IsAttributedWithoutChangingTheTerminalEvent()
+    {
+        var fixture = CreateFixture(HandlerBehavior.Success, includeHandlerApi: true);
+
+        await fixture.Client.ExecuteAsync(new(fixture.TaskId, 1), CancellationToken.None);
+
+        var summary = AssertSingleSummary(fixture.Logger);
+        Assert.AreEqual(15d, Convert.ToDouble(summary["HandlerApiMs"]));
+        Assert.AreEqual(1, summary["HandlerApiCallCount"]);
+        Assert.AreEqual(45d, Convert.ToDouble(summary["HandlerNonApiMs"]));
+        Assert.AreEqual(60d, Convert.ToDouble(summary["HandlerMs"]));
+        CollectionAssert.AreEquivalent(new[]
+        {
+            "Definition", "ResourceType", "Result", "MemorySizeMiB", "TotalMs", "AcquireMs", "HandlerMs",
+            "HandlerApiMs", "HandlerApiCallCount", "HandlerNonApiMs", "CompleteMs", "UnattributedMs",
+        }, summary.Keys.ToArray());
+    }
+
+    [TestMethod]
+    public async Task HandlerInternalApiFailure_IsMeasuredAndOriginalFailureClassificationIsPreserved()
+    {
+        var fixture = CreateFixture(HandlerBehavior.Success, includeHandlerApi: true, handlerApiFailure: true);
+
+        await fixture.Client.ExecuteAsync(new(fixture.TaskId, 1), CancellationToken.None);
+
+        var summary = AssertSingleSummary(fixture.Logger);
+        Assert.AreEqual("TransientFailure", summary["Result"]);
+        Assert.AreEqual(15d, Convert.ToDouble(summary["HandlerApiMs"]));
+        Assert.AreEqual(1, summary["HandlerApiCallCount"]);
+        Assert.AreEqual(45d, Convert.ToDouble(summary["HandlerNonApiMs"]));
+    }
+
+    [TestMethod]
+    public async Task TimingHandler_CountsOneLogicalCallAcrossRetries()
+    {
+        var clock = new ManualTelemetryClock();
+        using var scope = CollectionRuntimeTimingContext.BeginTask();
+        using var client = new HttpClient(new CollectionRuntimeTimingHandler(clock)
+        {
+            InnerHandler = new TransientBadGatewayRetryHandler(TimeSpan.Zero)
+            {
+                InnerHandler = new RetryingTransport(clock),
+            },
+        })
+        { BaseAddress = new("https://api.test/") };
+
+        using var response = await client.GetAsync("fixed-operation");
+
+        Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);
+        var timing = scope.Accumulator.Snapshot();
+        Assert.AreEqual(10d, timing.ApiElapsed.TotalMilliseconds);
+        Assert.AreEqual(1, timing.ApiCallCount);
+    }
+
+    [TestMethod]
     public async Task FailedTask_EmitsOneSafeTerminalSummary()
     {
         var fixture = CreateFixture(HandlerBehavior.Failure);
@@ -39,6 +95,9 @@ public sealed class CollectionPlatformWorkerTelemetryTests
 
         var summary = AssertSingleSummary(fixture.Logger);
         Assert.AreEqual("AccessLimited", summary["Result"]);
+        Assert.AreEqual(0d, Convert.ToDouble(summary["HandlerApiMs"]));
+        Assert.AreEqual(0, summary["HandlerApiCallCount"]);
+        Assert.AreEqual(Convert.ToDouble(summary["HandlerMs"]), Convert.ToDouble(summary["HandlerNonApiMs"]));
         AssertSafe(fixture.Logger.RenderedMessages.Single());
     }
 
@@ -53,10 +112,14 @@ public sealed class CollectionPlatformWorkerTelemetryTests
 
         var summary = AssertSingleSummary(fixture.Logger);
         Assert.AreEqual("TransientFailure", summary["Result"]);
+        Assert.AreEqual(0d, Convert.ToDouble(summary["HandlerApiMs"]));
+        Assert.AreEqual(0, summary["HandlerApiCallCount"]);
+        Assert.AreEqual(Convert.ToDouble(summary["HandlerMs"]), Convert.ToDouble(summary["HandlerNonApiMs"]));
         AssertSafe(fixture.Logger.RenderedMessages.Single());
     }
 
-    private static Fixture CreateFixture(HandlerBehavior behavior, CancellationTokenSource? cancellation = null)
+    private static Fixture CreateFixture(HandlerBehavior behavior, CancellationTokenSource? cancellation = null,
+        bool includeHandlerApi = false, bool handlerApiFailure = false)
     {
         var taskId = Guid.NewGuid();
         var clock = new ManualTelemetryClock();
@@ -65,7 +128,16 @@ public sealed class CollectionPlatformWorkerTelemetryTests
             "lease-secret", DateTimeOffset.UtcNow.AddMinutes(15), null,
             new Dictionary<string, string> { ["payload"] = "payload-secret" });
         var transport = new TimedTransport(lease, clock);
-        var handler = new TimedHandler(behavior, clock, cancellation);
+        HttpClient? handlerClient = null;
+        if (includeHandlerApi)
+        {
+            handlerClient = new HttpClient(new CollectionRuntimeTimingHandler(clock)
+            {
+                InnerHandler = new TimedApiTransport(clock, handlerApiFailure),
+            })
+            { BaseAddress = new("https://api.test/") };
+        }
+        var handler = new TimedHandler(behavior, clock, cancellation, handlerClient);
         var logger = new CapturingLogger();
         var client = new CollectionPlatformWorkerClient(
             new HttpClient(transport) { BaseAddress = new("https://api.test/") },
@@ -93,23 +165,48 @@ public sealed class CollectionPlatformWorkerTelemetryTests
     private enum HandlerBehavior { Success, Failure, Cancellation }
 
     private sealed class TimedHandler(HandlerBehavior behavior, ManualTelemetryClock clock,
-        CancellationTokenSource? cancellation) : ICollectionDefinitionHandler
+        CancellationTokenSource? cancellation, HttpClient? client) : ICollectionDefinitionHandler
     {
         public CollectionDefinitionId DefinitionId => new("horse-profile");
         public ResourceType ResourceType => ResourceType.Horse;
 
-        public Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
+        public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task, CancellationToken token)
         {
             clock.Advance(TimeSpan.FromMilliseconds(45));
             if (behavior == HandlerBehavior.Failure)
-                return Task.FromException<CollectionAttemptCompletion>(
-                    new HttpRequestException("handler-error-secret", null, HttpStatusCode.TooManyRequests));
+                throw new HttpRequestException("handler-error-secret", null, HttpStatusCode.TooManyRequests);
             if (behavior == HandlerBehavior.Cancellation)
             {
                 cancellation!.Cancel();
-                return Task.FromCanceled<CollectionAttemptCompletion>(token);
+                await Task.FromCanceled(token);
             }
-            return Task.FromResult(new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded));
+            if (client is not null)
+                using (await client.GetAsync("api/internal/fixed-operation", token)) { }
+            return new CollectionAttemptCompletion(CollectionAttemptResult.Succeeded);
+        }
+    }
+
+    private sealed class TimedApiTransport(ManualTelemetryClock clock, bool fail) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(15));
+            if (fail) throw new HttpRequestException("api-error-secret", null, HttpStatusCode.ServiceUnavailable);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+        }
+    }
+
+    private sealed class RetryingTransport(ManualTelemetryClock clock) : HttpMessageHandler
+    {
+        private int _calls;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            clock.Advance(TimeSpan.FromMilliseconds(5));
+            var status = Interlocked.Increment(ref _calls) == 1
+                ? HttpStatusCode.BadGateway : HttpStatusCode.NoContent;
+            return Task.FromResult(new HttpResponseMessage(status));
         }
     }
 

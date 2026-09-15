@@ -50,16 +50,18 @@ public sealed class CollectionPlatformWorkerClient
             throw new CollectionTaskActiveElsewhereException(notification.TaskId);
         var task = acquire.Task ?? throw new InvalidOperationException("Acquired task lease was empty.");
 
-        var expected = JraSessionExecutionScope.CurrentCompatibilityKey;
-        if (expected is not null && !IsCompatible(task, expected))
-            throw new CollectionDispatchCompatibilityException(notification.TaskId);
-
         CollectionAttemptCompletion? completion = null;
         var handlerElapsed = TimeSpan.Zero;
         var handlerMeasured = false;
         var completeElapsed = TimeSpan.Zero;
+        var handlerApiTiming = CollectionRuntimeTimingContext.BeginTask();
+        var handlerApi = default(CollectionRuntimeTimingContext.TimingSnapshot);
         try
         {
+            var expected = JraSessionExecutionScope.CurrentCompatibilityKey;
+            if (expected is not null && !IsCompatible(task, expected))
+                throw new CollectionDispatchCompatibilityException(notification.TaskId);
+
             var handlerStarted = _clock.GetTimestamp();
             try
             {
@@ -76,6 +78,8 @@ public sealed class CollectionPlatformWorkerClient
                     task);
                 handlerElapsed = _clock.GetElapsedTime(handlerStarted, _clock.GetTimestamp());
                 handlerMeasured = true;
+                handlerApiTiming.Dispose();
+                handlerApi = handlerApiTiming.Accumulator.Snapshot();
                 var cancelledCompleteStarted = _clock.GetTimestamp();
                 using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
                 await CompleteAsync(notification.TaskId, task.LeaseToken,
@@ -91,6 +95,8 @@ public sealed class CollectionPlatformWorkerClient
             {
                 if (!handlerMeasured)
                     handlerElapsed = _clock.GetElapsedTime(handlerStarted, _clock.GetTimestamp());
+                handlerApiTiming.Dispose();
+                handlerApi = handlerApiTiming.Accumulator.Snapshot();
             }
 
             completion = CollectionAttemptFailureClassifier.WithTaskContext(completion!, task);
@@ -100,17 +106,24 @@ public sealed class CollectionPlatformWorkerClient
         }
         finally
         {
+            handlerApiTiming.Dispose();
+            handlerApi = handlerApiTiming.Accumulator.Snapshot();
             var totalElapsed = _clock.GetElapsedTime(totalStarted, _clock.GetTimestamp());
             var attributed = acquireElapsed + handlerElapsed + completeElapsed;
             var unattributed = totalElapsed > attributed ? totalElapsed - attributed : TimeSpan.Zero;
             var result = completion?.Result.ToString() ?? "UnexpectedFailure";
+            var handlerNonApiElapsed = handlerElapsed > handlerApi.ApiElapsed
+                ? handlerElapsed - handlerApi.ApiElapsed
+                : TimeSpan.Zero;
             var memorySize = int.TryParse(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_MEMORY_SIZE"),
                 out var configuredMemory) ? configuredMemory : 0;
             _logger.LogInformation(
-                "Collection task runtime. Definition={Definition} ResourceType={ResourceType} Result={Result} MemorySizeMiB={MemorySizeMiB} TotalMs={TotalMs} AcquireMs={AcquireMs} HandlerMs={HandlerMs} CompleteMs={CompleteMs} UnattributedMs={UnattributedMs}",
+                "Collection task runtime. Definition={Definition} ResourceType={ResourceType} Result={Result} MemorySizeMiB={MemorySizeMiB} TotalMs={TotalMs} AcquireMs={AcquireMs} HandlerMs={HandlerMs} HandlerApiMs={HandlerApiMs} HandlerApiCallCount={HandlerApiCallCount} HandlerNonApiMs={HandlerNonApiMs} CompleteMs={CompleteMs} UnattributedMs={UnattributedMs}",
                 task.Definition.Value, task.Resource.Type, result, memorySize,
                 totalElapsed.TotalMilliseconds, acquireElapsed.TotalMilliseconds,
-                handlerElapsed.TotalMilliseconds, completeElapsed.TotalMilliseconds,
+                handlerElapsed.TotalMilliseconds, handlerApi.ApiElapsed.TotalMilliseconds,
+                handlerApi.ApiCallCount, handlerNonApiElapsed.TotalMilliseconds,
+                completeElapsed.TotalMilliseconds,
                 unattributed.TotalMilliseconds);
         }
     }
