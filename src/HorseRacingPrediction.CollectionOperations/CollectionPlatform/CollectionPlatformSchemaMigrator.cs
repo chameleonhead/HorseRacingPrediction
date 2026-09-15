@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 11;
+    internal const int CurrentVersion = 13;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -287,6 +287,37 @@ internal static class CollectionPlatformSchemaMigrator
                     cancellationToken, transaction).ConfigureAwait(false);
             await ExecuteAsync(connection, """
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (11, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 12)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_requests", "PayloadFingerprint",
+                    cancellationToken).ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_requests ADD COLUMN PayloadFingerprint TEXT NULL;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection, """
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (12, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 13)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_request_batch_bindings (
+                    BatchItemId TEXT NOT NULL CONSTRAINT PK_collection_request_batch_bindings PRIMARY KEY,
+                    PayloadFingerprint TEXT NOT NULL,
+                    RequestId TEXT NOT NULL,
+                    TaskId TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS IX_collection_request_batch_bindings_RequestId
+                    ON collection_request_batch_bindings (RequestId);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (13, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);

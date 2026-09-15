@@ -111,7 +111,33 @@ public sealed class CollectionPlatformStore
         int requestedRevision, CollectionReason reason, DateTimeOffset requestedAt,
         CollectionLane lane = CollectionLane.Normal, int priority = (int)CollectionPriority.Normal,
         Uri? explicitUrl = null, string? batchId = null, DateOnly? effectiveDate = null,
-        IReadOnlyDictionary<string, string>? attributes = null, CancellationToken cancellationToken = default)
+        IReadOnlyDictionary<string, string>? attributes = null, CancellationToken cancellationToken = default,
+        string? payloadFingerprint = null)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var receipt = await RequestCoreAsync(db, resource, definition, requestedRevision, reason, requestedAt,
+                lane, priority, explicitUrl, batchId, effectiveDate, attributes, payloadFingerprint,
+                cancellationToken).ConfigureAwait(false);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return receipt;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
+        {
+            throw new InvalidOperationException("The resource already has an active collection task.", ex);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static async Task<CollectionRequestReceipt> RequestCoreAsync(CollectionPlatformDbContext db,
+        ResourceKey resource, CollectionDefinitionId definition, int requestedRevision, CollectionReason reason,
+        DateTimeOffset requestedAt, CollectionLane lane, int priority, Uri? explicitUrl, string? batchId,
+        DateOnly? effectiveDate, IReadOnlyDictionary<string, string>? attributes, string? payloadFingerprint,
+        CancellationToken cancellationToken)
     {
         resource = resource.Normalize();
         var metadataJson = SerializeTaskMetadata(attributes);
@@ -120,181 +146,192 @@ public sealed class CollectionPlatformStore
         if (requestedRevision < 1) throw new ArgumentOutOfRangeException(nameof(requestedRevision));
         CollectionHttpUrl.EnsureHttp(explicitUrl, nameof(explicitUrl));
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        // Batch item identity is global to the supplied batch/item key, independent of the resource tuple.
+        // This prevents a replay from silently rebinding an idempotency key to different content.
+        if (!string.IsNullOrWhiteSpace(batchId) && payloadFingerprint is not null)
         {
-            await using var db = CreateDbContext();
-            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            var definitionEntity = await db.Definitions.SingleOrDefaultAsync(x => x.DefinitionId == definition.Value, cancellationToken)
-                ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
-            var suppression = await db.ResourceSuppressions.AsNoTracking().SingleOrDefaultAsync(x =>
-                x.Type == resource.Type && x.Provider == resource.Provider && x.ResourceId == resource.Id,
-                cancellationToken).ConfigureAwait(false);
-            if (suppression is not null)
-                throw new CollectionResourceSuppressedException(resource, suppression.Reason);
-            if (!definitionEntity.Enabled || definitionEntity.ResourceType != resource.Type)
-                throw new InvalidOperationException($"Definition {definition} cannot collect {resource.Type}.");
-            if (requestedRevision > definitionEntity.CurrentRevision
-                || !await db.Revisions.AnyAsync(x => x.DefinitionId == definition.Value
-                    && x.Revision == requestedRevision, cancellationToken))
-                throw new InvalidOperationException(
-                    $"Revision {requestedRevision} is not registered for definition {definition}.");
-
-            var resourceEntity = await db.Resources.SingleOrDefaultAsync(x => x.Type == resource.Type
-                && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
-            if (resourceEntity is null)
+            var keyedRequest = await db.Requests.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.BatchId == batchId, cancellationToken).ConfigureAwait(false);
+            if (keyedRequest is not null)
             {
-                resourceEntity = new CollectionResourceEntity
-                {
-                    Type = resource.Type,
-                    Provider = resource.Provider,
-                    ResourceId = resource.Id,
-                    EffectiveDate = effectiveDate,
-                    AttributesJson = JsonSerializer.Serialize(attributes ?? new Dictionary<string, string>()),
-                    CreatedAt = requestedAt,
-                };
-                db.Resources.Add(resourceEntity);
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                if (!string.Equals(keyedRequest.PayloadFingerprint, payloadFingerprint, StringComparison.Ordinal))
+                    throw new CollectionRequestIdempotencyMismatchException(batchId);
+                var keyedTask = await db.Tasks.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.RequestId == keyedRequest.RequestId, cancellationToken)
+                    .ConfigureAwait(false);
+                var keyedActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.ResourcePk == keyedRequest.ResourcePk && x.DefinitionId == keyedRequest.DefinitionId,
+                    cancellationToken).ConfigureAwait(false);
+                return new(keyedRequest.RequestId,
+                    keyedTask?.TaskId ?? keyedActive?.TaskId ?? Guid.Empty, false);
             }
-            else
-            {
-                resourceEntity.EffectiveDate ??= effectiveDate;
-                if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
-            }
+        }
 
-            if (!string.IsNullOrWhiteSpace(batchId))
-            {
-                var existingRequest = await db.Requests.AsNoTracking().FirstOrDefaultAsync(x =>
-                    x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value
-                    && x.BatchId == batchId, cancellationToken).ConfigureAwait(false);
-                if (existingRequest is not null)
-                {
-                    var existingTask = await db.Tasks.AsNoTracking()
-                        .FirstOrDefaultAsync(x => x.RequestId == existingRequest.RequestId, cancellationToken)
-                        .ConfigureAwait(false);
-                    var existingActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
-                        x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value,
-                        cancellationToken).ConfigureAwait(false);
-                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return new(existingRequest.RequestId,
-                        existingTask?.TaskId ?? existingActive?.TaskId ?? Guid.Empty, false);
-                }
-            }
+        var definitionEntity = await db.Definitions.SingleOrDefaultAsync(x => x.DefinitionId == definition.Value, cancellationToken)
+            ?? throw new InvalidOperationException($"Collection definition {definition} is not registered.");
+        var suppression = await db.ResourceSuppressions.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Type == resource.Type && x.Provider == resource.Provider && x.ResourceId == resource.Id,
+            cancellationToken).ConfigureAwait(false);
+        if (suppression is not null)
+            throw new CollectionResourceSuppressedException(resource, suppression.Reason);
+        if (!definitionEntity.Enabled || definitionEntity.ResourceType != resource.Type)
+            throw new InvalidOperationException($"Definition {definition} cannot collect {resource.Type}.");
+        if (requestedRevision > definitionEntity.CurrentRevision
+            || !await db.Revisions.AnyAsync(x => x.DefinitionId == definition.Value
+                && x.Revision == requestedRevision, cancellationToken))
+            throw new InvalidOperationException(
+                $"Revision {requestedRevision} is not registered for definition {definition}.");
 
-            if (IsOrdinaryRegistration(reason))
+        var resourceEntity = await db.Resources.SingleOrDefaultAsync(x => x.Type == resource.Type
+            && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
+        if (resourceEntity is null)
+        {
+            resourceEntity = new CollectionResourceEntity
             {
+                Type = resource.Type,
+                Provider = resource.Provider,
+                ResourceId = resource.Id,
+                EffectiveDate = effectiveDate,
+                AttributesJson = JsonSerializer.Serialize(attributes ?? new Dictionary<string, string>()),
+                CreatedAt = requestedAt,
+            };
+            db.Resources.Add(resourceEntity);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            resourceEntity.EffectiveDate ??= effectiveDate;
+            if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
+        }
+
+        if (!string.IsNullOrWhiteSpace(batchId))
+        {
+            var existingRequest = await db.Requests.AsNoTracking().FirstOrDefaultAsync(x =>
+                x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value
+                && x.BatchId == batchId, cancellationToken).ConfigureAwait(false);
+            if (existingRequest is not null)
+            {
+                if (payloadFingerprint is not null
+                    && !string.Equals(existingRequest.PayloadFingerprint, payloadFingerprint,
+                        StringComparison.Ordinal))
+                    throw new CollectionRequestIdempotencyMismatchException(batchId);
                 var existingTask = await db.Tasks.AsNoTracking()
-                    .Where(x => x.ResourcePk == resourceEntity.ResourcePk
-                        && x.DefinitionId == definition.Value
-                        && x.RequestedRevision == requestedRevision)
-                    .OrderByDescending(x => x.CreatedAt)
-                    .ThenByDescending(x => x.TaskId)
-                    .Select(x => new { x.TaskId, x.RequestId })
-                    .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-                if (existingTask is not null)
-                {
-                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return new(existingTask.RequestId, existingTask.TaskId, false);
-                }
-            }
-
-            var request = new CollectionRequestEntity
-            {
-                RequestId = Guid.NewGuid(),
-                ResourcePk = resourceEntity.ResourcePk,
-                DefinitionId = definition.Value,
-                RequestedRevision = requestedRevision,
-                Reason = reason,
-                RequestedAt = requestedAt,
-                ExplicitUrl = explicitUrl?.AbsoluteUri,
-                BatchId = batchId,
-            };
-            db.Requests.Add(request);
-
-            var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
-                && x.DefinitionId == definition.Value, cancellationToken);
-            if (active is not null)
-            {
-                var activeStatus = await db.Tasks.Where(x => x.TaskId == active.TaskId)
-                    .Select(x => (CollectionTaskStatus?)x.Status).SingleOrDefaultAsync(cancellationToken);
-                if (activeStatus is null || activeStatus is CollectionTaskStatus.Succeeded
-                    or CollectionTaskStatus.Failed or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)
-                {
-                    db.ActiveTasks.Remove(active);
-                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    active = null;
-                }
-            }
-            if (active is not null)
-            {
-                if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
-                    or CollectionReason.PeriodRecollection)
-                    await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
-                        active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
+                    .FirstOrDefaultAsync(x => x.RequestId == existingRequest.RequestId, cancellationToken)
+                    .ConfigureAwait(false);
+                var existingActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
+                    x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value,
+                    cancellationToken).ConfigureAwait(false);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return new CollectionRequestReceipt(request.RequestId, active.TaskId, false);
+                return new(existingRequest.RequestId,
+                    existingTask?.TaskId ?? existingActive?.TaskId ?? Guid.Empty, false);
             }
+        }
 
-            var task = new CollectionTaskEntity
+        if (IsOrdinaryRegistration(reason))
+        {
+            var existingTask = await db.Tasks.AsNoTracking()
+                .Where(x => x.ResourcePk == resourceEntity.ResourcePk
+                    && x.DefinitionId == definition.Value
+                    && x.RequestedRevision == requestedRevision)
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.TaskId)
+                .Select(x => new { x.TaskId, x.RequestId })
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (existingTask is not null)
             {
-                TaskId = Guid.NewGuid(),
-                RequestId = request.RequestId,
-                ResourcePk = resourceEntity.ResourcePk,
-                DefinitionId = definition.Value,
-                RequestedRevision = requestedRevision,
-                Status = CollectionTaskStatus.Ready,
-                Lane = lane,
-                Priority = priority,
-                AvailableAt = requestedAt,
-                CreatedAt = requestedAt,
-                UpdatedAt = requestedAt,
-                DispatchGeneration = 1,
-                MetadataJson = metadataJson,
-            };
-            db.Tasks.Add(task);
-            db.ActiveTasks.Add(new CollectionActiveTaskEntity
-            { ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value, TaskId = task.TaskId });
-            db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return new(existingTask.RequestId, existingTask.TaskId, false);
+            }
+        }
+
+        var request = new CollectionRequestEntity
+        {
+            RequestId = Guid.NewGuid(),
+            ResourcePk = resourceEntity.ResourcePk,
+            DefinitionId = definition.Value,
+            RequestedRevision = requestedRevision,
+            Reason = reason,
+            RequestedAt = requestedAt,
+            ExplicitUrl = explicitUrl?.AbsoluteUri,
+            BatchId = batchId,
+            PayloadFingerprint = payloadFingerprint,
+        };
+        db.Requests.Add(request);
+
+        var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+            && x.DefinitionId == definition.Value, cancellationToken);
+        if (active is not null)
+        {
+            var activeStatus = await db.Tasks.Where(x => x.TaskId == active.TaskId)
+                .Select(x => (CollectionTaskStatus?)x.Status).SingleOrDefaultAsync(cancellationToken);
+            if (activeStatus is null || activeStatus is CollectionTaskStatus.Succeeded
+                or CollectionTaskStatus.Failed or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)
             {
-                OutboxId = Guid.NewGuid(),
-                TaskId = task.TaskId,
-                DispatchGeneration = task.DispatchGeneration,
-                AvailableAt = requestedAt,
-                CreatedAt = requestedAt,
-            });
+                db.ActiveTasks.Remove(active);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                active = null;
+            }
+        }
+        if (active is not null)
+        {
             if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
                 or CollectionReason.PeriodRecollection)
                 await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
-                    task.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
-            var state = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
-                && x.DefinitionId == definition.Value, cancellationToken);
-            if (state is null)
-                db.States.Add(new CollectionStateEntity
-                {
-                    ResourcePk = resourceEntity.ResourcePk,
-                    DefinitionId = definition.Value,
-                    RequiredRevision = requestedRevision,
-                    Status = CollectionStateStatus.Pending,
-                    UpdatedAt = requestedAt,
-                });
-            else
-            {
-                state.RequiredRevision = Math.Max(state.RequiredRevision, requestedRevision);
-                state.Status = CollectionStateStatus.Pending;
-                state.UpdatedAt = requestedAt;
-            }
+                    active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
-            return new CollectionRequestReceipt(request.RequestId, task.TaskId, true);
+            return new CollectionRequestReceipt(request.RequestId, active.TaskId, false);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
+
+        var task = new CollectionTaskEntity
         {
-            throw new InvalidOperationException("The resource already has an active collection task.", ex);
+            TaskId = Guid.NewGuid(),
+            RequestId = request.RequestId,
+            ResourcePk = resourceEntity.ResourcePk,
+            DefinitionId = definition.Value,
+            RequestedRevision = requestedRevision,
+            Status = CollectionTaskStatus.Ready,
+            Lane = lane,
+            Priority = priority,
+            AvailableAt = requestedAt,
+            CreatedAt = requestedAt,
+            UpdatedAt = requestedAt,
+            DispatchGeneration = 1,
+            MetadataJson = metadataJson,
+        };
+        db.Tasks.Add(task);
+        db.ActiveTasks.Add(new CollectionActiveTaskEntity
+        { ResourcePk = resourceEntity.ResourcePk, DefinitionId = definition.Value, TaskId = task.TaskId });
+        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+        {
+            OutboxId = Guid.NewGuid(),
+            TaskId = task.TaskId,
+            DispatchGeneration = task.DispatchGeneration,
+            AvailableAt = requestedAt,
+            CreatedAt = requestedAt,
+        });
+        if (reason is CollectionReason.Recovery or CollectionReason.ManualRefresh
+            or CollectionReason.PeriodRecollection)
+            await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
+                task.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
+        var state = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+            && x.DefinitionId == definition.Value, cancellationToken);
+        if (state is null)
+            db.States.Add(new CollectionStateEntity
+            {
+                ResourcePk = resourceEntity.ResourcePk,
+                DefinitionId = definition.Value,
+                RequiredRevision = requestedRevision,
+                Status = CollectionStateStatus.Pending,
+                UpdatedAt = requestedAt,
+            });
+        else
+        {
+            state.RequiredRevision = Math.Max(state.RequiredRevision, requestedRevision);
+            state.Status = CollectionStateStatus.Pending;
+            state.UpdatedAt = requestedAt;
         }
-        finally { _gate.Release(); }
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return new CollectionRequestReceipt(request.RequestId, task.TaskId, true);
     }
 
     private static bool IsOrdinaryRegistration(CollectionReason reason)
@@ -1982,6 +2019,111 @@ public sealed class CollectionPlatformStore
         }
         finally { _gate.Release(); }
     }
+
+    public async Task<IReadOnlyList<CollectionRequestBatchOutcome>> RequestManyAsync(string batchId,
+        IReadOnlyList<CollectionRequestBatchItem> items, DateTimeOffset requestedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) throw new ArgumentException("Batch id is required.", nameof(batchId));
+        if (items.Count is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(items));
+        if (items.Select(item => item.ItemKey).Distinct(StringComparer.Ordinal).Count() != items.Count)
+            throw new ArgumentException("Batch item keys must be unique.", nameof(items));
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var outcomes = new List<CollectionRequestBatchOutcome>(items.Count);
+            foreach (var item in items)
+            {
+                try
+                {
+                    var fingerprint = BuildRequestFingerprint(item);
+                    var batchItemId = BuildBatchItemId(batchId, item.ItemKey);
+                    var binding = await db.RequestBatchBindings.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.BatchItemId == batchItemId, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (binding is not null)
+                    {
+                        if (!string.Equals(binding.PayloadFingerprint, fingerprint, StringComparison.Ordinal))
+                        {
+                            outcomes.Add(new(item.ItemKey, "Rejected", ErrorCode: "IdempotencyMismatch",
+                                Message: "The item key was already used with different request content."));
+                            continue;
+                        }
+                        outcomes.Add(new(item.ItemKey, "Reused",
+                            new(binding.RequestId, binding.TaskId, false)));
+                        continue;
+                    }
+                    var receipt = await RequestCoreAsync(db, item.Resource, item.Definition, item.RequestedRevision,
+                        item.Reason, requestedAt, item.Lane, item.Priority, item.ExplicitUrl,
+                        batchItemId, item.EffectiveDate, item.Attributes, fingerprint,
+                        cancellationToken)
+                        .ConfigureAwait(false);
+                    db.RequestBatchBindings.Add(new CollectionRequestBatchBindingEntity
+                    {
+                        BatchItemId = batchItemId,
+                        PayloadFingerprint = fingerprint,
+                        RequestId = receipt.RequestId,
+                        TaskId = receipt.TaskId,
+                    });
+                    outcomes.Add(new(item.ItemKey, receipt.CreatedTask ? "Created" : "Reused", receipt));
+                }
+                catch (CollectionResourceSuppressedException)
+                {
+                    outcomes.Add(new(item.ItemKey, "Rejected", ErrorCode: "ResourceSuppressed",
+                        Message: "The resource is suppressed."));
+                }
+                catch (CollectionRequestIdempotencyMismatchException)
+                {
+                    outcomes.Add(new(item.ItemKey, "Rejected", ErrorCode: "IdempotencyMismatch",
+                        Message: "The item key was already used with different request content."));
+                }
+                catch (ArgumentException)
+                {
+                    outcomes.Add(new(item.ItemKey, "Rejected", ErrorCode: "InvalidRequest",
+                        Message: "The request item is invalid."));
+                }
+                catch (InvalidOperationException)
+                {
+                    outcomes.Add(new(item.ItemKey, "Rejected", ErrorCode: "InvalidRequest",
+                        Message: "The request item cannot be processed."));
+                }
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return outcomes;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
+        {
+            throw new InvalidOperationException("A resource already has an active collection task.", ex);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static string BuildRequestFingerprint(CollectionRequestBatchItem item)
+    {
+        var attributes = item.Attributes?.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        var payload = JsonSerializer.Serialize(new
+        {
+            Resource = item.Resource.Normalize(),
+            item.Definition.Value,
+            item.RequestedRevision,
+            item.Reason,
+            item.Lane,
+            item.Priority,
+            ExplicitUrl = item.ExplicitUrl?.AbsoluteUri,
+            item.EffectiveDate,
+            attributes,
+        });
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(payload)));
+    }
+
+    private static string BuildBatchItemId(string batchId, string itemKey)
+        => $"{batchId.Length}:{batchId}{itemKey}";
 
     public async Task<CollectionResourceSuppressionResult> SuppressResourceAsync(
         ResourceKey resource, string reason, string repairId, DateTimeOffset now,

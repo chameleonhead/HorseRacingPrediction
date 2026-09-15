@@ -7,6 +7,7 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -392,7 +393,9 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             .Where(x => !string.IsNullOrWhiteSpace(x.Name))
             .Select(x => (x.Type, Name: x.Name!.Trim(), x.SourceIdentity))
             .Distinct();
-        foreach (var subject in subjects)
+        // TaskId fences response-loss retries without changing ordinary Discovery deduplication policy.
+        var batchId = $"race-subjects:{task.TaskId:N}:{requestedByRaceId}";
+        var items = subjects.Select(subject =>
         {
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
             var id = subject.Type == ResourceType.Horse
@@ -413,12 +416,21 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 attributes["sourceIdentity"] = sourceUrl;
                 attributes["sourceUrl"] = sourceUrl;
             }
-            await sink.RequestAsync(new(subject.Type, "JRA", id), descriptor.Definition,
-                CollectionReason.Discovery, lane, priority,
-                JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity),
-                effectiveDate,
-                attributes, cancellationToken)
-                .ConfigureAwait(false);
-        }
+            return new CollectionRequestBulkItem(
+                $"{subject.Type}:{id}", subject.Type.ToString(), "JRA", id, descriptor.Definition.Value, 1,
+                CollectionReason.Discovery.ToString(), lane.ToString(), priority,
+                JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)?.AbsoluteUri,
+                effectiveDate, attributes);
+        }).GroupBy(item => item.ItemKey, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+        if (items.Length == 0) return;
+        var response = await sink.RequestManyAsync(new(batchId, items), cancellationToken).ConfigureAwait(false);
+        var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        var validStatuses = new HashSet<string>(["Created", "Reused", "Accepted"], StringComparer.Ordinal);
+        if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
+            || response.Outcomes.Any(outcome => !validStatuses.Contains(outcome.Status)))
+            throw new InvalidOperationException("Referenced subject batch response was incomplete or rejected.");
     }
 }

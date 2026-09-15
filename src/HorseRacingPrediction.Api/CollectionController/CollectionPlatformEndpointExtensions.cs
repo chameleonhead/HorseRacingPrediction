@@ -4,6 +4,7 @@ using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Shared = HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -288,6 +289,33 @@ public static class CollectionPlatformEndpointExtensions
             var batch = await store.CreateOrResumeBackfillBatchAsync(batchId, request.Provider,
                 from, to, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", batch);
+        });
+        admin.MapPost("/requests/batch", async (Shared.CollectionRequestBulkRequest request,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            if (request.Items is null || request.Items.Count is < 1 or > 500)
+                return Results.BadRequest(new { message = "Batch items must contain between 1 and 500 entries." });
+            if (request.Items.Select(item => item.ItemKey).Distinct(StringComparer.Ordinal).Count() != request.Items.Count)
+                return Results.BadRequest(new { message = "Batch item keys must be unique." });
+            var items = new List<CollectionRequestBatchItem>(request.Items.Count);
+            foreach (var item in request.Items)
+            {
+                if (!Enum.TryParse<ResourceType>(item.ResourceType, true, out var resourceType)
+                    || !Enum.TryParse<CollectionReason>(item.Reason, true, out var reason)
+                    || !Enum.TryParse<CollectionLane>(item.Lane, true, out var lane))
+                    return Results.BadRequest(new { message = $"Invalid enum value for item {item.ItemKey}." });
+                if (!CollectionHttpUrl.TryCreate(item.ExplicitUrl, out var explicitUrl) && item.ExplicitUrl is not null)
+                    return Results.BadRequest(new { message = $"ExplicitUrl is invalid for item {item.ItemKey}." });
+                items.Add(new(item.ItemKey, new(resourceType, item.Provider, item.ResourceId),
+                    new(item.DefinitionId), item.RequestedRevision, reason, lane, item.Priority, explicitUrl,
+                    item.EffectiveDate, item.Attributes));
+            }
+            var outcomes = await store.RequestManyAsync(request.BatchId, items,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
+            return Results.Ok(new Shared.CollectionRequestBulkResponse(outcomes.Select(outcome =>
+                new Shared.CollectionRequestBulkOutcome(outcome.ItemKey, outcome.Status,
+                    outcome.Receipt?.RequestId, outcome.Receipt?.TaskId,
+                    outcome.Receipt?.CreatedTask ?? false, outcome.ErrorCode, outcome.Message)).ToArray()));
         });
         admin.MapPost("/race-period-recollections/preview", (CreateRacePeriodRecollectionRequest request) =>
         {

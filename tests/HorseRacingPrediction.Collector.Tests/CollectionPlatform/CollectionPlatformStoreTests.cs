@@ -1,6 +1,8 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Data.Sqlite;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
@@ -8,6 +10,115 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 [TestClass]
 public sealed class CollectionPlatformStoreTests
 {
+    [TestMethod]
+    public async Task RequestManyAsync_CommitsOneDatabaseTransaction()
+    {
+        var path = Path.Combine(_directory, "transaction-counter.db");
+        var counter = new TransactionCounterInterceptor();
+        var options = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={path};Pooling=False")
+            .AddInterceptors(counter).Options;
+        var store = new CollectionPlatformStore(options);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+            "Initial profile extractor", false);
+        counter.Commits = 0;
+
+        await store.RequestManyAsync("race-subjects:race-1",
+        [
+            new("Horse:H001", new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+                CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
+            new("Horse:H002", new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+                CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
+        ], DateTimeOffset.UtcNow);
+
+        Assert.AreEqual(1, counter.Commits);
+    }
+
+    [TestMethod]
+    public async Task RequestManyAsync_ConcurrentStoresBindSamePayloadAndRejectDifferentPayload()
+    {
+        var firstStore = await CreateStoreAsync();
+        var secondStore = CreateStore();
+        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+            HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
+            new(2026, 9, 12), null);
+        var now = DateTimeOffset.UtcNow;
+
+        var same = await Task.WhenAll(
+            firstStore.RequestManyAsync("race-subjects:same", [item], now),
+            secondStore.RequestManyAsync("race-subjects:same", [item], now));
+
+        Assert.AreEqual(same[0][0].Receipt!.RequestId, same[1][0].Receipt!.RequestId);
+        CollectionAssert.AreEquivalent(new[] { "Created", "Reused" },
+            same.Select(x => x[0].Status).ToArray());
+
+        var different = item with { Priority = 99 };
+        var conflict = await Task.WhenAll(
+            firstStore.RequestManyAsync("race-subjects:different", [item], now),
+            secondStore.RequestManyAsync("race-subjects:different", [different], now));
+        CollectionAssert.AreEquivalent(new[] { "Reused", "Rejected" },
+            conflict.Select(x => x[0].Status).ToArray());
+        Assert.IsTrue(conflict.Select(x => x[0]).Any(x => x.ErrorCode == "IdempotencyMismatch"));
+    }
+
+    [TestMethod]
+    public async Task RequestManyAsync_ReturnsPerItemOutcomes_AndReusesReplay()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero);
+        CollectionRequestBatchItem[] items =
+        [
+            new("Horse:H001", new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
+                CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
+            new("Horse:H002", new(ResourceType.Horse, "JRA", "H002"), HorseProfile, 7,
+                CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
+            new("Horse:H003", new(ResourceType.Horse, "JRA", "H003"), new("missing-definition"), 1,
+                CollectionReason.Discovery, CollectionLane.Realtime, 70, null, new(2026, 9, 12), null),
+        ];
+
+        var first = await store.RequestManyAsync("race-subjects:race-1", items, now);
+        var replay = await store.RequestManyAsync("race-subjects:race-1", items, now.AddMinutes(1));
+
+        CollectionAssert.AreEqual(new[] { "Created", "Created", "Rejected" },
+            first.Select(x => x.Status).ToArray());
+        CollectionAssert.AreEqual(new[] { "Reused", "Reused", "Rejected" },
+            replay.Select(x => x.Status).ToArray());
+        CollectionAssert.AreEqual(first.Take(2).Select(x => x.Receipt!.RequestId).ToArray(),
+            replay.Take(2).Select(x => x.Receipt!.RequestId).ToArray());
+        Assert.AreEqual("InvalidRequest", first[2].ErrorCode);
+        Assert.HasCount(2, await store.GetTasksAsync());
+
+        var changed = items.ToArray();
+        changed[0] = changed[0] with { Priority = 99 };
+        var mismatch = await store.RequestManyAsync("race-subjects:race-1", changed, now.AddMinutes(2));
+        Assert.AreEqual("Rejected", mismatch[0].Status);
+        Assert.AreEqual("IdempotencyMismatch", mismatch[0].ErrorCode);
+        Assert.HasCount(2, await store.GetTasksAsync());
+
+        changed[0] = changed[0] with
+        {
+            Resource = new ResourceKey(ResourceType.Horse, "JRA", "DIFFERENT-HORSE"),
+            Priority = items[0].Priority,
+        };
+        var rebound = await store.RequestManyAsync("race-subjects:race-1", changed, now.AddMinutes(3));
+        Assert.AreEqual("Rejected", rebound[0].Status);
+        Assert.AreEqual("IdempotencyMismatch", rebound[0].ErrorCode);
+        Assert.HasCount(2, await store.GetTasksAsync());
+    }
+
+    [TestMethod]
+    public async Task RequestManyAsync_RejectsDuplicateItemKeysBeforeCreatingTasks()
+    {
+        var store = await CreateStoreAsync();
+        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+            HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
+            new(2026, 9, 12), null);
+
+        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+            store.RequestManyAsync("race-subjects:race-1", [item, item], DateTimeOffset.UtcNow));
+        Assert.IsEmpty(await store.GetTasksAsync());
+    }
+
     [TestMethod]
     public async Task TaskMetadata_RemainsImmutableWhenLaterRequestUpdatesResourceAttributes()
     {
@@ -642,7 +753,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(11L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(13L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -950,7 +1061,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 11;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 13;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1386,6 +1497,19 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionFailureResolutionStatus.Open, actionable.ResolutionStatus);
         Assert.IsNull(actionable.RecoveryTaskId);
         Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+    }
+
+    private sealed class TransactionCounterInterceptor : DbTransactionInterceptor
+    {
+        public int Commits { get; set; }
+        public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData) =>
+            Commits++;
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            Commits++;
+            return Task.CompletedTask;
+        }
     }
 
     [TestMethod]

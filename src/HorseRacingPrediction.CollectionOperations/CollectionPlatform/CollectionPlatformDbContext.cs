@@ -12,6 +12,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionRevisionImpactEntity> RevisionImpacts => Set<CollectionRevisionImpactEntity>();
     public DbSet<CollectionStateEntity> States => Set<CollectionStateEntity>();
     public DbSet<CollectionRequestEntity> Requests => Set<CollectionRequestEntity>();
+    public DbSet<CollectionRequestBatchBindingEntity> RequestBatchBindings => Set<CollectionRequestBatchBindingEntity>();
     public DbSet<CollectionTaskEntity> Tasks => Set<CollectionTaskEntity>();
     public DbSet<CollectionActiveTaskEntity> ActiveTasks => Set<CollectionActiveTaskEntity>();
     public DbSet<CollectionAttemptEntity> Attempts => Set<CollectionAttemptEntity>();
@@ -68,6 +69,11 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_requests"); e.HasKey(x => x.RequestId);
             e.Property(x => x.Reason).HasConversion<string>();
             e.HasIndex(x => new { x.ResourcePk, x.DefinitionId, x.RequestedAt });
+        });
+        modelBuilder.Entity<CollectionRequestBatchBindingEntity>(e =>
+        {
+            e.ToTable("collection_request_batch_bindings"); e.HasKey(x => x.BatchItemId);
+            e.HasIndex(x => x.RequestId);
         });
         modelBuilder.Entity<CollectionTaskEntity>(e =>
         {

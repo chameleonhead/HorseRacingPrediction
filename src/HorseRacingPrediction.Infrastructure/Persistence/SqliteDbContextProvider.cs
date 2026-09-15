@@ -1,6 +1,7 @@
 using EventFlow.EntityFramework;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace HorseRacingPrediction.Infrastructure.Persistence;
 
@@ -9,7 +10,8 @@ public class SqliteDbContextProvider : IDbContextProvider<EventStoreDbContext>, 
     private readonly DbContextOptions<EventStoreDbContext> _options;
     private readonly SqliteConnection _connection;
 
-    public SqliteDbContextProvider(string connectionString = "DataSource=:memory:")
+    public SqliteDbContextProvider(string connectionString = "DataSource=:memory:",
+        IEnumerable<IInterceptor>? interceptors = null)
     {
         var connectionStringBuilder = new SqliteConnectionStringBuilder(connectionString)
         {
@@ -25,9 +27,10 @@ public class SqliteDbContextProvider : IDbContextProvider<EventStoreDbContext>, 
         _connection = new SqliteConnection(connectionStringBuilder.ConnectionString);
         _connection.Open();
 
-        _options = new DbContextOptionsBuilder<EventStoreDbContext>()
-            .UseSqlite(connectionStringBuilder.ConnectionString)
-            .Options;
+        var options = new DbContextOptionsBuilder<EventStoreDbContext>()
+            .UseSqlite(connectionStringBuilder.ConnectionString);
+        if (interceptors is not null) options.AddInterceptors(interceptors);
+        _options = options.Options;
 
     }
 

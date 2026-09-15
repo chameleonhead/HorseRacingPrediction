@@ -221,6 +221,9 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
         Assert.IsTrue(requests.Requests.All(x => x.Priority == (int)CollectionPriority.High));
         Assert.IsTrue(requests.Requests.All(x => x.EffectiveDate == date));
+        Assert.AreEqual(1, requests.BatchRequests.Count);
+        Assert.AreEqual(requests.BatchRequests[0].Items.Count,
+            requests.BatchRequests[0].Items.Select(x => x.ItemKey).Distinct(StringComparer.Ordinal).Count());
         var horseRequest = requests.Requests.Single(x => x.Resource.Type == ResourceType.Horse);
         Assert.AreEqual(new Uri(horseUrl), horseRequest.ExplicitUrl);
         Assert.AreEqual(horseUrl, horseRequest.Attributes["sourceIdentity"]);
@@ -472,6 +475,24 @@ public sealed class JraSubjectCollectionHandlerTests
     private sealed class RecordingRequestSink : ICollectionRequestSink
     {
         public List<Request> Requests { get; } = [];
+        public List<CollectionRequestBulkRequest> BatchRequests { get; } = [];
+
+        public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
+            CancellationToken cancellationToken)
+        {
+            BatchRequests.Add(request);
+            var outcomes = new List<CollectionRequestBulkOutcome>();
+            foreach (var item in request.Items)
+            {
+                await RequestAsync(new(Enum.Parse<ResourceType>(item.ResourceType), item.Provider, item.ResourceId),
+                    new(item.DefinitionId), Enum.Parse<CollectionReason>(item.Reason),
+                    Enum.Parse<CollectionLane>(item.Lane), item.Priority,
+                    item.ExplicitUrl is null ? null : new Uri(item.ExplicitUrl), item.EffectiveDate!.Value,
+                    item.Attributes ?? new Dictionary<string, string>(), cancellationToken);
+                outcomes.Add(new(item.ItemKey, "Accepted"));
+            }
+            return new(outcomes);
+        }
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)

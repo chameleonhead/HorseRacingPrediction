@@ -102,6 +102,12 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
     DateTimeOffset? NextCollectionAt, CollectionStateStatus Status);
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
+public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Resource,
+    CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
+    CollectionLane Lane, int Priority, Uri? ExplicitUrl, DateOnly? EffectiveDate,
+    IReadOnlyDictionary<string, string>? Attributes);
+public sealed record CollectionRequestBatchOutcome(string ItemKey, string Status,
+    CollectionRequestReceipt? Receipt = null, string? ErrorCode = null, string? Message = null);
 public sealed record CollectionResourceSuppressionResult(int CancelledTasks, int RunningCancellationRequests);
 public sealed record LegacyRaceDetailMergeReport(bool DryRun, int SourceResources, int TargetResources,
     int Requests, int Tasks, int Attempts, int Locations, int States, int SupplementRequests,
@@ -117,6 +123,9 @@ public sealed class CollectionResourceSuppressedException(ResourceKey resource, 
     public ResourceKey Resource { get; } = resource;
     public string SuppressionReason { get; } = reason;
 }
+
+public sealed class CollectionRequestIdempotencyMismatchException(string batchId)
+    : InvalidOperationException($"Collection request idempotency mismatch for {batchId}.");
 
 public enum CollectionTaskAcquireStatus
 {

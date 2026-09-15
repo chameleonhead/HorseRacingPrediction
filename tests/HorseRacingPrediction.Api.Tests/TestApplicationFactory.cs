@@ -18,6 +18,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Contracts.Time;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -26,7 +27,7 @@ internal static class TestApplicationFactory
     public const string TestApiKey = "test-api-key-12345";
 
     public static async Task<(WebApplication App, HttpClient Client)> CreateAsync(
-        string connectionString = "DataSource=:memory:")
+        string connectionString = "DataSource=:memory:", IEnumerable<IInterceptor>? interceptors = null)
     {
         var builder = WebApplication.CreateBuilder(Array.Empty<string>());
         builder.WebHost.UseTestServer();
@@ -57,7 +58,7 @@ internal static class TestApplicationFactory
 
         builder.Services.AddSingleton(_ =>
         {
-            var provider = new SqliteDbContextProvider(connectionString);
+            var provider = new SqliteDbContextProvider(connectionString, interceptors);
             using var context = provider.CreateContext();
             context.Database.EnsureCreated();
             return provider;
