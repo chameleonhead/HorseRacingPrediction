@@ -135,13 +135,13 @@ Playwright往復を行わず、`IPageSnapshotter`が1回のDOM評価でSemantic 
 metadataをまとめて取得する。ナビゲーションやready判定は引き続き`IWebBrowser`の責務であり、
 Snapshotter自身はページ遷移や待機を行わない。
 
-収集Workerは、互換Envelope内で1つのJRAセッションを再利用してページ遷移と必要なSemantic Snapshot取得を終え、Snapshotだけを入力とするparserで正規化済み収集データを構築する。ブラウザーを保持したまま出走馬単位のAPI書込みや関連Resource要求を逐次実行せず、Envelope末尾でブラウザーセッションを解放した後に1つのversioned ingestion envelopeとしてApiへ渡す。Apiは元タスクを`Applying`として処理所有権ごと引き継ぐため、Lambdaは適用完了を待たない。Api受付後のdomain write再試行は保存済みenvelopeから行い、Playwrightを再実行しない。初期対象は統合済み`race-detail`、Horse profile/history、Jockey profile、Trainer profileとし、Semantic DOM全体の常時永続化は含めない。
+収集Workerは、互換Envelope内で1つのJRAセッションを再利用してページ遷移と必要なSemantic Snapshot取得を終え、Snapshotだけを入力とするparserで正規化済み収集データを構築する。ブラウザーを保持したままAPI書込みや関連Resource要求を逐次実行せず、Envelope末尾でブラウザーセッションを解放した後に1つのversioned ingestion envelopeとしてApiへ渡す。Apiは元タスクを`Applying`として処理所有権ごと引き継ぐため、Lambdaは適用完了を待たない。Api受付後のdomain write再試行は保存済みenvelopeから行い、Playwrightを再実行しない。初期対象はfeature flag既定offの統合済み`race-detail` pilotだけとし、Semantic DOM全体の常時永続化は含めない。Horse profile/history、Jockey profile、Trainer profileはpilot成功後の別変更・別承認とする。
 
-Horse profile/history Snapshotは1ページ内の複数レース行をまとめて解析する。複数Horseの履歴行はcanonical Race IDへ正規化してstate-awareな共有frontierへ統合し、同一レース結果を馬ごとに再取得しない。1枚のRaceResult Snapshotを全出走馬へ適用する。同年代は共有Raceの可能性を高める順序hintに限り、取得省略の根拠にはしない。全履歴ページを取得し終えるまでは完全扱いにせず、順序・訂正挙動が実サイトで証明されるまでhigh-watermarkによる途中打切りを有効化しない。詳細と判断理由は[Snapshot-first collection and bulk ingestion](changes/20260915_snapshot-first-bulk-ingestion/README.md)を正本とする。
+Horse profile/history Snapshotは1ページ内の複数レース行をまとめて解析する。複数Horseの履歴行はcanonical Race IDへ正規化してstate-awareな共有frontierへ統合し、同一レース結果を馬ごとに再取得しない。1枚のRaceResult Snapshotを全出走馬へ適用する。同年代は共有Raceの可能性を高める順序hintに限り、取得省略の根拠にはしない。全履歴ページを取得し終えるまでは完全扱いにせず、順序・訂正挙動が実サイトで証明されるまでhigh-watermarkによる途中打切りを有効化しない。この拡張は`race-detail` pilot成功後の別承認とし、[Subject profile and history bulk ingestion](changes/20260915_subject-profile-history-bulk-ingestion/README.md)を正本とする。先行するbrowser/parser/navigation最適化は[Playwright collection efficiency](changes/20260915_playwright-collection-efficiency/README.md)、application/runtime最適化は[Collection application and runtime efficiency](changes/20260915_collection-application-runtime-efficiency/README.md)を正本とする。
 
 JRA向けNavigatorは、遷移・操作ごとにページ種別固有の必須DOMを1回待ち、その状態から待機を重ねずSemantic Snapshotを取得する。戻り値を使用しないtyped操作では本文全体や画像altを別途抽出しない。link/button/form候補は1回のDOM評価でdocument order、表示名、URL、region、DOM mutation世代を得て、選択時に世代と完全fingerprintの一意性を再確認して得た同一`ElementHandle`だけをPlaywrightで操作する。mutation、差替え、曖昧一致、detach時は再解決1回後に安全に失敗し、session-bound actionを直接GETや生`element.click()`へ置換しない。1つのSnapshotから作る`JraSnapshotView`はpage識別とparserで共有し、馬検索では最大32候補・256KiBまでの本人確認済みnormalized resultだけを検索再構築せず再利用する。resource interceptionやpage-kind別Snapshot projectionは、全対象ページの正規化結果・diagnostic・identity証拠がcontrolと一致し、速度と失敗率のgateを満たす場合だけ有効化する。CSS、script、XHR/fetchや未知hostを推測で遮断しない。
 
-騎手・調教師profileは同一種別の対象をまとめ、名鑑・五十音・引退者一覧を対象ごとに繰り返さずbatch resolverで一度ずつ走査する。親一覧を保持する一時child pageを使う場合は同じBrowserContext内のpage-scoped leaseとpage-local Navigator/Readerを使い、単一`IPage`を並列操作しない。POST/session-bound導線は再現可能性を個別検証するまでsame-pageを維持する。騎手・調教師ページ内の履歴らしき表は現行要件に含めず、実Snapshotで意味を確認した別changeで扱う。
+騎手・調教師profileは同一種別の対象をまとめ、名鑑・五十音・引退者一覧を対象ごとに繰り返さずbatch resolverで一度ずつ走査する。親一覧を保持する一時child pageを使う場合は同じBrowserContext内のpage-scoped leaseとpage-local Navigator/Readerを使い、単一`IPage`を並列操作しない。POST/session-bound導線は再現可能性を個別検証するまでsame-pageを維持する。騎手・調教師ページ内の履歴らしき表は現行要件に含めず、実Snapshotで意味を確認した別changeで扱う。対象範囲と承認条件は[Subject profile and history bulk ingestion](changes/20260915_subject-profile-history-bulk-ingestion/README.md)を正本とする。
 
 JRA parserは`JraSnapshotView`でSemantic Snapshotを参照し、span-awareな矩形table projectionと
 bounded cell fragmentsを利用する。旧section-oriented `Browser.PageSnapshot`、`Sections`、`Actions`、
@@ -1013,6 +1013,12 @@ JRA表記変更時の影響範囲をここへ限定する。
 
 ただしレース番号等、ページ固有リンクまではここへ置かない。
 
+`レース結果 開催選択` はJavaScript操作後に本文が切り替わるため、
+`HistoricalRaceSearch` のクリック対象は遷移直後にまだ存在しない場合がある。
+古いレース結果の導線では、対象リンクの出現をキャンセル可能な上限付き待機で吸収する。
+上限内に現れなければ、対象文言に加えて現在URLを保持したナビゲーション失敗として記録し、
+JRAの異常ページや構造変更を運用画面から判別可能にする。
+
 ---
 
 # 21. JraNavigator基本実装
@@ -1478,6 +1484,11 @@ Navigator Strategy化は、ルートが本当に複雑になった時点で行�
 ```
 
 JRAの実際のリンク文言・ページ階層は実ページ確認後に固定する。
+
+2026-09-15の実サイト確認では、`過去レース結果検索` は
+`レース結果 開催選択` ページの `過去のレース結果` セクションにある
+`href="#"` と `onclick="doAction(...)"` を持つアンカーである。
+JS遷移直後の遅延表示を考慮してから、この要素をクリックする。
 
 ---
 

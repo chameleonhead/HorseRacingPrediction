@@ -128,7 +128,7 @@ acquire のレスポンスには `taskId`, `jobType`, `payload`, `attemptCount`,
 
 Playwrightを使用する収集では、互換Envelope内のタスクを現行どおり1つのJRAセッションで順番に遷移・Semantic Snapshot取得し、Snapshotから正規化した収集データを生成してからEnvelope末尾でブラウザーセッションを1回だけ解放する。ドメイン書込みや関連Resourceの収集要求をブラウザー操作と交互に実行しない。
 
-正規化した収集データは、Envelope単位の内部ingestion APIでApiへ渡す。Apiはpayloadと処理workを同一トランザクションで永続化し、元タスクを`Running`からAPI所有の`Applying`へfencing付きで引き継いでから受付を返す。Lambdaは適用完了をpollせず終了する。既存Apiホスト上の非Playwright処理が一括domain write、引用元、関連収集要求を冪等に適用し、元タスクを最終完了する。API受付後の再試行は保存済みpayloadから再開し、Playwrightを再実行しない。初期対象は`race-detail`、Horse profile/history、Jockey profile、Trainer profileとし、Lambda/SQS/dispatcherの並列度を上げず、新しいAWSサービスも追加しない。
+正規化した収集データは、Envelope単位の内部ingestion APIでApiへ渡す。Apiはpayloadと処理workを同一トランザクションで永続化し、元タスクを`Running`からAPI所有の`Applying`へfencing付きで引き継いでから受付を返す。Lambdaは適用完了をpollせず終了する。既存Apiホスト上の非Playwright処理がdomain write、引用元、関連収集要求を冪等に適用し、元タスクを最終完了する。API受付後の再試行は保存済みpayloadから再開し、Playwrightを再実行しない。初期対象はfeature flag既定offの`race-detail` pilotだけとし、Lambda/SQS/dispatcherの並列度を上げず、新しいAWSサービスも追加しない。Horse profile/history、Jockey profile、Trainer profileはpilot成功後の別変更・別承認とする。
 
 複数Horseの履歴から得た過去レースは、馬単位で直ちに実行せず、正規化したRace IDで全体集合へ統合する。現在のrevision/freshnessで取得済みのRaceを除外し、同一Raceは依頼元Horse数にかかわらず1つの`race-detail`だけを作る。1つのレース結果Snapshotで全出走馬を反映する。Horseの同年代・世代は近接順序のhintにはできるが、同一ページや同一出走を保証しないためidentityには用いない。
 
@@ -136,7 +136,7 @@ Playwrightを使用する収集では、互換Envelope内のタスクを現行�
 
 Semantic DOM全体はブラウザーとparserの境界であり、永続境界にはcontract version、capture時刻、source URL、冪等key/hashを持つ小さい正規化snapshotを使う。全Semantic Snapshotの常時保存やobject storageへの分離は、API受付前の再取得コストが実測上支配的になった場合の別変更とする。詳細は[Snapshot-first collection and bulk ingestion](changes/20260915_snapshot-first-bulk-ingestion/README.md)を参照する。
 
-同変更では、JRA向けtyped navigationを「ページ種別固有のready判定1回＋no-wait Semantic Snapshot取得」に整理し、呼出側が捨てる本文全抽出と重複settleを除く。link/button/form候補は要素ごとのPlaywright RPCで探索せず、DOM内の1回の評価で候補を列挙して対象だけを通常clickする。1 captureにつき`JraSnapshotView`生成も1回とし、page判定とparserで共有する。画像・font・media等の通信遮断、Snapshot項目削減、request圧縮、Lambda memory変更は既定で有効化せず、正規化結果の完全一致、失敗率、p50/p95、bytes、GB-secondsを比較するgateを通った候補だけを採用する。既存bulk HTTPの内部もaggregate load、EventStore event/transaction、subject存在set query、projection updateを計測し、HTTP件数だけで高速化を判定しない。
+Playwright/Snapshot/navigationの局所最適化は、Snapshot-firstより先に独立して計測・実装する。[Playwright collection efficiency](changes/20260915_playwright-collection-efficiency/README.md)がready判定、候補探索、view共有、検索結果再利用、resource/Snapshot projectionおよび逐次子pageの正本である。aggregate/EventStore、HTTP transport、Lambda memory/一時領域は[Collection application and runtime efficiency](changes/20260915_collection-application-runtime-efficiency/README.md)で別に判断する。Snapshot-firstはこれらの効果を含めず`race-detail`限定pilotとして測定し、total p95またはGB-secondsのgateを通るまでsubjectへ展開しない。
 
 常駐する `BackgroundService` を実処理の中心にせず、次のような有限実行インターフェースを中心にする。
 
