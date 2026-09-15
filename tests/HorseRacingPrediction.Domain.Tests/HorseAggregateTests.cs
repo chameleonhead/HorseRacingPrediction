@@ -51,6 +51,33 @@ public class HorseAggregateTests
     }
 
     [TestMethod]
+    public void UpdateProfile_WhenValuesAreUnchanged_DoesNotAdvanceVersion()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        var birthDate = new DateOnly(2002, 3, 25);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト", "M", birthDate, "金子真人");
+        var version = sut.Version;
+
+        sut.UpdateProfile("ディープインパクト", "ディープインパクト", "M", birthDate, "金子真人");
+
+        Assert.AreEqual(version, sut.Version);
+    }
+
+    [TestMethod]
+    public void CorrectData_WhenUnchangedThenChanged_OnlyChangedValueAdvancesVersion()
+    {
+        var sut = new HorseAggregate(HorseId.New);
+        sut.RegisterHorse("ディープインパクト", "ディープインパクト", "M");
+        var version = sut.Version;
+
+        sut.CorrectData("ディープインパクト", "ディープインパクト", "M", reason: "再収集");
+        Assert.AreEqual(version, sut.Version);
+
+        sut.CorrectData(sexCode: "G", reason: "訂正");
+        Assert.AreEqual(version + 1, sut.Version);
+    }
+
+    [TestMethod]
     public void MergeAlias_AddsAlias()
     {
         var sut = new HorseAggregate(HorseId.New);

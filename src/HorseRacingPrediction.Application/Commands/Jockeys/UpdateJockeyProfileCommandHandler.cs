@@ -7,7 +7,7 @@ public sealed class UpdateJockeyProfileCommandHandler : CommandHandler<JockeyAgg
 {
     public override Task ExecuteAsync(JockeyAggregate aggregate, UpdateJockeyProfileCommand command, CancellationToken cancellationToken)
     {
-        aggregate.UpdateProfile(command.DisplayName, command.NormalizedName, command.AffiliationCode);
+        aggregate.UpsertProfile(command.DisplayName, command.NormalizedName, command.AffiliationCode);
         return Task.CompletedTask;
     }
 }

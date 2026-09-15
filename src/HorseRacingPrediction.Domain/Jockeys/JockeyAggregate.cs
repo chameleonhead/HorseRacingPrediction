@@ -29,7 +29,25 @@ public class JockeyAggregate : AggregateRoot<JockeyAggregate, JockeyId>,
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Jockey is not registered.");
 
+        if ((displayName is null || displayName == _state.DisplayName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (affiliationCode is null || affiliationCode == _state.AffiliationCode))
+            return;
+
         Emit(new JockeyProfileUpdated(displayName, normalizedName, affiliationCode));
+    }
+
+    public void UpsertProfile(string? displayName, string? normalizedName, string? affiliationCode = null)
+    {
+        if (!_state.IsRegistered)
+        {
+            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(normalizedName))
+                throw new InvalidOperationException("Jockey name is required for initial upsert.");
+            RegisterJockey(displayName, normalizedName, affiliationCode);
+            return;
+        }
+
+        UpdateProfile(displayName, normalizedName, affiliationCode);
     }
 
     public void MergeAlias(string aliasType, string aliasValue, string sourceName, bool isPrimary)
@@ -45,6 +63,11 @@ public class JockeyAggregate : AggregateRoot<JockeyAggregate, JockeyId>,
     {
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Jockey is not registered.");
+
+        if ((displayName is null || displayName == _state.DisplayName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (affiliationCode is null || affiliationCode == _state.AffiliationCode))
+            return;
 
         Emit(new JockeyDataCorrected(displayName, normalizedName, affiliationCode, reason));
     }

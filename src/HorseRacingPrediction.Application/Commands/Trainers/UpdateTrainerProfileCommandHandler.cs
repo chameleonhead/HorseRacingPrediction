@@ -7,7 +7,7 @@ public sealed class UpdateTrainerProfileCommandHandler : CommandHandler<TrainerA
 {
     public override Task ExecuteAsync(TrainerAggregate aggregate, UpdateTrainerProfileCommand command, CancellationToken cancellationToken)
     {
-        aggregate.UpdateProfile(command.DisplayName, command.NormalizedName, command.AffiliationCode);
+        aggregate.UpsertProfile(command.DisplayName, command.NormalizedName, command.AffiliationCode);
         return Task.CompletedTask;
     }
 }

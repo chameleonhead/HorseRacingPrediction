@@ -103,6 +103,19 @@ public class TrainerEndpointsTests
     }
 
     [TestMethod]
+    public async Task UpdateTrainerProfile_WhenMissing_CreatesProfile()
+    {
+        var trainerId = $"trainer-{Guid.NewGuid()}";
+        var response = await _client.PutAsJsonAsync($"/api/trainers/{trainerId}",
+            new UpdateTrainerProfileRequest("新規調教師", "新規調教師", "JRA"), JsonOptions);
+        var profile = await _client.GetFromJsonAsync<TrainerProfileResponse>($"/api/trainers/{trainerId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(profile);
+        Assert.AreEqual("新規調教師", profile.DisplayName);
+    }
+
+    [TestMethod]
     public async Task MergeTrainerAlias_AfterRegister_ReturnsOk()
     {
         var trainerId = $"trainer-{Guid.NewGuid()}";

@@ -104,6 +104,35 @@ public class HorseEndpointsTests
     }
 
     [TestMethod]
+    public async Task UpdateHorseProfile_WhenMissing_CreatesProfile()
+    {
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var response = await _client.PutAsJsonAsync($"/api/horses/{horseId}",
+            new UpdateHorseProfileRequest("新規馬", "新規馬", "F", null), JsonOptions);
+        var profile = await _client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(profile);
+        Assert.AreEqual("新規馬", profile.RegisteredName);
+    }
+
+    [TestMethod]
+    public async Task UpdateHorseProfile_ConcurrentIdenticalUpserts_AreReplaySafe()
+    {
+        var horseId = $"horse-{Guid.NewGuid()}";
+        var request = new UpdateHorseProfileRequest("同時登録馬", "同時登録馬", "M", null);
+
+        var responses = await Task.WhenAll(
+            _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions),
+            _client.PutAsJsonAsync($"/api/horses/{horseId}", request, JsonOptions));
+        var profile = await _client.GetFromJsonAsync<HorseProfileResponse>($"/api/horses/{horseId}", JsonOptions);
+
+        Assert.IsTrue(responses.All(response => response.StatusCode == HttpStatusCode.OK));
+        Assert.IsNotNull(profile);
+        Assert.AreEqual("同時登録馬", profile.RegisteredName);
+    }
+
+    [TestMethod]
     public async Task MergeHorseAlias_AfterRegister_ReturnsOk()
     {
         var horseId = $"horse-{Guid.NewGuid()}";

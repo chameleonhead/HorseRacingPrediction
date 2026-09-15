@@ -29,7 +29,25 @@ public partial class TrainerAggregate : AggregateRoot<TrainerAggregate, TrainerI
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Trainer is not registered.");
 
+        if ((displayName is null || displayName == _state.DisplayName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (affiliationCode is null || affiliationCode == _state.AffiliationCode))
+            return;
+
         Emit(new TrainerProfileUpdated(displayName, normalizedName, affiliationCode));
+    }
+
+    public void UpsertProfile(string? displayName, string? normalizedName, string? affiliationCode = null)
+    {
+        if (!_state.IsRegistered)
+        {
+            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(normalizedName))
+                throw new InvalidOperationException("Trainer name is required for initial upsert.");
+            RegisterTrainer(displayName, normalizedName, affiliationCode);
+            return;
+        }
+
+        UpdateProfile(displayName, normalizedName, affiliationCode);
     }
 
     public void MergeAlias(string aliasType, string aliasValue, string sourceName, bool isPrimary)
@@ -45,6 +63,11 @@ public partial class TrainerAggregate : AggregateRoot<TrainerAggregate, TrainerI
     {
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Trainer is not registered.");
+
+        if ((displayName is null || displayName == _state.DisplayName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (affiliationCode is null || affiliationCode == _state.AffiliationCode))
+            return;
 
         Emit(new TrainerDataCorrected(displayName, normalizedName, affiliationCode, reason));
     }

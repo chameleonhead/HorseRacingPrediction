@@ -103,6 +103,19 @@ public class JockeyEndpointsTests
     }
 
     [TestMethod]
+    public async Task UpdateJockeyProfile_WhenMissing_CreatesProfile()
+    {
+        var jockeyId = $"jockey-{Guid.NewGuid()}";
+        var response = await _client.PutAsJsonAsync($"/api/jockeys/{jockeyId}",
+            new UpdateJockeyProfileRequest("新規騎手", "新規騎手", "JRA"), JsonOptions);
+        var profile = await _client.GetFromJsonAsync<JockeyProfileResponse>($"/api/jockeys/{jockeyId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(profile);
+        Assert.AreEqual("新規騎手", profile.DisplayName);
+    }
+
+    [TestMethod]
     public async Task MergeJockeyAlias_AfterRegister_ReturnsOk()
     {
         var jockeyId = $"jockey-{Guid.NewGuid()}";

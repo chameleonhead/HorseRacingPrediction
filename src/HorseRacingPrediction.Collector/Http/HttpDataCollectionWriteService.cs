@@ -12,7 +12,7 @@ namespace HorseRacingPrediction.Collector.Http;
 /// クラウド API を呼び出して <see cref="IDataCollectionWriteService"/> を実装するクラス。
 /// <para>
 /// 馬・騎手・調教師の Upsert は決定論的 ID 生成（UUID v5 相当）を使い、
-/// GET で存在確認してから POST または PUT を呼び分ける。
+/// API 側の冪等な PUT upsert を直接呼び出す。
 /// </para>
 /// </summary>
 public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
@@ -196,42 +196,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var horseId = DeterministicIdGenerator.BuildHorseId(registeredName, jraSourceIdentity);
             var parsedBirthDate = TryParseDateOnly(birthDate);
 
-            var existing = await GetAsync<HorseExistenceDto>($"/api/horses/{Uri.EscapeDataString(horseId)}", cancellationToken).ConfigureAwait(false);
-
-            if (existing is null)
-            {
-                var registerRequest = new
-                {
-                    HorseId = horseId,
-                    RegisteredName = registeredName,
-                    NormalizedName = normalized,
-                    SexCode = sexCode,
-                    BirthDate = parsedBirthDate,
-                    OwnerName = ownerName,
-                    BreederName = breederName,
-                    SireName = sireName,
-                    DamName = damName,
-                    DamsireName = damsireName,
-                    CoatColor = coatColor
-                };
-                var response = await _httpClient
-                    .PostAsJsonAsync("/api/horses", registerRequest, cancellationToken)
-                    .ConfigureAwait(false);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-                {
-                    await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName,
-                        breederName, sireName, damName, damsireName, coatColor, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    response.EnsureSuccessStatusCode();
-                }
-            }
-            else
-            {
-                await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName,
-                    breederName, sireName, damName, damsireName, coatColor, cancellationToken).ConfigureAwait(false);
-            }
+            await UpdateHorseAsync(horseId, registeredName, normalized, sexCode, parsedBirthDate, ownerName,
+                breederName, sireName, damName, damsireName, coatColor, cancellationToken).ConfigureAwait(false);
 
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Horse,
@@ -282,33 +248,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(cleanedNormalizedName);
             var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
 
-            var existing = await GetAsync<JockeyExistenceDto>($"/api/jockeys/{Uri.EscapeDataString(jockeyId)}", cancellationToken).ConfigureAwait(false);
-
-            if (existing is null)
-            {
-                var registerRequest = new
-                {
-                    JockeyId = jockeyId,
-                    DisplayName = cleanedDisplayName,
-                    NormalizedName = normalized,
-                    AffiliationCode = affiliationCode
-                };
-                var response = await _httpClient
-                    .PostAsJsonAsync("/api/jockeys", registerRequest, cancellationToken)
-                    .ConfigureAwait(false);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-                {
-                    await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    response.EnsureSuccessStatusCode();
-                }
-            }
-            else
-            {
-                await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-            }
+            await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken)
+                .ConfigureAwait(false);
 
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Jockey,
@@ -357,33 +298,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
             var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", normalized);
 
-            var existing = await GetAsync<TrainerExistenceDto>($"/api/trainers/{Uri.EscapeDataString(trainerId)}", cancellationToken).ConfigureAwait(false);
-
-            if (existing is null)
-            {
-                var registerRequest = new
-                {
-                    TrainerId = trainerId,
-                    DisplayName = displayName,
-                    NormalizedName = normalized,
-                    AffiliationCode = affiliationCode
-                };
-                var response = await _httpClient
-                    .PostAsJsonAsync("/api/trainers", registerRequest, cancellationToken)
-                    .ConfigureAwait(false);
-                if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-                {
-                    await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    response.EnsureSuccessStatusCode();
-                }
-            }
-            else
-            {
-                await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken).ConfigureAwait(false);
-            }
+            await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken)
+                .ConfigureAwait(false);
 
             await _statusRecorder.RecordAsync(
                 AgentAcquisitionSubjectType.Trainer,
@@ -1162,9 +1078,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     }
 
     // ------------------------------------------------------------------ //
-    // private DTO — existence check only
-    // ------------------------------------------------------------------ //
-
+    // Refresh-only DTOs. Normal subject upserts intentionally avoid existence GETs.
     private sealed class HorseExistenceDto { public string HorseId { get; init; } = string.Empty; }
     private sealed class JockeyExistenceDto { public string JockeyId { get; init; } = string.Empty; }
     private sealed class TrainerExistenceDto { public string TrainerId { get; init; } = string.Empty; }

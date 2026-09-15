@@ -50,6 +50,32 @@ public class TrainerAggregateTests
     }
 
     [TestMethod]
+    public void UpdateProfile_WhenValuesAreUnchanged_DoesNotAdvanceVersion()
+    {
+        var sut = new TrainerAggregate(TrainerId.New);
+        sut.RegisterTrainer("池江泰寿", "いけえやすとし", "栗東");
+        var version = sut.Version;
+
+        sut.UpdateProfile("池江泰寿", "いけえやすとし", "栗東");
+
+        Assert.AreEqual(version, sut.Version);
+    }
+
+    [TestMethod]
+    public void CorrectData_WhenUnchangedThenChanged_OnlyChangedValueAdvancesVersion()
+    {
+        var sut = new TrainerAggregate(TrainerId.New);
+        sut.RegisterTrainer("池江泰寿", "いけえやすとし", "栗東");
+        var version = sut.Version;
+
+        sut.CorrectData("池江泰寿", "いけえやすとし", "栗東", "再収集");
+        Assert.AreEqual(version, sut.Version);
+
+        sut.CorrectData(affiliationCode: "美浦", reason: "訂正");
+        Assert.AreEqual(version + 1, sut.Version);
+    }
+
+    [TestMethod]
     public void MergeAlias_AddsAlias()
     {
         var sut = new TrainerAggregate(TrainerId.New);

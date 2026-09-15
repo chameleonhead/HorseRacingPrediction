@@ -35,7 +35,37 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Horse is not registered.");
 
+        if ((registeredName is null || registeredName == _state.RegisteredName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (sexCode is null || sexCode == _state.SexCode) &&
+            (!birthDate.HasValue || birthDate == _state.BirthDate) &&
+            (ownerName is null || ownerName == _state.OwnerName) &&
+            (breederName is null || breederName == _state.BreederName) &&
+            (sireName is null || sireName == _state.SireName) &&
+            (damName is null || damName == _state.DamName) &&
+            (damsireName is null || damsireName == _state.DamsireName) &&
+            (coatColor is null || coatColor == _state.CoatColor))
+            return;
+
         Emit(new HorseProfileUpdated(registeredName, normalizedName, sexCode, birthDate, ownerName, breederName, sireName, damName, damsireName, coatColor));
+    }
+
+    public void UpsertProfile(string? registeredName, string? normalizedName,
+        string? sexCode = null, DateOnly? birthDate = null, string? ownerName = null,
+        string? breederName = null, string? sireName = null, string? damName = null,
+        string? damsireName = null, string? coatColor = null)
+    {
+        if (!_state.IsRegistered)
+        {
+            if (string.IsNullOrWhiteSpace(registeredName) || string.IsNullOrWhiteSpace(normalizedName))
+                throw new InvalidOperationException("Horse name is required for initial upsert.");
+            RegisterHorse(registeredName, normalizedName, sexCode, birthDate, ownerName,
+                breederName, sireName, damName, damsireName, coatColor);
+            return;
+        }
+
+        UpdateProfile(registeredName, normalizedName, sexCode, birthDate, ownerName,
+            breederName, sireName, damName, damsireName, coatColor);
     }
 
     public void MergeAlias(string aliasType, string aliasValue, string sourceName, bool isPrimary)
@@ -51,6 +81,12 @@ public partial class HorseAggregate : AggregateRoot<HorseAggregate, HorseId>,
     {
         if (!_state.IsRegistered)
             throw new InvalidOperationException("Horse is not registered.");
+
+        if ((registeredName is null || registeredName == _state.RegisteredName) &&
+            (normalizedName is null || normalizedName == _state.NormalizedName) &&
+            (sexCode is null || sexCode == _state.SexCode) &&
+            (!birthDate.HasValue || birthDate == _state.BirthDate))
+            return;
 
         Emit(new HorseDataCorrected(registeredName, normalizedName, sexCode, birthDate, reason));
     }

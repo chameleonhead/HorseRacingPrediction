@@ -50,6 +50,32 @@ public class JockeyAggregateTests
     }
 
     [TestMethod]
+    public void UpdateProfile_WhenValuesAreUnchanged_DoesNotAdvanceVersion()
+    {
+        var sut = new JockeyAggregate(JockeyId.New);
+        sut.RegisterJockey("武豊", "たけゆたか", "JRA");
+        var version = sut.Version;
+
+        sut.UpdateProfile("武豊", "たけゆたか", "JRA");
+
+        Assert.AreEqual(version, sut.Version);
+    }
+
+    [TestMethod]
+    public void CorrectData_WhenUnchangedThenChanged_OnlyChangedValueAdvancesVersion()
+    {
+        var sut = new JockeyAggregate(JockeyId.New);
+        sut.RegisterJockey("武豊", "たけゆたか", "JRA");
+        var version = sut.Version;
+
+        sut.CorrectData("武豊", "たけゆたか", "JRA", "再収集");
+        Assert.AreEqual(version, sut.Version);
+
+        sut.CorrectData(affiliationCode: "FREE", reason: "訂正");
+        Assert.AreEqual(version + 1, sut.Version);
+    }
+
+    [TestMethod]
     public void MergeAlias_AddsAlias()
     {
         var sut = new JockeyAggregate(JockeyId.New);
