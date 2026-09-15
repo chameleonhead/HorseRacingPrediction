@@ -2,11 +2,14 @@ using SemanticSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSn
 using SemanticTable = HorseRacingPrediction.Scraping.Browser.Snapshots.PageTableSnapshot;
 using SemanticCell = HorseRacingPrediction.Scraping.Browser.Snapshots.PageTableCellSnapshot;
 using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using System.Runtime.CompilerServices;
 
 namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 
 internal sealed class JraSnapshotView
 {
+    private static readonly ConditionalWeakTable<SemanticSnapshot, Lazy<JraSnapshotView>> Cache = new();
+
     private JraSnapshotView(SemanticSnapshot source)
     {
         Source = source;
@@ -54,7 +57,10 @@ internal sealed class JraSnapshotView
     public static JraSnapshotView Create(SemanticSnapshot source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return new JraSnapshotView(source);
+        return Cache.GetValue(source,
+            static snapshot => new Lazy<JraSnapshotView>(
+                () => new JraSnapshotView(snapshot),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     }
 }
 

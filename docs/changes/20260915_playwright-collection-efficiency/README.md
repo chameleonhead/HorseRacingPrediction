@@ -1,6 +1,6 @@
 # Playwright collection efficiency
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-15
 - Updated: 2026-09-15
@@ -9,8 +9,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | Explicit approval is required before source changes. |
-| Verification | Not started | Baseline, equivalence, component and bounded-live measurements remain. |
+| Code | In progress | P1 measurement seams and P4 shared immutable view are implemented; P2/P3/P5/P6/P7 remain. |
+| Verification | In progress | Reproducible local baseline and focused P1/P4 checks pass; behavior-changing and bounded-live measurements remain. |
 | Deployment/operation | Not started | No production configuration is changed by the design. |
 
 ## Context
@@ -56,7 +56,7 @@ P6 inventories requests/bytes and evaluates resource blocking and page-purpose S
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | The baseline records at least 95% of typed JRA operation wall time across readiness, navigation/action, text extraction, Snapshot evaluation/transfer/deserialization, view projection and parsing, without secrets. | P1 | Instrumentation coverage tests and fixed baseline report. | Not started |
+| AC1 | The baseline records at least 95% of typed JRA operation wall time across readiness, navigation/action, text extraction, Snapshot evaluation/transfer/deserialization, view projection and parsing, without secrets. | P1 | Instrumentation coverage tests and fixed baseline report. | Verified |
 | AC2 | Each typed JRA action has at most one post-action readiness barrier, zero discarded legacy full-page text reads, and one semantic capture per parsed terminal page; delayed required data is awaited while delayed image/font/tracker is not. | P2 | Delayed-data/resource fixtures and exact normalized-output/failure comparison. | Not started |
 | AC3 | Candidate discovery uses at most one batch evaluation, one mutation-safe unique revalidation and one `ElementHandle` action independent of 10/100/500 candidates. Mutation/reorder/replacement/duplicate/detach never clicks another element; 100-link wall time improves at least 80%. | P3 | Five warm iterations per size plus first/middle/last and adversarial DOM mutation tests. | Not started |
 | AC4 | Every captured JRA page creates at most one shared `JraSnapshotView` and one selected typed parse; parser order, fields, citations and diagnostics equal baseline. | P4 | Instrumented parser suite and 70-history/result fixtures with allocation/time report. | Not started |
@@ -82,21 +82,21 @@ P6 inventories requests/bytes and evaluates resource blocking and page-purpose S
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P1 | Instrument and freeze browser/Snapshot/navigation/parser baseline. Covers AC1, AC6, AC7, AC9. | Main | Lead tier | - | Scraping metrics/test seams and benchmark artifacts | Coverage tests and baseline | Reviewed reproducible baseline | Proposed |
-| P2 | Implement typed no-text navigation and one page-specific readiness barrier. Covers AC2, AC9. | Main | Lead tier | P1,P4 | Browser/JRA navigation and focused tests | Delayed fixtures and regression corpus | Equivalent outputs with lower waits | Proposed |
-| P3 | Implement batch candidate discovery and mutation-safe handle action. Covers AC3, AC9. | Main | Lead tier | P1,P2 | Browser candidate/action layer and tests | RPC bounds, adversarial DOM and benchmark | Constant repository-call discovery | Proposed |
-| P4 | Share one view and one typed parse per capture. Covers AC4, AC9. | Main | Lead tier | P1 | JRA parsing/reader and tests | Parser suite, allocation/time | One projection/parse with equality | Proposed |
-| P5 | Reuse bounded Horse results/current-page captures and generation caches. Covers AC5, AC9. | Main | Lead tier | P3,P4 | JRA navigation and focused tests | Navigation trace/boundary tests | No search reconstruction | Proposed |
-| P6 | Evaluate resource interception and page-purpose Snapshot projections. Covers AC6, AC7, AC9. | Worker | Worker tier | P1–P5 | Browser policy/options, benchmarks and tests | Required fixture/live matrices | Passing candidates enabled or measured rejection | Proposed |
-| P7 | Add one sequential page-scoped child lease where measured useful. Covers AC8, AC9. | Main | Lead tier | P3,P5 | Browser/session abstraction and tests | Lifecycle/isolation/config tests | One-page policy with zero leaks | Proposed |
+| P1 | Instrument and freeze browser/Snapshot/navigation/parser baseline. Covers AC1, AC6, AC7, AC9. | Worker A | Worker tier | - | Scraping metrics/test seams and benchmark artifacts | Coverage tests and baseline | Reviewed reproducible baseline | Verified |
+| P2 | Implement typed no-text navigation and one page-specific readiness barrier. Covers AC2, AC9. | Main | Lead tier | P1,P4 | Browser/JRA navigation and focused tests | Delayed fixtures and regression corpus | Equivalent outputs with lower waits | Dependent |
+| P3 | Implement batch candidate discovery and mutation-safe handle action. Covers AC3, AC9. | Main | Lead tier | P1,P2 | Browser candidate/action layer and tests | RPC bounds, adversarial DOM and benchmark | Constant repository-call discovery | Dependent |
+| P4 | Share one view and one typed parse per capture. Covers AC4, AC9. | Worker B | Worker tier | P1 measurement contract only | JRA parsing/reader and tests | Parser suite, allocation/time | One projection/parse with equality | In progress |
+| P5 | Reuse bounded Horse results/current-page captures and generation caches. Covers AC5, AC9. | Main | Lead tier | P3,P4 | JRA navigation and focused tests | Navigation trace/boundary tests | No search reconstruction | Dependent |
+| P6 | Evaluate resource interception and page-purpose Snapshot projections. Covers AC6, AC7, AC9. | Worker | Worker tier | P1–P5 | Browser policy/options, benchmarks and tests | Required fixture/live matrices | Passing candidates enabled or measured rejection | Dependent |
+| P7 | Add one sequential page-scoped child lease where measured useful. Covers AC8, AC9. | Main | Lead tier | P3,P5 | Browser/session abstraction and tests | Lifecycle/isolation/config tests | One-page policy with zero leaks | Dependent |
 
 Shared browser/parser files are serialized in the order above. P6 may gather read-only baseline evidence earlier but does not write until P1–P5 are frozen. No task may enable concurrent navigation.
 
 ## Review gates
 
 - **Design and task-split review** — 2026-09-15, independent R10/R12. R10 found cross-record scope/dependency issues in the initial extraction. After removing all Snapshot/API/runtime ownership and freezing this record's complete AC1–AC9 result as the pilot prerequisite, R12 returned `PASS`. Task write scopes are serialized; resource/projection candidates remain measurement-gated and parallel navigation remains excluded.
-- **Pre-implementation review** — Pending explicit approval.
-- **Checkpoint review** — Pending implementation.
+- **Pre-implementation review** — 2026-09-15, reviewer: Main. User explicitly approved Playwright AC1–AC9. P1 and P4 are `In progress` with disjoint initial write scopes: P1 owns measurement/test seams and benchmark artifacts; P4 owns JRA view/parser/reader code and its focused tests. P2/P3/P5/P6/P7 remain `Proposed` until their recorded dependencies are verified. Escalate on output-contract changes, shared-file overlap, live-site ambiguity, test regression after one focused correction, or any need for concurrent navigation/external mutation. Snapshot-first, application/runtime and subject records remain `Proposed` and out of scope.
+- **Checkpoint review** — 2026-09-15, reviewer: Main. P1 records all seven required local pipeline phases; measured phase means account for 99.5% of the enclosing local fixture mean and contain no page data, credentials or external calls. The source-backed repository-call formulas are explicitly estimates and are not used as wire-trace claims. P4 uses a weak-key, execution-and-publication cache, preserving parser order and isolating distinct captures. Focused Release tests passed 14/14 and exact solution formatting passed. P4 stays `In progress` until the required regression corpus and allocation/time comparison are recorded. P2 is now runnable; later shared navigation changes must not absorb the independently owned historical-navigation change.
 - **Final review** — Pending complete evidence reconciliation.
 
 ## Documentation updates
@@ -108,7 +108,10 @@ Shared browser/parser files are serialized in the order above. P6 may gather rea
 
 - 2026-09-15: CodeGraph and targeted source inspection identified repeated readiness/text work, per-element Playwright calls, repeated view projection and search reconstruction.
 - 2026-09-15: Static estimates and existing fixtures were used only to design measurement gates; no production speedup is claimed yet.
-- No production code, AWS resource or external data was changed.
+- 2026-09-15: P1 added a repeatable local fixture probe and fixed source-backed operation-count scenarios. The initial one-warm/five-measured run covered navigation, readiness, discarded text, Snapshot capture, view, parser, repository-call seam and the enclosing total; phase means were 99.5% of the enclosing mean.
+- 2026-09-15: P4 made `JraSnapshotView` reuse one immutable projection per captured `PageSnapshot` reference through a weak-key cache. Same-reference, distinct-reference and concurrent-access tests pass; selected parsing remains once in `JraPageReader`.
+- 2026-09-15: Lead verification passed the focused P1/P4 Release tests (14/14) and `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`.
+- No AWS resource or external data was changed.
 
 ## Deviations and follow-up
 

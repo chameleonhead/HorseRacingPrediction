@@ -7,6 +7,45 @@ namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 public sealed class JraSnapshotViewTests
 {
     [TestMethod]
+    public void Create_SameSemanticSnapshot_ReusesProjectedView()
+    {
+        var snapshot = Snapshot(
+            Row(Cell("Horse", header: true), Cell("Result", header: true)),
+            Row(Cell("Horse One"), Cell("1")));
+
+        var first = JraSnapshotView.Create(snapshot);
+        var second = JraSnapshotView.Create(snapshot);
+
+        Assert.AreSame(first, second);
+        Assert.AreSame(snapshot, second.Source);
+    }
+
+    [TestMethod]
+    public void Create_DifferentSemanticSnapshots_DoNotShareProjectedView()
+    {
+        var firstSnapshot = Snapshot(Row(Cell("First")));
+        var secondSnapshot = Snapshot(Row(Cell("Second")));
+
+        var first = JraSnapshotView.Create(firstSnapshot);
+        var second = JraSnapshotView.Create(secondSnapshot);
+
+        Assert.AreNotSame(first, second);
+        Assert.AreEqual("First", first.Tables.Single().Rows.Single().Single());
+        Assert.AreEqual("Second", second.Tables.Single().Rows.Single().Single());
+    }
+
+    [TestMethod]
+    public void Create_ConcurrentCallsForSameSemanticSnapshot_ReturnSameProjectedView()
+    {
+        var snapshot = Snapshot(Row(Cell("Value")));
+        var views = new JraSnapshotView[32];
+
+        Parallel.For(0, views.Length, index => views[index] = JraSnapshotView.Create(snapshot));
+
+        Assert.IsTrue(views.All(view => ReferenceEquals(views[0], view)));
+    }
+
+    [TestMethod]
     public void Create_ProjectsMultiRowHeadersAndSpansWithoutLosingFragments()
     {
         var nameFragment = new PageElementFragmentSnapshot
