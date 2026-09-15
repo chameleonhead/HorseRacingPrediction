@@ -665,6 +665,26 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         {
             // ナビゲーション競合時は Snapshot 側で現在状態を診断する。
         }
+        if (Uri.TryCreate(_page.Url, UriKind.Absolute, out var currentUri)
+            && currentUri.Host.EndsWith("jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            && currentUri.AbsolutePath.Contains("/keiba/calendar/", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await _page.WaitForFunctionAsync(
+                    """() => /\d{4}年\s*\d{1,2}月/.test(document.body?.innerText || '') && Array.from(document.querySelectorAll('table td')).some(e => /\d/.test(e.innerText || e.textContent || ''))""",
+                    null,
+                    new PageWaitForFunctionOptions { Timeout = 3_000 });
+            }
+            catch (TimeoutException)
+            {
+                // Parser の構造化診断を優先する。
+            }
+            catch (PlaywrightException)
+            {
+                // ナビゲーション競合時は Snapshot 側で現在状態を診断する。
+            }
+        }
         cancellationToken.ThrowIfCancellationRequested();
     }
 
@@ -1047,7 +1067,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         {
             cancellationToken.ThrowIfCancellationRequested();
             var descriptors = await candidates.EvaluateAllAsync<ClickableDescriptor[]>(
-                """items => items.map((e,index) => ({ index, text:(e.innerText||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim().toLowerCase(), region:e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content', visible:!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) }))""");
+                """items => items.map((e,index) => ({ index, text:(e.innerText||e.textContent||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||e.querySelector('img[alt]')?.getAttribute('alt')||'').replace(/\s+/g,' ').trim().toLowerCase(), region:e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content', visible:!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) }))""");
             var ranked = descriptors
                 .Where(item => item.Visible && item.Text.Contains(target, StringComparison.Ordinal))
                 .Select(item => new
@@ -1068,7 +1088,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             var handle = await candidates.Nth(selected.Index).ElementHandleAsync();
             if (handle is null) continue;
             if (await handle.EvaluateAsync<bool>(
-                    """(e,wanted) => e.isConnected && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && (e.innerText||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||'').replace(/\s+/g,' ').trim().toLowerCase()===wanted.text && (e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content')===wanted.region""",
+                    """(e,wanted) => e.isConnected && !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && (e.innerText||e.textContent||e.value||e.getAttribute('aria-label')||e.getAttribute('title')||e.querySelector('img[alt]')?.getAttribute('alt')||'').replace(/\s+/g,' ').trim().toLowerCase()===wanted.text && (e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content')===wanted.region""",
                     new { text = selected.Text, region = selected.Region }))
                 return handle;
         }
@@ -1183,7 +1203,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             ? currentUri.Host.ToLowerInvariant()
             : string.Empty;
         var descriptors = await anchors.EvaluateAllAsync<BrowserLinkDescriptor[]>(
-            """(items, host) => items.map((e, index) => { const text=(e.innerText||e.textContent||'').replace(/\s+/g,' ').trim(); const region=e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content'; const searchResult=host.includes('google.')?!!e.closest('#search')&&!!e.querySelector('h3'):host.includes('bing.')?!!e.closest('#b_results')&&!!e.closest('h2'):false; return { index, url:e.getAttribute('href')||'', title:text, ariaLabel:e.getAttribute('aria-label')||'', titleAttribute:e.getAttribute('title')||'', region, searchResult }; })""",
+            """(items, host) => items.map((e, index) => { const text=(e.innerText||e.textContent||e.getAttribute('aria-label')||e.getAttribute('title')||e.querySelector('img[alt]')?.getAttribute('alt')||'').replace(/\s+/g,' ').trim(); const region=e.closest('header,[role=banner],#header,.header,[class*=header],#search_modal')?'header':e.closest('footer,[role=contentinfo],#footer')?'footer':'content'; const searchResult=host.includes('google.')?!!e.closest('#search')&&!!e.querySelector('h3'):host.includes('bing.')?!!e.closest('#b_results')&&!!e.closest('h2'):false; return { index, url:e.getAttribute('href')||'', title:text, ariaLabel:e.getAttribute('aria-label')||'', titleAttribute:e.getAttribute('title')||'', region, searchResult }; })""",
             host);
 
         foreach (var descriptor in descriptors.OrderByDescending(item => item.SearchResult).ThenBy(item => item.Index))

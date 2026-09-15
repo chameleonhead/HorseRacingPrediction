@@ -94,3 +94,16 @@ measurement.
 - Legacy navigation repository-call counts are currently static source models. Exact counts need an
   injectable browser protocol adapter or Playwright tracing parser before behavior-changing work.
 - No live JRA page, AWS service, production database, or production collector is contacted.
+
+## Enabled-slice comparison — 2026-09-15
+
+The production-equivalent local browser component benchmark used one warm-up and five measured runs
+over 100 links. The legacy seven-call locator loop had a 797.184 ms p50; the batch extraction path had
+an 11.233 ms p50, a 98.6% reduction. Exact 10, 100 and 500 link counts passed. A delayed unreachable
+image did not hold the typed no-text navigation path open.
+
+Resource interception and lossy purpose projections remain disabled: the required ten-iteration
+page-kind matrix and three bounded-live repetitions were not established, so neither candidate may
+claim its 15%/10% adoption threshold. A transient child page was also not introduced because the
+single-page browser work had already fallen by 98.6% and no remaining measurement justified another
+Playwright page. These are measured gate decisions, not future rollout authorization.

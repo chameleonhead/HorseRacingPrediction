@@ -1182,4 +1182,29 @@ public sealed class JraNavigatorTests
         CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
         Assert.IsTrue(browser.SelectOptionCalls.Count > 0, "Historicalルートへフォールバックし、年月選択が行われるはず。");
     }
+
+    [TestMethod]
+    public async Task ToSubjectProfileAsync_UniqueHorse_DoesNotReplaySearch()
+    {
+        const string searchFormUrl = "https://www.jra.go.jp/JRADB/accessO.html";
+        const string searchResultUrl = "https://www.jra.go.jp/JRADB/search/horse";
+        const string profileUrl = "https://www.jra.go.jp/JRADB/accessU.html?horse=1";
+        var browser = new FakeWebBrowser();
+        browser.SetClickDestination("競走馬検索", searchFormUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(searchResultUrl, new TestPageSnapshot(searchResultUrl, "競走馬検索", [new(
+            "検索結果", string.Empty, [new(profileUrl, "テストホース")], [], [], ["競走馬検索"])]));
+        browser.SetClickDestination("テストホース", profileUrl);
+        browser.SetSnapshot(profileUrl, new TestPageSnapshot(profileUrl, "競走馬情報", [new(
+            "競走馬情報", string.Empty, [], [], [new(["項目", "値"], [["生年月日", "2020年1月2日"]])],
+            ["競走馬情報 テストホース"])]));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var page = await navigator.ToSubjectProfileAsync(new("Horse", "テストホース"));
+
+        Assert.AreEqual(profileUrl, page.Profile.SourceIdentity);
+        Assert.AreEqual(1, browser.SubmitFormCallCount);
+        Assert.AreEqual(1, browser.NavigatedUrls.Count(url => url == KeibaTopUrl));
+        Assert.AreEqual(1, browser.ClickedTexts.Count(text => text == "テストホース"));
+    }
 }
