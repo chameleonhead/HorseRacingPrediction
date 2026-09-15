@@ -135,6 +135,8 @@ Playwright往復を行わず、`IPageSnapshotter`が1回のDOM評価でSemantic 
 metadataをまとめて取得する。ナビゲーションやready判定は引き続き`IWebBrowser`の責務であり、
 Snapshotter自身はページ遷移や待機を行わない。
 
+収集Workerは、互換Envelope内で1つのJRAセッションを再利用してページ遷移と必要なSemantic Snapshot取得を終え、Snapshotだけを入力とするparserで正規化済み収集データを構築する。ブラウザーを保持したまま出走馬単位のAPI書込みや関連Resource要求を逐次実行せず、Envelope末尾でブラウザーセッションを解放した後に1つのversioned ingestion envelopeとしてApiへ渡す。Apiは元タスクを`Applying`として処理所有権ごと引き継ぐため、Lambdaは適用完了を待たない。Api受付後のdomain write再試行は保存済みenvelopeから行い、Playwrightを再実行しない。初期対象は統合済み`race-detail`とし、Semantic DOM全体の常時永続化は含めない。詳細と判断理由は[Snapshot-first collection and bulk ingestion](changes/20260915_snapshot-first-bulk-ingestion/README.md)を正本とする。
+
 JRA parserは`JraSnapshotView`でSemantic Snapshotを参照し、span-awareな矩形table projectionと
 bounded cell fragmentsを利用する。旧section-oriented `Browser.PageSnapshot`、`Sections`、`Actions`、
 旧table/cell型および互換抽出経路はcutoverで削除した。現在のcapture契約と移行結果は

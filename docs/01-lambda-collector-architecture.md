@@ -124,6 +124,14 @@ acquire のレスポンスには `taskId`, `jobType`, `payload`, `attemptCount`,
 
 ## Worker の共通実行モデル
 
+### Snapshot-first の収集・登録境界
+
+Playwrightを使用する収集では、互換Envelope内のタスクを現行どおり1つのJRAセッションで順番に遷移・Semantic Snapshot取得し、Snapshotから正規化した収集データを生成してからEnvelope末尾でブラウザーセッションを1回だけ解放する。ドメイン書込みや関連Resourceの収集要求をブラウザー操作と交互に実行しない。
+
+正規化した収集データは、Envelope単位の内部ingestion APIでApiへ渡す。Apiはpayloadと処理workを同一トランザクションで永続化し、元タスクを`Running`からAPI所有の`Applying`へfencing付きで引き継いでから受付を返す。Lambdaは適用完了をpollせず終了する。既存Apiホスト上の非Playwright処理が一括domain write、引用元、関連収集要求を冪等に適用し、元タスクを最終完了する。API受付後の再試行は保存済みpayloadから再開し、Playwrightを再実行しない。初期対象は`race-detail`だけとし、Lambda/SQS/dispatcherの並列度を上げず、新しいAWSサービスも追加しない。
+
+Semantic DOM全体はブラウザーとparserの境界であり、永続境界にはcontract version、capture時刻、source URL、冪等key/hashを持つ小さい正規化snapshotを使う。全Semantic Snapshotの常時保存やobject storageへの分離は、API受付前の再取得コストが実測上支配的になった場合の別変更とする。詳細は[Snapshot-first collection and bulk ingestion](changes/20260915_snapshot-first-bulk-ingestion/README.md)を参照する。
+
 常駐する `BackgroundService` を実処理の中心にせず、次のような有限実行インターフェースを中心にする。
 
 ```csharp
