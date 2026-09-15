@@ -1,6 +1,6 @@
 # Collection phase timing
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-16
 - Updated: 2026-09-16
@@ -9,7 +9,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | User approval of AC1–AC4 is required before production changes. |
+| Code | Not started | The user approved AC1–AC4 on 2026-09-16; T1 is runnable. |
 | Verification | Not started | Focused timing, failure-path, formatting and regression tests remain. |
 | Deployment/operation | Not started | Logging uses the existing Collector output; no AWS resource or concurrency change is planned. |
 
@@ -67,7 +67,7 @@ Fixed categories are limited to task control, domain write, referenced-request w
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Attribute handler-internal API elapsed/count and derived non-API time. Covers AC1, AC3, AC4. | Main | Lead tier | Approval | Collector HTTP/timing scope and focused tests | Deterministic terminal-event and behavior tests | One safe task event on every terminal path | Proposed |
+| T1 | Attribute handler-internal API elapsed/count and derived non-API time. Covers AC1, AC3, AC4. | Main | Lead tier | Approval | Collector HTTP/timing scope and focused tests | Deterministic terminal-event and behavior tests | One safe task event on every terminal path | Runnable |
 | T2 | Attribute shared JRA session lifetime and API waits. Covers AC2–AC4. | Main | Lead tier | T1 timing contract | JRA session scope/invocation and lifecycle tests | Deterministic envelope lifecycle tests | One safe post-disposal session event | Dependent |
 
 The tasks are serialized because the timing scope and logging contract are shared. No worker production write is planned; read-only inventory results from the withdrawn Snapshot-first work supplied the call-path evidence.
@@ -75,7 +75,7 @@ The tasks are serialized because the timing scope and logging contract are share
 ## Review gates
 
 - **Design and task-split review** — 2026-09-16, reviewer: Main. Existing CodeGraph paths and runtime telemetry were reviewed. AC1–AC4 cover the task event, envelope event, safety/non-interference, and regression boundary. T1 and T2 are serialized under one owner because both use the same async-local aggregation contract. Fixed categories prevent cardinality and secret leakage. The change is measurement-only and does not authorize Snapshot-first or AWS changes. Provider usage/cost telemetry is unavailable; using the existing logging backend is the lower-cost option.
-- **Pre-implementation review** — Pending approval.
+- **Pre-implementation review** — 2026-09-16, reviewer: Main. The user approved AC1–AC4. T1 is `Runnable`; T2 is `Dependent` on the shared timing contract established by T1. Both production write scopes remain serialized under Main. Inputs are the existing task terminal logger, internal HTTP registrations, session execution scope, focused telemetry/lifecycle tests, and the approved allowlist. Completion evidence is deterministic timing attribution plus unchanged request, exception, cancellation and disposal behavior. Escalate on any need to expose identifiers/content, change a public/API/persistence contract, add infrastructure, or alter browser/queue concurrency.
 - **Checkpoint review** — Pending implementation.
 - **Final review** — Pending implementation and evidence reconciliation.
 
