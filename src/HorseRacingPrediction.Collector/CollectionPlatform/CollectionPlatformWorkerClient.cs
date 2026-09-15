@@ -1,15 +1,38 @@
 using System.Net.Http.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
-public sealed class CollectionPlatformWorkerClient(HttpClient client,
-    CollectionDefinitionHandlerRegistry handlers)
+public sealed class CollectionPlatformWorkerClient
 {
+    private readonly HttpClient _client;
+    private readonly CollectionDefinitionHandlerRegistry _handlers;
+    private readonly ILogger<CollectionPlatformWorkerClient> _logger;
+    private readonly ICollectionTaskTelemetryClock _clock;
+
+    public CollectionPlatformWorkerClient(HttpClient client, CollectionDefinitionHandlerRegistry handlers,
+        ILogger<CollectionPlatformWorkerClient>? logger = null)
+        : this(client, handlers, logger, SystemCollectionTaskTelemetryClock.Instance)
+    {
+    }
+
+    internal CollectionPlatformWorkerClient(HttpClient client, CollectionDefinitionHandlerRegistry handlers,
+        ILogger<CollectionPlatformWorkerClient>? logger, ICollectionTaskTelemetryClock clock)
+    {
+        _client = client;
+        _handlers = handlers;
+        _logger = logger ?? NullLogger<CollectionPlatformWorkerClient>.Instance;
+        _clock = clock;
+    }
+
     public async Task ExecuteAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
     {
-        using var acquireResponse = await client.PostAsJsonAsync(
+        var totalStarted = _clock.GetTimestamp();
+        var acquireStarted = _clock.GetTimestamp();
+        using var acquireResponse = await _client.PostAsJsonAsync(
             $"api/internal/collection/tasks/{notification.TaskId}/acquire",
             new
             {
@@ -20,6 +43,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         acquireResponse.EnsureSuccessStatusCode();
         var acquire = await acquireResponse.Content.ReadFromJsonAsync<CollectionTaskAcquireResult>(cancellationToken)
             .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task acquire response was empty.");
+        var acquireElapsed = _clock.GetElapsedTime(acquireStarted, _clock.GetTimestamp());
         if (acquire.Status is CollectionTaskAcquireStatus.AlreadyTerminal
             or CollectionTaskAcquireStatus.SupersededGeneration) return;
         if (acquire.Status == CollectionTaskAcquireStatus.ActiveElsewhere)
@@ -30,32 +54,65 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
         if (expected is not null && !IsCompatible(task, expected))
             throw new CollectionDispatchCompatibilityException(notification.TaskId);
 
-        CollectionAttemptCompletion completion;
+        CollectionAttemptCompletion? completion = null;
+        var handlerElapsed = TimeSpan.Zero;
+        var handlerMeasured = false;
+        var completeElapsed = TimeSpan.Zero;
         try
         {
-            using var leaseScope = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken);
-            completion = await handlers.Resolve(task.Definition, task.Resource.Type)
-                .CollectAsync(task, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            var cancelled = CollectionAttemptFailureClassifier.WithTaskContext(
-                new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
-                    "Collector execution was cancelled or reached its deadline.",
-                    RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)),
-                task);
-            await CompleteAsync(notification.TaskId, task.LeaseToken,
-                cancelled, report.Token).ConfigureAwait(false);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            completion = CollectionAttemptFailureClassifier.FromException(ex);
-        }
+            var handlerStarted = _clock.GetTimestamp();
+            try
+            {
+                using var leaseScope = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken);
+                completion = await _handlers.Resolve(task.Definition, task.Resource.Type)
+                    .CollectAsync(task, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                completion = CollectionAttemptFailureClassifier.WithTaskContext(
+                    new(CollectionAttemptResult.TransientFailure, "CollectorTimeout",
+                        "Collector execution was cancelled or reached its deadline.",
+                        RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1)),
+                    task);
+                handlerElapsed = _clock.GetElapsedTime(handlerStarted, _clock.GetTimestamp());
+                handlerMeasured = true;
+                var cancelledCompleteStarted = _clock.GetTimestamp();
+                using var report = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await CompleteAsync(notification.TaskId, task.LeaseToken,
+                    completion, report.Token).ConfigureAwait(false);
+                completeElapsed = _clock.GetElapsedTime(cancelledCompleteStarted, _clock.GetTimestamp());
+                throw;
+            }
+            catch (Exception ex)
+            {
+                completion = CollectionAttemptFailureClassifier.FromException(ex);
+            }
+            finally
+            {
+                if (!handlerMeasured)
+                    handlerElapsed = _clock.GetElapsedTime(handlerStarted, _clock.GetTimestamp());
+            }
 
-        completion = CollectionAttemptFailureClassifier.WithTaskContext(completion, task);
-        await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);
+            completion = CollectionAttemptFailureClassifier.WithTaskContext(completion!, task);
+            var completeStarted = _clock.GetTimestamp();
+            await CompleteAsync(notification.TaskId, task.LeaseToken, completion, cancellationToken).ConfigureAwait(false);
+            completeElapsed = _clock.GetElapsedTime(completeStarted, _clock.GetTimestamp());
+        }
+        finally
+        {
+            var totalElapsed = _clock.GetElapsedTime(totalStarted, _clock.GetTimestamp());
+            var attributed = acquireElapsed + handlerElapsed + completeElapsed;
+            var unattributed = totalElapsed > attributed ? totalElapsed - attributed : TimeSpan.Zero;
+            var result = completion?.Result.ToString() ?? "UnexpectedFailure";
+            var memorySize = int.TryParse(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_MEMORY_SIZE"),
+                out var configuredMemory) ? configuredMemory : 0;
+            _logger.LogInformation(
+                "Collection task runtime. Definition={Definition} ResourceType={ResourceType} Result={Result} MemorySizeMiB={MemorySizeMiB} TotalMs={TotalMs} AcquireMs={AcquireMs} HandlerMs={HandlerMs} CompleteMs={CompleteMs} UnattributedMs={UnattributedMs}",
+                task.Definition.Value, task.Resource.Type, result, memorySize,
+                totalElapsed.TotalMilliseconds, acquireElapsed.TotalMilliseconds,
+                handlerElapsed.TotalMilliseconds, completeElapsed.TotalMilliseconds,
+                unattributed.TotalMilliseconds);
+        }
     }
 
     private static bool IsCompatible(LeasedCollectionTask task, CollectionDispatchCompatibilityKey expected)
@@ -78,7 +135,7 @@ public sealed class CollectionPlatformWorkerClient(HttpClient client,
     private async Task CompleteAsync(Guid taskId, string leaseToken, CollectionAttemptCompletion completion,
         CancellationToken cancellationToken)
     {
-        using var completeResponse = await client.PostAsJsonAsync(
+        using var completeResponse = await _client.PostAsJsonAsync(
             $"api/internal/collection/tasks/{taskId}/complete",
             new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
