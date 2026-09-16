@@ -268,10 +268,12 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var priority = prioritized ? (int)CollectionPriority.High : (int)CollectionPriority.Background;
         var seenPages = new HashSet<string>(StringComparer.Ordinal);
         JraSubjectPage? page = firstPage;
+        var pageIndex = 0;
         while (page is not null)
         {
             if (!seenPages.Add(string.Join('|', page.Races.Select(x => x.Key))))
                 throw new JraCollectionException("出走履歴のページ送りが進みません。");
+            var itemsByRace = new Dictionary<string, CollectionRequestBulkItem>(StringComparer.Ordinal);
             foreach (var history in page.Races.Where(x => x.ExclusionReason is null && x.Link is not null))
             {
                 var url = CollectionHttpUrl.Resolve(history.Link!.Url, page.Url);
@@ -284,11 +286,35 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 };
                 if (priorityUntil is not null)
                     requestAttributes["weekendPriorityUntil"] = priorityUntil.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-                await sink.RequestAsync(resource, new("race-detail"), CollectionReason.Discovery, lane, priority,
-                    url, effectiveDate, requestAttributes, cancellationToken).ConfigureAwait(false);
+                itemsByRace.TryAdd(resource.Id, new CollectionRequestBulkItem(
+                    resource.Id, resource.Type.ToString(), resource.Provider, resource.Id, "race-detail", 1,
+                    CollectionReason.Discovery.ToString(), lane.ToString(), priority, url?.AbsoluteUri,
+                    effectiveDate, requestAttributes));
             }
+            var chunks = itemsByRace.Values.Chunk(500).ToArray();
+            for (var chunkIndex = 0; chunkIndex < chunks.Length; chunkIndex++)
+            {
+                var items = chunks[chunkIndex];
+                var batchId = $"horse-history:{task.TaskId:N}:p{pageIndex}:c{chunkIndex}";
+                var response = await sink.RequestManyAsync(new(batchId, items), cancellationToken)
+                    .ConfigureAwait(false);
+                ValidateHistoryBatchResponse(items, response);
+            }
+            pageIndex++;
             page = await navigator.NextHorseHistoryPageAsync(page, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static void ValidateHistoryBatchResponse(IReadOnlyList<CollectionRequestBulkItem> items,
+        CollectionRequestBulkResponse response)
+    {
+        var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
+        if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
+            || response.Outcomes.Any(outcome => outcome.Status is not ("Created" or "Reused")
+                || outcome.RequestId is null || outcome.RequestId == Guid.Empty
+                || outcome.TaskId is null || outcome.TaskId == Guid.Empty))
+            throw new InvalidOperationException("Horse history batch response was incomplete or rejected.");
     }
 
     private static bool TryResolveRaceResult(Uri? url, HorseHistoryRaceLink history, out ResourceKey resource,

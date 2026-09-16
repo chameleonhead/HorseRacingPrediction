@@ -338,6 +338,224 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task HorseHistory_SeventyUniqueRacesUseOneBatchAndNoSingleRequests()
+    {
+        var page = SubjectPage("A", Enumerable.Range(0, 70).Select(HistoryRace).ToArray());
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
+            }, new RecordingProfileSink(), requests,
+            new FixedTimeProvider(new(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(SubjectTask("horse-a", "A",
+            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.AreEqual(0, requests.SingleRequestCalls);
+        Assert.HasCount(1, requests.BatchRequests);
+        Assert.HasCount(70, requests.BatchRequests.Single().Items);
+        Assert.HasCount(70, requests.BatchRequests.Single().Items.Select(x => x.ItemKey)
+            .Distinct(StringComparer.Ordinal).ToArray());
+        Assert.IsTrue(requests.BatchRequests.Single().Items.All(item => item.Lane == "Realtime"
+            && item.Priority == (int)CollectionPriority.High
+            && item.RequestedRevision == 1
+            && item.DefinitionId == "race-detail"
+            && item.EffectiveDate.HasValue
+            && item.ExplicitUrl is not null
+            && item.Attributes!["requestedByHorseId"] == "horse-a"
+            && item.Attributes["requestedByHorseName"] == "A"
+            && item.Attributes["weekendPriorityUntil"] == "2026-09-19"));
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_PageOverLimitUsesDeterministicChunks()
+    {
+        var page = SubjectPage("A", Enumerable.Range(0, 501).Select(HistoryRace).ToArray());
+        var requests = new RecordingRequestSink();
+        var task = SubjectTask("horse-a", "A", new Dictionary<string, string>());
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
+            }, new RecordingProfileSink(), requests);
+
+        await handler.CollectAsync(task, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[] { 500, 1 }, requests.BatchRequests.Select(x => x.Items.Count).ToArray());
+        CollectionAssert.AreEqual(new[]
+        {
+            $"horse-history:{task.TaskId:N}:p0:c0", $"horse-history:{task.TaskId:N}:p0:c1",
+        }, requests.BatchRequests.Select(x => x.BatchId).ToArray());
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_DeduplicatesCanonicalRaceWithinPage()
+    {
+        var race = HistoryRace(0);
+        var page = SubjectPage("A", [race, race, HistoryRace(1)]);
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
+            }, new RecordingProfileSink(), requests);
+
+        await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()),
+            CancellationToken.None);
+
+        Assert.HasCount(1, requests.BatchRequests);
+        Assert.HasCount(2, requests.BatchRequests.Single().Items);
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_NextPageFailureKeepsFirstPageBatch()
+    {
+        var firstPage = SubjectPage("A", [HistoryRace(0), HistoryRace(1)]);
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = _ => firstPage,
+                    NextHistoryFactory = _ => throw new JraCollectionException("next-page-failure"),
+                },
+            }, new RecordingProfileSink(), requests);
+
+        await Assert.ThrowsAsync<JraCollectionException>(() => handler.CollectAsync(
+            SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None));
+
+        Assert.HasCount(1, requests.BatchRequests);
+        Assert.HasCount(2, requests.BatchRequests.Single().Items);
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_TwoPagesUseSeparatePageBatches()
+    {
+        var firstPage = SubjectPage("A", [HistoryRace(0)]);
+        var secondPage = SubjectPage("A", [HistoryRace(1)]);
+        var requests = new RecordingRequestSink();
+        var task = SubjectTask("horse-a", "A", new Dictionary<string, string>());
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = _ => firstPage,
+                    NextHistoryFactory = page => ReferenceEquals(page, firstPage) ? secondPage : null,
+                },
+            }, new RecordingProfileSink(), requests);
+
+        await handler.CollectAsync(task, CancellationToken.None);
+
+        CollectionAssert.AreEqual(new[]
+        {
+            $"horse-history:{task.TaskId:N}:p0:c0", $"horse-history:{task.TaskId:N}:p1:c0",
+        }, requests.BatchRequests.Select(x => x.BatchId).ToArray());
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_EmptyMalformedAndExcludedRowsEmitNoBatch()
+    {
+        var date = new DateOnly(2026, 9, 6);
+        var malformed = new HorseHistoryRaceLink(date, "中山", "malformed",
+            new("https://www.jra.go.jp/JRADB/accessS.html?CNAME=invalid", "結果", "content"), null);
+        var excluded = HistoryRace(0) with { ExclusionReason = "cancelled" };
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = _ => SubjectPage("A", [malformed, excluded]),
+                },
+            }, new RecordingProfileSink(), requests);
+
+        await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()),
+            CancellationToken.None);
+
+        Assert.IsEmpty(requests.BatchRequests);
+        Assert.AreEqual(0, requests.SingleRequestCalls);
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_RepeatedPageFailsAfterSubmittingFirstPageOnce()
+    {
+        var page = SubjectPage("A", [HistoryRace(0)]);
+        var requests = new RecordingRequestSink();
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = _ => page,
+                    NextHistoryFactory = _ => page,
+                },
+            }, new RecordingProfileSink(), requests);
+
+        await Assert.ThrowsAsync<JraCollectionException>(() => handler.CollectAsync(
+            SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None));
+
+        Assert.HasCount(1, requests.BatchRequests);
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_RejectedOrIdentityLessOutcomeFailsTheAttempt()
+    {
+        var page = SubjectPage("A", [HistoryRace(0)]);
+        var requests = new RecordingRequestSink
+        {
+            BatchResponseFactory = request => new([
+                new(request.Items.Single().ItemKey, "Rejected", ErrorCode: "InvalidRequest"),
+            ]),
+        };
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
+            }, new RecordingProfileSink(), requests);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.CollectAsync(
+            SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task HorseHistory_IncompleteOrInconsistentBatchResponseFailsTheAttempt()
+    {
+        var page = SubjectPage("A", [HistoryRace(0)]);
+        var responseFactories = new Func<CollectionRequestBulkRequest, CollectionRequestBulkResponse>[]
+        {
+            _ => new([]),
+            request => new([
+                SuccessfulOutcome(request.Items.Single().ItemKey),
+                SuccessfulOutcome(request.Items.Single().ItemKey),
+            ]),
+            _ => new([SuccessfulOutcome("unknown-race")]),
+            request => new([new(request.Items.Single().ItemKey, "Created")]),
+        };
+
+        foreach (var responseFactory in responseFactories)
+        {
+            var requests = new RecordingRequestSink { BatchResponseFactory = responseFactory };
+            var handler = new JraSubjectProfileCollectionHandler(
+                JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+                new FakeJraSessionFactory
+                {
+                    ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page },
+                }, new RecordingProfileSink(), requests);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => handler.CollectAsync(
+                SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None));
+        }
+
+        static CollectionRequestBulkOutcome SuccessfulOutcome(string itemKey) =>
+            new(itemKey, "Created", Guid.NewGuid(), Guid.NewGuid());
+    }
+
+    [TestMethod]
     public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
@@ -476,30 +694,42 @@ public sealed class JraSubjectCollectionHandlerTests
     {
         public List<Request> Requests { get; } = [];
         public List<CollectionRequestBulkRequest> BatchRequests { get; } = [];
+        public int SingleRequestCalls { get; private set; }
+        public Func<CollectionRequestBulkRequest, CollectionRequestBulkResponse>? BatchResponseFactory { get; init; }
 
-        public async Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
+        public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
             CancellationToken cancellationToken)
         {
             BatchRequests.Add(request);
-            var outcomes = new List<CollectionRequestBulkOutcome>();
             foreach (var item in request.Items)
             {
-                await RequestAsync(new(Enum.Parse<ResourceType>(item.ResourceType), item.Provider, item.ResourceId),
-                    new(item.DefinitionId), Enum.Parse<CollectionReason>(item.Reason),
+                Requests.Add(new(new(Enum.Parse<ResourceType>(item.ResourceType), item.Provider, item.ResourceId),
+                    new(item.DefinitionId),
                     Enum.Parse<CollectionLane>(item.Lane), item.Priority,
                     item.ExplicitUrl is null ? null : new Uri(item.ExplicitUrl), item.EffectiveDate!.Value,
-                    item.Attributes ?? new Dictionary<string, string>(), cancellationToken);
-                outcomes.Add(new(item.ItemKey, "Accepted"));
+                    item.Attributes ?? new Dictionary<string, string>()));
             }
-            return new(outcomes);
+            return Task.FromResult(BatchResponseFactory?.Invoke(request)
+                ?? new CollectionRequestBulkResponse(request.Items.Select(item =>
+                    new CollectionRequestBulkOutcome(item.ItemKey, "Created", Guid.NewGuid(), Guid.NewGuid(), true))
+                    .ToArray()));
         }
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
+            SingleRequestCalls++;
             Requests.Add(new(resource, definition, lane, priority, explicitUrl, effectiveDate, attributes));
             return Task.CompletedTask;
         }
+    }
+
+    private static HorseHistoryRaceLink HistoryRace(int daysAgo)
+    {
+        var date = new DateOnly(2026, 9, 6).AddDays(-daysAgo);
+        var dateText = date.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+        var url = $"https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde10062026040205{dateText}/2F";
+        return new(date, "中山", $"過去走{daysAgo}", new(url, "結果", "content"), null);
     }
 
     private sealed class StubOwnerIdentityVerifier(bool exists) : IOwnerIdentityVerifier

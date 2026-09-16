@@ -107,6 +107,47 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task RequestManyAsync_DifferentHorsesReuseOneRaceTaskAndOutboxMessage()
+    {
+        var store = CreateStore();
+        var concurrentStore = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1,
+            "Initial race extractor", false);
+        var now = new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero);
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260913:Nakayama:11");
+
+        CollectionRequestBatchItem Item(string horseId) => new(
+            race.Id, race, definition, 1, CollectionReason.Discovery, CollectionLane.Background, 30,
+            new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604020520260913/2F"),
+            new DateOnly(2026, 9, 13),
+            new Dictionary<string, string> { ["requestedByHorseId"] = horseId });
+
+        var concurrent = await Task.WhenAll(
+            store.RequestManyAsync("horse-history:horse-a:p0:c0", [Item("horse-a")], now),
+            concurrentStore.RequestManyAsync("horse-history:horse-b:p0:c0", [Item("horse-b")], now));
+        var first = concurrent[0].Single();
+        var second = concurrent[1].Single();
+
+        CollectionAssert.AreEquivalent(new[] { "Created", "Reused" },
+            new[] { first.Status, second.Status });
+        Assert.AreEqual(first.Receipt!.TaskId, second.Receipt!.TaskId);
+        Assert.AreEqual(first.Receipt.RequestId, second.Receipt.RequestId);
+        Assert.HasCount(1, await store.GetTasksAsync());
+        Assert.HasCount(1, await store.GetPendingDispatchesAsync(now.AddSeconds(2), 10));
+
+        var created = first.Status == "Created" ? first : second;
+        await CompleteAsync(store, created.Receipt!, now.AddSeconds(2));
+        var third = (await store.RequestManyAsync("horse-history:horse-c:p0:c0", [Item("horse-c")],
+            now.AddMinutes(2))).Single();
+
+        Assert.AreEqual("Reused", third.Status);
+        Assert.AreEqual(first.Receipt.TaskId, third.Receipt!.TaskId);
+        Assert.HasCount(1, await store.GetTasksAsync());
+        Assert.HasCount(1, await store.GetPendingDispatchesAsync(now.AddMinutes(2), 10));
+    }
+
+    [TestMethod]
     public async Task RequestManyAsync_RejectsDuplicateItemKeysBeforeCreatingTasks()
     {
         var store = await CreateStoreAsync();
