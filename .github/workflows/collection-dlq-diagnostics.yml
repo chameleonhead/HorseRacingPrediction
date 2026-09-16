@@ -2,6 +2,19 @@ name: collection-dlq-diagnostics
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect is read-only; recover creates Recovery tasks for DeadLetterQueue groups and resumes collection.
+        required: true
+        type: choice
+        options:
+          - inspect
+          - recover
+        default: inspect
+      confirmation:
+        description: Enter RECOVER-LEGACY-DLQ when mode is recover.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -11,18 +24,51 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Inspect actionable collection failure groups
+      - name: Validate recovery gate
         shell: bash
         env:
+          MODE: ${{ inputs.mode }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$MODE" = recover ] && [ "$CONFIRMATION" != RECOVER-LEGACY-DLQ ]; then
+            echo "Recovery confirmation did not match." >&2
+            exit 1
+          fi
+
+      - name: Inspect or recover actionable collection failure groups
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
           set -eu
           domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+          base="https://${domain}/api/admin/collection"
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
-            "https://${domain}/api/admin/collection/failure-notifications/groups?limit=10000" \
-            | jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]'
+            "$base/failure-notifications/groups?limit=10000" > "$work/groups.json"
+          jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]' "$work/groups.json"
+          jq '[.[] | select(.status == 8 and .errorCode == "DeadLetterQueue")]' \
+            "$work/groups.json" > "$work/targets.json"
+          target_count="$(jq 'length' "$work/targets.json")"
+          target_notifications="$(jq '[.[].count] | add // 0' "$work/targets.json")"
+          echo "Legacy DLQ recovery targets: groups=$target_count notifications=$target_notifications"
+          if [ "$MODE" != recover ]; then
+            exit 0
+          fi
+          test "$target_count" -gt 0
+          while IFS= read -r group_key; do
+            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+              -H 'Content-Type: application/json' --data '{}' \
+              "$base/failure-notifications/groups/${group_key}/recover" \
+              | jq '{selectedCount, createdTaskCount, reusedTaskCount, taskCount: (.taskIds | length)}'
+          done < <(jq -r '.[].groupKey' "$work/targets.json")
+          curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+            "$base/pipeline/resume" >/dev/null
+          echo "Collection pipeline resumed after legacy DLQ recovery."
 
       - name: Inspect API DLQ reconciliation logs and backups
         uses: appleboy/ssh-action@v1.0.3

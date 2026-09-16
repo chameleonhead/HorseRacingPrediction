@@ -10,6 +10,7 @@ public sealed class CollectionQueueCutoverContractTests
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
+    private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
 
     [TestMethod]
@@ -74,6 +75,17 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(MaintenanceWorkflow, "/pipeline/resume");
         StringAssert.Contains(MaintenanceWorkflow, "SubscriptionArn!='PendingConfirmation'");
         StringAssert.Contains(MaintenanceWorkflow, "aws sns publish");
+    }
+
+    [TestMethod]
+    public void DlqRecoveryWorkflow_GatesAndLimitsRecoveryToDeadLetterGroups()
+    {
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-DLQ");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, ".status == 8 and .errorCode == \"DeadLetterQueue\"");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
+        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("start-message-move-task", StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]
