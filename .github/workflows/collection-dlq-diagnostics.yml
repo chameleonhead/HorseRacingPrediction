@@ -57,6 +57,13 @@ jobs:
           echo "Collection pipeline state:"
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
             "$base/pipeline" | jq .
+          echo "Legacy race active tasks:"
+          curl --fail --silent --show-error -G -H "X-Api-Key: $API_KEY" \
+            --data-urlencode 'statuses=Pending,Ready,Running,RetryWaiting,WaitingDiscovery' \
+            --data-urlencode 'definitionId=race-detail' \
+            --data-urlencode 'search=20260419:Nakayama:9' \
+            --data-urlencode 'page=1' --data-urlencode 'pageSize=20' \
+            "$base/tasks/search" | jq '{totalCount, items: [.items[] | {taskId, status, resource, availableAt, attemptCount}]}'
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
             "$base/failure-notifications/groups?limit=10000" > "$work/groups.json"
           jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]' "$work/groups.json"
