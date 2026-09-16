@@ -134,6 +134,9 @@ jobs:
             if [ "$MODE" = enable-recovery-capacity ] || [ "$MODE" = restore-capacity ]; then
               target=1
               [ "$MODE" = enable-recovery-capacity ] && target=2
+              if ! grep -q 'CollectionQueue__MaxInFlightEnvelopes:' docker-compose.yml; then
+                sed -i '/CollectionQueue__QueueName:/a\      CollectionQueue__MaxInFlightEnvelopes: ${COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES:-1}' docker-compose.yml
+              fi
               sed -i '/^COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=/d' .env
               echo "COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=$target" >> .env
               chmod 600 .env
