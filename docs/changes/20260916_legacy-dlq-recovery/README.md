@@ -1,6 +1,6 @@
 # 旧形式DLQメッセージからの収集再開
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-16
 - Updated: 2026-09-16
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Complete | DLQ reconcilerへ旧 `CollectionTaskNotification` v1の厳密な互換読取を追加した。 |
 | Verification | Complete | 対象7件、Release build、非External全体（既存benchmarkの一時timeoutは単独再実行成功）を検証した。 |
-| Deployment/operation | Not started | 本番DBバックアップ後に配備し、DLQ障害化、Recovery作成、再開、処理進行を段階確認する。 |
+| Deployment/operation | Complete | 本番DBバックアップ、段階配備、DLQ 63件のreconcile、限定Recovery、処理再開、通常容量への復帰を確認した。 |
 
 ## Context
 
@@ -72,9 +72,9 @@
 | AC3 | 現行v2 Envelopeのreconcile挙動を維持し、v1/v2混在batchを個別に処理できる。 | T1, T2 | mixed-contract tests | Verified |
 | AC4 | malformed、未知version、曖昧なJSONは削除せずDLQに保持し、Task IDを推測しない。 | T1, T2 | invalid-contract tests | Verified |
 | AC5 | canonical architecture文書が移行互換と安全規則を説明する。 | T3 | documentation review | Verified |
-| AC6 | 配備前に本番DBバックアップ、queue/task件数、配備対象SHAを記録し、purge・直接redrive・DB直接更新を行わない。 | T4 | operation log and AWS evidence | Not started |
-| AC7 | 本番DLQ 63件が既存障害ライフサイクルへ移され、未知/未処理メッセージが残る場合はRecovery前に停止して報告される。 | T4 | DLQ depth, API failure groups, logs | Not started |
-| AC8 | 対象障害をRecoveryした後にpipelineを明示再開し、main queue/Lambda invocationが動き、waitingが継続的に減少し、同原因の新規DLQが発生しない。 | T4 | AWS metrics/logs and `/jobs?view=recent` | Not started |
+| AC6 | 配備前に本番DBバックアップ、queue/task件数、配備対象SHAを記録し、purge・直接redrive・DB直接更新を行わない。 | T4 | operation log and AWS evidence | Verified |
+| AC7 | 本番DLQ 63件が既存障害ライフサイクルへ移され、未知/未処理メッセージが残る場合はRecovery前に停止して報告される。 | T4 | DLQ depth, API failure groups, logs | Verified |
+| AC8 | 対象障害をRecoveryした後にpipelineを明示再開し、main queue/Lambda invocationが動き、waitingが継続的に減少し、同原因の新規DLQが発生しない。 | T4 | AWS metrics/logs and `/jobs?view=recent` | Verified |
 | AC9 | Release build、関連テスト、非Externalテスト、`git diff --check`が成功する。 | T2, T5 | recorded command results | Verified |
 
 ## Delivery plan
@@ -95,16 +95,16 @@
 | T1 | v1互換parserとDLQ reconcileを実装 | Main | High capability | Approval | API collection controller files | T2 tests | reviewed diff | Verified |
 | T2 | 契約・世代・混在・不正入力テストを追加 | Main | High capability | T1 | API test files | targeted tests | passing test output | Verified |
 | T3 | canonical architectureとchange recordを更新 | Main | High capability | T1 | docs only | doc review | updated documents | Verified |
-| T4 | CI後に本番へ段階配備・回復・監視 | Main | High capability | T1-T3, T5 | AWS/API operational state and change record evidence only | AWS/API/UI observations | before/after evidence | Dependent |
-| T5 | 全差分と受け入れ条件の最終レビュー | Main | High capability | T1-T3 | read-only plus review fixes | build/tests/diff/status | reviewed diff and AC matrix | Dependent |
+| T4 | CI後に本番へ段階配備・回復・監視 | Main | High capability | T1-T3, T5 | AWS/API operational state and change record evidence only | AWS/API/UI observations | before/after evidence | Verified |
+| T5 | 全差分と受け入れ条件の最終レビュー | Main | High capability | T1-T3 | read-only plus review fixes | build/tests/diff/status | reviewed diff and AC matrix | Verified |
 
 ## Review gates
 
 - **Design and task-split review (2026-09-16)** — Mainが本番証拠、現行parser、watchdog、既存Recovery経路を照合した。AC1–AC9はT1–T5へ追跡済みで、共有ファイルへの並列書込はない。危険なredrive/purge/DB直接更新を除外し、コードと本番操作を同じ高能力ownerが担当する。判断: 承認待ち。
 - **Pre-implementation review (2026-09-16)** — ユーザー承認を受領。T1をRunnableからIn progress、T2–T5を依存順にDependentとした。既存v2経路を維持し、旧v1の3フィールドを厳密検証する最小差分から着手する。
 - **Checkpoint review (2026-09-16, code)** — v1互換、混在、重複、未知version、追加フィールド、破損JSONを差分とテストで照合した。現行v2の既存テストを維持し、Task状態変更後だけメッセージを削除する既存順序も不変。T1–T3をVerified、T4–T5を配備待ちとした。
-- **Checkpoint review** — parser/test完了時と本番reconcile完了時に実施する。
-- **Final review** — 全ACと本番進行証拠を照合してからImplementedとする。
+- **Checkpoint review (2026-09-16, production recovery)** — DLQ 63件の全reconcile、限定Recovery、旧Race属性fallback、不可視旧Envelopeを越える一時送出枠を順に検証した。Lambda reserved concurrencyは1のまま維持し、purge・redrive・DB直接更新を行わなかった。
+- **Final review (2026-09-16)** — AC1–AC9をテスト、配備run、AWS queue/log、管理APIの証拠へ追跡した。待機件数は1770→1757、recentは1158→1171へ進み、pipeline稼働、attention 0、failure group 0、DLQ visible/not-visible 0を確認した。一時送出枠はrun `35092567897` で1へ復帰済み。未完了状態はなく、Implementedと判定した。
 
 ## Verification record
 
@@ -122,7 +122,10 @@
 - 2026-09-16: 修正配備 `35089733859` と限定Recovery `35091049705` が成功した。元Envelopeがvisibility timeout中のため、同ResourceにはReady・Attempt 0のtask `0b040607-...` が1件残った。exact resource、status Ready、Attempt 0、件数1をすべて確認するgateで未開始taskだけをcancelし、再オープンした同一障害を新v2 taskへ置換する。
 - 2026-09-16: 置換run `35091728924` は未開始task 1件をcancelし、Recovery task 1件を新規作成した。旧SQS messageが90分visibility中で本番の `MaxInFlightEnvelopes=1` を占有するため、Lambda concurrency 1は維持したままAPI dispatcher上限だけを一時的に2へ変更し、新v2 Envelopeの配送後に1へ戻す。
 - 2026-09-16: 初回capacity run `35091927643` は `.env` を更新したが、Composeがその変数をcontainerへ明示転送しておらず実効値は1のままだった。Composeへ既定1のoverride境界を追加し、workflowと契約テストを同じ変数名へ揃える。
+- 2026-09-16: capacity run `35092183102` でAPI dispatcher上限2を反映し、main SQSの不可視件数が1→2、新しいLambda log stream `f2fb5ef...` の開始を確認した。回収された旧Race taskはcanonical Resource IDからRaceIdを復元し、race result bulk API登録まで成功した（runtime 34.1秒、Succeeded）。続けて同じLambda sessionがhorse-profile等の通常待機taskを処理した。
+- 2026-09-16: 管理API診断run `35092393860` でwaiting 1764、running 1、recent 1164、attention 0、pipeline稼働、failure group 0を確認した。復帰run `35092567897` 直前にはwaiting 1757、recent 1171まで継続進行していた。
+- 2026-09-16: 復帰run `35092567897` でAPI dispatcher上限を通常値1へ戻した。最終AWS確認はmain SQS visible 0/not-visible 2（処理中Envelopeとvisibility中の旧Envelope）、DLQ visible 0/not-visible 0。同原因の新規障害通知・DLQ流入は観測されなかった。
 
 ## Deviations and follow-up
 
-なし。承認前のためプロダクションコードと本番状態は変更していない。
+旧Envelopeの90分visibility timeoutが通常送出枠を占有したため、Lambda reserved concurrency 1を変えずAPI dispatcher上限だけを一時的に2へ上げ、新v2 Envelopeの起動確認後に1へ戻した。これは復旧時だけの限定運用であり、恒常的な並列度変更ではない。
