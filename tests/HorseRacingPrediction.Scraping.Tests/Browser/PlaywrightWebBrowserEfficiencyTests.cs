@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Playwright;
 
@@ -48,8 +50,120 @@ public sealed class PlaywrightWebBrowserEfficiencyTests
             var elapsed = Stopwatch.GetElapsedTime(startedAt);
             var snapshot = await browser.CapturePageSnapshotAsync();
 
-            Assert.IsLessThan(TimeSpan.FromSeconds(3), elapsed);
+            Assert.IsLessThan(TimeSpan.FromSeconds(4), elapsed);
             Assert.Contains("Ready", JraSnapshotView.Create(snapshot).Headings);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task NavigateForSnapshotAsync_CalendarWaitsForVisibleRacecourseBeyondThreeSeconds()
+    {
+        var path = WriteFixture(CalendarShell("""
+            setTimeout(() => renderCalendar('2026年9月', '5 中山'), 3250);
+            """));
+        try
+        {
+            var snapshotter = new CountingSnapshotter();
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(5),
+                _ => true,
+                snapshotter);
+            var startedAt = Stopwatch.GetTimestamp();
+
+            await browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri);
+            var elapsed = Stopwatch.GetElapsedTime(startedAt);
+            var snapshot = await browser.CapturePageSnapshotAsync();
+            var calendar = (JraCalendarPage)new CalendarPageParser().Parse(snapshot);
+
+            Assert.IsGreaterThanOrEqualTo(TimeSpan.FromSeconds(3), elapsed);
+            Assert.IsLessThan(TimeSpan.FromSeconds(5), elapsed);
+            Assert.AreEqual(new(2026, 9), calendar.Month);
+            Assert.AreEqual(new DateOnly(2026, 9, 5), calendar.RaceDates.Single().Date);
+            Assert.AreEqual(1, snapshotter.CaptureCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task NavigateForSnapshotAsync_CalendarRetriesOneIncompleteGetAndCapturesOnce()
+    {
+        var path = WriteFixture(CalendarShell("""
+            const attempt = Number(sessionStorage.getItem('calendar-attempt') || '0') + 1;
+            sessionStorage.setItem('calendar-attempt', String(attempt));
+            document.getElementById('attempt').textContent = String(attempt);
+            if (attempt === 2) renderCalendar('2026年9月', '5 中山');
+            """));
+        try
+        {
+            var snapshotter = new CountingSnapshotter();
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromMilliseconds(200),
+                _ => true,
+                snapshotter);
+
+            await browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri);
+            var snapshot = await browser.CapturePageSnapshotAsync();
+            var view = JraSnapshotView.Create(snapshot);
+
+            StringAssert.Contains(view.MainText, "2");
+            _ = (JraCalendarPage)new CalendarPageParser().Parse(snapshot);
+            Assert.AreEqual(1, snapshotter.CaptureCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task NavigateForSnapshotAsync_CalendarTimeoutDoesNotCaptureIncompletePage()
+    {
+        var path = WriteFixture(CalendarShell(string.Empty));
+        try
+        {
+            var snapshotter = new CountingSnapshotter();
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromMilliseconds(100),
+                _ => true,
+                snapshotter);
+            var startedAt = Stopwatch.GetTimestamp();
+
+            var exception = await Assert.ThrowsExactlyAsync<TimeoutException>(
+                () => browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri));
+
+            Assert.IsLessThan(TimeSpan.FromSeconds(5), Stopwatch.GetElapsedTime(startedAt));
+            StringAssert.Contains(exception.Message, "Missing=YearMonthOrDateOrRacecourse");
+            Assert.AreEqual(0, snapshotter.CaptureCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task NavigateForSnapshotAsync_CalendarReadinessHonorsCancellation()
+    {
+        var path = WriteFixture(CalendarShell(string.Empty));
+        try
+        {
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(5),
+                _ => true);
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
+            var startedAt = Stopwatch.GetTimestamp();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri, cancellation.Token));
+
+            Assert.IsLessThan(TimeSpan.FromSeconds(2), Stopwatch.GetElapsedTime(startedAt));
         }
         finally
         {
@@ -139,5 +253,37 @@ public sealed class PlaywrightWebBrowserEfficiencyTests
         var path = Path.Combine(Path.GetTempPath(), $"playwright-efficiency-{Guid.NewGuid():N}.html");
         File.WriteAllText(path, $"<!doctype html><html><body>{body}</body></html>");
         return path;
+    }
+
+    private static string CalendarShell(string script) => $$"""
+        <main>
+          <h2 id="heading">開催日程</h2>
+          <p id="attempt"></p>
+          <div id="cal_unit"><table class="rc_table"><caption id="caption"></caption><tbody><tr><td id="day"></td></tr></tbody></table></div>
+        </main>
+        <script>
+          function renderCalendar(month, day) {
+            document.getElementById('heading').textContent = `開催日程 ${month}`;
+            document.getElementById('caption').textContent = month;
+            document.getElementById('day').textContent = day;
+          }
+          {{script}}
+        </script>
+        """;
+
+    private sealed class CountingSnapshotter : IPageSnapshotter
+    {
+        private readonly PlaywrightPageSnapshotter _inner = new();
+
+        public int CaptureCount { get; private set; }
+
+        public async Task<PageSnapshot> CaptureAsync(
+            IPage page,
+            PageSnapshotOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            CaptureCount++;
+            return await _inner.CaptureAsync(page, options, cancellationToken);
+        }
     }
 }

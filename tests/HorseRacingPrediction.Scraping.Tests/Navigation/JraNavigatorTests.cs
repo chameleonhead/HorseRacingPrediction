@@ -27,7 +27,8 @@ public sealed class JraNavigatorTests
 
     private static TestPageSnapshot BuildCalendarSnapshot(
         string url,
-        IEnumerable<TestPageLink> links)
+        IEnumerable<TestPageLink> links,
+        string yearMonth = "2026年9月")
     {
         var table = new TestPageTable(
             Headers: [],
@@ -42,7 +43,7 @@ public sealed class JraNavigatorTests
             links: links.ToList(),
             actions: [],
             tables: [table],
-            headings: ["開催日程>2026年9月"]);
+            headings: [$"開催日程>{yearMonth}"]);
 
         return new TestPageSnapshot(url, "開催日程", [section]);
     }
@@ -158,6 +159,36 @@ public sealed class JraNavigatorTests
         await navigator.ToCalendarAsync(new YearMonth(2026, 9));
 
         CollectionAssert.Contains(browser.NavigatedUrls, CalendarUrl);
+    }
+
+    [TestMethod]
+    public async Task ToCalendarAsync_WrongFinalMonthIsNotCached_ThenMatchingMonthIsCached()
+    {
+        const string SeptemberUrl = "https://www.jra.go.jp/keiba/calendar/sep.html";
+        var browser = new FakeWebBrowser();
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, [], "2026年8月"));
+        browser.SetLinks(CalendarUrl, [new TestPageLink("sep.html", "9月")]);
+        browser.SetSnapshot(SeptemberUrl, BuildCalendarSnapshot(SeptemberUrl, [], "2026年10月"));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+        var requested = new YearMonth(2026, 9);
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(
+            () => navigator.ToCalendarAsync(requested));
+
+        StringAssert.Contains(exception.Message, "ExpectedMonth=2026-09");
+        StringAssert.Contains(exception.Message, "ActualMonth=2026-10");
+        var captureCountAfterFailure = browser.SnapshotCaptureCount;
+
+        browser.SetSnapshot(SeptemberUrl, BuildCalendarSnapshot(SeptemberUrl, []));
+        var page = await navigator.ToCalendarAsync(requested);
+        var captureCountAfterSuccess = browser.SnapshotCaptureCount;
+        var cached = await navigator.ToCalendarAsync(requested);
+
+        Assert.AreEqual(requested, ((JraCalendarPage)page).Month);
+        Assert.AreSame(page, cached);
+        Assert.IsTrue(captureCountAfterFailure > 0);
+        Assert.IsTrue(captureCountAfterSuccess > captureCountAfterFailure);
+        Assert.AreEqual(captureCountAfterSuccess, browser.SnapshotCaptureCount);
     }
 
     private const string MeetingSelectionUrl = "https://www.jra.go.jp/JRADB/accessD.html";

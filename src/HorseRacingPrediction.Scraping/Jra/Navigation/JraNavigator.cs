@@ -162,12 +162,17 @@ public sealed partial class JraNavigator
             page.Kind,
             page.Url);
 
-        if (page is JraCalendarPage calendarPage)
-        {
-            _lastCalendarPage = (month, calendarPage);
-        }
+        if (page is not JraCalendarPage calendarPage)
+            throw new JraNavigationException(
+                $"カレンダーページを取得できませんでした。ExpectedMonth={month}; Kind={page.Kind}; Url={page.Url}");
 
-        return page;
+        if (calendarPage.Month != month)
+            throw new JraNavigationException(
+                $"カレンダーの年月が要求と一致しません。ExpectedMonth={month}; ActualMonth={calendarPage.Month}; Url={calendarPage.Url}");
+
+        _lastCalendarPage = (month, calendarPage);
+
+        return calendarPage;
     }
 
     public async Task<IJraPage> ToRaceListAsync(

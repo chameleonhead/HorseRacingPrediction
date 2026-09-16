@@ -37,6 +37,8 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
     public int SubmitFormCallCount { get; private set; }
 
+    public int SnapshotCaptureCount { get; private set; }
+
     /// <summary>
     /// テストの初期状態を設定する。NavigatedUrlsには記録しない。
     /// </summary>
@@ -88,6 +90,7 @@ internal sealed class FakeWebBrowser : IWebBrowser
 
     public Task<SemanticPageSnapshot> GetPageSnapshotAsync(CancellationToken cancellationToken = default)
     {
+        SnapshotCaptureCount++;
         var url = CurrentUrl ?? string.Empty;
         return Task.FromResult(_snapshotsByUrl.TryGetValue(url, out var snapshot)
             ? snapshot

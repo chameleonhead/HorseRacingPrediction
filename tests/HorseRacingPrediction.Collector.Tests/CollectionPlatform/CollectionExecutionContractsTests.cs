@@ -1,4 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Extensions.Options;
 using System.Net;
 
@@ -53,6 +55,45 @@ public sealed class CollectionExecutionContractsTests
 
         Assert.AreEqual(CollectionAttemptResult.TransientFailure, completion.Result);
         Assert.AreEqual(503, completion.HttpStatusCode);
+    }
+
+    [TestMethod]
+    public void CalendarReadinessTimeout_RemainsTransientAcrossCollectionClassifiers()
+    {
+        var exception = new TimeoutException("Calendar readiness timed out.");
+        var location = new ResourceLocationCandidate(
+            42,
+            new Uri("https://www.jra.go.jp/keiba/calendar/"),
+            ResourceLocationSource.Generated,
+            ResourceLocationStatus.Active,
+            null);
+
+        var attempt = CollectionAttemptFailureClassifier.FromException(exception);
+        var resource = ResourceLocationOutcomeClassifier.Failed(location, exception);
+
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, attempt.Result);
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, resource.Result);
+    }
+
+    [TestMethod]
+    public void CompletedCalendarParseFailure_RemainsStructural()
+    {
+        var exception = new JraPageParseException(
+            JraPageKind.Calendar,
+            "https://www.jra.go.jp/keiba/calendar/",
+            "Malformed completed calendar.");
+        var location = new ResourceLocationCandidate(
+            42,
+            new Uri(exception.Url),
+            ResourceLocationSource.Generated,
+            ResourceLocationStatus.Active,
+            null);
+
+        var attempt = CollectionAttemptFailureClassifier.FromException(exception);
+        var resource = ResourceLocationOutcomeClassifier.Failed(location, exception);
+
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, attempt.Result);
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, resource.Result);
     }
 
     [TestMethod]

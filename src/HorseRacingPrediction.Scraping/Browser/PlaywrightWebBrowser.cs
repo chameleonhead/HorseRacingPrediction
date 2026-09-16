@@ -17,6 +17,7 @@ namespace HorseRacingPrediction.Scraping.Browser;
 public sealed partial class PlaywrightWebBrowser : IWebBrowser
 {
     private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
+    private static readonly TimeSpan DefaultCalendarReadinessTimeout = TimeSpan.FromSeconds(10);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
     private readonly IPlaywright _playwright;
@@ -26,6 +27,8 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     private readonly string _searchBaseUrl;
     private readonly ILogger<PlaywrightWebBrowser> _logger;
     private readonly IPageSnapshotter _pageSnapshotter;
+    private readonly TimeSpan _calendarReadinessTimeout;
+    private readonly Func<Uri, bool> _isCalendarPage;
     private bool _disposed;
 
     private PlaywrightWebBrowser(
@@ -35,7 +38,9 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         IPage page,
         string searchBaseUrl,
         ILogger<PlaywrightWebBrowser>? logger,
-        IPageSnapshotter? pageSnapshotter)
+        IPageSnapshotter? pageSnapshotter,
+        TimeSpan calendarReadinessTimeout,
+        Func<Uri, bool> isCalendarPage)
     {
         _playwright = playwright;
         _browser = browser;
@@ -46,6 +51,8 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             : searchBaseUrl;
         _logger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
         _pageSnapshotter = pageSnapshotter ?? new PlaywrightPageSnapshotter();
+        _calendarReadinessTimeout = calendarReadinessTimeout;
+        _isCalendarPage = isCalendarPage;
     }
 
     public string? CurrentUrl
@@ -68,7 +75,41 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         BrowserNewContextOptions? contextOptions = null,
         ILogger<PlaywrightWebBrowser>? logger = null,
         IPageSnapshotter? pageSnapshotter = null)
+        => await CreateCoreAsync(
+            searchBaseUrl,
+            launchOptions,
+            contextOptions,
+            logger,
+            pageSnapshotter,
+            DefaultCalendarReadinessTimeout,
+            IsJraCalendarPage).ConfigureAwait(false);
+
+    internal static async Task<PlaywrightWebBrowser> CreateForTestingAsync(
+        TimeSpan calendarReadinessTimeout,
+        Func<Uri, bool> isCalendarPage,
+        IPageSnapshotter? pageSnapshotter = null)
+        => await CreateCoreAsync(
+            DefaultSearchBaseUrl,
+            launchOptions: null,
+            contextOptions: null,
+            logger: null,
+            pageSnapshotter,
+            calendarReadinessTimeout,
+            isCalendarPage).ConfigureAwait(false);
+
+    private static async Task<PlaywrightWebBrowser> CreateCoreAsync(
+        string searchBaseUrl,
+        BrowserTypeLaunchOptions? launchOptions,
+        BrowserNewContextOptions? contextOptions,
+        ILogger<PlaywrightWebBrowser>? logger,
+        IPageSnapshotter? pageSnapshotter,
+        TimeSpan calendarReadinessTimeout,
+        Func<Uri, bool> isCalendarPage)
     {
+        if (calendarReadinessTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(calendarReadinessTimeout));
+        ArgumentNullException.ThrowIfNull(isCalendarPage);
+
         var resolvedLogger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
         IPlaywright? playwright = null;
         IBrowser? browser = null;
@@ -86,7 +127,16 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
                 string.IsNullOrWhiteSpace(searchBaseUrl) ? DefaultSearchBaseUrl : searchBaseUrl,
                 resolvedLaunchOptions.Headless);
 
-            return new PlaywrightWebBrowser(playwright, browser, context, page, searchBaseUrl, resolvedLogger, pageSnapshotter);
+            return new PlaywrightWebBrowser(
+                playwright,
+                browser,
+                context,
+                page,
+                searchBaseUrl,
+                resolvedLogger,
+                pageSnapshotter,
+                calendarReadinessTimeout,
+                isCalendarPage);
         }
         catch
         {
@@ -148,12 +198,30 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
         _logger.LogInformation("Browser navigate start. Url={Url}", url);
 
-        await _page.GotoAsync(url, new PageGotoOptions
+        var calendarNavigation = Uri.TryCreate(url, UriKind.Absolute, out var targetUri)
+                                 && _isCalendarPage(targetUri);
+        var maxAttempts = calendarNavigation ? 2 : 1;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            WaitUntil = WaitUntilState.DOMContentLoaded,
-        }).WaitAsync(cancellationToken);
+            await _page.GotoAsync(url, new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+            }).WaitAsync(cancellationToken);
 
-        await WaitForPageSettledAsync(cancellationToken);
+            try
+            {
+                await WaitForPageSettledAsync(cancellationToken);
+                break;
+            }
+            catch (TimeoutException) when (calendarNavigation && attempt < maxAttempts)
+            {
+                _logger.LogWarning(
+                    "JRA calendar did not become visibly ready; retrying idempotent navigation. Url={Url} Attempt={Attempt} MaxAttempts={MaxAttempts}",
+                    url,
+                    attempt,
+                    maxAttempts);
+            }
+        }
         var content = includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         _logger.LogInformation(
             "Browser navigate complete. Url={Url} CurrentUrl={CurrentUrl} ContentLength={ContentLength}",
@@ -666,23 +734,39 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             // ナビゲーション競合時は Snapshot 側で現在状態を診断する。
         }
         if (Uri.TryCreate(_page.Url, UriKind.Absolute, out var currentUri)
-            && currentUri.Host.EndsWith("jra.go.jp", StringComparison.OrdinalIgnoreCase)
-            && currentUri.AbsolutePath.Contains("/keiba/calendar/", StringComparison.OrdinalIgnoreCase))
+            && _isCalendarPage(currentUri))
         {
             try
             {
                 await _page.WaitForFunctionAsync(
-                    """() => /\d{4}年\s*\d{1,2}月/.test(document.body?.innerText || '') && Array.from(document.querySelectorAll('table td')).some(e => /\d/.test(e.innerText || e.textContent || ''))""",
-                    null,
-                    new PageWaitForFunctionOptions { Timeout = 3_000 });
+                        """
+                        () => {
+                            const text = document.body?.innerText || '';
+                            if (!/\d{4}年\s*\d{1,2}月/.test(text)) return false;
+                            const cells = Array.from(document.querySelectorAll('#cal_unit table td, table.rc_table td'));
+                            const hasDate = cells.some(cell => /^\s*\d{1,2}\b/.test(cell.innerText || cell.textContent || ''));
+                            const hasRacecourse = cells.some(cell => /(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)/.test(cell.innerText || cell.textContent || ''));
+                            return hasDate && hasRacecourse;
+                        }
+                        """,
+                        null,
+                        new PageWaitForFunctionOptions
+                        {
+                            Timeout = (float)_calendarReadinessTimeout.TotalMilliseconds,
+                        })
+                    .WaitAsync(cancellationToken);
             }
-            catch (TimeoutException)
+            catch (TimeoutException exception)
             {
-                // Parser の構造化診断を優先する。
+                throw new TimeoutException(
+                    $"JRAカレンダーの表示完了を確認できませんでした。Url={currentUri}; Missing=YearMonthOrDateOrRacecourse; TimeoutMs={_calendarReadinessTimeout.TotalMilliseconds:F0}",
+                    exception);
             }
-            catch (PlaywrightException)
+            catch (PlaywrightException exception)
             {
-                // ナビゲーション競合時は Snapshot 側で現在状態を診断する。
+                throw new TimeoutException(
+                    $"JRAカレンダーの表示確認中にブラウザーエラーが発生しました。Url={currentUri}",
+                    exception);
             }
         }
         cancellationToken.ThrowIfCancellationRequested();
@@ -1094,6 +1178,10 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         }
         return null;
     }
+
+    private static bool IsJraCalendarPage(Uri uri)
+        => uri.Host.EndsWith("jra.go.jp", StringComparison.OrdinalIgnoreCase)
+           && uri.AbsolutePath.Contains("/keiba/calendar/", StringComparison.OrdinalIgnoreCase);
 
     private sealed class ClickableDescriptor
     {
