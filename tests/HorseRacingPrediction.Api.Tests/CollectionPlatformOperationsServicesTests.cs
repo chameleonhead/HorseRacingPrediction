@@ -56,6 +56,67 @@ public sealed class CollectionPlatformOperationsServicesTests
     }
 
     [TestMethod]
+    public async Task DlqReconciler_DeadLettersLegacyV1NotificationAndDeletesMessage()
+    {
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var notification = new CollectionTaskNotification(receipt.TaskId, 1);
+        var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("legacy-v1",
+            JsonSerializer.Serialize(notification, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+        var service = CreateReconciler(store, queue);
+
+        Assert.AreEqual(1, await service.RunOnceAsync(CancellationToken.None));
+        CollectionAssert.AreEqual(new[] { "legacy-v1" }, queue.Deleted);
+        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(
+            DateTimeOffset.UtcNow.AddMinutes(1), 10));
+    }
+
+    [TestMethod]
+    public async Task DlqReconciler_ProcessesMixedEnvelopeAndLegacyNotification()
+    {
+        var store = await CreateStoreAsync();
+        var first = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var second = await store.RequestAsync(new(ResourceType.Horse, "jra", "H2"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var queue = new RecordingQueue(
+            new CollectionPlatformDeadLetterMessage("envelope",
+                JsonSerializer.Serialize(CreateEnvelope(first.TaskId, 1), jsonOptions)),
+            new CollectionPlatformDeadLetterMessage("legacy",
+                JsonSerializer.Serialize(new CollectionTaskNotification(second.TaskId, 1), jsonOptions)));
+        var service = CreateReconciler(store, queue);
+
+        Assert.AreEqual(2, await service.RunOnceAsync(CancellationToken.None));
+        CollectionAssert.AreEquivalent(new[] { "envelope", "legacy" }, queue.Deleted);
+        Assert.IsTrue((await store.GetTasksAsync()).Where(x => x.TaskId == first.TaskId || x.TaskId == second.TaskId)
+            .All(x => x.Status == CollectionTaskStatus.DeadLetter));
+    }
+
+    [TestMethod]
+    public async Task DlqReconciler_DeletesRepeatedLegacyNotificationWithoutDuplicatingFailure()
+    {
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var body = JsonSerializer.Serialize(new CollectionTaskNotification(receipt.TaskId, 1),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.AreEqual(1, await CreateReconciler(store,
+            new RecordingQueue(new CollectionPlatformDeadLetterMessage("first", body)))
+            .RunOnceAsync(CancellationToken.None));
+        var repeatedQueue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("repeated", body));
+        Assert.AreEqual(0, await CreateReconciler(store, repeatedQueue).RunOnceAsync(CancellationToken.None));
+
+        CollectionAssert.AreEqual(new[] { "repeated" }, repeatedQueue.Deleted);
+        Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(
+            DateTimeOffset.UtcNow.AddMinutes(1), 10));
+    }
+
+    [TestMethod]
     public async Task DlqReconciler_DiscardsLegacyOrInvalidNotificationWithoutChangingTasks()
     {
         var store = await CreateStoreAsync();
@@ -75,6 +136,24 @@ public sealed class CollectionPlatformOperationsServicesTests
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
     }
 
+    [TestMethod]
+    public async Task DlqReconciler_RetainsLegacyNotificationWithUnknownOrAmbiguousShape()
+    {
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
+            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var queue = new RecordingQueue(
+            new CollectionPlatformDeadLetterMessage("unknown-version",
+                $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1,"contractVersion":2}"""),
+            new CollectionPlatformDeadLetterMessage("ambiguous",
+                $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1,"contractVersion":1,"extra":true}"""));
+
+        Assert.AreEqual(0, await CreateReconciler(store, queue).RunOnceAsync(CancellationToken.None));
+        Assert.HasCount(0, queue.Deleted);
+        Assert.AreEqual(CollectionTaskStatus.Ready,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+    }
+
     private async Task<CollectionPlatformStore> CreateStoreAsync()
     {
         var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
@@ -88,6 +167,11 @@ public sealed class CollectionPlatformOperationsServicesTests
 
     private static CollectionDispatchEnvelope CreateEnvelope(Guid taskId, long generation) => new(Guid.NewGuid(),
         new("JRA", new("horse-profile"), null, CollectionLane.Normal), [new(taskId, generation)]);
+
+    private static CollectionPlatformDeadLetterReconciler CreateReconciler(CollectionPlatformStore store,
+        ICollectionPlatformTaskQueue queue) => new(store, queue,
+        Options.Create(new CollectionDeadLetterQueueReconcilerOptions()),
+        NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
 
     private sealed class RecordingQueue(params CollectionPlatformDeadLetterMessage[] messages)
         : ICollectionPlatformTaskQueue
