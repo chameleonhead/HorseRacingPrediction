@@ -11,6 +11,7 @@ public sealed class CollectionQueueCutoverContractTests
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
     private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
+    private static string Compose => File.ReadAllText(Path.Combine(Root, "deploy", "docker-compose.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
 
     [TestMethod]
@@ -90,7 +91,9 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/tasks/${stuck_task}/cancel");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "ENABLE-RECOVERY-CAPACITY");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "RESTORE-CAPACITY");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "CollectionQueue__MaxInFlightEnvelopes=$target");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=$target");
+        StringAssert.Contains(Compose,
+            "CollectionQueue__MaxInFlightEnvelopes: ${COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES:-1}");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
         Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));

@@ -134,8 +134,8 @@ jobs:
             if [ "$MODE" = enable-recovery-capacity ] || [ "$MODE" = restore-capacity ]; then
               target=1
               [ "$MODE" = enable-recovery-capacity ] && target=2
-              sed -i '/^CollectionQueue__MaxInFlightEnvelopes=/d' .env
-              echo "CollectionQueue__MaxInFlightEnvelopes=$target" >> .env
+              sed -i '/^COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=/d' .env
+              echo "COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=$target" >> .env
               chmod 600 .env
               docker compose --env-file .env up -d --force-recreate api >/dev/null
               echo "API dispatch in-flight envelope limit set to $target."
