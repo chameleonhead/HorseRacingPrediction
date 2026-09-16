@@ -82,9 +82,12 @@ public sealed class CollectionQueueCutoverContractTests
     {
         StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-DLQ");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-RACE");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "REPLACE-STUCK-LEGACY-RACE");
         StringAssert.Contains(DlqDiagnosticsWorkflow, ".status == 8 and .errorCode == \"DeadLetterQueue\"");
         StringAssert.Contains(DlqDiagnosticsWorkflow,
             ".errorMessage == \"Race course and number attributes are required.\"");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "test \"$(jq '.items[0].attemptCount'");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "/tasks/${stuck_task}/cancel");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
         Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));

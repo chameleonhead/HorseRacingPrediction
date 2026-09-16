@@ -11,9 +11,10 @@ on:
           - inspect
           - recover-dlq
           - recover-legacy-race
+          - replace-stuck-legacy-race
         default: inspect
       confirmation:
-        description: Enter RECOVER-LEGACY-DLQ or RECOVER-LEGACY-RACE for the selected recovery mode.
+        description: Enter RECOVER-LEGACY-DLQ, RECOVER-LEGACY-RACE, or REPLACE-STUCK-LEGACY-RACE for the selected mode.
         required: false
         type: string
 
@@ -35,6 +36,7 @@ jobs:
             inspect) ;;
             recover-dlq) test "$CONFIRMATION" = RECOVER-LEGACY-DLQ ;;
             recover-legacy-race) test "$CONFIRMATION" = RECOVER-LEGACY-RACE ;;
+            replace-stuck-legacy-race) test "$CONFIRMATION" = REPLACE-STUCK-LEGACY-RACE ;;
             *) exit 1 ;;
           esac
 
@@ -63,7 +65,18 @@ jobs:
             --data-urlencode 'definitionId=race-detail' \
             --data-urlencode 'search=20260419:Nakayama:9' \
             --data-urlencode 'page=1' --data-urlencode 'pageSize=20' \
-            "$base/tasks/search" | jq '{totalCount, items: [.items[] | {taskId, status, resource, availableAt, attemptCount}]}'
+            "$base/tasks/search" > "$work/legacy-race-tasks.json"
+          jq '{totalCount, items: [.items[] | {taskId, status, resource, availableAt, attemptCount}]}' \
+            "$work/legacy-race-tasks.json"
+          if [ "$MODE" = replace-stuck-legacy-race ]; then
+            test "$(jq '.totalCount' "$work/legacy-race-tasks.json")" = 1
+            test "$(jq '.items[0].status' "$work/legacy-race-tasks.json")" = 1
+            test "$(jq '.items[0].attemptCount' "$work/legacy-race-tasks.json")" = 0
+            stuck_task="$(jq -r '.items[0].taskId' "$work/legacy-race-tasks.json")"
+            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+              "$base/tasks/${stuck_task}/cancel" >/dev/null
+            echo "Cancelled one unstarted legacy race task before replacement."
+          fi
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
             "$base/failure-notifications/groups?limit=10000" > "$work/groups.json"
           jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]' "$work/groups.json"
@@ -77,7 +90,7 @@ jobs:
             recover-dlq)
               jq '[.[] | select(.status == 8 and .errorCode == "DeadLetterQueue")]' \
                 "$work/groups.json" > "$work/targets.json" ;;
-            recover-legacy-race)
+            recover-legacy-race|replace-stuck-legacy-race)
               jq '[.[] | select(.definition.value == "race-detail" and .status == 6
                 and .errorCode == "InvalidOperationException"
                 and .errorMessage == "Race course and number attributes are required.")]' \
