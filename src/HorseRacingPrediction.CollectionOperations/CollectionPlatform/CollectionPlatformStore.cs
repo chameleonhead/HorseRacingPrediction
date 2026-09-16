@@ -1294,19 +1294,24 @@ public sealed class CollectionPlatformStore
             if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
                 return false;
 
-            var currentGeneration = from outbox in db.DispatchOutbox
-                                    join task in db.Tasks on outbox.TaskId equals task.TaskId
-                                    where outbox.EnvelopeId != null && outbox.DispatchedAt != null
-                                          && outbox.DispatchGeneration == task.DispatchGeneration
-                                          && (task.Status == CollectionTaskStatus.Ready
-                                              || task.Status == CollectionTaskStatus.Running)
-                                    select outbox.EnvelopeId;
-            var inFlight = await currentGeneration.Distinct().CountAsync(cancellationToken).ConfigureAwait(false);
+            var inFlight = await db.ExecutionLeases.CountAsync(x =>
+                (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
+                cancellationToken).ConfigureAwait(false);
+            var executionEnvelopeIds = db.ExecutionLeases.Select(x => x.DispatchEnvelopeId);
+            var legacyInFlight = await (from outbox in db.DispatchOutbox
+                                        join task in db.Tasks on outbox.TaskId equals task.TaskId
+                                        where outbox.EnvelopeId != null && outbox.DispatchedAt != null
+                                              && outbox.DispatchGeneration == task.DispatchGeneration
+                                              && (task.Status == CollectionTaskStatus.Ready
+                                                  || task.Status == CollectionTaskStatus.Running)
+                                              && !executionEnvelopeIds.Contains(outbox.EnvelopeId.Value)
+                                        select outbox.EnvelopeId).Distinct().CountAsync(cancellationToken)
+                .ConfigureAwait(false);
             var reserved = await db.DispatchOutbox
                 .Where(x => x.DispatchedAt == null && x.EnvelopeId != null
                             && x.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds())
                 .Select(x => x.EnvelopeId).Distinct().CountAsync(cancellationToken).ConfigureAwait(false);
-            if (inFlight + reserved >= Math.Max(1, maxInFlightEnvelopes)) return false;
+            if (inFlight + legacyInFlight + reserved >= Math.Max(1, maxInFlightEnvelopes)) return false;
 
             var rows = await db.DispatchOutbox.Where(x => ids.Contains(x.OutboxId) && x.DispatchedAt == null
                     && (x.ReservedUntilUnixMilliseconds == null
@@ -1321,6 +1326,159 @@ public sealed class CollectionPlatformStore
             }
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task MarkWakeSentAsync(Guid envelopeId, string reservationToken, string? queueMessageId,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var rows = await db.DispatchOutbox.Where(x => x.EnvelopeId == envelopeId
+                    && x.ReservationToken == reservationToken && x.DispatchedAt == null)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var row in rows) row.QueueMessageId = queueMessageId;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<int> ReclaimExpiredExecutionLeasesAsync(DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
+            db.Database.UseTransaction(tx);
+            var before = await db.ExecutionLeases.CountAsync(x => (x.Status == "StartPending" || x.Status == "Running")
+                && x.LeaseExpiresAt <= now, cancellationToken).ConfigureAwait(false);
+            await ReclaimExpiredExecutionLeasesAsync(db, now, cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return before;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectionExecutionAcquireResult> AcquireNextExecutionAsync(CollectionWakeSignal wake,
+        string queueMessageId, DateTimeOffset now, TimeSpan startLease,
+        CancellationToken cancellationToken = default)
+    {
+        if (wake.ContractVersion != 1 || wake.WakeId == Guid.Empty || wake.DispatchEnvelopeId == Guid.Empty
+            || string.IsNullOrWhiteSpace(wake.ReservationToken))
+            return new(CollectionExecutionAcquireStatus.NoWork);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await db.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var tx = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: false);
+            db.Database.UseTransaction(tx);
+            await ReclaimExpiredExecutionLeasesAsync(db, now, cancellationToken).ConfigureAwait(false);
+            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken))
+                return new(CollectionExecutionAcquireStatus.NoWork);
+
+            var existing = await db.ExecutionLeases.SingleOrDefaultAsync(
+                x => x.DispatchEnvelopeId == wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false);
+            if (existing is not null)
+            {
+                var priorEnvelope = existing.Status == "StartPending" && existing.LeaseExpiresAt > now
+                    && existing.WakeId == wake.WakeId && existing.ReservationToken == wake.ReservationToken
+                    ? await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false)
+                    : null;
+                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return priorEnvelope is null ? new(CollectionExecutionAcquireStatus.NoWork)
+                    : new(CollectionExecutionAcquireStatus.Acquired, existing.ExecutionBatchId,
+                        existing.LeaseToken, priorEnvelope, existing.LeaseExpiresAt);
+            }
+
+            var rows = await db.DispatchOutbox.Where(x => x.EnvelopeId == wake.DispatchEnvelopeId
+                    && x.ReservationToken == wake.ReservationToken && x.DispatchedAt == null
+                    && x.ReservedUntilUnixMilliseconds > now.ToUnixTimeMilliseconds())
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (rows.Count == 0) return new(CollectionExecutionAcquireStatus.NoWork);
+            var taskIds = rows.Select(x => x.TaskId).ToArray();
+            var tasks = await db.Tasks.Where(x => taskIds.Contains(x.TaskId)).ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (tasks.Count != rows.Count || rows.Any(row => tasks.All(task => task.TaskId != row.TaskId
+                    || task.DispatchGeneration != row.DispatchGeneration || task.Status != CollectionTaskStatus.Ready)))
+                return new(CollectionExecutionAcquireStatus.NoWork);
+
+            var lease = new CollectionExecutionLeaseEntity
+            {
+                ExecutionBatchId = Guid.NewGuid(),
+                DispatchEnvelopeId = wake.DispatchEnvelopeId,
+                WakeId = wake.WakeId,
+                ReservationToken = wake.ReservationToken,
+                LeaseToken = Guid.NewGuid().ToString("N"),
+                Status = "StartPending",
+                LeaseExpiresAt = now.AddSeconds(Math.Clamp((int)startLease.TotalSeconds, 10, 60)),
+                CreatedAt = now,
+                QueueMessageId = queueMessageId,
+            };
+            db.ExecutionLeases.Add(lease);
+            foreach (var row in rows)
+            {
+                row.DispatchedAt = now;
+                row.QueueMessageId = queueMessageId;
+                row.ReservationToken = null;
+                row.ReservedUntilUnixMilliseconds = null;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            var envelope = await BuildExecutionEnvelopeAsync(db, wake.DispatchEnvelopeId, cancellationToken)
+                .ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return envelope is null ? new(CollectionExecutionAcquireStatus.NoWork)
+                : new(CollectionExecutionAcquireStatus.Acquired, lease.ExecutionBatchId, lease.LeaseToken,
+                    envelope, lease.LeaseExpiresAt);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> StartExecutionAsync(Guid executionBatchId, CollectionExecutionStartRequest request,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var lease = await db.ExecutionLeases.SingleOrDefaultAsync(x => x.ExecutionBatchId == executionBatchId,
+                cancellationToken).ConfigureAwait(false);
+            if (lease is null || lease.LeaseToken != request.LeaseToken || lease.LeaseExpiresAt <= now) return false;
+            if (lease.Status == "Running") return true;
+            if (lease.Status != "StartPending") return false;
+            lease.Status = "Running";
+            lease.StartedAt = now;
+            lease.LambdaRequestId = request.LambdaRequestId;
+            lease.LeaseExpiresAt = now.AddSeconds(Math.Clamp(request.LeaseSeconds, 60, 1200));
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> CompleteExecutionAsync(Guid executionBatchId, string leaseToken,
+        DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var lease = await db.ExecutionLeases.SingleOrDefaultAsync(x => x.ExecutionBatchId == executionBatchId,
+                cancellationToken).ConfigureAwait(false);
+            if (lease is null || lease.LeaseToken != leaseToken) return false;
+            if (lease.Status == "Completed") return true;
+            if (lease.Status is not ("Running" or "StartPending")) return false;
+            await ReleaseUnstartedDispatchesAsync(db, lease.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false);
+            lease.Status = "Completed";
+            lease.FinishedAt = now;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
         finally { _gate.Release(); }
@@ -2977,6 +3135,66 @@ public sealed class CollectionPlatformStore
     }
 
     private sealed record DateRangeImpact(DateOnly From, DateOnly To);
+
+    private static async Task ReclaimExpiredExecutionLeasesAsync(CollectionPlatformDbContext db, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var expired = await db.ExecutionLeases.Where(x => (x.Status == "StartPending" || x.Status == "Running")
+                && x.LeaseExpiresAt <= now).ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var lease in expired)
+        {
+            await ReleaseUnstartedDispatchesAsync(db, lease.DispatchEnvelopeId, cancellationToken).ConfigureAwait(false);
+            lease.Status = "Expired";
+            lease.FinishedAt = now;
+        }
+        if (expired.Count > 0) await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ReleaseUnstartedDispatchesAsync(CollectionPlatformDbContext db, Guid envelopeId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await (from outbox in db.DispatchOutbox
+                          join task in db.Tasks on outbox.TaskId equals task.TaskId
+                          where outbox.EnvelopeId == envelopeId && outbox.DispatchGeneration == task.DispatchGeneration
+                                && task.Status == CollectionTaskStatus.Ready
+                          select outbox).ToListAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var row in rows)
+        {
+            row.DispatchedAt = null;
+            row.ReservationToken = null;
+            row.ReservedUntilUnixMilliseconds = null;
+            row.EnvelopeId = null;
+            row.QueueMessageId = null;
+        }
+    }
+
+    private static async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
+        Guid envelopeId, CancellationToken cancellationToken)
+    {
+        var rows = await (from outbox in db.DispatchOutbox.AsNoTracking()
+                          join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                          join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                          where outbox.EnvelopeId == envelopeId && outbox.DispatchGeneration == task.DispatchGeneration
+                          orderby task.Priority descending, task.CreatedAt, task.TaskId
+                          select new { outbox, task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (rows.Count == 0) return null;
+        var first = rows[0];
+        var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(first.resource.AttributesJson) ?? [];
+        CollectionDispatchCompatibilityKey compatibility;
+        if (first.resource.EffectiveDate.HasValue
+            && first.resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
+            compatibility = new(first.resource.Provider, new(first.task.DefinitionId), first.resource.EffectiveDate,
+                first.task.Lane, CollectionDispatchGroupKind.RaceDay, first.resource.EffectiveDate.Value.ToString("yyyy-MM-dd"));
+        else if (first.resource.Type == ResourceType.Horse
+                 && attributes.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
+            compatibility = new(first.resource.Provider, new(first.task.DefinitionId), first.resource.EffectiveDate,
+                first.task.Lane, CollectionDispatchGroupKind.WeekendSubjects, weekend);
+        else
+            compatibility = new(first.resource.Provider, new(first.task.DefinitionId), first.resource.EffectiveDate,
+                first.task.Lane, CollectionDispatchGroupKind.Definition, first.task.DefinitionId);
+        return new(envelopeId, compatibility, rows.Select(x => new CollectionDispatchTaskReference(
+            x.task.TaskId, x.outbox.DispatchGeneration)).ToArray());
+    }
 
     private async Task ReclaimExpiredAsync(CollectionPlatformDbContext db, DateTimeOffset now,
         CancellationToken cancellationToken)

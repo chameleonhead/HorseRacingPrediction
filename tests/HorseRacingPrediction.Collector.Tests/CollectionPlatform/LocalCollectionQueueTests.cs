@@ -27,13 +27,13 @@ public sealed class LocalCollectionQueueTests
 
         var received = await queue.ReceiveAsync(TimeSpan.FromMinutes(1));
         Assert.IsNotNull(received);
-        AssertEnvelope(envelope, received.Envelope);
+        AssertEnvelope(envelope, received.Envelope!);
         Assert.IsNull(await queue.ReceiveAsync(TimeSpan.FromMinutes(1)));
 
         await queue.ReleaseAsync(received.ReceiptHandle);
         var redelivered = await queue.ReceiveAsync(TimeSpan.FromMinutes(1));
         Assert.IsNotNull(redelivered);
-        AssertEnvelope(envelope, redelivered.Envelope);
+        AssertEnvelope(envelope, redelivered.Envelope!);
         Assert.AreEqual(2, redelivered.ReceiveCount);
         await queue.AcknowledgeAsync(redelivered.ReceiptHandle);
         Assert.AreEqual((0L, 0L, 0L), await queue.GetDepthAsync());

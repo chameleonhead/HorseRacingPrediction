@@ -63,19 +63,21 @@ public sealed class CollectionPlatformDeadLetterReconciler(
 
     internal async Task<int> RunOnceAsync(CancellationToken cancellationToken)
     {
+        _ = store; // Kept in the constructor for a source-compatible rolling deployment; DLQ audit is read-only.
         var messages = await queue.ReceiveDeadLetterMessagesAsync(
             Math.Clamp(_options.MaxMessagesPerCycle, 1, 10), cancellationToken).ConfigureAwait(false);
-        var reconciled = 0;
+        var audited = 0;
         foreach (var message in messages)
         {
             try
             {
-                var dispatch = ReadDeadLetterDispatch(message.Body);
-                foreach (var task in dispatch.Tasks)
-                    reconciled += await store.ReconcileDeadLetterAsync(task.TaskId,
-                        task.DispatchGeneration, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
-                        $"{dispatch.Description} exhausted delivery and entered the dead-letter queue.",
-                        cancellationToken).ConfigureAwait(false) ? 1 : 0;
+                var wake = JsonSerializer.Deserialize<CollectionWakeSignal>(message.Body, JsonOptions);
+                if (wake is not { ContractVersion: 1 } || wake.WakeId == Guid.Empty
+                    || wake.DispatchEnvelopeId == Guid.Empty || string.IsNullOrWhiteSpace(wake.ReservationToken))
+                    throw new JsonException("DLQ message did not contain a supported wake signal.");
+                logger.LogError("Collection wake entered the dead-letter queue. WakeId={WakeId} EnvelopeId={EnvelopeId}",
+                    wake.WakeId, wake.DispatchEnvelopeId);
+                audited++;
                 await queue.DeleteDeadLetterMessageAsync(message.ReceiptHandle, cancellationToken).ConfigureAwait(false);
             }
             catch (JsonException ex)
@@ -84,37 +86,8 @@ public sealed class CollectionPlatformDeadLetterReconciler(
                     message.ReceiptHandle);
             }
         }
-        return reconciled;
+        return audited;
     }
-
-    private static DeadLetterDispatch ReadDeadLetterDispatch(string body)
-    {
-        using var document = JsonDocument.Parse(body);
-        if (document.RootElement.ValueKind != JsonValueKind.Object)
-            throw new JsonException("DLQ message must be a JSON object.");
-
-        var envelope = JsonSerializer.Deserialize<CollectionDispatchEnvelope>(body, JsonOptions);
-        if (envelope?.IsSupported() == true)
-            return new(envelope.Tasks, $"Worker envelope {envelope.EnvelopeId}");
-
-        var propertyNames = document.RootElement.EnumerateObject()
-            .Select(x => x.Name).ToList();
-        var expectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "taskId", "dispatchGeneration", "contractVersion" };
-        if (propertyNames.Count != expectedNames.Count
-            || propertyNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() != expectedNames.Count
-            || propertyNames.Any(x => !expectedNames.Contains(x)))
-            throw new JsonException("DLQ message did not contain a supported dispatch envelope or legacy task notification.");
-
-        var notification = JsonSerializer.Deserialize<CollectionTaskNotification>(body, JsonOptions);
-        if (notification?.IsSupported() != true)
-            throw new JsonException("DLQ message contained an invalid legacy task notification.");
-        return new([new(notification.TaskId, notification.DispatchGeneration)],
-            $"Legacy worker notification for task {notification.TaskId}");
-    }
-
-    private sealed record DeadLetterDispatch(IReadOnlyList<CollectionDispatchTaskReference> Tasks,
-        string Description);
 }
 
 public sealed class CollectionBackfillRecoveryService(

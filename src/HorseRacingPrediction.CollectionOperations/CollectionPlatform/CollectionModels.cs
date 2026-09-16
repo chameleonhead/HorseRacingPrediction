@@ -137,6 +137,17 @@ public enum CollectionTaskAcquireStatus
 
 public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Status, LeasedCollectionTask? Task = null);
 
+public sealed record CollectionWakeSignal(Guid WakeId, Guid DispatchEnvelopeId, string ReservationToken,
+    int ContractVersion = 1);
+public enum CollectionExecutionAcquireStatus { Acquired, NoWork }
+public sealed record CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus Status,
+    Guid? ExecutionBatchId = null, string? LeaseToken = null,
+    CollectionDispatchEnvelope? Envelope = null, DateTimeOffset? StartBefore = null);
+public sealed record CollectionExecutionAcquireRequest(CollectionWakeSignal Wake, string QueueMessageId);
+public sealed record CollectionExecutionStartRequest(string LeaseToken, int LeaseSeconds,
+    string? LambdaRequestId = null);
+public sealed record CollectionExecutionCompleteRequest(string LeaseToken);
+
 public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, string LeaseToken, DateTimeOffset LeaseExpiresAt,

@@ -201,3 +201,19 @@ public sealed class CollectionDispatchOutboxEntity
     public string? QueueMessageId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+public sealed class CollectionExecutionLeaseEntity
+{
+    public Guid ExecutionBatchId { get; set; }
+    public Guid DispatchEnvelopeId { get; set; }
+    public Guid WakeId { get; set; }
+    public string ReservationToken { get; set; } = string.Empty;
+    public string LeaseToken { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public DateTimeOffset LeaseExpiresAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? FinishedAt { get; set; }
+    public string? QueueMessageId { get; set; }
+    public string? LambdaRequestId { get; set; }
+}

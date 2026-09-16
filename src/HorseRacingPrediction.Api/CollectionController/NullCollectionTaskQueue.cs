@@ -7,5 +7,10 @@ public sealed class NullCollectionTaskQueue : ICollectionTaskQueue, ICollectionP
         CancellationToken cancellationToken)
         => throw new InvalidOperationException("CollectionQueue is not configured.");
 
+    Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendWakeAsync(
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionWakeSignal wake,
+        CancellationToken cancellationToken)
+        => throw new InvalidOperationException("CollectionQueue is not configured.");
+
     public Task PurgeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

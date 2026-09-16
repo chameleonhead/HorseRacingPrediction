@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Collector.CollectionPlatform;
@@ -185,6 +187,49 @@ public sealed class CollectionLambdaInvocationTests
         Assert.AreEqual("bad", response.BatchItemFailures.Single().ItemIdentifier);
     }
 
+    [TestMethod]
+    public async Task Wake_NoWorkIsAcknowledged()
+    {
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
+        var worker = Worker(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(new CollectionExecutionAcquireResult(CollectionExecutionAcquireStatus.NoWork))
+        });
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake", wake), worker);
+
+        Assert.IsEmpty(response.BatchItemFailures);
+    }
+
+    [TestMethod]
+    public async Task Wake_AcquireBadGatewayIsAcknowledgedForScannerRecovery()
+    {
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "reservation");
+        var worker = Worker(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-502", wake), worker);
+
+        Assert.IsEmpty(response.BatchItemFailures);
+    }
+
+    [TestMethod]
+    public async Task Wake_MalformedBodyIsTheOnlyRecordFailureAndLegacyEnvelopeIsAcknowledged()
+    {
+        var eventJson = JsonSerializer.Serialize(new
+        {
+            Records = new object[]
+            {
+                new { messageId = "malformed", body = "not-json" },
+                new { messageId = "legacy", body = JsonSerializer.Serialize(Envelope(1), JsonOptions) },
+            }
+        });
+        var worker = Worker(_ => throw new AssertFailedException("Legacy messages must not call acquire-next."));
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(eventJson, worker);
+
+        Assert.AreEqual("malformed", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
     private static CollectionDispatchEnvelope Envelope(int count) => new(Guid.NewGuid(),
         new("JRA", new("race-card"), new DateOnly(2026, 9, 12), CollectionLane.Realtime),
         Enumerable.Range(0, count).Select(_ => new CollectionDispatchTaskReference(Guid.NewGuid(), 1)).ToArray());
@@ -193,4 +238,19 @@ public sealed class CollectionLambdaInvocationTests
     {
         Records = new[] { new { messageId, body = JsonSerializer.Serialize(envelope, JsonOptions) } },
     });
+
+    private static string WakeEvent(string messageId, CollectionWakeSignal wake) => JsonSerializer.Serialize(new
+    {
+        Records = new[] { new { messageId, body = JsonSerializer.Serialize(wake, JsonOptions) } },
+    });
+
+    private static CollectionPlatformWorkerClient Worker(Func<HttpRequestMessage, HttpResponseMessage> response)
+        => new(new HttpClient(new StubHandler(response)) { BaseAddress = new("https://api.test/") },
+            new CollectionDefinitionHandlerRegistry([]));
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) => Task.FromResult(response(request));
+    }
 }

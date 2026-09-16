@@ -110,19 +110,34 @@ if (runLocalQueue)
             var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
             var sessionLogger = app.Services.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("CollectionSessionRuntime");
+            if (message.Wake is not null)
+            {
+                var localEvent = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    Records = new[] { new { messageId = $"local-{message.MessageId}", body = System.Text.Json.JsonSerializer.Serialize(message.Wake) } }
+                });
+                await CollectionLambdaInvocation.ExecuteWakeAsync(localEvent, worker, cancellationToken: CancellationToken.None,
+                    executeGroup: (envelope, operation, cancellationToken) => JraSessionExecutionScope.ExecuteAsync(
+                        sessionFactory, operation, cancellationToken, envelope.Compatibility,
+                        envelope.Tasks.Count, sessionLogger)).ConfigureAwait(false);
+                await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
+                continue;
+            }
+            var legacyEnvelope = message.Envelope
+                ?? throw new InvalidOperationException("Local collection queue message was malformed.");
             await JraSessionExecutionScope.ExecuteAsync(sessionFactory, async cancellationToken =>
             {
                 var executionBatchId = Guid.NewGuid();
-                for (var index = 0; index < message.Envelope.Tasks.Count; index++)
+                for (var index = 0; index < legacyEnvelope.Tasks.Count; index++)
                 {
-                    var task = message.Envelope.Tasks[index];
+                    var task = legacyEnvelope.Tasks[index];
                     using var correlation = CollectionAttemptCorrelationScope.Push(new(executionBatchId,
-                        message.Envelope.EnvelopeId, $"local-{message.MessageId}", null,
-                        index + 1, message.Envelope.Tasks.Count));
+                        legacyEnvelope.EnvelopeId, $"local-{message.MessageId}", null,
+                        index + 1, legacyEnvelope.Tasks.Count));
                     await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), cancellationToken)
                         .ConfigureAwait(false);
                 }
-            }, CancellationToken.None, message.Envelope.Compatibility, message.Envelope.Tasks.Count,
+            }, CancellationToken.None, legacyEnvelope.Compatibility, legacyEnvelope.Tasks.Count,
                 sessionLogger).ConfigureAwait(false);
             await queue.AcknowledgeAsync(message.ReceiptHandle).ConfigureAwait(false);
         }
@@ -160,8 +175,8 @@ else if (runOnce)
         var sessionFactory = app.Services.GetRequiredService<IJraSessionFactory>();
         var sessionLogger = app.Services.GetRequiredService<ILoggerFactory>()
             .CreateLogger("CollectionSessionRuntime");
-        var response = await CollectionLambdaInvocation.ExecuteAsync(await File.ReadAllTextAsync(eventPath, cts.Token),
-            worker.ExecuteAsync, HasLambdaTimeRemaining, cts.Token,
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(await File.ReadAllTextAsync(eventPath, cts.Token),
+            worker, HasLambdaTimeRemaining, cts.Token,
              (envelope, operation, cancellationToken) => JraSessionExecutionScope.ExecuteAsync(
                   sessionFactory, operation, cancellationToken, envelope.Compatibility,
                   envelope.Tasks.Count, sessionLogger),

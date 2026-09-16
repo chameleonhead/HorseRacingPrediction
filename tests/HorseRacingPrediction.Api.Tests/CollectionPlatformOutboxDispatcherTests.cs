@@ -9,6 +9,38 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class CollectionPlatformOutboxDispatcherTests
 {
     [TestMethod]
+    public async Task WakeQueue_ReceivesOnlyOpaqueReservationIdentifiers()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "platform-wake", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
+            await store.RegisterDefinitionAsync(new("horse-profile"), "horse", ResourceType.Horse, 1, "initial", false);
+            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H1"), new("horse-profile"),
+                1, CollectionReason.Initial, DateTimeOffset.UtcNow.AddMinutes(-1));
+            var queue = new WakeRecordingQueue();
+            var dispatcher = new CollectionPlatformOutboxDispatcher(store, queue,
+                Options.Create(new CollectionQueueOptions
+                {
+                    Enabled = true,
+                    DispatchBatchSize = 1,
+                    AggregationDelayMilliseconds = 0
+                }),
+                NullLogger<CollectionPlatformOutboxDispatcher>.Instance);
+
+            await dispatcher.DispatchOnceAsync(CancellationToken.None);
+
+            var wake = queue.Wakes.Single();
+            Assert.AreNotEqual(Guid.Empty, wake.WakeId);
+            Assert.AreNotEqual(Guid.Empty, wake.DispatchEnvelopeId);
+            Assert.IsFalse(System.Text.Json.JsonSerializer.Serialize(wake).Contains(
+                receipt.TaskId.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [TestMethod]
     public async Task CompatibleRaceCards_AreSentInOneStableEnvelope()
     {
         var directory = Path.Combine(Path.GetTempPath(), "platform-envelope", Guid.NewGuid().ToString("N"));
@@ -293,6 +325,19 @@ public sealed class CollectionPlatformOutboxDispatcherTests
         {
             lock (_gate) Messages.Add(envelope);
             return Task.FromResult(new CollectionQueueSendReceipt(Guid.NewGuid().ToString("N")));
+        }
+    }
+
+    private sealed class WakeRecordingQueue : ICollectionPlatformTaskQueue
+    {
+        public List<CollectionWakeSignal> Wakes { get; } = [];
+        public Task<CollectionQueueSendReceipt> SendAsync(CollectionDispatchEnvelope envelope,
+            CancellationToken cancellationToken) => throw new AssertFailedException("Task envelopes are not allowed.");
+        public Task<CollectionQueueSendReceipt> SendWakeAsync(CollectionWakeSignal wake,
+            CancellationToken cancellationToken)
+        {
+            Wakes.Add(wake);
+            return Task.FromResult(new CollectionQueueSendReceipt("wake-message"));
         }
     }
 }

@@ -8,6 +8,10 @@ public sealed class LocalCollectionTaskQueue(LocalCollectionQueue queue) : IColl
         CollectionDispatchEnvelope envelope, CancellationToken token)
         => new((await queue.SendAsync(envelope, token).ConfigureAwait(false)).ToString());
 
+    async Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendWakeAsync(
+        CollectionWakeSignal wake, CancellationToken token)
+        => new((await queue.SendWakeAsync(wake, token).ConfigureAwait(false)).ToString());
+
     public async Task<CollectionQueueDepth> GetQueueDepthAsync(CancellationToken token)
     {
         var depth = await queue.GetDepthAsync(token);

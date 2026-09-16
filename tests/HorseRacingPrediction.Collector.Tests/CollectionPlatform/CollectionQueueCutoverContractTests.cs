@@ -89,11 +89,9 @@ public sealed class CollectionQueueCutoverContractTests
             ".errorMessage == \"Race course and number attributes are required.\"");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "test \"$(jq '.items[0].attemptCount'");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/tasks/${stuck_task}/cancel");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "ENABLE-RECOVERY-CAPACITY");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "RESTORE-CAPACITY");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=$target");
-        StringAssert.Contains(Compose,
-            "CollectionQueue__MaxInFlightEnvelopes: ${COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES:-1}");
+        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("ENABLE-RECOVERY-CAPACITY", StringComparison.Ordinal));
+        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES", StringComparison.Ordinal));
+        Assert.IsFalse(Compose.Contains("CollectionQueue__MaxInFlightEnvelopes", StringComparison.Ordinal));
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
         Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));
@@ -118,7 +116,7 @@ public sealed class CollectionQueueCutoverContractTests
 
         StringAssert.Contains(queue, "visibility_timeout_seconds = 5400");
         StringAssert.Contains(queue, "message_retention_seconds  = 345600");
-        StringAssert.Contains(queue, "maxReceiveCount = 3");
+        StringAssert.Contains(queue, "maxReceiveCount = 1");
         StringAssert.Contains(dlq, "message_retention_seconds = 1209600");
         StringAssert.Contains(lambda, "timeout                        = 900");
         StringAssert.Contains(lambda, "reserved_concurrent_executions = 1");

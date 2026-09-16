@@ -25,20 +25,21 @@ public sealed class CollectionPlatformOperationsServicesTests
     }
 
     [TestMethod]
-    public async Task DlqReconciler_DeadLettersCurrentTaskAndDeletesMessage()
+    public async Task DlqReconciler_AuditsWakeWithoutChangingTaskAndDeletesMessage()
     {
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("receipt-1", JsonSerializer.Serialize(
-            CreateEnvelope(receipt.TaskId, 1), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+            new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease"),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = new CollectionPlatformDeadLetterReconciler(store, queue,
             Options.Create(new CollectionDeadLetterQueueReconcilerOptions()),
             NullLogger<CollectionPlatformDeadLetterReconciler>.Instance);
 
         Assert.AreEqual(1, await service.RunOnceAsync(CancellationToken.None));
         CollectionAssert.AreEqual(new[] { "receipt-1" }, queue.Deleted);
-        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+        Assert.AreEqual(CollectionTaskStatus.Ready,
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
     }
 
@@ -56,7 +57,7 @@ public sealed class CollectionPlatformOperationsServicesTests
     }
 
     [TestMethod]
-    public async Task DlqReconciler_DeadLettersLegacyV1NotificationAndDeletesMessage()
+    public async Task DlqReconciler_RetainsLegacyTaskNotificationWithoutChangingTask()
     {
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
@@ -66,54 +67,50 @@ public sealed class CollectionPlatformOperationsServicesTests
             JsonSerializer.Serialize(notification, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = CreateReconciler(store, queue);
 
-        Assert.AreEqual(1, await service.RunOnceAsync(CancellationToken.None));
-        CollectionAssert.AreEqual(new[] { "legacy-v1" }, queue.Deleted);
-        Assert.AreEqual(CollectionTaskStatus.DeadLetter,
+        Assert.AreEqual(0, await service.RunOnceAsync(CancellationToken.None));
+        Assert.HasCount(0, queue.Deleted);
+        Assert.AreEqual(CollectionTaskStatus.Ready,
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
-        Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(
+        Assert.HasCount(0, await store.GetActionableFailureNotificationsAsync(
             DateTimeOffset.UtcNow.AddMinutes(1), 10));
     }
 
     [TestMethod]
-    public async Task DlqReconciler_ProcessesMixedEnvelopeAndLegacyNotification()
+    public async Task DlqReconciler_AuditsMultipleWakeSignals()
     {
         var store = await CreateStoreAsync();
-        var first = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
-            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
-        var second = await store.RequestAsync(new(ResourceType.Horse, "jra", "H2"), new("horse-profile"),
-            1, CollectionReason.Initial, DateTimeOffset.UtcNow);
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var queue = new RecordingQueue(
-            new CollectionPlatformDeadLetterMessage("envelope",
-                JsonSerializer.Serialize(CreateEnvelope(first.TaskId, 1), jsonOptions)),
-            new CollectionPlatformDeadLetterMessage("legacy",
-                JsonSerializer.Serialize(new CollectionTaskNotification(second.TaskId, 1), jsonOptions)));
+            new CollectionPlatformDeadLetterMessage("wake-1", JsonSerializer.Serialize(
+                new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease-1"), jsonOptions)),
+            new CollectionPlatformDeadLetterMessage("wake-2", JsonSerializer.Serialize(
+                new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease-2"), jsonOptions)));
         var service = CreateReconciler(store, queue);
 
         Assert.AreEqual(2, await service.RunOnceAsync(CancellationToken.None));
-        CollectionAssert.AreEquivalent(new[] { "envelope", "legacy" }, queue.Deleted);
-        Assert.IsTrue((await store.GetTasksAsync()).Where(x => x.TaskId == first.TaskId || x.TaskId == second.TaskId)
-            .All(x => x.Status == CollectionTaskStatus.DeadLetter));
+        CollectionAssert.AreEquivalent(new[] { "wake-1", "wake-2" }, queue.Deleted);
     }
 
     [TestMethod]
-    public async Task DlqReconciler_DeletesRepeatedLegacyNotificationWithoutDuplicatingFailure()
+    public async Task DlqReconciler_DeletesRepeatedWakeWithoutCreatingTaskFailure()
     {
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
-        var body = JsonSerializer.Serialize(new CollectionTaskNotification(receipt.TaskId, 1),
+        var body = JsonSerializer.Serialize(new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease"),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.AreEqual(1, await CreateReconciler(store,
             new RecordingQueue(new CollectionPlatformDeadLetterMessage("first", body)))
             .RunOnceAsync(CancellationToken.None));
         var repeatedQueue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("repeated", body));
-        Assert.AreEqual(0, await CreateReconciler(store, repeatedQueue).RunOnceAsync(CancellationToken.None));
+        Assert.AreEqual(1, await CreateReconciler(store, repeatedQueue).RunOnceAsync(CancellationToken.None));
 
         CollectionAssert.AreEqual(new[] { "repeated" }, repeatedQueue.Deleted);
-        Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(
+        Assert.HasCount(0, await store.GetActionableFailureNotificationsAsync(
             DateTimeOffset.UtcNow.AddMinutes(1), 10));
+        Assert.AreEqual(CollectionTaskStatus.Ready,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
     }
 
     [TestMethod]

@@ -81,9 +81,9 @@ resource "aws_sqs_queue" "resource_collection" {
   receive_wait_time_seconds  = 20
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.resource_collection_dlq.arn
-    # API停止、Lambda初期化失敗、ネットワーク断など、ジョブ側がAttemptを記録できない
-    # transport障害にはSQS再配信の余地を持たせる。収集処理自身のretryはAPIが管理する。
-    maxReceiveCount = 3
+    # wakeは実行指示ではないため同じmessageを再試行しない。DB scannerが新しいwakeを発行する。
+    # DLQはmalformed wakeまたはruntime crashの監査専用で、Task状態を変更しない。
+    maxReceiveCount = 1
   })
 }
 

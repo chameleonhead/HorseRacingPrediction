@@ -4,8 +4,8 @@ using Microsoft.Data.Sqlite;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
-public sealed record LocalCollectionQueueMessage(long MessageId, CollectionDispatchEnvelope Envelope,
-    string ReceiptHandle, int ReceiveCount);
+public sealed record LocalCollectionQueueMessage(long MessageId, CollectionDispatchEnvelope? Envelope,
+    string ReceiptHandle, int ReceiveCount, CollectionWakeSignal? Wake = null);
 
 public sealed class LocalCollectionQueue
 {
@@ -50,11 +50,17 @@ public sealed class LocalCollectionQueue
     }
 
     public async Task<long> SendAsync(CollectionDispatchEnvelope envelope, CancellationToken token = default)
+        => await SendBodyAsync(JsonSerializer.Serialize(envelope, JsonOptions), token).ConfigureAwait(false);
+
+    public async Task<long> SendWakeAsync(CollectionWakeSignal wake, CancellationToken token = default)
+        => await SendBodyAsync(JsonSerializer.Serialize(wake, JsonOptions), token).ConfigureAwait(false);
+
+    private async Task<long> SendBodyAsync(string body, CancellationToken token)
     {
         await using var connection = Open();
         await using var command = connection.CreateCommand();
         command.CommandText = "INSERT INTO local_collection_messages(body, visible_at, created_at) VALUES($body,$now,$now)";
-        command.Parameters.AddWithValue("$body", JsonSerializer.Serialize(envelope, JsonOptions));
+        command.Parameters.AddWithValue("$body", body);
         command.Parameters.AddWithValue("$now", JstTime.ToDatabaseString(JstTime.Now()));
         await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         command.CommandText = "SELECT last_insert_rowid();";
@@ -90,7 +96,13 @@ public sealed class LocalCollectionQueue
         update.Parameters.AddWithValue("$id", id);
         await update.ExecuteNonQueryAsync(token).ConfigureAwait(false);
         await transaction.CommitAsync(token).ConfigureAwait(false);
-        return new(id, JsonSerializer.Deserialize<CollectionDispatchEnvelope>(body, JsonOptions)!, receipt, count);
+        CollectionWakeSignal? wake = null;
+        CollectionDispatchEnvelope? envelope = null;
+        try { wake = JsonSerializer.Deserialize<CollectionWakeSignal>(body, JsonOptions); }
+        catch (JsonException) { }
+        if (wake is null || wake.WakeId == Guid.Empty)
+            envelope = JsonSerializer.Deserialize<CollectionDispatchEnvelope>(body, JsonOptions);
+        return new(id, envelope, receipt, count, wake);
     }
 
     public Task AcknowledgeAsync(string receiptHandle, CancellationToken token = default)

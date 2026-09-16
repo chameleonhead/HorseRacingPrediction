@@ -794,7 +794,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(13L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(14L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1102,7 +1102,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 13;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 14;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1630,5 +1630,77 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
             (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
         Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+    }
+
+    [TestMethod]
+    public async Task ExecutionLease_StartPendingIsIdempotentAndHoldsCapacityUntilExpiry()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        await store.RequestAsync(new(ResourceType.Horse, "JRA", "H456"), HorseProfile, 7,
+            CollectionReason.Initial, now.AddMilliseconds(1));
+        var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
+        var firstEnvelope = Guid.NewGuid();
+        var firstToken = Guid.NewGuid().ToString("N");
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending[0].OutboxId], firstToken,
+            firstEnvelope, now, TimeSpan.FromSeconds(45), 1));
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), firstEnvelope, firstToken);
+        var acquired = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(1),
+            TimeSpan.FromSeconds(45));
+        var repeated = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(2),
+            TimeSpan.FromSeconds(45));
+        var forged = await store.AcquireNextExecutionAsync(wake with { ReservationToken = "different" },
+            "message-forged", now.AddSeconds(2), TimeSpan.FromSeconds(45));
+
+        Assert.AreEqual(CollectionExecutionAcquireStatus.Acquired, acquired.Status);
+        Assert.AreEqual(acquired.ExecutionBatchId, repeated.ExecutionBatchId);
+        Assert.AreEqual(acquired.LeaseToken, repeated.LeaseToken);
+        Assert.AreEqual(CollectionExecutionAcquireStatus.NoWork, forged.Status);
+        Assert.IsFalse(await store.TryReserveDispatchesWithinCapacityAsync([pending[1].OutboxId],
+            Guid.NewGuid().ToString("N"), Guid.NewGuid(), now.AddSeconds(3), TimeSpan.FromSeconds(45), 1));
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending[1].OutboxId],
+            Guid.NewGuid().ToString("N"), Guid.NewGuid(), now.AddSeconds(47), TimeSpan.FromSeconds(45), 1));
+    }
+
+    [TestMethod]
+    public async Task ExecutionLease_CompleteReturnsUnstartedTaskAndFreesSlot()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        var envelopeId = Guid.NewGuid();
+        var reservation = Guid.NewGuid().ToString("N");
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
+            envelopeId, now, TimeSpan.FromSeconds(45), 1));
+        var acquired = await store.AcquireNextExecutionAsync(
+            new(Guid.NewGuid(), envelopeId, reservation), "message-1", now.AddSeconds(1), TimeSpan.FromSeconds(45));
+        Assert.IsTrue(await store.StartExecutionAsync(acquired.ExecutionBatchId!.Value,
+            new(acquired.LeaseToken!, 960, "lambda-1"), now.AddSeconds(2)));
+        Assert.IsTrue(await store.CompleteExecutionAsync(acquired.ExecutionBatchId.Value,
+            acquired.LeaseToken!, now.AddSeconds(3)));
+        Assert.IsTrue(await store.CompleteExecutionAsync(acquired.ExecutionBatchId.Value,
+            acquired.LeaseToken!, now.AddSeconds(4)), "completion must be idempotent");
+        Assert.HasCount(1, await store.GetPendingDispatchesAsync(now.AddSeconds(5), 10));
+    }
+
+    [TestMethod]
+    public async Task WakeReservations_NeverExceedConfiguredExecutionSlots()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var id in new[] { "SLOT-1", "SLOT-2", "SLOT-3" })
+            await store.RequestAsync(new(ResourceType.Horse, "JRA", id), HorseProfile, 7,
+                CollectionReason.Initial, now);
+        var pending = await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10);
+
+        Assert.IsTrue(await Reserve(0));
+        Assert.IsTrue(await Reserve(1));
+        Assert.IsFalse(await Reserve(2));
+
+        Task<bool> Reserve(int index) => store.TryReserveDispatchesWithinCapacityAsync(
+            [pending[index].OutboxId], Guid.NewGuid().ToString("N"), Guid.NewGuid(), now,
+            TimeSpan.FromSeconds(45), 2);
     }
 }

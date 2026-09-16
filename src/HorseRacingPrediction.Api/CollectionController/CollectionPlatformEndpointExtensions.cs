@@ -362,6 +362,20 @@ public static class CollectionPlatformEndpointExtensions
         });
 
         var worker = endpoints.MapGroup("/api/internal/collection").WithTags("Collection Worker");
+        worker.MapPost("/executions/acquire-next", async (CollectionExecutionAcquireRequest request,
+            CollectionPlatformStore store, CancellationToken token) => Results.Ok(
+                await store.AcquireNextExecutionAsync(request.Wake, request.QueueMessageId,
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now(), TimeSpan.FromSeconds(45), token)));
+        worker.MapPost("/executions/{executionBatchId:guid}/start", async (Guid executionBatchId,
+            CollectionExecutionStartRequest request, CollectionPlatformStore store, CancellationToken token) =>
+            await store.StartExecutionAsync(executionBatchId, request,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
+                ? Results.NoContent() : Results.Conflict());
+        worker.MapPost("/executions/{executionBatchId:guid}/complete", async (Guid executionBatchId,
+            CollectionExecutionCompleteRequest request, CollectionPlatformStore store, CancellationToken token) =>
+            await store.CompleteExecutionAsync(executionBatchId, request.LeaseToken,
+                HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
+                ? Results.NoContent() : Results.Conflict());
         worker.MapPost("/tasks/{taskId:guid}/acquire", async (Guid taskId, AcquireCollectionTaskRequest request,
             CollectionPlatformStore store, CancellationToken token) =>
         {

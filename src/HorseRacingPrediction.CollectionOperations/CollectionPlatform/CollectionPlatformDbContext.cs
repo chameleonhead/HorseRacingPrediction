@@ -18,6 +18,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionAttemptEntity> Attempts => Set<CollectionAttemptEntity>();
     public DbSet<ResourceLocationEntity> Locations => Set<ResourceLocationEntity>();
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
+    public DbSet<CollectionExecutionLeaseEntity> ExecutionLeases => Set<CollectionExecutionLeaseEntity>();
     public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
     public DbSet<BackfillBatchEntity> BackfillBatches => Set<BackfillBatchEntity>();
@@ -106,6 +107,12 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_task_outbox"); e.HasKey(x => x.OutboxId);
             e.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
             e.HasIndex(x => new { x.DispatchedAt, x.ReservedUntilUnixMilliseconds });
+        });
+        modelBuilder.Entity<CollectionExecutionLeaseEntity>(e =>
+        {
+            e.ToTable("collection_execution_leases"); e.HasKey(x => x.ExecutionBatchId);
+            e.HasIndex(x => x.DispatchEnvelopeId).IsUnique();
+            e.HasIndex(x => new { x.Status, x.LeaseExpiresAt });
         });
         modelBuilder.Entity<CollectionPlatformControlEntity>(e =>
         {

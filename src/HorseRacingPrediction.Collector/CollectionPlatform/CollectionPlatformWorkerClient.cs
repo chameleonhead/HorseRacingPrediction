@@ -28,6 +28,35 @@ public sealed class CollectionPlatformWorkerClient
         _clock = clock;
     }
 
+    public async Task<CollectionExecutionAcquireResult> AcquireNextAsync(CollectionWakeSignal wake,
+        string queueMessageId, CancellationToken cancellationToken)
+    {
+        using var response = await _client.PostAsJsonAsync("api/internal/collection/executions/acquire-next",
+            new CollectionExecutionAcquireRequest(wake, queueMessageId), cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<CollectionExecutionAcquireResult>(cancellationToken)
+            .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection execution acquire response was empty.");
+    }
+
+    public async Task StartExecutionAsync(Guid executionBatchId, string leaseToken, string? lambdaRequestId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _client.PostAsJsonAsync(
+            $"api/internal/collection/executions/{executionBatchId:D}/start",
+            new CollectionExecutionStartRequest(leaseToken, 960, lambdaRequestId), cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task CompleteExecutionAsync(Guid executionBatchId, string leaseToken,
+        CancellationToken cancellationToken)
+    {
+        using var response = await _client.PostAsJsonAsync(
+            $"api/internal/collection/executions/{executionBatchId:D}/complete",
+            new CollectionExecutionCompleteRequest(leaseToken), cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task ExecuteAsync(CollectionTaskNotification notification, CancellationToken cancellationToken)
     {
         var totalStarted = _clock.GetTimestamp();

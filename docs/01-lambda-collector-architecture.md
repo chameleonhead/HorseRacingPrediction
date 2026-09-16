@@ -1,8 +1,8 @@
-# Collector の Lambda 対応アーキテクチャ案
+# Collector の Lambda 対応アーキテクチャ
 
-> 2026-08-26 方針確定: ジョブコントローラーは Api が所有する。SQS は配送通知に限定し、タスク本文・状態・依存関係・リース・再試行の正本は Api のタスクストアとする。Collector は計画・ポーリング・一括取得を行わず、通知で指定された単一タスクを実行する Worker とする。
+> 2026-09-16更新: DBを収集Task、優先順位、batch、実行枠、lease、retryの唯一の正本とする。SQSはTask IDを持たない短命なwake通知だけを運び、visibilityやqueue depthを処理枠の判定に使わない。
 
-Resource 中心の次期モデルでもこの配置境界は維持する。Resource/Definition/Revision/State/Request/Task/Attempt/Location の正本は Api が所有し、SQS は task ID と送出世代だけを通知する。詳細は [26-collection-platform-design.md](26-collection-platform-design.md) を参照する。2026-09-11 現在は Proposed であり現行 schema は未変更である。
+詳細な変更記録と検証条件は [DB主導の収集タスク即時実行](changes/20260916_immediate-collection-dispatch/README.md) を正とする。以下の古いTask通知を前提とした記述より、この更新を優先する。
 
 ## 確定する制御境界
 
@@ -10,34 +10,34 @@ Resource 中心の次期モデルでもこの配置境界は維持する。Resou
 
 - 定期計画を起動し、実行すべきタスクと依存関係を確定する
 - タスク作成と同一トランザクションで dispatch outbox を記録する
-- outbox dispatcher が SQS へ `taskId` 通知を送信する
-- SQS の重複配送を前提に、lease token 付きで単一タスクを取得させる
+- dispatcher が空き実行枠をDBで予約し、SQSへopaqueなwake ID、Envelope ID、予約tokenだけを送る
+- `acquire-next` が予約済み仕事を短い`StartPending`へ移し、`start-batch`後だけ長い`Running` leaseへ移す
 - 完了・失敗・再試行結果を受け、必要な子タスクを作成する
 - 管理画面からの再投入も同じ outbox 経路へ流す
 
 ### SQS
 
 - タスク本文を正本として保持しない
-- `{ taskId, jobType, deduplicationKey }` の配送通知だけを持つ
-- visibility timeout と DLQ により Lambda 呼び出し失敗を吸収する
-- Standard Queue の少なくとも1回配送を前提とし、重複排除は Api が担う
+- Task IDや実行内容を持たないversion付きwakeだけを持つ
+- 有効なwakeもNoWork、502、接続失敗ではackし、DB scannerが新wakeを再発行する
+- DLQはmalformed wakeまたはruntime crashの監査用であり、Taskや実行枠を変更しない
 
 ### Collector Worker
 
-- SQS イベントからタスク識別子を受け取る
-- Api から対象タスクを lease token 付きで取得する
-- 1 invocation で1タスクだけ実行する
+- SQSイベントからwakeを受け、Apiの`acquire-next`で実行batchを取得する
+- `start-batch`が成功した場合だけ、互換Task群を同一ブラウザーsessionで逐次実行する
+- Task単位の結果を報告し、Envelope終了時に`complete-batch`を一度だけ送る
 - 実行結果を Api へ返し、自身では次のタスクを選択・計画しない
 - ローカル実行時も Api が返す1件の通知を同じ Worker へ渡す
 
 ### 整合性規則
 
 1. タスクと outbox は同じ SQLite トランザクションで保存する。
-2. SQS 送信成功後に outbox を dispatched にする。送信後の更新失敗は重複通知として許容する。
-3. Worker の acquire は `Ready -> Running` の条件更新で lease token を発行する。
-4. 完了・再投入は同じ lease token を要求し、期限切れ Worker の遅延更新を拒否する。
+2. SQS送信前にoutboxを45秒予約する。DB成功・SQS失敗は期限で回収し、SQS成功・応答喪失は同じ予約tokenで安全に判定する。
+3. `acquire-next`は45秒以下の`StartPending`を作る。応答を受けたWorkerの冪等な`start-batch`だけが最大16分の`Running`へ進める。
+4. Task完了は実行枠を解放しない。token付き`complete-batch`またはexecution lease失効だけが枠を解放する。
 5. Lambda の残り時間が安全猶予未満ならタスクを開始しない。
-6. Lambda lease は timeout より短くし、SQS visibility timeout は Lambda timeout より長くする。
+6. Task leaseは15分、execution leaseは16分、Lambda timeoutは15分とし、強制終了時もlease満了までは枠を保持する。SQS visibilityは正しさに使わない。
 
 ## 結論
 
@@ -47,7 +47,7 @@ Collector を次の 3 つの責務に分ける。
 2. **Collector Worker**: Api からタスクを取得し、JRA を収集して、結果を Api へ報告する。常駐機能や UI は持たない
 3. **実行ホスト**: ローカルでは `BackgroundService`、AWS では SQS event source mapping から起動する Lambda とし、どちらも同じ単一タスク Worker を呼び出す
 
-実装では **Api のタスクストアを正本、SQS を配送通知**として採用した。ローカル Worker は同じ outbox から1件ずつ取得し、Lambda Worker はSQS通知で指定された1件だけを取得する。
+実装では **Apiのタスクストアを正本、SQSをwake hint**として採用した。ローカルWorkerとLambda Workerはいずれもwakeから同じ`acquire-next → start-batch → complete-batch`契約を使う。
 
 ## 目標構成
 

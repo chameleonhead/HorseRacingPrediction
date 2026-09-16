@@ -35,6 +35,23 @@ public sealed class SqsCollectionTaskQueue : ICollectionTaskQueue, ICollectionPl
         return new(response.MessageId);
     }
 
+    async Task<CollectionQueueSendReceipt> ICollectionPlatformTaskQueue.SendWakeAsync(
+        HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionWakeSignal wake,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.Enabled || (string.IsNullOrWhiteSpace(_options.QueueUrl) && string.IsNullOrWhiteSpace(_options.QueueName)))
+            throw new InvalidOperationException("CollectionQueue is not configured.");
+        var queueUrl = _options.QueueUrl;
+        if (string.IsNullOrWhiteSpace(queueUrl))
+            queueUrl = (await _sqs.GetQueueUrlAsync(_options.QueueName, cancellationToken).ConfigureAwait(false)).QueueUrl;
+        var response = await _sqs.SendMessageAsync(new SendMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MessageBody = JsonSerializer.Serialize(wake, JsonOptions)
+        }, cancellationToken).ConfigureAwait(false);
+        return new(response.MessageId);
+    }
+
     async Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ICollectionPlatformTaskQueue.ReceiveDeadLetterMessagesAsync(
         int maxMessages, CancellationToken cancellationToken)
     {

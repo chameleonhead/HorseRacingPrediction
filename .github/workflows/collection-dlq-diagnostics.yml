@@ -12,8 +12,6 @@ on:
           - recover-dlq
           - recover-legacy-race
           - replace-stuck-legacy-race
-          - enable-recovery-capacity
-          - restore-capacity
         default: inspect
       confirmation:
         description: Enter RECOVER-LEGACY-DLQ, RECOVER-LEGACY-RACE, or REPLACE-STUCK-LEGACY-RACE for the selected mode.
@@ -39,8 +37,6 @@ jobs:
             recover-dlq) test "$CONFIRMATION" = RECOVER-LEGACY-DLQ ;;
             recover-legacy-race) test "$CONFIRMATION" = RECOVER-LEGACY-RACE ;;
             replace-stuck-legacy-race) test "$CONFIRMATION" = REPLACE-STUCK-LEGACY-RACE ;;
-            enable-recovery-capacity) test "$CONFIRMATION" = ENABLE-RECOVERY-CAPACITY ;;
-            restore-capacity) test "$CONFIRMATION" = RESTORE-CAPACITY ;;
             *) exit 1 ;;
           esac
 
@@ -131,18 +127,6 @@ jobs:
           script: |
             set -eu
             cd "$APP_DIRECTORY"
-            if [ "$MODE" = enable-recovery-capacity ] || [ "$MODE" = restore-capacity ]; then
-              target=1
-              [ "$MODE" = enable-recovery-capacity ] && target=2
-              if ! grep -q 'CollectionQueue__MaxInFlightEnvelopes:' docker-compose.yml; then
-                sed -i '/CollectionQueue__QueueName:/a\      CollectionQueue__MaxInFlightEnvelopes: ${COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES:-1}' docker-compose.yml
-              fi
-              sed -i '/^COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=/d' .env
-              echo "COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES=$target" >> .env
-              chmod 600 .env
-              docker compose --env-file .env up -d --force-recreate api >/dev/null
-              echo "API dispatch in-flight envelope limit set to $target."
-            fi
             echo "Recent collection DLQ reconciliation logs:"
             docker compose --env-file .env logs --since 20m api 2>&1 \
               | grep -E 'DLQ|dead-letter|DeadLetter|reconciliation cycle failed|AccessDenied|queue' \

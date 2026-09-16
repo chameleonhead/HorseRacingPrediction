@@ -7,6 +7,8 @@ namespace HorseRacingPrediction.Api.CollectionController;
 public interface ICollectionPlatformTaskQueue
 {
     Task<CollectionQueueSendReceipt> SendAsync(CollectionDispatchEnvelope envelope, CancellationToken cancellationToken);
+    Task<CollectionQueueSendReceipt> SendWakeAsync(CollectionWakeSignal wake, CancellationToken cancellationToken)
+        => throw new NotSupportedException("This queue does not support wake-only collection messages.");
     Task<IReadOnlyList<CollectionPlatformDeadLetterMessage>> ReceiveDeadLetterMessagesAsync(int maxMessages,
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<CollectionPlatformDeadLetterMessage>>([]);
     Task DeleteDeadLetterMessageAsync(string receiptHandle, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -38,6 +40,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
     internal async Task DispatchOnceAsync(CancellationToken cancellationToken)
     {
         var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        await store.ReclaimExpiredExecutionLeasesAsync(now, cancellationToken).ConfigureAwait(false);
         // DB outbox is the priority queue. Consider every due row so a recently-created
         // Realtime task cannot be hidden behind an older Background page.
         var remaining = (await store.GetPendingDispatchesAsync(now, int.MaxValue, cancellationToken).ConfigureAwait(false))
@@ -73,10 +76,24 @@ public sealed class CollectionPlatformOutboxDispatcher(
                         Math.Max(1, _options.MaxInFlightEnvelopes),
                         cancellationToken).ConfigureAwait(false))
                     continue;
-                var receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
-                if (!await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
-                        envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false))
-                    logger.LogWarning("Collection envelope was sent but its outbox reservation could not be finalized. EnvelopeId={EnvelopeId}", envelopeId);
+                var wake = new CollectionWakeSignal(Guid.NewGuid(), envelopeId, reservationToken);
+                CollectionQueueSendReceipt receipt;
+                var legacyAdapter = false;
+                try { receipt = await queue.SendWakeAsync(wake, cancellationToken).ConfigureAwait(false); }
+                catch (NotSupportedException)
+                {
+                    // Transitional in-process test adapters may still expose the old method. Production
+                    // queue adapters implement SendWakeAsync and never put task identifiers on SQS.
+                    legacyAdapter = true;
+                    receipt = await queue.SendAsync(envelope, cancellationToken).ConfigureAwait(false);
+                }
+                if (legacyAdapter)
+                    await store.MarkDispatchedAsync(group.Select(x => x.OutboxId).ToArray(), reservationToken,
+                        envelopeId, receipt.MessageId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken)
+                        .ConfigureAwait(false);
+                else
+                    await store.MarkWakeSentAsync(envelopeId, reservationToken, receipt.MessageId, cancellationToken)
+                        .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)

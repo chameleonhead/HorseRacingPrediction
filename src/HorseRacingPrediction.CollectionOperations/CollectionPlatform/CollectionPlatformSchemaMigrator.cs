@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 13;
+    internal const int CurrentVersion = 14;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -318,6 +318,47 @@ internal static class CollectionPlatformSchemaMigrator
                 CREATE INDEX IF NOT EXISTS IX_collection_request_batch_bindings_RequestId
                     ON collection_request_batch_bindings (RequestId);
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (13, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 14)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS collection_execution_leases (
+                    ExecutionBatchId TEXT NOT NULL CONSTRAINT PK_collection_execution_leases PRIMARY KEY,
+                    DispatchEnvelopeId TEXT NOT NULL,
+                    WakeId TEXT NOT NULL,
+                    ReservationToken TEXT NOT NULL,
+                    LeaseToken TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    LeaseExpiresAt TEXT NOT NULL,
+                    CreatedAt TEXT NOT NULL,
+                    StartedAt TEXT NULL,
+                    FinishedAt TEXT NULL,
+                    QueueMessageId TEXT NULL,
+                    LambdaRequestId TEXT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_collection_execution_leases_DispatchEnvelopeId
+                    ON collection_execution_leases (DispatchEnvelopeId);
+                CREATE INDEX IF NOT EXISTS IX_collection_execution_leases_Status_LeaseExpiresAt
+                    ON collection_execution_leases (Status, LeaseExpiresAt);
+
+                -- A v1/v2 SQS envelope is no longer executable after the wake-only cutover.
+                -- Re-open its current Ready outbox row so the scanner emits a v1 wake instead.
+                UPDATE collection_task_outbox
+                SET DispatchedAt = NULL, ReservationToken = NULL,
+                    ReservedUntilUnixMilliseconds = NULL, EnvelopeId = NULL, QueueMessageId = NULL
+                WHERE OutboxId IN (
+                    SELECT o.OutboxId
+                    FROM collection_task_outbox o
+                    JOIN collection_tasks t ON t.TaskId = o.TaskId
+                    WHERE o.DispatchedAt IS NOT NULL
+                      AND t.Status = 'Ready'
+                      AND t.DispatchGeneration = o.DispatchGeneration
+                );
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (14, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);
