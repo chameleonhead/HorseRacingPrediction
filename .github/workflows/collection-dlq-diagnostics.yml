@@ -48,6 +48,12 @@ jobs:
           base="https://${domain}/api/admin/collection"
           work="$(mktemp -d)"
           trap 'rm -rf -- "$work"' EXIT
+          echo "Collection task view counts:"
+          curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
+            "$base/task-view-counts" | jq .
+          echo "Collection pipeline state:"
+          curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
+            "$base/pipeline" | jq .
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
             "$base/failure-notifications/groups?limit=10000" > "$work/groups.json"
           jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]' "$work/groups.json"
