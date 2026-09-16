@@ -1,0 +1,33 @@
+name: collection-dlq-diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Inspect API DLQ reconciliation logs and backups
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_DIRECTORY: /opt/horse-racing-prediction/app
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USERNAME }}
+          key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          envs: APP_DIRECTORY
+          script: |
+            set -eu
+            cd "$APP_DIRECTORY"
+            echo "Recent collection DLQ reconciliation logs:"
+            docker compose --env-file .env logs --since 20m api 2>&1 \
+              | grep -E 'DLQ|dead-letter|DeadLetter|reconciliation cycle failed|AccessDenied|queue' \
+              | tail -n 200 || true
+            echo "Recent collection platform backups:"
+            find "$APP_DIRECTORY/data/backups" -maxdepth 1 -type f \
+              -name 'collection-platform-predeploy-*.db' -printf '%TY-%Tm-%TdT%TH:%TM:%TSZ %f %s bytes\n' \
+              | sort -r | head -n 3
