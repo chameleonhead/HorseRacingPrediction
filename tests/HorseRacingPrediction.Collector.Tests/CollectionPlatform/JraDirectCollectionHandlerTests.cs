@@ -74,6 +74,56 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_CardBoundaryOutOfRange_ContinuesWithResultCollection()
+    {
+        var today = new DateOnly(2026, 9, 17);
+        var date = today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
+        var race = new RaceId(date, RaceCourse.Nakayama, 11);
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraNavigationException(
+                "card retired",
+                JraNavigationFailureReason.OutOfDisplayedRange),
+        };
+        var result = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(
+                id,
+                "domain-race",
+                [1],
+                [],
+                "https://example.test/result/11",
+                true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(
+            new FakeJraSessionFactory(),
+            _ => card,
+            _ => result,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 16, 15, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(
+            new LeasedCollectionTask(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new(ResourceType.Race, "JRA", "20260912:Nakayama:11"),
+                new("race-detail"),
+                1,
+                CollectionReason.Discovery,
+                CollectionLane.Realtime,
+                100,
+                "lease",
+                DateTimeOffset.UtcNow.AddMinutes(5),
+                date,
+                new Dictionary<string, string> { ["course"] = "中山", ["number"] = "11" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.HasCount(1, card.RefreshRequests);
+        Assert.HasCount(1, result.Requests);
+        Assert.AreEqual(race, result.Requests.Single());
+    }
+
+    [TestMethod]
     public async Task RaceDetail_OfficialCancellation_CompletesWithoutWaitingForPayouts()
     {
         var date = new DateOnly(2026, 9, 12);

@@ -601,8 +601,23 @@ public sealed partial class JraNavigator
 
         if (IsCurrentRacePeriod(race.Date))
         {
-            route = "Current";
-            page = await ToCurrentRaceResultAsync(race, cancellationToken);
+            try
+            {
+                route = "Current";
+                page = await ToCurrentRaceResultAsync(race, cancellationToken);
+            }
+            catch (JraNavigationException ex)
+                when (race.Date < _today()
+                      && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+            {
+                _logger.LogInformation(
+                    ex,
+                    "JRA navigation fallback. Current route out of displayed range for past Race={Race}. Falling back to Historical route.",
+                    race);
+
+                route = "HistoricalFallback";
+                page = await ToHistoricalRaceResultAsync(race, cancellationToken);
+            }
         }
         else if (IsRecentRacePeriod(race.Date))
         {
@@ -672,8 +687,24 @@ public sealed partial class JraNavigator
 
         if (IsCurrentRacePeriod(date))
         {
-            route = "Current";
-            page = await ToRaceResultMeetingListAsync(date, course, cancellationToken);
+            try
+            {
+                route = "Current";
+                page = await ToRaceResultMeetingListAsync(date, course, cancellationToken);
+            }
+            catch (JraNavigationException ex)
+                when (date < _today()
+                      && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+            {
+                _logger.LogInformation(
+                    ex,
+                    "JRA navigation fallback. Current route out of displayed range for past Date={Date} Course={Course}. Falling back to Historical route.",
+                    date,
+                    course);
+
+                route = "HistoricalFallback";
+                page = await ToHistoricalRaceResultListAsync(date, course, cancellationToken);
+            }
         }
         else if (IsRecentRacePeriod(date))
         {

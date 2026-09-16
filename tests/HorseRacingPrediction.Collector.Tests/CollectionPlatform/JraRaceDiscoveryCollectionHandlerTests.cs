@@ -49,6 +49,49 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task Discovery_CardBoundaryOutOfRange_FallsBackToResultWithoutOddsRequest()
+    {
+        var today = new DateOnly(2026, 9, 17);
+        var date = today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (_, _) => throw new JraNavigationException(
+                    "card retired",
+                    JraNavigationFailureReason.OutOfDisplayedRange),
+                RaceResultListFactory = (target, course) => new JraRaceListPage(
+                    "https://www.jra.go.jp/JRADB/accessS.html", target, course,
+                    [new(new(target, course, 11), "test", null, null,
+                        "/JRADB/accessS.html?CNAME=pw01sde0106123456781120260912/2F")]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(
+            sessions,
+            _ => schedule,
+            sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 16, 15, 0, 0, TimeSpan.Zero)));
+
+        var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.HasCount(1, sessions.LastNavigator!.RaceCardListRequests);
+        Assert.HasCount(1, sessions.LastNavigator.RaceResultListRequests);
+        Assert.HasCount(1, sink.Requests);
+        var request = sink.Requests.Single();
+        Assert.AreEqual(ResourceType.Race, request.Resource.Type);
+        Assert.AreEqual(CollectionLane.Background, request.Lane);
+        Assert.AreEqual(10, request.Priority);
+        Assert.AreEqual(
+            new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106123456781120260912/2F"),
+            request.ExplicitUrl);
+        Assert.IsFalse(request.Attributes.ContainsKey("startTime"));
+    }
+
+    [TestMethod]
     public async Task Discovery_ResolvesRelativeRaceUrlsAgainstTheSourcePage()
     {
         var date = new DateOnly(2026, 9, 12);
@@ -373,13 +416,14 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     private sealed class RecordingSink : ICollectionRequestSink
     {
         public List<(ResourceKey Resource, CollectionDefinitionId Definition, CollectionReason Reason,
-            DateOnly EffectiveDate, IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
+            CollectionLane Lane, int Priority, DateOnly EffectiveDate,
+            IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
         { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add((resource, definition, reason, effectiveDate, attributes, explicitUrl));
+            Requests.Add((resource, definition, reason, lane, priority, effectiveDate, attributes, explicitUrl));
             return Task.CompletedTask;
         }
     }

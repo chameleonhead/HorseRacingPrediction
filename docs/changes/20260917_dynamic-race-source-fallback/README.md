@@ -1,6 +1,6 @@
 # Dynamic race source fallback
 
-- Status: Proposed
+- Status: Implemented
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-17
 - Updated: 2026-09-17
@@ -9,9 +9,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | Approval is required before production-code changes. |
-| Verification | Not started | Handler, Navigator, lifecycle, live-route, and solution regressions remain. |
-| Deployment/operation | Not started | Deployment, pipeline resume, and failed-task recovery are outside this proposal. |
+| Code | Complete | Discovery, race-detail, and past-date Current result fallback are implemented. |
+| Verification | Complete | Focused, live read-only, Release, non-external, formatting, graph, and record gates passed. |
+| Deployment/operation | Out of scope | No deployment, pipeline resume, or failed-task recovery was performed. |
 
 ## Context
 
@@ -120,27 +120,27 @@ would undo the integrated detail workflow's enrichment behavior.
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | At the exact configured RaceCard age boundary, a missing meeting button with `OutOfDisplayedRange` falls back to result discovery and creates the correct race-detail requests without pausing the pipeline. | T2, T5 | Handler test plus store/pause integration | Not started |
-| AC2 | A still-visible RaceCard uses the existing fast path and produces the same card URL, odds requests, attributes, priority, and lane as before. | T2, T5 | Existing and new discovery regressions | Not started |
-| AC3 | Discovery fallback validates date/course/race identity and persists result URLs; it does not create odds work or pretend RaceCard metadata exists. | T2 | Route-aware handler tests | Not started |
-| AC4 | A race-detail task whose card retires at execution time continues to result collection; missing card data does not enqueue subject or prediction work, and successful result collection completes normally. | T3 | Detail-handler boundary test | Not started |
-| AC5 | Future `NotYetPublished`, HTTP failures, parse failures, unexpected pages, and identity mismatches retain their existing distinct behavior and do not use the retirement fallback. | T2, T3, T5 | Negative-path regressions | Not started |
-| AC6 | Current and Recent result routes fall back to Historical only for past `OutOfDisplayedRange` dates; today/future, parse, HTTP, and identity failures remain strict. | T4, T5 | Navigator route matrix tests | Not started |
-| AC7 | Calendar, odds, subject/profile collection, admin presentation, and the platform-wide terminal-failure safety policy remain unchanged. | T5 | Cross-surface regression and production caller inventory | Not started |
-| AC8 | Calendar readiness, one semantic Snapshot, non-calendar navigation, result Current/Recent/Historical behavior, and existing performance tests do not regress. | T5 | Focused scraping/collector/API tests and efficiency gates | Not started |
-| AC9 | Three bounded live checks cover visible card success and retired-card result fallback where the official site exposes suitable dates; no production state changes. | T5 | Live read-only verification | Not started |
-| AC10 | Release build, all non-external tests, formatting, CodeGraph, record validation, and diff/status checks pass. | T5, T6 | CI-equivalent verification | Not started |
+| AC1 | At the exact configured RaceCard age boundary, a missing meeting button with `OutOfDisplayedRange` falls back to result discovery and creates the correct race-detail requests without pausing the pipeline. | T2, T5 | Handler test plus completion contract | Verified |
+| AC2 | A still-visible RaceCard uses the existing fast path and produces the same card URL, odds requests, attributes, priority, and lane as before. | T2, T5 | Existing and new discovery regressions | Verified |
+| AC3 | Discovery fallback validates date/course/race identity and persists result URLs; it does not create odds work or pretend RaceCard metadata exists. | T2 | Route-aware handler tests | Verified |
+| AC4 | A race-detail task whose card retires at execution time continues to result collection; missing card data does not enqueue subject or prediction work, and successful result collection completes normally. | T3 | Detail-handler boundary test | Verified |
+| AC5 | Future `NotYetPublished`, HTTP failures, parse failures, unexpected pages, and identity mismatches retain their existing distinct behavior and do not use the retirement fallback. | T2, T3, T5 | Negative-path regressions | Verified |
+| AC6 | Current and Recent result routes fall back to Historical only for past `OutOfDisplayedRange` dates; today/future, parse, HTTP, and identity failures remain strict. | T4, T5 | Navigator route matrix tests | Verified |
+| AC7 | Calendar, odds, subject/profile collection, admin presentation, and the platform-wide terminal-failure safety policy remain unchanged. | T5 | Cross-surface regression and production caller inventory | Verified |
+| AC8 | Calendar readiness, one semantic Snapshot, non-calendar navigation, result Current/Recent/Historical behavior, and existing performance tests do not regress. | T5 | Focused scraping/collector/API tests and efficiency gates | Verified |
+| AC9 | Three bounded live checks cover visible card success and retired-card result fallback where the official site exposes suitable dates; no production state changes. | T5 | Live read-only verification | Verified |
+| AC10 | Release build, all non-external tests, formatting, CodeGraph, record validation, and diff/status checks pass. | T5, T6 | CI-equivalent verification | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | Audit production failure and every fixed-period/route consumer. Covers AC1-AC10 design. | Main with read-only audit worker | Lead/review tier | - | Read-only plus this record/canonical docs | Source, production UI, tests | Reviewed inventory in this record | Verified |
-| T2 | Make discovery route-aware with precise `OutOfDisplayedRange` result fallback. Covers AC1-AC3, AC5. | Main | Lead tier | Approval | discovery handler/tests | Focused handler and identity tests | Pending | Dependent |
-| T3 | Align race-detail fallback behavior without changing card enrichment. Covers AC4-AC5. | Main | Lead tier | T2 contract | detail handler/tests | Boundary and store tests | Pending | Dependent |
-| T4 | Extend past-date Current result fallback while preserving today/future strictness. Covers AC6. | Main | Lead tier | T2 route contract | Navigator/tests | Route matrix tests | Pending | Dependent |
-| T5 | Run cross-surface, pause-policy, performance, live, and non-external regressions. Covers AC1-AC10. | Main | Lead tier | T2-T4 | Read-only except ignored outputs | Recorded commands/results | Pending | Dependent |
-| T6 | Synchronize CodeGraph, update records, audit scope/secrets, and commit. Covers AC10. | Main | Lead tier | T5 | docs and derived graph | Validator/diff/status | Pending | Dependent |
+| T2 | Make discovery route-aware with precise `OutOfDisplayedRange` result fallback. Covers AC1-AC3, AC5. | Main | Lead tier | Approval | discovery handler/tests | Focused handler and identity tests | Result route, URL, lane, priority, and no-odds assertions passed | Verified |
+| T3 | Align race-detail fallback behavior without changing card enrichment. Covers AC4-AC5. | Main | Lead tier | T2 contract | detail handler/tests | Boundary and store tests | Boundary result continuation passed | Verified |
+| T4 | Extend past-date Current result fallback while preserving today/future strictness. Covers AC6. | Test worker with Main integration | Worker/review tier | T2 route contract | Navigator/tests | Route matrix tests | Four new route tests and 50 Navigator tests passed | Verified |
+| T5 | Run cross-surface, pause-policy, performance, live, and non-external regressions. Covers AC1-AC10. | Main | Lead tier | T2-T4 | Read-only except ignored outputs | Recorded commands/results | Focused, live, Release, and 1,050 non-external tests passed | Verified |
+| T6 | Synchronize CodeGraph, update records, audit scope/secrets, and commit. Covers AC10. | Main | Lead tier | T5 | docs and derived graph | Validator/diff/status | Final gates passed | Verified |
 
 ## Review gates
 
@@ -151,9 +151,21 @@ would undo the integrated detail workflow's enrichment behavior.
   pause policy do not share the faulty source-selection boundary and stay unchanged. AC1-AC10 cover success,
   strict negative paths, performance, live evidence, and final gates. No unresolved design choice blocks
   approval.
-- **Pre-implementation review** — blocked on explicit approval.
-- **Checkpoint review** — pending implementation.
-- **Final review** — pending implementation and verification.
+- **Pre-implementation review — 2026-09-17, reviewer: Main.** The user explicitly approved AC1-AC10.
+  T2 is `In progress`; T3-T6 are `Dependent`. Main owns the shared discovery/detail route contract and
+  production integration. A test-only worker may cover the disjoint Navigator route matrix after the contract
+  is frozen. Escalate if fallback requires private JRA implementation details, changes today/future semantics,
+  creates duplicate race-detail work, or weakens the terminal-failure safety pause.
+- **Checkpoint review — 2026-09-17, reviewer: Main.** Main reviewed the production diff and delegated
+  Navigator tests against AC1-AC8. Discovery switches its route-state only after the precise exception and
+  therefore emits a result URL, Background lane, lower priority, and no odds request. Race detail skips only
+  missing-card enrichment and continues its existing result workflow. Four delegated route tests passed and
+  did not change production code; focused Collector tests passed. One parallel Playwright cancellation timing
+  assertion was slow once and passed immediately in isolated rerun, with no related source change.
+- **Final review — 2026-09-17, reviewer: Main.** AC1-AC10 trace to production handlers/Navigator and passing
+  focused, live, and solution evidence. Cross-surface inventory confirms no behavior change to calendar, odds,
+  subjects/profiles, admin presentation, or global pause policy. No approved task, review finding, or blocker
+  remains. Deployment and production recovery remain explicitly excluded.
 
 ## Verification record
 
@@ -168,8 +180,20 @@ would undo the integrated detail workflow's enrichment behavior.
   Recent-only result fallback, and no shared fixed-period decision in calendar, odds scheduling, subjects, or
   profiles. Main verified the cited production callers. Rework: the initial proposal was narrowed to exclude
   odds and UI changes; usage/cost telemetry was unavailable.
+- 2026-09-17: the user explicitly approved AC1-AC10 and requested implementation.
+- 2026-09-17: focused Collector tests passed 39/39; Navigator plus browser-efficiency selection passed after
+  one unrelated timing-only cancellation test succeeded on immediate isolated rerun. Navigator tests passed
+  50/50, including four delegated Current-route boundary tests.
+- 2026-09-17: read-only live checks passed for current calendar (about five seconds), completed RaceResult
+  (about nine seconds), retired RaceCard range detection (about seven seconds), and Historical RaceResultList
+  fallback (about eight seconds). The current-week RaceCard list check had no suitable published meeting and
+  skipped; deterministic normal-path tests verify unchanged fast-path behavior.
+- 2026-09-17: Release solution build passed with zero warnings and errors. All non-external solution tests
+  passed: 1,050 passed and one existing skip.
+- 2026-09-17: CodeGraph synchronized and re-queried the changed handlers/Navigator; formatting verification,
+  change-record validation, and final diff/status checks passed.
 
 ## Deviations and follow-up
 
-- No production code has changed while this record is `Proposed`.
+- The approved implementation matches the design; no behavioral deviation remains.
 - Deployment, pipeline resume, and recovery of current failed tasks remain separate operational actions.

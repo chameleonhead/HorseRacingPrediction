@@ -1173,6 +1173,124 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceResultAsync_CurrentPastPeriod_OutOfDisplayedRange_FallsBackToHistoricalRoute()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/current-past/";
+        const string searchResultUrl = "https://www.jra.go.jp/keiba/sample/search/current-past/result/";
+        const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/search/current-past/result/11/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月6日 4回中山1日"));
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceResultUrl);
+        browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 6));
+
+        var page = await navigator.ToRaceResultAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11));
+
+        Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
+        Assert.IsNotEmpty(browser.SelectOptionCalls);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultListAsync_CurrentPastPeriod_OutOfDisplayedRange_FallsBackToHistoricalRoute()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/current-past-list/";
+        const string searchResultUrl = "https://www.jra.go.jp/keiba/sample/search/current-past-list/result/";
+        const string raceListUrl = "https://www.jra.go.jp/keiba/sample/search/current-past-list/result/list/";
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月6日 4回中山1日"));
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetSnapshot(raceListUrl, BuildRaceListSnapshot(raceListUrl));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 6));
+
+        var page = await navigator.ToRaceResultListAsync(
+            new DateOnly(2026, 9, 5),
+            RaceCourse.Nakayama);
+
+        Assert.AreEqual(JraPageKind.RaceList, page.Kind);
+        CollectionAssert.Contains(browser.NavigatedUrls, raceListUrl);
+        Assert.IsNotEmpty(browser.SelectOptionCalls);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultAsync_CurrentDay_OutOfDisplayedRange_DoesNotFallback()
+    {
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, string.Empty));
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(() =>
+            navigator.ToRaceResultAsync(
+                new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11)));
+
+        Assert.AreEqual(JraNavigationFailureReason.OutOfDisplayedRange, exception.Reason);
+        Assert.IsEmpty(browser.SelectOptionCalls);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultListAsync_CurrentDay_OutOfDisplayedRange_DoesNotFallback()
+    {
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(
+            ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, string.Empty));
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraNavigationException>(() =>
+            navigator.ToRaceResultListAsync(
+                new DateOnly(2026, 9, 5),
+                RaceCourse.Nakayama));
+
+        Assert.AreEqual(JraNavigationFailureReason.OutOfDisplayedRange, exception.Reason);
+        Assert.IsEmpty(browser.SelectOptionCalls);
+    }
+
+    [TestMethod]
     public async Task ToRaceResultAsync_RecentPeriod_OutOfDisplayedRange_FallsBackToHistoricalRoute()
     {
         const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/";

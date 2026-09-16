@@ -55,21 +55,28 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
             var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
             foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
             {
-                var historical = date < TodayJst().AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
+                var resultRoute = date < TodayJst().AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
                 IJraPage page;
                 try
                 {
-                    page = historical
+                    page = resultRoute
                         ? await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken).ConfigureAwait(false)
                         : await session.Navigate.ToRaceListAsync(date, course, cancellationToken).ConfigureAwait(false);
                 }
-                catch (JraNavigationException ex) when (!historical && IsFutureJst(date)
+                catch (JraNavigationException ex) when (!resultRoute && date < TodayJst()
+                    && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+                {
+                    page = await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken)
+                        .ConfigureAwait(false);
+                    resultRoute = true;
+                }
+                catch (JraNavigationException ex) when (!resultRoute && IsFutureJst(date)
                     && ex.Reason == JraNavigationFailureReason.NotYetPublished)
                 {
                     RecordUnpublished(date, ex.Message);
                     continue;
                 }
-                if (!historical && page is not JraRaceListPage)
+                if (!resultRoute && page is not JraRaceListPage)
                 {
                     if (IsFutureJst(date))
                     {
@@ -112,7 +119,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     };
                     if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
                     Uri? detailUrl;
-                    if (!historical)
+                    if (!resultRoute)
                     {
                         if (race.StartTime is { } detailStart)
                             attributes["startTime"] = detailStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
@@ -137,8 +144,8 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                             ? task.Reason
                             : CollectionReason.Discovery,
-                        historical ? CollectionLane.Background : CollectionLane.Realtime,
-                        historical ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
+                        resultRoute ? CollectionLane.Background : CollectionLane.Realtime,
+                        resultRoute ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -237,6 +244,13 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             try
             {
                 result = await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (JraNavigationException ex) when (raceId.Date < today
+                && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+            {
+                // RaceCardLookupPeriod is a local preference, not a guarantee that JRA still exposes
+                // the card selection. A retired card for a past race must not prevent result collection.
+                requiresCard = false;
             }
             catch (JraPageKindMismatchException ex)
             {
