@@ -10,7 +10,7 @@ public sealed class CollectionQueueOptions
     public string QueueUrl { get; set; } = string.Empty;
     public string QueueName { get; set; } = "horse-racing-prediction-collector";
     public string DeadLetterQueueUrl { get; set; } = string.Empty;
-    public string DeadLetterQueueName { get; set; } = "horse-racing-prediction-collector-dlq";
+    public string DeadLetterQueueName { get; set; } = "horse-racing-prediction-resource-collection-dlq";
     public int DispatchIntervalSeconds { get; set; } = 5;
     public int DispatchBatchSize { get; set; } = 10;
     public int MaxInFlightEnvelopes { get; set; } = 1;

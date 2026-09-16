@@ -23,6 +23,8 @@ public sealed class CollectionQueueCutoverContractTests
             .Select(x => x.Groups["name"].Value).Order().ToArray();
         CollectionAssert.AreEqual(new[] { "resource_collection", "resource_collection_dlq" }, queueResources);
         Assert.IsFalse(Main.Contains("horse-racing-prediction-collector-dlq", StringComparison.Ordinal));
+        StringAssert.Contains(ApiSettings,
+            "\"DeadLetterQueueName\": \"horse-racing-prediction-resource-collection-dlq\"");
     }
 
     [TestMethod]

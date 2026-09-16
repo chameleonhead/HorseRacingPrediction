@@ -48,6 +48,7 @@
 ## Technical impact
 
 - DLQ本文の解析を、現行Envelopeと旧単件通知を区別する小さなparserへ分離する。
+- APIのqueue設定と既定値をTerraformの物理DLQ名 `horse-racing-prediction-resource-collection-dlq` に一致させ、契約テストで固定する。
 - 旧通知は `contractVersion == 1`、空でないTask ID、正のdispatch generationを必須とし、1件だけのTask参照へ変換する。
 - 現行Envelopeは現在の検証を維持する。旧通知にもEnvelopeを捏造せず、既存のTask単位reconcile経路へ明示的に渡す。
 - valid/supportedなメッセージは既存規則どおり、各Task参照を世代付きでreconcileしてからSQSメッセージを削除する。terminalまたはsupersededなTaskをFailedへ戻さない。
@@ -113,6 +114,7 @@
 - 2026-09-16: `CollectionPlatformOperationsServicesTests` 7件成功。正常v1、v1/v2混在、重複通知、contractVersion欠落/未知、追加フィールド、破損JSON、既存v2を検証した。
 - 2026-09-16: Release solution buildは警告0・エラー0。`TestCategory!=External` はContracts 43、Domain 105、Application 57、Infrastructure 13、MachineLearning 14、Agents 106、Collector 224、API 223成功・1 skip。Scrapingは241件成功後、ローカルPlaywright benchmark 1件がNetworkIdle待機30秒で一時timeoutしたが、同一テストの単独再実行は0.8秒で成功した。
 - 2026-09-16: commit `30a9335` のapp-ci `35086212436` とapp-deploy `35086212442` が成功。deployはAPI停止後のcollection-platform DB世代バックアップ、API health、Lambda image `sha-30a9335...` の反映を完了した。配備後もDLQ visible 63件が変わらなかったため、Recovery前の停止条件に従い読取専用ログ診断を追加した。
+- 2026-09-16: 読取専用診断run `35087464233` で、10:50 UTCのcollection-platform backup（15,908,864 bytes）と、APIが旧既定名 `horse-racing-prediction-collector-dlq` を解決して `QueueDoesNotExistException` を反復していることを確認した。実在するTerraform DLQ名へ設定・既定値を揃え、再発防止の契約テストを追加する。
 
 ## Deviations and follow-up
 
