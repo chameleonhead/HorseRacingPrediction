@@ -14,6 +14,30 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraDirectCollectionHandlerTests
 {
     [TestMethod]
+    public void RaceDetail_LegacyTaskWithoutAttributes_ParsesCanonicalResourceId()
+    {
+        var date = new DateOnly(2026, 4, 19);
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260419:Nakayama:9"), new("race-detail"), 1,
+            CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>());
+
+        Assert.AreEqual(new RaceId(date, RaceCourse.Nakayama, 9),
+            JraRaceDetailCollectionHandler.ParseRaceId(task));
+    }
+
+    [TestMethod]
+    public void RaceDetail_LegacyTaskWithMismatchedResourceDate_IsRejected()
+    {
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260420:Nakayama:9"), new("race-detail"), 1,
+            CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 4, 19), new Dictionary<string, string>());
+
+        Assert.Throws<InvalidOperationException>(() => JraRaceDetailCollectionHandler.ParseRaceId(task));
+    }
+
+    [TestMethod]
     public async Task RaceDetail_RecentFinishedRace_CollectsCardThenResultInOneTask()
     {
         var date = new DateOnly(2026, 9, 12);

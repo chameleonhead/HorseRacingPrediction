@@ -49,6 +49,7 @@
 
 - DLQ本文の解析を、現行Envelopeと旧単件通知を区別する小さなparserへ分離する。
 - APIのqueue設定と既定値をTerraformの物理DLQ名 `horse-racing-prediction-resource-collection-dlq` に一致させ、契約テストで固定する。
+- 旧Readyタスクがmetadata属性を持たない場合に限り、canonical Race Resource ID（`yyyyMMdd:Course:Number`）をeffective date一致込みで厳密にfallback解析する。
 - 旧通知は `contractVersion == 1`、空でないTask ID、正のdispatch generationを必須とし、1件だけのTask参照へ変換する。
 - 現行Envelopeは現在の検証を維持する。旧通知にもEnvelopeを捏造せず、既存のTask単位reconcile経路へ明示的に渡す。
 - valid/supportedなメッセージは既存規則どおり、各Task参照を世代付きでreconcileしてからSQSメッセージを削除する。terminalまたはsupersededなTaskをFailedへ戻さない。
@@ -116,6 +117,7 @@
 - 2026-09-16: commit `30a9335` のapp-ci `35086212436` とapp-deploy `35086212442` が成功。deployはAPI停止後のcollection-platform DB世代バックアップ、API health、Lambda image `sha-30a9335...` の反映を完了した。配備後もDLQ visible 63件が変わらなかったため、Recovery前の停止条件に従い読取専用ログ診断を追加した。
 - 2026-09-16: 読取専用診断run `35087464233` で、10:50 UTCのcollection-platform backup（15,908,864 bytes）と、APIが旧既定名 `horse-racing-prediction-collector-dlq` を解決して `QueueDoesNotExistException` を反復していることを確認した。実在するTerraform DLQ名へ設定・既定値を揃え、再発防止の契約テストを追加する。
 - 2026-09-16: 修正版deploy `35087589348` 成功後、DLQは63→42→21→3→0件へ減少した。診断run `35089055561` で未知/未処理DLQが0件、actionableな対象は `race-detail / DeadLetterQueue` 1グループ4通知だけと確認した。残り59通知はstoreの世代・終端guardにより状態変更不要として安全にackされた。
+- 2026-09-16: Recovery run `35089206558` は4通知を既存active task 4件へ関連付けてpipelineを再開し、main queue in-flight 1件まで進んだ。その先頭Race `20260419:Nakayama:9` は移行前Taskのためcourse/number metadataを持たず、canonical Resource IDは完全なのにhandlerが `InvalidOperationException` で停止した。Resource ID fallbackは日付一致・3要素・有効course/numberを必須とし、不整合IDは引き続き拒否する。
 
 ## Deviations and follow-up
 

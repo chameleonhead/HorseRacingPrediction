@@ -365,11 +365,23 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     internal static RaceId ParseRaceId(LeasedCollectionTask task)
     {
         if (task.EffectiveDate is null) throw new InvalidOperationException("Race effective date is required.");
-        if (!task.Attributes.TryGetValue("course", out var course)
-            || !task.Attributes.TryGetValue("number", out var numberText)
-            || !int.TryParse(numberText, out var number))
-            throw new InvalidOperationException("Race course and number attributes are required.");
-        return new(task.EffectiveDate.Value, RaceCourseNames.Parse(course), number);
+        if (task.Attributes.TryGetValue("course", out var course)
+            && task.Attributes.TryGetValue("number", out var numberText)
+            && int.TryParse(numberText, out var number))
+            return new(task.EffectiveDate.Value, RaceCourseNames.Parse(course), number);
+
+        var parts = task.Resource.Id.Split(':', StringSplitOptions.TrimEntries);
+        if (parts.Length == 3
+            && DateOnly.TryParseExact(parts[0], "yyyyMMdd", out var resourceDate)
+            && resourceDate == task.EffectiveDate.Value
+            && int.TryParse(parts[2], out number))
+        {
+            var parsedCourse = Enum.TryParse<RaceCourse>(parts[1], true, out var namedCourse)
+                ? namedCourse : RaceCourseNames.Parse(parts[1]);
+            if (parsedCourse != RaceCourse.Unknown)
+                return new(resourceDate, parsedCourse, number);
+        }
+        throw new InvalidOperationException("Race course and number attributes are required.");
     }
 
     private async Task RequestReferencedSubjectsAsync(LeasedCollectionTask task,
