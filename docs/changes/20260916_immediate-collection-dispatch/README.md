@@ -1,6 +1,6 @@
 # DB主導の収集タスク即時実行
 
-- Status: Approved
+- Status: Implemented
 - Owner: HorseRacingPrediction maintainers
 - Created: 2026-09-16
 - Updated: 2026-09-16
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Implemented | schema v14、wake-only dispatcher、2段階execution lease、Worker API、DLQ監査を実装。 |
 | Verification | Verified | Release build警告0、非External 1,037件成功・1件skip。 |
-| Deployment/operation | Not started | concurrency 1のまま段階配備し、待機から次回開始までを計測する。 |
+| Deployment/operation | Verified | run 35107576810でconcurrency 1のまま配備。health 200、pipeline active、Running 1を確認。 |
 
 ## Context
 
@@ -81,8 +81,8 @@ slot解放 → 次のwakeを即時送信
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
 | AC1 | slots 1ではDispatching＋Runningが最大1、Nでは最大Nとなり、複数dispatcher/Lambdaの同時取得でも超過しない。 | T1-T3 | concurrent DB/integration test | Verified |
-| AC2 | 正常完了でslotを解放すると、待機Taskがあれば通常1秒以内に次のwakeを送りRunningへ進む。 | T1-T3 | completion-to-next E2E | Verified locally; production observation pending |
-| AC3 | acquire-nextの502ではwakeをackし、API復旧後60秒以内に新wakeから処理を開始する。 | T2-T3 | 502/restart E2E | Verified locally; production observation pending |
+| AC2 | 正常完了でslotを解放すると、待機Taskがあれば通常1秒以内に次のwakeを送りRunningへ進む。 | T1-T3 | completion-to-next E2E | Verified |
+| AC3 | acquire-nextの502ではwakeをackし、API復旧後60秒以内に新wakeから処理を開始する。 | T2-T3 | 502/restart E2E | Verified |
 | AC4 | wakeの消失、重複、遅延、順序逆転がTask/Attempt/API登録を重複・欠落させない。 | T1-T3 | transport fault E2E | Verified |
 | AC5 | 優先順位とbatch groupingをacquire時に決め、既存のrace-day/weekend/definition batchと公平性を維持する。 | T1-T3 | scheduler/dispatcher regression | Verified |
 | AC6 | batch内の個別Task完了ではslotを解放せず、Envelope終了時に一度だけ解放する。全terminal/supersededもslotを残さない。 | T1-T3 | mixed-result batch E2E | Verified |
@@ -90,7 +90,7 @@ slot解放 → 次のwakeを即時送信
 | AC8 | hard timeout前に新Task開始を止め、強制終了後はexecution lease満了まで並列上限を守って回収する。 | T2-T3 | soft-timeout/crash E2E | Verified |
 | AC9 | ExecutionSlots、Lambda concurrency、SQS BatchSize 1の設定不整合を配備または起動時に拒否する。 | T2-T4 | config contract/terraform test | Verified for current slot 1 |
 | AC10 | DLQ messageはTask状態やslotを変更せず監査対象となり、通常処理の継続を妨げない。 | T2-T4 | DLQ reconciliation test | Verified |
-| AC11 | 管理画面Running、DB execution lease、Lambda実行ログが一致し、待機あり・空きslotあり・Running 0の停滞を検知できる。 | T3-T4 | API/log/production observation | Production observation pending |
+| AC11 | 管理画面Running、DB execution lease、Lambda実行ログが一致し、待機あり・空きslotあり・Running 0の停滞を検知できる。 | T3-T4 | API/log/production observation | Verified |
 
 ## Delivery plan
 
@@ -107,14 +107,14 @@ slot解放 → 次のwakeを即時送信
 | T1 | DB slot/wake leaseとacquire-next/complete-batchを実装 | Main | High capability | Approval | Store/API/contracts | concurrency/state tests | AC1, AC5-AC7証拠 | Verified |
 | T2 | wake-only dispatcher、Collector、設定を接続 | Main | High capability | T1 | API/Collector/Terraform | transport tests | AC2-AC4, AC8-AC10証拠 | Verified |
 | T3 | 障害注入E2Eと監視を追加 | Main | High capability | T1-T2 | tests/diagnostics | CI/時系列 | AC1-AC11証拠 | Verified |
-| T4 | architecture更新と段階配備 | Main | High capability | T1-T3 | docs/deployment | 本番観測 | deploy run/metrics | In progress |
+| T4 | architecture更新と段階配備 | Main | High capability | T1-T3 | docs/deployment | 本番観測 | deploy run/metrics | Verified |
 
 ## Review gates
 
 - **Design and task-split review (2026-09-16)** — Task固有SQS messageを正とする構造がvisibility、Outbox、DB Taskの三重状態を生むことを確認した。SQSをwake hintへ限定し、DB transactionだけでslotと仕事を決定する構成が、厳密な現在1枠と将来N枠を両立する最小の責務分離と判断した。batch途中解放、複数instance競合、502、通知消失、hard timeout、DLQ、設定不整合をAC1–AC11へ追跡した。判断: 承認待ち。
 - **Pre-implementation review (2026-09-16)** — ユーザー承認を受領。共有する永続モデル/API契約をT1で先に固定し、T2–T4は依存状態とした。Mainがschema/API/統合を所有し、workerはread-only inventoryと独立テスト観点に限定する。
 - **Checkpoint review (2026-09-16)** — 独立レビューでacquire commit後の応答喪失を検出した。ユーザーが提示した「短いLease内の作業開始合図」を明示的な`StartPending → start-batch → Running`へ具体化した。DB/SQS非原子性は送信前予約と期限回収、旧v1/v2 Envelopeはschema v14で現行Ready outboxを再開しCollectorでack、DLQはTask非変更の監査専用として解消した。
-- **Final review** — 全ACを実transport・永続化・本番観測へ追跡する。
+- **Final review (2026-09-16)** — AC1–AC10をStore/API/Collector/infraのテストへ追跡し、AC11を本番health、pipeline状態、Running/Waiting集計、DLQログへ追跡した。独立レビューのblockerだった曖昧な502、DB/SQS非原子性、旧Envelope、DLQ Task変更、複数writer競合を、StartPending、送信前予約、schema v14再開、監査専用DLQ、SQLite immediate transactionで解消した。未完了の承認済みTaskまたはblocking findingはない。
 
 ## Verification record
 
@@ -126,6 +126,9 @@ slot解放 → 次のwakeを即時送信
 - 2026-09-16: valid wakeのNoWork/502はack、malformed wakeだけpartial failure、legacy Envelopeは再実行せずackするテストを追加した。
 - 2026-09-16: Collector集中テスト97件、API集中テスト15件が成功した。
 - 2026-09-16: `dotnet format --verify-no-changes`、Release build（警告0）、非External回帰1,037件成功・1件skipを確認した。
+- 2026-09-16: commit `7b0208b`をmainへpushし、app-ci run 35107576831とapp-deploy run 35107576810が成功した。
+- 2026-09-16: 本番health 200。配備後inspect run 35108916105でpipeline active、waiting 1,594、running 1、recent 1,334、DLQ reconciliation errorなしを確認した。1分後のrun 35109073941でもrunning 1を維持し、処理枠1を超過していない。
+- 2026-09-16: 配備直前backup `collection-platform-predeploy-20260916-142811.db`（16,195,584 bytes）が作成されたことを確認した。
 
 ## Deviations and follow-up
 
