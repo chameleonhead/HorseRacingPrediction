@@ -118,6 +118,7 @@
 - 2026-09-16: 読取専用診断run `35087464233` で、10:50 UTCのcollection-platform backup（15,908,864 bytes）と、APIが旧既定名 `horse-racing-prediction-collector-dlq` を解決して `QueueDoesNotExistException` を反復していることを確認した。実在するTerraform DLQ名へ設定・既定値を揃え、再発防止の契約テストを追加する。
 - 2026-09-16: 修正版deploy `35087589348` 成功後、DLQは63→42→21→3→0件へ減少した。診断run `35089055561` で未知/未処理DLQが0件、actionableな対象は `race-detail / DeadLetterQueue` 1グループ4通知だけと確認した。残り59通知はstoreの世代・終端guardにより状態変更不要として安全にackされた。
 - 2026-09-16: Recovery run `35089206558` は4通知を既存active task 4件へ関連付けてpipelineを再開し、main queue in-flight 1件まで進んだ。その先頭Race `20260419:Nakayama:9` は移行前Taskのためcourse/number metadataを持たず、canonical Resource IDは完全なのにhandlerが `InvalidOperationException` で停止した。Resource ID fallbackは日付一致・3要素・有効course/numberを必須とし、不整合IDは引き続き拒否する。
+- 2026-09-16: legacy Race fallbackのCollectorテスト227件が成功した。運用workflowはDLQ障害とこの完全一致エラーを別mode・別confirmationで選択し、他の `InvalidOperationException` を一括Recoveryしない。
 
 ## Deviations and follow-up
 

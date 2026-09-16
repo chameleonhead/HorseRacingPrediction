@@ -81,7 +81,10 @@ public sealed class CollectionQueueCutoverContractTests
     public void DlqRecoveryWorkflow_GatesAndLimitsRecoveryToDeadLetterGroups()
     {
         StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-DLQ");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-RACE");
         StringAssert.Contains(DlqDiagnosticsWorkflow, ".status == 8 and .errorCode == \"DeadLetterQueue\"");
+        StringAssert.Contains(DlqDiagnosticsWorkflow,
+            ".errorMessage == \"Race course and number attributes are required.\"");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
         Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));

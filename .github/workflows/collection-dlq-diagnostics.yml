@@ -9,10 +9,11 @@ on:
         type: choice
         options:
           - inspect
-          - recover
+          - recover-dlq
+          - recover-legacy-race
         default: inspect
       confirmation:
-        description: Enter RECOVER-LEGACY-DLQ when mode is recover.
+        description: Enter RECOVER-LEGACY-DLQ or RECOVER-LEGACY-RACE for the selected recovery mode.
         required: false
         type: string
 
@@ -30,10 +31,12 @@ jobs:
           MODE: ${{ inputs.mode }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
-          if [ "$MODE" = recover ] && [ "$CONFIRMATION" != RECOVER-LEGACY-DLQ ]; then
-            echo "Recovery confirmation did not match." >&2
-            exit 1
-          fi
+          case "$MODE" in
+            inspect) ;;
+            recover-dlq) test "$CONFIRMATION" = RECOVER-LEGACY-DLQ ;;
+            recover-legacy-race) test "$CONFIRMATION" = RECOVER-LEGACY-RACE ;;
+            *) exit 1 ;;
+          esac
 
       - name: Inspect or recover actionable collection failure groups
         shell: bash
@@ -63,12 +66,21 @@ jobs:
               "$base/failure-notifications/groups/${group_key}?page=1&pageSize=5" \
               | jq '{totalCount, items: [.items[] | {notificationId, taskId, resource, errorCode, errorMessage, requestedUrl}]}'
           done < <(jq -r '.[].groupKey' "$work/groups.json")
-          jq '[.[] | select(.status == 8 and .errorCode == "DeadLetterQueue")]' \
-            "$work/groups.json" > "$work/targets.json"
+          case "$MODE" in
+            recover-dlq)
+              jq '[.[] | select(.status == 8 and .errorCode == "DeadLetterQueue")]' \
+                "$work/groups.json" > "$work/targets.json" ;;
+            recover-legacy-race)
+              jq '[.[] | select(.definition.value == "race-detail" and .status == 6
+                and .errorCode == "InvalidOperationException"
+                and .errorMessage == "Race course and number attributes are required.")]' \
+                "$work/groups.json" > "$work/targets.json" ;;
+            *) printf '[]' > "$work/targets.json" ;;
+          esac
           target_count="$(jq 'length' "$work/targets.json")"
           target_notifications="$(jq '[.[].count] | add // 0' "$work/targets.json")"
-          echo "Legacy DLQ recovery targets: groups=$target_count notifications=$target_notifications"
-          if [ "$MODE" != recover ]; then
+          echo "Collection recovery targets: mode=$MODE groups=$target_count notifications=$target_notifications"
+          if [ "$MODE" = inspect ]; then
             exit 0
           fi
           test "$target_count" -gt 0
@@ -80,7 +92,7 @@ jobs:
           done < <(jq -r '.[].groupKey' "$work/targets.json")
           curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
             "$base/pipeline/resume" >/dev/null
-          echo "Collection pipeline resumed after legacy DLQ recovery."
+          echo "Collection pipeline resumed after $MODE."
 
       - name: Inspect API DLQ reconciliation logs and backups
         uses: appleboy/ssh-action@v1.0.3
