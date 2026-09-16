@@ -1,6 +1,6 @@
 # Horse history collection-request batching
 
-- Status: Proposed
+- Status: Approved
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-16
 - Updated: 2026-09-16
@@ -9,7 +9,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | User approval of AC1–AC5 is required before production changes. |
+| Code | Not started | The user approved AC1–AC5 on 2026-09-16; T1 is runnable. |
 | Verification | Not started | Focused Collector/API integration and regression gates remain. |
 | Deployment/operation | Not started | No AWS, database schema, queue, or browser-concurrency change is planned. |
 
@@ -70,7 +70,7 @@ Batch and item keys are derived from the current Horse task ID, zero-based histo
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Implement Horse history page batching and focused behavior tests. Covers AC1–AC5. | Main | Lead tier | Approval | Horse subject handler and Collector tests | Request counts, fields, pagination, outcomes, replay | One batch per page/chunk with current semantics | Proposed |
+| T1 | Implement Horse history page batching and focused behavior tests. Covers AC1–AC5. | Main | Lead tier | Approval | Horse subject handler and Collector tests | Request counts, fields, pagination, outcomes, replay | One batch per page/chunk with current semantics | Runnable |
 | T2 | Add real-store cross-Horse dedupe/replay evidence and complete regressions. Covers AC4, AC5. | Main | Lead tier | T1 | API/Collection Platform integration tests and record | Store/API concurrency and CI-equivalent gates | One global Race task and clean final audit | Dependent |
 
 Tasks are serialized because T2 verifies the exact contract emitted by T1. Read-only inventory was delegated; production writes remain under Main.
@@ -78,7 +78,7 @@ Tasks are serialized because T2 verifies the exact contract emitted by T1. Read-
 ## Review gates
 
 - **Design and task-split review** — 2026-09-16, reviewer: Main with read-only workers `/root/horse_history_dedupe_inventory` and `/root/subject_next_candidate_review`. Both inventories confirmed global cross-Horse Race task deduplication already exists and rejected a redundant state preflight. The lower-cost remaining fan-out is per-row HTTP. The design preserves page-level partial progress, uses the existing 500-item batch boundary, separates T1/T2 writes, and maps every AC to focused or integration evidence. Worker usage/cost telemetry is unavailable; both reports were accepted without rework.
-- **Pre-implementation review** — Pending approval.
+- **Pre-implementation review** — 2026-09-16, reviewer: Main. The user approved AC1–AC5. T1 is `Runnable`; T2 is `Dependent` on T1's frozen batch identity and outcome rules. Production edits are serialized under Main. Inputs are the existing Horse handler, `ICollectionRequestSink.RequestManyAsync`, the v13 batch binding/store invariant, focused handler fixtures and real-store tests. Escalate on any need to change the public batch contract, schema, task identity, pagination behavior, browser navigation/concurrency, or AWS resources.
 - **Checkpoint review** — Pending implementation.
 - **Final review** — Pending implementation and evidence reconciliation.
 
