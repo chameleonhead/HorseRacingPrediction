@@ -11,6 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Inspect actionable collection failure groups
+        shell: bash
+        env:
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        run: |
+          set -eu
+          domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
+          curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
+            "https://${domain}/api/admin/collection/failure-notifications/groups?limit=10000" \
+            | jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]'
+
       - name: Inspect API DLQ reconciliation logs and backups
         uses: appleboy/ssh-action@v1.0.3
         env:
