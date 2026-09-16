@@ -57,6 +57,12 @@ jobs:
           curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
             "$base/failure-notifications/groups?limit=10000" > "$work/groups.json"
           jq '[.[] | {groupKey, definition: .definition.value, status, errorCode, count}]' "$work/groups.json"
+          while IFS= read -r group_key; do
+            echo "Failure group sample: $group_key"
+            curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
+              "$base/failure-notifications/groups/${group_key}?page=1&pageSize=5" \
+              | jq '{totalCount, items: [.items[] | {notificationId, taskId, resource, errorCode, errorMessage, requestedUrl}]}'
+          done < <(jq -r '.[].groupKey' "$work/groups.json")
           jq '[.[] | select(.status == 8 and .errorCode == "DeadLetterQueue")]' \
             "$work/groups.json" > "$work/targets.json"
           target_count="$(jq 'length' "$work/targets.json")"
