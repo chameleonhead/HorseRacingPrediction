@@ -92,6 +92,42 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task Discovery_ResultFallbackReturnsUnsupportedPage_ReturnsUnexpectedPageInsteadOfSucceedingEmpty()
+    {
+        var today = new DateOnly(2026, 9, 17);
+        var date = today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (_, _) => throw new JraNavigationException(
+                    "card retired",
+                    JraNavigationFailureReason.OutOfDisplayedRange),
+                RaceResultListFactory = (_, _) => new JraCalendarPage(
+                    "https://www.jra.go.jp/keiba/calendar/",
+                    new YearMonth(date.Year, date.Month),
+                    []),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(
+            sessions,
+            _ => schedule,
+            sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 16, 15, 0, 0, TimeSpan.Zero)));
+
+        var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.Result);
+        Assert.AreEqual("RaceResultListPageKindMismatch", result.ErrorCode);
+        StringAssert.Contains(result.ErrorMessage, "Kind=Calendar");
+        Assert.AreEqual(new Uri("https://www.jra.go.jp/keiba/calendar/"), result.FinalUrl);
+        Assert.IsEmpty(sink.Requests);
+    }
+
+    [TestMethod]
     public async Task Discovery_ResolvesRelativeRaceUrlsAgainstTheSourcePage()
     {
         var date = new DateOnly(2026, 9, 12);

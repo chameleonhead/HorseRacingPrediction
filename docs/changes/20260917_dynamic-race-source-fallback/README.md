@@ -9,8 +9,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Complete | Discovery, race-detail, and past-date Current result fallback are implemented. |
-| Verification | Complete | Focused, live read-only, Release, non-external, formatting, graph, and record gates passed. |
+| Code | Complete | Discovery, race-detail, past-date fallback, terminal page/identity validation, and readiness cancellation are implemented. |
+| Verification | Complete | Focused regressions, repeated cancellation checks, Release, full non-external, formatting, graph, and record gates passed. |
 | Deployment/operation | Out of scope | No deployment, pipeline resume, or failed-task recovery was performed. |
 
 ## Context
@@ -130,6 +130,9 @@ would undo the integrated detail workflow's enrichment behavior.
 | AC8 | Calendar readiness, one semantic Snapshot, non-calendar navigation, result Current/Recent/Historical behavior, and existing performance tests do not regress. | T5 | Focused scraping/collector/API tests and efficiency gates | Verified |
 | AC9 | Three bounded live checks cover visible card success and retired-card result fallback where the official site exposes suitable dates; no production state changes. | T5 | Live read-only verification | Verified |
 | AC10 | Release build, all non-external tests, formatting, CodeGraph, record validation, and diff/status checks pass. | T5, T6 | CI-equivalent verification | Verified |
+| AC11 | If Historical navigation lands directly on a different race, it must not return that race as the requested result; it either reaches the requested race or reports an explicit terminal identity failure. | T7 | Navigator wrong-race regression | Verified |
+| AC12 | Result-route discovery must reject unsupported page kinds instead of succeeding with zero requests, while retaining the supported result-list and single-result cases. | T8 | Discovery unexpected-page regression | Verified |
+| AC13 | Calendar readiness cancellation must interrupt every Playwright readiness wait instead of being delayed by an uncancellable three-second sub-wait. | T9 | Repeated cancellation test and original full-suite command | Verified |
 
 ## Task plan
 
@@ -141,6 +144,9 @@ would undo the integrated detail workflow's enrichment behavior.
 | T4 | Extend past-date Current result fallback while preserving today/future strictness. Covers AC6. | Test worker with Main integration | Worker/review tier | T2 route contract | Navigator/tests | Route matrix tests | Four new route tests and 50 Navigator tests passed | Verified |
 | T5 | Run cross-surface, pause-policy, performance, live, and non-external regressions. Covers AC1-AC10. | Main | Lead tier | T2-T4 | Read-only except ignored outputs | Recorded commands/results | Focused, live, Release, and 1,050 non-external tests passed | Verified |
 | T6 | Synchronize CodeGraph, update records, audit scope/secrets, and commit. Covers AC10. | Main | Lead tier | T5 | docs and derived graph | Validator/diff/status | Final gates passed | Verified |
+| T7 | Close review finding 1 by validating a direct Historical result's identity and testing the mismatched-race path. Covers AC11. | Main | Lead tier | User authorization | Navigator and Navigator tests | Focused navigation tests | Requested-race recovery and explicit mismatch tests passed | Verified |
+| T8 | Close review finding 2 by rejecting unsupported discovery result pages and testing that failure. Covers AC12. | Main | Lead tier | T7 contract | Discovery handler and tests | Focused handler tests | Unsupported page returns `UnexpectedPage`; focused tests passed | Verified |
+| T9 | Close the repeated full-suite cancellation failure by propagating the token through all readiness waits. Covers AC13. | Main | Lead tier | Observed verification failure | Browser implementation/tests | Repeated focused test plus original CI-equivalent suite | 11 focused runs and the original full suite passed | Verified |
 
 ## Review gates
 
@@ -166,9 +172,46 @@ would undo the integrated detail workflow's enrichment behavior.
   focused, live, and solution evidence. Cross-surface inventory confirms no behavior change to calendar, odds,
   subjects/profiles, admin presentation, or global pause policy. No approved task, review finding, or blocker
   remains. Deployment and production recovery remain explicitly excluded.
+- **Post-implementation review reopening — 2026-09-17, reviewer: Main.** A later explicit review found two
+  material terminal-validation gaps: Historical direct-result navigation could return a different race, and
+  discovery could treat an unsupported result-route page as an empty successful result. The user authorized
+  both fixes. AC11/T7 and AC12/T8 are now closure items, so the record returns to `Approved` until their
+  regression tests and final gates pass.
+- **Post-review final review — 2026-09-17, reviewer: Main.** The original two findings map one-to-one to AC11
+  and AC12 and now have production-boundary regressions. The repeated cancellation failure maps to AC13 and
+  has verified cause, product fix, repeated focused evidence, and a passing rerun of the original full-suite
+  command. AC1-AC13 and T1-T9 are all `Verified`; no authorized review item or observed verification failure
+  remains open. No reusable skill gap was found because the existing external-adapter fidelity gate already
+  required terminal kind/identity validation; the demonstrated failure was noncompliance with that gate.
 
 ## Verification record
 
+- 2026-09-17: the first post-review focused test run launched Scraping and Collector test builds in parallel.
+  The Scraping command failed before test execution with `CS2012` because both processes attempted to write
+  `HorseRacingPrediction.Contracts.dll` in the same `obj` directory; the concurrent Collector command passed
+  14/14. Classification: deterministic local command concurrency conflict, unrelated to product behavior.
+  Disposition remains open until the original Scraping selection is rerun sequentially and passes.
+- 2026-09-17: the first sequential Scraping rerun reached compilation and exposed that the new test asserted
+  non-existent convenience properties on `JraRaceIdentityMismatchException`. Classification: deterministic
+  test implementation defect. The assertion was corrected to the exception's existing `Message` and
+  `RawValue` contract; closure requires the same focused command to pass.
+- 2026-09-17: the CI-equivalent suite reproduced the earlier calendar cancellation failure at 2.28 seconds
+  against a two-second bound. Source inspection established the cause: the cancellation token reached the
+  calendar-specific wait but not the preceding load-state and generic-readiness Playwright waits, each of
+  which could block for three seconds. Classification: deterministic load-sensitive product cancellation
+  defect exposed by suite concurrency. The token is now propagated through every readiness wait; closure
+  requires repeated focused execution and a successful rerun of the original full-suite command.
+- 2026-09-17: the first focused compile after changing unsupported pages to an explicit `UnexpectedPage`
+  completion found the new assertion used `Message` instead of the record's existing `ErrorMessage` member.
+  Classification: deterministic test implementation defect; corrected before rerunning the focused command.
+- 2026-09-17: post-review focused verification passed: Navigator 52/52, discovery/detail handlers 31/31,
+  and the combined final selection 53/53. The calendar cancellation test passed once after build and ten
+  additional no-build repetitions, closing the load-sensitive timing failure with cause evidence rather than
+  an isolated rerun.
+- 2026-09-17: the original CI-equivalent sequence passed after the final edits: formatting verification;
+  Release build with zero warnings/errors; and 1,053 non-external tests passed with one existing skip. This
+  closes the prior file-lock, test-compilation, and cancellation entries. CodeGraph synchronized and confirmed
+  the updated navigation, discovery, and readiness-wait call paths.
 - 2026-09-17: production UI showed `discovery:2026091306` failing after 39.6 seconds with
   `JraNavigationException` for `2026-09-12 Nakayama`; the terminal result was permanent and paused collection.
 - 2026-09-17: source trace found inclusive five-day checks in discovery and race detail, while RaceResult
@@ -195,5 +238,13 @@ would undo the integrated detail workflow's enrichment behavior.
 
 ## Deviations and follow-up
 
-- The approved implementation matches the design; no behavioral deviation remains.
+- Review finding analysis: AC5 already required strict unexpected-page and identity behavior, and the existing
+  `learn-from-implementation-failures` external-adapter gate already requires terminal kind/identity tests.
+  The omission was therefore not a missing skill rule. The implementation review verified the successful
+  fallback route but did not enumerate every terminal page shape on the newly reachable Historical branch;
+  tests likewise used only the ideal requested-race/list fixtures. The corrective gate is AC11-AC12 with
+  production-boundary regressions for a plausible wrong race and an unsupported page kind. No skill file is
+  changed because duplicating an existing enforceable rule would not change future decisions.
+- The post-review implementation now matches the expanded AC11-AC13 contract; no behavioral deviation or
+  open local follow-up remains.
 - Deployment, pipeline resume, and recovery of current failed tasks remain separate operational actions.

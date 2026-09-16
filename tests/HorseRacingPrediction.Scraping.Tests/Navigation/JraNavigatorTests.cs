@@ -1208,6 +1208,72 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToRaceResultAsync_HistoricalDirectResultForAnotherRace_NavigatesToRequestedRace()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct/";
+        const string searchResultUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct/result/";
+        const string directResultUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct/result/11/";
+        const string requestedResultUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct/result/1/";
+        var date = new DateOnly(2026, 1, 5);
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "1月5日 1回中山2日"));
+        browser.SetClickDestination("1回中山2日", directResultUrl);
+        browser.SetSnapshot(directResultUrl, BuildRaceResultSnapshot(directResultUrl, "11R", "2026年1月5日 中山"));
+        browser.SetLinks(directResultUrl, [new TestPageLink(requestedResultUrl, "1レース結果")]);
+        browser.SetSnapshot(requestedResultUrl, BuildRaceResultSnapshot(requestedResultUrl, "1R", "2026年1月5日 中山"));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 17));
+
+        var page = await navigator.ToRaceResultAsync(new RaceId(date, RaceCourse.Nakayama, 1));
+
+        Assert.AreEqual(new RaceId(date, RaceCourse.Nakayama, 1), ((JraRaceResultPage)page).RaceId);
+        CollectionAssert.Contains(browser.NavigatedUrls, requestedResultUrl);
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultAsync_HistoricalDirectResultForAnotherRaceWithoutRequestedLink_ThrowsIdentityMismatch()
+    {
+        const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct-no-link/";
+        const string searchResultUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct-no-link/result/";
+        const string directResultUrl = "https://www.jra.go.jp/keiba/sample/search/wrong-direct-no-link/result/11/";
+        var date = new DateOnly(2026, 1, 5);
+
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetClickDestination("過去レース結果検索", searchUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(
+            searchResultUrl,
+            BuildMeetingSelectionSnapshot(searchResultUrl, "1月5日 1回中山2日"));
+        browser.SetClickDestination("1回中山2日", directResultUrl);
+        browser.SetSnapshot(directResultUrl, BuildRaceResultSnapshot(directResultUrl, "11R", "2026年1月5日 中山"));
+
+        var navigator = new JraNavigator(
+            browser,
+            CreateReader(browser),
+            logger: null,
+            today: () => new DateOnly(2026, 9, 17));
+
+        var exception = await Assert.ThrowsExactlyAsync<JraRaceIdentityMismatchException>(() =>
+            navigator.ToRaceResultAsync(new RaceId(date, RaceCourse.Nakayama, 1)));
+
+        StringAssert.Contains(exception.Message, new RaceId(date, RaceCourse.Nakayama, 1).ToString());
+        Assert.AreEqual(new RaceId(date, RaceCourse.Nakayama, 11).ToString(), exception.RawValue);
+    }
+
+    [TestMethod]
     public async Task ToRaceResultListAsync_CurrentPastPeriod_OutOfDisplayedRange_FallsBackToHistoricalRoute()
     {
         const string searchUrl = "https://www.jra.go.jp/keiba/sample/search/current-past-list/";

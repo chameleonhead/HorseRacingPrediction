@@ -86,6 +86,15 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                     throw new JraCollectionException(
                         $"レース一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}");
                 }
+                if (resultRoute && page is not JraRaceListPage && page is not JraRaceResultPage)
+                {
+                    return new(
+                        CollectionAttemptResult.UnexpectedPage,
+                        "RaceResultListPageKindMismatch",
+                        $"レース結果一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}",
+                        FinalUrl: ToAbsoluteUri(page.Url),
+                        PageIdentification: $"Expected=RaceListOrRaceResult; Actual={page.Kind}; Resource={task.Resource.Id}");
+                }
                 if (page is JraRaceListPage parsedList
                     && (parsedList.Date != date || parsedList.Course != course))
                 {
@@ -163,6 +172,9 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
     }
 
     private bool IsFutureJst(DateOnly date) => date > TodayJst();
+
+    private static Uri? ToAbsoluteUri(string value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
 
     private DateOnly TodayJst()
     {

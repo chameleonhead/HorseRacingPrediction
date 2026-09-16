@@ -717,13 +717,14 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     private async Task WaitForPageSettledAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await TryWaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        await TryWaitForLoadStateAsync(LoadState.DOMContentLoaded, cancellationToken);
         try
         {
             await _page.WaitForFunctionAsync(
-                """() => document.readyState !== 'loading' && !!document.body && (document.body.innerText.trim().length > 0 || !!document.querySelector('table,form,a[href],[role=main],main,article'))""",
-                null,
-                new PageWaitForFunctionOptions { Timeout = 3_000 });
+                    """() => document.readyState !== 'loading' && !!document.body && (document.body.innerText.trim().length > 0 || !!document.querySelector('table,form,a[href],[role=main],main,article'))""",
+                    null,
+                    new PageWaitForFunctionOptions { Timeout = 3_000 })
+                .WaitAsync(cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -772,14 +773,15 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private async Task TryWaitForLoadStateAsync(LoadState state)
+    private async Task TryWaitForLoadStateAsync(LoadState state, CancellationToken cancellationToken)
     {
         try
         {
             await _page.WaitForLoadStateAsync(state, new PageWaitForLoadStateOptions
             {
                 Timeout = 3_000,
-            });
+            })
+                .WaitAsync(cancellationToken);
         }
         catch (TimeoutException)
         {

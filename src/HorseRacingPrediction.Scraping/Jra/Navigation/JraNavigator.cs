@@ -916,12 +916,48 @@ public sealed partial class JraNavigator
                 race.Course,
                 cancellationToken);
 
-        // 重賞レースは開催選択ボタンから直接「レース結果」ページへリンクされている
-        // ため、そのページが既に「レース結果」であればそのまま返す。そうでなければ
-        // 「レース結果 レース選択」ページとみなし、対象R番号のリンクを辿る。
-        if (afterMeeting.Kind == JraPageKind.RaceResult)
+        // 重賞レースは開催選択ボタンから直接「レース結果」ページへリンクされることがある。
+        // 要求レースと一致すればそのまま返し、別レースなら現在ページのレース番号リンクから
+        // 要求レースへの到達を試みる。一覧ページの場合も対象R番号のリンクを辿る。
+        if (afterMeeting is JraRaceResultPage directResult)
         {
-            return afterMeeting;
+            if (directResult.RaceId == race)
+            {
+                return directResult;
+            }
+
+            if (!await TryNavigateRaceNumberLinkAsync(
+                    race.Number,
+                    JraNavigationLinks.RaceResult,
+                    cancellationToken))
+            {
+                throw new JraRaceIdentityMismatchException(
+                    JraPageKind.RaceResult,
+                    directResult.Url,
+                    race.ToString(),
+                    directResult.RaceId.ToString());
+            }
+
+            var requestedPage = await _pageReader.ReadAsync(cancellationToken);
+            if (requestedPage is not JraRaceResultPage requestedResult)
+            {
+                throw new JraPageKindMismatchException(
+                    JraPageKind.RaceResult,
+                    requestedPage.Kind,
+                    requestedPage.Url,
+                    race.ToString());
+            }
+
+            if (requestedResult.RaceId != race)
+            {
+                throw new JraRaceIdentityMismatchException(
+                    JraPageKind.RaceResult,
+                    requestedResult.Url,
+                    race.ToString(),
+                    requestedResult.RaceId.ToString());
+            }
+
+            return requestedResult;
         }
 
         await NavigateRaceNumberLinkAsync(
