@@ -25,6 +25,8 @@
 
 2026-09-14にこの提案を実装した。新規レース収集の正規形は `ResourceType.Race / race-detail` であり、直近5日はRaceCardと公式RaceResultの両方が成功した場合だけCurrent、それ以前は公式RaceResultの成功でCurrentになる。発走前・未公開・未確定は次回確認時刻を持つretryable availabilityとして扱う。
 
+直近5日という判定はRaceCardを試す優先条件であり、公式画面の保持期間を保証しない。RaceCardが`OutOfDisplayedRange`になった場合に結果導線へ動的に切り替え、期待される掲載終了を全体停止へ波及させない変更案と状態分類は[Dynamic race source fallback](changes/20260917_dynamic-race-source-fallback/README.md)を正本とする。グローバルなterminal failure停止規則は弱めず、承認前は現行動作を維持する。
+
 既存 `RaceCard` / `RaceResult` collection dataは、管理APIのpreview/applyでcanonical Raceへ統合する。Request/Task/Attempt IDを維持し、Request/Taskの移行元definition/revisionをprovenance列へ保存する。StateとLocationを統合し、不完全な直近Raceには同一transaction内で `DefinitionChanged` request/task/outboxを作成してから旧definitionを無効化する。空DB initializerも同じcanonical Raceとcompleteness policyを使用する。
 
 ## Invariants
