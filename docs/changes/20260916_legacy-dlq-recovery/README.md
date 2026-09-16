@@ -120,6 +120,7 @@
 - 2026-09-16: Recovery run `35089206558` は4通知を既存active task 4件へ関連付けてpipelineを再開し、main queue in-flight 1件まで進んだ。その先頭Race `20260419:Nakayama:9` は移行前Taskのためcourse/number metadataを持たず、canonical Resource IDは完全なのにhandlerが `InvalidOperationException` で停止した。Resource ID fallbackは日付一致・3要素・有効course/numberを必須とし、不整合IDは引き続き拒否する。
 - 2026-09-16: legacy Race fallbackのCollectorテスト227件が成功した。運用workflowはDLQ障害とこの完全一致エラーを別mode・別confirmationで選択し、他の `InvalidOperationException` を一括Recoveryしない。
 - 2026-09-16: 修正配備 `35089733859` と限定Recovery `35091049705` が成功した。元Envelopeがvisibility timeout中のため、同ResourceにはReady・Attempt 0のtask `0b040607-...` が1件残った。exact resource、status Ready、Attempt 0、件数1をすべて確認するgateで未開始taskだけをcancelし、再オープンした同一障害を新v2 taskへ置換する。
+- 2026-09-16: 置換run `35091728924` は未開始task 1件をcancelし、Recovery task 1件を新規作成した。旧SQS messageが90分visibility中で本番の `MaxInFlightEnvelopes=1` を占有するため、Lambda concurrency 1は維持したままAPI dispatcher上限だけを一時的に2へ変更し、新v2 Envelopeの配送後に1へ戻す。
 
 ## Deviations and follow-up
 

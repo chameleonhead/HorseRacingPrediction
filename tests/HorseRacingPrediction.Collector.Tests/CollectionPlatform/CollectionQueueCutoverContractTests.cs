@@ -88,6 +88,9 @@ public sealed class CollectionQueueCutoverContractTests
             ".errorMessage == \"Race course and number attributes are required.\"");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "test \"$(jq '.items[0].attemptCount'");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/tasks/${stuck_task}/cancel");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "ENABLE-RECOVERY-CAPACITY");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "RESTORE-CAPACITY");
+        StringAssert.Contains(DlqDiagnosticsWorkflow, "CollectionQueue__MaxInFlightEnvelopes=$target");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
         StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
         Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));
