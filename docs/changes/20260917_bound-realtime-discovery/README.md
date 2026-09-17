@@ -55,6 +55,26 @@
   直ちに反映し、Running task は現在の attempt を中断せず、保存した昇格値を次回 retry/dispatch から使用する。
 - 低い新規依頼による降格は行わず、既存の高優先意図を保持する。
 
+## Resource propagation inventory
+
+| Producer | Child resource | Current lane behavior | Can recursively expand? | Decision |
+| --- | --- | --- | --- | --- |
+| 3-hour planning bucket | Race discovery | Realtime/High | No. Each bucket is a durable logical resource and ordinary registration deduplicates it. | No change. |
+| Race discovery | Race detail and odds | Current/future race is Realtime; result-route/backfill is Background. | No unbounded recursion. The same canonical Race ID is deduplicated. | No change. |
+| Weekend race detail | Horse/Jockey/Trainer/Owner profiles | Realtime/High for the finite entries on that race card. | Only Horse expands further; the other three handlers do not create child collection tasks. | Keep direct-subject behavior in this scope. |
+| Historical race detail | Horse/Jockey/Trainer/Owner profiles | Normal/Low because the race date is outside the weekend window. | Only Horse expands further. With this proposal its history becomes Background. | Covered by AC2 and AC5-AC7. |
+| Horse profile | Historical races | Realtime/High while `weekendPriorityUntil` is active; otherwise Background. | Yes. One horse can create many Race tasks, and recent Race tasks can discover more Horse tasks. | Change to one-step lane demotion. |
+| Horse profile | Sire, dam, trainer profiles | Background with reduced numeric priority, depth limit 3, and ancestor-cycle prevention. | Horse ancestors can expand, but every generation remains Background and is depth-bounded. | No change; preserve with AC3/AC8. |
+| Jockey/Trainer profile | None | No child collection requests. | No. | No change. |
+| Owner identity | None | No child collection requests. | No. | No change. |
+| Odds/result availability retry | Same Resource/Definition | Existing task receives a bounded next time. | No new child task graph. | No change. |
+| Scheduled refresh | Same Resource/Definition | Policy-selected lane; only when no active task exists. | No new resource. | No change. |
+| Manual/recovery/backfill | Explicit target or finite date range | Operator-selected or Background. | Finite and explicitly initiated. | No change; high-priority merge applies consistently. |
+
+The inventory therefore identifies no second recursive Realtime producer requiring the same demotion rule. The direct weekend
+Jockey/Trainer/Owner volume is bounded by race-card entries and should be evaluated separately only if production evidence shows
+that even this finite set is too large; changing it is not required to stop the current horse-history expansion.
+
 ## Decisions
 
 1. 履歴 lane は一段だけ下げ、Realtime を推移的に増殖させない。
@@ -84,6 +104,7 @@
 | AC8 | 配分ロジック、失敗時の安全停止、ブラウザー取得、手動再取得は変更されない。 | T2, T3 | regression と diff review | Not started |
 | AC9 | デプロイ後、新しく作られる horse-history task に Realtime がなく、Normal/Background へ振り分けられる。 | T4 | 本番ジョブ画面と時系列件数 | Not started |
 | AC10 | デプロイ後、Realtime 待機数が horse-history の派生だけで増加し続けない。 | T4 | 本番の lane/definition 推移 | Not started |
+| AC11 | 全 collection task producer の棚卸しで、競走馬履歴以外に再帰的な Realtime 生成経路がなく、有限・同一対象再実行・Background 深度制限のいずれかであることを確認できる。 | T2, T3 | producer inventory、CodeGraph、repository-wide search | Not started |
 
 ## Delivery plan
 
@@ -106,7 +127,7 @@
 
 - **Design and task-split review — 2026-09-17, reviewer: Main.** ユーザーの修正指示に基づき、主体種別ごとの複雑な
   伝播グラフ案を取り下げた。起点 horse task の lane を一段下げる単純規則と、同一 task では高い既存・新規値を採用する
-  規則へ限定した。AC1-AC10 は生成、永続化、配送前マージ、Running 境界、本番収束を網羅する。共有 store 契約を含むため
+  規則へ限定した。AC1-AC11 は生成、永続化、配送前マージ、Running 境界、全 producer の境界、本番収束を網羅する。共有 store 契約を含むため
   Main が直列で担当する。
 - **Pre-implementation review:** approval pending.
 - **Checkpoint review:** pending.
@@ -117,6 +138,10 @@
 - 2026-09-17: CodeGraph とソース確認で、現行 `DiscoverHorseRaceHistoryAsync` は `weekendPriorityUntil` が有効なら
   起点 lane に関係なく全履歴を Realtime/High にすることを確認した。
 - 2026-09-17: 現行の普通依頼重複排除は既存 task をそのまま返し、新規依頼が高くても lane/priority を昇格しないことを確認した。
+- 2026-09-17: `RequestAsync`、`RequestManyAsync`、`CollectionRequestBulkItem` の全 production caller と scheduler、
+  manual/recovery/backfill entry point を棚卸しした。Horse profile 以外に子 collection task を再帰生成する subject handler はない。
+  Race discovery は canonical Race ID、planning は3時間 bucket、schedule/retry は同一 Resource/Definition、backfill は有限期間であり、
+  同じ Realtime 連鎖対策を追加する必要はない。
 
 ## Deviations and follow-up
 
