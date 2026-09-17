@@ -6,7 +6,8 @@ namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public interface ICollectionRequestSink
 {
-    Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
+    Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+        CollectionReason reason,
         CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
         IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken);
 
@@ -26,7 +27,8 @@ public interface ICollectionRequestSink
                 continue;
             }
 
-            await RequestAsync(new(resourceType, item.Provider, item.ResourceId), new(item.DefinitionId), reason,
+            await RequestAsync(new(resourceType, item.Provider, item.ResourceId), new(item.DefinitionId),
+                item.RequestedRevision, reason,
                 lane, item.Priority,
                 Uri.TryCreate(item.ExplicitUrl, UriKind.Absolute, out var explicitUrl) ? explicitUrl : null,
                 item.EffectiveDate.Value, item.Attributes ?? new Dictionary<string, string>(), cancellationToken);
@@ -49,7 +51,8 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
                ?? throw new InvalidOperationException("Collection request batch response was empty.");
     }
 
-    public async Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
+    public async Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+        CollectionReason reason,
         CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
         IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
     {
@@ -59,7 +62,7 @@ public sealed class CollectionRequestApiClient(HttpClient client) : ICollectionR
             resource.Provider,
             ResourceId = resource.Id,
             DefinitionId = definition.Value,
-            RequestedRevision = 1,
+            RequestedRevision = requestedRevision,
             Reason = reason,
             Lane = lane,
             Priority = priority,

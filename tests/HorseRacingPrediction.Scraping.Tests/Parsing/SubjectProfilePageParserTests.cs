@@ -10,6 +10,19 @@ namespace HorseRacingPrediction.Scraping.Tests.Parsing;
 public sealed class SubjectProfilePageParserTests
 {
     [TestMethod]
+    public void IdentityNames_RemoveOfficialRegistrationMarksAndAffiliations()
+    {
+        Assert.AreEqual("アジアエクスプレス",
+            SubjectProfilePageParser.CanonicalizeDisplayName("Horse", "マルガイ アジアエクスプレス"));
+        Assert.AreEqual("パレスラン",
+            SubjectProfilePageParser.CanonicalizeDisplayName("Horse", "マルチ パレスラン"));
+        Assert.AreEqual("尾形 和幸",
+            SubjectProfilePageParser.CanonicalizeDisplayName("Trainer", "尾形 和幸（美浦）"));
+        Assert.AreEqual(SubjectProfilePageParser.NormalizeIdentityName("Trainer", "尾形 和幸"),
+            SubjectProfilePageParser.NormalizeIdentityName("Trainer", "尾形 和幸(美浦)"));
+    }
+
+    [TestMethod]
     public void Parse_PreservesAllSeventyRacesAndExcludesNonJraHistory()
     {
         var rows = Enumerable.Range(1, 70).Select(i => (IReadOnlyList<string>)new[] { "2026年9月6日", "中山", "レース" + i }).ToArray();
@@ -46,5 +59,19 @@ public sealed class SubjectProfilePageParserTests
         Assert.AreEqual(JraSubjectIdentificationFailureKind.SourceIdentityMismatch, sourceMismatch.Kind);
         Assert.AreEqual("https://www.jra.go.jp/expected", sourceMismatch.RequestedUrl);
         Assert.AreEqual(snapshot.Url, sourceMismatch.FinalUrl);
+    }
+
+    [TestMethod]
+    public void Parse_HorseHeadingRemovesRegistrationMarkBeforeValidation()
+    {
+        var snapshot = new TestPageSnapshot("https://www.jra.go.jp/horse", "競走馬情報", [new(
+            "プロフィール", "", [], [],
+            [new(["項目", "値"], [["生年月日", "2011年2月9日"]])],
+            ["競走馬情報 マルガイ アジアエクスプレス（USA）"])]);
+
+        var page = SubjectProfilePageParser.Parse(snapshot, "Horse");
+
+        Assert.AreEqual("アジアエクスプレス", page.Profile.Name);
+        SubjectProfilePageParser.Validate(page, new("Horse", "アジアエクスプレス"));
     }
 }

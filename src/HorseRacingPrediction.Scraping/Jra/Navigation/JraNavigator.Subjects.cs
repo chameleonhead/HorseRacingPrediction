@@ -28,9 +28,12 @@ public sealed partial class JraNavigator
             var group = beforeLinks.FirstOrDefault(l => l.Title.Trim() == initial);
             if (group is not null) await _browser.ClickLinkForSnapshotAsync(group, cancellationToken);
             var links = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
-            var matches = links.Where(l => SubjectProfilePageParser.Normalize(Regex.Replace(l.Title, "^(美浦|栗東)\\s*", ""))
-                == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
-            if (matches.Length > 1) throw new JraCollectionException($"同定不能: 同名の{label}が複数見つかりました。");
+            var matches = links.Where(l => SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType,
+                    Regex.Replace(l.Title, "^(美浦|栗東)\\s*", ""))
+                == SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType, subject.Name)).ToArray();
+            if (matches.Length > 1) throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.MultipleCandidates, subject.SubjectType, subject.Name,
+                candidates: matches.Select(x => new JraSubjectIdentificationCandidate(x.Title, x.Url)));
             if (matches.Length == 0) continue;
             await _browser.ClickLinkForSnapshotAsync(matches[0], cancellationToken);
             var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
@@ -42,8 +45,13 @@ public sealed partial class JraNavigator
         await _browser.ClickForSnapshotAsync("騎手・調教師", cancellationToken);
         await _browser.ClickForSnapshotAsync(isJockey ? "引退騎手一覧" : "引退調教師一覧", cancellationToken);
         var retiredLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
-        var retiredMatches = retiredLinks.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name)).ToArray();
-        if (retiredMatches.Length != 1) throw new JraCollectionException($"同定不能: 公開名簿から{label}を一意に確認できませんでした。");
+        var retiredMatches = retiredLinks.Where(l => SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType, l.Title)
+            == SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType, subject.Name)).ToArray();
+        if (retiredMatches.Length != 1) throw new JraSubjectIdentificationException(
+            retiredMatches.Length == 0 ? JraSubjectIdentificationFailureKind.NoCandidate
+                : JraSubjectIdentificationFailureKind.MultipleCandidates,
+            subject.SubjectType, subject.Name,
+            candidates: retiredMatches.Select(x => new JraSubjectIdentificationCandidate(x.Title, x.Url)));
         await _browser.ClickLinkForSnapshotAsync(retiredMatches[0], cancellationToken);
         var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
         SubjectProfilePageParser.Validate(result, subject);

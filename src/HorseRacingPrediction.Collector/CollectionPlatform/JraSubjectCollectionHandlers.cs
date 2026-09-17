@@ -12,7 +12,8 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
-    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile = true);
+    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile = true,
+    int CurrentRevision = 2);
 
 public static class JraSubjectCollectionDefinitions
 {
@@ -21,7 +22,7 @@ public static class JraSubjectCollectionDefinitions
         new(ResourceType.Horse, new("horse-profile"), "Horse", "horse"),
         new(ResourceType.Jockey, new("jockey-profile"), "Jockey", "jockey"),
         new(ResourceType.Trainer, new("trainer-profile"), "Trainer", "trainer"),
-        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false),
+        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false, 1),
     ];
 
     public static JraSubjectCollectionDefinition For(ResourceType type) =>
@@ -137,6 +138,12 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (JraSubjectIdentificationException ex)
             {
+                if (descriptor.ResourceType is ResourceType.Jockey or ResourceType.Trainer
+                    && ex.Kind == JraSubjectIdentificationFailureKind.NoCandidate)
+                    return new(CollectionAttemptResult.NotApplicable, "SubjectNotInProviderDirectory", ex.Message,
+                        ToUri(ex.RequestedUrl), ToUri(ex.FinalUrl),
+                        PageIdentification: $"SubjectIdentification:{ex.Kind}",
+                        LocationOutcomes: locationOutcomes);
                 return IdentificationFailure(task, ex, locationOutcomes);
             }
             catch (JraCollectionException ex) when (ex.Message.Contains("同定不能", StringComparison.Ordinal))
@@ -217,8 +224,8 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var references = new (ResourceType Type, string? Name)[]
         {
             (ResourceType.Trainer, Field(profile.Fields, "調教師", "調教師名")),
-            (ResourceType.Horse, Field(profile.Fields, "父", "父馬")),
-            (ResourceType.Horse, NormalizeDam(Field(profile.Fields, "母", "母馬"))),
+            (ResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "父", "父馬"))),
+            (ResourceType.Horse, NormalizePedigreeReference(Field(profile.Fields, "母", "母馬"))),
         };
         foreach (var reference in references.Where(x => !string.IsNullOrWhiteSpace(x.Name))
                      .Select(x => (x.Type, Name: x.Name!.Trim())).Distinct())
@@ -233,7 +240,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 _ => DeterministicIdGenerator.BuildEntityId(child.IdPrefix, reference.Name),
             };
             if (ancestors.Contains(childId)) continue;
-            await sink.RequestAsync(new(reference.Type, "JRA", childId), child.Definition,
+            await sink.RequestAsync(new(reference.Type, "JRA", childId), child.Definition, child.CurrentRevision,
                 CollectionReason.Discovery, CollectionLane.Background, Math.Max(10, task.Priority - 10), null,
                 task.EffectiveDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
                 new Dictionary<string, string>
@@ -248,24 +255,24 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
     }
 
-    private static string? NormalizeDam(string? value)
+    private static string? NormalizePedigreeReference(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var marker = value.IndexOfAny(['(', '（']);
-        return (marker < 0 ? value : value[..marker]).Trim();
+        var normalized = (marker < 0 ? value : value[..marker]).Trim();
+        return normalized.EndsWith("産駒", StringComparison.Ordinal) ? null : normalized;
     }
 
     private async Task DiscoverHorseRaceHistoryAsync(LeasedCollectionTask task, JraSubjectPage firstPage,
         HorseRacingPrediction.Scraping.Jra.Navigation.IJraNavigator navigator,
         ICollectionRequestSink sink, CancellationToken cancellationToken)
     {
-        var jst = TimeZoneInfo.FindSystemTimeZoneById(
-            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
         var priorityUntil = ParseDate(task.Attributes.GetValueOrDefault("weekendPriorityUntil"));
-        var prioritized = priorityUntil is not null && priorityUntil >= today;
-        var lane = prioritized ? CollectionLane.Realtime : CollectionLane.Background;
-        var priority = prioritized ? (int)CollectionPriority.High : (int)CollectionPriority.Background;
+        var (lane, priority) = task.Lane switch
+        {
+            CollectionLane.Realtime => (CollectionLane.Normal, (int)CollectionPriority.Low),
+            _ => (CollectionLane.Background, (int)CollectionPriority.Background),
+        };
         var seenPages = new HashSet<string>(StringComparer.Ordinal);
         JraSubjectPage? page = firstPage;
         var pageIndex = 0;

@@ -72,6 +72,7 @@ public enum CollectionAttemptResult
     UnexpectedPage,
     AccessLimited,
     Cancelled,
+    NotApplicable,
 }
 
 public enum CollectionLane { Realtime, Normal, Background }

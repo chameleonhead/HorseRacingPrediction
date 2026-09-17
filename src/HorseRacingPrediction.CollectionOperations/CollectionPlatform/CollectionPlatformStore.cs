@@ -229,6 +229,20 @@ public sealed class CollectionPlatformStore
 
         if (IsOrdinaryRegistration(reason))
         {
+            var activeTask = await (from activeRow in db.ActiveTasks
+                                    join taskRow in db.Tasks on activeRow.TaskId equals taskRow.TaskId
+                                    where activeRow.ResourcePk == resourceEntity.ResourcePk
+                                          && activeRow.DefinitionId == definition.Value
+                                    select taskRow).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (activeTask is not null)
+            {
+                activeTask.Lane = StrongerLane(activeTask.Lane, lane);
+                activeTask.Priority = Math.Max(activeTask.Priority, priority);
+                activeTask.UpdatedAt = requestedAt;
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return new(activeTask.RequestId, activeTask.TaskId, false);
+            }
+
             var existingTask = await db.Tasks.AsNoTracking()
                 .Where(x => x.ResourcePk == resourceEntity.ResourcePk
                     && x.DefinitionId == definition.Value
@@ -333,6 +347,9 @@ public sealed class CollectionPlatformStore
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new CollectionRequestReceipt(request.RequestId, task.TaskId, true);
     }
+
+    private static CollectionLane StrongerLane(CollectionLane left, CollectionLane right) =>
+        (CollectionLane)Math.Min((int)left, (int)right);
 
     private static bool IsOrdinaryRegistration(CollectionReason reason)
         => reason is CollectionReason.Initial or CollectionReason.Backfill or CollectionReason.Discovery;
@@ -732,6 +749,17 @@ public sealed class CollectionPlatformStore
                         state.Status = CollectionStateStatus.Pending;
                     }
                 }
+            }
+            else if (completion.Result == CollectionAttemptResult.NotApplicable)
+            {
+                task.Status = CollectionTaskStatus.Succeeded;
+                task.FinishedAt = now;
+                state.LastCollectedAt = now;
+                state.NextCollectionAt = null;
+                state.Status = CollectionStateStatus.Unavailable;
+                db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
+                await ResolveFailuresAsync(db, task.ResourcePk, task.DefinitionId, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
             else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
             {

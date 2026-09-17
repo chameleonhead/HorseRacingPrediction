@@ -30,7 +30,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             CoursesByDate = target => target == date ? [RaceCourse.Tokyo] : [],
         };
         var sink = new RecordingSink();
-        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.Race, "JRA", "discovery:2026091200"), new("race-discovery"), 1,
             CollectionReason.Discovery, CollectionLane.Realtime, 70, "lease", DateTimeOffset.UtcNow.AddMinutes(5),
@@ -146,7 +147,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         { CoursesByDate = target => target == date ? [RaceCourse.Sapporo] : [] };
         var sink = new RecordingSink();
 
-        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
+        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
         Assert.AreEqual(new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde1001123456780720260912/25"),
@@ -171,7 +173,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         { CoursesByDate = target => target == date ? [RaceCourse.Sapporo] : [] };
         var sink = new RecordingSink();
 
-        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink)
+        await new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
 
         Assert.IsNull(sink.Requests.Single(x => x.Resource.Type == ResourceType.Race).ExplicitUrl);
@@ -455,7 +458,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
             CollectionLane Lane, int Priority, DateOnly EffectiveDate,
             IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
         { get; } = [];
-        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {

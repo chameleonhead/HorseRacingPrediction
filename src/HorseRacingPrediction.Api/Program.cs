@@ -212,12 +212,20 @@ var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore
 await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 1, "Initial", false);
+await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 2,
+    "Normalize registration marks and reject invalid pedigree references", true);
+await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 2,
+    "Classify subjects outside the JRA directory", true);
+await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 2,
+    "Normalize affiliation suffixes and classify directory misses", true);
 await collectionPlatform.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner, 1, "Initial", false);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
+var subjectRecovery = await SubjectIdentificationAutoRecovery.RunOnceAsync(collectionPlatform, app.Logger);
+app.Logger.LogInformation(
+    "Subject identification recovery examined {Examined}, created {Recovered}, reused {Reused}, suppressed {Suppressed}, skipped {Skipped}, failed {Failed}.",
+    subjectRecovery.Examined, subjectRecovery.Recovered, subjectRecovery.Reused,
+    subjectRecovery.Suppressed, subjectRecovery.Skipped, subjectRecovery.Failed);
 // 起動直後はホストサービス（Dispatcher/Watchdog）自体も初回サイクルを即時実行するが、
 // 直前にクラッシュ復旧中の初期化（ResumeIfNeeded）がメンテナンス中の場合は、その完了を
 // 待たずに終わってしまい、完了後に誰も再トリガーしないまま次の定期実行（最大数時間後）

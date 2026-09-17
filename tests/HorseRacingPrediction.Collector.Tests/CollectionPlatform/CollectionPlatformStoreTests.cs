@@ -401,6 +401,68 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task OrdinaryRegistration_MergesActiveTaskToStrongerLaneAndPriorityWithoutChangingTaskId()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            CollectionLane.Background, (int)CollectionPriority.Background);
+
+        var promoted = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery,
+            now.AddMinutes(1), CollectionLane.Normal, (int)CollectionPriority.High);
+        var lower = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery,
+            now.AddMinutes(2), CollectionLane.Background, (int)CollectionPriority.Low);
+
+        Assert.IsFalse(promoted.CreatedTask);
+        Assert.AreEqual(first.TaskId, promoted.TaskId);
+        Assert.AreEqual(first.TaskId, lower.TaskId);
+        var task = (await store.GetTasksAsync()).Single();
+        Assert.AreEqual(CollectionLane.Normal, task.Lane);
+        Assert.AreEqual((int)CollectionPriority.High, task.Priority);
+    }
+
+    [TestMethod]
+    public async Task OrdinaryRegistration_PromotesRunningTaskWithoutStartingAnotherAttempt()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            CollectionLane.Background, (int)CollectionPriority.Background);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        var promoted = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery,
+            now.AddMinutes(1), CollectionLane.Realtime, (int)CollectionPriority.Critical);
+
+        Assert.AreEqual(first.TaskId, promoted.TaskId);
+        var task = (await store.GetTasksAsync()).Single();
+        Assert.AreEqual(CollectionTaskStatus.Running, task.Status);
+        Assert.AreEqual(CollectionLane.Realtime, task.Lane);
+        Assert.AreEqual((int)CollectionPriority.Critical, task.Priority);
+        Assert.HasCount(1, (await store.GetResourceDetailAsync(Horse, HorseProfile))!.Attempts);
+    }
+
+    [TestMethod]
+    public async Task NotApplicableCompletesUnavailableWithoutActionableFailure()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken,
+            now.AddMinutes(1), new(CollectionAttemptResult.NotApplicable,
+                "SubjectNotInProviderDirectory", "提供元の公開名簿対象外です。")));
+
+        var task = (await store.GetTasksAsync()).Single();
+        Assert.AreEqual(CollectionTaskStatus.Succeeded, task.Status);
+        Assert.AreEqual(CollectionStateStatus.Unavailable,
+            (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+        Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddHours(1), 10));
+    }
+
+    [TestMethod]
     public async Task SearchLatestTasks_GroupsBeforeFilteringAndCountsTheLatestState()
     {
         var store = await CreateStoreAsync();

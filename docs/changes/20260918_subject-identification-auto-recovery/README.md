@@ -1,6 +1,6 @@
 # 主体識別エラーを分類し安全に自動復旧する
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Created: 2026-09-18
 - Updated: 2026-09-18
@@ -9,8 +9,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 承認後に名前正規化、参照抽出、対象外終端、revision単位の復旧plannerを実装する。 |
-| Verification | Not started | parser、handler、store、recovery、回帰テストと本番件数推移を確認する。 |
+| Code | Complete | 名前正規化、誤参照抑止、非該当終端、revision単位の冪等復旧を実装した。 |
+| Verification | Complete | parser、handler、store、recovery、UI guidance、API/Collector回帰を通過した。 |
 | Deployment/operation | Not started | デプロイ後に既存245件を分類し、安全対象だけを一度再投入して解消結果を確認する。 |
 
 ## Context
@@ -115,16 +115,16 @@ active failure notificationの分類単位で集計されるため、群件数�
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | `マル外 アジアエクスプレス`等の表示装飾付き見出しを、source identityを維持したまま正規名の同一馬として取得できる。 | T1,T3 | parser/handler fixtures | Not started |
-| AC2 | `尾形 和幸（美浦）`等は所属を氏名から分離し、正規名で調教師名簿を照合できる。 | T1,T3 | race-card/navigation tests | Not started |
-| AC3 | `パネットーネ 産駒`等の説明文字列、空名、リンクのない血統表示から新しいHorse taskが作られない。 | T1,T3 | subject discovery tests | Not started |
-| AC4 | JRA対象外と確認できる騎手等は業務データを残したままプロフィール非該当で終端し、要対応と再試行を増やさない。 | T2,T3 | handler/store integration tests | Not started |
-| AC5 | 複数候補、同一性根拠不足、名前欠落は自動選択・自動Recoveryされず、具体的理由で要対応に残る。 | T2,T3 | planner safety tests | Not started |
-| AC6 | 見出し欠落等の構造エラーは同revisionで繰り返されず、新revision配備までは1件の要対応として残る。 | T2,T3 | retry/revision integration tests | Not started |
-| AC7 | 新revisionが既知原因を修正した場合だけ、対象failureごとに最大1件のRecoveryが作成または既存task再利用される。 | T2,T3 | idempotency/concurrency tests | Not started |
-| AC8 | plannerの中断・再起動・重複起動・部分失敗でも、成功済み補正とRecovery taskが重複しない。 | T2,T3 | restart/concurrency tests | Not started |
-| AC9 | `/jobs` で原因分類、件数、実行した自動処置、残る手動対応を確認でき、直らない群に一括再取得を勧めない。 | T4 | component/browser tests | Not started |
-| AC10 | 既存のtimeout・アクセス制限backoff、全体停止、安全な手動Recovery、identity厳密照合は維持される。 | T3,T5 | regression/diff review | Not started |
+| AC1 | `マル外 アジアエクスプレス`等の表示装飾付き見出しを、source identityを維持したまま正規名の同一馬として取得できる。 | T1,T3 | parser/handler fixtures | Verified |
+| AC2 | `尾形 和幸（美浦）`等は所属を氏名から分離し、正規名で調教師名簿を照合できる。 | T1,T3 | race-card/navigation tests | Verified |
+| AC3 | `パネットーネ 産駒`等の説明文字列、空名、リンクのない血統表示から新しいHorse taskが作られない。 | T1,T3 | subject discovery tests | Verified |
+| AC4 | JRA対象外と確認できる騎手等は業務データを残したままプロフィール非該当で終端し、要対応と再試行を増やさない。 | T2,T3 | handler/store integration tests | Verified |
+| AC5 | 複数候補、同一性根拠不足、名前欠落は自動選択・自動Recoveryされず、具体的理由で要対応に残る。 | T2,T3 | planner safety tests | Verified |
+| AC6 | 見出し欠落等の構造エラーは同revisionで繰り返されず、新revision配備までは1件の要対応として残る。 | T2,T3 | retry/revision integration tests | Verified |
+| AC7 | 新revisionが既知原因を修正した場合だけ、対象failureごとに最大1件のRecoveryが作成または既存task再利用される。 | T2,T3 | idempotency/concurrency tests | Verified |
+| AC8 | plannerの中断・再起動・重複起動・部分失敗でも、成功済み補正とRecovery taskが重複しない。 | T2,T3 | restart/concurrency tests | Verified |
+| AC9 | `/jobs` で原因分類、件数、実行した自動処置、残る手動対応を確認でき、直らない群に一括再取得を勧めない。 | T4 | component/browser tests | Verified |
+| AC10 | 既存のtimeout・アクセス制限backoff、全体停止、安全な手動Recovery、identity厳密照合は維持される。 | T3,T5 | regression/diff review | Verified |
 | AC11 | 本番既存245件をpreviewし、分類別件数と実行予定を確認してから安全対象だけをapplyできる。 | T5 | production preview/apply evidence | Not started |
 | AC12 | apply後、補正可能群と対象外群は要対応から減り、曖昧・名前欠落・構造修正待ちだけが理由付きで残る。 | T5 | production `/jobs` before/after | Not started |
 
@@ -140,19 +140,19 @@ active failure notificationの分類単位で集計されるため、群件数�
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 主体名正規化と血統参照の誤生成防止を実装する。 | Main | Lead tier | Approval | Scraping parser、Collector discovery | parser/handler tests | AC1-AC3のfixtures | Proposed |
-| T2 | 結果分類、revision gate、冪等plannerを実装する。 | Main | Lead tier | T1 | Collection operations、API repair | integration tests | AC4-AC8の証拠 | Proposed |
-| T3 | 失敗・再起動・並行実行を含む回帰テストを追加する。 | Main | Lead/review tier | T1,T2 | tests | focused/full tests | AC1-AC8,AC10 | Proposed |
-| T4 | `/jobs` の原因別表示と操作制御を実装する。 | Main | Lead tier | T2 | API Web/API contracts | component/browser tests | AC9 | Proposed |
-| T5 | 正本同期、セルフレビュー、CI、デプロイ、preview/apply、本番確認を行う。 | Main | Lead/review tier | T1-T4 | docs、deployment/operation | repository/production gates | AC10-AC12 | Proposed |
+| T1 | 主体名正規化と血統参照の誤生成防止を実装する。 | Main | Lead tier | Approval | Scraping parser、Collector discovery | parser/handler tests | AC1-AC3のfixtures | Verified |
+| T2 | 結果分類、revision gate、冪等plannerを実装する。 | Main | Lead tier | T1 | Collection operations、API repair | integration tests | AC4-AC8の証拠 | Verified |
+| T3 | 失敗・再起動・並行実行を含む回帰テストを追加する。 | Main | Lead/review tier | T1,T2 | tests | focused/full tests | AC1-AC8,AC10 | Verified |
+| T4 | `/jobs` の原因別表示と操作制御を実装する。 | Main | Lead tier | T2 | API Web/API contracts | component/browser tests | AC9 | Verified |
+| T5 | 正本同期、セルフレビュー、CI、デプロイ、preview/apply、本番確認を行う。 | Main | Lead/review tier | T1-T4 | docs、deployment/operation | repository/production gates | AC10-AC12 | Dependent |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-18, reviewer: Main.** 本番4障害群、代表対象、既存subject handler、
   repair preview/executeを照合した。入力不具合、対象外、曖昧、構造エラーを同じretry policyへ入れない設計とし、
   AC1-AC12を生成、解析、状態遷移、冪等復旧、UI、本番applyへ追跡した。identityと既存データ補正が密接に関係するためMainが直列で担当する。
-- **Pre-implementation review:** approval pending.
-- **Checkpoint review:** pending.
+- **Pre-implementation review — 2026-09-18, reviewer: Main.** ユーザー承認と優先順位変更の同時実施を確認。T1をRunnable、T2-T5を依存順にDependentとした。誤生成抑止を先に接続し、結果分類・冪等復旧・UI・本番applyの順で進める。主体同一性を証明できない場合は自動補正せずエスカレーションする。
+- **Checkpoint review — 2026-09-18, reviewer: Main.** revision 2への昇格、既知装飾のcanonical化、`～産駒`抑止、JRA名簿外の非該当終端、曖昧対象の安全停止を確認した。復旧はfailure/target revisionの安定キーで冪等化し、個別失敗を隔離してAPI起動と後続対象を継続する。
 - **Final review:** pending.
 
 ## Verification record
@@ -164,6 +164,8 @@ active failure notificationの分類単位で集計されるため、群件数�
   previewしてRecoveryを作れるが、修正revisionによる自動適格判定と対象外終端を持たないことを確認した。
 - 2026-09-18: `DiscoverHorseReferencesAsync` が父母フィールド文字列をリンク根拠なしでHorseとして登録し、
   `SubjectProfilePageParser` がプロフィール見出しの登録区分を除去しないことを確認した。
+- 2026-09-18: parser、subject handler、store、revision-gated recovery、UI guidanceのfocused testsを追加し、API 228件、Collector 247件、CI相当Releaseテストをすべて通過した。
+- 2026-09-18: セルフレビューで個別復旧失敗がAPI起動全体を止める経路を検出し、対象単位の例外隔離、失敗件数記録、後続継続を追加した。
 
 ## Deviations and follow-up
 

@@ -6,6 +6,7 @@ using HorseRacingPrediction.Scraping.Jra.Pages;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
+using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Options;
 using HorseRacingPrediction.Contracts;
 
@@ -139,7 +140,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         {
                             var oddsAttributes = new Dictionary<string, string>(attributes)
                             { ["startTime"] = start.ToString("HH:mm") };
-                            await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"),
+                            await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
                                 CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
                                 oddsAttributes, cancellationToken).ConfigureAwait(false);
                         }
@@ -149,7 +150,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                         detailUrl = JraRaceDetailUrl.Validate(
                             CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
                     }
-                    await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"),
+                    await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 1,
                         task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                             ? task.Reason
                             : CollectionReason.Discovery,
@@ -429,7 +430,9 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 (ResourceType.Owner, entry.OwnerName, null),
             })
             .Where(x => !string.IsNullOrWhiteSpace(x.Name))
-            .Select(x => (x.Type, Name: x.Name!.Trim(), x.SourceIdentity))
+            .Select(x => (x.Type, Name: SubjectProfilePageParser.CanonicalizeDisplayName(
+                x.Type.ToString(), x.Name!), x.SourceIdentity))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Name))
             .Distinct();
         // TaskId fences response-loss retries without changing ordinary Discovery deduplication policy.
         var batchId = $"race-subjects:{task.TaskId:N}:{requestedByRaceId}";
@@ -455,7 +458,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 attributes["sourceUrl"] = sourceUrl;
             }
             return new CollectionRequestBulkItem(
-                $"{subject.Type}:{id}", subject.Type.ToString(), "JRA", id, descriptor.Definition.Value, 1,
+                $"{subject.Type}:{id}", subject.Type.ToString(), "JRA", id, descriptor.Definition.Value,
+                descriptor.CurrentRevision,
                 CollectionReason.Discovery.ToString(), lane.ToString(), priority,
                 JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)?.AbsoluteUri,
                 effectiveDate, attributes);

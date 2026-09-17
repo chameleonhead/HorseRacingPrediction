@@ -188,7 +188,8 @@ public sealed class JraDirectCollectionHandlerTests
             },
         };
         var workflow = new FakeJraRaceCardCollectionWorkflow();
-        var handler = new JraRaceCardCollectionHandler(sessions, _ => workflow);
+        var handler = new JraRaceCardCollectionHandler(sessions, _ => workflow,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)));
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
             new(ResourceType.RaceCard, "JRA", "20260912:Tokyo:11"), new("race-card"), 1,
             CollectionReason.ManualRefresh, CollectionLane.Realtime, 100, "lease",
@@ -222,7 +223,8 @@ public sealed class JraDirectCollectionHandlerTests
             },
         };
         var workflow = new FakeJraRaceCardCollectionWorkflow();
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, wrong, valid), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -251,7 +253,8 @@ public sealed class JraDirectCollectionHandlerTests
             },
         };
         var workflow = new FakeJraRaceCardCollectionWorkflow();
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, first, second), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -285,7 +288,8 @@ public sealed class JraDirectCollectionHandlerTests
         };
         var workflow = new FakeJraRaceCardCollectionWorkflow();
 
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, first, second),
                 CancellationToken.None);
 
@@ -308,7 +312,8 @@ public sealed class JraDirectCollectionHandlerTests
             },
         };
         var workflow = new FakeJraRaceCardCollectionWorkflow();
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date, invalid), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
@@ -354,7 +359,8 @@ public sealed class JraDirectCollectionHandlerTests
                 "20260912:Tokyo:11"),
         };
 
-        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow)
+        var result = await new JraRaceCardCollectionHandler(sessions, _ => workflow,
+                timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.Result);

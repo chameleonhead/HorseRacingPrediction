@@ -195,7 +195,7 @@ public sealed class JraSubjectCollectionHandlerTests
         var cardUrl = new Uri("https://example.test/card/11");
         const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106188/45";
         var card = new JraRaceCardPage(cardUrl.AbsoluteUri, race, "test", new(15, 30),
-            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師", "テスト馬主",
+            [new RaceEntry(1, "テスト馬", 1, "テスト騎手", 55, "テスト調教師（美浦）", "テスト馬主",
                 HorseSourceIdentity: horseUrl)]);
         var sessions = new FakeJraSessionFactory
         {
@@ -229,6 +229,8 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.AreEqual(horseUrl, horseRequest.Attributes["sourceIdentity"]);
         Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("テスト馬", horseUrl),
             horseRequest.Resource.Id);
+        Assert.AreEqual("テスト調教師", requests.Requests.Single(x => x.Resource.Type == ResourceType.Trainer)
+            .Attributes["name"]);
         var profileSink = new RecordingProfileSink();
         foreach (var request in requests.Requests)
         {
@@ -291,7 +293,7 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task WeekendHorseProfile_DiscoversPastRaceResultsAsRealtimeUntilRaceDay()
+    public async Task RealtimeHorseProfile_DemotesPastRaceResultsToNormalLow()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
         var historyDate = new DateOnly(2026, 9, 6);
@@ -304,20 +306,22 @@ public sealed class JraSubjectCollectionHandlerTests
             new FixedTimeProvider(new(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)));
 
         await handler.CollectAsync(SubjectTask("horse-a", "A",
-            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }), CancellationToken.None);
+            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }, CollectionLane.Realtime), CancellationToken.None);
 
         var request = requests.Requests.Single();
         Assert.AreEqual(ResourceType.Race, request.Resource.Type);
         Assert.AreEqual(new CollectionDefinitionId("race-detail"), request.Definition);
         Assert.AreEqual("20260906:Nakayama:5", request.Resource.Id);
-        Assert.AreEqual(CollectionLane.Realtime, request.Lane);
-        Assert.AreEqual((int)CollectionPriority.High, request.Priority);
+        Assert.AreEqual(CollectionLane.Normal, request.Lane);
+        Assert.AreEqual((int)CollectionPriority.Low, request.Priority);
         Assert.AreEqual(historyDate, request.EffectiveDate);
         Assert.AreEqual(historyUrl, request.ExplicitUrl);
     }
 
     [TestMethod]
-    public async Task WeekendHorseProfile_AfterRaceDay_DemotesPastRaceResultsToBackground()
+    [DataRow(CollectionLane.Normal)]
+    [DataRow(CollectionLane.Background)]
+    public async Task NonRealtimeHorseProfile_DemotesPastRaceResultsToBackground(CollectionLane sourceLane)
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
         var historyDate = new DateOnly(2026, 9, 6);
@@ -330,11 +334,56 @@ public sealed class JraSubjectCollectionHandlerTests
             new FixedTimeProvider(new(2026, 9, 20, 0, 0, 0, TimeSpan.Zero)));
 
         await handler.CollectAsync(SubjectTask("horse-a", "A",
-            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }), CancellationToken.None);
+            new Dictionary<string, string> { ["weekendPriorityUntil"] = "2026-09-19" }, sourceLane), CancellationToken.None);
 
         var request = requests.Requests.Single();
         Assert.AreEqual(CollectionLane.Background, request.Lane);
         Assert.AreEqual((int)CollectionPriority.Background, request.Priority);
+    }
+
+    [TestMethod]
+    public async Task HorseProfile_DoesNotCreateHorseForPedigreeDescriptionEndingInOffspring()
+    {
+        var requests = new RecordingRequestSink();
+        var sessions = SubjectSessions("A", new Dictionary<string, string>
+        {
+            ["生年月日"] = "2020年1月1日",
+            ["父"] = "パネットーネ 産駒",
+            ["母"] = "フロンサック 産駒",
+        });
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions,
+            new RecordingProfileSink(), requests);
+
+        var completion = await handler.CollectAsync(SubjectTask("horse-a", "A",
+            new Dictionary<string, string>()), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsFalse(requests.Requests.Any(x => x.Resource.Type == ResourceType.Horse));
+    }
+
+    [TestMethod]
+    public async Task JockeyAbsentFromJraDirectoryCompletesAsNotApplicable()
+    {
+        var navigator = new FakeJraNavigator
+        {
+            SubjectFactory = identity => throw new JraSubjectIdentificationException(
+                JraSubjectIdentificationFailureKind.NoCandidate, identity.SubjectType, identity.Name),
+        };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Jockey),
+            new FakeJraSessionFactory { ConfigureNavigator = () => navigator },
+            new RecordingProfileSink());
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Jockey, "JRA", "jockey-local"), new("jockey-profile"), 1,
+            CollectionReason.Discovery, CollectionLane.Normal, 30, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), null,
+            new Dictionary<string, string> { ["name"] = "小谷 哲平" });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
+        Assert.AreEqual("SubjectNotInProviderDirectory", completion.ErrorCode);
     }
 
     [TestMethod]
@@ -359,8 +408,8 @@ public sealed class JraSubjectCollectionHandlerTests
         Assert.HasCount(70, requests.BatchRequests.Single().Items);
         Assert.HasCount(70, requests.BatchRequests.Single().Items.Select(x => x.ItemKey)
             .Distinct(StringComparer.Ordinal).ToArray());
-        Assert.IsTrue(requests.BatchRequests.Single().Items.All(item => item.Lane == "Realtime"
-            && item.Priority == (int)CollectionPriority.High
+        Assert.IsTrue(requests.BatchRequests.Single().Items.All(item => item.Lane == "Background"
+            && item.Priority == (int)CollectionPriority.Background
             && item.RequestedRevision == 1
             && item.DefinitionId == "race-detail"
             && item.EffectiveDate.HasValue
@@ -682,11 +731,11 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     private static LeasedCollectionTask SubjectTask(string id, string name,
-        IReadOnlyDictionary<string, string> inherited)
+        IReadOnlyDictionary<string, string> inherited, CollectionLane lane = CollectionLane.Background)
     {
         var attributes = new Dictionary<string, string>(inherited) { ["name"] = name };
         return new(Guid.NewGuid(), Guid.NewGuid(), new(ResourceType.Horse, "JRA", id),
-            new("horse-profile"), 1, CollectionReason.Discovery, CollectionLane.Background, 30, "lease",
+            new("horse-profile"), 1, CollectionReason.Discovery, lane, 30, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 12), attributes);
     }
 
@@ -714,7 +763,8 @@ public sealed class JraSubjectCollectionHandlerTests
                     new CollectionRequestBulkOutcome(item.ItemKey, "Created", Guid.NewGuid(), Guid.NewGuid(), true))
                     .ToArray()));
         }
-        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, CollectionReason reason,
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {

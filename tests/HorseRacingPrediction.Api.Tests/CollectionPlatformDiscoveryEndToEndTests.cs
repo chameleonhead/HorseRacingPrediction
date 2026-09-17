@@ -84,7 +84,9 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var sessions = new DiscoverySessionFactory(date, race);
             var schedule = new ScheduleWorkflow(date);
             var requestSink = new CollectionRequestApiClient(client);
-            var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, requestSink);
+            var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, requestSink,
+                timeProvider: new FixedTimeProvider(
+                    new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)));
             var worker = new CollectionPlatformWorkerClient(client,
                 new CollectionDefinitionHandlerRegistry([handler]));
 
