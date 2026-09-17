@@ -33,10 +33,18 @@ public sealed class CollectionDefinitionHandlerRegistry
 public sealed record FairCollectionCandidate(Guid TaskId, CollectionLane Lane, int Priority,
     DateTimeOffset AvailableAt, DateTimeOffset CreatedAt);
 
+public sealed record CollectionLaneDispatchState(int ConsecutiveRealtime, CollectionLane? LastNonRealtimeLane)
+{
+    public static CollectionLaneDispatchState Empty { get; } = new(0, null);
+
+    public CollectionLaneDispatchState Advance(CollectionLane lane) => lane == CollectionLane.Realtime
+        ? this with { ConsecutiveRealtime = ConsecutiveRealtime + 1 }
+        : new(0, lane);
+}
+
 public sealed class CollectionLaneAllocator
 {
     private readonly int _maxConsecutiveRealtime;
-    private int _consecutiveRealtime;
 
     public CollectionLaneAllocator(int maxConsecutiveRealtime = 4)
     {
@@ -45,31 +53,37 @@ public sealed class CollectionLaneAllocator
     }
 
     public FairCollectionCandidate? Select(IEnumerable<FairCollectionCandidate> candidates, DateTimeOffset now,
-        int? consecutiveRealtime = null)
+        CollectionLaneDispatchState? dispatchState = null)
     {
-        if (consecutiveRealtime.HasValue) _consecutiveRealtime = Math.Max(0, consecutiveRealtime.Value);
+        var state = dispatchState ?? CollectionLaneDispatchState.Empty;
         var due = candidates.Where(x => x.AvailableAt <= now).ToList();
         if (due.Count == 0) return null;
-        var hasBackground = due.Any(x => x.Lane == CollectionLane.Background);
-        CollectionLane? forcedLane = _consecutiveRealtime >= _maxConsecutiveRealtime && hasBackground
-            ? CollectionLane.Background : null;
-        var selected = due.Where(x => forcedLane is null || x.Lane == forcedLane)
-            .OrderBy(x => LaneRank(x.Lane))
-            .ThenByDescending(x => EffectivePriority(x, now))
+        var selectedLane = SelectLane(due, state);
+        return due.Where(x => x.Lane == selectedLane)
+            .OrderByDescending(x => EffectivePriority(x, now))
             .ThenBy(x => x.AvailableAt)
             .ThenBy(x => x.CreatedAt)
+            .ThenBy(x => x.TaskId)
             .First();
-        _consecutiveRealtime = selected.Lane == CollectionLane.Realtime ? _consecutiveRealtime + 1 : 0;
-        return selected;
     }
 
-    private static int LaneRank(CollectionLane lane) => lane switch
+    private CollectionLane SelectLane(IReadOnlyCollection<FairCollectionCandidate> due,
+        CollectionLaneDispatchState state)
     {
-        CollectionLane.Realtime => 0,
-        CollectionLane.Normal => 1,
-        CollectionLane.Background => 2,
-        _ => 3,
-    };
+        var hasRealtime = due.Any(x => x.Lane == CollectionLane.Realtime);
+        var hasNormal = due.Any(x => x.Lane == CollectionLane.Normal);
+        var hasBackground = due.Any(x => x.Lane == CollectionLane.Background);
+        if (hasRealtime && (state.ConsecutiveRealtime < _maxConsecutiveRealtime
+                            || (!hasNormal && !hasBackground)))
+            return CollectionLane.Realtime;
+        if (hasNormal && hasBackground)
+            return state.LastNonRealtimeLane == CollectionLane.Normal
+                ? CollectionLane.Background
+                : CollectionLane.Normal;
+        if (hasNormal) return CollectionLane.Normal;
+        if (hasBackground) return CollectionLane.Background;
+        return CollectionLane.Realtime;
+    }
 
     private static int EffectivePriority(FairCollectionCandidate candidate, DateTimeOffset now)
     {

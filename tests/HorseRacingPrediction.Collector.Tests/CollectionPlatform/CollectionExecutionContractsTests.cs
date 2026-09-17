@@ -41,10 +41,71 @@ public sealed class CollectionExecutionContractsTests
         var allocator = new CollectionLaneAllocator(maxConsecutiveRealtime: 2);
         var background = new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Background, 10, now, now);
         FairCollectionCandidate Realtime() => new(Guid.NewGuid(), CollectionLane.Realtime, 100, now, now);
+        var state = CollectionLaneDispatchState.Empty;
 
-        Assert.AreEqual(CollectionLane.Realtime, allocator.Select([background, Realtime()], now)!.Lane);
-        Assert.AreEqual(CollectionLane.Realtime, allocator.Select([background, Realtime()], now)!.Lane);
-        Assert.AreEqual(CollectionLane.Background, allocator.Select([background, Realtime()], now)!.Lane);
+        for (var index = 0; index < 2; index++)
+        {
+            var selected = allocator.Select([background, Realtime()], now, state)!;
+            Assert.AreEqual(CollectionLane.Realtime, selected.Lane);
+            state = state.Advance(selected.Lane);
+        }
+        Assert.AreEqual(CollectionLane.Background, allocator.Select([background, Realtime()], now, state)!.Lane);
+    }
+
+    [TestMethod]
+    public void Allocator_AllLanesDue_UsesEightyTenTenRotation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var allocator = new CollectionLaneAllocator();
+        var candidates = new[]
+        {
+            new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Realtime, 100, now, now),
+            new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Normal, 50, now, now),
+            new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Background, 10, now, now),
+        };
+        var state = CollectionLaneDispatchState.Empty;
+        var actual = new List<CollectionLane>();
+
+        for (var index = 0; index < 10; index++)
+        {
+            var selected = allocator.Select(candidates, now, state)!;
+            actual.Add(selected.Lane);
+            state = state.Advance(selected.Lane);
+        }
+
+        CollectionAssert.AreEqual(new[]
+        {
+            CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Realtime,
+            CollectionLane.Normal,
+            CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Realtime, CollectionLane.Realtime,
+            CollectionLane.Background,
+        }, actual);
+    }
+
+    [TestMethod]
+    public void Allocator_WithoutRealtime_AlternatesNormalAndBackground()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var allocator = new CollectionLaneAllocator();
+        var candidates = new[]
+        {
+            new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Normal, 10, now, now),
+            new FairCollectionCandidate(Guid.NewGuid(), CollectionLane.Background, 100, now, now),
+        };
+        var state = CollectionLaneDispatchState.Empty;
+        var actual = new List<CollectionLane>();
+
+        for (var index = 0; index < 4; index++)
+        {
+            var selected = allocator.Select(candidates, now, state)!;
+            actual.Add(selected.Lane);
+            state = state.Advance(selected.Lane);
+        }
+
+        CollectionAssert.AreEqual(new[]
+        {
+            CollectionLane.Normal, CollectionLane.Background, CollectionLane.Normal, CollectionLane.Background,
+        }, actual);
     }
 
     [TestMethod]

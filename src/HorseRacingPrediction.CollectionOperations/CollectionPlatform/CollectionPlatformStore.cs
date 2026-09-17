@@ -1260,7 +1260,8 @@ public sealed class CollectionPlatformStore
                 JsonSerializer.Deserialize<Dictionary<string, string>>(x.resource.AttributesJson) ?? [])).ToList();
     }
 
-    public async Task<int> GetConsecutiveRealtimeDispatchCountAsync(CancellationToken cancellationToken = default)
+    public async Task<CollectionLaneDispatchState> GetLaneDispatchStateAsync(
+        CancellationToken cancellationToken = default)
     {
         await using var db = CreateDbContext();
         var rows = await (from outbox in db.DispatchOutbox.AsNoTracking()
@@ -1271,13 +1272,17 @@ public sealed class CollectionPlatformStore
         var envelopes = rows.GroupBy(x => x.EnvelopeId!.Value)
             .Select(x => new { DispatchedAt = x.Max(y => y.DispatchedAt)!.Value, Lane = x.First().Lane })
             .OrderByDescending(x => x.DispatchedAt);
-        var count = 0;
+        var consecutiveRealtime = 0;
+        CollectionLane? lastNonRealtimeLane = null;
         foreach (var envelope in envelopes)
         {
-            if (envelope.Lane != CollectionLane.Realtime) break;
-            count++;
+            if (lastNonRealtimeLane is null && envelope.Lane != CollectionLane.Realtime)
+                lastNonRealtimeLane = envelope.Lane;
+            if (envelope.Lane == CollectionLane.Realtime && lastNonRealtimeLane is null)
+                consecutiveRealtime++;
+            if (lastNonRealtimeLane is not null) break;
         }
-        return count;
+        return new CollectionLaneDispatchState(consecutiveRealtime, lastNonRealtimeLane);
     }
 
     public async Task<bool> TryReserveDispatchesWithinCapacityAsync(IReadOnlyCollection<Guid> outboxIds,

@@ -46,11 +46,11 @@ public sealed class CollectionPlatformOutboxDispatcher(
         var remaining = (await store.GetPendingDispatchesAsync(now, int.MaxValue, cancellationToken).ConfigureAwait(false))
             .Where(x => x.Definition.Value == "race-odds" || _options.AggregationDelayMilliseconds <= 0
                 || x.CreatedAt <= now.AddMilliseconds(-_options.AggregationDelayMilliseconds)).ToList();
+        var dispatchState = await store.GetLaneDispatchStateAsync(cancellationToken).ConfigureAwait(false);
         for (var sent = 0; sent < Math.Max(1, _options.DispatchBatchSize) && remaining.Count > 0; sent++)
         {
             var selected = _allocator.Select(remaining.Select(x => new FairCollectionCandidate(
-                    x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now,
-                await store.GetConsecutiveRealtimeDispatchCountAsync(cancellationToken).ConfigureAwait(false));
+                    x.Notification.TaskId, x.Lane, x.Priority, x.AvailableAt, x.CreatedAt)), now, dispatchState);
             if (selected is null) break;
             var item = remaining.Single(x => x.Notification.TaskId == selected.TaskId);
             var compatibility = CreateCompatibility(item);
@@ -94,6 +94,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
                 else
                     await store.MarkWakeSentAsync(envelopeId, reservationToken, receipt.MessageId, cancellationToken)
                         .ConfigureAwait(false);
+                dispatchState = dispatchState.Advance(selected.Lane);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
