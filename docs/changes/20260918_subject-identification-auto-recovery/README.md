@@ -169,8 +169,10 @@ active failure notificationの分類単位で集計されるため、群件数�
 - 2026-09-18: GitHub Actions `app-ci` / `app-deploy` が成功し、API/Lambdaを本番反映した。`/jobs` の要対応Resourceは245件から97件へ減少。残る競走馬障害には候補なし・複数候補の具体的理由と「同じ抽出仕様で再取得しない」案内が表示された。
 - 2026-09-18: 本番セルフレビューで同定不能の障害詳細に一括再取得操作が残る不整合を検出した。`SubjectNotIdentified`、提供元非該当、見出し欠落では一括・選択再取得と選択欄を表示しないよう修正し、component testで通常障害の復旧操作を維持しつつ確認した。
 - 2026-09-18: commit `c351097` の再デプロイ成功後、本番の競走馬 `SubjectNotIdentified` 障害詳細で一括再取得、選択再取得、選択欄が表示されず、修正待ちの説明だけが表示されることを確認した。
+- 2026-09-18: 配備後、所属付き調教師名から探索した正しいプロフィールが保存APIの旧単純名比較で400となり、pipelineを安全停止させる接続漏れを確認した。Collectorと保存APIが同じ共通normalizerを使用するよう修正し、所属付き保存名とcanonicalプロフィール名のAPI統合テストを追加した。
+- 2026-09-18: 接続漏れ修正後、API focused 4件、Collector 247件、Scraping 259件、API 230件（1 skip）が成功し、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` も成功した。AC1、AC2、AC10を実transport境界まで再検証した。
 
 ## Deviations and follow-up
 
-- 現時点では調査・設計のみで、再取得、failure close、データ統合、production code変更は行っていない。
+- 初期設計時点では本番データの直接統合を行わない方針とし、実装後も同一性を証明できない対象は手動確認待ちとして維持した。
 - 競走馬履歴laneの提案は `20260917_bound-realtime-discovery` で独立して管理する。

@@ -54,6 +54,31 @@ public sealed class SubjectCollectionTests
         response.EnsureSuccessStatusCode();
         Assert.AreEqual(raceId, (await response.Content.ReadFromJsonAsync<RaceIdentity>())!.RaceId);
     }
+
+    [TestMethod]
+    public async Task TrainerProfile_AcceptsCanonicalNameWhenStoredNameContainsAffiliation()
+    {
+        var (app, http) = await TestApplicationFactory.CreateAsync();
+        await using var disposable = app;
+        using var client = http;
+        client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var trainerId = "trainer-" + Guid.NewGuid();
+        (await client.PostAsJsonAsync("/api/trainers",
+            new RegisterTrainerRequest("黒岩 陽一（美浦）", "黒岩陽一", "美浦", trainerId)))
+            .EnsureSuccessStatusCode();
+        var profile = new JraSubjectProfileDto("Trainer", "黒岩 陽一",
+            "Trainer:黒岩陽一:1980-03-27", "https://www.jra.go.jp/JRADB/accessC.html",
+            new() { ["生年月日"] = "1980年3月27日", ["所属"] = "美浦" }, DateTimeOffset.UtcNow);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/admin/subjects/Trainer/{trainerId}/profile", profile);
+
+        response.EnsureSuccessStatusCode();
+        var saved = await client.GetFromJsonAsync<JraSubjectProfileDto>(
+            $"/api/admin/subjects/Trainer/{trainerId}/profile");
+        Assert.IsNotNull(saved);
+        Assert.AreEqual("黒岩 陽一", saved.Name);
+    }
     [TestMethod]
     public async Task HistoryResult_AttachesNewRaceToOriginHorseAndRejectsWrongHorse()
     {

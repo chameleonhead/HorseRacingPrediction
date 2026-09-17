@@ -40,7 +40,9 @@ public static class SubjectCollectionEndpointExtensions
         {
             var subject = await ResolveAsync(kind, subjectId, queries, token);
             if (subject is null) return Results.NotFound();
-            if (request.Fields is null || request.SubjectType != subject.SubjectType || Normalize(request.Name) != Normalize(subject.Name)
+            if (request.Fields is null || request.SubjectType != subject.SubjectType
+                || JraSubjectNameNormalizer.NormalizeIdentityName(request.SubjectType, request.Name)
+                != JraSubjectNameNormalizer.NormalizeIdentityName(subject.SubjectType, subject.Name)
                 || !Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var source) || source.Scheme != "https" || source.Host != "www.jra.go.jp"
                 || string.IsNullOrWhiteSpace(request.SourceIdentity)) return Results.BadRequest(new[] { "プロフィールの識別情報が不正です。" });
             if (!DateOnly.TryParseExact(request.Fields.GetValueOrDefault("生年月日"), "yyyy年M月d日", CultureInfo.InvariantCulture, DateTimeStyles.None, out var birth)

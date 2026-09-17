@@ -12,18 +12,11 @@ namespace HorseRacingPrediction.Scraping.Jra.Parsing;
 public static class SubjectProfilePageParser
 {
     public static string Normalize(string value) => Regex.Replace(value.Normalize(NormalizationForm.FormKC), @"\s+", "");
-    public static string CanonicalizeDisplayName(string subjectType, string value)
-    {
-        var canonical = value.Normalize(NormalizationForm.FormKC).Trim();
-        if (subjectType is "Trainer" or "Jockey")
-            canonical = Regex.Replace(canonical, @"\s*[（(][^）)]*[）)]\s*$", "").Trim();
-        if (subjectType == "Horse")
-            canonical = Regex.Replace(canonical, @"^(?:マルガイ|マルチ|マル外|マル地)\s*", "").Trim();
-        return canonical;
-    }
+    public static string CanonicalizeDisplayName(string subjectType, string value) =>
+        JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, value);
 
     public static string NormalizeIdentityName(string subjectType, string value) =>
-        Normalize(CanonicalizeDisplayName(subjectType, value));
+        JraSubjectNameNormalizer.NormalizeIdentityName(subjectType, value);
 
     public static JraSubjectPage Parse(SemanticPageSnapshot source, string subjectType)
     {
