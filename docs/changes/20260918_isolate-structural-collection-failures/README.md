@@ -1,6 +1,6 @@
 # プロフィール画面を確実に待機し、既存エラーを安全に復旧する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-18
 - Updated: 2026-09-18
@@ -9,9 +9,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 承認後、対象画面の成立待ち、完了通知の影響範囲、主体プロフィール構造エラーの隔離を実装する。 |
-| Verification | Not started | 同一URL内の画面遷移、handler、transport、store、pipeline alert、復旧plannerの回帰テストと本番確認が必要。 |
-| Deployment/operation | Not started | 配備後に全要対応を分類し、安全な対象だけをrevision recoveryして、他の収集が停止しないことを確認する。 |
+| Code | Verified | 意味的な画面成立待ち、型付きfailure impact、対象単位隔離、revision 3 recoveryを実装した。 |
+| Verification | Verified | build、format、CI、focused/full tests、JRA実サイトE2E、本番画面を確認した。 |
+| Deployment/operation | Verified | run 35285889932でAPI/Lambdaを配備し、旧構造障害群5件の消滅とpipeline継続を確認した。 |
 
 ## Context
 
@@ -95,10 +95,10 @@
 | AC4 | AC3の失敗後もpipelineは稼働状態を保ち、別のdue taskを取得・実行できる。 | T2,T3 | store/worker integration test | Verified |
 | AC5 | 未分類の恒久障害と内容検証失敗は従来どおりpipelineを停止し、alertを1回発行する。 | T3 | pipeline alert regression tests | Verified |
 | AC6 | failure impactはCollector→complete API→storeへ型付きで伝搬し、欠落時は安全停止側へ倒れる。 | T2,T3 | serialization/API integration tests | Verified |
-| AC7 | 復旧previewが現在の全要対応を、構造待機5件、名前欠落4件、競走馬の候補なし・複数候補・提供元対象外・誤生成参照に分類し、各対象の処置理由を表示する。 | T4 | planner tests and production preview evidence | Connected |
-| AC8 | applyは構造待機5件と一意性を証明できる対象だけを一度処置し、名前欠落や複数候補を推測で再試行・結合せず、既存の高い優先度とlaneを維持する。 | T4 | idempotency/priority tests and production apply evidence | Connected |
-| AC9 | `/jobs`では残存する要対応理由を確認でき、全体収集は処理中または待機消化中で、復旧による重複taskがない。 | T5 | component test and production browser verification | Not started |
-| AC10 | 配備後、見出し欠落5件を修正版revisionで復旧し、同じ構造エラーが再発しても他の収集が停止しない。 | T5 | production `/jobs` before/after evidence | Not started |
+| AC7 | 復旧previewが現在の全要対応を、構造待機5件、名前欠落4件、競走馬の候補なし・複数候補・提供元対象外・誤生成参照に分類し、各対象の処置理由を表示する。 | T4 | planner tests and production preview evidence | Verified |
+| AC8 | applyは構造待機5件と一意性を証明できる対象だけを一度処置し、名前欠落や複数候補を推測で再試行・結合せず、既存の高い優先度とlaneを維持する。 | T4 | idempotency/priority tests and production apply evidence | Verified |
+| AC9 | `/jobs`では残存する要対応理由を確認でき、全体収集は処理中または待機消化中で、復旧による重複taskがない。 | T5 | component test and production browser verification | Verified |
+| AC10 | 配備後、見出し欠落5件を修正版revisionで復旧し、同じ構造エラーが再発しても他の収集が停止しない。 | T5 | production `/jobs` before/after evidence | Verified |
 
 ## Delivery plan
 
@@ -115,15 +115,15 @@
 | T1 | 同一URL遷移でも成立する主体プロフィール固有の待機を実装する。 | Main | Lead tier | Approval | browser abstraction、JRA navigator、tests | navigation/timeout tests | AC1,AC2 | Verified |
 | T2 | failure impact契約と主体構造エラー分類を実装する。 | Main | Lead tier | T1 | CollectionOperations、Collector、API transport | focused contract/handler tests | AC3,AC6 | Verified |
 | T3 | store停止判定と安全停止回帰を実装・検証する。 | Main | Lead tier | T2 | CollectionPlatformStore、API tests | store/alert integration tests | AC4-AC6 | Verified |
-| T4 | 要対応全件のpreview分類と安全な冪等applyを実装・検証する。 | Main | Lead tier | T1-T3 | recovery planner、operation API/tests | classification/idempotency/priority tests | AC7,AC8 | In progress |
-| T5 | UI回帰、CI、配備、対象revision recovery、本番継続確認を行う。 | Main | Lead/review tier | T1-T4 | UI tests、docs、production operation | component/full tests、deployment runs、production evidence | AC9,AC10 | Dependent |
+| T4 | 要対応全件のpreview分類と安全な冪等applyを実装・検証する。 | Main | Lead tier | T1-T3 | recovery planner、operation API/tests | classification/idempotency/priority tests | AC7,AC8 | Verified |
+| T5 | UI回帰、CI、配備、対象revision recovery、本番継続確認を行う。 | Main | Lead/review tier | T1-T4 | UI tests、docs、production operation | component/full tests、deployment runs、production evidence | AC9,AC10 | Verified |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-18, reviewer: Main.** 本番停止理由、JRA上の実プロフィール、同一URL遷移、browser待機、parser、handler例外境界、worker classifier、store停止判定、全要対応群を追跡した。意味的な画面成立待ち、明示的impact、安全側の復旧分類によりAC1-AC10と既存安全停止を両立する。browser・契約・store・本番復旧が直列依存するためMainが担当する。
 - **Pre-implementation review — 2026-09-18, reviewer: Main.** ユーザーがAC1-AC10を承認した。T1をRunnable、T2-T5を依存順のDependentとした。画面待機、型付き契約、store、復旧planner、配備が共有契約と本番状態へ直列に影響するため、Lead tierのMainが書込ownerを保持する。委譲は調整コストと共有範囲が利益を上回るため行わない。
 - **Checkpoint review — 2026-09-18, reviewer: Main.** T1-T3を実装し、固定500ms待機を削除して意味的な成立条件へ置換した。隔離impactは既定を安全停止とし、handler→HTTP→storeを型付きで接続した。Collector 249件、API 231件が合格し、調教師の実サイトプロフィール取得も合格した。Scraping全体278件中、今回と無関係な実サイト馬主欠落2件のみ失敗した。T4はrevision 3、旧構造エラー選別、冪等request、元lane/priority維持まで接続済みで、本番preview/apply証跡待ち。
-- **Final review — 未実施。**
+- **Final review — 2026-09-18, reviewer: Main.** AC1-AC10を実装・テスト・本番経路へ追跡した。旧騎手構造障害群`02D78CBC10B10F67`と旧調教師構造障害群`FBF7553D84F38EFB`はいずれも本番で「見つかりません（再取得が開始され、要対応ではなくなった可能性）」となり、一覧から消滅した。pipelineは稼働中で別taskを処理している。残存群は競走馬同定不能と調教師名前欠落だけで、曖昧対象を自動結合していない。全taskはVerified、承認範囲に未完了なし。委譲なし、rework 1回（不足using追加）、利用量・費用は取得不能。
 
 ## Verification record
 
@@ -134,6 +134,8 @@
 - 2026-09-18 07:57 JST: 本番pipelineは稼働し、要対応98、処理中1、待機中4192、最近完了1570を確認した。障害群は競走馬同定不能112対象、調教師名前欠落4対象、騎手見出し欠落3対象、調教師見出し欠落2対象だった。要対応集計と障害群内対象数は集計単位が異なるため単純合計しない。
 - 2026-09-18: 競走馬群には公開検索の候補なしと同名の複数候補が混在し、調教師名前欠落群は全4件で主体名がないことを確認した。盲目的な一括再試行では解消せず、分類previewと一意性根拠に基づく処置が必要である。
 - 2026-09-18: `dotnet build HorseRacingPrediction.sln --no-restore` 成功（警告0、エラー0）。focused tests 6件、Collector tests 249件、API tests 231件、調教師実サイトE2E 1件が合格した。Scraping全体は276件合格、1件skip、既存の実サイト馬主名欠落2件が失敗し、今回変更経路とは独立している。
+- 2026-09-18: GitHub Actions `app-ci` run 35285889847と`app-deploy` run 35285889932が成功し、API、Collector Lambda、remote stackのhealth checkが完了した。
+- 2026-09-18 08:25 JST: `/jobs`で「すべて一時停止」操作が表示される稼働状態、処理中2、待機中4187、最近完了1576、要対応96を確認した。配備前の要対応98から2減少し、構造障害群5対象はすべて要対応一覧から消滅した。残存障害群は競走馬`SubjectNotIdentified` 113対象と調教師`SubjectNotIdentified` 4対象だけである。
 - 2026-09-18: 最初の復旧依頼でpipeline再開と進行確認だけを「復旧」と報告し、根本原因と恒久対策案を同じ作業内で提示しなかった。運用再開を完了条件と誤認したworkflow gapとして整理し、`.codex/skills/production-incident-recovery/SKILL.md`を追加した。以後は暫定復旧、根本原因、対策設計、実装、配備、本番検証を別々に追跡する。
 
 ## Deviations and follow-up
