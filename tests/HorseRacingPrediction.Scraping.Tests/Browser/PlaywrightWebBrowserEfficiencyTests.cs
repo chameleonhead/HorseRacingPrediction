@@ -192,6 +192,115 @@ public sealed class PlaywrightWebBrowserEfficiencyTests
     }
 
     [TestMethod]
+    public async Task SetFieldValueForSnapshotAsync_WaitsForDelayedVisibleField()
+    {
+        var path = WriteFixture("""
+            <main><h1>競走馬検索</h1><form id='search'></form></main>
+            <script>
+              setTimeout(() => {
+                const field = document.createElement('input');
+                field.name = 'iv_h_name';
+                document.getElementById('search').appendChild(field);
+              }, 200);
+            </script>
+            """);
+        try
+        {
+            var snapshotter = new CountingSnapshotter();
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(1),
+                _ => false,
+                snapshotter,
+                TimeSpan.FromSeconds(2));
+            await browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri);
+
+            await browser.SetFieldValueForSnapshotAsync("iv_h_name", "テストホース");
+            var forms = await browser.GetFormsAsync();
+
+            Assert.AreEqual("テストホース", forms.Single().Fields.Single().Value);
+            Assert.AreEqual(0, snapshotter.CaptureCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SetFieldValueForSnapshotAsync_VisibleFieldUsesImmediateFastPath()
+    {
+        var path = WriteFixture("<main><form><input name='iv_h_name'></form></main>");
+        try
+        {
+            var snapshotter = new CountingSnapshotter();
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(1),
+                _ => false,
+                snapshotter,
+                TimeSpan.FromMilliseconds(1));
+            await browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri);
+
+            await browser.SetFieldValueForSnapshotAsync("iv_h_name", "テストホース");
+
+            Assert.AreEqual(0, snapshotter.CaptureCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SetFieldValueForSnapshotAsync_MissingFieldRemainsStructuralFailure()
+    {
+        var path = WriteFixture("<main><h1>競走馬検索</h1><form></form></main>");
+        try
+        {
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(1),
+                _ => false,
+                fieldReadinessTimeout: TimeSpan.FromMilliseconds(100));
+            var url = new Uri(path).AbsoluteUri;
+            await browser.NavigateForSnapshotAsync(url);
+
+            var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                () => browser.SetFieldValueForSnapshotAsync("iv_h_name", "テストホース"));
+
+            StringAssert.Contains(exception.Message, "iv_h_name");
+            StringAssert.Contains(exception.Message, url);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task SetFieldValueForSnapshotAsync_ReadinessWaitHonorsCancellation()
+    {
+        var path = WriteFixture("<main><h1>競走馬検索</h1><form></form></main>");
+        try
+        {
+            await using var browser = await PlaywrightWebBrowser.CreateForTestingAsync(
+                TimeSpan.FromSeconds(1),
+                _ => false,
+                fieldReadinessTimeout: TimeSpan.FromSeconds(5));
+            await browser.NavigateForSnapshotAsync(new Uri(path).AbsoluteUri);
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
+            var startedAt = Stopwatch.GetTimestamp();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                () => browser.SetFieldValueForSnapshotAsync("iv_h_name", "テストホース", cancellation.Token));
+
+            Assert.IsLessThan(TimeSpan.FromSeconds(2), Stopwatch.GetElapsedTime(startedAt));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
     public async Task GetLinksAsync_OneHundredLinks_IsAtLeastEightyPercentFasterThanLocatorLoop()
     {
         const int count = 100;

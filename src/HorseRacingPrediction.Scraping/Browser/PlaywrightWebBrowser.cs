@@ -18,6 +18,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 {
     private const string DefaultSearchBaseUrl = "https://duckduckgo.com/?q=";
     private static readonly TimeSpan DefaultCalendarReadinessTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultFieldReadinessTimeout = TimeSpan.FromSeconds(10);
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
     private readonly IPlaywright _playwright;
@@ -28,6 +29,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
     private readonly ILogger<PlaywrightWebBrowser> _logger;
     private readonly IPageSnapshotter _pageSnapshotter;
     private readonly TimeSpan _calendarReadinessTimeout;
+    private readonly TimeSpan _fieldReadinessTimeout;
     private readonly Func<Uri, bool> _isCalendarPage;
     private bool _disposed;
 
@@ -40,6 +42,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         ILogger<PlaywrightWebBrowser>? logger,
         IPageSnapshotter? pageSnapshotter,
         TimeSpan calendarReadinessTimeout,
+        TimeSpan fieldReadinessTimeout,
         Func<Uri, bool> isCalendarPage)
     {
         _playwright = playwright;
@@ -52,6 +55,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         _logger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
         _pageSnapshotter = pageSnapshotter ?? new PlaywrightPageSnapshotter();
         _calendarReadinessTimeout = calendarReadinessTimeout;
+        _fieldReadinessTimeout = fieldReadinessTimeout;
         _isCalendarPage = isCalendarPage;
     }
 
@@ -82,12 +86,14 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             logger,
             pageSnapshotter,
             DefaultCalendarReadinessTimeout,
+            DefaultFieldReadinessTimeout,
             IsJraCalendarPage).ConfigureAwait(false);
 
     internal static async Task<PlaywrightWebBrowser> CreateForTestingAsync(
         TimeSpan calendarReadinessTimeout,
         Func<Uri, bool> isCalendarPage,
-        IPageSnapshotter? pageSnapshotter = null)
+        IPageSnapshotter? pageSnapshotter = null,
+        TimeSpan? fieldReadinessTimeout = null)
         => await CreateCoreAsync(
             DefaultSearchBaseUrl,
             launchOptions: null,
@@ -95,6 +101,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             logger: null,
             pageSnapshotter,
             calendarReadinessTimeout,
+            fieldReadinessTimeout ?? DefaultFieldReadinessTimeout,
             isCalendarPage).ConfigureAwait(false);
 
     private static async Task<PlaywrightWebBrowser> CreateCoreAsync(
@@ -104,10 +111,13 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         ILogger<PlaywrightWebBrowser>? logger,
         IPageSnapshotter? pageSnapshotter,
         TimeSpan calendarReadinessTimeout,
+        TimeSpan fieldReadinessTimeout,
         Func<Uri, bool> isCalendarPage)
     {
         if (calendarReadinessTimeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(calendarReadinessTimeout));
+        if (fieldReadinessTimeout <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(fieldReadinessTimeout));
         ArgumentNullException.ThrowIfNull(isCalendarPage);
 
         var resolvedLogger = logger ?? NullLogger<PlaywrightWebBrowser>.Instance;
@@ -136,6 +146,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
                 resolvedLogger,
                 pageSnapshotter,
                 calendarReadinessTimeout,
+                fieldReadinessTimeout,
                 isCalendarPage);
         }
         catch
@@ -595,7 +606,14 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         var field = await FindFillableFieldAsync(fieldLabelOrName, cancellationToken);
         if (field is null)
         {
-            throw new InvalidOperationException($"フィールド '{fieldLabelOrName}' が見つかりませんでした。");
+            await WaitForFillableFieldAsync(fieldLabelOrName, cancellationToken);
+            field = await FindFillableFieldAsync(fieldLabelOrName, cancellationToken);
+        }
+
+        if (field is null)
+        {
+            throw new InvalidOperationException(
+                $"フィールド '{fieldLabelOrName}' が見つかりませんでした。Url={CurrentUrl ?? "(unknown)"}");
         }
 
         await field.ScrollIntoViewIfNeededAsync();
@@ -1022,6 +1040,52 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
         cancellationToken.ThrowIfCancellationRequested();
         return null;
+    }
+
+    private async Task WaitForFillableFieldAsync(
+        string fieldLabelOrName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _page.WaitForFunctionAsync(
+                    """
+                    target => {
+                        const normalize = value => (value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                        const expected = normalize(target);
+                        return Array.from(document.querySelectorAll('input, textarea, select')).some(field => {
+                            const style = window.getComputedStyle(field);
+                            const rect = field.getBoundingClientRect();
+                            if (style.visibility === 'hidden' || style.display === 'none'
+                                || rect.width <= 0 || rect.height <= 0) return false;
+
+                            const name = normalize(field.getAttribute('name'));
+                            const placeholder = normalize(field.getAttribute('placeholder'));
+                            const ariaLabel = normalize(field.getAttribute('aria-label'));
+                            const id = field.getAttribute('id');
+                            const explicitLabel = id
+                                ? normalize(Array.from(document.querySelectorAll('label'))
+                                    .find(candidate => candidate.htmlFor === id)?.textContent)
+                                : '';
+                            const containingLabel = normalize(field.closest('label')?.textContent);
+                            return name === expected || placeholder.includes(expected)
+                                || ariaLabel.includes(expected) || explicitLabel.includes(expected)
+                                || containingLabel.includes(expected);
+                        });
+                    }
+                    """,
+                    fieldLabelOrName,
+                    new PageWaitForFunctionOptions
+                    {
+                        Timeout = (float)_fieldReadinessTimeout.TotalMilliseconds,
+                    })
+                .WaitAsync(cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            // Re-resolve once at the boundary. A true absence remains structural instead
+            // of becoming an indefinitely retryable readiness timeout.
+        }
     }
 
     private async Task<ILocator?> FindCheckboxAsync(string fieldLabelOrName, CancellationToken cancellationToken)

@@ -97,6 +97,19 @@ public sealed class CollectionExecutionContractsTests
     }
 
     [TestMethod]
+    public void MissingHorseSearchField_RemainsStructural()
+    {
+        var exception = new InvalidOperationException(
+            "フィールド 'iv_h_name' が見つかりませんでした。Url=https://www.jra.go.jp/JRADB/accessO.html");
+
+        var attempt = CollectionAttemptFailureClassifier.FromException(exception);
+
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, attempt.Result);
+        Assert.AreEqual(nameof(InvalidOperationException), attempt.ErrorCode);
+        StringAssert.Contains(attempt.ErrorMessage!, "iv_h_name");
+    }
+
+    [TestMethod]
     public void TaskContext_FillsMissingIdentificationAndPreservesSpecificIdentification()
     {
         var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),

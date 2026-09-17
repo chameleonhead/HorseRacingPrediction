@@ -141,6 +141,8 @@ Horse profile/history Snapshotは1ページ内の複数レース行をまとめ�
 
 JRA向けNavigatorは、遷移・操作ごとにページ種別固有の必須DOMを1回待ち、その状態から待機を重ねずSemantic Snapshotを取得する。戻り値を使用しないtyped操作では本文全体や画像altを別途抽出しない。link/button/form候補は1回のDOM評価でdocument order、表示名、URL、region、DOM mutation世代を得て、選択時に世代と完全fingerprintの一意性を再確認して得た同一`ElementHandle`だけをPlaywrightで操作する。mutation、差替え、曖昧一致、detach時は再解決1回後に安全に失敗し、session-bound actionを直接GETや生`element.click()`へ置換しない。1つのSnapshotから作る`JraSnapshotView`はpage識別とparserで共有し、馬検索では最大32候補・256KiBまでの本人確認済みnormalized resultだけを検索再構築せず再利用する。resource interceptionやpage-kind別Snapshot projectionは、全対象ページの正規化結果・diagnostic・identity証拠がcontrolと一致し、速度と失敗率のgateを満たす場合だけ有効化する。CSS、script、XHR/fetchや未知hostを推測で遮断しない。
 
+競走馬検索フォームへの入力は、汎用的な本文表示だけでなく、要求した入力欄が画面上で操作可能になったことを確認してから行う。即時に入力欄が見つかる正常系は待機を追加せず、遅延表示時だけ上限付きで対象欄を待つ。`NetworkIdle`、固定sleep、JRA内部API/JavaScript完了の観測、session-bound検索の再送は用いない。待機期限後も入力欄が存在しない場合は構造異常として既存の安全停止を維持する。提案中の詳細と受け入れ条件は[Robust JRA horse-search form readiness](changes/20260917_horse-search-form-readiness/README.md)を参照する。
+
 開催日程ページの表示完了は、JRA内部のJSON/API仕様ではなく画面に表示された年月・日付・競馬場から判定する。10秒以内に成立しない場合は冪等なGETを1回だけ再試行し、最終的な未成立はSnapshotを取得せず一時的なtimeoutとして扱う。解析後は要求年月との一致を確認してからcacheする。no-text typed操作、正常時1 Snapshot、画像・font・tracker非待機、batched候補抽出、単一逐次pageという性能契約を維持する。設計と検証証拠は[Robust JRA calendar readiness](changes/20260917_robust-calendar-readiness/README.md)を正本とする。
 
 騎手・調教師profileは同一種別の対象をまとめ、名鑑・五十音・引退者一覧を対象ごとに繰り返さずbatch resolverで一度ずつ走査する。親一覧を保持する一時child pageを使う場合は同じBrowserContext内のpage-scoped leaseとpage-local Navigator/Readerを使い、単一`IPage`を並列操作しない。POST/session-bound導線は再現可能性を個別検証するまでsame-pageを維持する。騎手・調教師ページ内の履歴らしき表は現行要件に含めず、実Snapshotで意味を確認した別changeで扱う。対象範囲と承認条件は[Subject profile and history bulk ingestion](changes/20260915_subject-profile-history-bulk-ingestion/README.md)を正本とする。
