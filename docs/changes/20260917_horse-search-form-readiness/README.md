@@ -148,8 +148,8 @@ Rejected. A real JRA markup change would retry indefinitely and weaken the produ
 | T2 | Implement visible-field readiness with immediate fast path, 10-second bound, cancellation, and final structural miss. Covers AC1-AC4. | Main | Lead tier | Approval | `PlaywrightWebBrowser.cs` | Deterministic browser fixtures | Four browser readiness tests passed | Verified |
 | T3 | Prove horse-search navigation, form selection, failure classification, and safety-stop semantics. Covers AC1, AC3-AC5. | Main | Lead tier | T2 | Navigator/browser/collection tests | Focused integration and boundary tests | Browser/Navigator 15/15 and classifier 10/10 passed | Verified |
 | T4 | Run cross-surface, efficiency, three live repetitions, Release, and non-external regressions. Covers AC2, AC5-AC8. | Main | Lead/review tier | T2-T3 | Read-only except ignored test outputs | Recorded commands and results | Live 3/3, Release build, and 1,058 tests passed | Verified |
-| T5 | Update canonical docs and record, sync CodeGraph, audit diff/status/secrets, self-review, commit, and push. Covers AC8. | Main | Lead/review tier | T4 | docs and derived graph | Validator and repository gates | Final review evidence | In progress |
-| T6 | Verify deployment and perform bounded production recovery/monitoring. Covers AC9. | Main | Lead tier | T5 and successful deployment | Production operations explicitly listed in AC9 | Production UI and deployment evidence | Dependent |
+| T5 | Update canonical docs and record, sync CodeGraph, audit diff/status/secrets, self-review, commit, and push. Covers AC8. | Main | Lead/review tier | T4 | docs and derived graph | Validator and repository gates | Commits `67587da` and `a6b0a5c`; CI run `35186846325` passed | Verified |
+| T6 | Verify deployment and perform bounded production recovery/monitoring. Covers AC9. | Main | Lead tier | T5 and successful deployment | Production operations explicitly listed in AC9 | Production UI and deployment evidence | Externally blocked: deployed and running; affected Normal-lane tasks are behind the pre-existing Realtime backlog |
 
 All implementation and shared verification remain serialized under Main because the browser primitive,
 Navigator behavior, classifier evidence, deployment, and production recovery form one safety-sensitive path.
@@ -204,8 +204,19 @@ Navigator behavior, classifier evidence, deployment, and production recovery for
   command passed after the correction: the benchmark passed once with build and ten additional repetitions,
   Release build passed with zero warnings/errors, and all 1,058 non-external tests passed with one existing
   skip. Deployment may resume from a new commit.
+- 2026-09-17: commits `67587da` and `a6b0a5c` were pushed. CI run `35186846325` passed, and deployment run
+  `35186846324` completed successfully, including verification, collector Lambda deployment, API restart,
+  health verification, and legacy-job migration.
+- 2026-09-17: production collection is active (`1` running, global pause control available, `0` attention
+  items). The affected horse resource accepted a fourth manual collection request and moved from `要対応`
+  to `再取得処理中`; the original discovery resource remains `再取得処理中`. Both tasks are in the Normal
+  lane, while the existing queue has 1,586 waiting items and is currently dispatching Realtime priority-70
+  profile work. No unsafe lane/priority mutation or explicit URL override was applied. The existing production
+  monitor remains active until AC9 can be observed.
 
 ## Deviations and follow-up
 
 - CI exposed a pre-existing benchmark-only lifecycle race. The test-only readiness measurement was corrected;
   no production behavior or approved acceptance boundary changed.
+- Final production observation is delayed by the pre-existing queue backlog, not by deployment failure. AC9
+  remains open until the queued horse attempt and `discovery:2026091306` reach their observable outcomes.
