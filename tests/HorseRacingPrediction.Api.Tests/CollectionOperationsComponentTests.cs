@@ -73,6 +73,45 @@ public sealed class CollectionOperationsComponentTests
         StringAssert.Contains(cut.Markup, "レース結果 ・ JRA");
     }
 
+    [TestMethod]
+    public async Task FailureGroupPage_HidesRecoveryActionsForSubjectIdentificationFailure()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new SubjectIdentificationHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+
+        var cut = context.Render<FailureGroupPage>(parameters => parameters
+            .Add(x => x.GroupKey, "horse-profile|Failed|SubjectNotIdentified"));
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "自動再取得は行いません"));
+        Assert.IsFalse(cut.Markup.Contains("対象をまとめて再取得", StringComparison.Ordinal));
+        Assert.IsFalse(cut.Markup.Contains("選択した対象を再取得", StringComparison.Ordinal));
+        Assert.IsFalse(cut.Markup.Contains("を選択\"", StringComparison.Ordinal));
+    }
+
+    private sealed class SubjectIdentificationHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var notificationId = Guid.NewGuid();
+            var resource = new ResourceKey(ResourceType.Horse, "JRA", "horse-1");
+            var group = new CollectionFailureGroup("horse-profile|Failed|SubjectNotIdentified",
+                new("horse-profile"), CollectionTaskStatus.Failed, "SubjectNotIdentified",
+                "同定不能: 公開検索に一致候補が複数あります。", 1,
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, [notificationId], [resource]);
+            var page = new CollectionFailureGroupPage(group, 1, 1, 50, null,
+                [new(notificationId, Guid.NewGuid(), resource, new("horse-profile"),
+                    CollectionTaskStatus.Failed, group.ErrorCode, group.ErrorMessage, 1,
+                    DateTimeOffset.UtcNow, null, null, null,
+                    "SubjectIdentification:MultipleCandidates", null, null)]);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            { Content = JsonContent.Create(page) });
+        }
+    }
+
     private sealed class OperationsHandler : HttpMessageHandler
     {
         public int BackfillRequests { get; private set; }

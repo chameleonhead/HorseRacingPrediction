@@ -167,6 +167,7 @@ active failure notificationの分類単位で集計されるため、群件数�
 - 2026-09-18: parser、subject handler、store、revision-gated recovery、UI guidanceのfocused testsを追加し、API 228件、Collector 247件、CI相当Releaseテストをすべて通過した。
 - 2026-09-18: セルフレビューで個別復旧失敗がAPI起動全体を止める経路を検出し、対象単位の例外隔離、失敗件数記録、後続継続を追加した。
 - 2026-09-18: GitHub Actions `app-ci` / `app-deploy` が成功し、API/Lambdaを本番反映した。`/jobs` の要対応Resourceは245件から97件へ減少。残る競走馬障害には候補なし・複数候補の具体的理由と「同じ抽出仕様で再取得しない」案内が表示された。
+- 2026-09-18: 本番セルフレビューで同定不能の障害詳細に一括再取得操作が残る不整合を検出した。`SubjectNotIdentified`、提供元非該当、見出し欠落では一括・選択再取得と選択欄を表示しないよう修正し、component testで通常障害の復旧操作を維持しつつ確認した。
 
 ## Deviations and follow-up
 
