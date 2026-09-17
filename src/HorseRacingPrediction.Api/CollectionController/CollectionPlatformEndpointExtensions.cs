@@ -396,7 +396,7 @@ public static class CollectionPlatformEndpointExtensions
             var accepted = await store.CompleteAttemptAsync(taskId, request.LeaseToken, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 new(request.Result, request.ErrorCode, request.ErrorMessage, requestedUrl, finalUrl,
                     request.HttpStatusCode, request.PageIdentification, request.RetryAt, request.NextCollectionAt,
-                    request.LocationOutcomes), token);
+                    request.LocationOutcomes, request.FailureImpact), token);
             return accepted ? Results.NoContent() : Results.Conflict();
         });
         worker.MapPost("/tasks/{taskId:guid}/heartbeat", async (Guid taskId,
@@ -551,4 +551,5 @@ public sealed record CompleteCollectionAttemptRequest(string LeaseToken, Collect
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,
     string? FinalUrl = null, int? HttpStatusCode = null, string? PageIdentification = null,
     DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null,
-    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null);
+    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null,
+    CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline);

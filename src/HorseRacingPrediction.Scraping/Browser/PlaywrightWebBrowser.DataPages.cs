@@ -1,4 +1,5 @@
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
+using Microsoft.Playwright;
 
 namespace HorseRacingPrediction.Scraping.Browser;
 
@@ -38,7 +39,6 @@ public sealed partial class PlaywrightWebBrowser
                 new { raw = link.Url, absolute = expectedHref, region = link.Region, title = NormalizeForMatch(link.Title) });
             if (!stillMatches) continue;
             await handle.ClickAsync().WaitAsync(cancellationToken);
-            await _page.WaitForTimeoutAsync(500).WaitAsync(cancellationToken);
             await WaitForPageSettledAsync(cancellationToken);
             return includeContent ? await ReadNormalizedPageTextAsync(cancellationToken) : string.Empty;
         }
@@ -60,4 +60,24 @@ public sealed partial class PlaywrightWebBrowser
 
     public Task<SemanticPageSnapshot> GetDataPageSnapshotAsync(CancellationToken cancellationToken = default)
         => GetPageSnapshotAsync(cancellationToken);
+
+    public async Task WaitForContentAsync(IReadOnlyCollection<string> requiredTexts,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var required = requiredTexts.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
+        if (required.Length == 0) throw new ArgumentException("画面成立条件が指定されていません。", nameof(requiredTexts));
+        try
+        {
+            await _page.WaitForFunctionAsync(
+                    """(wanted) => { const text=(document.body?.innerText||'').replace(/\s+/g,' '); return wanted.every(x => text.includes(x)); }""",
+                    required,
+                    new PageWaitForFunctionOptions { Timeout = 10_000 })
+                .WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (PlaywrightException exception)
+        {
+            throw new TimeoutException($"遷移先画面の表示完了を確認できませんでした。Required={string.Join('|', required)}", exception);
+        }
+    }
 }

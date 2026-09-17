@@ -13,7 +13,7 @@ namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
     CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile = true,
-    int CurrentRevision = 2);
+    int CurrentRevision = 3);
 
 public static class JraSubjectCollectionDefinitions
 {
@@ -150,6 +150,13 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             {
                 return IdentificationFailure(task, ex.Message, null, null, null, locationOutcomes);
             }
+            catch (JraCollectionException ex) when (IsStructuralProfileFailure(ex))
+            {
+                return new(CollectionAttemptResult.PermanentFailure, "StructuralPageFailure", ex.Message,
+                    PageIdentification: $"{descriptor.SubjectType}Profile:UnexpectedPage",
+                    LocationOutcomes: locationOutcomes,
+                    FailureImpact: CollectionFailureImpact.Isolated);
+            }
         }
         try
         {
@@ -209,6 +216,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
 
     private static Uri? ToUri(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
+
+    private static bool IsStructuralProfileFailure(JraCollectionException exception) =>
+        exception.Message.Contains("情報の見出しを確認できません", StringComparison.Ordinal);
 
     private async Task DiscoverHorseReferencesAsync(LeasedCollectionTask task, JraSubjectProfileDto profile,
         ICollectionRequestSink sink, CancellationToken cancellationToken)

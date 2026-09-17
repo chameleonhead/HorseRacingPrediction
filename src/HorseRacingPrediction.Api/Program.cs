@@ -212,12 +212,12 @@ var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore
 await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 2,
-    "Normalize registration marks and reject invalid pedigree references", true);
-await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 2,
-    "Classify subjects outside the JRA directory", true);
-await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 2,
-    "Normalize affiliation suffixes and classify directory misses", true);
+await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3,
+    "Wait for the semantic profile view and isolate structural failures", true);
+await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3,
+    "Wait for the semantic profile view and isolate structural failures", true);
+await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 3,
+    "Wait for the semantic profile view and isolate structural failures", true);
 await collectionPlatform.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner, 1, "Initial", false);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();

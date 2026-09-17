@@ -786,7 +786,8 @@ public sealed class CollectionPlatformStore
                     ? CollectionStateStatus.Unavailable : CollectionStateStatus.Failed;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 await QueueFailureNotificationAsync(db, task, completion.ErrorCode, completion.ErrorMessage, now,
-                    pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound,
+                    pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound
+                        && completion.FailureImpact != CollectionFailureImpact.Isolated,
                     cancellationToken).ConfigureAwait(false);
             }
             state.UpdatedAt = now;

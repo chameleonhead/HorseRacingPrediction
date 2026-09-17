@@ -36,6 +36,7 @@ public sealed partial class JraNavigator
                 candidates: matches.Select(x => new JraSubjectIdentificationCandidate(x.Title, x.Url)));
             if (matches.Length == 0) continue;
             await _browser.ClickLinkForSnapshotAsync(matches[0], cancellationToken);
+            await _browser.WaitForContentAsync([$"{label}情報", subject.Name], cancellationToken);
             var page = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
             SubjectProfilePageParser.Validate(page, subject);
             return page;
@@ -53,6 +54,7 @@ public sealed partial class JraNavigator
             subject.SubjectType, subject.Name,
             candidates: retiredMatches.Select(x => new JraSubjectIdentificationCandidate(x.Title, x.Url)));
         await _browser.ClickLinkForSnapshotAsync(retiredMatches[0], cancellationToken);
+        await _browser.WaitForContentAsync([$"{label}情報", subject.Name], cancellationToken);
         var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
         SubjectProfilePageParser.Validate(result, subject);
         return result;
@@ -93,6 +95,7 @@ public sealed partial class JraNavigator
                 if (subject.SourceIdentity is not null && link.Url != subject.SourceIdentity) continue;
                 if (subject.BirthDate is null) { found.Add((link, pageNumber, null)); continue; }
                 await _browser.ClickLinkForSnapshotAsync(link, token);
+                await _browser.WaitForContentAsync(["競走馬情報", subject.Name], token);
                 var candidate = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(token), "Horse");
                 if (SubjectProfilePageParser.TryDate(candidate.Profile.Fields.GetValueOrDefault("生年月日") ?? "", out var birth) && birth == subject.BirthDate)
                     found.Add((link, pageNumber, candidate));
@@ -120,6 +123,7 @@ public sealed partial class JraNavigator
         var selected = currentLinks.FirstOrDefault(l => l.Url == found[0].Link.Url && SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
             ?? throw new JraCollectionException("対象馬の検索結果が変化しました。");
         await _browser.ClickLinkForSnapshotAsync(selected, token);
+        await _browser.WaitForContentAsync(["競走馬情報", subject.Name], token);
         var page = found[0].Parsed ?? SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(token), "Horse");
         page = page with { Profile = page.Profile with { SourceIdentity = selected.Url } };
         try

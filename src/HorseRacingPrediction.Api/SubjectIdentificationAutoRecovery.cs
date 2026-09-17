@@ -15,7 +15,9 @@ internal static class SubjectIdentificationAutoRecovery
     {
         var failures = (await store.GetActionableFailureNotificationsAsync(
                 JstTime.Now(), int.MaxValue, cancellationToken).ConfigureAwait(false))
-            .Where(x => string.Equals(x.ErrorCode, "SubjectNotIdentified", StringComparison.Ordinal)
+            .Where(x => (string.Equals(x.ErrorCode, "SubjectNotIdentified", StringComparison.Ordinal)
+                    || string.Equals(x.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
+                    || x.ErrorMessage?.Contains("情報の見出しを確認できません", StringComparison.Ordinal) == true)
                 && x.Resource.Type is ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer)
             .ToArray();
         var recovered = 0;
@@ -59,18 +61,20 @@ internal static class SubjectIdentificationAutoRecovery
                     continue;
                 }
 
+                var structuralFailure = string.Equals(failure.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
+                    || failure.ErrorMessage?.Contains("情報の見出しを確認できません", StringComparison.Ordinal) == true;
                 var profileMismatch = string.Equals(attempt?.PageIdentification,
                     "SubjectIdentification:ProfileNameMismatch", StringComparison.Ordinal);
                 var directorySubject = failure.Resource.Type is ResourceType.Jockey or ResourceType.Trainer;
-                if (!profileMismatch && !directorySubject)
+                if (!structuralFailure && !profileMismatch && !directorySubject)
                 {
                     skipped++;
                     continue;
                 }
 
                 var receipt = await store.RequestAsync(failure.Resource, failure.Definition, currentRevision,
-                    CollectionReason.Recovery, JstTime.Now(), CollectionLane.Normal,
-                    (int)CollectionPriority.High, batchId: $"subject-auto-recovery:{failure.NotificationId:N}:r{currentRevision}",
+                    CollectionReason.Recovery, JstTime.Now(), task.Lane, task.Priority,
+                    batchId: $"subject-auto-recovery:{failure.NotificationId:N}:r{currentRevision}",
                     attributes: task.Metadata, cancellationToken: cancellationToken).ConfigureAwait(false);
                 if (receipt.CreatedTask) recovered++;
                 else reused++;

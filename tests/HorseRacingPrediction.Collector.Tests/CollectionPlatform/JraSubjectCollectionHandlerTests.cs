@@ -188,6 +188,31 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task StructuralProfileFailure_IsIsolatedFromPipeline()
+    {
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                SubjectFactory = _ => throw new JraCollectionException("調教師情報の見出しを確認できません。"),
+            },
+        };
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Trainer, "JRA", "trainer-a"), new("trainer-profile"), 2,
+            CollectionReason.Recovery, CollectionLane.Background, 40, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), null,
+            new Dictionary<string, string> { ["name"] = "テスト調教師" });
+
+        var completion = await new JraSubjectProfileCollectionHandler(
+                JraSubjectCollectionDefinitions.For(ResourceType.Trainer), sessions, new RecordingProfileSink())
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
+        Assert.AreEqual("StructuralPageFailure", completion.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+    }
+
+    [TestMethod]
     public async Task RaceCard_DiscoversHorseJockeyTrainer_AndProfilesAreWrittenByTheirHandlers()
     {
         var date = new DateOnly(2026, 9, 12);

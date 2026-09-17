@@ -1662,6 +1662,24 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task IsolatedPermanentFailure_QueuesNotificationWithoutPausingPipeline()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var store = await CreateStoreAsync();
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "StructuralPageFailure", "missing heading",
+                FailureImpact: CollectionFailureImpact.Isolated)));
+
+        Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+        Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+        Assert.AreEqual("StructuralPageFailure",
+            (await store.GetPendingFailureNotificationsAsync(now.AddSeconds(2), 10)).Single().ErrorCode);
+    }
+
+    [TestMethod]
     public async Task SuppressResource_SupersedesActionableFailureNotifications()
     {
         var store = await CreateStoreAsync();

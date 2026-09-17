@@ -1421,5 +1421,7 @@ public sealed class JraNavigatorTests
         Assert.AreEqual(1, browser.SubmitFormCallCount);
         Assert.AreEqual(1, browser.NavigatedUrls.Count(url => url == KeibaTopUrl));
         Assert.AreEqual(1, browser.ClickedTexts.Count(text => text == "テストホース"));
+        CollectionAssert.AreEqual(new[] { "競走馬情報", "テストホース" },
+            browser.ContentWaits.Single().ToArray());
     }
 }

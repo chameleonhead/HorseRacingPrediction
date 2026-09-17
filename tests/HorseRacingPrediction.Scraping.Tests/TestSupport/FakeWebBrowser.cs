@@ -73,6 +73,14 @@ internal sealed class FakeWebBrowser : IWebBrowser
         => _remainingMissingClickFailuresByText[text] = count;
 
     public List<string> ClickedTexts { get; } = [];
+    public List<IReadOnlyCollection<string>> ContentWaits { get; } = [];
+
+    public Task WaitForContentAsync(IReadOnlyCollection<string> requiredTexts,
+        CancellationToken cancellationToken = default)
+    {
+        ContentWaits.Add(requiredTexts.ToArray());
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// SubmitFormAsync呼び出し後に遷移する先のURLを設定する。

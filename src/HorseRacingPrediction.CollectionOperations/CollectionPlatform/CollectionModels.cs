@@ -155,11 +155,14 @@ public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceK
     DateOnly? EffectiveDate, IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyList<ResourceLocationCandidate>? Locations = null);
 
+public enum CollectionFailureImpact { StopPipeline, Isolated }
+
 public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result, string? ErrorCode = null,
     string? ErrorMessage = null, Uri? RequestedUrl = null, Uri? FinalUrl = null,
     int? HttpStatusCode = null, string? PageIdentification = null,
     DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null,
-    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null);
+    IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null,
+    CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline);
 
 public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string ScopePayload);
 

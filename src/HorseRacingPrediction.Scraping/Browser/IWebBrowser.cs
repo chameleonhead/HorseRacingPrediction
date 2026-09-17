@@ -51,6 +51,11 @@ public interface IWebBrowser : IAsyncDisposable
     async Task ClickLinkForSnapshotAsync(PageLinkSnapshot link, CancellationToken cancellationToken = default)
         => _ = await ClickLinkAsync(link, cancellationToken).ConfigureAwait(false);
 
+    /// <summary>現在の動的画面に、遷移先を識別する必須テキストがすべて表示されるまで待つ。</summary>
+    Task WaitForContentAsync(IReadOnlyCollection<string> requiredTexts,
+        CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
     /// <summary>
     /// 現在のページで指定ラベルに対応する選択項目を変更し、
     /// 更新後のページ本文テキストを返す。

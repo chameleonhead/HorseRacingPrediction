@@ -69,4 +69,36 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         var state = await store.GetStateAsync(resource, definition);
         Assert.AreEqual(CollectionStateStatus.Unavailable, state!.Status);
     }
+
+    [TestMethod]
+    public async Task NewRevisionRecoversStructuralFailureAndPreservesScheduling()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var definition = new CollectionDefinitionId("trainer-profile");
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+            2, "old wait", false);
+        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"trainer-{Guid.NewGuid():N}");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-2);
+        var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Discovery, now,
+            CollectionLane.Background, 40,
+            attributes: new Dictionary<string, string> { ["name"] = "テスト調教師" });
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "JraCollectionException",
+                "調教師情報の見出しを確認できません。"));
+        await store.SetPausedAsync(false, null, now.AddSeconds(2));
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+            3, "semantic readiness", true);
+
+        var result = await SubjectIdentificationAutoRecovery.RunOnceAsync(store);
+
+        Assert.AreEqual(1, result.Recovered);
+        var recovered = (await store.GetTasksAsync()).Single(x => x.TaskId != receipt.TaskId);
+        Assert.AreEqual(3, recovered.RequestedRevision);
+        Assert.AreEqual(CollectionLane.Background, recovered.Lane);
+        Assert.AreEqual(40, recovered.Priority);
+    }
 }
