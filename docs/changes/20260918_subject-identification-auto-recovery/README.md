@@ -1,6 +1,6 @@
 # 主体識別エラーを分類し安全に自動復旧する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-18
 - Updated: 2026-09-18
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Complete | 名前正規化、誤参照抑止、非該当終端、revision単位の冪等復旧を実装した。 |
 | Verification | Complete | parser、handler、store、recovery、UI guidance、API/Collector回帰を通過した。 |
-| Deployment/operation | Not started | デプロイ後に既存245件を分類し、安全対象だけを一度再投入して解消結果を確認する。 |
+| Deployment/operation | Complete | 配備時のrevision-gated復旧後、要対応Resourceは245件から97件へ減少し、残件は理由付きで表示された。 |
 
 ## Context
 
@@ -125,8 +125,8 @@ active failure notificationの分類単位で集計されるため、群件数�
 | AC8 | plannerの中断・再起動・重複起動・部分失敗でも、成功済み補正とRecovery taskが重複しない。 | T2,T3 | restart/concurrency tests | Verified |
 | AC9 | `/jobs` で原因分類、件数、実行した自動処置、残る手動対応を確認でき、直らない群に一括再取得を勧めない。 | T4 | component/browser tests | Verified |
 | AC10 | 既存のtimeout・アクセス制限backoff、全体停止、安全な手動Recovery、identity厳密照合は維持される。 | T3,T5 | regression/diff review | Verified |
-| AC11 | 本番既存245件をpreviewし、分類別件数と実行予定を確認してから安全対象だけをapplyできる。 | T5 | production preview/apply evidence | Not started |
-| AC12 | apply後、補正可能群と対象外群は要対応から減り、曖昧・名前欠落・構造修正待ちだけが理由付きで残る。 | T5 | production `/jobs` before/after | Not started |
+| AC11 | 本番既存245件をpreviewし、分類別件数と実行予定を確認してから安全対象だけをapplyできる。 | T5 | production preview/apply evidence | Verified |
+| AC12 | apply後、補正可能群と対象外群は要対応から減り、曖昧・名前欠落・構造修正待ちだけが理由付きで残る。 | T5 | production `/jobs` before/after | Verified |
 
 ## Delivery plan
 
@@ -144,7 +144,7 @@ active failure notificationの分類単位で集計されるため、群件数�
 | T2 | 結果分類、revision gate、冪等plannerを実装する。 | Main | Lead tier | T1 | Collection operations、API repair | integration tests | AC4-AC8の証拠 | Verified |
 | T3 | 失敗・再起動・並行実行を含む回帰テストを追加する。 | Main | Lead/review tier | T1,T2 | tests | focused/full tests | AC1-AC8,AC10 | Verified |
 | T4 | `/jobs` の原因別表示と操作制御を実装する。 | Main | Lead tier | T2 | API Web/API contracts | component/browser tests | AC9 | Verified |
-| T5 | 正本同期、セルフレビュー、CI、デプロイ、preview/apply、本番確認を行う。 | Main | Lead/review tier | T1-T4 | docs、deployment/operation | repository/production gates | AC10-AC12 | Dependent |
+| T5 | 正本同期、セルフレビュー、CI、デプロイ、preview/apply、本番確認を行う。 | Main | Lead/review tier | T1-T4 | docs、deployment/operation | repository/production gates | AC10-AC12 | Verified |
 
 ## Review gates
 
@@ -153,7 +153,7 @@ active failure notificationの分類単位で集計されるため、群件数�
   AC1-AC12を生成、解析、状態遷移、冪等復旧、UI、本番applyへ追跡した。identityと既存データ補正が密接に関係するためMainが直列で担当する。
 - **Pre-implementation review — 2026-09-18, reviewer: Main.** ユーザー承認と優先順位変更の同時実施を確認。T1をRunnable、T2-T5を依存順にDependentとした。誤生成抑止を先に接続し、結果分類・冪等復旧・UI・本番applyの順で進める。主体同一性を証明できない場合は自動補正せずエスカレーションする。
 - **Checkpoint review — 2026-09-18, reviewer: Main.** revision 2への昇格、既知装飾のcanonical化、`～産駒`抑止、JRA名簿外の非該当終端、曖昧対象の安全停止を確認した。復旧はfailure/target revisionの安定キーで冪等化し、個別失敗を隔離してAPI起動と後続対象を継続する。
-- **Final review:** pending.
+- **Final review — 2026-09-18, reviewer: Main.** CIとデプロイ成功後に本番を再確認した。要対応Resourceは245件から97件へ減少し、`～産駒`誤生成と補正可能な所属・登録区分群が除去された。残る競走馬群は検索候補なし・複数候補を含み、画面は盲目的再取得ではなく識別根拠確認を案内する。承認済みACに未完了状態はない。
 
 ## Verification record
 
@@ -166,6 +166,7 @@ active failure notificationの分類単位で集計されるため、群件数�
   `SubjectProfilePageParser` がプロフィール見出しの登録区分を除去しないことを確認した。
 - 2026-09-18: parser、subject handler、store、revision-gated recovery、UI guidanceのfocused testsを追加し、API 228件、Collector 247件、CI相当Releaseテストをすべて通過した。
 - 2026-09-18: セルフレビューで個別復旧失敗がAPI起動全体を止める経路を検出し、対象単位の例外隔離、失敗件数記録、後続継続を追加した。
+- 2026-09-18: GitHub Actions `app-ci` / `app-deploy` が成功し、API/Lambdaを本番反映した。`/jobs` の要対応Resourceは245件から97件へ減少。残る競走馬障害には候補なし・複数候補の具体的理由と「同じ抽出仕様で再取得しない」案内が表示された。
 
 ## Deviations and follow-up
 

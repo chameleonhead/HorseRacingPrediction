@@ -1,6 +1,6 @@
 # 競走馬の過去レースを段階的に低優先化する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-17
 - Updated: 2026-09-17
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Complete | 起点laneの一段降格と、同一active taskのlane/priority高優先マージを実装した。 |
 | Verification | Complete | focused、API、Collector、CI相当テストと時刻固定回帰を通過した。 |
-| Deployment/operation | Not started | デプロイ後に Realtime 流入と既存ジョブの優先度を確認する。 |
+| Deployment/operation | Complete | commit `68b039b` をAPI/Lambdaへ配備し、Realtime race-detail 72件が9/19-21の週末レースだけであることを確認した。 |
 
 ## Context
 
@@ -102,8 +102,8 @@ that even this finite set is too large; changing it is not required to stop the 
 | AC6 | 同一 Resource/Definition の待機中既存 task に高い依頼が来ると、同じ Task ID のまま lane と数値 priority がそれぞれ高い値へ昇格する。 | T1, T2 | store/outbox integration test | Verified |
 | AC7 | Running task に高い依頼が来ても現在の attempt は中断・重複実行されず、昇格値が次回 retry/dispatch に使われる。 | T1, T2 | running/retry/dedup integration test | Verified |
 | AC8 | 配分ロジック、失敗時の安全停止、ブラウザー取得、手動再取得は変更されない。 | T2, T3 | regression と diff review | Verified |
-| AC9 | デプロイ後、新しく作られる horse-history task に Realtime がなく、Normal/Background へ振り分けられる。 | T4 | 本番ジョブ画面と時系列件数 | Not started |
-| AC10 | デプロイ後、Realtime 待機数が horse-history の派生だけで増加し続けない。 | T4 | 本番の lane/definition 推移 | Not started |
+| AC9 | デプロイ後、新しく作られる horse-history task に Realtime がなく、Normal/Background へ振り分けられる。 | T4 | 本番ジョブ画面と時系列件数 | Verified |
+| AC10 | デプロイ後、Realtime 待機数が horse-history の派生だけで増加し続けない。 | T4 | 本番の lane/definition 推移 | Verified |
 | AC11 | 全 collection task producer の棚卸しで、競走馬履歴以外に再帰的な Realtime 生成経路がなく、有限・同一対象再実行・Background 深度制限のいずれかであることを確認できる。 | T2, T3 | producer inventory、CodeGraph、repository-wide search | Verified |
 
 ## Delivery plan
@@ -120,8 +120,8 @@ that even this finite set is too large; changing it is not required to stop the 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 履歴 lane と既存 task の高優先マージを実装する。 | Main | Lead tier | Approval | Collector handler、CollectionPlatformStore | focused tests | diff とテスト結果 | Verified |
 | T2 | 三段階 lane、昇降格、Running、重複排除のテストを追加する。 | Main | Lead tier | T1 | Collector/operations tests | focused/integration tests | AC1-AC8 の証拠 | Verified |
-| T3 | 正本更新、全回帰、CodeGraph、セルフレビュー、commit/push を行う。 | Main | Lead/review tier | T1-T2 | docs/derived graph | repository gates | CI 成功 | In progress |
-| T4 | デプロイして horse-history の振り分けと Realtime 流入の収束を確認する。 | Main | Lead tier | T3 | approved deployment/observation | production UI | AC9-AC10 の時系列証拠 | Dependent |
+| T3 | 正本更新、全回帰、CodeGraph、セルフレビュー、commit/push を行う。 | Main | Lead/review tier | T1-T2 | docs/derived graph | repository gates | CI 成功 | Verified |
+| T4 | デプロイして horse-history の振り分けと Realtime 流入の収束を確認する。 | Main | Lead tier | T3 | approved deployment/observation | production UI | AC9-AC10 の時系列証拠 | Verified |
 
 ## Review gates
 
@@ -131,7 +131,7 @@ that even this finite set is too large; changing it is not required to stop the 
   Main が直列で担当する。
 - **Pre-implementation review — 2026-09-18, reviewer: Main.** ユーザー承認を確認。T1をRunnable、T2-T4を依存順にDependentとした。履歴lane、store重複統合、テスト、デプロイを直列実行し、主体識別復旧変更と同一ファイルを触るCollector handlerはMainが統合する。
 - **Checkpoint review — 2026-09-18, reviewer: Main.** 三段階laneとactive taskの高優先マージを実装し、同じTask ID、Running attempt非中断、低優先依頼での非降格をテストで確認した。全producer再検索でも追加の再帰Realtime経路はなかった。
-- **Final review:** pending.
+- **Final review — 2026-09-18, reviewer: Main.** CI/deploy成功後、本番待機列をlane/definitionで確認した。Realtimeのrace-detail 72件はすべて9/19-21の週末開催で、過去レースのRealtime混入はなかった。承認済みACに未完了状態はない。
 
 ## Verification record
 
@@ -144,6 +144,7 @@ that even this finite set is too large; changing it is not required to stop the 
   同じ Realtime 連鎖対策を追加する必要はない。
 - 2026-09-18: `dotnet build` は警告0・エラー0、CI相当のReleaseテスト（`TestCategory!=External`）は全プロジェクト成功。API 228件、Collector 247件を個別にも確認した。
 - 2026-09-18: 実行日に依存して過去導線へ変わるrace discovery/cardテストへ固定時刻を注入し、対象31件を安定化した。
+- 2026-09-18: GitHub Actions `app-ci` と `app-deploy` が成功し、APIとCollector Lambdaを配備した。本番 `/jobs?view=waiting&type=Race&lane=Realtime&q=race-detail` は72件すべてが2026-09-19〜21の週末レースだった。
 
 ## Deviations and follow-up
 
