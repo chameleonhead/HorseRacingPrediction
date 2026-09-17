@@ -85,3 +85,8 @@ per-definition schedules, and collection handlers are unchanged.
   dispatcher reconstruction, proving persisted rotation state.
 - 2026-09-17: formatting verification and Release build passed with zero warnings/errors. All non-external
   tests passed: 1,061 passed and one existing skip.
+- 2026-09-17: the first `app-ci` run exposed an order-dependent capacity test: stable Task ID tie-breaking
+  can legitimately dispatch either equal-priority race first, while the test always completed the first
+  requested race. The test now completes the task ID actually present in the dispatched envelope. The focused
+  test passed once with build and ten additional repetitions. Product code and approved scheduling semantics
+  were unchanged by this correction.

@@ -180,7 +180,7 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions { StateDirectory = directory }));
             await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
-            var first = await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
+            await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R1"), new("race-card"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: new(2026, 9, 12));
             await store.RequestAsync(new(ResourceType.RaceCard, "JRA", "R2"), new("race-card"), 1,
                 CollectionReason.Initial, now, CollectionLane.Realtime, 100, effectiveDate: new(2026, 9, 13));
@@ -199,9 +199,10 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
             Assert.HasCount(1, queue.Messages);
 
-            var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            var dispatchedTaskId = queue.Messages.Single().Tasks.Single().TaskId;
+            var lease = await store.AcquireAsync(dispatchedTaskId, 1, now, TimeSpan.FromMinutes(5));
             Assert.IsNotNull(lease);
-            Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            Assert.IsTrue(await store.CompleteAttemptAsync(dispatchedTaskId, lease.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.Succeeded)));
             await dispatcher.DispatchOnceAsync(CancellationToken.None);
             Assert.HasCount(2, queue.Messages);
