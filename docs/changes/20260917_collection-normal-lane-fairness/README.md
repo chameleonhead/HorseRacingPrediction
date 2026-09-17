@@ -1,6 +1,9 @@
 # Collection normal-lane fairness
 
-Status: Proposed
+- Status: Proposed
+- Owner: Main
+- Created: 2026-09-17
+- Updated: 2026-09-17
 
 ## Problem
 
@@ -29,13 +32,13 @@ per-definition schedules, and collection handlers are unchanged.
 
 | ID | Observable criterion | Verification | State |
 | --- | --- | --- | --- |
-| AC1 | With continuously due Realtime and Normal candidates, a Normal candidate is selected no later than the fifth envelope. | Allocator unit test and dispatcher integration test | Proposed |
-| AC2 | With continuously due Realtime and Background candidates, the existing Background anti-starvation behavior remains. | Existing and expanded allocator/dispatcher tests | Proposed |
-| AC3 | When Normal and Background are both due in a fairness slot, selection uses effective priority, then availability, creation, and task ID; repeated dispatches cannot be dominated solely by lane rank. | Deterministic mixed-lane tests | Proposed |
-| AC4 | Before the fairness threshold, Realtime remains preferred; within a selected lane, existing priority and age behavior remains unchanged. | Regression tests | Proposed |
-| AC5 | Retry classification, publication-wait scheduling, global pause behavior, handlers, and task lane assignments are unchanged. | Focused collection tests and diff review | Proposed |
-| AC6 | Formatting, Release build, all non-external tests, CodeGraph sync, record validation, diff/status, and secret checks pass. | Repository gates | Proposed |
-| AC7 | After deployment, Normal-lane completions advance while Realtime work remains queued; the affected horse attempt runs without `iv_h_name`, and `discovery:2026091306` reaches a successful terminal state without the Nakayama error. | Deployment and production job screens | Proposed |
+| AC1 | With continuously due Realtime and Normal candidates, a Normal candidate is selected no later than the fifth envelope. | Allocator unit test and dispatcher integration test | Not started |
+| AC2 | With continuously due Realtime and Background candidates, the existing Background anti-starvation behavior remains. | Existing and expanded allocator/dispatcher tests | Not started |
+| AC3 | When Normal and Background are both due in a fairness slot, selection uses effective priority, then availability, creation, and task ID; repeated dispatches cannot be dominated solely by lane rank. | Deterministic mixed-lane tests | Not started |
+| AC4 | Before the fairness threshold, Realtime remains preferred; within a selected lane, existing priority and age behavior remains unchanged. | Regression tests | Not started |
+| AC5 | Retry classification, publication-wait scheduling, global pause behavior, handlers, and task lane assignments are unchanged. | Focused collection tests and diff review | Not started |
+| AC6 | Formatting, Release build, all non-external tests, CodeGraph sync, record validation, diff/status, and secret checks pass. | Repository gates | Not started |
+| AC7 | After deployment, Normal-lane completions advance while Realtime work remains queued; the affected horse attempt runs without `iv_h_name`, and `discovery:2026091306` reaches a successful terminal state without the Nakayama error. | Deployment and production job screens | Not started |
 
 ## Task plan
 
