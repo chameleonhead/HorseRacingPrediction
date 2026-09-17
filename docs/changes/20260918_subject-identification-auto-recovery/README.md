@@ -171,6 +171,8 @@ active failure notificationの分類単位で集計されるため、群件数�
 - 2026-09-18: commit `c351097` の再デプロイ成功後、本番の競走馬 `SubjectNotIdentified` 障害詳細で一括再取得、選択再取得、選択欄が表示されず、修正待ちの説明だけが表示されることを確認した。
 - 2026-09-18: 配備後、所属付き調教師名から探索した正しいプロフィールが保存APIの旧単純名比較で400となり、pipelineを安全停止させる接続漏れを確認した。Collectorと保存APIが同じ共通normalizerを使用するよう修正し、所属付き保存名とcanonicalプロフィール名のAPI統合テストを追加した。
 - 2026-09-18: 接続漏れ修正後、API focused 4件、Collector 247件、Scraping 259件、API 230件（1 skip）が成功し、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` も成功した。AC1、AC2、AC10を実transport境界まで再検証した。
+- 2026-09-18: commit `94eb599` の GitHub Actions `app-ci`（run `35280098338`）と `app-deploy`（run `35280098249`）が成功し、共通normalizerをAPI/Lambdaへ本番反映した。
+- 2026-09-18: 本番の調教師 `HttpRequestException` 障害群（3対象）をまとめて再取得した。障害群は要対応から消え、要対応Resourceは101件から97件へ減少し、pipelineは安全停止せず稼働を継続した。3対象は既存の高優先度処理を追い越さない通常優先度の実行待ちとなり、同じ400障害の再生成は確認されなかった。
 
 ## Deviations and follow-up
 
