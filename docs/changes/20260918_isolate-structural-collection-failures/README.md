@@ -103,7 +103,8 @@
 - 2026-09-18: 本番で停止理由 `Task=55ba65be-5ea2-4818-bfc1-a5c62d0db504; Error=JraCollectionException; 調教師情報の見出しを確認できません。` を確認した。
 - 2026-09-18: 障害群`FBF7553D84F38EFB`に調教師2件があり、最新対象は`松永 幹夫（栗東）`、Background/priority 40、試行1回、取得先未記録であることを確認した。
 - 2026-09-18: handlerで構造例外が未捕捉、workerで`PermanentFailure`化、storeで`ResourceNotFound`以外のterminal failureが全体停止となる実行経路を確認した。
+- 2026-09-18: 最初の復旧依頼でpipeline再開と進行確認だけを「復旧」と報告し、根本原因と恒久対策案を同じ作業内で提示しなかった。運用再開を完了条件と誤認したworkflow gapとして整理し、`.codex/skills/production-incident-recovery/SKILL.md`を追加した。以後は暫定復旧、根本原因、対策設計、実装、配備、本番検証を別々に追跡する。
 
 ## Deviations and follow-up
 
-- なし。承認前のためproduction codeは変更していない。
+- 承認前のためproduction codeは変更していない。workflow改善はユーザーから別途明示承認されたため、製品修正に先行して適用した。
