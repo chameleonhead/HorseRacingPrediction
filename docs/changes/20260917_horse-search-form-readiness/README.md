@@ -197,7 +197,15 @@ Navigator behavior, classifier evidence, deployment, and production recovery for
 - 2026-09-17: CodeGraph synchronized and re-query confirmed the one production field-input path and expected
   browser helper call graph. Diff review found no action replay, `NetworkIdle`, extra Snapshot, or pause-policy
   change.
+- 2026-09-17: deploy run `35186331074` stopped before deployment because the pre-existing local performance
+  benchmark timed out while attaching a `Load` lifecycle waiter after `DOMContentLoaded`; all product-focused
+  tests had passed. The benchmark readiness sample now observes `document.readyState === 'complete'`, matching
+  its rendered-page purpose without `NetworkIdle` or a missed lifecycle-event race. The original CI-equivalent
+  command passed after the correction: the benchmark passed once with build and ten additional repetitions,
+  Release build passed with zero warnings/errors, and all 1,058 non-external tests passed with one existing
+  skip. Deployment may resume from a new commit.
 
 ## Deviations and follow-up
 
-- None at implementation start.
+- CI exposed a pre-existing benchmark-only lifecycle race. The test-only readiness measurement was corrected;
+  no production behavior or approved acceptance boundary changed.

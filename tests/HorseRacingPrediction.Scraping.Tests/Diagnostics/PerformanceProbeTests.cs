@@ -46,7 +46,8 @@ public sealed class PerformanceProbeTests
                 samples.Add(await PerformanceProbe.MeasureAsync("navigation", async () =>
                     await page.GotoAsync(uri, new() { WaitUntil = WaitUntilState.DOMContentLoaded })));
                 samples.Add(await PerformanceProbe.MeasureAsync("ready", async () =>
-                    await page.WaitForLoadStateAsync(LoadState.Load)));
+                    await page.WaitForFunctionAsync("() => document.readyState === 'complete'", null,
+                        new() { Timeout = 3_000 })));
                 samples.Add(await PerformanceProbe.MeasureAsync("text", async () =>
                     _ = await page.Locator("body").InnerTextAsync()));
                 samples.Add(await PerformanceProbe.MeasureAsync("capture", async () =>
