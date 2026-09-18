@@ -1,6 +1,6 @@
 # 主体識別の古い失敗通知を画面から対応不要にする
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-18
 - Updated: 2026-09-18
@@ -10,8 +10,8 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Complete | notification限定の状態遷移、管理API、設定画面の選択・確認Dialog・結果表示を実装した。 |
-| Verification | In progress | focused/full testは通過。デプロイ後のdesktop/narrow browser確認を残す。 |
-| Deployment/operation | Not started | 実装・検証後にデプロイし、本番の古い4件で表示消去と履歴保持を確認する。 |
+| Verification | Complete | focused/full test、desktop/narrow browser、履歴保持、pipeline継続を確認した。 |
+| Deployment/operation | Complete | GitHub Actionsで配備し、本番の古い調教師4通知を`Superseded`として閉じた。`要確認 0件`、履歴保持、pipeline稼働を確認した。 |
 
 ## Context
 
@@ -120,15 +120,15 @@ Resource全体の抑止を行わず、運用者が「この失敗通知への対
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 再収集可能・要確認のどちらの主体識別候補もcheckboxで選択でき、1件以上の選択で「選択した候補を対応不要として閉じる」が利用できる。 | T2,T3 | component test、desktop/narrow browser確認 | Connected |
-| AC2 | 閉じる前に確認Dialogが開き、対象件数、履歴と主体データを削除しないこと、将来の新規失敗は再表示されることが示され、取消では状態が変わらない。 | T2,T3 | component test、keyboard browser確認 | Connected |
-| AC3 | 実行すると選択したopen notificationだけが一覧から消え、成功件数が表示される一方、元のFailed taskとattempt履歴はジョブ詳細から確認できる。 | T1-T3 | store/API integration test、browser確認 | Connected |
+| AC1 | 再収集可能・要確認のどちらの主体識別候補もcheckboxで選択でき、1件以上の選択で「選択した候補を対応不要として閉じる」が利用できる。 | T2,T3 | component test、desktop/narrow browser確認 | Verified |
+| AC2 | 閉じる前に確認Dialogが開き、対象件数、履歴と主体データを削除しないこと、将来の新規失敗は再表示されることが示され、取消では状態が変わらない。 | T2,T3 | component test、keyboard browser確認 | Verified |
+| AC3 | 実行すると選択したopen notificationだけが一覧から消え、成功件数が表示される一方、元のFailed taskとattempt履歴はジョブ詳細から確認できる。 | T1-T3 | store/API integration test、browser確認 | Verified |
 | AC4 | 通知を閉じてもResource、収集state、domain dataは変更されず、同じResourceの将来の新規失敗は新しい要対応として表示される。 | T1,T3 | store integration test | Verified |
 | AC5 | 同一要求の再送は重複変更せず、未知・対象外IDを含む要求およびRecovery開始との競合は一部更新を起こさず、画面に再読込可能なエラーを表示する。 | T1-T3 | store/API/component tests | Verified |
-| AC6 | 要確認を含む選択では再収集操作を誤実行できず、閉じる操作との違いと次の行動が表示される。 | T2,T3 | component test、browser確認 | Connected |
-| AC7 | desktopのDataGridと狭幅cardで主要情報と操作が保持され、keyboard操作、focus、accessible name、loading/empty/error状態に回帰がない。 | T2,T3 | component test、desktop/narrow browser確認 | Connected |
+| AC6 | 要確認を含む選択では再収集操作を誤実行できず、閉じる操作との違いと次の行動が表示される。 | T2,T3 | component test、browser確認 | Verified |
+| AC7 | desktopのDataGridと狭幅cardで主要情報と操作が保持され、keyboard操作、focus、accessible name、loading/empty/error状態に回帰がない。 | T2,T3 | component test、desktop/narrow browser確認 | Verified |
 | AC8 | 認証境界、既存の安全な補正・名寄せ・再収集、一般のfailure notification処理に回帰がない。 | T1-T4 | focused/full tests、diff review | Verified |
-| AC9 | 配備後、本番の古い調教師4通知を対応不要として閉じると `/settings` から消え、対象データと履歴が保持され、pipelineが稼働を継続する。 | T4 | production before/after確認 | Not started |
+| AC9 | 配備後、本番の古い調教師4通知を対応不要として閉じると `/settings` から消え、対象データと履歴が保持され、pipelineが稼働を継続する。 | T4 | production before/after確認 | Verified |
 
 ## Delivery plan
 
@@ -143,15 +143,15 @@ Resource全体の抑止を行わず、運用者が「この失敗通知への対
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | notificationの検証・状態遷移、管理API、契約、clientを実装する。 | Main | Lead tier | Approval | CollectionOperations、API endpoint/contracts/client | store/API integration tests | AC3-AC5,AC8の結果 | Verified |
 | T2 | 設定画面の選択、確認Dialog、結果表示、responsive表示を実装する。 | Main | Lead tier | T1 | `Settings.razor`と必要最小限のstyle | component tests | AC1-AC3,AC5-AC8の結果 | Verified |
-| T3 | 回帰テストと実ブラウザー検証を行い、設計適合をセルフレビューする。 | Main | Lead/review tier | T1,T2 | tests、change record | focused/full/browser gates | AC1-AC8の証拠 | In progress |
-| T4 | CI、デプロイ、本番4件のoperationと事後確認を行う。 | Main | Lead/review tier | T3 | deployment、production operation、docs | CI/deploy/production evidence | Dependent |
+| T3 | 回帰テストと実ブラウザー検証を行い、設計適合をセルフレビューする。 | Main | Lead/review tier | T1,T2 | tests、change record | focused/full/browser gates | AC1-AC8の証拠 | Verified |
+| T4 | CI、デプロイ、本番4件のoperationと事後確認を行う。 | Main | Lead/review tier | T3 | deployment、production operation、docs | CI/deploy/production evidence | Verified |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-18, reviewer: Main.** 対象taskがterminal Failedであること、画面がopen failure notificationを列挙すること、既存の`Superseded`/`Resolved`状態、Resource抑止の影響範囲を確認した。削除・task状態改変・Resource抑止を退け、notificationだけを原子的に`Superseded`へ遷移させる設計とした。AC1-AC9をstore、API、UI、回帰、本番operationへ追跡した。データ完全性と本番操作を含むためMainが直列で担当し、サブエージェントは使用しない。
 - **Pre-implementation review — 2026-09-18, reviewer: Main.** ユーザー承認を確認した。T1をRunnable、T2-T4を依存順にDependentとした。通知検証と状態遷移を単一transactionへ閉じ、対象外ID・Recovery開始済み通知で部分更新しないことをAPI接続前にstore testで確認する。T1完了後にのみUIへ接続し、実ブラウザー操作はcomponent/API回帰後に行う。
 - **Checkpoint review — 2026-09-18, reviewer: Main.** store/API/UIの接続と全diffを確認した。物理削除、task状態改変、Resource抑止、schema変更はなく、`Open` notificationだけを`Superseded`へ更新する。重複実行、将来の新規failure、Recovery競合、対象外IDの全件拒否をintegration testで確認した。Blocked選択時は再収集を無効化し、対応不要化だけを説明付きで提示する。focused 17件、Release build、全test 1081件（1 skip）が成功した。実ブラウザーと本番operationを残す。
-- **Final review:** 全taskとACの検証後に記録する。
+- **Final review — 2026-09-18, reviewer: Main.** AC1-AC9とT1-T4を実装、テスト、CI、配備、本番操作へ追跡した。desktopではBlocked 4件の選択、再収集buttonの無効化、専用説明、4件を列挙する確認Dialogを確認し、480x900では同じ候補・選択・操作がcard表示で保持されることを確認した。本番操作後は`要確認 0件`と4件の成功messageを確認した。対象Resource詳細には依頼履歴3件、task履歴3件、試行履歴4件、障害履歴2件が残り、障害対応だけが`未解決なし`になった。収集管理は処理中2件、待機中4237件で継続稼働しており、承認済みスコープに未完了task、未検証AC、受入を阻害するblockerはない。
 
 ## Verification record
 
@@ -161,7 +161,13 @@ Resource全体の抑止を行わず、運用者が「この失敗通知への対
 - 2026-09-18: 現行画面ではBlocked候補のcheckboxがdisabledで、運用者が通知を閉じる導線がないことを確認した。
 - 2026-09-18: storeの履歴保持・冪等性・将来failure・Recovery競合2件、API/UI重点15件が成功した。
 - 2026-09-18: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release build、`TestCategory!=External`の全test 1081件（1 skip）が成功した。
+- 2026-09-18: commit `e00aa0f6084ada3e41bf3606d64b995134e52bf4` のapp-ci run `35293914933` とapp-deploy run `35293914929` が成功した。
+- 2026-09-18: 本番desktopで調教師4件を選択すると再収集操作が無効、対応不要化だけが有効になり、Dialogに対象4件、履歴非削除、将来failure再表示が示されることを確認した。
+- 2026-09-18: 480x900 viewportでDataGridがcardへ切り替わり、4件のchecked状態、対象情報、対応不要化button、補正不可理由が保持されることを確認した。
+- 2026-09-18: 本番の古い調教師4通知を閉じ、success message `4 件を対応不要として閉じました。元の収集ジョブと履歴は保持されています。` と `要確認 0件` を確認した。
+- 2026-09-18: 対象Resource詳細で依頼履歴3件、task履歴3件、試行履歴4件、障害履歴2件と`未解決なし`を確認し、履歴を保持したままopen notificationだけが閉じたことを確認した。
+- 2026-09-18: `/jobs` で処理中2件、待機中4237件、全体一時停止操作が可能な通常稼働状態を確認した。
 
 ## Deviations and follow-up
 
-- なし。実装中にtask削除、Resource抑止、schema変更が必要になった場合は設計変更として再承認を得る。
+- 承認済み設計からの逸脱なし。task削除、Resource抑止、schema変更は行っていない。
