@@ -28,3 +28,8 @@ public sealed record ExecuteSubjectIdentificationRepairRequest(
 public sealed record ExecuteSubjectIdentificationRepairResponse(
     int SelectedCount, int CreatedTaskCount, int ReusedTaskCount, IReadOnlyList<Guid> TaskIds,
     int MergedCount = 0, int DisabledCollectionTaskCount = 0, int RunningCancellationRequestCount = 0);
+
+public sealed record DismissSubjectIdentificationFailuresRequest(IReadOnlyList<Guid> NotificationIds);
+
+public sealed record DismissSubjectIdentificationFailuresResponse(
+    int SelectedCount, int DismissedCount, int AlreadyClosedCount);

@@ -138,12 +138,13 @@ public sealed class HorseIdentityRepairSettingsComponentTests
     }
 
     [TestMethod]
-    public async Task SubjectRepair_MissingNameCannotBeSelected()
+    public async Task SubjectRepair_MissingNameCanBeDismissedWithoutBeingRecovered()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
         using var ignored = original;
-        using var http = new HttpClient(new SubjectRepairHandler(missingNameOnly: true))
+        var handler = new SubjectRepairHandler(missingNameOnly: true);
+        using var http = new HttpClient(handler)
         { BaseAddress = new Uri("http://localhost") };
         await using var context = CreateContext(app.Services, http);
 
@@ -152,7 +153,27 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "主体名がないため再収集できません"));
         var candidate = cut.FindComponents<FluentCheckbox>()
             .First(x => x.Markup.Contains("owner-missing", StringComparison.Ordinal));
-        Assert.IsTrue(candidate.Instance.Disabled);
+        Assert.IsFalse(candidate.Instance.Disabled);
+        await cut.InvokeAsync(() => candidate.Instance.CheckStateChanged.InvokeAsync(true));
+        var recover = cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("選択した補正を確認"));
+        Assert.IsTrue(recover.Instance.Disabled);
+        StringAssert.Contains(cut.Markup, "要確認を含むため再収集は実行できません");
+
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("選択した候補を対応不要として閉じる"))
+            .Instance.OnClick.InvokeAsync());
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Find("#subject-dismiss-confirm-title").TextContent,
+            "選択した1件を対応不要として閉じますか"));
+        StringAssert.Contains(cut.Markup, "元の収集ジョブ、試行履歴、主体データは削除されません");
+        StringAssert.Contains(cut.Markup, "新しい失敗が発生した場合は、再び要対応として表示されます");
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">対応不要として閉じる<", StringComparison.Ordinal))
+            .Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "1 件を対応不要として閉じました"));
+        Assert.AreEqual(Guid.Parse("00000000-0000-0000-0000-000000000004"), handler.Dismissed.Single());
+        Assert.IsEmpty(handler.Executed);
     }
 
     [TestMethod]
@@ -235,6 +256,7 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         : HttpMessageHandler
     {
         public List<ExecuteSubjectIdentificationRepairItem> Executed { get; } = [];
+        public List<Guid> Dismissed { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -253,7 +275,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                         Subject("trainer-1", ResourceType.Trainer, "RetryReady", true, null, null, 3),
                         Subject("owner-1", ResourceType.Owner, "RetryReady", true, null, null, 4)
                     };
-                return Ok(new SubjectIdentificationRepairPreviewResponse(items));
+                return Ok(new SubjectIdentificationRepairPreviewResponse(
+                    items.Where(x => !Dismissed.Contains(x.NotificationId)).ToArray()));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("subject-identification/execute", StringComparison.Ordinal) == true)
             {
@@ -261,6 +284,14 @@ public sealed class HorseIdentityRepairSettingsComponentTests
                 Executed.AddRange(body!.Items);
                 return Accepted(new ExecuteSubjectIdentificationRepairResponse(body.Items.Count, body.Items.Count, 0,
                     body.Items.Select(x => Guid.NewGuid()).ToArray()));
+            }
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.EndsWith("subject-identification/dismiss", StringComparison.Ordinal) == true)
+            {
+                var body = await request.Content!.ReadFromJsonAsync<DismissSubjectIdentificationFailuresRequest>(
+                    cancellationToken: cancellationToken);
+                Dismissed.AddRange(body!.NotificationIds);
+                return Ok(new DismissSubjectIdentificationFailuresResponse(
+                    body.NotificationIds.Count, body.NotificationIds.Count, 0));
             }
             return Ok(new HorseIdentityRepairPreviewResponse("20260913-jra-horse-identity-repair", []));
         }

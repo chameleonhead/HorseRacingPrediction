@@ -29,4 +29,23 @@ public sealed partial class AdminApiClient
             ? AdminApiResult<ExecuteSubjectIdentificationRepairResponse>.Fail(["補正結果を確認できませんでした。"])
             : AdminApiResult<ExecuteSubjectIdentificationRepairResponse>.Ok(value);
     }
+
+    public async Task<AdminApiResult<DismissSubjectIdentificationFailuresResponse>>
+        DismissSubjectIdentificationFailuresAsync(
+            IReadOnlyList<Guid> notificationIds, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"{SubjectIdentificationRepairPath}/dismiss",
+            new DismissSubjectIdentificationFailuresRequest(notificationIds), JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            return AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Fail(
+                await ReadErrorsAsync(response, cancellationToken).ConfigureAwait(false));
+
+        var value = await response.Content.ReadFromJsonAsync<DismissSubjectIdentificationFailuresResponse>(
+            JsonOptions, cancellationToken).ConfigureAwait(false);
+        return value is null
+            ? AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Fail(["対応不要化の結果を確認できませんでした。"])
+            : AdminApiResult<DismissSubjectIdentificationFailuresResponse>.Ok(value);
+    }
 }

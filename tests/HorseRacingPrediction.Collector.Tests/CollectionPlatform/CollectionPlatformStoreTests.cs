@@ -1561,6 +1561,73 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task DismissFailureNotifications_PreservesHistory_IsIdempotent_AndAllowsFutureFailure()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var failedLease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId, failedLease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "OldFailure",
+                FailureImpact: CollectionFailureImpact.Isolated));
+        var notification = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
+
+        var first = await store.DismissFailureNotificationsAsync([notification.NotificationId], now.AddMinutes(2));
+        var repeated = await store.DismissFailureNotificationsAsync([notification.NotificationId], now.AddMinutes(3));
+
+        Assert.AreEqual(1, first.DismissedCount);
+        Assert.AreEqual(0, first.AlreadyClosedCount);
+        Assert.AreEqual(0, repeated.DismissedCount);
+        Assert.AreEqual(1, repeated.AlreadyClosedCount);
+        Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10));
+        Assert.AreEqual(CollectionTaskStatus.Failed,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == failed.TaskId).Status);
+        Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
+        var oldFailure = (await store.GetResourceDetailAsync(Horse, HorseProfile))!.Failures!.Single();
+        Assert.AreEqual(CollectionFailureResolutionStatus.Superseded, oldFailure.ResolutionStatus);
+        Assert.IsNotNull(oldFailure.ResolvedAt);
+
+        var next = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh,
+            now.AddMinutes(4));
+        var nextLease = await store.AcquireAsync(next.TaskId, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(next.TaskId, nextLease!.LeaseToken, now.AddMinutes(5),
+            new(CollectionAttemptResult.PermanentFailure, "NewFailure",
+                FailureImpact: CollectionFailureImpact.Isolated));
+        var newNotification = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(6), 10)).Single();
+        Assert.AreEqual("NewFailure", newNotification.ErrorCode);
+        Assert.AreNotEqual(notification.NotificationId, newNotification.NotificationId);
+    }
+
+    [TestMethod]
+    public async Task DismissFailureNotifications_RecoveryInProgressDoesNotPartiallyUpdate()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var firstResource = Horse;
+        var secondResource = new ResourceKey(ResourceType.Horse, "JRA", "H456");
+        var ids = new List<Guid>();
+        foreach (var resource in new[] { firstResource, secondResource })
+        {
+            var failed = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Initial, now);
+            var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.PermanentFailure, "Broken",
+                    FailureImpact: CollectionFailureImpact.Isolated));
+        }
+        ids.AddRange((await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10))
+            .Select(x => x.NotificationId));
+        await store.RequestAsync(firstResource, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(2));
+
+        var result = await store.DismissFailureNotificationsAsync(ids, now.AddMinutes(3));
+
+        Assert.IsTrue(result.HasRecoveryConflict);
+        Assert.AreEqual(0, result.DismissedCount);
+        var details = await store.GetFailureNotificationsAsync(ids);
+        Assert.IsTrue(details.Any(x => x.ResolutionStatus == CollectionFailureResolutionStatus.RecoveryInProgress));
+        Assert.IsTrue(details.Any(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open));
+    }
+
+    [TestMethod]
     public async Task FailedRecovery_SupersedesOldFailure_AndLeavesOnlyLatestActionable()
     {
         var store = await CreateStoreAsync();

@@ -44,7 +44,7 @@
     {
         <div class="repair-grid">
             <FluentDataGrid Items="@FilteredSubjectCandidates.AsQueryable()" TGridItem="SubjectIdentificationRepairCandidateResponse" aria-label="主体識別情報の補正候補">
-                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(context)" CheckStateChanged="@(value => SetSubjectSelected(context, value == true))" Disabled="@(!SubjectActionable(context) || busy)" aria-label="@($"{SubjectTypeLabel(context.SubjectType)} {context.SubjectId}を選択")" /></TemplateColumn>
+                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(context)" CheckStateChanged="@(value => SetSubjectSelected(context, value == true))" Disabled="@busy" aria-label="@($"{SubjectTypeLabel(context.SubjectType)} {context.SubjectId}を選択")" /></TemplateColumn>
                 <TemplateColumn Title="状態"><RaceOpsStatusBadge Label="@SubjectStatusLabel(context)" Tone="@(SubjectActionable(context) ? "success" : "warning")" /></TemplateColumn>
                 <TemplateColumn Title="主体"><span>@SubjectTypeLabel(context.SubjectType)</span><small>@context.SubjectId</small>@if(context.MergeTargetId is not null){<small>統合先: @context.MergeTargetId</small>}</TemplateColumn>
                 <TemplateColumn Title="元の収集ジョブ"><span>@context.DefinitionId</span><small>@context.TaskId</small></TemplateColumn>
@@ -57,7 +57,7 @@
             {
                 <article class="repair-card">
                     <div class="repair-card-status">
-                        <FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(candidate)" CheckStateChanged="@(value => SetSubjectSelected(candidate, value == true))" Disabled="@(!SubjectActionable(candidate) || busy)" aria-label="@($"{SubjectTypeLabel(candidate.SubjectType)} {candidate.SubjectId}を選択")" />
+                        <FluentCheckbox ThreeState="true" CheckState="@SubjectCheckState(candidate)" CheckStateChanged="@(value => SetSubjectSelected(candidate, value == true))" Disabled="@busy" aria-label="@($"{SubjectTypeLabel(candidate.SubjectType)} {candidate.SubjectId}を選択")" />
                         <RaceOpsStatusBadge Label="@SubjectStatusLabel(candidate)" Tone="@(SubjectActionable(candidate) ? "success" : "warning")" />
                     </div>
                     <dl>
@@ -71,9 +71,16 @@
             }
         </div>
         <div class="repair-actions">
-            <span>@selectedSubjects.Count 件を選択</span>
-            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingSubjects = true)" Disabled="@(busy || selectedSubjects.Count == 0)">選択した補正を確認</FluentButton>
+            <span>@selectedSubjects.Count 件を選択（補正可能 @SelectedActionableSubjectCount 件、要確認 @SelectedBlockedSubjectCount 件）</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingSubjects = true)"
+                          Disabled="@(busy || selectedSubjects.Count == 0 || SelectedBlockedSubjectCount > 0)">選択した補正を確認</FluentButton>
+            <FluentButton Appearance="@Appearance.Outline" OnClick="@(() => dismissingSubjects = true)"
+                          Disabled="@(busy || selectedSubjects.Count == 0)">選択した候補を対応不要として閉じる</FluentButton>
         </div>
+        @if (selectedSubjects.Count > 0 && SelectedBlockedSubjectCount > 0)
+        {
+            <p class="hint" role="status">要確認を含むため再収集は実行できません。対応不要として閉じるか、選択を変更してください。</p>
+        }
     }
 </section>
 
@@ -91,6 +98,28 @@
     <FluentDialogFooter>
         <FluentButton OnClick="@(() => confirmingSubjects = false)" Disabled="@busy">戻って確認</FluentButton>
         <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteSubjectRepairsAsync" Disabled="@busy">@(busy ? "補正中…" : "補正して再収集")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog Hidden="@(!dismissingSubjects)" HiddenChanged="@(hidden => dismissingSubjects = !hidden)"
+              Modal="true" TrapFocus="true" AriaLabelledby="subject-dismiss-confirm-title"
+              Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="subject-dismiss-confirm-title">選択した@(selectedSubjects.Count)件を対応不要として閉じますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>選択した古い失敗通知だけが一覧から消えます。元の収集ジョブ、試行履歴、主体データは削除されません。</p>
+        <p>同じ対象で新しい失敗が発生した場合は、再び要対応として表示されます。</p>
+        <ul class="repair-confirm-list">
+            @foreach (var candidate in SelectedSubjectCandidates)
+            {
+                <li><strong>@SubjectTypeLabel(candidate.SubjectType)</strong> @candidate.SubjectId — @(candidate.BlockingReason ?? candidate.ErrorMessage ?? "理由なし")</li>
+            }
+        </ul>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@(() => dismissingSubjects = false)" Disabled="@busy">キャンセル</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="DismissSubjectFailuresAsync" Disabled="@busy">
+            @(busy ? "処理中…" : "対応不要として閉じる")
+        </FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
@@ -225,10 +254,13 @@
     private string subjectFilter = string.Empty;
     private bool subjectLoading = true;
     private bool confirmingSubjects;
+    private bool dismissingSubjects;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
         string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
     private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
         subjectCandidates.Where(x => selectedSubjects.Contains(x.NotificationId));
+    private int SelectedActionableSubjectCount => SelectedSubjectCandidates.Count(SubjectActionable);
+    private int SelectedBlockedSubjectCount => selectedSubjects.Count - SelectedActionableSubjectCount;
     private int SafeCount => candidates.Count(x => x.SafeToApply);
     private int BlockedCount => candidates.Count - SafeCount;
     private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
@@ -257,7 +289,7 @@
             subjectLoading = true;
             var subjectPreview = await Api.GetSubjectIdentificationRepairPreviewAsync();
             subjectCandidates = subjectPreview?.Candidates.Where(x => x.NotificationId != Guid.Empty).ToArray() ?? [];
-            selectedSubjects.RemoveWhere(id => subjectCandidates.All(x => x.NotificationId != id || !SubjectActionable(x)));
+            selectedSubjects.RemoveWhere(id => subjectCandidates.All(x => x.NotificationId != id));
         }
         catch (Exception)
         {
@@ -275,13 +307,13 @@
     private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);
     private void SetSubjectSelected(SubjectIdentificationRepairCandidateResponse candidate, bool value)
     {
-        if (value && SubjectActionable(candidate)) selectedSubjects.Add(candidate.NotificationId);
+        if (value) selectedSubjects.Add(candidate.NotificationId);
         else selectedSubjects.Remove(candidate.NotificationId);
     }
 
     private async Task ExecuteSubjectRepairsAsync()
     {
-        if (selectedSubjects.Count == 0 || busy) return;
+        if (selectedSubjects.Count == 0 || SelectedBlockedSubjectCount > 0 || busy) return;
         busy = true; errors = []; success = null;
         try
         {
@@ -298,6 +330,33 @@
         }
         catch (Exception) { errors = ["補正の完了状態を確認できませんでした。再読込して状態を確認してください。"]; }
         finally { confirmingSubjects = false; busy = false; }
+    }
+
+    private async Task DismissSubjectFailuresAsync()
+    {
+        if (selectedSubjects.Count == 0 || busy) return;
+        busy = true; errors = []; success = null;
+        try
+        {
+            var result = await Api.DismissSubjectIdentificationFailuresAsync(selectedSubjects.ToArray());
+            if (!result.Success || result.Value is null)
+            {
+                errors = result.Errors.Count == 0
+                    ? ["対応不要として閉じられませんでした。候補を再読込してください。"]
+                    : result.Errors;
+                return;
+            }
+            success = $"{result.Value.DismissedCount} 件を対応不要として閉じました。元の収集ジョブと履歴は保持されています。";
+            if (result.Value.AlreadyClosedCount > 0)
+                success += $" {result.Value.AlreadyClosedCount} 件はすでに処理済みでした。";
+            selectedSubjects.Clear();
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            errors = ["対応不要化の完了状態を確認できませんでした。候補を再読込して状態を確認してください。"];
+        }
+        finally { dismissingSubjects = false; busy = false; }
     }
 
     private string SubjectStatusLabel(SubjectIdentificationRepairCandidateResponse candidate) =>

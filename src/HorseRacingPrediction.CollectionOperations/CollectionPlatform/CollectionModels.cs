@@ -307,6 +307,8 @@ public sealed record CollectionFailureGroupMatch(int MatchingGroupCount,
     IReadOnlyList<PendingCollectionFailureNotification> Notifications);
 public sealed record CollectionFailureRecoveryResult(int SelectedCount, int CreatedTaskCount,
     int ReusedTaskCount, IReadOnlyList<Guid> TaskIds);
+public sealed record CollectionFailureDismissalResult(int SelectedCount, int DismissedCount,
+    int AlreadyClosedCount, bool HasRecoveryConflict = false);
 public sealed record CollectionRequestSummary(Guid RequestId, int RequestedRevision, CollectionReason Reason,
     DateTimeOffset RequestedAt, string? ExplicitUrl, string? BatchId);
 public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int AttemptNumber,

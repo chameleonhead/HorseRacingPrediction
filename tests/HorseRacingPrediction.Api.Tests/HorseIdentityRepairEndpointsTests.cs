@@ -46,6 +46,87 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
+    public async Task SubjectNotIdentified_CanBeDismissedWithoutDeletingHistory()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var definition = new CollectionDefinitionId("trainer-profile");
+        await store.RegisterDefinitionAsync(definition, "Trainer profile", ResourceType.Trainer,
+            1, "test", false);
+        var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"old-{Guid.NewGuid():N}");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
+                PageIdentification: "SubjectIdentification:MissingName"));
+        var candidate = (await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification"))!.Candidates.Single(x => x.SubjectId == resource.Id);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/dismiss",
+            new DismissSubjectIdentificationFailuresRequest([candidate.NotificationId]));
+        var result = await response.Content.ReadFromJsonAsync<DismissSubjectIdentificationFailuresResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual(1, result!.DismissedCount);
+        Assert.IsEmpty((await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification"))!.Candidates.Where(x => x.SubjectId == resource.Id));
+        Assert.AreEqual(CollectionTaskStatus.Failed,
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+        var detail = await store.GetResourceDetailAsync(resource, definition);
+        Assert.AreEqual(CollectionFailureResolutionStatus.Superseded,
+            detail!.Failures!.Single().ResolutionStatus);
+
+        using var repeatedResponse = await http.PostAsJsonAsync(
+            "/api/admin/repairs/subject-identification/dismiss",
+            new DismissSubjectIdentificationFailuresRequest([candidate.NotificationId]));
+        var repeated = await repeatedResponse.Content
+            .ReadFromJsonAsync<DismissSubjectIdentificationFailuresResponse>();
+        Assert.AreEqual(HttpStatusCode.OK, repeatedResponse.StatusCode);
+        Assert.AreEqual(0, repeated!.DismissedCount);
+        Assert.AreEqual(1, repeated.AlreadyClosedCount);
+    }
+
+    [TestMethod]
+    public async Task DismissSubjectIdentification_WithNonSubjectNotification_UpdatesNothing()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var subjectDefinition = new CollectionDefinitionId("jockey-profile");
+        var raceDefinition = new CollectionDefinitionId("race-test");
+        await store.RegisterDefinitionAsync(subjectDefinition, "Jockey profile", ResourceType.Jockey,
+            1, "test", false);
+        await store.RegisterDefinitionAsync(raceDefinition, "Race", ResourceType.Race,
+            1, "test", false);
+        foreach (var item in new[]
+                 {
+                     (new ResourceKey(ResourceType.Jockey, "JRA", "jockey-old"), subjectDefinition),
+                     (new ResourceKey(ResourceType.Race, "JRA", "race-old"), raceDefinition),
+                 })
+        {
+            var receipt = await store.RequestAsync(item.Item1, item.Item2, 1, CollectionReason.Discovery, now);
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "not found",
+                    FailureImpact: CollectionFailureImpact.Isolated));
+        }
+        var notifications = await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/dismiss",
+            new DismissSubjectIdentificationFailuresRequest(notifications.Select(x => x.NotificationId).ToArray()));
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.HasCount(2, await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10));
+    }
+
+    [TestMethod]
     public async Task SubjectNotIdentified_WithSafeHorseCandidate_MergesSuppressesAndRecoversTarget()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

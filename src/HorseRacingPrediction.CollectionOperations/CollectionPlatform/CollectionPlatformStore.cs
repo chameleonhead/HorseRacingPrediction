@@ -2573,6 +2573,48 @@ public sealed class CollectionPlatformStore
             .Take(Math.Max(1, maxCount)).Select(ToFailure).ToList();
     }
 
+    public async Task<IReadOnlyList<PendingCollectionFailureNotification>> GetFailureNotificationsAsync(
+        IReadOnlyCollection<Guid> notificationIds, CancellationToken cancellationToken = default)
+    {
+        var ids = notificationIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        await using var db = CreateDbContext();
+        var rows = await FailureQuery(db).Where(x => ids.Contains(x.Notification.NotificationId))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        return rows.Select(ToFailure).ToList();
+    }
+
+    public async Task<CollectionFailureDismissalResult> DismissFailureNotificationsAsync(
+        IReadOnlyCollection<Guid> notificationIds, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = notificationIds.Distinct().ToArray();
+        if (ids.Length == 0) throw new ArgumentException("At least one notification is required.", nameof(notificationIds));
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var rows = await db.FailureNotifications.Where(x => ids.Contains(x.NotificationId))
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            if (rows.Count != ids.Length)
+                throw new KeyNotFoundException("One or more failure notifications were not found.");
+            if (rows.Any(x => x.ResolutionStatus == CollectionFailureResolutionStatus.RecoveryInProgress))
+                return new(ids.Length, 0, rows.Count(x => x.ResolutionStatus != CollectionFailureResolutionStatus.Open), true);
+
+            var open = rows.Where(x => x.ResolutionStatus == CollectionFailureResolutionStatus.Open).ToArray();
+            foreach (var row in open)
+            {
+                row.ResolutionStatus = CollectionFailureResolutionStatus.Superseded;
+                row.ResolvedAt = now;
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(ids.Length, open.Length, ids.Length - open.Length);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<CollectionFailureGroupMatch> GetActionableFailureGroupAsync(string groupKey,
         DateTimeOffset now, CancellationToken cancellationToken = default)
     {
