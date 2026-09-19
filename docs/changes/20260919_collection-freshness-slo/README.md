@@ -54,14 +54,14 @@ The user approved this design on 2026-09-19 by instructing Codex to process the 
 
 - 毎週金曜18:00 JST以降、直後の土曜・日曜について評価する。時刻は設定値とする。
 - 分母は、公式calendar/race list discoveryで発見され、`race-detail` resource/taskが作成されたレースのdistinct canonical resource IDとする。
-- 分子は、domain race summaryが存在し、`EntryCount > 0` で、collection artifactのCardがpersist済みのレースとする。
+- 分子は、domain race summaryの `EntryCount > 0` を正とする。collection artifactのCard状態も利用するが、導入前データのartifact未移行だけを欠落とはしない。
 - discovery自体が開催を列挙できていない場合は充足率100%とせず、`WeekendDiscoveryCoverageUnknown` とする。
 - 18:00時点で100%未満ならHigh、21:00時点でも未解消ならCriticalとして通知する。
 
 ### Post-race result checkpoint
 
 - 各レースの公式発走予定時刻に30分のgraceを加えた時刻以降に評価する。
-- 分母は当該時刻を過ぎた発見済みレース、分子は `ResultDeclaredAt` がありResult artifactがpersist済みのレースとする。
+- 分母は当該時刻を過ぎた発見済みレース、分子はdomainの `ResultDeclaredAt` または公式なResult artifactがpersist済みのレースとする。
 - 期限超過30分以内はMedium、30分超または開催日18:30 JST時点の未取得はHighとする。
 - 中止・取消など公式にレース全体が不成立の場合は、`NotApplicable` の公式根拠が保存されていれば充足として数える。
 
@@ -123,6 +123,7 @@ findingには対象日、評価時刻、期限、分母・分子・欠落数、�
 - 代表の中山8Rは9月17日18:35 JSTのattemptが `RaceNotStarted` で終了し、required revision 1、applied revision 0、last collectedなし。金曜時点でdomainのcard/entriesを確認できない。
 - 現行監視はtask停止・滞留を検出するが、上記のdomain completenessをfindingにしないことを確認した。
 - 2026-09-19 22:12 JST: deployment後shadow run 35445057660で鮮度findingが生成されることを確認した。一方、最新待機taskのmetadataを優先したため、保存済みの9月19日Cardも24/24不足と誤判定した。projectionをtask metadataではなく永続 `race_artifact_states` と `race_scheduling_evidence` 優先へ修正し、回帰テストを追加した。
+- 2026-09-19 22:46 JST: shadow run 35446435137で数値enumを含むActionRequired判定とwarning出力を確認した。永続artifactにも9月19日Card状態が移行されておらず、domainではEntryCount/ResultDeclaredAtが24/24存在するのにCard 0/24とする誤検知が残った。domain race summaryの件数をartifact projectionへ併合し、artifact移行遅延だけでは欠落扱いしない回帰テストを追加した。9月20日のdomain 0/24は引き続きCriticalとする。
 
 ## Human decision required
 

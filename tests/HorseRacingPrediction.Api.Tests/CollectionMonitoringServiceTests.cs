@@ -201,6 +201,41 @@ public sealed class CollectionMonitoringServiceTests
     }
 
     [TestMethod]
+    public void Freshness_DomainCardsPreventArtifactLagFalsePositive()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 19, 18, 30, 0, TimeSpan.FromHours(9));
+        var races = Enumerable.Range(1, 24).Select(index => RaceFreshness(
+            $"20260919:Course:{index}", now.AddHours(-8),
+            RaceArtifactStatus.Unknown, RaceArtifactStatus.Unknown)).ToArray();
+        var domain = Enumerable.Range(1, 24)
+            .Select(_ => new DomainRaceFreshness(new DateOnly(2026, 9, 19), true, true)).ToArray();
+
+        var findings = service.EvaluateFreshness(races, domain, now);
+
+        Assert.IsFalse(findings.Any(x => x.Kind == "WeekendCardCoverageMissing"));
+        Assert.IsFalse(findings.Any(x => x.Kind is "RaceDayResultCoverageMissing" or "RaceResultFreshnessMiss"));
+    }
+
+    [TestMethod]
+    public void Freshness_DomainCoverageDoesNotHideMissingSundayCards()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 18, 21, 5, 0, TimeSpan.FromHours(9));
+        var races = Enumerable.Range(1, 24).Select(index => RaceFreshness(
+            $"20260920:Course:{index}", now.AddDays(1).AddHours(-6),
+            RaceArtifactStatus.Unknown, RaceArtifactStatus.Unknown)).ToArray();
+
+        var finding = service.EvaluateFreshness(races, [], now)
+            .Single(x => x.Kind == "WeekendCardCoverageMissing");
+
+        Assert.AreEqual("critical", finding.Severity);
+        Assert.IsTrue(finding.Evidence.Contains("missing=24"));
+    }
+
+    [TestMethod]
     public void Freshness_EmptyFridayDiscoveryIsUnknownRatherThanHealthy()
     {
         using var scope = new MonitoringStoreScope();

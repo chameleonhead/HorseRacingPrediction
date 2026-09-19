@@ -1,6 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
+using EventFlow.EntityFramework;
+using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace HorseRacingPrediction.Api.CollectionController;
@@ -88,9 +92,12 @@ public sealed record CollectionKnownRecoveryExecution(
     int Skipped,
     int Failed);
 
+internal sealed record DomainRaceFreshness(DateOnly RaceDate, bool HasCard, bool HasResult);
+
 public sealed class CollectionMonitoringService(
     CollectionPlatformStore store,
-    IOptions<CollectionMonitoringOptions> options)
+    IOptions<CollectionMonitoringOptions> options,
+    IDbContextProvider<EventStoreDbContext>? domainProvider = null)
 {
     internal const string SubjectRecoveryRecipeId = "subject-identification-revision-gated-v1";
     private static readonly SemaphoreSlim RecoveryGate = new(1, 1);
@@ -173,7 +180,9 @@ public sealed class CollectionMonitoringService(
                 $"stalled:{group.Key.Value}:{group.Key.Status}:{group.Key.Lane}:{group.Key.Priority}"));
         }
 
-        findings.AddRange(EvaluateFreshness(snapshot.RaceFreshness ?? [], now));
+        var domainFreshness = await GetDomainFreshnessAsync(snapshot.RaceFreshness ?? [], cancellationToken)
+            .ConfigureAwait(false);
+        findings.AddRange(EvaluateFreshness(snapshot.RaceFreshness ?? [], domainFreshness, now));
 
         foreach (var violation in FindDispatchOrderViolations(snapshot, now).Take(20))
             findings.Add(violation);
@@ -192,6 +201,12 @@ public sealed class CollectionMonitoringService(
 
     internal IReadOnlyList<CollectionOperationalFinding> EvaluateFreshness(
         IReadOnlyList<CollectionRaceFreshnessSnapshot> snapshots, DateTimeOffset now)
+        => EvaluateFreshness(snapshots, [], now);
+
+    internal IReadOnlyList<CollectionOperationalFinding> EvaluateFreshness(
+        IReadOnlyList<CollectionRaceFreshnessSnapshot> snapshots,
+        IReadOnlyList<DomainRaceFreshness> domainRaces,
+        DateTimeOffset now)
     {
         var findings = new List<CollectionOperationalFinding>();
         var latest = snapshots
@@ -217,7 +232,10 @@ public sealed class CollectionMonitoringService(
                 continue;
             }
 
-            var missing = races.Where(x => x.CardStatus != RaceArtifactStatus.Current).ToArray();
+            var domainCardCount = domainRaces.Count(x => x.RaceDate == date && x.HasCard);
+            var artifactCardCount = races.Count(x => x.CardStatus == RaceArtifactStatus.Current);
+            var missingCount = Math.Max(0, races.Length - Math.Max(artifactCardCount, domainCardCount));
+            var missing = races.Where(x => x.CardStatus != RaceArtifactStatus.Current).Take(missingCount).ToArray();
             if (missing.Length == 0) continue;
             var severity = now.DayOfWeek == DayOfWeek.Friday
                            && now.Hour >= Math.Clamp(_options.FridayCriticalHour, 18, 23)
@@ -238,8 +256,13 @@ public sealed class CollectionMonitoringService(
             .ToArray();
         foreach (var dateGroup in dueResults.GroupBy(x => GetRaceDate(x.Resource.Id)))
         {
+            var domainResultCount = domainRaces.Count(x => x.RaceDate == dateGroup.Key && x.HasResult);
+            var artifactResultCount = dateGroup.Count(x => x.ResultStatus == RaceArtifactStatus.Current
+                                                            || x.ResultStatus == RaceArtifactStatus.Unavailable);
+            var missingCount = Math.Max(0, dateGroup.Count() - Math.Max(artifactResultCount, domainResultCount));
             var missing = dateGroup.Where(x => x.ResultStatus != RaceArtifactStatus.Current
-                                               && x.ResultStatus != RaceArtifactStatus.Unavailable).ToArray();
+                                               && x.ResultStatus != RaceArtifactStatus.Unavailable)
+                .Take(missingCount).ToArray();
             if (missing.Length == 0) continue;
             var checkpoint = new TimeSpan(Math.Clamp(_options.RaceDayResultCheckpointHour, 0, 23),
                 Math.Clamp(_options.RaceDayResultCheckpointMinute, 0, 59), 0);
@@ -258,6 +281,25 @@ public sealed class CollectionMonitoringService(
                 null, $"freshness:result:{dateGroup.Key:yyyyMMdd}:{(pastDayCheckpoint ? "day" : "race")}"));
         }
         return findings;
+    }
+
+    private async Task<IReadOnlyList<DomainRaceFreshness>> GetDomainFreshnessAsync(
+        IReadOnlyList<CollectionRaceFreshnessSnapshot> snapshots,
+        CancellationToken cancellationToken)
+    {
+        if (domainProvider is null) return [];
+        var dates = snapshots.Select(x => GetRaceDate(x.Resource.Id)).Where(x => x != default).Distinct().ToArray();
+        if (dates.Length == 0) return [];
+        var first = dates.Min();
+        var last = dates.Max();
+        using var db = domainProvider.CreateContext();
+        return await db.Set<RaceSummaryReadModel>().AsNoTracking()
+            .Where(x => x.RaceDate >= first && x.RaceDate <= last)
+            .Select(x => new DomainRaceFreshness(
+                x.RaceDate!.Value,
+                x.EntryCount.HasValue && x.EntryCount.Value > 0,
+                x.ResultDeclaredAt.HasValue))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private IEnumerable<DateOnly> GetCardCheckpointDates(DateOnly today, TimeSpan localTime)

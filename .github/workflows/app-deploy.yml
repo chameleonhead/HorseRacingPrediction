@@ -423,6 +423,13 @@ jobs:
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
           base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
+          preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+            "$base/migrations/race-entry-owners/preview")"
+          echo "Race entry owner migration preview: $preview"
+          if [ "$(jq '.remaining' <<<"$preview")" = "0" ]; then
+            echo "Race entry owner migration is already complete; skipping pipeline pause."
+            exit 0
+          fi
           resume() {
             curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
               "$base/pipeline/resume" >/dev/null || true
