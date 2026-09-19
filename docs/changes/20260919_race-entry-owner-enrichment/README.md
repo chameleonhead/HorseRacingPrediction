@@ -1,6 +1,6 @@
 # Race出走馬の後着データ補完
 
-- Status: Approved
+- Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -12,6 +12,11 @@
 | Code | Completed | 要求revisionの全terminal経路での後続実体化、request実行条件の永続化、migration preview/apply/progress、設定画面、deploy後migration jobを接続した。 |
 | Verification | Completed | Collector 269件、API 247件（既存skip 1件）、solution build、format、change-record validator、CodeGraphを完了した。 |
 | Deployment/operation | Not started | push/deployとproduction migration preview/apply、本番データ補正は未実施。既存error jobは変更していない。 |
+
+> **2026-09-19 design correction:** ownerはRaceCardを取得できた場合だけ取得でき、過去RaceResultや
+> 現在のHorse profileからは復元できない。全owner欠損Raceへ補正要求を作る現行migrationは、
+> Card取得期間外にも実行不能な要求を作るため、push/deploy/applyしてはならない。
+> [JRAサイト収集契約とCard限定補正](../20260919_jra-site-collection-contract/README.md)の承認・実装後に再度Approvedとする。
 
 ## 調査結果
 
@@ -205,7 +210,7 @@ API/schemaを先行し、Collector互換を確認してからCollectorを配備�
 - Reviewer: Main
 - Checkpoint finding: 単一request APIはactive taskへ統合した高revisionを`RequiredRevision`へ反映していなかった。bulkだけの局所修正では同型不具合が残るため、単一・bulk双方でrequestを永続化し、terminal共通処理から後続taskを生成するよう修正した。
 - Persistence finding: 後続taskが元taskのlane/priority/metadataを流用すると新revision要求の条件を失うため、schema v17でrequestへ`Lane`、`Priority`、`MetadataJson`を追加し、後続taskはrequestから復元する。
-- Migration review: 固定batch `migration:race-entry-owners:v2`、全Race read-only scan、pause/running-drain gate、公式Card再取得、進捗分類を実経路へ接続した。Horse profileからの直接コピーは存在しない。
+- Migration review: 固定batch `migration:race-entry-owners:v2`、全Race read-only scan、pause/running-drain gate、公式Card再取得、進捗分類を実経路へ接続した。Horse profileからの直接コピーは存在しない。**ただし後続確認で、全Race scanから全欠損Raceへ要求する設計はCard取得期間外のRaceを補正できないことが判明したため、本項の実装完了判定を撤回し、再設計を要する。**
 - Legacy surface: 旧日付preview/apply APIは外部互換用に残し、applyはpause/drainと同じ固定migration batchへ委譲する。旧Web client/UI callerは0件で、設定画面の操作入口はmigrationへ一本化した。
-- Final state: T6-T8とAC11-AC14はVerified。T9、AC5、AC15のproduction post-checkはpush/deploy前のため未完了であり、recordは`Approved`のまま維持する。
+- Final state: T6-T8の基盤部分は検証済みだが、owner補正対象の選定はCard取得元制約に違反している。T9、AC5、AC13-AC15は再設計後に再検証するため、本recordを`Proposed`へ戻す。
 - Workflow assessment: テストが承認後の実装中に既存単一request APIの同型欠損を検出し、承認済み範囲内で根本修正・再検証できた。既存DDD/セルフレビュー規約の不足を示す反復失敗ではないためskill変更は行わない。
