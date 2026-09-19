@@ -52,7 +52,16 @@ public sealed record CollectionMonitoringReport(
     bool Suppressed,
     string? SuppressionReason,
     bool Truncated,
-    IReadOnlyList<CollectionOperationalFinding> Findings);
+    IReadOnlyList<CollectionOperationalFinding> Findings,
+    CollectionMonitoringOutcome Outcome = CollectionMonitoringOutcome.Healthy);
+
+public enum CollectionMonitoringOutcome
+{
+    Healthy,
+    FindingRecorded,
+    ActionRequired,
+    MonitorFailed,
+}
 
 public sealed record CollectionKnownRecoveryPreview(
     string RecipeId,
@@ -88,7 +97,7 @@ public sealed class CollectionMonitoringService(
     {
         if (!_options.Enabled)
             return new(now, now, false, _options.ChangeRecordEnabled, true,
-                "Collection monitoring is disabled.", false, []);
+                "Collection monitoring is disabled.", false, [], CollectionMonitoringOutcome.Healthy);
 
         var snapshot = await store.GetMonitoringSnapshotAsync(now,
             now.AddHours(-Math.Clamp(_options.DispatchLookbackHours, 1, 168)),
@@ -96,7 +105,7 @@ public sealed class CollectionMonitoringService(
         var maintenanceReason = GetMaintenanceReason(snapshot.Pipeline);
         if (maintenanceReason is not null)
             return new(now, DateTimeOffset.UtcNow, true, _options.ChangeRecordEnabled, true,
-                maintenanceReason, snapshot.Truncated, []);
+                maintenanceReason, snapshot.Truncated, [], CollectionMonitoringOutcome.Healthy);
 
         var findings = new List<CollectionOperationalFinding>();
         var failures = await store.GetActionableFailureNotificationsAsync(now,
@@ -162,9 +171,16 @@ public sealed class CollectionMonitoringService(
         foreach (var violation in FindDispatchOrderViolations(snapshot, now).Take(20))
             findings.Add(violation);
 
-        return new(now, DateTimeOffset.UtcNow, true, _options.ChangeRecordEnabled, false, null, snapshot.Truncated,
-            findings.OrderByDescending(x => SeverityRank(x.Severity)).ThenBy(x => x.Fingerprint)
-                .Take(Math.Clamp(_options.MaxFindings, 1, 1_000)).ToArray());
+        var ordered = findings.OrderByDescending(x => SeverityRank(x.Severity)).ThenBy(x => x.Fingerprint)
+            .Take(Math.Clamp(_options.MaxFindings, 1, 1_000)).ToArray();
+        var outcome = ordered.Any(x => x.Kind == "UnexpectedPipelinePause"
+                                       || x.Severity is "high" or "critical")
+            ? CollectionMonitoringOutcome.ActionRequired
+            : ordered.Length > 0
+                ? CollectionMonitoringOutcome.FindingRecorded
+                : CollectionMonitoringOutcome.Healthy;
+        return new(now, DateTimeOffset.UtcNow, true, _options.ChangeRecordEnabled, false, null,
+            snapshot.Truncated, ordered, outcome);
     }
 
     public async Task<CollectionKnownRecoveryPreview> PreviewKnownRecoveryAsync(
