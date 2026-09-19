@@ -9,8 +9,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Complete | 監査schema、validator/集計、低コストworker設定、canonical workflowを実装した。 |
-| Verification | Complete | 11反例test、3 skill validator、TOML parse、change-record validator、format/diff checksが成功した。 |
+| Code | Complete | follow-up changeでcomparison groupと排他的review時間schemaを修正した。 |
+| Verification | Complete | 14 audit testsでmixed-group、4+1比較不能、review時間不一致を含む反例が成功した。 |
 | Deployment/operation | Complete | リポジトリ規則とcustom worker設定へ接続済み。今後のdelegated coding taskから監査artifactを蓄積する。 |
 
 ## Context
@@ -209,11 +209,11 @@ worker が実装と test を同時に作成した重要変更では、主担当�
 | AC4 | bounded coding task は Luna、やや複雑な bounded task は Terra を初期候補とし、危険・曖昧な task は lead tier に保持する routing rule が適用される。 | T3,T4 | routing forward test | Verified |
 | AC5 | coding worker の成果は AC、test/build/format、scope、lead findings、rework、regression の gate で評価され、自己申告だけでは合格しない。 | T1,T3,T4 | pass/fail counterexample tests | Verified |
 | AC6 | task ごとの指示について objective、scope、dependency、acceptance、evidence、escalation、output format の不足を監査できる。 | T1,T2 | incomplete-contract fixture | Verified |
-| AC7 | 5件未満では budget default を変えず、十分な比較可能標本がある場合だけ successful outcome の token 分布から recommendation を作る。 | T2,T4 | small/qualified sample tests | Verified |
+| AC7 | 5件未満では budget default を変えず、十分な比較可能標本がある場合だけ successful outcome の token 分布から recommendation を作る。 | T2,T4,T5 | small/qualified/mixed-group sample tests | Verified |
 | AC8 | 失敗時に再指示、再分割、reasoning/model 昇格を自律実行でき、persistent policy 変更は evidence、validator、forward test、承認境界を守る。 | T3,T4 | failure and promotion simulation | Verified |
 | AC9 | 監査 artifact に credential、secret、prompt 全文、ソース本文が保存されない。 | T1,T2 | forbidden-field/secret fixture tests | Verified |
 | AC10 | 今後の delegated coding task の final review が task audit を参照し、model verification、quality verdict、usage availability、routing recommendation を change record へ要約する。 | T3,T4 | DDD format review と realistic forward test | Verified |
-| AC11 | 低コスト model の結果は、比較可能な task class/risk の Terra または lead-tier baseline と区別され、baseline 不在時に相対的な費用優位を断定しない。 | T1,T2,T4 | comparable/non-comparable baseline fixtures | Verified |
+| AC11 | 低コスト model の結果は、比較可能な task class/risk の Terra または lead-tier baseline と区別され、baseline 不在時に相対的な費用優位を断定しない。 | T1,T2,T4,T5 | comparable/non-comparable/mixed-group baseline fixtures | Verified |
 | AC12 | 成功結果当たりの評価が worker usage に加えて review、retry、corrective implementation、promotion、破棄 attempt を含む。 | T1,T2,T4 | total-outcome-cost aggregation tests | Verified |
 | AC13 | task の ambiguity、execution paths、contract、persistence、concurrency、security、external dependency、test coverage、write scope を実行前に分類できる。 | T1,T2 | difficulty-profile schema tests | Verified |
 | AC14 | model/reasoning、task contract、開始・終了 revision、skill/tool/config profile を記録し、取得不能な provider version を推測しない。 | T1,T2 | reproducibility and missing-version fixtures | Verified |
@@ -221,7 +221,7 @@ worker が実装と test を同時に作成した重要変更では、主担当�
 | AC16 | 共有 worktree の worker diff を既存ユーザー変更および並行 agent 変更から区別でき、帰属不能 run は比較統計から除外される。 | T1,T2,T4 | mixed-worktree fixture tests | Verified |
 | AC17 | 後続 review、CI、運用で確認された defect を元 task audit へ関連付け、initial pass と escaped-defect-adjusted pass を分けて集計できる。 | T1,T2,T4 | escaped-defect lifecycle test | Verified |
 | AC18 | 自動 recommendation は一段階の変更、対象、evidence、validator、forward test、観測期間、rollback condition を持ち、重大 failure では低コスト routing の停止候補を生成する。 | T2,T3,T4 | adaptation/rollback simulations | Verified |
-| AC19 | reviewer model usage、review回数、active review time、human review time、finding対応、correction、再検証、audit overheadを個別記録し、worker・review・reworkを合算した成功結果当たり総費用とreview burden ratioを算出できる。 | T1,T2,T4 | complete/partial/missing review-cost fixtures と aggregation tests | Verified |
+| AC19 | reviewer model usage、review回数、active review time、human review time、finding対応、correction、再検証、audit overheadを個別記録し、worker・review・reworkを合算した成功結果当たり総費用とreview burden ratioを算出できる。 | T1,T2,T4,T6 | complete/partial/missing/overlap review-cost fixtures と aggregation tests | Verified |
 | AC20 | 人間工数はactive minutesと待機時間を区別し、利用者が換算単価を明示しない限り架空の人件費へ変換しない。価格換算にはsource、日付、単位が記録される。 | T1,T2,T4 | human-rate absent/present、stale/missing price-source fixtures | Verified |
 
 ## Task plan
@@ -232,6 +232,8 @@ worker が実装と test を同時に作成した重要変更では、主担当�
 | T2 | audit validator、worker/review/rework総 outcome cost・baseline・escaped defect 集計、guarded recommendation script と test を実装する。AC1-AC3, AC6, AC7, AC9, AC11-AC14, AC16-AC20。 | Coding worker + Main review | Luna candidate; Lead review | T1 | `.codex/skills/agent-task-orchestration/scripts/**` と tests | script tests、invalid/mixed-worktree/lifecycle/review-cost fixtures | validator/summary/recommendation outputs | Verified |
 | T3 | orchestration、DDD、failure skill、format、AGENTS.md を独立反証、帰属、改善安全弁へ接続する。AC4, AC5, AC8, AC10, AC15, AC18。 | Coding worker drafts + Main integration | Luna/Terra candidates; Lead integration | T1 | listed canonical documents | skill validators、diff review | policy and workflow diff | Verified |
 | T4 | low-cost coding forward test、baseline比較、review工数集計、hidden counterexample、mixed-worktree、escaped defect、rollback の反証 test と final reconciliation を行う。全 AC。 | Independent reviewer + Main | Review tier + Lead tier | T2,T3 | read-only、audit fixtures、本記録 | realistic delegated task simulations、review-cost aggregation、全 validator、`git diff --check` | audit reports と closure ledger | Verified |
+| T5 | 集計をtask class、risk、model、reasoning、difficulty profileの比較groupごとに分離し、比較可能な成功5件だけで改善gateを開く。AC7, AC11。 | Main | Lead tier | Follow-up approval | audit script/tests | mixed-group counterexamples | grouped summary and recommendation | Verified |
+| T6 | review時間区分を排他的にし、pure review、correction、re-verification、audit overheadの二重計上を拒否する。AC19。 | Main | Lead tier | Follow-up approval | audit schema/script/tests | overlap and total-cost counterexamples | reconciled review effort | Verified |
 
 ## Review gates
 
@@ -318,3 +320,12 @@ worker が実装と test を同時に作成した重要変更では、主担当�
 - `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`: 成功。
 - 対象ファイルの`git diff --check`: 成功。
 - `git status`: 本変更対象だけが変更・追加され、既存production codeの変更はない。
+
+## Post-implementation concern review
+
+- 2026-09-19: ユーザーから「懸念は変更作成時に解消し、人とエージェント双方の合意で進めたい」との指摘を受けて再監査した。
+- Finding C1 (verified): `summarize()` は全attributable successを一つに集計し、`baseline.comparable` がfalseのsampleや異なるtask class/risk/model/difficultyを5件gateへ算入できる。これはAC7とAC11を満たさない。
+- Finding C2 (verified): `reviewEffortMinutes` は`humanActiveMinutes`、`correctionMinutes`、`reverificationMinutes`、`auditOverheadMinutes`を加算するが、`humanActiveMinutes`が純review時間か総active時間かをschemaが強制しない。入力方法によりAC19のreview工数を二重計上できる。
+- Process cause: 設計上の懸念を実装契約へ書いたが、承認前の独立concern reviewと、各懸念を反例へ変換したことを人とエージェントが確認する合意ledgerがなかった。最終reviewは既存test成功を根拠にし、設計文から未実装反例を再導出しなかった。
+- Disposition: `20260919_change-concern-consensus-gate`でcomparison grouping、排他的review時間、concern consensus gateを実装し、14 audit testsと10 change-record validator testsで再検証した。AC7、AC11、AC19とT5-T6を`Verified`へ戻した。
+- Prior final-review decision: superseded by this section。commit `0ad7bc3`は初回実装証拠であり、AC7/AC11/AC19の完了証拠はfollow-up changeのgroup/time反例testと最終commitである。

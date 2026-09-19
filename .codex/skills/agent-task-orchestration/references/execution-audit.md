@@ -4,11 +4,11 @@ Use this reference for delegated coding, model-routing audits, usage/cost compar
 
 ## Required record
 
-The validator accepts schema version `1`. Unknown fields are allowed so provider telemetry can evolve, but the required decision fields below must remain explicit.
+The validator accepts schema version `2`. Unknown fields are allowed so provider telemetry can evolve, but the required decision fields below must remain explicit. Version 2 makes review-time components exclusive and groups routing statistics by comparable task profile.
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "identity": {
     "changeId": "20260919_agent-execution-audit",
     "taskId": "T2",
@@ -91,10 +91,11 @@ The validator accepts schema version `1`. Unknown fields are allowed so provider
     "reviewUsageTokens": null,
     "reviewPasses": 1,
     "elapsedReviewMinutes": 4.0,
-    "humanActiveMinutes": null,
+    "pureReviewMinutes": 1.0,
     "correctionMinutes": 0.0,
     "reverificationMinutes": 2.0,
     "auditOverheadMinutes": 1.0,
+    "totalActiveMinutes": 4.0,
     "availability": "partial",
     "source": "lead task log"
   },
@@ -133,7 +134,7 @@ The validator accepts schema version `1`. Unknown fields are allowed so provider
 - A pass requires acceptance, verification, scope, regression, zero blocking findings, and attributable work. A telemetry gap changes the verdict to `pass-with-telemetry-gap`, not `fail`.
 - A model mismatch is a failed model-verification gate even when code quality passes.
 - Important worker-authored code and tests require an independent challenge. An existing regression suite is acceptable only for a low-risk mechanical change and the audit states that rationale.
-- Human time is active minutes, not unattended wall-clock time. Convert it to currency only when the user or organization supplied the hourly rate.
+- Human time components are exclusive active minutes, not unattended wall-clock time. `pureReviewMinutes` excludes correction, re-verification, and audit overhead; `totalActiveMinutes` equals their sum. Convert time to currency only when the user or organization supplied the hourly rate.
 - Currency aggregation requires a price source, observation date, and one currency. Otherwise report tokens, minutes, findings, and corrections separately.
 - `reviewBurdenRatio` uses automated review, human review, rework, and audit overhead cost divided by total successful-outcome cost. Do not compute it when required monetary components are unavailable.
 - Unattributed shared-worktree changes exclude the run from comparative routing statistics.
@@ -148,7 +149,7 @@ The validator accepts schema version `1`. Unknown fields are allowed so provider
 
 ## Budget recommendations
 
-Group only attributable, quality-passing samples with comparable task class, risk, model, reasoning effort, and difficulty profile.
+The tool forms a comparison key from task class, risk, requested model, reasoning effort, and the full difficulty profile. It returns one summary per key and never pools percentiles or sample thresholds across keys. Within a key, use only attributable, quality-passing, baseline-comparable samples without escaped defects for persistent adjustment.
 
 - Fewer than five successful samples: show observations; do not change a persistent default.
 - Five or more: report P50, P90, maximum successful usage, retry usage, truncation, and escaped defects.
@@ -161,7 +162,7 @@ Report these components separately before any total:
 
 1. worker model tokens/credits/currency;
 2. automated reviewer model tokens/credits/currency;
-3. human active review minutes and optional user-supplied labor rate;
+3. exclusive pure review, correction, re-verification, and audit-overhead minutes, plus an optional user-supplied labor rate;
 4. retry, correction, promotion, and re-verification cost;
 5. audit overhead.
 

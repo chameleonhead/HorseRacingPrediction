@@ -102,6 +102,8 @@ Execution Mode に移行した後は、
 - 成功結果当たりのcostにはworkerだけでなく、automated reviewer、利用者が提供した場合のhuman active review、指摘対応、corrective implementation、promotion、再検証、audit overheadを含める。人間単価やprovider料金根拠がない値を通貨へ換算しない。同程度のtaskと帰属可能なpatchだけを比較する。
 - persistentなmodel/reasoning/budget/task-boundary改善は、反復する比較可能evidence、重大なsecurity/data/scope/false-completion failure、または5件以上の成功標本に基づき、一段階の変更、validator、独立forward test、観測期間、rollback条件を持たせる。自発的にrecommendationと承認済み範囲内の再指示・再分割・昇格は行えるが、未承認scopeへ拡張しない。
 - DDD の Design/task-split、Pre-implementation、Checkpoint、Final review を各 change record で実施し、設計・分割・統合・完了判定の判断を記録する。
+- change recordの承認依頼前に、エージェントは要件衝突、設計・データ・セキュリティ、外部制約、移行・並行性・復旧、検証blind spot、cost/review工数、caller assumption、却下案から、承認判断または成否を変えるmaterial concernを能動的に提示する。各懸念は根拠、影響、推奨処置、代替、残存risk、AC/task/反例、agent position、user dispositionを持ち、`Resolved in design`、`Accepted risk`、`Excluded follow-up`、`Open decision`で管理する。`Open decision`または根拠あるagent objectionが未解決なら承認・実装へ進まない。material concernがない小変更は確認観点と短い結論だけでよい。
+- 人とエージェントの合意は、エージェントの無条件同意や利用者への責任移転ではない。安全性・受け入れ基準と衝突する場合は根拠と代替を示し、未合意のまま進めない。可逆的な好みは利用者の明示判断を尊重する。実装中に新しいmaterial design concernが出た場合は`Proposed`へ戻し、承認範囲内の局所欠陥はclosure itemと反例testを追加して自律修正する。
 - 行動を変えない誤字修正またはコメントだけの明確化は change record 不要とする。それ以外の機能、UI/UX、外部仕様、データモデル、運用フロー、レビュー判断に影響する変更は、規模にかかわらず DDD の change record を作成する。
 
 <!-- CODEGRAPH_START -->

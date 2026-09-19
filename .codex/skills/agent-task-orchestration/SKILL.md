@@ -22,6 +22,7 @@ For coding, prefer the lowest-cost eligible route, not the lowest-cost model unc
 ## Required lead workflow
 
 1. Define the outcome, constraints, acceptance criteria, and risk level before delegation.
+   Before approval, surface material routing, caller-assumption, telemetry, attribution, verification, cost, and review-burden concerns in the governing concern ledger. Convert resolved concerns into acceptance criteria and counterexamples; do not wait for the user to ask whether concerns exist.
 2. Split only work with a clear boundary. For each work item record: `id`, objective, owner, tier, dependencies, read scope, write scope, deliverable, verification command or evidence, and completion state.
 3. Decide whether items can run in parallel. Parallelize only when they have disjoint write scopes and no ordering dependency. Serialize shared-file edits, schema/API changes, migrations, and integration work. Treat generated files, migration snapshots, shared contracts, and formatters that rewrite common files as shared write scopes even when workers edit different source files. Assign them one owner and record when a reviewed contract is frozen before dependent workers begin.
 4. Send each worker a complete prompt using the contract below. A worker must not infer missing authority from repository access.
@@ -30,6 +31,8 @@ For coding, prefer the lowest-cost eligible route, not the lowest-cost model unc
 7. For delegated coding, create an execution audit using [the audit schema and gates](references/execution-audit.md). Record requested and observed models separately. Include reviewer usage, active review effort, corrections, re-verification, and audit overhead in successful-outcome cost.
 
 Before declaring the work complete, the lead performs a focused self-audit of the plan and dependencies, tier/routing choices, worker evidence, material acceptance gaps, and applicable skill instructions, proportional to the task's risk and size. Record material findings and their evidence; a short, low-risk task does not need a separate checklist. Do not complete while a material approved item is runnable, unverified, or unresolved. If the audit demonstrates a reusable process failure, apply `learn-from-implementation-failures`, update the narrowest applicable skill, validate it, and rerun the affected gate. Correct isolated implementation mistakes locally without turning each one into a skill rule.
+
+If a foreseeable concern is first raised only after completion, compare it with the approved design and tests. Reopen the originating record when it invalidates an AC or completion evidence, add the missing counterexample, and apply `learn-from-implementation-failures` when the review process failed to surface the concern. Do not classify it as a future enhancement merely because it was noticed late.
 
 Do not accept worker-authored tests as the only quality evidence for a material change. Use an independent counterexample, existing regression suite, invariant, real-path trace, or end-to-end check. Record why an existing suite is sufficient for a low-risk mechanical change.
 

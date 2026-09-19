@@ -15,7 +15,7 @@ SPEC.loader.exec_module(MODULE)
 
 def valid_record():
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "identity": {"changeId": "c", "taskId": "T1", "attemptId": "A1", "taskClass": "bounded-code", "risk": "low", "startedAt": "s", "completedAt": "e"},
         "difficulty": {"ambiguity": "low", "executionPaths": 1, "publicContract": False, "persistenceOrMigration": False, "concurrency": False, "securityOrPrivacy": False, "externalDependency": False, "existingTestCoverage": "strong", "expectedWriteScope": ["x"]},
         "routing": {"expectedTier": "low-cost-coding", "requestedModel": "gpt-5.6-luna", "requestedReasoningEffort": "medium", "observedModel": None, "observationSource": None, "verificationState": "unavailable", "unavailableReason": "not exposed"},
@@ -24,7 +24,7 @@ def valid_record():
         "reproducibility": {"startRevision": "a", "endRevisionOrPatch": "b", "skills": ["agent-task-orchestration"], "toolConfigProfile": "default", "providerModelVersion": None},
         "attribution": {"startStatusCaptured": True, "workerPatchIdentified": True, "parallelOwnersRecorded": True, "unattributedChanges": False},
         "quality": {"acceptancePassed": True, "verificationPassed": True, "scopePassed": True, "blockingFindings": 0, "nonBlockingFindings": 0, "workerRetries": 0, "leadCorrectionFiles": 0, "leadCorrectionLines": 0, "promoted": False, "independentChallenge": "existing suite", "regressionPassed": True},
-        "reviewEffort": {"reviewerTier": "lead", "reviewerModel": None, "reviewUsageTokens": None, "reviewPasses": 1, "elapsedReviewMinutes": 3, "humanActiveMinutes": None, "correctionMinutes": 0, "reverificationMinutes": 1, "auditOverheadMinutes": 1, "availability": "partial", "source": "log"},
+        "reviewEffort": {"reviewerTier": "lead", "reviewerModel": None, "reviewUsageTokens": None, "reviewPasses": 1, "elapsedReviewMinutes": 3, "pureReviewMinutes": 1, "correctionMinutes": 0, "reverificationMinutes": 1, "auditOverheadMinutes": 1, "totalActiveMinutes": 3, "availability": "partial", "source": "log"},
         "cost": {"currency": None, "priceSource": None, "priceObservedAt": None, "worker": None, "automatedReview": None, "humanReview": None, "rework": None, "auditOverhead": None, "totalSuccessfulOutcome": None, "reviewBurdenRatio": None, "humanHourlyRate": None},
         "baseline": {"comparable": False, "auditIds": [], "reason": "none"},
         "escapedDefects": [],
@@ -82,16 +82,42 @@ class AuditTests(unittest.TestCase):
         record["attribution"]["unattributedChanges"] = True
         self.assertTrue(any("verdict must be fail" in x for x in MODULE.validate_record(record)))
 
-    def test_summary_requires_five_samples_for_adjustment(self):
+    def test_review_time_components_must_be_exclusive_and_reconcile(self):
+        record = valid_record()
+        record["reviewEffort"]["totalActiveMinutes"] = 2
+        self.assertTrue(any("exclusive review-time components" in x for x in MODULE.validate_record(record)))
+
+    def test_summary_requires_five_comparable_samples_in_one_group(self):
         four = [copy.deepcopy(valid_record()) for _ in range(4)]
-        self.assertEqual("collect-more-successful-samples", MODULE.summarize(four)["recommendation"])
-        five = four + [copy.deepcopy(valid_record())]
-        self.assertEqual("eligible-for-one-step-reviewed-adjustment", MODULE.summarize(five)["recommendation"])
+        for record in four:
+            record["baseline"] = {"comparable": True, "auditIds": ["baseline"], "reason": None}
+        group = MODULE.summarize(four)["groups"][0]
+        self.assertEqual("collect-more-comparable-successful-samples", group["recommendation"])
+        fifth = copy.deepcopy(four[0])
+        group = MODULE.summarize(four + [fifth])["groups"][0]
+        self.assertEqual("eligible-for-one-step-reviewed-adjustment", group["recommendation"])
+
+    def test_non_comparable_fifth_sample_does_not_open_gate(self):
+        records = [copy.deepcopy(valid_record()) for _ in range(5)]
+        for record in records[:4]:
+            record["baseline"] = {"comparable": True, "auditIds": ["baseline"], "reason": None}
+        group = MODULE.summarize(records)["groups"][0]
+        self.assertEqual(4, group["eligibleComparableSuccessful"])
+        self.assertNotEqual("eligible-for-one-step-reviewed-adjustment", group["recommendation"])
+
+    def test_mixed_profiles_are_never_pooled(self):
+        records = [copy.deepcopy(valid_record()) for _ in range(5)]
+        for record in records:
+            record["baseline"] = {"comparable": True, "auditIds": ["baseline"], "reason": None}
+        records[-1]["identity"]["risk"] = "medium"
+        summary = MODULE.summarize(records)
+        self.assertEqual(2, summary["comparisonGroups"])
+        self.assertFalse(any(g["recommendation"] == "eligible-for-one-step-reviewed-adjustment" for g in summary["groups"]))
 
     def test_escaped_defect_suspends_route_recommendation(self):
         records = [copy.deepcopy(valid_record()) for _ in range(5)]
         records[0]["escapedDefects"] = [{"severity": "material", "reference": "incident-1"}]
-        self.assertEqual("review-or-suspend-affected-route", MODULE.summarize(records)["recommendation"])
+        self.assertEqual("review-or-suspend-affected-route", MODULE.summarize(records)["groups"][0]["recommendation"])
 
     def test_cli_validates_and_summarizes(self):
         with tempfile.TemporaryDirectory() as directory:

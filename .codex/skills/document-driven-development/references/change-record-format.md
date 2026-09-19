@@ -8,6 +8,7 @@ Store each record at `docs/changes/yyyyMMdd_<change-name>/README.md`. `yyyyMMdd`
 # <change title>
 
 - Status: Proposed | Approved | Implemented | Superseded
+- Change record schema: 2
 - Owner: <person or team>
 - Created: YYYY-MM-DD
 - Updated: YYYY-MM-DD
@@ -29,6 +30,16 @@ Store each record at `docs/changes/yyyyMMdd_<change-name>/README.md`. `yyyyMMdd`
 ## Documentation updates
 ## Technical impact
 ## Decisions
+## Concern and agreement ledger
+
+Before approval, list every material concern or state briefly why none exists after inspecting the applicable risk dimensions.
+
+| ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| C1 | <fact or inference> | <effect> | <resolution, accepted risk, or excluded follow-up> | <traceability> | Agree or evidence-based objection | Pending or explicit decision | Resolved in design \| Accepted risk \| Excluded follow-up \| Open decision |
+
+`Open decision` or an unresolved evidence-based agent objection blocks approval. `Accepted risk` includes monitoring and rollback/reconsideration conditions. `Excluded follow-up` includes an owner and evidence that it does not block an acceptance criterion. The approval request summarizes this ledger together with every acceptance criterion so the user can explicitly agree, amend, or reject it.
+
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
@@ -50,6 +61,7 @@ Link each task to its acceptance criteria and each acceptance criterion to its t
 For multi-task or delegated changes, record the reviewer, inputs, decision, and follow-up for each gate:
 
 - **Design and task-split review** — before approval; confirms settled decisions, AC/task/verification coverage, valid dependencies, non-overlapping write scopes, and suitable model tier.
+- **Concern and agreement review** — before approval; actively identifies material concerns and counterexamples, records agent position and user disposition, and blocks approval while an open decision or evidence-based objection remains.
 - **Pre-implementation review** — after approval and before code changes; classifies every task and confirms the runnable frontier and worker contracts.
 - **Checkpoint review** — at each substantial checkpoint; compares worker evidence, full diff, tests, and the acceptance-criterion matrix, recording fixes or escalation.
 - **Final review** — before `Implemented`; confirms every approved task and AC is `Verified`, with no approved-scope rejected, runnable, dependent, in-progress, or acceptance-blocking external work left. A genuine external blocker keeps the record `Approved` unless it is an explicitly excluded follow-up that does not prevent an AC. Reconcile the task/finding ledger when the work has multiple tasks, delegation, or material review findings; a short non-delegated task may record the same conclusion concisely. Record the next action if work is interrupted.

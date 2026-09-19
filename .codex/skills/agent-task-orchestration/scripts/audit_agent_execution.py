@@ -47,8 +47,8 @@ def _find_forbidden(value: Any, path: str, issues: list[str]) -> None:
 def validate_record(record: Any) -> list[str]:
     issues: list[str] = []
     root = _mapping(record, "$", issues)
-    if root.get("schemaVersion") != 1:
-        issues.append("$.schemaVersion must equal 1")
+    if root.get("schemaVersion") != 2:
+        issues.append("$.schemaVersion must equal 2")
     _find_forbidden(root, "$", issues)
 
     required_sections = (
@@ -143,12 +143,19 @@ def validate_record(record: Any) -> list[str]:
         issues.append("$.quality.independentChallenge must be a non-empty string")
 
     review = sections["reviewEffort"]
-    for key in ("reviewPasses", "reviewUsageTokens", "elapsedReviewMinutes", "humanActiveMinutes", "correctionMinutes", "reverificationMinutes", "auditOverheadMinutes"):
+    time_keys = ("pureReviewMinutes", "correctionMinutes", "reverificationMinutes", "auditOverheadMinutes")
+    for key in ("reviewPasses", "reviewUsageTokens", "elapsedReviewMinutes") + time_keys + ("totalActiveMinutes",):
         _number_or_none(review.get(key), f"$.reviewEffort.{key}", issues)
     if review.get("availability") not in VALID_AVAILABILITY:
         issues.append("$.reviewEffort.availability must be complete, partial, or unavailable")
     if not review.get("source"):
         issues.append("$.reviewEffort.source is required")
+    if all(review.get(key) is not None for key in time_keys):
+        expected_active = sum(float(review[key]) for key in time_keys)
+        if review.get("totalActiveMinutes") is None or not math.isclose(float(review["totalActiveMinutes"]), expected_active, rel_tol=1e-9, abs_tol=1e-9):
+            issues.append("$.reviewEffort.totalActiveMinutes must equal the exclusive review-time components")
+    elif review.get("totalActiveMinutes") is not None:
+        issues.append("$.reviewEffort.totalActiveMinutes requires every exclusive review-time component")
 
     cost = sections["cost"]
     component_keys = ("worker", "automatedReview", "humanReview", "rework", "auditOverhead")
@@ -215,32 +222,65 @@ def _percentile(values: list[float], percentile: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
 
 
-def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
+def _comparison_profile(record: dict[str, Any]) -> dict[str, Any]:
+    difficulty = record["difficulty"]
+    return {
+        "taskClass": record["identity"]["taskClass"],
+        "risk": record["identity"]["risk"],
+        "requestedModel": record["routing"]["requestedModel"],
+        "reasoningEffort": record["routing"]["requestedReasoningEffort"],
+        "difficulty": {
+            "ambiguity": difficulty["ambiguity"],
+            "executionPaths": difficulty["executionPaths"],
+            "publicContract": difficulty["publicContract"],
+            "persistenceOrMigration": difficulty["persistenceOrMigration"],
+            "concurrency": difficulty["concurrency"],
+            "securityOrPrivacy": difficulty["securityOrPrivacy"],
+            "externalDependency": difficulty["externalDependency"],
+            "existingTestCoverage": difficulty["existingTestCoverage"],
+        },
+    }
+
+
+def _group_summary(profile: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
     valid_quality = [r for r in records if r["outcome"]["verdict"] in {"pass", "pass-with-telemetry-gap"}]
     attributable = [r for r in valid_quality if not r["attribution"]["unattributedChanges"]]
-    measured_tokens = [float(r["usage"]["totalTokens"]) for r in attributable if r["usage"].get("totalTokens") is not None]
-    measured_costs = [float(r["cost"]["totalSuccessfulOutcome"]) for r in attributable if r["cost"].get("totalSuccessfulOutcome") is not None]
-    review_minutes = [
-        sum(float(r["reviewEffort"].get(key) or 0) for key in ("humanActiveMinutes", "correctionMinutes", "reverificationMinutes", "auditOverheadMinutes"))
-        for r in attributable
-    ]
+    eligible = [r for r in attributable if r["baseline"].get("comparable") and not r.get("escapedDefects")]
+    measured_tokens = [float(r["usage"]["totalTokens"]) for r in eligible if r["usage"].get("totalTokens") is not None]
+    measured_costs = [float(r["cost"]["totalSuccessfulOutcome"]) for r in eligible if r["cost"].get("totalSuccessfulOutcome") is not None]
+    review_minutes = [float(r["reviewEffort"]["totalActiveMinutes"]) for r in eligible if r["reviewEffort"].get("totalActiveMinutes") is not None]
     escaped = sum(len(r.get("escapedDefects", [])) for r in records)
-    comparable = sum(1 for r in attributable if r["baseline"].get("comparable"))
-    recommendation = "collect-more-successful-samples"
-    if len(attributable) >= 5:
+    recommendation = "collect-more-comparable-successful-samples"
+    if len(eligible) >= 5:
         recommendation = "eligible-for-one-step-reviewed-adjustment"
-    if any(r.get("escapedDefects") for r in records):
+    if escaped:
         recommendation = "review-or-suspend-affected-route"
     return {
+        "profile": profile,
         "records": len(records),
         "successful": len(valid_quality),
         "attributableSuccessful": len(attributable),
-        "comparableSuccessful": comparable,
+        "eligibleComparableSuccessful": len(eligible),
         "escapedDefects": escaped,
         "tokens": {"samples": len(measured_tokens), "p50": _percentile(measured_tokens, .5), "p90": _percentile(measured_tokens, .9)},
         "successfulOutcomeCost": {"samples": len(measured_costs), "p50": _percentile(measured_costs, .5), "p90": _percentile(measured_costs, .9)},
         "reviewEffortMinutes": {"samples": len(review_minutes), "p50": _percentile(review_minutes, .5), "p90": _percentile(review_minutes, .9)},
         "recommendation": recommendation,
+    }
+
+
+def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}
+    for record in records:
+        profile = _comparison_profile(record)
+        key = json.dumps(profile, sort_keys=True, separators=(",", ":"))
+        grouped.setdefault(key, (profile, []))[1].append(record)
+    groups = [_group_summary(profile, members) for profile, members in (grouped[key] for key in sorted(grouped))]
+    return {
+        "records": len(records),
+        "comparisonGroups": len(groups),
+        "groups": groups,
+        "globalRecommendation": "review-group-results; never pool thresholds across groups",
     }
 
 

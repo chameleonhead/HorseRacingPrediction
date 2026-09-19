@@ -67,6 +67,12 @@ If the pre-completion self-audit finds an omitted acceptance item, unsupported w
 
 The observable gate is a one-to-one ledger from reported findings to completion evidence or a genuine external blocker, with no untracked “remaining work” introduced only after completion was claimed.
 
+### Late concern and consensus failure gate
+
+When a material concern is first surfaced after a change was marked complete, determine whether it was truly unknowable before implementation or was foreseeable from the requirements, design, code, or verification plan. If it invalidates an acceptance criterion or completion evidence, reopen the originating change record to `Approved`, move affected ACs to `Connected`, add explicit closure tasks, and identify the prior final-review decision as superseded. Do not leave the correction only in a follow-up record.
+
+For a foreseeable concern, record which pre-approval dimension or counterexample was omitted and update the narrowest planning/review skill so future change creation surfaces it before approval. Add a concern ledger entry with the agent's technical position and the user's disposition. An `Open decision` or unresolved evidence-based objection blocks approval; low-risk changes with no material concerns may use a concise reviewed-none statement. Validate the skill and replay both a material-conflict scenario and a low-risk scenario so the gate does not become indiscriminate process overhead.
+
 ### Resume protocol after an interruption
 
 When work resumes after a user interjection, context compaction, tool failure, process restart, or another interruption, do not reconstruct the task from memory or restart completed work.
