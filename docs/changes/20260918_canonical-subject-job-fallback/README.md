@@ -1,6 +1,6 @@
 # 主体ジョブのcanonical ID整合と過去ジョブフォールバック
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-18
 - Updated: 2026-09-19
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Verified | bulk DTO/API、全producerのcanonical ID、閉鎖session交換、行別失敗、既存repair preview/execute/dismissを接続した。 |
 | Verification | Verified | format、Release build、non-External全体試験とfocused回帰を実行した。既存Playwright時間上限試験2件は全体実行時だけ負荷超過し、単独再実行は成功した。 |
-| Deployment/operation | In progress | commit/push、CI/CD、本番previewと新規同型エラーの確認を残す。 |
+| Deployment/operation | Verified | 2回のCI/CDとhealth checkが成功し、同型レース10件と閉鎖session調教師1件を再取得して要対応から解消した。安全な補正先がない過去Horseは履歴を保持して対応不要候補へ分類した。 |
 
 ## Context
 
@@ -103,23 +103,23 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | RaceCard、RaceResult、refresh、profile内参照、手動/Recoveryの各入口で、保存された主体IDと子TaskのResource IDが共通解決結果と一致する。 | T2, T3, T6 | entry-point matrixとtransport/persistence E2E | Not started |
-| AC2 | JRA識別子付きHorseはbulk経路でも識別子を失わず、同名別馬を分離し、識別子なしの場合だけ安全なfallbackへ進む。 | T2, T3 | identity有無・同名別identity・再送の回帰試験 | Not started |
-| AC3 | Jockey/Trainerは空白、全半角、所属括弧、表記揺れを全経路で同じcanonical規則へ収束し、同名人物や曖昧候補を自動統合しない。 | T2, T3, T6 | 表記差と曖昧性fixtureによるE2E | Not started |
-| AC4 | OwnerはRaceEntry snapshotとalias resolverから内部canonical IDへ解決され、外部プロフィールTaskや別体系のIDを作らない。曖昧なaliasは要対応に残る。 | T2, T3, T6 | alias一意・未登録・衝突・欠落テスト | Not started |
-| AC5 | 過去ジョブpreviewは主体別に、安全な修復、既存Task再利用、対象外、曖昧、証拠不足、Running、衝突を件数・根拠付きで表示し、データを変更しない。 | T4, T5 | API/UI testsと本番preview manifest | Not started |
-| AC6 | applyはmanifest一致時だけ冪等に参照・redirect・ledger・Recovery Taskを作り、元Task/Attempt/Request/通知履歴を保持する。二度目のapplyで結果が増えない。 | T4, T6, T7 | transaction/concurrency/idempotency試験と本番再preview | Not started |
-| AC7 | 名前だけで一意性を証明できない対象、metadata欠落、同名候補、ID衝突は誤結合・削除・盲目的再試行されず、具体的理由付きで要対応または`NotApplicable`になる。 | T2, T4, T5 | failure classification tests | Not started |
-| AC8 | bulkの行別登録失敗時、成功行は保存できる一方、未解決主体の子Taskは作られず、親Taskに対象と原因が残る。 | T2, T3, T6 | partial failure E2E | Not started |
-| AC9 | 404は真のprojection遅延だけを上限付きで再試行し、主体不在・ID不一致は自動修復候補または終端分類となり、同じ失敗を無期限反復しない。 | T3, T4, T6 | aggregate/read-model組合せとretry上限試験 | Not started |
-| AC10 | Recovery Taskは既存active taskの高いlane/priorityを保持し、Running attemptを中断せず、Realtime増殖抑止規則を変えない。 | T4, T6 | dispatcher/store統合試験 | Not started |
-| AC11 | 一括化によるHTTP/ブラウザ効率を維持し、主体解決がN+1の外部遷移を導入しない。 | T2, T3, T6 | request/session count assertionと性能比較 | Not started |
-| AC12 | 配備後、本番previewで対象を確認し、backup・pause/drain・apply・冪等確認・resume後に当該Horseを含む安全対象が成功し、queue/healthに新しい同型エラーがない。 | T7 | deployment run、job detail、health/queue evidence | Not started |
-| AC13 | 設定画面で、変更なしのpreview、分類件数、対象ごとの根拠・予定操作・除外理由を確認し、安全対象だけを選択して確認Dialogからmigrationできる。 | T4, T5, T6 | component testとbrowser主要シナリオ | Not started |
-| AC14 | 設定画面はLoading、候補なし、失敗、manifest期限切れ、部分成功、実行中を区別し、二重送信を防ぐ。desktop/narrowとkeyboardで重要情報・操作を失わない。 | T5, T6 | bUnit、browser desktop/narrow、keyboard確認 | Not started |
-| AC15 | race subject bulkの行別拒否は対象ItemKeyとerror codeを親Attemptで確認でき、canonical redirectで解決可能な抑止済みResourceは正本へ収束する。解決不能な一行で正常行や収集全体を巻き戻さない。 | T2, T3, T6 | bulk API/handler partial-failure E2E、Attempt persistence test | Not started |
-| AC16 | 共有Playwright page/context/browserが閉じた場合、新規sessionで当該Taskを一度だけ再実行し、後続Taskは閉じたsessionを再利用しない。再発はbackoff付き一時失敗、cancellation/timeoutは従来どおり伝播する。 | T3, T6 | session-scope/handler tests | Not started |
-| AC17 | `産駒`等の関係ラベルをHorse名としてTask化せず、JRA国内profile対象外と証明できる海外参照は`NotApplicable`となる。曖昧な国内馬は自動統合されず修復previewへ残る。 | T3, T4, T6 | parsing/handler/repair classification tests | Not started |
+| AC1 | RaceCard、RaceResult、refresh、profile内参照、手動/Recoveryの各入口で、保存された主体IDと子TaskのResource IDが共通解決結果と一致する。 | T2, T3, T6 | entry-point matrixとtransport/persistence E2E | Verified |
+| AC2 | JRA識別子付きHorseはbulk経路でも識別子を失わず、同名別馬を分離し、識別子なしの場合だけ安全なfallbackへ進む。 | T2, T3 | identity有無・同名別identity・再送の回帰試験 | Verified |
+| AC3 | Jockey/Trainerは空白、全半角、所属括弧、表記揺れを全経路で同じcanonical規則へ収束し、同名人物や曖昧候補を自動統合しない。 | T2, T3, T6 | 表記差と曖昧性fixtureによるE2E | Verified |
+| AC4 | OwnerはRaceEntry snapshotとalias resolverから内部canonical IDへ解決され、外部プロフィールTaskや別体系のIDを作らない。曖昧なaliasは要対応に残る。 | T2, T3, T6 | alias一意・未登録・衝突・欠落テスト | Verified |
+| AC5 | 過去ジョブpreviewは主体別に、安全な修復、既存Task再利用、対象外、曖昧、証拠不足、Running、衝突を件数・根拠付きで表示し、データを変更しない。 | T4, T5 | API/UI testsと本番preview manifest | Verified |
+| AC6 | applyはmanifest一致時だけ冪等に参照・redirect・ledger・Recovery Taskを作り、元Task/Attempt/Request/通知履歴を保持する。二度目のapplyで結果が増えない。 | T4, T6, T7 | transaction/concurrency/idempotency試験と本番再preview | Verified |
+| AC7 | 名前だけで一意性を証明できない対象、metadata欠落、同名候補、ID衝突は誤結合・削除・盲目的再試行されず、具体的理由付きで要対応または`NotApplicable`になる。 | T2, T4, T5 | failure classification tests | Verified |
+| AC8 | bulkの行別登録失敗時、成功行は保存できる一方、未解決主体の子Taskは作られず、親Taskに対象と原因が残る。 | T2, T3, T6 | partial failure E2E | Verified |
+| AC9 | 404は真のprojection遅延だけを上限付きで再試行し、主体不在・ID不一致は自動修復候補または終端分類となり、同じ失敗を無期限反復しない。 | T3, T4, T6 | aggregate/read-model組合せとretry上限試験 | Verified |
+| AC10 | Recovery Taskは既存active taskの高いlane/priorityを保持し、Running attemptを中断せず、Realtime増殖抑止規則を変えない。 | T4, T6 | dispatcher/store統合試験 | Verified |
+| AC11 | 一括化によるHTTP/ブラウザ効率を維持し、主体解決がN+1の外部遷移を導入しない。 | T2, T3, T6 | request/session count assertionと性能比較 | Verified |
+| AC12 | 配備後、本番previewで対象を確認し、backup・pause/drain・apply・冪等確認・resume後に当該Horseを含む安全対象が成功し、queue/healthに新しい同型エラーがない。 | T7 | deployment run、job detail、health/queue evidence | Verified |
+| AC13 | 設定画面で、変更なしのpreview、分類件数、対象ごとの根拠・予定操作・除外理由を確認し、安全対象だけを選択して確認Dialogからmigrationできる。 | T4, T5, T6 | component testとbrowser主要シナリオ | Verified |
+| AC14 | 設定画面はLoading、候補なし、失敗、manifest期限切れ、部分成功、実行中を区別し、二重送信を防ぐ。desktop/narrowとkeyboardで重要情報・操作を失わない。 | T5, T6 | bUnit、browser desktop/narrow、keyboard確認 | Verified |
+| AC15 | race subject bulkの行別拒否は対象ItemKeyとerror codeを親Attemptで確認でき、canonical redirectで解決可能な抑止済みResourceは正本へ収束する。解決不能な一行で正常行や収集全体を巻き戻さない。 | T2, T3, T6 | bulk API/handler partial-failure E2E、Attempt persistence test | Verified |
+| AC16 | 共有Playwright page/context/browserが閉じた場合、新規sessionで当該Taskを一度だけ再実行し、後続Taskは閉じたsessionを再利用しない。再発はbackoff付き一時失敗、cancellation/timeoutは従来どおり伝播する。 | T3, T6 | session-scope/handler tests | Verified |
+| AC17 | `産駒`等の関係ラベルをHorse名としてTask化せず、JRA国内profile対象外と証明できる海外参照は`NotApplicable`となる。曖昧な国内馬は自動統合されず修復previewへ残る。 | T3, T4, T6 | parsing/handler/repair classification tests | Verified |
 
 ## Task plan
 
@@ -131,7 +131,7 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 | T4 | 過去ジョブpreview/apply、redirect/ledger、Recovery生成と対象外分類を実装する（AC5–AC7, AC9, AC10, AC17）。 | Main | High capability | T2 | store、repair service/API、tests | transaction/concurrency tests | notification/revision gate付き冪等apply | Verified |
 | T5 | Settingsに独立したmigration sectionを実装し、preview、分類、選択、確認、apply結果を表示する（AC5, AC7, AC13, AC14）。 | Main | High capability | T4 | Blazor UI、component/browser tests | UI tests | 対応不要候補を含む安全な管理画面 | Verified |
 | T6 | 主体別・入口別・失敗/再送/session交換/性能の回帰試験と旧UAC2の再検証を行う（AC1–AC11, AC13–AC17）。 | Main | High capability | T3, T4, T5 | tests、記録 | format/build/non-External tests、CodeGraph | 全体試験とfocused回帰 | Verified |
-| T7 | commit/push、CI/CD、本番preview/apply・監視・文書同期を行う（AC6, AC12）。 | Main | High capability | T6 | deployment/production、docs | CI/CD、production evidence | 復旧と無再発確認 | In progress |
+| T7 | commit/push、CI/CD、本番preview/apply・監視・文書同期を行う（AC6, AC12）。 | Main | High capability | T6 | deployment/production、docs | CI/CD、production evidence | 復旧と無再発確認 | Verified |
 
 共有契約・migration・本番データ整合を跨ぐため、主担当が直列に保持する。承認後のテスト追加等を分離できる場合だけ、非重複write scopeを再確認して委譲する。
 
@@ -144,6 +144,7 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 - **Checkpoint review — 2026-09-19, reviewer: Main.** 初回配備後の本番再確認で、同じ親Taskの旧payloadと補正後canonical ID payloadが同一batch IDを共有し、3レースが`IdempotencyMismatch`になったことを行別診断から確認した。batch IDをTask IDだけで固定せず、順序を正規化したpayload fingerprintを含めるよう修正した。同じpayloadのresponse-loss retryは同じID、ID・revision・属性等が変わった補正payloadは別IDとなる。
 - **Checkpoint review** — 各契約、producer/repair、UI/本番操作のcheckpointで記録する。
 - **Final review** — 全ACと旧UAC2を実際の入口から再追跡し、未完了・未分類のlegacy ID生成経路がない場合だけImplementedとする。
+- **Final review — 2026-09-19, reviewer: Main.** AC1–AC17とT1–T7をコード、試験、2回のCI/CD、本番preview/recoveryへ追跡した。初回本番診断で発見したbatch idempotency回帰も同じ変更内で修正・再配備した。レース10件と調教師1件は再取得開始後に障害groupから消え、30秒後にも再発しなかった。残る要対応7リソースは強い同一性根拠がない過去Horseで、自動統合・盲目的再試行をせず`DismissRecommended`として表示されるため、承認済み安全境界どおりの非阻害対象である。
 
 ## Documentation updates
 
@@ -164,6 +165,7 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 - 2026-09-19: `codegraph sync .` と変更入口の再照会が成功し、bulk requestの17 caller、session wrapperのhandler/test経路を再確認した。
 - 2026-09-19: commit `9160557` のapp-deploy run `35419108827` はverify、API、Collector Lambda、remote health、legacy race migrationを含め成功した。本番再確認で要対応13件、うち新しい行別診断3件が全て`IdempotencyMismatch`であることを確認し、追加修正へ反映した。
 - 2026-09-19: payload fingerprint batch IDのfocused Collector試験21件、Release build、formatが成功した。
+- 2026-09-19: commit `7bb442f` のapp-deploy run `35419812114` はverify、API、Collector Lambda、remote healthを含め成功した。`IdempotencyMismatch` 8件と旧generic bulk error 2件、`TargetClosedException` 1件を再取得し、各failure groupが消えたことを確認した。30秒後の要対応は過去Horse 7リソースのみで、新しい同型レース/調教師エラーはなかった。
 
 ## Deviations and follow-up
 
