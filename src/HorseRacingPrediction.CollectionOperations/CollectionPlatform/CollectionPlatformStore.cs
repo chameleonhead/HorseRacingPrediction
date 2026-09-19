@@ -2126,6 +2126,97 @@ public sealed partial class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<ObsoleteSubjectProfileTask>> GetObsoleteSubjectProfileTasksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var definitions = new[] { "horse-profile", "jockey-profile", "trainer-profile" };
+        var activeStatuses = new[] { CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
+            CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.Running };
+        var rows = await (from task in db.Tasks.AsNoTracking()
+                          join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                          where definitions.Contains(task.DefinitionId) && activeStatuses.Contains(task.Status)
+                          select new { task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (rows.Count == 0) return [];
+        var taskIds = rows.Select(row => row.task.TaskId).ToArray();
+        var latestAttempts = (await db.Attempts.AsNoTracking().Where(attempt => taskIds.Contains(attempt.TaskId))
+                .OrderByDescending(attempt => attempt.AttemptNumber).ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .GroupBy(attempt => attempt.TaskId).ToDictionary(group => group.Key, group => group.First());
+        var result = new List<ObsoleteSubjectProfileTask>();
+        foreach (var row in rows)
+        {
+            if (!latestAttempts.TryGetValue(row.task.TaskId, out var attempt)
+                || !string.Equals(attempt.ErrorCode, "SubjectProjectionNotReady", StringComparison.Ordinal))
+                continue;
+            var metadata = DeserializeTaskMetadata(row.task.MetadataJson ?? row.resource.AttributesJson);
+            if (!metadata.TryGetValue("requestedByRaceId", out var raceId) || string.IsNullOrWhiteSpace(raceId))
+                continue;
+            result.Add(new(row.task.TaskId,
+                new(row.resource.Type, row.resource.Provider, row.resource.ResourceId),
+                new(row.task.DefinitionId), row.task.Status, row.task.AttemptCount,
+                attempt.ErrorCode!, raceId));
+        }
+        return result.OrderBy(item => item.Definition.Value, StringComparer.Ordinal)
+            .ThenBy(item => item.Resource.Id, StringComparer.Ordinal).ToArray();
+    }
+
+    public async Task<ObsoleteSubjectProfileTaskCleanupResult> RetireObsoleteSubjectProfileTasksAsync(
+        IReadOnlyCollection<Guid> taskIds, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var requestedIds = taskIds.Distinct().ToArray();
+        var candidates = (await GetObsoleteSubjectProfileTasksAsync(cancellationToken).ConfigureAwait(false))
+            .Where(item => requestedIds.Contains(item.TaskId)).ToArray();
+        if (candidates.Length != requestedIds.Length)
+            throw new InvalidOperationException("One or more tasks no longer satisfy the obsolete-subject cleanup criteria.");
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            var cancelled = 0;
+            var running = 0;
+            foreach (var candidate in candidates)
+            {
+                var task = await db.Tasks.SingleAsync(item => item.TaskId == candidate.TaskId, cancellationToken)
+                    .ConfigureAwait(false);
+                task.CancellationRequestedAt = now;
+                task.UpdatedAt = now;
+                if (task.Status == CollectionTaskStatus.Running)
+                {
+                    running++;
+                    continue;
+                }
+                task.Status = CollectionTaskStatus.Cancelled;
+                task.FinishedAt = now;
+                cancelled++;
+                var active = await db.ActiveTasks.SingleOrDefaultAsync(item => item.TaskId == task.TaskId,
+                    cancellationToken).ConfigureAwait(false);
+                if (active is not null) db.ActiveTasks.Remove(active);
+                var state = await db.States.SingleAsync(item => item.ResourcePk == task.ResourcePk
+                    && item.DefinitionId == task.DefinitionId, cancellationToken).ConfigureAwait(false);
+                state.Status = CollectionStateStatus.Unavailable;
+                state.NextCollectionAt = null;
+                state.UpdatedAt = now;
+                var pending = await db.DispatchOutbox.Where(item => item.TaskId == task.TaskId
+                    && item.DispatchedAt == null).ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var item in pending) item.DispatchedAt = now;
+                var notifications = await db.FailureNotifications.Where(item => item.TaskId == task.TaskId
+                    && item.ResolutionStatus != CollectionFailureResolutionStatus.Resolved)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var notification in notifications)
+                {
+                    notification.ResolutionStatus = CollectionFailureResolutionStatus.Superseded;
+                    notification.ResolvedAt = now;
+                }
+            }
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new(true, candidates.Length, cancelled, running, candidates);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<LegacyRaceDetailMergeReport> MergeLegacyRaceDetailsAsync(bool execute,
         DateTimeOffset now, CancellationToken cancellationToken = default)
     {

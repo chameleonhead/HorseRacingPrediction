@@ -111,6 +111,12 @@ public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Reso
 public sealed record CollectionRequestBatchOutcome(string ItemKey, string Status,
     CollectionRequestReceipt? Receipt = null, string? ErrorCode = null, string? Message = null);
 public sealed record CollectionResourceSuppressionResult(int CancelledTasks, int RunningCancellationRequests);
+public sealed record ObsoleteSubjectProfileTask(Guid TaskId, ResourceKey Resource,
+    CollectionDefinitionId Definition, CollectionTaskStatus Status, int AttemptCount,
+    string ErrorCode, string? RequestedByRaceId);
+public sealed record ObsoleteSubjectProfileTaskCleanupResult(bool Executed, int SelectedCount,
+    int CancelledCount, int RunningCancellationRequests,
+    IReadOnlyList<ObsoleteSubjectProfileTask> Tasks);
 public sealed record LegacyRaceDetailMergeReport(bool DryRun, int SourceResources, int TargetResources,
     int Requests, int Tasks, int Attempts, int Locations, int States, int SupplementRequests,
     IReadOnlyList<string> Errors);

@@ -445,7 +445,10 @@ public sealed class RaceCardPageParser
                 parsedHorse.BodyWeightChange, sexCode, sexAge.Success ? int.Parse(sexAge.Groups["age"].Value) : null,
                 parsedHorse.BreederName, parsedHorse.SireName, parsedHorse.DamName,
                 parsedHorse.DamsireName, coatColor,
-                FindHorseSourceIdentity(table.GetCell(rowIndex, horseNameIndex), url)));
+                FindHorseSourceIdentity(table.GetCell(rowIndex, horseNameIndex), url),
+                FindSubjectProfileUrl(jockeyIndex >= 0 ? table.GetCell(rowIndex, jockeyIndex) : null,
+                    url, "/JRADB/accessK.html"),
+                FindSubjectProfileUrl(table.GetCell(rowIndex, horseNameIndex), url, "/JRADB/accessC.html")));
         }
 
         return entries;
@@ -462,6 +465,24 @@ public sealed class RaceCardPageParser
                 ? absolute.ToString()
                 : Uri.TryCreate(new Uri(pageUrl), raw, out var relative) ? relative.ToString() : null;
             if (JraSourceIdentity.TryNormalizeHorse(resolved, out _)) return resolved;
+        }
+        return null;
+    }
+
+    private static string? FindSubjectProfileUrl(JraCellView? cell, string pageUrl, string expectedPath)
+    {
+        if (cell is null) return null;
+        foreach (var fragment in cell.Fragments.Where(x => x.TagName.Equals("a", StringComparison.OrdinalIgnoreCase)))
+        {
+            var raw = fragment.RawUrl ?? fragment.Url?.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var resolved = Uri.TryCreate(raw, UriKind.Absolute, out var absolute)
+                ? absolute : Uri.TryCreate(new Uri(pageUrl), raw, out var relative) ? relative : null;
+            if (resolved is not null && resolved.Scheme == Uri.UriSchemeHttps
+                && resolved.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+                && resolved.AbsolutePath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(resolved.Query.TrimStart('?')))
+                return resolved.AbsoluteUri;
         }
         return null;
     }

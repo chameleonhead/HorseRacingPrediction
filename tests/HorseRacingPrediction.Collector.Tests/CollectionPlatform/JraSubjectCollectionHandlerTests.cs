@@ -213,7 +213,7 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task RaceCard_DiscoversHorseJockeyTrainer_AndProfilesAreWrittenByTheirHandlers()
+    public async Task RaceCard_DoesNotRecomputeOrRequestSubjectProfileJobsInCollector()
     {
         var date = new DateOnly(2026, 9, 12);
         var race = new RaceId(date, RaceCourse.Tokyo, 11);
@@ -240,55 +240,8 @@ public sealed class JraSubjectCollectionHandlerTests
             CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, raceResult.Result);
-        CollectionAssert.AreEquivalent(new[] { ResourceType.Horse, ResourceType.Jockey, ResourceType.Trainer,
-                ResourceType.Owner },
-            requests.Requests.Select(x => x.Resource.Type).ToArray());
-        Assert.IsTrue(requests.Requests.All(x => x.Lane == CollectionLane.Realtime));
-        Assert.IsTrue(requests.Requests.All(x => x.Priority == (int)CollectionPriority.High));
-        Assert.IsTrue(requests.Requests.All(x => x.EffectiveDate == date));
-        Assert.AreEqual(1, requests.BatchRequests.Count);
-        Assert.AreEqual(requests.BatchRequests[0].Items.Count,
-            requests.BatchRequests[0].Items.Select(x => x.ItemKey).Distinct(StringComparer.Ordinal).Count());
-        var horseRequest = requests.Requests.Single(x => x.Resource.Type == ResourceType.Horse);
-        Assert.AreEqual(new Uri(horseUrl), horseRequest.ExplicitUrl);
-        Assert.AreEqual(horseUrl, horseRequest.Attributes["sourceIdentity"]);
-        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("テスト馬", horseUrl),
-            horseRequest.Resource.Id);
-        Assert.AreEqual("テスト調教師", requests.Requests.Single(x => x.Resource.Type == ResourceType.Trainer)
-            .Attributes["name"]);
-        var profileSink = new RecordingProfileSink();
-        foreach (var request in requests.Requests)
-        {
-            var descriptor = JraSubjectCollectionDefinitions.For(request.Resource.Type);
-            var profileSessions = new FakeJraSessionFactory
-            {
-                ConfigureNavigator = () => new FakeJraNavigator
-                {
-                    SubjectFactory = identity =>
-                    {
-                        var sourceUrl = $"https://www.jra.go.jp/profile/{descriptor.IdPrefix}";
-                        var sourceIdentity = identity.SubjectType == "Horse"
-                            ? sourceUrl : $"{identity.SubjectType}:{identity.Name}:1990-01-01";
-                        return new JraSubjectPage(new JraSubjectProfileDto(identity.SubjectType, identity.Name,
-                            sourceIdentity, sourceUrl,
-                            new Dictionary<string, string> { ["生年月日"] = "1990年1月1日" },
-                            DateTimeOffset.UtcNow), [], null);
-                    },
-                },
-            };
-            var handler = new JraSubjectProfileCollectionHandler(descriptor, profileSessions, profileSink,
-                ownerIdentities: new StubOwnerIdentityVerifier(true));
-            var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-                request.Resource, request.Definition, 1, CollectionReason.Discovery, CollectionLane.Normal, 30,
-                "lease", DateTimeOffset.UtcNow.AddMinutes(5), date, request.Attributes), CancellationToken.None);
-            Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
-        }
-
-        CollectionAssert.AreEquivalent(new[] { "Horse", "Jockey", "Trainer" },
-            profileSink.Saves.Select(x => x.SubjectType).ToArray());
-        CollectionAssert.AreEquivalent(requests.Requests.Where(x => x.Resource.Type != ResourceType.Owner)
-                .Select(x => x.Resource.Id).ToArray(),
-            profileSink.Saves.Select(x => x.SubjectId).ToArray());
+        Assert.IsEmpty(requests.Requests);
+        Assert.IsEmpty(requests.BatchRequests);
     }
 
     [TestMethod]
@@ -665,7 +618,7 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task ProfileWrite_SubjectProjectionNotReady_IsRetried()
+    public async Task ProfileWrite_MissingAuthoritativeSubject_IsIsolatedPermanentFailure()
     {
         var handler = new JraSubjectProfileCollectionHandler(
             JraSubjectCollectionDefinitions.For(ResourceType.Horse),
@@ -675,9 +628,10 @@ public sealed class JraSubjectCollectionHandlerTests
         var completion = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()),
             CancellationToken.None);
 
-        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
-        Assert.AreEqual("SubjectProjectionNotReady", completion.ErrorCode);
-        Assert.IsNotNull(completion.RetryAt);
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
+        Assert.AreEqual("SubjectResourceMissing", completion.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+        Assert.IsNull(completion.RetryAt);
     }
 
     [TestMethod]

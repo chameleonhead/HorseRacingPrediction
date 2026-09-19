@@ -6,6 +6,7 @@ using HorseRacingPrediction.Contracts;
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -22,6 +23,15 @@ public class RaceEndpointsTests
     {
         (_app, _client) = await TestApplicationFactory.CreateAsync();
         _client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var collectionStore = _app.Services.GetRequiredService<CollectionPlatformStore>();
+        await collectionStore.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+            3, "Test", true);
+        await collectionStore.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey,
+            3, "Test", true);
+        await collectionStore.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer,
+            3, "Test", true);
+        await collectionStore.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner,
+            1, "Test", false);
     }
 
     [ClassCleanup]
@@ -170,7 +180,7 @@ public class RaceEndpointsTests
         const string sourceIdentity =
             "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026123456/00";
         var request = new DeclareRaceResultBulkRequest(date, course, 1, "主体ID検証",
-            EntryCount: 1,
+            EntryCount: 1, IsRaceCard: true,
             Entries:
             [
                 new RaceResultEntryBulkDto(1, 1, "1:35.0", null, null, null, null,
@@ -184,7 +194,7 @@ public class RaceEndpointsTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
-        Assert.IsEmpty(body.Errors);
+        Assert.IsEmpty(body.Errors, string.Join(" | ", body.Errors));
         var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body.RaceId}", JsonOptions);
         Assert.IsNotNull(race);
         var entry = race.Entries.Single();
@@ -194,6 +204,26 @@ public class RaceEndpointsTests
             "jockey", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey("識別 騎手")), entry.JockeyId);
         Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
             "trainer", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey("識別 調教師")), entry.TrainerId);
+        var tasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
+            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        Assert.IsNotNull(tasks);
+        var subjectTasks = tasks.Where(task => task.Resource.Id is not null
+            && new[] { entry.HorseId, entry.JockeyId, entry.TrainerId }.Contains(task.Resource.Id)).ToArray();
+        Assert.HasCount(3, subjectTasks);
+        Assert.IsTrue(subjectTasks.Any(task => task.Resource.Id == entry.HorseId
+            && task.Definition.Value == "horse-profile"));
+        Assert.IsTrue(subjectTasks.Any(task => task.Resource.Id == entry.JockeyId
+            && task.Definition.Value == "jockey-profile"));
+        Assert.IsTrue(subjectTasks.Any(task => task.Resource.Id == entry.TrainerId
+            && task.Definition.Value == "trainer-profile"));
+
+        var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode);
+        var replayTasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
+            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        CollectionAssert.AreEquivalent(subjectTasks.Select(task => task.TaskId).ToArray(),
+            replayTasks!.Where(task => subjectTasks.Select(existingTask => existingTask.Resource.Id)
+                    .Contains(task.Resource.Id)).Select(task => task.TaskId).ToArray());
     }
 
     [TestMethod]

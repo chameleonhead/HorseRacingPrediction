@@ -12,6 +12,9 @@ using HorseRacingPrediction.Domain.Jockeys;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.Domain.Trainers;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Shared = HorseRacingPrediction.Contracts;
 
@@ -24,6 +27,7 @@ public static partial class EndpointExtensions
         ICommandBus commandBus,
         IQueryProcessor queryProcessor,
         IDbContextProvider<EventStoreDbContext> dbContextProvider,
+        CollectionPlatformStore collectionStore,
         CancellationToken cancellationToken)
     {
         if (request.RefreshExistingData)
@@ -144,6 +148,13 @@ public static partial class EndpointExtensions
                 errors.Add($"レース一括登録エラー: {message}");
                 MarkAcceptedOutcomesFailed(outcomes, "RaceBulkCommandFailed", message);
             }
+            else if (request.IsRaceCard)
+            {
+                var jobOutcomes = await RequestSubjectProfileJobsAsync(raceIdValue, request.RaceDate,
+                    accepted, collectionStore, cancellationToken).ConfigureAwait(false);
+                foreach (var rejected in jobOutcomes.Where(item => item.Status == "Rejected"))
+                    errors.Add($"プロフィール収集ジョブ登録エラー: {rejected.ItemKey} — {rejected.ErrorCode}: {rejected.Message}");
+            }
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -152,6 +163,91 @@ public static partial class EndpointExtensions
         }
 
         return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+    }
+
+    private static async Task<IReadOnlyList<CollectionRequestBatchOutcome>> RequestSubjectProfileJobsAsync(
+        string raceId, DateOnly raceDate,
+        IReadOnlyList<(Shared.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
+            string HorseName, string? JockeyName, string? TrainerName)> entries,
+        CollectionPlatformStore store, CancellationToken cancellationToken)
+    {
+        var today = Shared.Time.JstTime.Today();
+        var realtime = raceDate >= today && raceDate <= today.AddDays(7);
+        var lane = realtime ? CollectionLane.Realtime : CollectionLane.Normal;
+        var priority = realtime ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
+        var candidates = entries.SelectMany(item => new[]
+            {
+                new SubjectJob(ResourceType.Horse, item.Entry.HorseId, item.HorseName,
+                    item.Source.HorseSourceIdentity),
+                new SubjectJob(ResourceType.Jockey, item.Entry.JockeyId, item.JockeyName,
+                    item.Source.JockeyProfileUrl),
+                new SubjectJob(ResourceType.Trainer, item.Entry.TrainerId, item.TrainerName,
+                    item.Source.TrainerProfileUrl),
+                new SubjectJob(ResourceType.Owner,
+                    string.IsNullOrWhiteSpace(item.Source.OwnerName) ? null :
+                        DeterministicIdGenerator.BuildEntityId("owner",
+                            DeterministicIdGenerator.NormalizeKey(item.Source.OwnerName)),
+                    item.Source.OwnerName, null),
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id) && !string.IsNullOrWhiteSpace(item.Name))
+            .DistinctBy(item => (item.Type, item.Id))
+            .OrderBy(item => item.Type).ThenBy(item => item.Id, StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0) return [];
+
+        var items = candidates.Select(subject =>
+        {
+            var definition = subject.Type switch
+            {
+                ResourceType.Horse => (Id: "horse-profile", Revision: 3),
+                ResourceType.Jockey => (Id: "jockey-profile", Revision: 3),
+                ResourceType.Trainer => (Id: "trainer-profile", Revision: 3),
+                ResourceType.Owner => (Id: "owner-identity", Revision: 1),
+                _ => throw new InvalidOperationException($"Unsupported subject type: {subject.Type}"),
+            };
+            var attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["name"] = subject.Name!,
+                ["requestedByRaceId"] = raceId,
+                ["weekendPriorityUntil"] = raceDate.ToString("yyyy-MM-dd"),
+                ["discoveredFromType"] = ResourceType.Race.ToString(),
+                ["discoveredFromProvider"] = "JRA",
+                ["discoveredFromId"] = raceId,
+            };
+            Uri? explicitUrl = null;
+            if (subject.Type == ResourceType.Horse
+                && JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
+            {
+                explicitUrl = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity);
+                attributes["sourceIdentity"] = explicitUrl!.AbsoluteUri;
+                attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
+            }
+            else if (subject.Type is ResourceType.Jockey or ResourceType.Trainer
+                     && IsAllowedJraProfileUrl(subject.SourceIdentity, subject.Type, out var profileUrl))
+            {
+                explicitUrl = profileUrl!;
+                attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
+            }
+            return new CollectionRequestBatchItem($"{subject.Type}:{subject.Id}",
+                new(subject.Type, "JRA", subject.Id!), new(definition.Id), definition.Revision,
+                CollectionReason.Discovery, lane, priority, explicitUrl, raceDate, attributes);
+        }).ToArray();
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
+            items.Select(item => item.ItemKey))))).ToLowerInvariant()[..24];
+        return await store.RequestManyAsync($"race-subjects:{raceId}:{fingerprint}", items,
+            Shared.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed record SubjectJob(ResourceType Type, string? Id, string? Name, string? SourceIdentity);
+
+    private static bool IsAllowedJraProfileUrl(string? value, ResourceType type, out Uri? uri)
+    {
+        uri = Uri.TryCreate(value, UriKind.Absolute, out var parsed) ? parsed : null;
+        var path = type == ResourceType.Jockey ? "/JRADB/accessK.html" : "/JRADB/accessC.html";
+        return uri is not null && uri.Scheme == Uri.UriSchemeHttps
+            && uri.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            && uri.AbsolutePath.Equals(path, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(uri.Query.TrimStart('?'));
     }
 
     private static void ValidateCollectedRaceResultBulk(BulkRaceResultData data,

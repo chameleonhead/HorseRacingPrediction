@@ -13,6 +13,7 @@ using HorseRacingPrediction.Application.Commands.Predictions;
 using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Commands.Trainers;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using AppReadModels = HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Horses;
 using HorseRacingPrediction.Domain.Jockeys;
@@ -807,11 +808,11 @@ public static partial class EndpointExtensions
 
         writeGroup.MapPost("/races/result-bulk",
             [SwaggerOperation(Summary = "Declare race result in bulk", Description = "Creates/updates the race and declares result, entry results, weather, track condition and payouts in a single call")]
-        async (ApiContracts.DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
+        async (ApiContracts.DeclareRaceResultBulkRequest request, ICommandBus commandBus, IQueryProcessor queryProcessor, IDbContextProvider<EventStoreDbContext> dbContextProvider, CollectionPlatformStore collectionStore, CancellationToken cancellationToken) =>
             {
                 if (request is null) return Results.BadRequest(new[] { "Request is required." });
                 return await ApplyCollectedRaceResultBulkAsync(request, commandBus, queryProcessor,
-                    dbContextProvider, cancellationToken).ConfigureAwait(false);
+                    dbContextProvider, collectionStore, cancellationToken).ConfigureAwait(false);
 
             })
             .WithName("DeclareRaceResultBulk")

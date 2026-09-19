@@ -28,7 +28,8 @@ public sealed partial class JraRaceCardCollectionWorkflow
             BodyWeightChange: x.BodyWeightChange, OwnerName: x.OwnerName, SexCode: x.SexCode, Age: x.Age,
             BreederName: x.BreederName, SireName: x.SireName, DamName: x.DamName,
             DamsireName: x.DamsireName, CoatColor: x.CoatColor,
-            HorseSourceIdentity: x.HorseSourceIdentity)).ToArray();
+            HorseSourceIdentity: x.HorseSourceIdentity, JockeyProfileUrl: x.JockeyProfileUrl,
+            TrainerProfileUrl: x.TrainerProfileUrl)).ToArray();
         var saved = await _writeService.DeclareRaceResultBulkAsync(new(raceId.Date,
             RaceCourseNames.GetJraName(raceId.Course), raceId.Number, card.RaceName, EntryCount: entries.Length,
             GradeCode: card.GradeCode, DistanceMeters: card.CourseSpec?.DistanceMeters,

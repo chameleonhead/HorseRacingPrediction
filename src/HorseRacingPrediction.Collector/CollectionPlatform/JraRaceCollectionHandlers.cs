@@ -1,16 +1,12 @@
-using System.Security.Cryptography;
-using System.Text;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Workflow;
 using HorseRacingPrediction.Scraping.Jra.Pages;
-using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Options;
-using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -223,6 +219,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
     {
+        _ = requests; // Kept temporarily for binary/test constructor compatibility; API now creates subject jobs.
         var raceId = ParseRaceId(task);
         return await JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync(sessions,
             (session, token) => CollectWithSessionAsync(task, raceId, session, token), cancellationToken)
@@ -387,17 +384,6 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                         "RaceCardOwnerIncomplete", cardOwnerError));
             }
         }
-        string? subjectBatchError = null;
-        if (requiresCard && result?.Error is null && requests is not null && result?.Entries is not null)
-            try
-            {
-                await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (ReferencedSubjectBatchException ex)
-            {
-                subjectBatchError = ex.Message;
-            }
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         var firstResultCheck = FirstResultCheck(raceId.Date, task.Attributes, result?.StartTime);
@@ -513,13 +499,6 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}", LocationOutcomes: locationOutcomes,
                 FailureImpact: CollectionFailureImpact.Isolated, StageOutcomes: stageOutcomes,
                 RaceEvidence: raceEvidence);
-        if (subjectBatchError is not null)
-            return new(CollectionAttemptResult.ValidationFailure, "ReferencedSubjectBatchRejected",
-                subjectBatchError, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
-                FinalUrl: ToUri(raceResult.SourceUrl),
-                PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
-                LocationOutcomes: locationOutcomes, FailureImpact: CollectionFailureImpact.Isolated,
-                StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
         if (cardOwnerError is not null)
             return new(CollectionAttemptResult.ValidationFailure, "RaceCardOwnerIncomplete", cardOwnerError,
                 RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), FinalUrl: ToUri(raceResult.SourceUrl),
@@ -594,111 +573,4 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         throw new InvalidOperationException("Race course and number attributes are required.");
     }
 
-    private async Task RequestReferencedSubjectsAsync(LeasedCollectionTask task,
-        IReadOnlyList<RaceEntry> entries, string requestedByRaceId,
-        ICollectionRequestSink sink, CancellationToken cancellationToken)
-    {
-        var jst = TimeZoneInfo.FindSystemTimeZoneById(
-            OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
-        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
-        var effectiveDate = task.EffectiveDate ?? today;
-        var weekendRelated = effectiveDate >= today && effectiveDate <= today.AddDays(7);
-        var lane = weekendRelated ? CollectionLane.Realtime : CollectionLane.Normal;
-        var priority = weekendRelated ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
-        var subjects = entries.SelectMany(entry => new (ResourceType Type, string? Name, string? SourceIdentity)[]
-            {
-                (ResourceType.Horse, entry.HorseName, entry.HorseSourceIdentity),
-                (ResourceType.Jockey, entry.JockeyName, null),
-                (ResourceType.Trainer, entry.TrainerName, null),
-                (ResourceType.Owner, entry.OwnerName, null),
-            })
-            .Where(x => !string.IsNullOrWhiteSpace(x.Name))
-            .Select(x => (x.Type, Name: SubjectProfilePageParser.CanonicalizeDisplayName(
-                x.Type.ToString(), x.Name!), x.SourceIdentity))
-            .Where(x => !string.IsNullOrWhiteSpace(x.Name))
-            .Distinct();
-        var items = subjects.Select(subject =>
-        {
-            var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
-            var id = subject.Type == ResourceType.Horse
-                ? DeterministicIdGenerator.BuildHorseId(subject.Name, subject.SourceIdentity)
-                : DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix,
-                    DeterministicIdGenerator.NormalizeKey(subject.Name));
-            var attributes = new Dictionary<string, string>
-            {
-                ["name"] = subject.Name,
-                ["requestedByRaceId"] = requestedByRaceId,
-                ["weekendPriorityUntil"] = effectiveDate.ToString("yyyy-MM-dd"),
-                ["discoveredFromType"] = task.Resource.Type.ToString(),
-                ["discoveredFromProvider"] = task.Resource.Provider,
-                ["discoveredFromId"] = task.Resource.Id,
-            };
-            if (JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
-            {
-                var sourceUrl = JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)!.ToString();
-                attributes["sourceIdentity"] = sourceUrl;
-                attributes["sourceUrl"] = sourceUrl;
-            }
-            return new CollectionRequestBulkItem(
-                $"{subject.Type}:{id}", subject.Type.ToString(), "JRA", id, descriptor.Definition.Value,
-                descriptor.CurrentRevision,
-                CollectionReason.Discovery.ToString(), lane.ToString(), priority,
-                JraSourceIdentity.NormalizeHorseUrl(subject.SourceIdentity)?.AbsoluteUri,
-                effectiveDate, attributes);
-        }).GroupBy(item => item.ItemKey, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToArray();
-        if (items.Length == 0) return;
-        // The payload fingerprint preserves response-loss idempotency while allowing a corrected
-        // canonical-ID payload to supersede an older request made by the same parent task.
-        var batchId = BuildReferencedSubjectBatchId(task.TaskId, items);
-        var response = await sink.RequestManyAsync(new(batchId, items), cancellationToken).ConfigureAwait(false);
-        ValidateReferencedSubjectBatchResponse(items, response);
-    }
-
-    internal static string BuildReferencedSubjectBatchId(Guid taskId,
-        IReadOnlyList<CollectionRequestBulkItem> items)
-    {
-        var canonicalPayload = string.Join('\n', items.OrderBy(item => item.ItemKey, StringComparer.Ordinal)
-            .Select(item => string.Join('\u001f',
-                item.ItemKey, item.ResourceType, item.Provider, item.ResourceId, item.DefinitionId,
-                item.RequestedRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                item.Reason, item.Lane,
-                item.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                item.ExplicitUrl ?? string.Empty, item.EffectiveDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                string.Join('\u001e', (item.Attributes ?? new Dictionary<string, string>())
-                    .OrderBy(attribute => attribute.Key, StringComparer.Ordinal)
-                    .Select(attribute => $"{attribute.Key}={attribute.Value}")))));
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPayload)))
-            .ToLowerInvariant()[..24];
-        return $"race-subjects:{taskId:N}:{fingerprint}";
-    }
-
-    internal static void ValidateReferencedSubjectBatchResponse(
-        IReadOnlyList<CollectionRequestBulkItem> items, CollectionRequestBulkResponse response)
-    {
-        var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
-        var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
-        var validStatuses = new HashSet<string>(["Created", "Reused", "Accepted"], StringComparer.Ordinal);
-        if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
-            || response.Outcomes.Any(outcome => !validStatuses.Contains(outcome.Status)))
-        {
-            var returnedKeys = response.Outcomes.Select(outcome => outcome.ItemKey).ToHashSet(StringComparer.Ordinal);
-            var allFailures = items.Where(item => !returnedKeys.Contains(item.ItemKey))
-                .Select(item => $"{item.ItemKey}:Missing")
-                .Concat(response.Outcomes.Where(outcome => !validStatuses.Contains(outcome.Status))
-                    .Select(outcome => $"{outcome.ItemKey}:{outcome.ErrorCode ?? outcome.Status}"))
-                .ToArray();
-            var failures = allFailures
-                .Take(20)
-                .ToArray();
-            var omitted = allFailures.Length - failures.Length;
-            var detail = string.Join(", ", failures);
-            if (omitted > 0) detail += $", +{omitted} more";
-            throw new ReferencedSubjectBatchException(
-                $"Referenced subject batch response was incomplete or rejected. Items=[{detail}]");
-        }
-    }
-
-    internal sealed class ReferencedSubjectBatchException(string message) : InvalidOperationException(message);
 }

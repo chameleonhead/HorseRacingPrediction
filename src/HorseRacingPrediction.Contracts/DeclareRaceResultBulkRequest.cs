@@ -62,4 +62,6 @@ public sealed record RaceResultEntryBulkDto(
     bool IsDeadHeat = false, string? OwnerName = null, string? CornerPositions = null, decimal? Average1F = null,
     string? BreederName = null, string? SireName = null, string? DamName = null,
     string? DamsireName = null, string? CoatColor = null, decimal? AdditionalPrizeMoney = null,
-    string? HorseSourceIdentity = null);
+    string? HorseSourceIdentity = null,
+    string? JockeyProfileUrl = null,
+    string? TrainerProfileUrl = null);

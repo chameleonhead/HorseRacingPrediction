@@ -15,53 +15,6 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraDirectCollectionHandlerTests
 {
     [TestMethod]
-    public void RaceDetail_SubjectBatchIdIsStableForReplayAndChangesWithCanonicalPayload()
-    {
-        var taskId = Guid.NewGuid();
-        var first = new CollectionRequestBulkItem("Horse:horse-old", "Horse", "JRA", "horse-old",
-            "horse-profile", 3, "Discovery", "Realtime", 100, null, new DateOnly(2026, 9, 19),
-            new Dictionary<string, string> { ["name"] = "テスト馬" });
-        var corrected = first with { ItemKey = "Horse:horse-canonical", ResourceId = "horse-canonical" };
-
-        var originalId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [first]);
-        var replayId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [first]);
-        var correctedId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [corrected]);
-
-        Assert.AreEqual(originalId, replayId);
-        Assert.AreNotEqual(originalId, correctedId);
-        Assert.IsLessThanOrEqualTo(128, correctedId.Length);
-    }
-
-    [TestMethod]
-    public void RaceDetail_RejectedSubjectBatchPreservesItemAndErrorCode()
-    {
-        var item = new CollectionRequestBulkItem("Horse:horse-1", "Horse", "JRA", "horse-1",
-            "horse-profile", 3, "Discovery", "Normal", 50, null, new DateOnly(2026, 9, 19),
-            new Dictionary<string, string>());
-        var response = new CollectionRequestBulkResponse(
-            [new(item.ItemKey, "Rejected", ErrorCode: "ResourceSuppressed")]);
-
-        var exception = Assert.ThrowsExactly<JraRaceDetailCollectionHandler.ReferencedSubjectBatchException>(() =>
-            JraRaceDetailCollectionHandler.ValidateReferencedSubjectBatchResponse([item], response));
-
-        StringAssert.Contains(exception.Message, "Horse:horse-1:ResourceSuppressed");
-    }
-
-    [TestMethod]
-    public void RaceDetail_MissingSubjectBatchOutcomePreservesMissingItem()
-    {
-        var item = new CollectionRequestBulkItem("Trainer:trainer-1", "Trainer", "JRA", "trainer-1",
-            "trainer-profile", 3, "Discovery", "Normal", 50, null, new DateOnly(2026, 9, 19),
-            new Dictionary<string, string>());
-
-        var exception = Assert.ThrowsExactly<JraRaceDetailCollectionHandler.ReferencedSubjectBatchException>(() =>
-            JraRaceDetailCollectionHandler.ValidateReferencedSubjectBatchResponse([item],
-                new CollectionRequestBulkResponse([])));
-
-        StringAssert.Contains(exception.Message, "Trainer:trainer-1:Missing");
-    }
-
-    [TestMethod]
     public void RaceDetail_LegacyTaskWithoutAttributes_ParsesCanonicalResourceId()
     {
         var date = new DateOnly(2026, 4, 19);
@@ -119,44 +72,6 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.HasCount(1, card.RefreshRequests);
         Assert.HasCount(1, result.Requests);
         Assert.AreEqual(race, result.Requests.Single());
-    }
-
-    [TestMethod]
-    public async Task RaceDetail_SubjectBatchRejectionStillCollectsResultAndIsolatesFailure()
-    {
-        var date = new DateOnly(2026, 9, 19);
-        var race = new RaceId(date, RaceCourse.Nakayama, 2);
-        var direct = new Uri("https://example.test/card/2");
-        var cardPage = new JraRaceCardPage(direct.AbsoluteUri, race, "test", new(10, 30),
-            [new RaceEntry(1, "テスト馬", 1, null, 55m,
-                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud001234567890/01")]);
-        var sessions = new FakeJraSessionFactory
-        {
-            ConfigureNavigator = () => new FakeJraNavigator { DirectUrlFactory = _ => cardPage },
-        };
-        var results = new FakeJraRaceResultCollectionWorkflow
-        {
-            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [1], [],
-                "https://example.test/result/2", true),
-        };
-        var handler = new JraRaceDetailCollectionHandler(sessions,
-            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
-            requests: new RejectingRequestSink(),
-            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
-
-        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260919:Nakayama:2"), new("race-detail"), 1,
-            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
-            DateTimeOffset.UtcNow.AddMinutes(5), date,
-            new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2", ["startTime"] = "10:30" },
-            [new(1, direct, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]),
-            CancellationToken.None);
-
-        Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
-        Assert.AreEqual("ReferencedSubjectBatchRejected", completion.ErrorCode);
-        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
-        Assert.HasCount(1, results.Requests);
-        StringAssert.Contains(completion.ErrorMessage, "ResourceSuppressed");
     }
 
     [TestMethod]
@@ -651,19 +566,6 @@ public sealed class JraDirectCollectionHandlerTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    private sealed class RejectingRequestSink : ICollectionRequestSink
-    {
-        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
-            CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
-            IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
-            CancellationToken cancellationToken) => Task.FromResult(new CollectionRequestBulkResponse(
-            request.Items.Select(item => new CollectionRequestBulkOutcome(item.ItemKey, "Rejected",
-                ErrorCode: "ResourceSuppressed")).ToArray()));
     }
 
     [TestMethod]

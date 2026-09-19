@@ -225,9 +225,13 @@ public sealed class RaceCardPageParserTests
                     new("span", ["transition"], "(+6)"),
                     new("p", ["owner"], "(株)ネクストトライ"),
                     new("p", ["breeder"], "杵臼牧場"),
-                    new("p", ["trainer"], "久保田 貴士(美浦)"),
+                    new("a", ["trainer"], "久保田 貴士(美浦)",
+                        "/JRADB/accessC.html?CNAME=pw01dud1020260123/A1"),
                 ]),
-                new(rows[0][3], []),
+                new(rows[0][3],
+                [
+                    new("a", ["jockey"], "騎手A", "/JRADB/accessK.html?CNAME=pw01dud1020260456/B2"),
+                ]),
             ],
         };
         var table = new TestPageTable(
@@ -249,6 +253,10 @@ public sealed class RaceCardPageParserTests
         Assert.AreEqual("鹿", entry.CoatColor);
         Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002023106188/45",
             entry.HorseSourceIdentity);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessK.html?CNAME=pw01dud1020260456/B2",
+            entry.JockeyProfileUrl);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessC.html?CNAME=pw01dud1020260123/A1",
+            entry.TrainerProfileUrl);
     }
 
     // 実サイト確認で判明: 全ページ共通ヘッダーの<h1>はロゴ画像のみで構成されており、

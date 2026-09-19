@@ -140,6 +140,58 @@ public static class CollectionPlatformEndpointExtensions
         admin.MapPost("/tasks/{taskId:guid}/cancel", async (Guid taskId, CollectionPlatformStore store,
             CancellationToken token) => await store.CancelTaskAsync(taskId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                 ? Results.NoContent() : Results.Conflict());
+        admin.MapPost("/maintenance/obsolete-subject-profile-tasks", async (
+            ObsoleteSubjectProfileCleanupRequest request, CollectionPlatformStore store,
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken token) =>
+        {
+            var candidates = await store.GetObsoleteSubjectProfileTasksAsync(token).ConfigureAwait(false);
+            if (candidates.Count == 0)
+                return Results.Ok(new ObsoleteSubjectProfileTaskCleanupResult(request.Execute, 0, 0, 0, []));
+            using var db = dbContextProvider.CreateContext();
+            var raceIds = candidates.Select(item => item.RequestedByRaceId!).Distinct(StringComparer.Ordinal).ToArray();
+            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+                .Where(item => raceIds.Contains(item.RaceId)).ToListAsync(token).ConfigureAwait(false);
+            var raceById = races.ToDictionary(item => item.RaceId, StringComparer.Ordinal);
+            var horseIds = candidates.Where(item => item.Resource.Type == ResourceType.Horse)
+                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var jockeyIds = candidates.Where(item => item.Resource.Type == ResourceType.Jockey)
+                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var trainerIds = candidates.Where(item => item.Resource.Type == ResourceType.Trainer)
+                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
+            var existingHorses = (await db.Set<HorseReadModel>().AsNoTracking()
+                .Where(item => horseIds.Contains(item.HorseId)).Select(item => item.HorseId).ToArrayAsync(token))
+                .ToHashSet(StringComparer.Ordinal);
+            var existingJockeys = (await db.Set<JockeyReadModel>().AsNoTracking()
+                .Where(item => jockeyIds.Contains(item.JockeyId)).Select(item => item.JockeyId).ToArrayAsync(token))
+                .ToHashSet(StringComparer.Ordinal);
+            var existingTrainers = (await db.Set<TrainerReadModel>().AsNoTracking()
+                .Where(item => trainerIds.Contains(item.TrainerId)).Select(item => item.TrainerId).ToArrayAsync(token))
+                .ToHashSet(StringComparer.Ordinal);
+            bool IsExisting(ObsoleteSubjectProfileTask item) => item.Resource.Type switch
+            {
+                ResourceType.Horse => existingHorses.Contains(item.Resource.Id),
+                ResourceType.Jockey => existingJockeys.Contains(item.Resource.Id),
+                ResourceType.Trainer => existingTrainers.Contains(item.Resource.Id),
+                _ => false,
+            };
+            bool IsReferenced(ObsoleteSubjectProfileTask item)
+            {
+                if (!raceById.TryGetValue(item.RequestedByRaceId!, out var race)) return false;
+                return item.Resource.Type switch
+                {
+                    ResourceType.Horse => race.Entries.Any(entry => entry.HorseId == item.Resource.Id),
+                    ResourceType.Jockey => race.Entries.Any(entry => entry.JockeyId == item.Resource.Id),
+                    ResourceType.Trainer => race.Entries.Any(entry => entry.TrainerId == item.Resource.Id),
+                    _ => false,
+                };
+            }
+            var obsolete = candidates.Where(item => !IsExisting(item) || !IsReferenced(item)).ToArray();
+            if (!request.Execute)
+                return Results.Ok(new ObsoleteSubjectProfileTaskCleanupResult(false, obsolete.Length, 0, 0, obsolete));
+            return Results.Ok(await store.RetireObsoleteSubjectProfileTasksAsync(
+                obsolete.Select(item => item.TaskId).ToArray(), Shared.Time.JstTime.Now(), token)
+                .ConfigureAwait(false));
+        });
         admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetActionableFailureNotificationsAsync(
                 HorseRacingPrediction.Contracts.Time.JstTime.Now(), Math.Clamp(limit ?? 100, 1, 1000), token)));
@@ -493,6 +545,8 @@ public static class CollectionPlatformEndpointExtensions
                 ? Results.NoContent() : Results.Conflict());
         return endpoints;
     }
+
+    private sealed record ObsoleteSubjectProfileCleanupRequest(bool Execute = false);
 
     private static RaceEntryOwnerRepairCandidate ToRaceEntryOwnerRepairCandidate(
         RacePredictionContextReadModel race)

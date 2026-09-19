@@ -178,11 +178,10 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
             catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                // EventFlow read models are eventually consistent. A subject discovered from a race can
-                // reach the profile worker before its Horse/Jockey/Trainer projection becomes visible.
-                return new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady",
-                    ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(1),
-                    LocationOutcomes: locationOutcomes);
+                return new(CollectionAttemptResult.PermanentFailure, "SubjectResourceMissing",
+                    "The API-authoritative subject resource was not found while persisting its profile. "
+                    + ex.Message, LocationOutcomes: locationOutcomes,
+                    FailureImpact: CollectionFailureImpact.Isolated);
             }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
         {

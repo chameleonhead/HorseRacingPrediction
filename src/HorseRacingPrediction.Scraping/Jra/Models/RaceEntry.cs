@@ -20,4 +20,6 @@ public sealed record RaceEntry(
     string? DamName = null,
     string? DamsireName = null,
     string? CoatColor = null,
-    string? HorseSourceIdentity = null);
+    string? HorseSourceIdentity = null,
+    string? JockeyProfileUrl = null,
+    string? TrainerProfileUrl = null);

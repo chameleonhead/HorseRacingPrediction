@@ -11,6 +11,37 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class CollectionPlatformStoreTests
 {
     [TestMethod]
+    public async Task ObsoleteSubjectProjectionCleanup_CancelsRaceDerivedRetryAndKeepsHistory()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "obsolete",
+                ["requestedByRaceId"] = "race-authoritative",
+            });
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady", "missing",
+                RetryAt: now.AddHours(1))));
+
+        var preview = await store.GetObsoleteSubjectProfileTasksAsync();
+        Assert.HasCount(1, preview);
+        Assert.AreEqual(receipt.TaskId, preview[0].TaskId);
+
+        var result = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId], now.AddSeconds(2));
+
+        Assert.AreEqual(1, result.CancelledCount);
+        Assert.AreEqual(0, result.RunningCancellationRequests);
+        Assert.IsEmpty(await store.GetObsoleteSubjectProfileTasksAsync());
+        var task = (await store.GetTasksAsync(limit: 10)).Single(item => item.TaskId == receipt.TaskId);
+        Assert.AreEqual(CollectionTaskStatus.Cancelled, task.Status);
+        Assert.HasCount(1, await store.GetAttemptsAsync(receipt.TaskId));
+    }
+
+    [TestMethod]
     public async Task RequestManyAsync_CommitsOneDatabaseTransaction()
     {
         var path = Path.Combine(_directory, "transaction-counter.db");
