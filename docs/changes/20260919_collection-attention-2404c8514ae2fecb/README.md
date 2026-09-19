@@ -65,6 +65,8 @@
 
 ## Observation history
 
+- 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=42 jockey-profile tasks are stalled in Ready.。
+
 - 2026-09-19T15:43:52.0331893+09:00: 再観測。severity=`medium`、summary=42 jockey-profile tasks are stalled in Ready.。
 
 - 2026-09-19T15:15:14.3476835+09:00: 再観測。severity=`medium`、summary=42 jockey-profile tasks are stalled in Ready.。

@@ -1,10 +1,10 @@
-# [自動検知] 1858 race-detail tasks are stalled in Ready.
+# [自動検知] 1 trainer-profile tasks are stalled in Ready.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `104da1144ae3a60b`
+- Finding fingerprint: `8df2cd0868dec26e`
 - Classification: `OperationalCondition`
 - Kind: `StalledActiveTask`
 - Severity: `medium`
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:40:56.5982606+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T16:13:43.7245779+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -35,12 +35,12 @@
 
 ## Evidence
 
-- `definition=race-detail`
+- `definition=trainer-profile`
 - `status=Ready`
 - `lane=Background`
-- `priority=10`
-- `oldest=2026-09-14T04:43:42.4310367+09:00`
-- `sampleTaskIds=4ef9b386-ee18-41a5-924f-8807e161c1de,e8f0a0fc-a890-4c35-8ca7-9e98fd8e57c3,fef0db25-999d-46ec-a9f7-c84f654cfc54,ec104bf0-70a1-4d28-9116-d0310c6f89de,cb9ed4dc-7767-41cd-9aa8-50518fc4ec36`
+- `priority=50`
+- `oldest=2026-09-18T11:00:03.9142520+09:00`
+- `sampleTaskIds=b2f1948c-4b31-47bf-9baa-f16f9d87f943`
 
 ## Proposed investigation
 
@@ -53,7 +53,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `104da1144ae3a60b` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `8df2cd0868dec26e` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,23 +65,11 @@
 
 ## Observation history
 
-- 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T15:43:52.0331893+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T15:15:14.3476835+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T14:55:51.4140850+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T14:42:00.7716914+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T14:41:12.3940259+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
-
-- 2026-09-19T14:40:56.5982606+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T16:13:43.7245779+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `104da1144ae3a60b` の調査・判断・検証の正本である。
+- このchange recordがfinding `8df2cd0868dec26e` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -89,4 +77,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-104da1144ae3a60b`
+- Directory: `20260919_collection-attention-8df2cd0868dec26e`
