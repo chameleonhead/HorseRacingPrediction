@@ -42,6 +42,8 @@ For multi-task or multi-agent changes, use this table (a short single task may u
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | <task> | Main or Worker | High capability or Cost efficient | - | <paths or read-only> | <command or observable check> | <artifact or result> | Proposed |
 
+For delegated coding tasks, link `agent-audits/<task-id>.json` from Completion evidence or the Verification record. Summarize requested/observed model, model verification, usage availability, quality verdict, independent challenge, review passes and effort, rework/promotion, total successful-outcome cost when measurable, and the routing recommendation. Never infer observed model or token usage from the requested configuration.
+
 Link each task to its acceptance criteria and each acceptance criterion to its task(s) and verification. Use observable evidence and keep state current. The canonical states are `Proposed`, `Runnable`, `In progress`, `Dependent`, `Externally blocked`, `Rejected with reason`, and `Verified`. `Rejected with reason` may be used only for work explicitly outside the approved scope; an approved-scope task cannot be rejected to bypass completion. `Externally blocked` may remain at completion only when it is an explicitly excluded follow-up that does not prevent an approved acceptance criterion.
 
 ## Review gates
@@ -51,6 +53,8 @@ For multi-task or delegated changes, record the reviewer, inputs, decision, and 
 - **Pre-implementation review** — after approval and before code changes; classifies every task and confirms the runnable frontier and worker contracts.
 - **Checkpoint review** — at each substantial checkpoint; compares worker evidence, full diff, tests, and the acceptance-criterion matrix, recording fixes or escalation.
 - **Final review** — before `Implemented`; confirms every approved task and AC is `Verified`, with no approved-scope rejected, runnable, dependent, in-progress, or acceptance-blocking external work left. A genuine external blocker keeps the record `Approved` unless it is an explicitly excluded follow-up that does not prevent an AC. Reconcile the task/finding ledger when the work has multiple tasks, delegation, or material review findings; a short non-delegated task may record the same conclusion concisely. Record the next action if work is interrupted.
+
+For delegated coding, Final review also reconciles each task audit: attributable patch, quality/scope gates, independent evidence, requested versus observed model, token telemetry availability, automated and human review effort, correction/re-verification, escaped defects, comparable baseline, and guarded routing recommendation.
 
 ## Verification record
 ## Deviations and follow-up

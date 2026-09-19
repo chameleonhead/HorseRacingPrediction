@@ -36,6 +36,10 @@ Turn observed failures into narrow, testable improvements to future decisions. D
 失敗した元タスクとの対応を追跡できることである。モデル単価だけでなく、初回受入率、
 再試行、レビュー負荷、修正時間を根拠にrouting ruleを狭く更新する。
 
+Delegated coding の失敗分析では、元の agent audit に escaped defect、原因、reviewで見逃した gate、worker/reviewer/rework usage、active review/correction/re-verification timeを追記する。worker tokenだけで安価だったと結論しない。比較可能な成功標本が5件未満ならpersistent defaultは変更せず、重大なsecurity/data/scope/false-completion failureは標本数に関係なく該当する低コストrouteの停止候補にする。
+
+Persistent improvementはmodel、reasoning、budget、task boundaryのうち一段階だけを変更し、観測期間、独立forward test、rollback conditionを持たせる。人間工数を金額へ換算するのは利用者または組織が換算単価を明示した場合だけとし、取得不能なprovider telemetryやreview timeを推測しない。
+
 ## Repeated interruption and autonomy review
 
 承認済みの安全な作業が残る状態でチェックポイント停止を繰り返した場合は、停止パターン自体を失敗として扱う。

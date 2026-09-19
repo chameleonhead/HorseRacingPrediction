@@ -97,6 +97,10 @@ Execution Mode に移行した後は、
 - 主担当は、高能力モデルで要件解釈、設計、タスク分割、依存関係、委譲条件、成果の統合、設計適合レビュー、最終レビューを保持する。明確で独立した作業は、利用可能なコスト効率の高いモデルへ委譲してよいが、委譲成果を自己申告だけで採用しない。
 - タスクごとに owner、model tier、依存、write scope、verification、completion evidence、state を記録する。同一ファイルまたは共有状態を並列タスクが書き込まないよう、owner を一つにする。要件が曖昧、設計・移行・セキュリティ・データ損失リスクを含む、統合が複雑、完了条件を独立検証できない、または失敗を反復する場合は、主担当が実行するか上位モデルへ昇格する。
 - 安価なモデルの利用は単価だけで評価せず、初回受入、再試行、レビュー指摘、修正時間、検証失敗を必要な範囲で記録し、成功結果あたりの総費用が悪化する場合は routing を見直す。
+- 明確で局所的かつ独立検証可能なcoding taskは、現在利用可能なcost-sensitive coding workerを第一候補にする。architecture、public contract、persistence/migration、concurrency、security/privacy、破壊的操作、曖昧な要件、統合・最終判定は主担当または上位tierに保持する。1回のfocused correction後もgateを満たさない、またはscopeが拡大した場合は一段階昇格する。
+- delegated coding taskはchange record配下のagent auditへ、requested/observed model、observation source、token availability、task difficulty、patch attribution、quality/scope gates、独立反証、retry/promotion、escaped defectを記録する。observed modelやtokenを取得できない場合は未確認とし、requested値から推測しない。
+- 成功結果当たりのcostにはworkerだけでなく、automated reviewer、利用者が提供した場合のhuman active review、指摘対応、corrective implementation、promotion、再検証、audit overheadを含める。人間単価やprovider料金根拠がない値を通貨へ換算しない。同程度のtaskと帰属可能なpatchだけを比較する。
+- persistentなmodel/reasoning/budget/task-boundary改善は、反復する比較可能evidence、重大なsecurity/data/scope/false-completion failure、または5件以上の成功標本に基づき、一段階の変更、validator、独立forward test、観測期間、rollback条件を持たせる。自発的にrecommendationと承認済み範囲内の再指示・再分割・昇格は行えるが、未承認scopeへ拡張しない。
 - DDD の Design/task-split、Pre-implementation、Checkpoint、Final review を各 change record で実施し、設計・分割・統合・完了判定の判断を記録する。
 - 行動を変えない誤字修正またはコメントだけの明確化は change record 不要とする。それ以外の機能、UI/UX、外部仕様、データモデル、運用フロー、レビュー判断に影響する変更は、規模にかかわらず DDD の change record を作成する。
 

@@ -17,6 +17,8 @@ Treat model labels as capability/cost tiers, not fixed product names. Select the
 
 Do not hard-code model IDs, pricing, or provider assumptions in plans or artifacts. Record the selected tier, measured usage if available, elapsed time, retries, and delegated result so routing can be tuned later.
 
+For coding, prefer the lowest-cost eligible route, not the lowest-cost model unconditionally. A frozen, narrow, independently verifiable task with no architecture, public-contract, persistence/migration, concurrency, security/privacy, or destructive decision may start with the current cost-sensitive coding model. In this repository that is configured as `low_cost_coding_worker`; resolve current availability at execution time. Bounded multi-file work may use the balanced worker tier. The lead retains ambiguous or high-risk work and all final acceptance.
+
 ## Required lead workflow
 
 1. Define the outcome, constraints, acceptance criteria, and risk level before delegation.
@@ -25,8 +27,11 @@ Do not hard-code model IDs, pricing, or provider assumptions in plans or artifac
 4. Send each worker a complete prompt using the contract below. A worker must not infer missing authority from repository access.
 5. Review the returned evidence against acceptance criteria before merging or forwarding it. The lead resolves conflicts and owns the final integrated change.
 6. Record routing results: successful outputs, rework/retries, escalations, measured usage/cost when available, and elapsed time. Evaluate cost per successful outcome, not token price alone.
+7. For delegated coding, create an execution audit using [the audit schema and gates](references/execution-audit.md). Record requested and observed models separately. Include reviewer usage, active review effort, corrections, re-verification, and audit overhead in successful-outcome cost.
 
 Before declaring the work complete, the lead performs a focused self-audit of the plan and dependencies, tier/routing choices, worker evidence, material acceptance gaps, and applicable skill instructions, proportional to the task's risk and size. Record material findings and their evidence; a short, low-risk task does not need a separate checklist. Do not complete while a material approved item is runnable, unverified, or unresolved. If the audit demonstrates a reusable process failure, apply `learn-from-implementation-failures`, update the narrowest applicable skill, validate it, and rerun the affected gate. Correct isolated implementation mistakes locally without turning each one into a skill rule.
+
+Do not accept worker-authored tests as the only quality evidence for a material change. Use an independent counterexample, existing regression suite, invariant, real-path trace, or end-to-end check. Record why an existing suite is sufficient for a low-risk mechanical change.
 
 ## Worker prompt contract
 
@@ -72,6 +77,10 @@ Use observable gates for routing decisions:
 
 Keep a worker tier only when it passes quality and scope gates with acceptable rework and improves outcome cost or throughput. Otherwise narrow the task, strengthen the prompt, serialize the work, or promote it to the lead/review tier. These are routing decisions, not permanent model rankings.
 
+Count the full cost of a successful result: worker usage, automated review, human active review time when supplied, retries, lead corrections, promotions, re-verification, and audit overhead. Keep unavailable units separate; do not invent currency conversion or labor rates. Compare routes only across similar task difficulty and attributable patches. Fewer than five comparable successes may inform a note but may not change a persistent default.
+
+Persistent routing, prompt, reasoning, or budget improvements require repeated comparable evidence, one material security/data/scope/false-completion failure, or at least five successful samples. Change one bounded factor, validate it, run an independent forward test, define an observation period and rollback condition, and record escaped defects. Generate recommendations autonomously, but do not expand approved scope or silently rewrite unrelated policy.
+
 ## Handoff record
 
 For each task, retain a compact record with:
@@ -85,8 +94,10 @@ Write scope: <paths/systems or read-only>
 Acceptance/evidence: <checks and results>
 State: Proposed | Runnable | In progress | Dependent | Externally blocked | Rejected with reason | Verified
 Usage/effort: <measured values or unavailable>
+Model verification: <requested, observed, source, verified | mismatch | unavailable>
+Review effort/cost: <review passes, model usage, active minutes, correction and re-verification, or unavailable>
 Rework/escalation: <count and reason>
 Lead decision: accept | revise | promote | reject
 ```
 
-Keep records in the governing change record or task artifact, not in worker prompts alone. If the workflow is repository work, follow the repository's change-record and approval rules before editing production code.
+Keep the compact record in the governing change record and delegated coding details in its `agent-audits/<task-id>.json` artifact. Validate artifacts with `scripts/audit_agent_execution.py`. Do not store prompt text, source text, credentials, or secrets. If the workflow is repository work, follow the repository's change-record and approval rules before editing production code.

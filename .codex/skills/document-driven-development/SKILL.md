@@ -28,11 +28,15 @@ For changes with multiple tasks or agents, include a task plan in the record (or
 
 Before approval, perform a **Design and task-split review**: the main owner confirms the design decisions are settled, all acceptance criteria have task and verification coverage, boundaries and dependencies are valid, parallel write scopes do not overlap, and delegation is suitable for the selected model tier. Do not delegate unresolved design decisions.
 
+When a task delegates coding, link its agent execution audit from the task or verification record. The audit distinguishes requested from observed model, records token availability without estimates, proves patch attribution in the shared worktree, and includes automated/human review effort, correction, promotion, and re-verification in successful-outcome cost. A telemetry gap may be explicit, but must not be described as verified model use.
+
 Immediately after approval and before code changes, perform a **Pre-implementation review**: classify every task as `Runnable`, `Dependent`, `Externally blocked`, or `Rejected with reason`; confirm the current frontier has non-overlapping write scopes; and record the exact worker inputs, expected evidence, and escalation conditions. Use the canonical task-state vocabulary defined below.
 
 At each substantial checkpoint, perform a **Checkpoint review**: the main owner reads the delegated diff or primary evidence, compares it with the approved design and acceptance-criterion matrix, checks tests and scope, and records fixes, re-sequencing, or model escalation. A checkpoint may contain unfinished work; it is not a completion claim.
 
 Before `Implemented`, perform a **Final review**: every task needed by the approved scope and every acceptance criterion is `Verified`, and no approved-scope `Rejected with reason`, `Runnable`, `In progress`, `Dependent`, or otherwise incomplete task remains. No acceptance-blocking `Externally blocked` task may remain; a non-blocking external blocker is allowed only as an explicitly excluded follow-up. Otherwise keep the record `Approved` and report the blocker. Record final diff/status checks and relevant tests. Never mark a record complete from isolated tests or scaffolding that is not connected to the documented path.
+
+For delegated coding, the final review also records the quality verdict, model-verification state, usage availability, review burden, total successful-outcome cost when measurable, independent challenge evidence, escaped defects known at review time, and routing recommendation. Exclude unattributed shared-worktree changes and non-comparable baselines from model-efficiency conclusions.
 
 ### Canonical task states and completion gate
 
