@@ -161,7 +161,7 @@ public sealed class CollectionMonitoringServiceTests
 
         var finding = scope.CreateService().FindDispatchOrderViolations(snapshot, now).Single();
 
-        Assert.IsTrue(finding.Evidence.Contains("compatibilityDefinition=horse-profile"));
+        Assert.IsTrue(finding.Evidence.Contains("compatibilityKey=JRA|Definition|horse-profile|Realtime"));
     }
 
     [TestMethod]
@@ -313,11 +313,12 @@ public sealed class CollectionMonitoringServiceTests
     private static CollectionMonitoringTaskSnapshot MonitoringTask(string definition, int priority,
         DateTimeOffset availableAt) => new(Guid.NewGuid(), new(ResourceType.Horse, "JRA", Guid.NewGuid().ToString("N")),
         new(definition), CollectionTaskStatus.Ready, CollectionLane.Realtime, priority, availableAt, availableAt,
-        availableAt, null, null, 0);
+        availableAt, null, null, 0, $"JRA|Definition|{definition}|Realtime");
 
     private static CollectionMonitoringDispatchSnapshot MonitoringDispatch(string definition, int priority,
         DateTimeOffset dispatchedAt) => new(Guid.NewGuid(), Guid.NewGuid(), new(definition), CollectionLane.Realtime,
-        priority, dispatchedAt.AddMinutes(-1), dispatchedAt.AddHours(-1), dispatchedAt);
+        priority, dispatchedAt.AddMinutes(-1), dispatchedAt.AddHours(-1), dispatchedAt,
+        $"JRA|Definition|{definition}|Realtime");
 
     private static async Task CreateFailureAsync(CollectionPlatformStore store, DateTimeOffset now,
         string definitionId, ResourceType type, string errorCode, string message)

@@ -12,7 +12,8 @@ public sealed record CollectionMonitoringTaskSnapshot(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? LeaseExpiresAt,
-    int AttemptCount);
+    int AttemptCount,
+    string? CompatibilityKey = null);
 
 public sealed record CollectionMonitoringDispatchSnapshot(
     Guid EnvelopeId,
@@ -22,7 +23,8 @@ public sealed record CollectionMonitoringDispatchSnapshot(
     int Priority,
     DateTimeOffset AvailableAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset DispatchedAt);
+    DateTimeOffset DispatchedAt,
+    string? CompatibilityKey = null);
 
 public sealed record CollectionRaceFreshnessSnapshot(
     Guid TaskId,

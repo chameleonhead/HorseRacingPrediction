@@ -493,8 +493,9 @@ public sealed class CollectionMonitoringService(
             .ToArray();
         foreach (var higher in snapshot.ActiveTasks.Where(x => IsStalled(x, now)))
         {
+            if (string.IsNullOrWhiteSpace(higher.CompatibilityKey)) continue;
             var bypasses = dispatches.Where(dispatch => dispatch.Lane == higher.Lane
-                    && dispatch.Definition == higher.Definition
+                    && string.Equals(dispatch.CompatibilityKey, higher.CompatibilityKey, StringComparison.Ordinal)
                     && higher.AvailableAt <= dispatch.DispatchedAt
                     && higher.CreatedAt <= dispatch.DispatchedAt
                     && EffectivePriority(higher.Priority, higher.CreatedAt, dispatch.DispatchedAt)
@@ -508,7 +509,7 @@ public sealed class CollectionMonitoringService(
                 "Stalled higher-priority work was bypassed by at least three dispatch decisions in the same lane.",
                 [
                     $"lane={higher.Lane}",
-                    $"compatibilityDefinition={higher.Definition.Value}",
+                    $"compatibilityKey={higher.CompatibilityKey}",
                     $"waitingTaskId={higher.TaskId:D}",
                     $"waitingPriority={higher.Priority}",
                     $"bypassCount={bypasses.Length}",
@@ -535,26 +536,26 @@ public sealed class CollectionMonitoringService(
 
     private static (string Hypothesis, string OwnerTask, string NextSafeOperation) RouteRootCause(
         string kind, string key) => (kind, key) switch
-    {
-        ("ActionableFailureGroup", var value) when value.Contains("owner", StringComparison.OrdinalIgnoreCase) =>
-            ("Owner identity producer and lookup contracts may disagree.", "T1",
-                "Run the owner identity compatibility preview; do not rewrite stored IDs."),
-        ("DispatchOrderViolation", _) =>
-            ("Compatible higher-priority work may have been repeatedly bypassed.", "T2",
-                "Inspect the recorded compatibility definition and envelope sequence."),
-        ("StalledActiveTask" or "RetryWaitingBacklog", _) =>
-            ("Arrival, dispatch, or completion capacity may be imbalanced.", "T3",
-                "Compare definition flow rates and oldest age at the same cutoff."),
-        ("ActionableFailureGroup", var value) when value.Contains("TargetClosed", StringComparison.OrdinalIgnoreCase) =>
-            ("The observation may predate the deployed closed-session recovery revision.", "T6",
-                "Confirm deployed revision and re-observe before creating another fix."),
-        ("WeekendCardCoverageMissing" or "WeekendDiscoveryCoverageUnknown" or "RaceResultFreshnessMiss"
-            or "RaceDayResultCoverageMissing", _) =>
-            ("Required race data is not confirmed in the domain by its checkpoint.", "T6",
-                "Verify deployed revision and inspect the read-only freshness evidence."),
-        _ => ("The finding requires consolidated operational triage.", "T3",
-            "Inspect the definition flow diagnostic and representative task evidence."),
-    };
+        {
+            ("ActionableFailureGroup", var value) when value.Contains("owner", StringComparison.OrdinalIgnoreCase) =>
+                ("Owner identity producer and lookup contracts may disagree.", "T1",
+                    "Run the owner identity compatibility preview; do not rewrite stored IDs."),
+            ("DispatchOrderViolation", _) =>
+                ("Compatible higher-priority work may have been repeatedly bypassed.", "T2",
+                    "Inspect the recorded compatibility definition and envelope sequence."),
+            ("StalledActiveTask" or "RetryWaitingBacklog", _) =>
+                ("Arrival, dispatch, or completion capacity may be imbalanced.", "T3",
+                    "Compare definition flow rates and oldest age at the same cutoff."),
+            ("ActionableFailureGroup", var value) when value.Contains("TargetClosed", StringComparison.OrdinalIgnoreCase) =>
+                ("The observation may predate the deployed closed-session recovery revision.", "T6",
+                    "Confirm deployed revision and re-observe before creating another fix."),
+            ("WeekendCardCoverageMissing" or "WeekendDiscoveryCoverageUnknown" or "RaceResultFreshnessMiss"
+                or "RaceDayResultCoverageMissing", _) =>
+                ("Required race data is not confirmed in the domain by its checkpoint.", "T6",
+                    "Verify deployed revision and inspect the read-only freshness evidence."),
+            _ => ("The finding requires consolidated operational triage.", "T3",
+                "Inspect the definition flow diagnostic and representative task evidence."),
+        };
 
     private static int EffectivePriority(int priority, DateTimeOffset createdAt, DateTimeOffset now)
         => priority + Math.Min(30, Math.Max(0, (int)(now - createdAt).TotalHours / 6));
