@@ -73,6 +73,19 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
+    public void DeployWorkflow_SkipsCompletedOwnerMigrationBeforePausingPipeline()
+    {
+        var migration = DeployWorkflow.IndexOf("migrate-race-entry-owners:", StringComparison.Ordinal);
+        var preview = DeployWorkflow.IndexOf("race-entry-owners/preview", migration, StringComparison.Ordinal);
+        var pause = DeployWorkflow.IndexOf("$base/pipeline/pause", preview, StringComparison.Ordinal);
+
+        Assert.IsGreaterThanOrEqualTo(0, migration);
+        Assert.IsGreaterThan(migration, preview);
+        Assert.IsGreaterThan(preview, pause);
+        StringAssert.Contains(DeployWorkflow[migration..], "jq '.remaining'");
+    }
+
+    [TestMethod]
     public void MaintenanceWorkflow_GatesAndRecoversProductionRepairsSafely()
     {
         StringAssert.Contains(MaintenanceWorkflow, "APPLY-PENDING-COLLECTION-REPAIRS");
