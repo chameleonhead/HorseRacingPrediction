@@ -166,7 +166,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 | T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | Verified |
 | T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | Verified |
 | T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Verified |
-| T7 | GitHub cronを手動probeへ縮小し、Codexスケジュールを主監視・障害診断・修正案起票へ切り替える。AC1,AC3,AC7-AC10,AC17 | Main | Lead tier | T1-T5 | workflow、Codex automation、docs | automation card、manual probe、failure proposal evidence | スケジュールIDと実行境界 | In progress |
+| T7 | GitHub cronを手動probeへ縮小し、Codexスケジュールを主監視・障害診断・修正案起票へ切り替える。AC1,AC3,AC7-AC10,AC17 | Main | Lead tier | T1-T5 | workflow、Codex automation、docs | automation card、manual probe、failure proposal evidence | スケジュールIDと実行境界 | Verified |
 
 ## Review gates
 
@@ -175,6 +175,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - **Checkpoint review — 2026-09-19, reviewer: Main.** T1-T5の本番経路を接続した。store snapshotは単一cutoff、行数上限、pipeline/task/recent dispatchを返し、APIはfailure、pause、stalled/retry、same-lane priority追い越しをversioned fingerprintへ分類する。配送順異常は同一Envelope内の互換タスクを除き、停滞済み高優先度taskが独立配送で3回以上追い越された場合に限定した。自動補正は独立switch、maintenance抑止、プロセス内single-flight、canary上限、apply前SQLite online backup、既存のfailure/revision冪等キーを使う。GitHub Actionsは30分間隔、環境単位concurrency、production secret、安定finding branch/PR、recovery preview/applyを接続した。C# focused 9件、Python 4件、format、YAML parse、diff checkが成功。T1-T5は実経路に接続したが、全回帰、デプロイ、本番shadow/preview/canary、別経路の定期実行欠落監視が残る。
 - **Checkpoint review:** 評価/API、生成コマンド、定期実行の各チェックポイントで実施する。
 - **Redesign review — 2026-09-19, reviewer: Main.** 利用者から主監視をCodexスケジュールタスクにする意図と、安定稼働まで実行エラーの自動復旧をコード変更ではなく修正案作成として扱う指示を受けた。OpenAI公式ドキュメントにより、デスクトップのスケジュールタスクはローカルprojectを扱える一方、PCとアプリの稼働に依存し、worktree分離が推奨されることを確認した。GitHub cronとCodex cronの二重実行を禁止し、GitHub workflowはproduction secretを保持する手動probe、Codexは30分ごとの起動・診断・Proposed record作成に限定する。既知recipeも安定化中はpreviewのみとし、applyは人が明示的に`recover`を選んだ場合だけ許可する。安定化判定は14日連続、予定実行の99%以上成功、未分類失敗0、意図しない変更0、fingerprint重複率2%未満とする。恒久案はalways-onのサービス内監視またはクラウドschedulerを検知、Codexを診断担当とするhybridを推奨する。
+- **Codex schedule checkpoint — 2026-09-19, reviewer: Main.** automation `collection-monitor-liveness` を `Collection operations monitor` へ更新し、30分間隔、local project、`gpt-5.6-sol` mediumで有効化した。promptはinspect-only probe、二回連続失敗の修正案record、isolated temporary worktree、validator/secret/diff gate、自動実装・補正・merge禁止、14日安定化判定を明記する。GitHub workflowからcronを除去し、`recover` applyは明示的manual inputに限定した。手動probe run `35426097345` は全step成功し、recovery applyがskipされた。
 - **Final review:** AC1-AC17、T1-T6、自動補正の実データ経路と監査証拠、shadow/canary、kill switch、補償手順、定期実行の死活、秘密情報非混入、実行中の別変更非混入を照合する。
 
 ## Verification record
@@ -192,6 +193,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 2026-09-19: production canary `35424643889` は事前backupを作成し、5件を検査、0件変更、5件skip、0件失敗で安全に完了した。初期recipeがOwnerを扱わない一方でclassifierがOwnerを既知扱いしていた境界差を検出したため、Ownerは未知エラーとして起票するよう分類をrecipe対象と一致させた。
 - 2026-09-19: 最終本番確認 `35425200781` でfinding branchへmainをmergeする時点のbot identity未設定を検出した。identity設定をbranch準備前へ移し、merge commitとfinding commitで同じ限定bot identityを使用するよう修正した。
 - 2026-09-19: 本番previewが事前条件を満たさずskipされる候補もmatchingとして数え、不要なbackup/applyを繰り返し得ることを確認した。recipeの詳細条件を読み取り専用で先に評価し、実際に補正または抑止できる候補だけをcanary上限へ数えるよう共通化した。focused 11件が成功した。
+- 2026-09-19: GitHub cronを削除し、Codex automation `collection-monitor-liveness` を30分間隔の主監視へ更新した。manual-only YAML、automation.toml、change-record validator、`git diff --check`を確認し、inspect-only本番probe `35426097345` が成功、recovery applyは実行されなかった。
 
 ## Deviations and follow-up
 
