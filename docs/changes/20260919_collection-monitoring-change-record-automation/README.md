@@ -1,6 +1,6 @@
 # 収集運用を監視し起票と安全な過去ジョブ補正を自動化する
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -159,17 +159,17 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | finding型、閾値、4分類、version、一貫したcutoff、収集運用評価を実装する。AC2,AC8,AC13,AC14,AC16 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Proposed |
-| T2 | 読み取り専用監視APIを取得件数/時間上限付きで追加する。AC1,AC2,AC8,AC14 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only/load tests | 実API契約の証拠 | Proposed |
-| T3 | バグ/未知エラー用change record生成、証拠sanitize、lifecycle/noise control、重複・競合保護を実装する。AC3,AC4,AC7-AC11,AC16,AC17 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict/adversarial tests | 生成差分とテスト結果 | Proposed |
-| T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | Proposed |
-| T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | Proposed |
-| T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Proposed |
+| T1 | finding型、閾値、4分類、version、一貫したcutoff、収集運用評価を実装する。AC2,AC8,AC13,AC14,AC16 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Runnable |
+| T2 | 読み取り専用監視APIを取得件数/時間上限付きで追加する。AC1,AC2,AC8,AC14 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only/load tests | 実API契約の証拠 | Dependent |
+| T3 | バグ/未知エラー用change record生成、証拠sanitize、lifecycle/noise control、重複・競合保護を実装する。AC3,AC4,AC7-AC11,AC16,AC17 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict/adversarial tests | 生成差分とテスト結果 | Dependent |
+| T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | Dependent |
+| T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | Dependent |
+| T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Dependent |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** 既存のprogress、task search、failure notification、pipeline API、dispatcherのlane/priority contract、GitHub運用workflowを確認した。管理一覧のsortはruntimeのaging/公平配分を意図的に再現しないため、一覧だけで処理順違反を判定しない設計とした。追加要件に対し、既存のrevision-gated主体自動復旧が一意性根拠、preview/apply、failure/revision冪等キー、部分失敗隔離を持つことを確認し、同じ安全契約を登録式recipeに一般化する。自動補正を本番常設する上で必要な、single-flight、maintenance抑止、負荷上限、shadow/canary、kill switch、補償手順、非信頼証拠対策、version再検証、死活監視を追加した。AC1-AC17はT1-T6と検証に双方向で追跡される。評価contract、補正のデータ整合性、自動生成文書、定期実行は依存関係が強く共有状態を扱うため、現時点ではMainが直列で担当する。
-- **Pre-implementation review:** 利用者承認後、コード変更前に実施する。
+- **Pre-implementation review — 2026-09-19, reviewer: Main.** 利用者の「対応をお願いします」をAC1-AC17の明示承認として記録した。T1を`Runnable`、T2-T6を依存順の`Dependent`とした。本変更は公開API契約、永続状態、本番データ補正、認証、自動化を横断し、現在のworktreeでは直前変更との統合も必要なため、T1-T6はMain/lead tierが直列で実施する。各checkpointで実diff、focused test、AC matrixを照合し、一意性根拠不足、破壊的復元、秘密情報不足、承認済み境界外のrecipe追加は人の判断なしに進めない。
 - **Checkpoint review:** 評価/API、生成コマンド、定期実行の各チェックポイントで実施する。
 - **Final review:** AC1-AC17、T1-T6、自動補正の実データ経路と監査証拠、shadow/canary、kill switch、補償手順、定期実行の死活、秘密情報非混入、実行中の別変更非混入を照合する。
 
