@@ -65,6 +65,8 @@
 
 ## Observation history
 
+- 2026-09-19T20:13:43.2116985+09:00: 再観測。severity=`medium`、summary=132 horse-profile tasks are stalled in Ready.。
+
 - 2026-09-19T19:43:52.7457668+09:00: 再観測。severity=`medium`、summary=132 horse-profile tasks are stalled in Ready.。
 
 - 2026-09-19T19:13:54.8561706+09:00: 再観測。severity=`medium`、summary=132 horse-profile tasks are stalled in Ready.。
