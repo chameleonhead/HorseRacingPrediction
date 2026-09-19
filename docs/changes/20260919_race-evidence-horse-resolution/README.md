@@ -191,6 +191,7 @@
 - 2026-09-20: Horse task実行では、JRAの文脈依存URLが直接遷移で検索画面へ戻った後、handlerが`sourceIdentity`を外して名前検索し、再度`MultipleCandidates`になった。Race根拠付きの場合はidentityを保持し、JRA Horse identityを相対・絶対URL間で正規化比較するT6を追加した。
 - 2026-09-20: T6のdirect-failure fallbackとrelative/absolute identity回帰テスト、format、Release build（警告0）、migration差分なし、非External全テストを実行した。1,139件成功、既知skip 1、失敗0。本番再配備とHorse Recoveryは未完了。
 - 2026-09-20: T6配備後のRecoveryで、task `EffectiveDate` がRecovery実行日、参照レースが前日だったため `ResolveReferenceRace` が正しい過去レース根拠を破棄していたことを確認した。`EffectiveDate` はtaskの基準日であってprovenanceではないため、Race発見元・provider・発見元resource ID・参照レース3要素・`requestedByRaceId` の検証は維持しつつ、日付一致条件を除去した。後日Recoveryの回帰テストへ変更した。
+- 2026-09-20: 後日Recoveryは同定を通過してプロフィール保存まで到達したが、既存RaceEntryをResult-onlyで再取得する経路が関連主体作成を新規entryだけに限定しており、canonical Horse投影がないlegacy entryでは保存APIが`SubjectProjectionNotReady`を返した。結果再取得時は既存entryを含む全accepted行について関連主体を冪等確認し、欠落Horseをmaterializeするよう修正した。
 
 ## Incident ledger
 
