@@ -125,6 +125,9 @@ builder.Services.PostConfigure<CollectionPlatformOptions>(options =>
     if (!Path.IsPathRooted(configured)) options.StateDirectory = Path.GetFullPath(configured, builder.Environment.ContentRootPath);
 });
 builder.Services.AddSingleton<CollectionPlatformStore>();
+builder.Services.Configure<CollectionMonitoringOptions>(
+    builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));
+builder.Services.AddSingleton<CollectionMonitoringService>();
 builder.Services.AddSingleton<ICollectionSchedulePolicy, JraCollectionSchedulePolicy>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, HorseProfileLegacyLayoutRevisionCondition>();
 builder.Services.AddSingleton<INamedRevisionImpactCondition, RaceResultDeadHeatBeforeRevisionFiveCondition>();
@@ -274,6 +277,7 @@ app.UseAntiforgery();
 app.MapApiEndpoints();
 app.MapAdminEndpoints();
 app.MapCollectionPlatformEndpoints();
+app.MapCollectionMonitoringEndpoints();
 app.MapRaceOddsEndpoints();
 app.MapSubjectCollectionEndpoints();
 app.MapPredictionScheduleEndpoints();

@@ -11,7 +11,8 @@ internal static class SubjectIdentificationAutoRecovery
     internal const string RepairId = "20260918-subject-identification-auto-recovery";
 
     internal static async Task<SubjectIdentificationAutoRecoveryResult> RunOnceAsync(
-        CollectionPlatformStore store, ILogger? logger = null, CancellationToken cancellationToken = default)
+        CollectionPlatformStore store, ILogger? logger = null, CancellationToken cancellationToken = default,
+        int maxCandidates = int.MaxValue)
     {
         var failures = (await store.GetActionableFailureNotificationsAsync(
                 JstTime.Now(), int.MaxValue, cancellationToken).ConfigureAwait(false))
@@ -19,6 +20,7 @@ internal static class SubjectIdentificationAutoRecovery
                     || string.Equals(x.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
                     || x.ErrorMessage?.Contains("情報の見出しを確認できません", StringComparison.Ordinal) == true)
                 && x.Resource.Type is ResourceType.Horse or ResourceType.Jockey or ResourceType.Trainer)
+            .Take(Math.Max(0, maxCandidates))
             .ToArray();
         var recovered = 0;
         var reused = 0;

@@ -13,6 +13,11 @@ services:
       DatabaseMigration__BackupRetentionCount: 7
       CollectionPlatform__StateDirectory: /data
       CollectionPlatform__DatabaseFileName: collection-platform.db
+      CollectionMonitoring__Enabled: ${COLLECTION_MONITORING_ENABLED:-true}
+      CollectionMonitoring__ChangeRecordEnabled: ${COLLECTION_MONITORING_CHANGE_RECORD_ENABLED:-true}
+      CollectionMonitoring__RecoveryEnabled: ${COLLECTION_MONITORING_RECOVERY_ENABLED:-true}
+      CollectionMonitoring__MaintenanceMode: ${COLLECTION_MONITORING_MAINTENANCE_MODE:-false}
+      CollectionMonitoring__CanaryLimit: ${COLLECTION_MONITORING_CANARY_LIMIT:-5}
       PredictionScheduling__StateDirectory: /data
       PredictionScheduling__StoreFileName: prediction-executions.db
       CollectionQueue__Enabled: ${COLLECTION_QUEUE_ENABLED:-false}

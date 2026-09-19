@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
-public sealed class CollectionPlatformStore
+public sealed partial class CollectionPlatformStore
 {
     private const int MaxLocationOutcomesPerCompletion = 100;
     private static readonly HashSet<string> AllowedTaskMetadataKeys = new(StringComparer.Ordinal)

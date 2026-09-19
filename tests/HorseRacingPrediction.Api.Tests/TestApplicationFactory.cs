@@ -49,6 +49,8 @@ internal static class TestApplicationFactory
             options.DatabaseFileName = "collection-platform.db";
         });
         builder.Services.AddSingleton<CollectionPlatformStore>();
+        builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
+        builder.Services.AddSingleton<CollectionMonitoringService>();
         builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
         builder.Services.AddAdminAuthentication();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -105,6 +107,7 @@ internal static class TestApplicationFactory
         app.MapAdminEndpoints();
         app.MapSubjectCollectionEndpoints();
         app.MapRaceOddsEndpoints();
+        app.MapCollectionMonitoringEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();
