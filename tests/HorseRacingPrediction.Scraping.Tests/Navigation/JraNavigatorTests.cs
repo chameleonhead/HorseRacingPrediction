@@ -1457,6 +1457,32 @@ public sealed class JraNavigatorTests
     }
 
     [TestMethod]
+    public async Task ToSubjectProfileAsync_DuplicateHorse_MatchesAbsoluteIdentityToRelativeLink()
+    {
+        const string searchFormUrl = "https://www.jra.go.jp/JRADB/accessO.html";
+        const string searchResultUrl = "https://www.jra.go.jp/JRADB/search/horse";
+        const string selectedPath = "/JRADB/accessU.html?CNAME=pw01dud002024102539/FC";
+        const string selectedUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024102539/FC";
+        const string otherPath = "/JRADB/accessU.html?CNAME=pw01dud002000102503/14";
+        var browser = new FakeWebBrowser();
+        browser.SetClickDestination("競走馬検索", searchFormUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(searchResultUrl, new TestPageSnapshot(searchResultUrl, "競走馬検索", [new(
+            "検索結果", string.Empty,
+            [new(selectedPath, "ロンドンコーリング"), new(otherPath, "ロンドンコーリング")],
+            [], [], ["競走馬検索"])]));
+        browser.SetSnapshot(selectedPath, BuildHorseProfile(
+            selectedPath, "ロンドンコーリング", "2024年2月26日", null, null));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var page = await navigator.ToSubjectProfileAsync(new("Horse", "ロンドンコーリング",
+            SourceIdentity: selectedUrl));
+
+        Assert.AreEqual(selectedPath, page.Profile.SourceIdentity);
+        CollectionAssert.Contains(browser.ClickedTexts, "ロンドンコーリング");
+    }
+
+    [TestMethod]
     public async Task ToSubjectProfileAsync_DuplicateHorse_WithoutExactRace_StopsWithTemporalEvidence()
     {
         const string searchFormUrl = "https://www.jra.go.jp/JRADB/accessO.html";

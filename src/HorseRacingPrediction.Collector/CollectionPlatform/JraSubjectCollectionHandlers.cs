@@ -134,10 +134,13 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         if (page is null)
         {
-            // A persisted source URL is useful while validating that URL, but must not constrain
-            // discovery after the URL itself has failed. Keep the stable name/birth-date identity
-            // and let navigation discover the subject's current official URL.
-            var discoveryIdentity = identity with { SourceIdentity = null };
+            // Ordinary persisted locations may become stale, so name/birth-date discovery may
+            // replace them. A source identity corroborated by a reference race is stronger:
+            // keep it during discovery so a context-dependent JRA link cannot fall back to a
+            // different same-name horse after direct navigation redirects to the search page.
+            var discoveryIdentity = identity.ReferenceRace is null
+                ? identity with { SourceIdentity = null }
+                : identity;
             try
             {
                 page = await session.Navigate.ToSubjectProfileAsync(discoveryIdentity, cancellationToken).ConfigureAwait(false);

@@ -188,6 +188,51 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceReferencedProfileLocationFailure_RetainsSourceIdentityForDiscovery()
+    {
+        var failedUrl = new Uri(
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002024102539/FC");
+        JraSubjectIdentity? discoveryIdentity = null;
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new HttpRequestException("context-dependent redirect"),
+                SubjectFactory = identity =>
+                {
+                    discoveryIdentity = identity;
+                    return SubjectPage("ロンドンコーリング", []);
+                },
+            },
+        };
+        var task = SubjectTask("horse-current", "ロンドンコーリング", new Dictionary<string, string>
+        {
+            ["sourceIdentity"] = failedUrl.AbsoluteUri,
+            ["requestedByRaceId"] = "race-current",
+            ["discoveredFromType"] = "Race",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = "20260919:Nakayama:2",
+            ["referenceRaceDate"] = "2026-09-19",
+            ["referenceRaceCourse"] = "Nakayama",
+            ["referenceRaceNumber"] = "2",
+        }) with
+        {
+            EffectiveDate = new DateOnly(2026, 9, 19),
+            Locations = [new(0, failedUrl, ResourceLocationSource.Explicit,
+                ResourceLocationStatus.Unknown, null)],
+        };
+
+        var completion = await new JraSubjectProfileCollectionHandler(
+                JraSubjectCollectionDefinitions.For(ResourceType.Horse), sessions, new RecordingProfileSink())
+            .CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsNotNull(discoveryIdentity);
+        Assert.AreEqual(failedUrl.AbsoluteUri, discoveryIdentity.SourceIdentity);
+        Assert.IsNotNull(discoveryIdentity.ReferenceRace);
+    }
+
+    [TestMethod]
     public async Task StructuralProfileFailure_IsIsolatedFromPipeline()
     {
         var sessions = new FakeJraSessionFactory
