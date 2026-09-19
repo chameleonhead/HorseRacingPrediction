@@ -1,6 +1,6 @@
 # 週末レース情報の期限内収集を監視する
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -14,6 +14,8 @@
 | Deployment/operation | Not started | 承認後に30分監視へ接続する。 |
 
 ## Context
+
+The user approved this design on 2026-09-19 by instructing Codex to process the open pull requests in order.
 
 現行監視は失敗、pipeline停止、task停滞、配送順違反を検出するが、処理が動いていても必要なレース情報が期限までにdomainへ保存されているかを判定しない。このため「監視成功」と「利用目的を満たす収集成功」が一致しない。
 
@@ -110,7 +112,7 @@ findingには対象日、評価時刻、期限、分母・分子・欠落数、�
 ## Review gates
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** 現行monitoring evaluator、race discovery/detail、domain race summary、artifact/task状態、本番read-only evidenceを照合した。分母を固定レース数ではなく公式discovery由来resourceとし、金曜cardと発走後resultを別checkpointにする。snapshot/evaluator/APIは同じ状態契約を扱うためMainが直列実装する。
-- **Pre-implementation review:** 利用者によるAC1-AC7の明示承認後に行う。
+- **Pre-implementation review — 2026-09-19, reviewer: Main.** ユーザー承認を確認し、task metadataに永続化済みのCard/Result artifact状態と公式発走予定をread-only monitoring projectionへ追加する。domainへの書き込みやtask再実行は行わず、同じfingerprint writerを再利用する。
 - **Checkpoint review:** evaluator、endpoint/notification、本番shadowごとに実diffとAC matrixを照合する。
 - **Final review:** AC1-AC7、読み取り専用境界、金曜/発走後fixture、重複抑止、正常化、本番shadowを照合する。
 

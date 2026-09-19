@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -46,7 +47,17 @@ public sealed partial class CollectionPlatformStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var truncated = activeRows.Count > limit || dispatchRows.Count > limit;
+        var raceRows = await (from task in db.Tasks.AsNoTracking()
+                              join resource in db.Resources.AsNoTracking()
+                                  on task.ResourcePk equals resource.ResourcePk
+                              where task.CreatedAt <= cutoff && task.DefinitionId == "race-detail"
+                              orderby task.UpdatedAt descending, task.TaskId
+                              select new { task, resource })
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var truncated = activeRows.Count > limit || dispatchRows.Count > limit || raceRows.Count > limit;
         var active = activeRows.Take(limit).Select(x => new CollectionMonitoringTaskSnapshot(
             x.task.TaskId,
             new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
@@ -69,8 +80,27 @@ public sealed partial class CollectionPlatformStore
             x.outbox.AvailableAt,
             x.outbox.CreatedAt,
             x.outbox.DispatchedAt!.Value)).ToArray();
-        return new(cutoff, pipeline, active, dispatches, truncated);
+        var races = raceRows.Take(limit).Select(x =>
+        {
+            var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                x.task.MetadataJson ?? x.resource.AttributesJson) ?? [];
+            return new CollectionRaceFreshnessSnapshot(
+                x.task.TaskId,
+                new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+                x.task.Status,
+                x.task.UpdatedAt,
+                ParseInstant(attributes.GetValueOrDefault("officialStartAt")),
+                ParseArtifactStatus(attributes.GetValueOrDefault("cardArtifactStatus")),
+                ParseArtifactStatus(attributes.GetValueOrDefault("resultArtifactStatus")));
+        }).ToArray();
+        return new(cutoff, pipeline, active, dispatches, truncated, races);
     }
+
+    private static DateTimeOffset? ParseInstant(string? value) =>
+        DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+
+    private static RaceArtifactStatus ParseArtifactStatus(string? value) =>
+        Enum.TryParse<RaceArtifactStatus>(value, true, out var parsed) ? parsed : RaceArtifactStatus.Unknown;
 
     public async Task<CollectionMonitoringBackup> CreateMonitoringBackupAsync(
         DateTimeOffset now,

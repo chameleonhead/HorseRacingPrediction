@@ -161,6 +161,69 @@ public sealed class CollectionMonitoringServiceTests
         StringAssert.Contains(preview.BlockingReason, "No matching");
     }
 
+    [TestMethod]
+    public void Freshness_FridayProductionShapeReportsSundayCardsAndAcceptsCurrentSaturdayCards()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 18, 21, 5, 0, TimeSpan.FromHours(9));
+        var races = Enumerable.Range(1, 24)
+            .Select(index => RaceFreshness($"20260919:Course:{index}", now.AddHours(-4),
+                RaceArtifactStatus.Current, RaceArtifactStatus.Current))
+            .Concat(Enumerable.Range(1, 24).Select(index => RaceFreshness(
+                $"20260920:Course:{index}", now.AddDays(1).AddHours(-6),
+                RaceArtifactStatus.AwaitingPublication, RaceArtifactStatus.AwaitingPublication)))
+            .ToArray();
+
+        var findings = service.EvaluateFreshness(races, now);
+
+        Assert.IsFalse(findings.Any(x => x.Kind == "WeekendCardCoverageMissing"
+                                         && x.Evidence.Contains("raceDate=2026-09-19")));
+        var sunday = findings.Single(x => x.Kind == "WeekendCardCoverageMissing");
+        Assert.AreEqual("critical", sunday.Severity);
+        Assert.IsTrue(sunday.Evidence.Contains("discovered=24"));
+        Assert.IsTrue(sunday.Evidence.Contains("missing=24"));
+    }
+
+    [TestMethod]
+    public void Freshness_EmptyFridayDiscoveryIsUnknownRatherThanHealthy()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 18, 18, 0, 0, TimeSpan.FromHours(9));
+
+        var findings = service.EvaluateFreshness([], now);
+
+        Assert.HasCount(2, findings.Where(x => x.Kind == "WeekendDiscoveryCoverageUnknown"));
+    }
+
+    [TestMethod]
+    public void Freshness_ResultGraceAndDayCheckpointReportMissingResult()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 19, 18, 30, 0, TimeSpan.FromHours(9));
+        var races = new[]
+        {
+            RaceFreshness("20260919:Nakayama:1", now.AddHours(-8),
+                RaceArtifactStatus.Current, RaceArtifactStatus.Current),
+            RaceFreshness("20260919:Nakayama:2", now.AddHours(-2),
+                RaceArtifactStatus.Current, RaceArtifactStatus.Due),
+        };
+
+        var finding = service.EvaluateFreshness(races, now)
+            .Single(x => x.Kind == "RaceDayResultCoverageMissing");
+
+        Assert.AreEqual("high", finding.Severity);
+        Assert.IsTrue(finding.Evidence.Contains("due=2"));
+        Assert.IsTrue(finding.Evidence.Contains("missing=1"));
+    }
+
+    private static CollectionRaceFreshnessSnapshot RaceFreshness(string id, DateTimeOffset start,
+        RaceArtifactStatus card, RaceArtifactStatus result) => new(
+        Guid.NewGuid(), new(ResourceType.Race, "JRA", id), CollectionTaskStatus.Ready,
+        start.AddHours(-1), start, card, result);
+
     private static async Task CreateFailureAsync(CollectionPlatformStore store, DateTimeOffset now,
         string definitionId, ResourceType type, string errorCode, string message)
     {
