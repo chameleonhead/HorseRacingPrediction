@@ -265,6 +265,9 @@ public sealed partial class CollectionPlatformStore
             DefinitionId = definition.Value,
             RequestedRevision = requestedRevision,
             Reason = reason,
+            Lane = lane,
+            Priority = priority,
+            MetadataJson = metadataJson,
             RequestedAt = requestedAt,
             ExplicitUrl = explicitUrl?.AbsoluteUri,
             BatchId = batchId,
@@ -292,6 +295,15 @@ public sealed partial class CollectionPlatformStore
                 or CollectionReason.PeriodRecollection)
                 await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
                     active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
+            var activeState = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+                && x.DefinitionId == definition.Value, cancellationToken).ConfigureAwait(false);
+            if (activeState is not null)
+            {
+                activeState.RequiredRevision = Math.Max(activeState.RequiredRevision, requestedRevision);
+                if (activeState.AppliedRevision < activeState.RequiredRevision)
+                    activeState.Status = CollectionStateStatus.Pending;
+                activeState.UpdatedAt = requestedAt;
+            }
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new CollectionRequestReceipt(request.RequestId, active.TaskId, false);
         }
@@ -350,6 +362,56 @@ public sealed partial class CollectionPlatformStore
 
     private static CollectionLane StrongerLane(CollectionLane left, CollectionLane right) =>
         (CollectionLane)Math.Min((int)left, (int)right);
+
+    private static async Task<bool> MaterializeUnsatisfiedRevisionAsync(CollectionPlatformDbContext db,
+        CollectionTaskEntity completedTask, CollectionStateEntity state, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (state.RequiredRevision <= completedTask.RequestedRevision
+            || await db.ActiveTasks.AnyAsync(x => x.ResourcePk == completedTask.ResourcePk
+                && x.DefinitionId == completedTask.DefinitionId && x.TaskId != completedTask.TaskId,
+                cancellationToken).ConfigureAwait(false))
+            return false;
+
+        var request = await db.Requests
+            .Where(x => x.ResourcePk == completedTask.ResourcePk
+                && x.DefinitionId == completedTask.DefinitionId
+                && x.RequestedRevision >= state.RequiredRevision)
+            .OrderByDescending(x => x.RequestedAt)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (request is null) return false;
+
+        var followUp = new CollectionTaskEntity
+        {
+            TaskId = Guid.NewGuid(),
+            RequestId = request.RequestId,
+            ResourcePk = completedTask.ResourcePk,
+            DefinitionId = completedTask.DefinitionId,
+            RequestedRevision = state.RequiredRevision,
+            Status = CollectionTaskStatus.Ready,
+            Lane = request.Lane,
+            Priority = request.Priority,
+            AvailableAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+            DispatchGeneration = 1,
+            MetadataJson = request.MetadataJson,
+        };
+        db.Tasks.Add(followUp);
+        db.ActiveTasks.Add(new CollectionActiveTaskEntity
+        { ResourcePk = completedTask.ResourcePk, DefinitionId = completedTask.DefinitionId, TaskId = followUp.TaskId });
+        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+        {
+            OutboxId = Guid.NewGuid(),
+            TaskId = followUp.TaskId,
+            DispatchGeneration = 1,
+            AvailableAt = now,
+            CreatedAt = now,
+        });
+        state.Status = CollectionStateStatus.Pending;
+        state.NextCollectionAt = now;
+        return true;
+    }
 
     private static bool IsOrdinaryRegistration(CollectionReason reason)
         => reason is CollectionReason.Initial or CollectionReason.Backfill or CollectionReason.Discovery;
@@ -427,6 +489,9 @@ public sealed partial class CollectionPlatformStore
                     DefinitionId = definition.Value,
                     RequestedRevision = requestedRevision,
                     Reason = reason,
+                    Lane = lane,
+                    Priority = priority,
+                    MetadataJson = metadataJson,
                     RequestedAt = requestedAt,
                     BatchId = batchId,
                 };
@@ -793,6 +858,9 @@ public sealed partial class CollectionPlatformStore
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 if (!suppressed && await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
+                if (!suppressed)
+                    await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                        .ConfigureAwait(false);
             }
             else if (completion.Result == CollectionAttemptResult.Succeeded)
             {
@@ -807,45 +875,8 @@ public sealed partial class CollectionPlatformStore
                 if (state.Status == CollectionStateStatus.Current)
                     await ResolveFailuresAsync(db, task.ResourcePk, task.DefinitionId, now, cancellationToken)
                         .ConfigureAwait(false);
-                if (state.AppliedRevision < state.RequiredRevision)
-                {
-                    var followUpRequests = await db.Requests
-                        .Where(x => x.ResourcePk == task.ResourcePk && x.DefinitionId == task.DefinitionId
-                                    && x.RequestedRevision >= state.RequiredRevision)
-                        .ToListAsync(cancellationToken).ConfigureAwait(false);
-                    var followUpRequest = followUpRequests.OrderByDescending(x => x.RequestedAt).FirstOrDefault();
-                    if (followUpRequest is not null)
-                    {
-                        var followUp = new CollectionTaskEntity
-                        {
-                            TaskId = Guid.NewGuid(),
-                            RequestId = followUpRequest.RequestId,
-                            ResourcePk = task.ResourcePk,
-                            DefinitionId = task.DefinitionId,
-                            RequestedRevision = state.RequiredRevision,
-                            Status = CollectionTaskStatus.Ready,
-                            Lane = task.Lane,
-                            Priority = task.Priority,
-                            AvailableAt = now,
-                            CreatedAt = now,
-                            UpdatedAt = now,
-                            DispatchGeneration = 1,
-                            MetadataJson = task.MetadataJson,
-                        };
-                        db.Tasks.Add(followUp);
-                        db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                        { ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, TaskId = followUp.TaskId });
-                        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
-                        {
-                            OutboxId = Guid.NewGuid(),
-                            TaskId = followUp.TaskId,
-                            DispatchGeneration = 1,
-                            AvailableAt = now,
-                            CreatedAt = now,
-                        });
-                        state.Status = CollectionStateStatus.Pending;
-                    }
-                }
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
             else if (completion.Result == CollectionAttemptResult.NotApplicable)
             {
@@ -856,6 +887,8 @@ public sealed partial class CollectionPlatformStore
                 state.Status = CollectionStateStatus.Unavailable;
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 await ResolveFailuresAsync(db, task.ResourcePk, task.DefinitionId, now, cancellationToken)
+                    .ConfigureAwait(false);
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
                     .ConfigureAwait(false);
             }
             else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
@@ -886,6 +919,8 @@ public sealed partial class CollectionPlatformStore
                     pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound
                         && completion.FailureImpact != CollectionFailureImpact.Isolated,
                     cancellationToken).ConfigureAwait(false);
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
             state.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -2078,6 +2113,8 @@ public sealed partial class CollectionPlatformStore
                 state.UpdatedAt = now;
                 if (await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
                 var pending = await db.DispatchOutbox.Where(x => x.TaskId == taskId && x.DispatchedAt == null)
                     .ToListAsync(cancellationToken);
                 foreach (var item in pending) item.DispatchedAt = now;
@@ -2293,6 +2330,9 @@ public sealed partial class CollectionPlatformStore
                         DefinitionId = "race-detail",
                         RequestedRevision = 1,
                         Reason = CollectionReason.DefinitionChanged,
+                        Lane = CollectionLane.Realtime,
+                        Priority = (int)CollectionPriority.High,
+                        MetadataJson = target.AttributesJson,
                         RequestedAt = now,
                     };
                     var task = new CollectionTaskEntity
@@ -2568,6 +2608,33 @@ public sealed partial class CollectionPlatformStore
             .ToList();
     }
 
+    public async Task<IReadOnlyList<CollectionBatchResourceStatus>> GetBatchResourceStatusesAsync(string batchId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return [];
+        await using var db = CreateDbContext();
+        var requests = await (from request in db.Requests.AsNoTracking()
+                              join resource in db.Resources.AsNoTracking() on request.ResourcePk equals resource.ResourcePk
+                              where request.BatchId == batchId
+                              select new { request, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var result = new List<CollectionBatchResourceStatus>(requests.Count);
+        foreach (var row in requests.GroupBy(x => (x.request.ResourcePk, x.request.DefinitionId)).Select(x => x
+                     .OrderByDescending(y => y.request.RequestedAt).First()))
+        {
+            var taskStatus = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == row.request.ResourcePk
+                    && x.DefinitionId == row.request.DefinitionId)
+                .OrderByDescending(x => x.CreatedAt).Select(x => (CollectionTaskStatus?)x.Status)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var state = await db.States.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.ResourcePk == row.request.ResourcePk && x.DefinitionId == row.request.DefinitionId,
+                cancellationToken).ConfigureAwait(false);
+            result.Add(new(new(row.resource.Type, row.resource.Provider, row.resource.ResourceId),
+                row.request.RequestedRevision, taskStatus, state?.Status,
+                state?.AppliedRevision ?? 0, state?.RequiredRevision ?? row.request.RequestedRevision));
+        }
+        return result;
+    }
+
     public async Task<bool> HeartbeatAsync(Guid taskId, string leaseToken, DateTimeOffset now,
         TimeSpan extension, CancellationToken cancellationToken = default)
     {
@@ -2619,6 +2686,8 @@ public sealed partial class CollectionPlatformStore
             var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
             if (active is not null) db.ActiveTasks.Remove(active);
             await QueueFailureNotificationAsync(db, task, "DeadLetterQueue", errorMessage, now, true, cancellationToken)
+                .ConfigureAwait(false);
+            await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
                 .ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);

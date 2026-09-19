@@ -218,26 +218,20 @@ public sealed partial class AdminApiClient
         => SendCollectionPlatformAsync<RacePeriodRecollectionReceipt>(HttpMethod.Post,
             $"{CollectionPlatformPath}/race-period-recollections", request, token);
 
-    public async Task<AdminApiResult<RaceEntryOwnerRepairPreview>> GetRaceEntryOwnerRepairPreviewAsync(
-        DateOnly date, CancellationToken token = default)
-    {
-        using var response = await _httpClient.GetAsync(
-            $"{CollectionPlatformPath}/repairs/race-entry-owners/preview?date={date:yyyy-MM-dd}", token)
-            .ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            return AdminApiResult<RaceEntryOwnerRepairPreview>.Fail(
-                await ReadErrorsAsync(response, token).ConfigureAwait(false));
-        var value = await response.Content.ReadFromJsonAsync<RaceEntryOwnerRepairPreview>(JsonOptions, token)
-            .ConfigureAwait(false);
-        return value is null
-            ? AdminApiResult<RaceEntryOwnerRepairPreview>.Fail(["応答の解析に失敗しました。"])
-            : AdminApiResult<RaceEntryOwnerRepairPreview>.Ok(value);
-    }
+    public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> PreviewRaceEntryOwnerMigrationAsync(
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/preview", new { }, token);
 
-    public Task<AdminApiResult<RaceEntryOwnerRepairReceipt>> ExecuteRaceEntryOwnerRepairAsync(
-        RaceEntryOwnerRepairRequest request, CancellationToken token = default)
-        => SendCollectionPlatformAsync<RaceEntryOwnerRepairReceipt>(HttpMethod.Post,
-            $"{CollectionPlatformPath}/repairs/race-entry-owners", request, token);
+    public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> ApplyRaceEntryOwnerMigrationAsync(
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/apply", new { }, token);
+
+    public Task<RaceEntryOwnerMigrationProgress?> GetRaceEntryOwnerMigrationProgressAsync(
+        CancellationToken token = default)
+        => GetJsonAsync<RaceEntryOwnerMigrationProgress>(
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/progress", token);
 
     private async Task<AdminApiResult<T>> SendCollectionPlatformAsync<T>(HttpMethod method, string path,
         object body, CancellationToken token)

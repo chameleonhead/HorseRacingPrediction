@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 16;
+    internal const int CurrentVersion = 17;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -420,6 +420,30 @@ internal static class CollectionPlatformSchemaMigrator
                     cancellationToken, transaction).ConfigureAwait(false);
             await ExecuteAsync(connection,
                 "INSERT INTO collection_schema_history (version, applied_at) VALUES (16, $appliedAt);",
+                cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 17)
+        {
+            if (!await HasColumnAsync(connection, transaction, "collection_requests", "Lane", cancellationToken)
+                    .ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_requests ADD COLUMN Lane TEXT NOT NULL DEFAULT 'Normal';",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_requests", "Priority", cancellationToken)
+                    .ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_requests ADD COLUMN Priority INTEGER NOT NULL DEFAULT 50;",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            if (!await HasColumnAsync(connection, transaction, "collection_requests", "MetadataJson", cancellationToken)
+                    .ConfigureAwait(false))
+                await ExecuteAsync(connection,
+                    "ALTER TABLE collection_requests ADD COLUMN MetadataJson TEXT NOT NULL DEFAULT '{}';",
+                    cancellationToken, transaction).ConfigureAwait(false);
+            await ExecuteAsync(connection,
+                "INSERT INTO collection_schema_history (version, applied_at) VALUES (17, $appliedAt);",
                 cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);

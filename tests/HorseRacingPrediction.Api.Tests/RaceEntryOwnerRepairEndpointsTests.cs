@@ -11,7 +11,7 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class RaceEntryOwnerRepairEndpointsTests
 {
     [TestMethod]
-    public async Task PreviewIsReadOnly_AndApplyCreatesOnlySelectedRaceRefresh()
+    public async Task MigrationPreviewIsReadOnly_AndApplyIsRestartSafe()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -41,14 +41,27 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         CollectionAssert.AreEqual(preview.Candidates.Select(x => x.RaceId).ToArray(),
             repeated!.Candidates.Select(x => x.RaceId).ToArray());
 
-        using var apply = await http.PostAsJsonAsync("/api/admin/collection/repairs/race-entry-owners",
-            new RaceEntryOwnerRepairRequest(date, [created.RaceId], "repair:owner-test"));
-        var receipt = await apply.Content.ReadFromJsonAsync<RaceEntryOwnerRepairReceipt>();
+        using var migrationPreviewResponse = await http.PostAsync(
+            "/api/admin/collection/migrations/race-entry-owners/preview", null);
+        var migrationPreview = await migrationPreviewResponse.Content
+            .ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
+        Assert.IsNotNull(migrationPreview);
+        Assert.IsTrue(migrationPreview.Candidates.Any(x => x.RaceId == created.RaceId));
+        Assert.AreEqual(0, migrationPreview.Requested);
 
-        Assert.AreEqual(HttpStatusCode.Accepted, apply.StatusCode);
-        Assert.IsNotNull(receipt);
-        Assert.AreEqual(1, receipt.TargetCount);
-        Assert.AreEqual(1, receipt.TasksCreated);
+        await store.SetPausedAsync(true, "test migration", DateTimeOffset.UtcNow);
+        using var apply = await http.PostAsync(
+            "/api/admin/collection/migrations/race-entry-owners/apply", null);
+        using var repeatedApply = await http.PostAsync(
+            "/api/admin/collection/migrations/race-entry-owners/apply", null);
+        var progress = await repeatedApply.Content.ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
+
+        Assert.AreEqual(HttpStatusCode.OK, apply.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, repeatedApply.StatusCode);
+        Assert.IsNotNull(progress);
+        Assert.AreEqual(1, progress.Requested);
+        Assert.AreEqual(1, progress.Processing);
+        Assert.HasCount(1, (await store.GetTasksAsync()).Where(x => x.Resource.Id == preview.Candidates[0].ResourceId));
     }
 
     [TestMethod]

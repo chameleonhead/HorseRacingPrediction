@@ -191,6 +191,60 @@ public sealed class CollectionPlatformStoreTests
     private static readonly CollectionDefinitionId HorseProfile = new("horse-profile");
     private static readonly ResourceKey Horse = new(ResourceType.Horse, "jra", "H123");
 
+    [TestMethod]
+    [DataRow("Succeeded")]
+    [DataRow("Failed")]
+    [DataRow("Cancelled")]
+    [DataRow("DeadLetter")]
+    public async Task TerminalTask_MaterializesExactlyOneHigherRevisionRequest(string terminal)
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 1,
+            "Initial revision", false);
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 2,
+            "Revision materialization", true);
+        var higher = await store.RequestAsync(Horse, HorseProfile, 2, CollectionReason.DefinitionChanged,
+            now.AddSeconds(1), CollectionLane.Background, (int)CollectionPriority.Background,
+            attributes: new Dictionary<string, string> { ["name"] = "new-revision" });
+        Assert.AreEqual(first.TaskId, higher.TaskId);
+
+        switch (terminal)
+        {
+            case "Succeeded":
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(2), new(CollectionAttemptResult.Succeeded)));
+                break;
+            case "Failed":
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(2), new(CollectionAttemptResult.PermanentFailure,
+                        FailureImpact: CollectionFailureImpact.Isolated)));
+                break;
+            case "Cancelled":
+                Assert.IsTrue(await store.CancelTaskAsync(first.TaskId, now.AddSeconds(2)));
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(3), new(CollectionAttemptResult.Cancelled)));
+                break;
+            case "DeadLetter":
+                Assert.IsTrue(await store.ReconcileDeadLetterAsync(first.TaskId, 1, now.AddSeconds(2)));
+                break;
+        }
+
+        var tasks = await store.GetTasksAsync(limit: 10);
+        Assert.HasCount(2, tasks);
+        var followUp = tasks.Single(x => x.TaskId != first.TaskId);
+        Assert.AreEqual(2, followUp.RequestedRevision);
+        Assert.AreEqual(CollectionTaskStatus.Ready, followUp.Status);
+        Assert.AreEqual(CollectionLane.Background, followUp.Lane);
+        Assert.AreEqual((int)CollectionPriority.Background, followUp.Priority);
+        await store.SetPausedAsync(false, null, now.AddSeconds(4));
+        var followUpLease = await store.AcquireAsync(followUp.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
+        Assert.AreEqual("new-revision", followUpLease!.Attributes["name"]);
+    }
+
     [TestInitialize]
     public void Setup()
     {
@@ -856,7 +910,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(16L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(17L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1164,7 +1218,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 16;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 17;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 

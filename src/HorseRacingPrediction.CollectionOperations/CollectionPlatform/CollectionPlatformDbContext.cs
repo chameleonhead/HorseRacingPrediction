@@ -72,6 +72,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("collection_requests"); e.HasKey(x => x.RequestId);
             e.Property(x => x.Reason).HasConversion<string>();
+            e.Property(x => x.Lane).HasConversion<string>();
             e.HasIndex(x => new { x.ResourcePk, x.DefinitionId, x.RequestedAt });
         });
         modelBuilder.Entity<CollectionRequestBatchBindingEntity>(e =>

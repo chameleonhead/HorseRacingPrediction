@@ -15,12 +15,12 @@
 }
 
 <section class="entity-section settings-section" aria-labelledby="race-owner-repair-heading">
-    <p class="eyebrow">レースデータ補完</p>
-    <h2 id="race-owner-repair-heading">出走馬の馬主情報を再取得</h2>
-    <p class="section-description">対象日の保存済みレースを確認し、馬主が欠けているレースだけを選んで再取得します。確認だけではデータを変更しません。</p>
+    <p class="eyebrow">レースデータマイグレーション</p>
+    <h2 id="race-owner-repair-heading">出走馬の馬主情報を補正</h2>
+    <p class="section-description">保存済みの全レースを確認し、Raceの出走登録に馬主が欠けているレースを公式出馬表から再取得します。プレビューではデータを変更しません。</p>
     <div class="operations-form-row">
-        <FluentTextField Label="対象日 (yyyy-MM-dd)" Required="true" @bind-Value="ownerRepairDateText" />
-        <FluentButton Appearance="@Appearance.Outline" OnClick="PreviewOwnerRepairsAsync" Disabled="@busy">欠損を確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="PreviewOwnerMigrationAsync" Disabled="@busy">マイグレーションを確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="LoadOwnerMigrationProgressAsync" Disabled="@busy">進捗を更新</FluentButton>
     </div>
     @if (ownerRepairErrors.Count > 0)
     {
@@ -30,26 +30,29 @@
     {
         <UiState Kind="loading" Title="対象日の馬主情報を確認しています" />
     }
-    else if (ownerRepairPreview is not null && ownerRepairPreview.Candidates.Count == 0)
+    else if (ownerMigration is not null && ownerMigration.Remaining == 0)
     {
-        <UiState Title="馬主情報が欠けているレースはありません" Message="対象日の保存済みレースを確認しました。" />
+        <UiState Title="馬主情報の補正対象はありません" Message="保存済みRaceのentry-level馬主情報を確認しました。" />
     }
-    else if (ownerRepairPreview is not null)
+    else if (ownerMigration is not null)
     {
         <div class="repair-summary" role="status">
-            <span>確認したレース <strong>@ownerRepairPreview.RaceCount</strong> 件</span>
-            <span>補完候補 <strong>@ownerRepairPreview.Candidates.Count</strong> 件</span>
+            <span>補正済み <strong>@ownerMigration.Corrected</strong> 件</span>
+            <span>処理中 <strong>@ownerMigration.Processing</strong> 件</span>
+            <span>失敗 <strong>@ownerMigration.Failed</strong> 件</span>
+            <span>公式情報なし <strong>@ownerMigration.Unavailable</strong> 件</span>
+            <span>現在の欠損 <strong>@ownerMigration.Remaining</strong> 件</span>
         </div>
         <div class="repair-grid">
-            <FluentDataGrid Items="@ownerRepairPreview.Candidates.AsQueryable()" TGridItem="RaceEntryOwnerRepairCandidate" aria-label="馬主情報の補完候補">
-                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@ownerRepairSelected.Contains(context.RaceId)" CheckStateChanged="@(value => SetOwnerRepairSelected(context.RaceId, value == true))" Disabled="@busy" aria-label="@($"{context.RaceName ?? context.ResourceId}を選択")" /></TemplateColumn>
+            <FluentDataGrid Items="@ownerMigration.Candidates.AsQueryable()" TGridItem="RaceEntryOwnerRepairCandidate" aria-label="馬主情報の補正候補">
                 <TemplateColumn Title="レース"><a href="@RaceUrl(context.RaceId)">@(context.RaceName ?? context.ResourceId)</a><small>@context.RacecourseCode @context.RaceNumber R</small></TemplateColumn>
-                <TemplateColumn Title="欠損"><strong>@context.MissingOwnerCount / @context.EntryCount 頭</strong><small>再取得後に非破壊で補完</small></TemplateColumn>
+                <TemplateColumn Title="対象日">@context.Date.ToString("yyyy/MM/dd")</TemplateColumn>
+                <TemplateColumn Title="entry-level欠損"><strong>@context.MissingOwnerCount / @context.EntryCount 頭</strong><small>表示用プロフィール補完を含まない保存値</small></TemplateColumn>
             </FluentDataGrid>
         </div>
         <div class="repair-actions">
-            <span>@ownerRepairSelected.Count 件を選択</span>
-            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingOwnerRepair = true)" Disabled="@(busy || ownerRepairSelected.Count == 0)">選択したレースを再取得</FluentButton>
+            <span>適用には収集パイプラインの停止と実行中タスクの完了が必要です。</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingOwnerRepair = true)" Disabled="@(busy || ownerMigration.Remaining == 0)">マイグレーションを適用</FluentButton>
         </div>
     }
 </section>
@@ -57,13 +60,13 @@
 <FluentDialog Hidden="@(!confirmingOwnerRepair)" HiddenChanged="@(hidden => confirmingOwnerRepair = !hidden)"
               Modal="true" TrapFocus="true" AriaLabelledby="owner-repair-confirm-title"
               Style="width:min(680px, calc(100vw - 32px));">
-    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="owner-repair-confirm-title">選択した@ownerRepairSelected.Count 件を再取得しますか？</h2></FluentDialogHeader>
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="owner-repair-confirm-title">馬主情報のマイグレーションを適用しますか？</h2></FluentDialogHeader>
     <FluentDialogBody>
-        <p>選択したRaceリソースだけに通常優先度の再取得を依頼します。既存値は空値で上書きせず、既存エラージョブの自動復旧や優先度変更は行いません。</p>
+        <p>欠損しているRaceリソースへ通常優先度のrevision 2再取得を登録します。既存値は空値で上書きせず、既存エラージョブの一括復旧や優先度変更は行いません。</p>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton OnClick="@(() => confirmingOwnerRepair = false)" Disabled="@busy">戻って確認</FluentButton>
-        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteOwnerRepairsAsync" Disabled="@busy">@(busy ? "依頼中…" : "再取得を依頼")</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ApplyOwnerMigrationAsync" Disabled="@busy">@(busy ? "適用中…" : "マイグレーションを適用")</FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
 
@@ -308,10 +311,8 @@
     private bool subjectLoading = true;
     private bool confirmingSubjects;
     private bool dismissingSubjects;
-    private string ownerRepairDateText = JstTime.Today().ToString("yyyy-MM-dd");
-    private RaceEntryOwnerRepairPreview? ownerRepairPreview;
+    private RaceEntryOwnerMigrationProgress? ownerMigration;
     private IReadOnlyList<string> ownerRepairErrors = [];
-    private readonly HashSet<string> ownerRepairSelected = new(StringComparer.Ordinal);
     private bool ownerRepairLoading;
     private bool confirmingOwnerRepair;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
@@ -362,43 +363,40 @@
     private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
         candidate.SafeToExecute;
 
-    private async Task PreviewOwnerRepairsAsync()
+    private async Task PreviewOwnerMigrationAsync()
     {
-        ownerRepairErrors = []; ownerRepairPreview = null; ownerRepairSelected.Clear();
-        if (!DateOnly.TryParseExact(ownerRepairDateText, "yyyy-MM-dd", out var date))
-        {
-            ownerRepairErrors = ["対象日は yyyy-MM-dd 形式で入力してください。"]; return;
-        }
+        ownerRepairErrors = []; ownerMigration = null;
         ownerRepairLoading = true;
         try
         {
-            var result = await Api.GetRaceEntryOwnerRepairPreviewAsync(date);
-            if (result.Success) ownerRepairPreview = result.Value;
+            var result = await Api.PreviewRaceEntryOwnerMigrationAsync();
+            if (result.Success) ownerMigration = result.Value;
             else ownerRepairErrors = result.Errors;
         }
-        catch (Exception) { ownerRepairErrors = ["確認結果を取得できませんでした。入力した日付は保持されています。"]; }
+        catch (Exception) { ownerRepairErrors = ["マイグレーションの確認結果を取得できませんでした。"]; }
         finally { ownerRepairLoading = false; }
     }
 
-    private void SetOwnerRepairSelected(string raceId, bool value)
+    private async Task LoadOwnerMigrationProgressAsync()
     {
-        if (value) ownerRepairSelected.Add(raceId); else ownerRepairSelected.Remove(raceId);
+        ownerRepairErrors = []; ownerRepairLoading = true;
+        try { ownerMigration = await Api.GetRaceEntryOwnerMigrationProgressAsync(); }
+        catch (Exception) { ownerRepairErrors = ["マイグレーションの進捗を取得できませんでした。"]; }
+        finally { ownerRepairLoading = false; }
     }
 
-    private async Task ExecuteOwnerRepairsAsync()
+    private async Task ApplyOwnerMigrationAsync()
     {
-        if (ownerRepairSelected.Count == 0 || busy || ownerRepairPreview is null) return;
+        if (busy || ownerMigration is null || ownerMigration.Remaining == 0) return;
         busy = true; ownerRepairErrors = []; success = null;
         try
         {
-            var batchId = $"repair:race-entry-owners:{ownerRepairPreview.Date:yyyyMMdd}:{Guid.NewGuid():N}";
-            var result = await Api.ExecuteRaceEntryOwnerRepairAsync(new(ownerRepairPreview.Date,
-                ownerRepairSelected.ToArray(), batchId));
+            var result = await Api.ApplyRaceEntryOwnerMigrationAsync();
             if (!result.Success || result.Value is null) { ownerRepairErrors = result.Errors; return; }
-            success = $"馬主情報の再取得を {result.Value.TargetCount} レースへ依頼しました（新規タスク {result.Value.TasksCreated} 件）。";
-            ownerRepairSelected.Clear(); ownerRepairPreview = null;
+            ownerMigration = result.Value;
+            success = $"馬主情報のマイグレーションを適用しました（対象 {result.Value.Requested} レース）。パイプライン再開後に進捗を確認してください。";
         }
-        catch (Exception) { ownerRepairErrors = ["依頼結果を確認できませんでした。収集ジョブ一覧で状態を確認してください。"]; }
+        catch (Exception) { ownerRepairErrors = ["適用結果を確認できませんでした。再度プレビューして状態を確認してください。"]; }
         finally { busy = false; confirmingOwnerRepair = false; }
     }
 

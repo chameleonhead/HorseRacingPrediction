@@ -67,6 +67,9 @@ public sealed class CollectionRequestEntity
     public string DefinitionId { get; set; } = string.Empty;
     public int RequestedRevision { get; set; }
     public CollectionReason Reason { get; set; }
+    public CollectionLane Lane { get; set; } = CollectionLane.Normal;
+    public int Priority { get; set; } = (int)CollectionPriority.Normal;
+    public string MetadataJson { get; set; } = "{}";
     public DateTimeOffset RequestedAt { get; set; }
     public string? ExplicitUrl { get; set; }
     public string? BatchId { get; set; }

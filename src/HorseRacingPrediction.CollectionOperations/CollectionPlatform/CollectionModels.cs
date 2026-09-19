@@ -198,6 +198,9 @@ public sealed record RevisionRecollectionProgress(CollectionDefinitionId Definit
 
 public sealed record CollectionBulkTarget(ResourceKey Resource, DateOnly? EffectiveDate = null,
     IReadOnlyDictionary<string, string>? Attributes = null);
+public sealed record CollectionBatchResourceStatus(ResourceKey Resource, int RequestedRevision,
+    CollectionTaskStatus? LatestTaskStatus, CollectionStateStatus? StateStatus,
+    int AppliedRevision, int RequiredRevision);
 public sealed record CollectionBulkPreview(CollectionDefinitionId Definition, int Revision,
     int TargetCount, IReadOnlyList<ResourceKey> Resources);
 public sealed record CollectionBulkExecution(string BatchId, int TargetCount, int TasksCreated,

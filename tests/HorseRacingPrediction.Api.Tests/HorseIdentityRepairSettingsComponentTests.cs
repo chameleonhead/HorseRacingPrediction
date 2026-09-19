@@ -18,7 +18,7 @@ namespace HorseRacingPrediction.Api.Tests;
 public sealed class HorseIdentityRepairSettingsComponentTests
 {
     [TestMethod]
-    public async Task RaceOwnerRepair_PreviewsBeforeSubmittingSelectedRace()
+    public async Task RaceOwnerMigration_PreviewsBeforeApplying()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -29,17 +29,16 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         var cut = context.Render<Settings>();
 
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("欠損を確認")).Instance.OnClick.InvokeAsync());
+            .Single(x => x.Markup.Contains("マイグレーションを確認")).Instance.OnClick.InvokeAsync());
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "15 / 16 頭"));
-        await cut.InvokeAsync(() => cut.FindComponents<FluentCheckbox>()
-            .Single(x => x.Markup.Contains("大阪スポーツ杯を選択")).Instance.CheckStateChanged.InvokeAsync(true));
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("選択したレースを再取得")).Instance.OnClick.InvokeAsync());
+            .First(x => x.Markup.Contains("マイグレーションを適用")).Instance.OnClick.InvokeAsync());
         await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
-            .Single(x => x.Markup.Contains("再取得を依頼")).Instance.OnClick.InvokeAsync());
+            .Last(x => x.Markup.Contains("マイグレーションを適用"))
+            .Instance.OnClick.InvokeAsync());
 
-        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "馬主情報の再取得を 1 レースへ依頼"));
-        CollectionAssert.AreEqual(new[] { "race-target" }, handler.AppliedRaceIds);
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "馬主情報のマイグレーションを適用しました"));
+        Assert.IsTrue(handler.Applied);
     }
 
     [TestMethod]
@@ -268,21 +267,23 @@ public sealed class HorseIdentityRepairSettingsComponentTests
 
     private sealed class RaceOwnerRepairHandler : HttpMessageHandler
     {
-        public string[] AppliedRaceIds { get; private set; } = [];
+        public bool Applied { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
-            if (request.Method == HttpMethod.Get && path.EndsWith("race-entry-owners/preview", StringComparison.Ordinal))
-                return Ok(new RaceEntryOwnerRepairPreview(new(2026, 9, 19), 12,
-                    [new("race-target", "20260919:Hanshin:11", "大阪スポーツ杯", "阪神", 11, 16, 15)]));
-            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners", StringComparison.Ordinal))
+            var progress = new RaceEntryOwnerMigrationProgress("migration:race-entry-owners:v2", 1, 0, 1, 0, 0, 1,
+                [new("race-target", "20260919:Hanshin:11", "大阪スポーツ杯", "阪神", 11, 16, 15,
+                    new(2026, 9, 19))]);
+            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/preview", StringComparison.Ordinal))
+                return Ok(progress);
+            if (request.Method == HttpMethod.Get && path.EndsWith("race-entry-owners/progress", StringComparison.Ordinal))
+                return Ok(progress);
+            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/apply", StringComparison.Ordinal))
             {
-                var body = await request.Content!.ReadFromJsonAsync<RaceEntryOwnerRepairRequest>(
-                    cancellationToken: cancellationToken);
-                AppliedRaceIds = body!.RaceIds.ToArray();
-                return Accepted(new RaceEntryOwnerRepairReceipt(body.BatchId!, 1, 1, [Guid.NewGuid()]));
+                Applied = true;
+                return Ok(progress);
             }
             if (path.EndsWith("subject-identification", StringComparison.Ordinal))
                 return Ok(new SubjectIdentificationRepairPreviewResponse([]));
