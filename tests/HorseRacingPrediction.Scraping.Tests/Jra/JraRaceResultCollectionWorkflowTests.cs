@@ -55,7 +55,8 @@ public sealed class JraRaceResultCollectionWorkflowTests
     {
         var entries = new[]
         {
-            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5)),
+            new RaceResultEntry(ResultStatus.Finished, 1, 3, "テストホースA", "テスト騎手A", TimeSpan.FromSeconds(84.5),
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3"),
             new RaceResultEntry(ResultStatus.Finished, 2, 7, "テストホースB", "テスト騎手B", TimeSpan.FromSeconds(85.0)),
             new RaceResultEntry(ResultStatus.Finished, 3, 1, "テストホースC", "テスト騎手C", TimeSpan.FromSeconds(85.3)),
         };
@@ -90,6 +91,10 @@ public sealed class JraRaceResultCollectionWorkflowTests
         Assert.AreEqual("G3", writeService.DeclareRaceResultBulkCalls.Single().GradeCode);
         Assert.AreEqual(41_000_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].PrizeMoney);
         Assert.AreEqual(567_000m, writeService.DeclareRaceResultBulkCalls.Single().Entries![0].AdditionalPrizeMoney);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3",
+            writeService.DeclareRaceResultBulkCalls.Single().Entries![0].HorseSourceIdentity);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3",
+            result.Entries!.Single(x => x.HorseNumber == 3).HorseSourceIdentity);
         Assert.AreEqual("枠内駐立不良。", writeService.DeclareRaceResultBulkCalls.Single().StewardReportText);
 
         Assert.HasCount(3, writeService.DeclareRaceEntryResultCalls);

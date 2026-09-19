@@ -505,6 +505,19 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 RetryAt: NextResultRetry(raceId.Date), LocationOutcomes: locationOutcomes,
                 StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
         }
+        if (requests is not null && raceResult.Entries is { Count: > 0 }
+            && !(requiresCard && result?.Error is null && result?.Entries is { Count: > 0 }))
+        {
+            try
+            {
+                await RequestReferencedSubjectsAsync(task, raceResult.Entries, raceResult.DataCollectionRaceId,
+                    requests, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ReferencedSubjectBatchException ex)
+            {
+                subjectBatchError = ex.Message;
+            }
+        }
         stageOutcomes.Add(new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded,
             FinalUrl: ToUri(raceResult.SourceUrl), Persisted: true));
         if (result?.Error is not null)
@@ -598,6 +611,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         IReadOnlyList<RaceEntry> entries, string requestedByRaceId,
         ICollectionRequestSink sink, CancellationToken cancellationToken)
     {
+        var referenceRace = ParseRaceId(task);
         var jst = TimeZoneInfo.FindSystemTimeZoneById(
             OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
@@ -635,6 +649,9 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 ["discoveredFromType"] = task.Resource.Type.ToString(),
                 ["discoveredFromProvider"] = task.Resource.Provider,
                 ["discoveredFromId"] = task.Resource.Id,
+                ["referenceRaceDate"] = referenceRace.Date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                ["referenceRaceCourse"] = referenceRace.Course.ToString(),
+                ["referenceRaceNumber"] = referenceRace.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             };
             if (JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _))
             {

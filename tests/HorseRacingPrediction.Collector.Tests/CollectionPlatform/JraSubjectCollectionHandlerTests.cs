@@ -748,6 +748,76 @@ public sealed class JraSubjectCollectionHandlerTests
         },
     };
 
+    [TestMethod]
+    public async Task HorseProfile_ValidRaceProvenance_ReachesNavigatorAsReferenceRace()
+    {
+        JraSubjectIdentity? received = null;
+        var page = SubjectPage("ロンドンコーリング", []);
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = identity =>
+                    {
+                        received = identity;
+                        return page;
+                    },
+                },
+            }, new RecordingProfileSink());
+        var task = SubjectTask("horse-london", "ロンドンコーリング", new Dictionary<string, string>
+        {
+            ["requestedByRaceId"] = "domain-race",
+            ["discoveredFromType"] = "Race",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = "20260912:Nakayama:6",
+            ["referenceRaceDate"] = "2026-09-12",
+            ["referenceRaceCourse"] = "Nakayama",
+            ["referenceRaceNumber"] = "6",
+        });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.AreEqual(new RaceId(new DateOnly(2026, 9, 12), RaceCourse.Nakayama, 6), received!.ReferenceRace);
+    }
+
+    [TestMethod]
+    public async Task HorseProfile_InconsistentRaceProvenance_DoesNotReachNavigatorAsReferenceRace()
+    {
+        JraSubjectIdentity? received = null;
+        var page = SubjectPage("ロンドンコーリング", []);
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    SubjectFactory = identity =>
+                    {
+                        received = identity;
+                        return page;
+                    },
+                },
+            }, new RecordingProfileSink());
+        var task = SubjectTask("horse-london", "ロンドンコーリング", new Dictionary<string, string>
+        {
+            ["requestedByRaceId"] = "domain-race",
+            ["discoveredFromType"] = "Race",
+            ["discoveredFromProvider"] = "JRA",
+            ["discoveredFromId"] = "20260912:Tokyo:6",
+            ["referenceRaceDate"] = "2026-09-12",
+            ["referenceRaceCourse"] = "Nakayama",
+            ["referenceRaceNumber"] = "6",
+        });
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsNull(received!.ReferenceRace);
+    }
+
     private static JraSubjectPage SubjectPage(string name, IReadOnlyList<HorseHistoryRaceLink> races)
     {
         var url = $"https://www.jra.go.jp/profile/{name}";

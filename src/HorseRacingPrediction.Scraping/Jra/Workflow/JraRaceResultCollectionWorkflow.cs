@@ -184,7 +184,8 @@ public sealed class JraRaceResultCollectionWorkflow
                     resultPage.AdditionalPrizeMoneyByPosition is { } additionalPrizes &&
                     additionalPrizes.TryGetValue(additionalFinishPosition, out var additionalPrize)
                         ? additionalPrize
-                        : null))
+                        : null,
+                HorseSourceIdentity: entry.HorseSourceIdentity))
             .ToList();
 
         var weather = string.IsNullOrWhiteSpace(resultPage.WeatherText)
@@ -274,13 +275,30 @@ public sealed class JraRaceResultCollectionWorkflow
             .Select(e => e.HorseNumber)
             .ToList();
 
+        var savedEntries = validResults
+            .Where(entry => savedHorseNumbers.Contains(entry.HorseNumber))
+            .Select(entry => new RaceEntry(
+                entry.HorseNumber,
+                entry.HorseName,
+                entry.FrameNumber,
+                entry.JockeyName,
+                entry.AssignedWeight,
+                entry.TrainerName,
+                BodyWeight: entry.BodyWeight,
+                BodyWeightChange: entry.BodyWeightChange,
+                SexCode: entry.Sex is { } sex ? HorseSexText.ToSexCode(sex) : null,
+                Age: entry.Age,
+                HorseSourceIdentity: entry.HorseSourceIdentity))
+            .ToArray();
+
         return new RaceResultCollectionResult(
             raceId,
             dataCollectionRaceId,
             savedHorseNumbers,
             errors,
             resultPage.Url,
-            winningEntry is not null && payouts is not null);
+            winningEntry is not null && payouts is not null,
+            Entries: savedEntries);
     }
 
     private static IReadOnlyList<PayoutEntryDto>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)
