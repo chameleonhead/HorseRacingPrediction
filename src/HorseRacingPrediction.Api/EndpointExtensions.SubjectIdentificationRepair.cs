@@ -4,9 +4,12 @@ using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Api;
 
@@ -154,7 +157,8 @@ public static partial class EndpointExtensions
                                 .Select(x => x.TargetHorseId).SingleOrDefaultAsync(token).ConfigureAwait(false);
                     }
                     if (merge is null && redirectTarget is null && !hasExplicitCorrection
-                        && (!IsValidCorrectionUrl(storedUrl) || IsUnsafeStoredRepairEvidence(failure.ErrorMessage)))
+                        && (!IsValidCorrectionUrl(storedUrl)
+                            || IsUnsafeStoredRepairEvidence(failure.Resource.Type, failure.ErrorMessage)))
                         return Results.Conflict(new[]
                         {
                             $"{failure.Resource.Type}/{failure.Resource.Id}: " +
@@ -267,7 +271,8 @@ public static partial class EndpointExtensions
                 : merges.Length > 1 ? "同じ統合元に複数の統合先候補があります。"
                 : merge is { SafeToApply: false } ? merge.BlockingReason
                 : merge is null && redirectedTarget is null
-                    && (!IsValidCorrectionUrl(suggestedUrl) || IsUnsafeStoredRepairEvidence(failure.ErrorMessage))
+                    && (!IsValidCorrectionUrl(suggestedUrl)
+                        || IsUnsafeStoredRepairEvidence(failure.Resource.Type, failure.ErrorMessage))
                     ? "同一性を証明できる補正先がありません。同じ条件では再失敗するため、対応不要として閉じるか確認済みURLを指定してください。"
                 : null;
             var ready = blocked is null;
@@ -350,10 +355,33 @@ public static partial class EndpointExtensions
         message?.Contains(" 産駒", StringComparison.Ordinal) == true
         || message?.Contains("公開検索に一致候補がありません", StringComparison.Ordinal) == true;
 
-    private static bool IsUnsafeStoredRepairEvidence(string? message) =>
+    private static bool IsUnsafeStoredRepairEvidence(ResourceType resourceType, string? message) =>
         IsObsoleteSubjectReference(message)
-        || message?.Contains("取得プロフィールの名前が一致しません", StringComparison.Ordinal) == true
+        || (message?.Contains("取得プロフィールの名前が一致しません", StringComparison.Ordinal) == true
+            && (resourceType != ResourceType.Horse
+                || !IsCorrectableHorseRegistrationMarkMismatch(message)))
+        || message?.Contains("取得したプロフィールの名前が対象と一致しません", StringComparison.Ordinal) == true
         || message?.Contains("公開識別子が一致しません", StringComparison.Ordinal) == true;
+
+    internal static bool IsCorrectableHorseRegistrationMarkMismatch(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        var match = StructuredHorseNameMismatch().Match(message);
+        if (!match.Success) return false;
+        var expected = match.Groups["expected"].Value.Trim();
+        var actual = match.Groups["actual"].Value.Trim();
+        if (!HorseRegistrationMarkPrefix().IsMatch(actual.Normalize(NormalizationForm.FormKC))) return false;
+        var normalizedExpected = JraSubjectNameNormalizer.NormalizeIdentityName("Horse", expected);
+        var normalizedActual = JraSubjectNameNormalizer.NormalizeIdentityName("Horse", actual);
+        return normalizedExpected.Length > 0
+            && string.Equals(normalizedExpected, normalizedActual, StringComparison.Ordinal);
+    }
+
+    [GeneratedRegex(@"期待=Horse::(?<expected>[^;]+);\s*取得名=(?<actual>[^;]+)(?:;|$)")]
+    private static partial Regex StructuredHorseNameMismatch();
+
+    [GeneratedRegex(@"^(?:マルガイ|マルチ|マル外|マル地)\s*")]
+    private static partial Regex HorseRegistrationMarkPrefix();
 
     internal static bool IsValidCorrectionUrl(string? value) => TryCreateCorrectionUrl(value, out _);
 

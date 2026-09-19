@@ -19,7 +19,7 @@ public static class JraSubjectCollectionDefinitions
 {
     public static IReadOnlyList<JraSubjectCollectionDefinition> All { get; } =
     [
-        new(ResourceType.Horse, new("horse-profile"), "Horse", "horse"),
+        new(ResourceType.Horse, new("horse-profile"), "Horse", "horse", CurrentRevision: 4),
         new(ResourceType.Jockey, new("jockey-profile"), "Jockey", "jockey"),
         new(ResourceType.Trainer, new("trainer-profile"), "Trainer", "trainer"),
         new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false, 1),
@@ -85,7 +85,8 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 null, null, []);
         var identity = new JraSubjectIdentity(descriptor.SubjectType, name,
             ParseDate(task.Attributes.GetValueOrDefault("birthDate")),
-            task.Attributes.GetValueOrDefault("sourceIdentity"));
+            task.Attributes.GetValueOrDefault("sourceIdentity"),
+            ResolveReferenceRace(task));
         if (descriptor.ResourceType == ResourceType.Owner)
         {
             if (ownerIdentities is null || !await ownerIdentities.ExistsAsync(
@@ -133,10 +134,13 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         }
         if (page is null)
         {
-            // A persisted source URL is useful while validating that URL, but must not constrain
-            // discovery after the URL itself has failed. Keep the stable name/birth-date identity
-            // and let navigation discover the subject's current official URL.
-            var discoveryIdentity = identity with { SourceIdentity = null };
+            // Ordinary persisted locations may become stale, so name/birth-date discovery may
+            // replace them. A source identity corroborated by a reference race is stronger:
+            // keep it during discovery so a context-dependent JRA link cannot fall back to a
+            // different same-name horse after direct navigation redirects to the search page.
+            var discoveryIdentity = identity.ReferenceRace is null
+                ? identity with { SourceIdentity = null }
+                : identity;
             try
             {
                 page = await session.Navigate.ToSubjectProfileAsync(discoveryIdentity, cancellationToken).ConfigureAwait(false);
@@ -194,6 +198,34 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
     }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParse(value, out var result) ? result : null;
+
+    private static RaceId? ResolveReferenceRace(LeasedCollectionTask task)
+    {
+        if (!string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), ResourceType.Race.ToString(), StringComparison.Ordinal)
+            || !string.Equals(task.Attributes.GetValueOrDefault("discoveredFromProvider"), "JRA", StringComparison.OrdinalIgnoreCase)
+            || !DateOnly.TryParse(task.Attributes.GetValueOrDefault("referenceRaceDate"), out var date)
+            || !Enum.TryParse<RaceCourse>(task.Attributes.GetValueOrDefault("referenceRaceCourse"), true, out var course)
+            || course == RaceCourse.Unknown
+            || !int.TryParse(task.Attributes.GetValueOrDefault("referenceRaceNumber"), out var number)
+            || number is < 1 or > 12
+            || string.IsNullOrWhiteSpace(task.Attributes.GetValueOrDefault("requestedByRaceId"))
+            || !IsReferenceRaceResourceId(task.Attributes.GetValueOrDefault("discoveredFromId"), date, course, number))
+            return null;
+        return new RaceId(date, course, number);
+    }
+
+    private static bool IsReferenceRaceResourceId(
+        string? value, DateOnly date, RaceCourse course, int number)
+    {
+        var parts = value?.Split(':', StringSplitOptions.TrimEntries);
+        return parts is { Length: 3 }
+            && DateOnly.TryParseExact(parts[0], "yyyyMMdd", out var resourceDate)
+            && resourceDate == date
+            && Enum.TryParse<RaceCourse>(parts[1], true, out var resourceCourse)
+            && resourceCourse == course
+            && int.TryParse(parts[2], out var resourceNumber)
+            && resourceNumber == number;
+    }
 
     private static bool IsParameterlessJraAccessUrl(Uri url) =>
         string.Equals(url.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)

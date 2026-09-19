@@ -5,14 +5,15 @@
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
+- JRA site contract impact: None
 
 ## Completion summary
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 2026-09-19にユーザーが本recordの実装を明示承認。T1から順に実装中。 |
-| Verification | Not started | 静的な原因確認を実施済み。回帰・本番検証は各タスクに定義した。 |
-| Deployment/operation | Not started | 現行監視はGitHub Actions経由。ローカルAPI runnerへの切替が必要。 |
+| Code | Verified | owner ID共有契約、dispatch compatibility、flow診断、原因routing、DPAPI local runnerを実装。 |
+| Verification | Verified | API 256/257、Collector 276/276、CI、runner dry-run、production read-only runが成功。 |
+| Deployment/operation | Externally blocked | 本番revisionとread-only監視は確認済み。ローカルrunnerの初回DPAPI資格情報入力だけ利用者作業待ち。 |
 
 ## Context
 
@@ -66,12 +67,13 @@
 - 新規または重大に変化したfindingだけを通知し、変化なしの観測はautomation memoryに時刻と集計値だけを保存する。
 - owner IDはAPIとtask producerで1つの共有関数・正規化規則へ統一し、既存IDへの移行・互換参照を設計してから切り替える。
 - dispatch違反はlane一致だけで判定せず、実worker capabilityまたはdispatcherが用いるcompatibility keyを証拠に含める。
-- GitHub Actionsはローカルrunner完成まで手動診断手段として残すが、定期heartbeatの通常経路とPR作成には使わない。
+- 2026-09-19の利用者判断により、監視経路はCodexのローカルスケジュールタスクへ一本化し、`collection-monitoring` GitHub Actions workflowを削除する。手動診断もローカルrunnerを使う。
 - API keyは`%LOCALAPPDATA%\HorseRacingPrediction\CollectionMonitor\production-api-key.credential.xml`へWindows DPAPIで暗号化して保存し、base URLだけを同ディレクトリの`settings.json`へ保存する。どちらもリポジトリ外とする。
 
 ## Documentation updates
 
-本提案では本change recordのみを追加する。承認後、`docs/11-automation-design.md`と`docs/26-collection-platform-design.md`を、原因集約、直接API監視、秘密情報境界、成功条件の正本に合わせて更新する。
+- `docs/11-automation-design.md`: 監視の正規経路をCodexローカルタスクだけにし、GitHub Actionsの手動診断経路を廃止した事実へ更新する。
+- `docs/26-collection-platform-design.md`: 原因集約、直接API監視、秘密情報境界、成功条件の設計を反映済み。今回のworkflow削除による追加変更は不要と確認した。
 
 ## Concern and agreement ledger
 
@@ -82,37 +84,40 @@
 | C3 | ローカルheartbeatはPC/Codex停止中に実行できない。 | 死活監視の空白 | 本変更は利用者指定どおりローカル主経路とし、60分欠落を次回起動時に通知する。always-on外部監視は除外follow-upとする。 | AC5/T5 | 制約を明示して採用 | Pending | Accepted risk |
 | C4 | 既存35 recordを削除すると監査証跡を失う。 | 過去経緯の消失 | 削除せず、本recordから原因別に参照し、以後の反復追記だけを停止する。 | AC4/T4 | 保存して正本を一本化 | Pending | Resolved in design |
 | C5 | API keyの誤出力は認証情報漏洩になる。 | 本番アクセス侵害 | DPAPI、リポジトリ外、標準出力禁止、redaction test、秘密情報scanを必須化する。 | AC5/T5 | 平文設定は不可 | Pending | Resolved in design |
+| C6 | GitHub Actionsを削除すると、PCまたはCodex停止中に代替probeを実行できない。既存C3と同じ可用性制約が残る。 | ローカル停止中の監視空白 | 利用者の一本化指示を優先し、workflowを削除する。60分欠落通知と14日予定実行率99%未満を外部監視再検討条件として維持する。 | AC8/T7 | 二重経路を残さず削除するが、可用性riskは明示する | Accepted by explicit removal request, 2026-09-19 | Accepted risk |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | race entryから作られたowner task IDをowner参照APIが同一ownerとして解決し、既存IDも移行中に参照できる。 | T1 | producer→API integration test、既存ID inventory、migration preview | Not started |
-| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Not started |
-| AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Not started |
-| AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Not started |
+| AC1 | race entryから作られたowner task IDをowner参照APIが同一ownerとして解決し、既存IDも移行中に参照できる。 | T1 | producer→API integration test、既存ID inventory、migration preview | Verified |
+| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Verified |
+| AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Verified |
+| AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Verified |
 | AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Not started |
-| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Not started |
-| AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Not started |
+| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Verified |
+| AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Verified |
+| AC8 | リポジトリに`collection-monitoring` GitHub Actions workflowが存在せず、監視と手動診断の実行経路がローカルrunnerへ一本化されている。 | T7 | workflow不存在contract test、repository-wide literal search | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Proposed |
-| T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Proposed |
-| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Proposed |
-| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Proposed |
-| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Proposed |
-| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Proposed |
+| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Verified |
+| T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Verified |
+| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Verified |
+| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Verified |
+| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Externally blocked |
+| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Verified |
+| T7 | `collection-monitoring` GitHub Actions workflowを削除し、契約テストと正本ドキュメントをローカルrunner単独経路へ更新する。AC8 | Main | High capability | 利用者の明示的な削除指示 | workflow、contract test、docs | focused test、literal search | workflow不存在とローカルrunner存続 | Verified |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** 49 findingをID契約、dispatch判定、capacity/backlog、既修正の配備、本体自動化の5系統へ集約した。AC1-AC7はT1-T6と検証に双方向で対応する。ID移行、dispatcher契約、本番認証を含むため主担当が直列に統合する。
 - **Concern and agreement review — 2026-09-19, reviewer: Main.** データ互換性、証拠不足、ローカル死活、監査履歴、秘密情報を確認した。C1-C5の処置を設計に組み込み、未解決の技術的反対はない。C3は利用者指定のローカル運用と可用性制約を明示した受容riskであり、60分欠落通知を再検討条件とする。
-- **Pre-implementation review:** 承認後に各taskのrevision、write scope、移行preview、API key provision状態を確認する。
-- **Checkpoint review:** T1/T2、T3/T4、T5/T6の各検証済みcheckpointで実施する。
-- **Final review:** AC1-AC7、全task、production revision、秘密情報非混入、GitHub write不在を照合する。
+- **Pre-implementation review — 2026-09-19, T7:** 利用者の明示的な削除指示を既存Approved recordの決定変更承認として記録した。write scopeはworkflow、既存contract test、監視正本文書に限定し、ローカルrunnerや他の保守workflowは変更しない。削除後の監視空白riskはC3/C6で受容済みとした。
+- **Checkpoint review — 2026-09-19, T7:** workflow削除、contract test反転、正本文書更新のdiffをAC8と照合した。他の保守workflow、ローカルrunner、API実装には変更がない。
+- **Final review — 2026-09-19, T7:** AC8とT7はfocused test、change-record validator、format gate、literal searchでVerified。履歴change record内の参照は当時の実装証跡として保持し、現行runtime entry pointではない。record全体はAC5/T5の利用者によるDPAPI資格情報入力待ちのためApprovedを維持する。
 
 ## Verification record
 
@@ -120,7 +125,16 @@
 - 2026-09-19: CodeGraphでdispatch findingがlaneだけを比較しworker capabilityを照合しないことを確認した。
 - 2026-09-19: origin/mainの35件の`collection-attention-*` recordと、直近監視の49 findingを棚卸しした。
 - 2026-09-19: 本番監視の直近値をautomation memoryと実行証拠から照合した。秘密値と未編集ログは記録していない。
+- 2026-09-19: PR #46をCI run 35447676532成功後にmerge。PR #47で未承認owner migrationをpreview-onlyへ変更し、deploy run 35448297743は全job成功、pipeline pauseなし。
+- 2026-09-19: production read-only run 35448855309/35448927212が成功。51 findingすべてに原因・ownerTask・次操作があり、GitHub write/PR生成なし。内訳はfailure 3、dispatch 20、stalled 27、freshness 1。
+- 2026-09-19: `%LOCALAPPDATA%` のsettings/DPAPI credentialが未設定であることを確認。fixture dry-runは秘密値なしでmemoryとaction summaryを生成した。
+- 2026-09-19: 利用者のCodexタスク一本化指示に従い、`.github/workflows/collection-monitoring.yml`を削除した。contract testでworkflow不存在とローカルrunner存続を固定し、`docs/11-automation-design.md`を更新した。
+- 2026-09-19: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功。`CollectionQueueCutoverContractTests`は12/12成功。`validate_change_records.py`はissues=0。repository-wide literal searchで残ったworkflow名は、本recordの削除証跡、不存在contract test、過去のImplemented change recordだけであることを確認した。
 
 ## Deviations and follow-up
 
 - always-onの外部死活監視は本変更のACを妨げない除外follow-upとし、ownerはoperator、再検討条件はローカル監視の60分超欠落または14日予定実行率99%未満とする。
+
+## Human decision required
+
+- ローカルrunnerの初回設定として、`settings.json`のbase URL作成と `invoke_local_monitor.ps1 -ProvisionCredential` でproduction API keyを対話入力する。資格情報は現在のWindowsユーザー向けDPAPI暗号化ファイルとなり、リポジトリやautomation promptへ保存しない。

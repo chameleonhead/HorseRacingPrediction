@@ -216,7 +216,7 @@ await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race di
 await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 2,
     "Race resource artifact state machine", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3,
+await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 4,
     "Wait for the semantic profile view and isolate structural failures", true);
 await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3,
     "Wait for the semantic profile view and isolate structural failures", true);

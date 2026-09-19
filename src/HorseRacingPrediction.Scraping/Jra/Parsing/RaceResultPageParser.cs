@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Text;
+using HorseRacingPrediction.ApiClient;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -1397,8 +1398,9 @@ public sealed class RaceResultPageParser
 
         var results = new List<RaceResultEntry>();
 
-        foreach (var row in table.Rows)
+        for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
+            var row = table.Rows[rowIndex];
             // Task16実サイト確認で判明: 抽出したテーブルの1行目にヘッダー行自体が
             // 重複して含まれることがある。見出し文字列をレース結果として扱わない
             // よう読み飛ばす。
@@ -1787,9 +1789,25 @@ public sealed class RaceResultPageParser
                 IsDeadHeat: isDeadHeat,
                 EstimatedLast3F: estimatedLast3F,
                 Average1F: average1F,
-                CornerOrders: cornerOrders));
+                CornerOrders: cornerOrders,
+                HorseSourceIdentity: FindHorseSourceIdentity(table.GetCell(rowIndex, horseNameIndex), url)));
         }
 
         return results;
+    }
+
+    private static string? FindHorseSourceIdentity(JraCellView? cell, string pageUrl)
+    {
+        if (cell is null) return null;
+        foreach (var fragment in cell.Fragments.Where(x => x.TagName.Equals("a", StringComparison.OrdinalIgnoreCase)))
+        {
+            var raw = fragment.RawUrl ?? fragment.Url?.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var resolved = Uri.TryCreate(raw, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https"
+                ? absolute.ToString()
+                : Uri.TryCreate(new Uri(pageUrl), raw, out var relative) ? relative.ToString() : null;
+            if (JraSourceIdentity.TryNormalizeHorse(resolved, out _)) return resolved;
+        }
+        return null;
     }
 }

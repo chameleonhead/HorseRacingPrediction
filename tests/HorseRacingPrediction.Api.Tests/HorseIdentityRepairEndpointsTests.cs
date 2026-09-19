@@ -458,6 +458,63 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
+    public async Task SubjectNotIdentified_RegistrationMarkMismatch_UsesStoredUrlForRecovery()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
+            2, "test", false);
+        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"marked-{Guid.NewGuid():N}");
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002011110091/B0");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, new("horse-profile"), 2,
+            CollectionReason.Discovery, now, explicitUrl: url);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        const string error = "同定不能: 取得プロフィールの名前が一致しません。" +
+            "期待=Horse::アジアエクスプレス; 取得名=マルガイ   アジアエクスプレス; " +
+            "候補=アジアエクスプレス [/JRADB/accessU.html?CNAME=pw01dud002011110091/B0]";
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", error, null, url));
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
+        Assert.AreEqual("RetryReady", candidate.Evaluation);
+        Assert.IsTrue(candidate.SafeToExecute);
+        Assert.AreEqual(url.AbsoluteUri, candidate.SuggestedUrl);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest(
+                [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId)]));
+        var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.AreEqual(1, result!.CreatedTaskCount);
+        var detail = await store.GetResourceDetailPagedAsync(resource, new("horse-profile"));
+        Assert.IsTrue(detail!.Requests.Any(x => x.Reason == CollectionReason.Recovery
+            && x.ExplicitUrl == url.AbsoluteUri));
+    }
+
+    [TestMethod]
+    [DataRow("マルガイ   アジアエクスプレス", true)]
+    [DataRow("マル外　アジアエクスプレス", true)]
+    [DataRow("マル地 アジアエクスプレス", true)]
+    [DataRow("マルチ アジアエクスプレス", true)]
+    [DataRow("マルガイ アジアエクスプレスII", false)]
+    [DataRow("アジアエクスプレス", false)]
+    public void RegistrationMarkMismatch_RequiresKnownPrefixAndExactNormalizedName(
+        string actualName, bool expected)
+    {
+        var message = "同定不能: 取得プロフィールの名前が一致しません。" +
+            $"期待=Horse::アジアエクスプレス; 取得名={actualName}; 候補=fixture";
+
+        Assert.AreEqual(expected,
+            EndpointExtensions.IsCorrectableHorseRegistrationMarkMismatch(message));
+    }
+
+    [TestMethod]
     public async Task SubjectNotIdentified_ParameterlessJraUrl_RemainsBlockedWithoutSafeCorrection()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();

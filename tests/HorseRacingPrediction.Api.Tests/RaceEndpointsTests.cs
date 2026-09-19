@@ -170,6 +170,12 @@ public class RaceEndpointsTests
         Assert.AreEqual(12.3m, race.EntryResults[0].Average1F);
         Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode);
         Assert.AreEqual(eventsAfterFirst, eventsAfterReplay);
+        foreach (var entry in race.Entries)
+        {
+            var horse = await _client.GetAsync($"/api/horses/{entry.HorseId}");
+            Assert.AreEqual(HttpStatusCode.OK, horse.StatusCode,
+                "Result-only replay must leave every referenced Horse materialized.");
+        }
     }
 
     [TestMethod]

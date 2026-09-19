@@ -35,4 +35,5 @@ public sealed record RaceResultEntry(
     // 整数列、例:「4 3 3 2」=1〜4コーナーの通過順位）。ページ下方の集計テーブル
     // （<see cref="JraRaceResultPage.CornerPassages"/>、<see cref="CornerPassage"/>型）
     // とは別物。列自体が存在しない場合はnull（正常）。
-    IReadOnlyList<int>? CornerOrders = null);
+    IReadOnlyList<int>? CornerOrders = null,
+    string? HorseSourceIdentity = null);

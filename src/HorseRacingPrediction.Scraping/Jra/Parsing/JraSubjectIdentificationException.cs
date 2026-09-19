@@ -6,10 +6,12 @@ public enum JraSubjectIdentificationFailureKind
     MultipleCandidates,
     ProfileNameMismatch,
     BirthDateMismatch,
+    HistoricalRaceEvidenceBudgetExceeded,
+    HistoricalRaceEvidenceUnavailable,
     SourceIdentityMismatch,
 }
 
-public sealed record JraSubjectIdentificationCandidate(string Name, string Url);
+public sealed record JraSubjectIdentificationCandidate(string Name, string Url, string? Evidence = null);
 
 public sealed class JraSubjectIdentificationException : Exception
 {
@@ -67,6 +69,8 @@ public sealed class JraSubjectIdentificationException : Exception
             JraSubjectIdentificationFailureKind.MultipleCandidates => "公開検索に一致候補が複数あります",
             JraSubjectIdentificationFailureKind.ProfileNameMismatch => "取得プロフィールの名前が一致しません",
             JraSubjectIdentificationFailureKind.BirthDateMismatch => "取得プロフィールの生年月日が一致しません",
+            JraSubjectIdentificationFailureKind.HistoricalRaceEvidenceBudgetExceeded => "過去レース根拠の探索上限を超えました",
+            JraSubjectIdentificationFailureKind.HistoricalRaceEvidenceUnavailable => "過去レースとの一致を公開履歴から確認できません",
             JraSubjectIdentificationFailureKind.SourceIdentityMismatch => "取得プロフィールの公開識別子が一致しません",
             _ => "公開プロフィールを同定できません",
         };
@@ -76,7 +80,9 @@ public sealed class JraSubjectIdentificationException : Exception
         };
         if (!string.IsNullOrWhiteSpace(actualName)) parts.Add($"取得名={actualName}");
         var summaries = (candidates ?? []).Take(MaximumRecordedCandidates)
-            .Select(candidate => $"{candidate.Name} [{candidate.Url}]").ToArray();
+            .Select(candidate => $"{candidate.Name} [{candidate.Url}]"
+                + (string.IsNullOrWhiteSpace(candidate.Evidence) ? string.Empty : $" ({candidate.Evidence})"))
+            .ToArray();
         if (summaries.Length > 0) parts.Add($"候補={string.Join(", ", summaries)}");
         return string.Join("; ", parts);
     }

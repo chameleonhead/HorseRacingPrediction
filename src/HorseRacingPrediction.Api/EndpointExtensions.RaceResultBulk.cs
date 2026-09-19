@@ -128,7 +128,10 @@ public static partial class EndpointExtensions
 
         try
         {
-            await EnsureRelatedSubjectsBulkAsync(accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)),
+            // Existing race entries can predate related-subject creation (or refer to a
+            // canonical source-identity Horse that has not been materialized yet). Replays
+            // must heal that missing subject before the profile collection task runs.
+            await EnsureRelatedSubjectsBulkAsync(accepted,
                 commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
