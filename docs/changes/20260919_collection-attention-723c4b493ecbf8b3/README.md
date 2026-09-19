@@ -4,7 +4,7 @@
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `c8fc7e67d808b665`
+- Finding fingerprint: `723c4b493ecbf8b3`
 - Classification: `OperationalCondition`
 - Kind: `StalledActiveTask`
 - Severity: `medium`
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:40:56.5982606+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T15:15:14.3476835+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -38,9 +38,9 @@
 - `definition=horse-profile`
 - `status=Ready`
 - `lane=Background`
-- `priority=20`
-- `oldest=2026-09-13T18:12:51.9640000+09:00`
-- `sampleTaskIds=35e6e234-f07a-47a5-8cb7-70de3c23cb2f,e2b74359-9c7f-482e-962f-c4b0d3b2a14d,8f492ca0-3a38-4d45-9e3b-065cfa9ffbe9,9aa3021c-33cd-4a69-9fb2-f3ec6f305bb9`
+- `priority=60`
+- `oldest=2026-09-13T20:04:47.9521928+09:00`
+- `sampleTaskIds=ff3fbcc8-4e53-4476-b518-510283397da6,14dfcd01-dcb7-489a-90ff-d7a592227af8,5aaf52db-009e-4f27-9e10-f110b48f3ada,4d28b784-0d0a-4e2d-8475-8fc0466d6cc4`
 
 ## Proposed investigation
 
@@ -53,7 +53,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `c8fc7e67d808b665` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `723c4b493ecbf8b3` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,19 +65,11 @@
 
 ## Observation history
 
-- 2026-09-19T15:15:14.3476835+09:00: 再観測。severity=`medium`、summary=4 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:55:51.4140850+09:00: 再観測。severity=`medium`、summary=4 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:42:00.7716914+09:00: 再観測。severity=`medium`、summary=4 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:41:12.3940259+09:00: 再観測。severity=`medium`、summary=4 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:40:56.5982606+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T15:15:14.3476835+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `c8fc7e67d808b665` の調査・判断・検証の正本である。
+- このchange recordがfinding `723c4b493ecbf8b3` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -85,4 +77,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-c8fc7e67d808b665`
+- Directory: `20260919_collection-attention-723c4b493ecbf8b3`
