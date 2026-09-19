@@ -100,6 +100,7 @@ Execution Mode に移行した後は、
 - 明確で局所的かつ独立検証可能なcoding taskは、現在利用可能なcost-sensitive coding workerを第一候補にする。architecture、public contract、persistence/migration、concurrency、security/privacy、破壊的操作、曖昧な要件、統合・最終判定は主担当または上位tierに保持する。1回のfocused correction後もgateを満たさない、またはscopeが拡大した場合は一段階昇格する。
 - Lead tierを選ぶ前に、判断部分と確定済み判断に従う実装部分を分ける。単独verificationとexclusive write ownerを持ち、prompt・統合・review overheadが見合うsliceだけを低コストworker候補にし、Lead保持には分離不能の具体理由を残す。
 - worker指示にはAC ID、frozen decision/invariant、変更禁止判断、exact write scope、反例、実装自由度、Leadへ戻す境界、検証と成果形式を含める。reviewは既存AC↔Task対応をgroupとして統合成果を一回確認し、gate failure、設計変更、scope/ownership逸脱、risk/独立証拠不足、過大なretry/review burdenの場合だけtask/diffへ掘り下げる。
+- coding workerには作成・更新するtest、実装中に回す最小test、handoff前の関連regression、期待結果を指示する。test変更が不要なら理由と既存の独立証拠を示す。workerは指定testを実行して成功結果を返すまで完了扱いにせず、実行不能ならblockerを明示してtaskを未完了のまま主担当へ戻す。
 - delegated coding taskはchange record配下のagent auditへ、requested/observed model、observation source、token availability、task difficulty、patch attribution、quality/scope gates、独立反証、retry/promotion、escaped defectを記録する。observed modelやtokenを取得できない場合は未確認とし、requested値から推測しない。
 - 成功結果当たりのcostにはworkerだけでなく、automated reviewer、利用者が提供した場合のhuman active review、指摘対応、corrective implementation、promotion、再検証、audit overheadを含める。人間単価やprovider料金根拠がない値を通貨へ換算しない。同程度のtaskと帰属可能なpatchだけを比較する。
 - persistentなmodel/reasoning/budget/task-boundary改善は、反復する比較可能evidence、重大なsecurity/data/scope/false-completion failure、または5件以上の成功標本に基づき、一段階の変更、validator、独立forward test、観測期間、rollback条件を持たせる。自発的にrecommendationと承認済み範囲内の再指示・再分割・昇格は行えるが、未承認scopeへ拡張しない。

@@ -61,13 +61,14 @@ Every delegated prompt must state:
 - out-of-scope actions, especially destructive operations and external side effects;
 - dependencies, starting revision/state, and assumptions;
 - linked acceptance-criterion IDs, the local evidence the slice must produce, and required completion evidence (tests, commands, links, or cited sources);
+- test responsibility: the tests to create or update, the smallest relevant test command to run during implementation, the broader regression command required before handoff, and the expected result. If no test change is appropriate, require a concrete reason and identify the existing test or independent evidence that covers the change;
 - frozen decisions and invariants, decisions the worker must not change, and at least one relevant counterexample;
 - the implementation freedom that remains and the exact boundary at which the worker returns the decision to the lead;
 - expected output format, including changed files and unresolved risks;
 - escalation triggers: ambiguity, missing access, conflicting requirements, unsafe operation, failed verification, or scope expansion;
 - whether parallel work is allowed and what other work it must not overlap.
 
-If any required item is unavailable, the worker should stop at the boundary and report the missing information rather than inventing it.
+If any required item is unavailable, the worker should stop at the boundary and report the missing information rather than inventing it. A coding worker does not report completion until it has created or updated the contracted tests and run the contracted commands successfully. If execution is genuinely unavailable, it reports the exact blocker and leaves the task incomplete for lead classification; source inspection alone is not a passing test result.
 
 ## Suitability and routing gates
 

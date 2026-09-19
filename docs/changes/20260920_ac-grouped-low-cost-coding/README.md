@@ -131,6 +131,7 @@ reviewerは通常、各workerの全思考や全commandを再追跡しない。AC
 | AC7 | requested modelが具体IDで記録され、observed model不明runはmodel別成功・費用統計から除外される。 | T1,T2,T3 | concrete/abstract model fixtures and policy inspection | Verified |
 | AC8 | Lead tierを選ぶtaskは、低コストworkerへ安全に分離できなかった具体理由をrouting evidenceに持つ。 | T1,T2,T3 | blanket-vs-specific routing fixture | Verified |
 | AC9 | DDD、orchestration、audit reference/validator、AGENTS.mdが同じ細粒度指示・AC単位review・escalation規則を持ち、全skill/test/format/diff gateが成功する。 | T1-T4 | validators、tests、final review | Verified |
+| AC10 | coding worker指示がtest作成・更新、実装中の最小test、handoff前の関連regression、期待結果を指定し、成功実行または明示blockerを完了条件にする。 | T5 | policy inspection and skill validation | Verified |
 
 ## Task plan
 
@@ -140,6 +141,7 @@ reviewerは通常、各workerの全思考や全commandを再追跡しない。AC
 | T2 | compact audit/validatorを具体model ID、review group evidence、Lead非委譲理由、review overheadへ接続する。AC4,AC6-AC9。 | Main | Lead | T1 contract freeze | audit reference、validator、tests | positive/negative fixtures | 33 passing root validator tests | Verified | Lead — process contract integration shared with canonical policy | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T3 | Luna分解、Terra integration、Lead保持、粗いreview成功、詳細review escalation、過分割のforward scenariosを評価する。AC1-AC8。 | Main | Lead | T1,T2 | read-only fixtures | scenario outcomes | forward challenge table | Verified | Lead — final acceptance and independent workflow challenge | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T4 | 全差分、両validator、skill validation、format、audit overhead、zero-open-itemを最終確認してcommitする。AC9。 | Main | Lead | T1-T3 | change record and repository checks | final gates | Implemented record and commit | Verified | Lead — final acceptance | none | unavailable; retries 0; corrections 0; reviews 1 |
+| T5 | coding workerのtest作成・実行責任とno-test-change例外をworker contract、DDD pre-implementation、AGENTSへ追加する。AC10。 | Main | Lead | User amendment approval | orchestration/DDD skills、AGENTS.md | skill validators and policy inspection | explicit test responsibility contract | Verified | Lead — process contract integration | none | unavailable; retries 0; corrections 0; reviews 1 |
 
 ## Design and task-split review
 
@@ -195,6 +197,13 @@ reviewerは通常、各workerの全思考や全commandを再追跡しない。AC
 - Scope: 承認済みC1-C7、AC1-AC9、T1-T4、全変更差分、検証結果。
 - Decision: 全AC/Tが`Verified`で、未解決finding、open failure、scope外変更、受入れを阻害するexternal blockerはない。schema 1は後方互換、schema 2だけ新gateを強制する。
 - Model conclusion: このprocess変更自体はcanonical contractとvalidatorを同時に統合するためLead保持が妥当。今後のcodingでは、frozen/local sliceを具体`gpt-5.6-luna`で要求し、観測不能runをmodel別評価へ混ぜない。
+
+## Approved amendment: worker test responsibility
+
+- Approval: ユーザーが2026-09-20に、coding workerへtest code作成とtest実行を指示できるよう明示的に追加依頼した。
+- Contract: worker promptは変更に必要なtest、実装中の最小test、handoff前の関連regression、期待結果を指定する。test変更なしは理由と既存の独立証拠を必要とする。
+- Completion: 指定testの成功結果がないworker taskは完了にせず、実行不能時はblockerを示してLeadへ戻す。
+- Review: AC group reviewはworkerの自己申告ではなく、実行されたcommand/resultと独立証拠を確認する。
 
 ## Pre-implementation review
 
