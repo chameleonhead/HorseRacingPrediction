@@ -96,6 +96,8 @@ public static class CollectionAttemptFailureClassifier
 {
     public static CollectionAttemptCompletion FromException(Exception exception)
     {
+        if (IsClosedBrowserSession(exception))
+            return new(CollectionAttemptResult.TransientFailure, "TargetClosedException", exception.Message);
         var result = exception switch
         {
             HttpRequestException { StatusCode: System.Net.HttpStatusCode.NotFound } =>
@@ -109,6 +111,16 @@ public static class CollectionAttemptFailureClassifier
         };
         return new(result, exception.GetType().Name, exception.Message,
             HttpStatusCode: (exception as HttpRequestException)?.StatusCode is { } status ? (int)status : null);
+    }
+
+    private static bool IsClosedBrowserSession(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+            if (string.Equals(current.GetType().Name, "TargetClosedException", StringComparison.Ordinal)
+                || current.Message.Contains("page, context or browser has been closed",
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     public static CollectionAttemptCompletion WithTaskContext(

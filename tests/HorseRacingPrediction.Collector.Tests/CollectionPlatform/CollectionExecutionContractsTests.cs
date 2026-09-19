@@ -137,6 +137,17 @@ public sealed class CollectionExecutionContractsTests
     }
 
     [TestMethod]
+    public void ClosedBrowserSession_IsCanonicalTransientFailure()
+    {
+        var completion = CollectionAttemptFailureClassifier.FromException(
+            new InvalidOperationException("wrapper", new TargetClosedException()));
+
+        Assert.AreEqual(CollectionAttemptResult.TransientFailure, completion.Result);
+        Assert.AreEqual("TargetClosedException", completion.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.StopPipeline, completion.FailureImpact);
+    }
+
+    [TestMethod]
     public void CompletedCalendarParseFailure_RemainsStructural()
     {
         var exception = new JraPageParseException(
@@ -240,4 +251,7 @@ public sealed class CollectionExecutionContractsTests
             throw new OperationCanceledException(cancellation.Token);
         }
     }
+
+    private sealed class TargetClosedException()
+        : Exception("Target page, context or browser has been closed");
 }
