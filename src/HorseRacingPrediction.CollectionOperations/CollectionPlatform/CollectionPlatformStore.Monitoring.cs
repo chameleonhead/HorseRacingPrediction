@@ -57,6 +57,10 @@ public sealed partial class CollectionPlatformStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var flowTasks = await db.Tasks.AsNoTracking()
+            .Where(x => x.CreatedAt <= cutoff && (x.CreatedAt >= dispatchesFrom || x.FinishedAt >= dispatchesFrom))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+
         var truncated = activeRows.Count > limit || dispatchRows.Count > limit || raceRows.Count > limit;
         var active = activeRows.Take(limit).Select(x => new CollectionMonitoringTaskSnapshot(
             x.task.TaskId,
@@ -109,7 +113,18 @@ public sealed partial class CollectionPlatformStore
                 artifacts.FirstOrDefault(y => y.Artifact == RaceArtifactKind.Result)?.Status
                     ?? ParseArtifactStatus(attributes.GetValueOrDefault("resultArtifactStatus")));
         }).ToArray();
-        return new(cutoff, pipeline, active, dispatches, truncated, races);
+        var dispatchedTaskIds = dispatchRows.Select(x => x.task.TaskId).ToHashSet();
+        var flows = flowTasks.GroupBy(x => new { x.DefinitionId, x.Lane })
+            .Select(group => new CollectionDefinitionFlowSnapshot(
+                new(group.Key.DefinitionId), group.Key.Lane,
+                $"{group.Key.Lane}:{group.Key.DefinitionId}",
+                group.Count(x => x.CreatedAt >= dispatchesFrom),
+                group.Count(x => dispatchedTaskIds.Contains(x.TaskId)),
+                group.Count(x => x.FinishedAt >= dispatchesFrom),
+                group.Count(x => x.FinishedAt is null),
+                group.Where(x => x.FinishedAt is null).Select(x => (DateTimeOffset?)x.AvailableAt).Min()))
+            .OrderBy(x => x.Definition.Value, StringComparer.Ordinal).ThenBy(x => x.Lane).ToArray();
+        return new(cutoff, pipeline, active, dispatches, truncated, races, flows);
     }
 
     private static DateTimeOffset? ParseInstant(string? value) =>

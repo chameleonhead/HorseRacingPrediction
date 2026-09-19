@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.ApiClient;
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -259,6 +260,26 @@ public class HorseEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, listResponse.StatusCode);
         var detailResponse = await _client.GetAsync("/api/owners/unknown-owner");
         Assert.AreEqual(HttpStatusCode.NotFound, detailResponse.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task OwnerDetail_ResolvesProducerCanonicalAndLegacyIds()
+    {
+        var key = Guid.NewGuid().ToString("N");
+        var ownerName = $"株式会社 共有契約馬主{key}";
+        await _client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest(
+            $"OwnerContractHorse-{key}", $"owner-contract-horse-{key}", "M", null,
+            $"horse-{Guid.NewGuid()}", ownerName), JsonOptions);
+
+        var canonical = OwnerIdentityContract.CreateId(ownerName);
+        var legacy = OwnerIdentityContract.CreateLegacyId(ownerName);
+        var canonicalResponse = await _client.GetAsync($"/api/owners/{canonical}");
+        var legacyResponse = await _client.GetAsync($"/api/owners/{legacy}");
+
+        Assert.AreEqual(HttpStatusCode.OK, canonicalResponse.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, legacyResponse.StatusCode);
+        var detail = await canonicalResponse.Content.ReadFromJsonAsync<OwnerDetailResponse>(JsonOptions);
+        Assert.AreEqual(canonical, detail!.Summary.OwnerId);
     }
 
     [TestMethod]

@@ -620,10 +620,13 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var items = subjects.Select(subject =>
         {
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
-            var id = subject.Type == ResourceType.Horse
-                ? DeterministicIdGenerator.BuildHorseId(subject.Name, subject.SourceIdentity)
-                : DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix,
-                    DeterministicIdGenerator.NormalizeKey(subject.Name));
+            var id = subject.Type switch
+            {
+                ResourceType.Horse => DeterministicIdGenerator.BuildHorseId(subject.Name, subject.SourceIdentity),
+                ResourceType.Owner => OwnerIdentityContract.CreateId(subject.Name),
+                _ => DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix,
+                    DeterministicIdGenerator.NormalizeKey(subject.Name)),
+            };
             var attributes = new Dictionary<string, string>
             {
                 ["name"] = subject.Name,

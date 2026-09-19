@@ -1,6 +1,6 @@
 # 収集監視を観測記録から原因分析と実行タスクへ変更する
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
@@ -10,7 +10,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 原因別タスクを提案済み。承認後に実装する。 |
+| Code | In progress | 2026-09-19にユーザーが本recordの実装を明示承認。T1から順に実装中。 |
 | Verification | Not started | 静的な原因確認を実施済み。回帰・本番検証は各タスクに定義した。 |
 | Deployment/operation | Not started | 現行監視はGitHub Actions経由。ローカルAPI runnerへの切替が必要。 |
 

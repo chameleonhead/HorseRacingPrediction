@@ -33,12 +33,23 @@ public sealed record CollectionRaceFreshnessSnapshot(
     RaceArtifactStatus CardStatus,
     RaceArtifactStatus ResultStatus);
 
+public sealed record CollectionDefinitionFlowSnapshot(
+    CollectionDefinitionId Definition,
+    CollectionLane Lane,
+    string CompatibilityKey,
+    int Arrived,
+    int Dispatched,
+    int Completed,
+    int Active,
+    DateTimeOffset? OldestActiveAt);
+
 public sealed record CollectionMonitoringSnapshot(
     DateTimeOffset Cutoff,
     CollectionPipelineState Pipeline,
     IReadOnlyList<CollectionMonitoringTaskSnapshot> ActiveTasks,
     IReadOnlyList<CollectionMonitoringDispatchSnapshot> RecentDispatches,
     bool Truncated,
-    IReadOnlyList<CollectionRaceFreshnessSnapshot>? RaceFreshness = null);
+    IReadOnlyList<CollectionRaceFreshnessSnapshot>? RaceFreshness = null,
+    IReadOnlyList<CollectionDefinitionFlowSnapshot>? DefinitionFlows = null);
 
 public sealed record CollectionMonitoringBackup(string BackupId, string FileName, DateTimeOffset CreatedAt);

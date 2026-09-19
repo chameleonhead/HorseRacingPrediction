@@ -54,9 +54,9 @@
 
 ## 収集運用の監視、起票、過去ジョブ補正
 
-要対応のfailure notification、長時間停滞したactive task、予期しないpipeline pause、lane/priority/公平配分契約に反する処理順を定期的に評価する。実行層は型付きの決定的findingを返し、定期自動化は新規findingごとに `Proposed` change recordを作る。同じfingerprintの未完了recordは新規作成せず、観測履歴を追記する。
+要対応のfailure notification、長時間停滞したactive task、予期しないpipeline pause、lane/priority/公平配分契約に反する処理順を定期的に評価する。実行層は型付きの決定的findingを返し、各actionable findingを原因仮説、影響、所有task、次の安全な操作へ対応付ける。fingerprint別recordは監査履歴として保持するが、反復findingごとの新規recordやPRは作成しない。
 
-監視APIはprobeの実行成否とは別に `Healthy`、`FindingRecorded`、`ActionRequired`、`MonitorFailed` を返す。GitHub Actionsは `ActionRequired` をwarningとして可視化し、30分cronは登録済みデータ補正canaryと限定的なpipeline継続だけを実行する。独立heartbeatは読み取り専用で、要対応の継続通知、復旧通知、監視欠落、週末データ鮮度を現在のCodexスレッドへ配送する。自動pipeline継続は `race-discovery` の `TargetClosedException`、原因task一致、直近6時間に同一fingerprintのresumeなし、maintenance/手動停止でない場合に限り、失敗taskや通知を変更せずpipelineのみresumeして進行を再確認する。
+監視APIはprobeの実行成否とは別に `Healthy`、`FindingRecorded`、`ActionRequired`、`MonitorFailed` を返す。原因・所有task・次操作が欠けたactionable findingは `MonitorFailed` とする。Codex heartbeatはDPAPIで保護した資格情報を使うローカルrunnerからAPIを直接読み、要対応、復旧、監視欠落、週末データ鮮度を同じスレッドへ配送する。登録済みデータ補正canaryと限定的なpipeline継続だけを自動実行できる。
 
 プログラムバグは修正用change record、未知の過去ジョブエラーは原因仮説・影響範囲・対応候補・推奨調査を持つchange recordとして起票する。既知の過去ジョブエラーは、一意性根拠、revision条件、preview、冪等キー、postcondition、実行上限、監査記録を持つ登録済みの自動安全recipeに限り自動補正する。曖昧・未登録・事前条件不一致の対象は変更せず、未知エラー調査へ分離する。
 
@@ -66,7 +66,7 @@
 CodexのローカルスケジュールはPCとデスクトップアプリの稼働に依存するため、恒久的な24時間監視の正本にはしない。安定化後は、収集サービス内のdurable lease付き監視またはクラウドスケジューラを検知の正本、Codexを診断・修正案作成の担当とする構成を再評価する。
 
 正常判定はpipelineやtaskが動いていることだけでは完了しない。週末開催について、公式discoveryで発見したレースを分母に、金曜時点の出馬表・出走馬と、各レース終了後の結果が期限内にdomainへ保存された割合を評価する。0件を無条件に正常とせず、discovery未完了と開催なしを区別する。期限、severity、例外状態、通知lifecycleは [週末レース情報の期限内収集を監視する](changes/20260919_collection-freshness-slo/README.md) を正本とする。
-監視findingのpublicationは、repository単位でGitHub ActionsによるPull Request作成を許可し、workflow側は`contents: write`と`pull-requests: write`だけを明示する。recordのvalidation/pushとPR create/reuseを別stepに分け、PR権限不足は管理者が変更すべき設定を示す専用failureとして扱う。PR承認、auto-merge、repository管理権限はworkflowへ与えない。
+GitHub Actionsの監視workflowは手動診断用のread-only経路とし、`contents: read`だけを持つ。change recordの生成、branch push、PR作成は行わない。ローカルrunnerの資格情報は `%LOCALAPPDATA%\HorseRacingPrediction\CollectionMonitor` 配下へ保存し、API keyはWindows DPAPIで現在ユーザーに暗号化する。詳細は [収集監視を観測記録から原因分析と実行タスクへ変更する](changes/20260919_collection-monitor-root-cause-triage/README.md) を正本とする。
 
 ## 長期収集計画の定期見直し（提案）
 

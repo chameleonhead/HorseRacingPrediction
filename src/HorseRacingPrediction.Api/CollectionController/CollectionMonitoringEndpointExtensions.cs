@@ -12,6 +12,8 @@ public static class CollectionMonitoringEndpointExtensions
             Results.Ok(await service.InspectAsync(JstTime.Now(), token)));
         group.MapGet("/known-recovery/preview", async (CollectionMonitoringService service,
             CancellationToken token) => Results.Ok(await service.PreviewKnownRecoveryAsync(JstTime.Now(), token)));
+        group.MapGet("/owner-identity/preview", async (CollectionMonitoringService service,
+            CancellationToken token) => Results.Ok(await service.PreviewOwnerIdentityMigrationAsync(token)));
         group.MapPost("/known-recovery/apply", async (CollectionMonitoringService service,
             ILogger<CollectionMonitoringService> logger, CancellationToken token) =>
         {
