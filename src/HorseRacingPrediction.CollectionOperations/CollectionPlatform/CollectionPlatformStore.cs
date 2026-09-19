@@ -18,6 +18,8 @@ public sealed partial class CollectionPlatformStore
         "sourceIdentity", "sourceUrl", "startTime", "trainer", "weekendPriorityUntil", "weight", "year",
     };
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
+    private readonly int _closedSessionFailureThreshold;
+    private readonly TimeSpan _closedSessionFailureWindow;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate;
 
@@ -31,6 +33,9 @@ public sealed partial class CollectionPlatformStore
             ? "collection-platform.db" : value.DatabaseFileName);
         _dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
             .UseSqlite($"Data Source={path};Pooling=False;Default Timeout=30").Options;
+        _closedSessionFailureThreshold = Math.Clamp(value.ClosedSessionFailureThreshold, 1, 100);
+        _closedSessionFailureWindow = TimeSpan.FromMinutes(
+            Math.Clamp(value.ClosedSessionFailureWindowMinutes, 1, 1_440));
         _gate = Gates.GetOrAdd(path, static _ => new SemaphoreSlim(1, 1));
         using var db = CreateDbContext();
         CollectionPlatformSchemaMigrator.Migrate(db);
@@ -39,6 +44,8 @@ public sealed partial class CollectionPlatformStore
     internal CollectionPlatformStore(DbContextOptions<CollectionPlatformDbContext> dbOptions)
     {
         _dbOptions = dbOptions;
+        _closedSessionFailureThreshold = 3;
+        _closedSessionFailureWindow = TimeSpan.FromMinutes(10);
         using (var context = new CollectionPlatformDbContext(dbOptions))
         {
             var key = context.Database.GetConnectionString() ?? Guid.NewGuid().ToString("N");
@@ -846,6 +853,15 @@ public sealed partial class CollectionPlatformStore
             task.UpdatedAt = now;
             var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
                 && x.DefinitionId == task.DefinitionId, cancellationToken);
+            var closedSessionBurst = false;
+            if (IsClosedSessionFailure(completion))
+            {
+                var windowStart = now.Subtract(_closedSessionFailureWindow);
+                var recentClosedSessionFailures = await db.Attempts.AsNoTracking().CountAsync(x =>
+                    x.FinishedAt >= windowStart && x.ErrorCode == "TargetClosedException", cancellationToken)
+                    .ConfigureAwait(false);
+                closedSessionBurst = recentClosedSessionFailures + 1 >= _closedSessionFailureThreshold;
+            }
 
             if (task.CancellationRequestedAt.HasValue || completion.Result == CollectionAttemptResult.Cancelled)
             {
@@ -891,7 +907,7 @@ public sealed partial class CollectionPlatformStore
                 await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
                     .ConfigureAwait(false);
             }
-            else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
+            else if (!closedSessionBurst && (IsRetryable(completion.Result) || completion.RetryAt.HasValue))
             {
                 task.Status = CollectionTaskStatus.RetryWaiting;
                 task.AvailableAt = completion.RetryAt ?? now.Add(DefaultRetryDelay(completion.Result, task.AttemptCount));
@@ -3199,6 +3215,10 @@ public sealed partial class CollectionPlatformStore
     private static bool IsRetryable(CollectionAttemptResult result) => result is
         CollectionAttemptResult.TransientFailure or CollectionAttemptResult.ResourceNotYetAvailable
         or CollectionAttemptResult.AccessLimited;
+
+    private static bool IsClosedSessionFailure(CollectionAttemptCompletion completion)
+        => completion.Result == CollectionAttemptResult.TransientFailure
+           && string.Equals(completion.ErrorCode, "TargetClosedException", StringComparison.Ordinal);
 
     private static TimeSpan DefaultRetryDelay(CollectionAttemptResult result, int attemptCount)
     {

@@ -63,6 +63,8 @@
 
 CodexのローカルスケジュールはPCとデスクトップアプリの稼働に依存するため、恒久的な24時間監視の正本にはしない。安定化後は、収集サービス内のdurable lease付き監視またはクラウドスケジューラを検知の正本、Codexを診断・修正案作成の担当とする構成を再評価する。
 
+監視findingのpublicationは、repository単位でGitHub ActionsによるPull Request作成を許可し、workflow側は`contents: write`と`pull-requests: write`だけを明示する。recordのvalidation/pushとPR create/reuseを別stepに分け、PR権限不足は管理者が変更すべき設定を示す専用failureとして扱う。PR承認、auto-merge、repository管理権限はworkflowへ与えない。
+
 ## 長期収集計画の定期見直し（提案）
 
 長期バックフィルと馬公式情報補完は、開始時の計画だけで完走させず、永続化された `AcquisitionPlanReview` ジョブで既定15分ごとに再評価する。今週末の出馬表と出走予定馬公式情報の不足を最初に確認し、当日・直近結果、長期バックフィルの順に、未実行ジョブの優先度と次回投入量を調整する。状態別件数、最終進捗、チェックポイント、反復失敗、キュー状態、判断理由、次回予定を保存する。
