@@ -1,9 +1,10 @@
 # Race出走馬の後着データ補完
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
+- JRA site contract impact: Updated — 後続の`20260919_jra-site-collection-contract`でCard限定の取得元制約を正本化した。
 
 ## Completion summary
 
@@ -17,6 +18,10 @@
 > 現在のHorse profileからは復元できない。全owner欠損Raceへ補正要求を作る現行migrationは、
 > Card取得期間外にも実行不能な要求を作るため、push/deploy/applyしてはならない。
 > [JRAサイト収集契約とCard限定補正](../20260919_jra-site-collection-contract/README.md)の承認・実装後に再度Approvedとする。
+
+> **Resolution:** 後続変更を実装し、preview/applyはCard探索期間内だけを要求対象とし、期間外は
+> `補正不能`、期間内で公式Cardがない場合はretryしない`公式Cardなし`として扱うよう修正した。
+> 本recordはproduction migration post-checkを残すため`Approved`へ戻す。
 
 ## 調査結果
 

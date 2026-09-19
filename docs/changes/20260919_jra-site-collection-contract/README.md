@@ -1,9 +1,10 @@
 # JRAサイト収集契約とCard限定補正
 
-- Status: Proposed
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
+- JRA site contract impact: Updated — `docs/27-jra-site-collection-contract.md`を新設し、取得元と更新ワークフローを正本化した。
 
 ## Goal
 
@@ -57,22 +58,22 @@ Horse profileの現在ownerもRace時点ownerの代用にならない。現行Na
 | AC1 | canonical documentに各画面の入口、取得情報、取得不可情報、遷移、公開上の注意が記載される。 | documentation review | Verified |
 | AC2 | ownerはRaceCard取得時だけ取得し、RaceResult/Horse profile/別Raceから代用しない契約が明記される。 | documentation and source matrix review | Verified |
 | AC3 | JRA仕様変更を検知する条件と、証拠採取→文書→change record→fixture/test→データ影響評価の更新順序が定義される。 | workflow review | Verified |
-| AC4 | migration previewがowner欠損をCard再取得候補、既要求、期間外・補正不能へ分類し、期間外へ要求を作らない。 | API/store integration tests | Not started |
-| AC5 | migration applyはCard再取得候補だけに冪等要求を作り、Horse profileやResult値を直接コピーしない。 | DB invariant and migration tests | Not started |
-| AC6 | 期間内でもCardが実在しない場合は無期限retryせず`公式Cardなし`として観測できる。 | workflow/progress tests | Not started |
-| AC7 | 新規Card収集のowner保存不一致を構造化outcomeで検知できる。 | collector/API integration tests | Not started |
-| AC8 | JRA parser/navigation/workflow/migration変更のchange recordがcontract impactを宣言しない場合、validatorが検出する。 | validator tests | Not started |
-| AC9 | 既存error jobの自動復旧、priority変更、notification解決を行わない。 | DB invariant tests | Not started |
+| AC4 | migration previewがowner欠損をCard再取得候補、既要求、期間外・補正不能へ分類し、期間外へ要求を作らない。 | API/store integration tests | Verified |
+| AC5 | migration applyはCard再取得候補だけに冪等要求を作り、Horse profileやResult値を直接コピーしない。 | DB invariant and migration tests | Verified |
+| AC6 | 期間内でもCardが実在しない場合は無期限retryせず`公式Cardなし`として観測できる。 | workflow/progress tests | Verified |
+| AC7 | 新規Card収集のowner保存不一致を構造化outcomeで検知できる。 | collector/API integration tests | Verified |
+| AC8 | JRA parser/navigation/workflow/migration変更のchange recordがcontract impactを宣言しない場合、validatorが検出する。 | validator tests | Verified |
+| AC9 | 既存error jobの自動復旧、priority変更、notification解決を行わない。 | DB invariant tests | Verified |
 
 ## Task split
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | canonical JRA site contract | Main | Lead | none | docs/27, docs/24 | doc review | AC1-AC3 | Verified |
-| T2 | migration eligibility correction | Main | Lead | Approval | API/store/UI/tests | AC4-AC6, AC9 | integration tests | Proposed |
-| T3 | Card completeness guard | Main | Lead | Approval | Collector/API/tests | AC7 | integration tests | Proposed |
-| T4 | contract-impact validator | Main | Lead | Approval | DDD validator/CI/tests | AC8 | validator tests | Proposed |
-| T5 | final review and deployment gate | Main | Lead | T2-T4 | change records | traceability audit | review evidence | Dependent |
+| T2 | migration eligibility correction | Main | Lead | Approval | API/store/UI/tests | AC4-AC6, AC9 | integration tests | Verified |
+| T3 | Card completeness guard | Main | Lead | Approval | Collector/API/tests | AC7 | integration tests | Verified |
+| T4 | contract-impact validator | Main | Lead | Approval | DDD validator/CI/tests | AC8 | validator tests | Verified |
+| T5 | final review and deployment gate | Main | Lead | T2-T4 | change records | traceability audit | review evidence | Verified |
 
 ## Review gates
 
@@ -84,7 +85,11 @@ Horse profileの現在ownerもRace時点ownerの代用にならない。現行Na
 
 ### Pre-implementation review
 
-- Pending user approval of AC4-AC9.
+- Approval: 2026-09-19にユーザーがAC4-AC9を承認した。
+- Runnable frontier: T2とT4。T3はT2で確定する進捗・outcome契約に依存するため直列化する。
+- Mainがmigration、Collector/API、validator、testsを所有する。migrationとoutcomeは共有contractを変更するため委譲せず、Lead tierで実装・統合する。
+- Required evidence: preview不変性、apply冪等性、期間外要求0件、Cardなしのterminal分類、owner保存不一致、validatorのpositive/negative test、関連回帰、format、CodeGraph、diff/status。
+- Escalation: 新しいowner取得元、履歴ownerの推測、既存error job自動復旧、破壊的データ更新が必要ならProposedへ戻す。
 - No push/deploy/migration apply is permitted before the correction is implemented and verified.
 
 ## Verification record
@@ -93,3 +98,29 @@ Horse profileの現在ownerもRace時点ownerの代用にならない。現行Na
 - `JraNavigator.IsWithinRaceCardLookupPeriod` currently uses today minus 5 days as a prefilter.
 - `RaceCardPageParser` parses owner; `RaceResultPageParser` has no owner extraction.
 - JRA official FAQ was checked on 2026-09-19 for historical result availability and navigation scope.
+- `dotnet test tests/HorseRacingPrediction.Collector.Tests/HorseRacingPrediction.Collector.Tests.csproj --no-restore`: 270 passed。
+- `dotnet test tests/HorseRacingPrediction.Api.Tests/HorseRacingPrediction.Api.Tests.csproj --no-restore`: 247 passed、既存skip 1件。
+- `python .codex/skills/document-driven-development/scripts/test_validate_change_records.py`: 6 passed。
+- `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`: passed。
+- `codegraph sync .`およびowner migration production pathの`codegraph explore`: endpoint、store metadata、Collector handler、Settings UI、testsの接続を確認。
+
+## Documentation updates
+
+- `docs/27-jra-site-collection-contract.md`: JRA画面、取得元、遷移、Card限定owner、更新条件の正本として新設。
+- `docs/24-jra-html-change-diagnostics.md`: 診断後に正本更新ワークフローへ進むリンクを追加。
+- `docs/changes/20260919_race-entry-owner-enrichment/README.md`: 全期間補正の誤前提とCard限定補正による解決を追記。
+
+## Checkpoint review
+
+- Initial test finding: `ownerRepair` metadataが許可リストになくbulk requestが拒否された。明示的な安全なbool markerとして許可し、API integration testを再実行した。
+- UI fixture finding: 新しい`Eligible`が既定0だったため適用ボタンが無効になった。production contractと同じ値をfixtureへ設定した。
+- Boundary review: 通常のCard未公開は従来どおり`ResourceNotYetAvailable`でretryする。`ownerRepair=true`だけが期間外または公式Cardなしで`NotApplicable`となる。
+- Shared policy review: APIだけに5日を重複定義せず、`JraCollectionPolicy.DefaultRaceCardLookupPeriodDays`を共有正本とし、Navigatorの既存定数は互換aliasにした。
+
+## Final review
+
+- Trigger: Settings/APIのpreview・apply。Persistence: 固定migration batchと`ownerRepair` metadata。Dispatch: 既存bulk request。Worker: `JraRaceDetailCollectionHandler`。Outcome: Card mergeまたはterminal unavailable。Visibility: Settingsの再取得候補・要求済み・期間外分類。
+- 期間外Raceはapply後もtask 0件、同一batch再適用はtaskを増やさず、Cardなしはretry日時を返さないことをテストした。
+- Horse profile/Resultからownerをコピーする経路、既存error jobの復旧、priority変更、notification解決は追加していない。
+- Delegationは行っていない。migration、worker outcome、UI contractが共有状態を跨ぐためLead tierで直列実装した。usage/costは取得不可、reworkは上記テスト指摘2件を同一checkpoint内で修正した。
+- AC1-AC9、T1-T5はすべてVerified。未完了の承認済み項目はない。

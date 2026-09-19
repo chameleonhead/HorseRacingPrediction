@@ -30,6 +30,13 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         Assert.IsNotNull(created);
         Assert.IsEmpty(created.Errors, string.Join("; ", created.Errors));
 
+        var oldDate = new DateOnly(2020, 1, 5);
+        var oldCreate = create with { RaceDate = oldDate, RaceNumber = 9, RaceName = "期間外検証" };
+        var oldResponse = await http.PostAsJsonAsync("/api/races/result-bulk", oldCreate);
+        var oldCreated = await oldResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>();
+        Assert.IsNotNull(oldCreated);
+        Assert.IsEmpty(oldCreated.Errors, string.Join("; ", oldCreated.Errors));
+
         var preview = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
             $"/api/admin/collection/repairs/race-entry-owners/preview?date={date:yyyy-MM-dd}");
         var repeated = await http.GetFromJsonAsync<RaceEntryOwnerRepairPreview>(
@@ -47,6 +54,10 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
             .ReadFromJsonAsync<RaceEntryOwnerMigrationProgress>();
         Assert.IsNotNull(migrationPreview);
         Assert.IsTrue(migrationPreview.Candidates.Any(x => x.RaceId == created.RaceId));
+        var outside = migrationPreview.Candidates.Single(x => x.RaceId == oldCreated.RaceId);
+        Assert.AreEqual(RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod, outside.Eligibility);
+        Assert.AreEqual(1, migrationPreview.Eligible);
+        Assert.AreEqual(1, migrationPreview.OutsideCardLookupPeriod);
         Assert.AreEqual(0, migrationPreview.Requested);
 
         await store.SetPausedAsync(true, "test migration", DateTimeOffset.UtcNow);
@@ -61,7 +72,11 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         Assert.IsNotNull(progress);
         Assert.AreEqual(1, progress.Requested);
         Assert.AreEqual(1, progress.Processing);
+        Assert.AreEqual(0, progress.Eligible);
+        Assert.AreEqual(RaceEntryOwnerRepairEligibility.ExistingRequest,
+            progress.Candidates.Single(x => x.RaceId == created.RaceId).Eligibility);
         Assert.HasCount(1, (await store.GetTasksAsync()).Where(x => x.Resource.Id == preview.Candidates[0].ResourceId));
+        Assert.IsFalse((await store.GetTasksAsync()).Any(x => x.Resource.Id == outside.ResourceId));
     }
 
     [TestMethod]

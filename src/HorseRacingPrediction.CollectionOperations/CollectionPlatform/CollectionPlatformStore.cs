@@ -14,7 +14,7 @@ public sealed partial class CollectionPlatformStore
         "backfillDate", "batchId", "birthDate", "course", "discoveredFromId", "discoveredFromProvider",
         "discoveredFromType", "discoveryAncestors", "discoveryDepth", "domainRaceId", "name", "number",
         "date", "day", "distance", "entries", "layout", "meeting", "month", "observations", "observedAt",
-        "owner", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
+        "owner", "ownerRepair", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
         "sourceIdentity", "sourceUrl", "startTime", "trainer", "weekendPriorityUntil", "weight", "year",
     };
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;

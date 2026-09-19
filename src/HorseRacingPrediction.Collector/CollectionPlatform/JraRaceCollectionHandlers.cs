@@ -237,6 +237,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var today = TodayJst();
         var cardAlreadyCurrent = string.Equals(task.Attributes.GetValueOrDefault("cardArtifactStatus"),
             RaceArtifactStatus.Current.ToString(), StringComparison.OrdinalIgnoreCase);
+        var ownerRepair = task.Attributes.TryGetValue("ownerRepair", out var ownerRepairValue)
+            && string.Equals(ownerRepairValue, "true", StringComparison.OrdinalIgnoreCase);
         var requiresCard = !cardAlreadyCurrent
             && raceId.Date >= today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
         RaceCardRaceOutcome? result = null;
@@ -245,6 +247,15 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var stageOutcomes = new List<CollectionStageOutcome>();
         string? cardOwnerError = null;
         RaceSchedulingEvidence? raceEvidence = null;
+        if (ownerRepair && !requiresCard)
+        {
+            stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                CollectionAttemptResult.NotApplicable, "OfficialRaceCardOutsideLookupPeriod",
+                "対象Raceは出馬表の探索対象期間外です。"));
+            return new(CollectionAttemptResult.NotApplicable, "OfficialRaceCardOutsideLookupPeriod",
+                "対象Raceは出馬表の探索対象期間外であり、馬主情報は現行の公式取得元から補正できません。",
+                StageOutcomes: stageOutcomes);
+        }
         foreach (var location in requiresCard
                      ? (task.Locations ?? []).Where(x => x.Artifact is null or RaceArtifactKind.Card)
                      : [])
@@ -294,6 +305,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             catch (JraNavigationException ex) when (raceId.Date < today
                 && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
             {
+                if (ownerRepair)
+                {
+                    stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                        CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable", ex.Message));
+                    return new(CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable",
+                        "公式出馬表を取得できないため、馬主情報は現行の公式取得元から補正できません。",
+                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                }
                 // RaceCardLookupPeriod is a local preference, not a guarantee that JRA still exposes
                 // the card selection. A retired card for a past race must not prevent result collection.
                 requiresCard = false;
@@ -327,6 +346,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             }
             catch (JraCollectionException ex)
             {
+                if (ownerRepair)
+                {
+                    stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                        CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable", ex.Message));
+                    return new(CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable",
+                        "公式出馬表を取得できないため、馬主情報は現行の公式取得元から補正できません。",
+                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                }
                 stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
                     CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable", ex.Message));
                 return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",

@@ -210,6 +210,38 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_OwnerRepairWithoutOfficialCard_IsTerminallyUnavailable()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraCollectionException("出馬表を取得できませんでした。"),
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => card, _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:11"), new("race-detail"), 2,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京",
+                ["number"] = "11",
+                ["ownerRepair"] = "true",
+            }), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
+        Assert.AreEqual("OfficialRaceCardUnavailable", completion.ErrorCode);
+        Assert.IsNull(completion.RetryAt);
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "ResolveCard"
+            && x.Result == CollectionAttemptResult.NotApplicable));
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_OfficialCancellation_CompletesWithoutWaitingForPayouts()
     {
         var date = new DateOnly(2026, 9, 12);
