@@ -14,6 +14,65 @@
     <FluentMessageBar Intent="@MessageIntent.Success" Title="データ補正が完了しました">@success</FluentMessageBar>
 }
 
+<section class="entity-section settings-section" aria-labelledby="race-owner-repair-heading">
+    <p class="eyebrow">レースデータマイグレーション</p>
+    <h2 id="race-owner-repair-heading">出走馬の馬主情報を補正</h2>
+    <p class="section-description">保存済みRaceを確認し、公式出馬表の探索対象期間内にある馬主欠損だけを再取得します。過去の結果や現在の競走馬プロフィールから馬主を代用しません。プレビューではデータを変更しません。</p>
+    <div class="operations-form-row">
+        <FluentButton Appearance="@Appearance.Outline" OnClick="PreviewOwnerMigrationAsync" Disabled="@busy">マイグレーションを確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Outline" OnClick="LoadOwnerMigrationProgressAsync" Disabled="@busy">進捗を更新</FluentButton>
+    </div>
+    @if (ownerRepairErrors.Count > 0)
+    {
+        <RaceOpsAlert Title="馬主情報の欠損を確認できませんでした" Messages="@ownerRepairErrors" />
+    }
+    @if (ownerRepairLoading)
+    {
+        <UiState Kind="loading" Title="対象日の馬主情報を確認しています" />
+    }
+    else if (ownerMigration is not null && ownerMigration.Remaining == 0)
+    {
+        <UiState Title="馬主情報の補正対象はありません" Message="保存済みRaceのentry-level馬主情報を確認しました。" />
+    }
+    else if (ownerMigration is not null)
+    {
+        <div class="repair-summary" role="status">
+            <span>補正済み <strong>@ownerMigration.Corrected</strong> 件</span>
+            <span>処理中 <strong>@ownerMigration.Processing</strong> 件</span>
+            <span>失敗 <strong>@ownerMigration.Failed</strong> 件</span>
+            <span>公式情報なし <strong>@ownerMigration.Unavailable</strong> 件</span>
+            <span>再取得候補 <strong>@ownerMigration.Eligible</strong> 件</span>
+            <span>出馬表期間外 <strong>@ownerMigration.OutsideCardLookupPeriod</strong> 件</span>
+            <span>現在の欠損 <strong>@ownerMigration.Remaining</strong> 件</span>
+        </div>
+        <div class="repair-grid">
+            <FluentDataGrid Items="@ownerMigration.Candidates.AsQueryable()" TGridItem="RaceEntryOwnerRepairCandidate" aria-label="馬主情報の補正候補">
+                <TemplateColumn Title="レース"><a href="@RaceUrl(context.RaceId)">@(context.RaceName ?? context.ResourceId)</a><small>@context.RacecourseCode @context.RaceNumber R</small></TemplateColumn>
+                <TemplateColumn Title="対象日">@context.Date.ToString("yyyy/MM/dd")</TemplateColumn>
+                <TemplateColumn Title="entry-level欠損"><strong>@context.MissingOwnerCount / @context.EntryCount 頭</strong><small>表示用プロフィール補完を含まない保存値</small></TemplateColumn>
+                <TemplateColumn Title="補正可否"><strong>@EligibilityLabel(context.Eligibility)</strong><small>@context.EligibilityReason</small></TemplateColumn>
+            </FluentDataGrid>
+        </div>
+        <div class="repair-actions">
+            <span>適用には収集パイプラインの停止と実行中タスクの完了が必要です。</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingOwnerRepair = true)" Disabled="@(busy || ownerMigration.Eligible == 0)">マイグレーションを適用</FluentButton>
+        </div>
+    }
+</section>
+
+<FluentDialog Hidden="@(!confirmingOwnerRepair)" HiddenChanged="@(hidden => confirmingOwnerRepair = !hidden)"
+              Modal="true" TrapFocus="true" AriaLabelledby="owner-repair-confirm-title"
+              Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="owner-repair-confirm-title">馬主情報のマイグレーションを適用しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>出馬表の探索対象期間内にあるRaceリソースだけへ通常優先度のrevision 2再取得を登録します。期間外には要求を作らず、過去結果や競走馬プロフィールから馬主をコピーしません。既存エラージョブの一括復旧や優先度変更も行いません。</p>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@(() => confirmingOwnerRepair = false)" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ApplyOwnerMigrationAsync" Disabled="@busy">@(busy ? "適用中…" : "マイグレーションを適用")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 <section class="entity-section settings-section" aria-labelledby="subject-repair-heading">
     <p class="eyebrow">要対応データ補正</p>
     <h2 id="subject-repair-heading">主体識別情報の補正</h2>
@@ -255,6 +314,10 @@
     private bool subjectLoading = true;
     private bool confirmingSubjects;
     private bool dismissingSubjects;
+    private RaceEntryOwnerMigrationProgress? ownerMigration;
+    private IReadOnlyList<string> ownerRepairErrors = [];
+    private bool ownerRepairLoading;
+    private bool confirmingOwnerRepair;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
         string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
     private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
@@ -263,6 +326,13 @@
     private int SelectedBlockedSubjectCount => selectedSubjects.Count - SelectedActionableSubjectCount;
     private int SafeCount => candidates.Count(x => x.SafeToApply);
     private int BlockedCount => candidates.Count - SafeCount;
+    private static string EligibilityLabel(RaceEntryOwnerRepairEligibility eligibility) => eligibility switch
+    {
+        RaceEntryOwnerRepairEligibility.CardRetrievalCandidate => "再取得候補",
+        RaceEntryOwnerRepairEligibility.ExistingRequest => "要求済み",
+        RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod => "期間外・補正不能",
+        _ => "要確認"
+    };
     private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
         candidates.Where(x => selected.Contains(x.CandidateId));
 
@@ -302,6 +372,43 @@
 
     private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
         candidate.SafeToExecute;
+
+    private async Task PreviewOwnerMigrationAsync()
+    {
+        ownerRepairErrors = []; ownerMigration = null;
+        ownerRepairLoading = true;
+        try
+        {
+            var result = await Api.PreviewRaceEntryOwnerMigrationAsync();
+            if (result.Success) ownerMigration = result.Value;
+            else ownerRepairErrors = result.Errors;
+        }
+        catch (Exception) { ownerRepairErrors = ["マイグレーションの確認結果を取得できませんでした。"]; }
+        finally { ownerRepairLoading = false; }
+    }
+
+    private async Task LoadOwnerMigrationProgressAsync()
+    {
+        ownerRepairErrors = []; ownerRepairLoading = true;
+        try { ownerMigration = await Api.GetRaceEntryOwnerMigrationProgressAsync(); }
+        catch (Exception) { ownerRepairErrors = ["マイグレーションの進捗を取得できませんでした。"]; }
+        finally { ownerRepairLoading = false; }
+    }
+
+    private async Task ApplyOwnerMigrationAsync()
+    {
+        if (busy || ownerMigration is null || ownerMigration.Eligible == 0) return;
+        busy = true; ownerRepairErrors = []; success = null;
+        try
+        {
+            var result = await Api.ApplyRaceEntryOwnerMigrationAsync();
+            if (!result.Success || result.Value is null) { ownerRepairErrors = result.Errors; return; }
+            ownerMigration = result.Value;
+            success = $"馬主情報のマイグレーションを適用しました（対象 {result.Value.Requested} レース）。パイプライン再開後に進捗を確認してください。";
+        }
+        catch (Exception) { ownerRepairErrors = ["適用結果を確認できませんでした。再度プレビューして状態を確認してください。"]; }
+        finally { busy = false; confirmingOwnerRepair = false; }
+    }
 
     private bool SubjectSelected(Guid id) => selectedSubjects.Contains(id);
     private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);

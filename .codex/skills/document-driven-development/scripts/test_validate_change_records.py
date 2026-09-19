@@ -67,6 +67,25 @@ class ValidateChangeRecordsTests(unittest.TestCase):
 """)
         self.assertIn("Acceptance criteria is not a state table", inspect(path))
 
+    def test_requires_jra_site_contract_impact_for_jra_collection_changes(self):
+        path = self.record("""# Change
+
+- Status: Proposed
+
+RaceCardPageParserを変更する。
+""")
+        self.assertTrue(any("JRA site contract impact" in issue for issue in inspect(path)))
+
+    def test_accepts_declared_jra_site_contract_impact(self):
+        path = self.record("""# Change
+
+- Status: Proposed
+- JRA site contract impact: Updated — source matrixを更新した。
+
+RaceResultPageParserを変更する。
+""")
+        self.assertEqual([], inspect(path))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2568,4 +2568,6 @@ Collector(`IDataCollectionWriteService` 経由の Web API 書き込み)へ接続
 
 `JraNavigator.DefaultRaceCardLookupPeriodDays`（5日）を、Navigatorの探索制限とCollectorの取得元選択で共有する。期間内の `race-detail` はRaceCardをidentity検証・保存した後、現在ページの結果リンクを優先してRaceResultへ進み、リンク欠落時のみ完全探索へfallbackする。期間外は掲載終了したRaceCardを探索せずRaceResultへ直接進む。結果が未公開または未確定の場合もRaceCard側の保存結果は保持し、上位のcollection taskを待機させる。
 
+2026-09-19再提案: Parser/Navigator/Workflowと単一Race task/sessionは維持するが、handler内部をCard/Resultのtyped stageへ分け、各結果をRace resource facetへ独立checkpointする。Location解決のtry/catchはpage検証までに限定し、domain write failureをLocation failureへ変換して完全探索と二重writeを起こさない。公式StartTimeより前はResult stageを呼ばず、両stageがdueの場合だけ同じsessionでCard→Resultへ短絡する。詳細は[Raceリソース中心の取得状態機械](changes/20260919_race-detail-phase-recovery/README.md)を正とし、承認前は現行動作を変更しない。
+
 この5日はRaceCardを優先するローカルな最適化であり、JRA画面が必ず同じ期間を掲載するという外部契約ではない。期間内でも過去日の開催選択画面が`OutOfDisplayedRange`を示した場合は、未来の未公開・構造不正・通信失敗と混同せず、既存のRaceResult Current/Recent/Historical導線へ切り替える。discovery、個別race-detail、過去日の結果導線に限定した境界処理は[Dynamic race source fallback](changes/20260917_dynamic-race-source-fallback/README.md)を正本とする。同recordが`Proposed`の間は実装を変更しない。

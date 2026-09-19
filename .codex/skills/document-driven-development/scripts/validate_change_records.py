@@ -10,6 +10,12 @@ from pathlib import Path
 
 STATUSES = {"Proposed", "Approved", "Implemented", "Superseded"}
 AC_STATES = {"Not started", "Connected", "Verified"}
+JRA_CONTRACT_MARKER = re.compile(r"(?im)^- JRA site contract impact:\s*(Updated|None)\b")
+JRA_CHANGE_SURFACE = re.compile(
+    r"HorseRacingPrediction\.Scraping[/\\]Jra|JraNavigator|RaceCardPageParser|RaceResultPageParser|"
+    r"race-entry-owners|owner migration|馬主.*マイグレーション",
+    re.IGNORECASE,
+)
 
 
 def markdown_cells(line: str) -> list[str]:
@@ -28,6 +34,9 @@ def inspect(path: Path) -> list[str]:
         status = match.group(1)
         if status not in STATUSES:
             issues.append(f"non-canonical Status: {status}")
+
+    if JRA_CHANGE_SURFACE.search(text) and not JRA_CONTRACT_MARKER.search(text):
+        issues.append("JRA collection change has no 'JRA site contract impact: Updated|None' declaration")
 
     heading = next((i for i, line in enumerate(lines) if line.strip() == "## Acceptance criteria"), None)
     if heading is None:

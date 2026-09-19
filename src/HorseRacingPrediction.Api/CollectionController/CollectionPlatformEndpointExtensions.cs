@@ -101,6 +101,42 @@ public static class CollectionPlatformEndpointExtensions
                 HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return report.Errors.Count == 0 ? Results.Ok(report) : Results.Conflict(report);
         });
+        admin.MapPost("/migrations/race-entry-owners/preview", async (
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var candidates = await GetRaceEntryOwnerMigrationCandidatesAsync(dbContextProvider, token);
+            var batch = await store.GetBatchResourceStatusesAsync(RaceEntryOwnerMigrationBatchId, token);
+            return Results.Ok(BuildRaceEntryOwnerMigrationProgress(candidates, batch));
+        });
+        admin.MapPost("/migrations/race-entry-owners/apply", async (
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var pipeline = await store.GetPipelineStateAsync(token);
+            if (!pipeline.IsPaused)
+                return Results.Conflict(new { message = "Collection pipeline must be paused." });
+            if ((await store.GetTasksAsync(CollectionTaskStatus.Running, 1, token)).Count > 0)
+                return Results.Conflict(new { message = "Running collection tasks must be drained before migration." });
+            var candidates = await GetRaceEntryOwnerMigrationCandidatesAsync(dbContextProvider, token);
+            var actionable = candidates.Where(x => x.Eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate)
+                .ToArray();
+            if (actionable.Length > 0)
+                await store.ExecuteBulkRequestAsync(new("race-detail"), 2, CollectionReason.DefinitionChanged,
+                    actionable.Select(ToRaceEntryOwnerMigrationTarget),
+                    HorseRacingPrediction.Contracts.Time.JstTime.Now(), RaceEntryOwnerMigrationBatchId,
+                    CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
+            var batch = await store.GetBatchResourceStatusesAsync(RaceEntryOwnerMigrationBatchId, token);
+            return Results.Ok(BuildRaceEntryOwnerMigrationProgress(candidates, batch));
+        });
+        admin.MapGet("/migrations/race-entry-owners/progress", async (
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider,
+            CollectionPlatformStore store, CancellationToken token) =>
+        {
+            var candidates = await GetRaceEntryOwnerMigrationCandidatesAsync(dbContextProvider, token);
+            var batch = await store.GetBatchResourceStatusesAsync(RaceEntryOwnerMigrationBatchId, token);
+            return Results.Ok(BuildRaceEntryOwnerMigrationProgress(candidates, batch));
+        });
         admin.MapPost("/tasks/{taskId:guid}/cancel", async (Guid taskId, CollectionPlatformStore store,
             CancellationToken token) => await store.CancelTaskAsync(taskId, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                 ? Results.NoContent() : Results.Conflict());
@@ -337,6 +373,57 @@ public static class CollectionPlatformEndpointExtensions
                 request.From, request.To, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", receipt);
         });
+        admin.MapGet("/repairs/race-entry-owners/preview", async (DateOnly date,
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken token) =>
+        {
+            using var db = dbContextProvider.CreateContext();
+            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+                .Where(x => x.RaceDate == date)
+                .OrderBy(x => x.RacecourseCode).ThenBy(x => x.RaceNumber)
+                .ToListAsync(token).ConfigureAwait(false);
+            var candidates = races.Select(ToRaceEntryOwnerRepairCandidate)
+                .Where(x => x.MissingOwnerCount > 0
+                    && x.Eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate).ToArray();
+            return Results.Ok(new RaceEntryOwnerRepairPreview(date, races.Count, candidates));
+        });
+        admin.MapPost("/repairs/race-entry-owners", async (RaceEntryOwnerRepairRequest request,
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            var pipeline = await store.GetPipelineStateAsync(token);
+            if (!pipeline.IsPaused)
+                return Results.Conflict(new { message = "Use the paused race entry owner migration." });
+            if ((await store.GetTasksAsync(CollectionTaskStatus.Running, 1, token)).Count > 0)
+                return Results.Conflict(new { message = "Running collection tasks must be drained before migration." });
+            var selected = request.RaceIds.Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.Ordinal).ToArray();
+            if (selected.Length is 0 or > 24)
+                return Results.BadRequest(new { message = "Select between 1 and 24 races." });
+            using var db = dbContextProvider.CreateContext();
+            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+                .Where(x => x.RaceDate == request.Date && selected.Contains(x.RaceId))
+                .ToListAsync(token).ConfigureAwait(false);
+            var candidates = races.Select(ToRaceEntryOwnerRepairCandidate)
+                .Where(x => x.MissingOwnerCount > 0).ToArray();
+            if (candidates.Length != selected.Length)
+                return Results.Conflict(new { message = "Selection changed after preview; preview again before executing." });
+            var targets = candidates.Select(x => new CollectionBulkTarget(
+                new(ResourceType.Race, "JRA", x.ResourceId), request.Date,
+                new Dictionary<string, string>
+                {
+                    ["domainRaceId"] = x.RaceId,
+                    ["date"] = request.Date.ToString("yyyy-MM-dd"),
+                    ["course"] = x.RacecourseCode,
+                    ["number"] = x.RaceNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["ownerRepair"] = "true",
+                })).ToArray();
+            var batchId = RaceEntryOwnerMigrationBatchId;
+            var result = await store.ExecuteBulkRequestAsync(new("race-detail"), 2,
+                CollectionReason.DefinitionChanged, targets, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                batchId, CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
+            return Results.Accepted(value: new RaceEntryOwnerRepairReceipt(batchId, result.TargetCount,
+                result.TasksCreated, result.Requests.Select(x => x.TaskId).ToArray()));
+        });
         admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetBackfillBatchesAsync(token)));
         admin.MapGet("/backfills/{batchId}", async (string batchId, CollectionPlatformStore store,
@@ -406,6 +493,94 @@ public static class CollectionPlatformEndpointExtensions
                 ? Results.NoContent() : Results.Conflict());
         return endpoints;
     }
+
+    private static RaceEntryOwnerRepairCandidate ToRaceEntryOwnerRepairCandidate(
+        RacePredictionContextReadModel race)
+    {
+        var date = race.RaceDate ?? throw new InvalidOperationException("Race date is required.");
+        var number = race.RaceNumber ?? throw new InvalidOperationException("Race number is required.");
+        var course = CanonicalRaceCourse(race.RacecourseCode);
+        var cardLookupStart = HorseRacingPrediction.Contracts.Time.JstTime.Today()
+            .AddDays(-HorseRacingPrediction.Contracts.JraCollectionPolicy.DefaultRaceCardLookupPeriodDays);
+        var eligibility = date >= cardLookupStart
+            ? RaceEntryOwnerRepairEligibility.CardRetrievalCandidate
+            : RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod;
+        var reason = eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate
+            ? "出馬表の探索対象期間内です。実際の公開有無は収集時に確認します。"
+            : $"出馬表の探索対象期間（{cardLookupStart:yyyy-MM-dd}以降）外のため、現行の公式取得元から補正できません。";
+        return new(race.RaceId, $"{date:yyyyMMdd}:{course}:{number}", race.RaceName,
+            race.RacecourseCode ?? course, number, race.Entries.Count,
+            race.Entries.Count(x => string.IsNullOrWhiteSpace(x.OwnerName)), date, eligibility, reason);
+    }
+
+    private const string RaceEntryOwnerMigrationBatchId = "migration:race-entry-owners:v2";
+    private static async Task<IReadOnlyList<RaceEntryOwnerRepairCandidate>> GetRaceEntryOwnerMigrationCandidatesAsync(
+        IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken token)
+    {
+        using var db = dbContextProvider.CreateContext();
+        var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+            .OrderBy(x => x.RaceDate).ThenBy(x => x.RacecourseCode).ThenBy(x => x.RaceNumber)
+            .ToListAsync(token).ConfigureAwait(false);
+        return races.Where(x => x.RaceDate.HasValue && x.RaceNumber.HasValue && x.Entries.Count > 0)
+            .Select(ToRaceEntryOwnerRepairCandidate).Where(x => x.MissingOwnerCount > 0).ToArray();
+    }
+
+    private static CollectionBulkTarget ToRaceEntryOwnerMigrationTarget(RaceEntryOwnerRepairCandidate candidate) =>
+        new(new(ResourceType.Race, "JRA", candidate.ResourceId), candidate.Date,
+            new Dictionary<string, string>
+            {
+                ["domainRaceId"] = candidate.RaceId,
+                ["date"] = candidate.Date.ToString("yyyy-MM-dd"),
+                ["course"] = candidate.RacecourseCode,
+                ["number"] = candidate.RaceNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["ownerRepair"] = "true",
+            });
+
+    private static RaceEntryOwnerMigrationProgress BuildRaceEntryOwnerMigrationProgress(
+        IReadOnlyList<RaceEntryOwnerRepairCandidate> missing,
+        IReadOnlyList<CollectionBatchResourceStatus> batch)
+    {
+        var missingIds = missing.Select(x => x.ResourceId).ToHashSet(StringComparer.Ordinal);
+        var batchIds = batch.Select(x => x.Resource.Id).ToHashSet(StringComparer.Ordinal);
+        var classified = missing.Select(x => batchIds.Contains(x.ResourceId)
+            ? x with
+            {
+                Eligibility = RaceEntryOwnerRepairEligibility.ExistingRequest,
+                EligibilityReason = "同じmigration batchの補正要求が既に存在します。"
+            }
+            : x).ToArray();
+        var corrected = batch.Count(x => !missingIds.Contains(x.Resource.Id));
+        var processing = batch.Count(x => missingIds.Contains(x.Resource.Id)
+            && x.StateStatus != CollectionStateStatus.Unavailable
+            && x.LatestTaskStatus is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready
+                or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting
+                or CollectionTaskStatus.WaitingDiscovery);
+        var failed = batch.Count(x => missingIds.Contains(x.Resource.Id)
+            && x.StateStatus != CollectionStateStatus.Unavailable
+            && x.LatestTaskStatus is CollectionTaskStatus.Failed or CollectionTaskStatus.DeadLetter
+                or CollectionTaskStatus.Cancelled);
+        var outsideWindow = classified.Count(x => x.Eligibility == RaceEntryOwnerRepairEligibility.OutsideCardLookupPeriod);
+        var unavailable = outsideWindow + batch.Count(x => missingIds.Contains(x.Resource.Id)
+            && x.StateStatus == CollectionStateStatus.Unavailable);
+        var actionable = classified.Count(x => x.Eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate);
+        return new(RaceEntryOwnerMigrationBatchId, batch.Count, corrected, processing, failed, unavailable,
+            missing.Count, classified, actionable, outsideWindow);
+    }
+
+    private static string CanonicalRaceCourse(string? value) => value?.Trim() switch
+    {
+        "札幌" or "Sapporo" => "Sapporo",
+        "函館" or "Hakodate" => "Hakodate",
+        "福島" or "Fukushima" => "Fukushima",
+        "新潟" or "Niigata" => "Niigata",
+        "東京" or "Tokyo" => "Tokyo",
+        "中山" or "Nakayama" => "Nakayama",
+        "中京" or "Chukyo" => "Chukyo",
+        "京都" or "Kyoto" => "Kyoto",
+        "阪神" or "Hanshin" => "Hanshin",
+        "小倉" or "Kokura" => "Kokura",
+        _ => throw new InvalidOperationException($"Unsupported JRA racecourse '{value}'.")
+    };
 
     private static RevisionImpact BuildImpact(RevisionImpactRequest request) => request.ScopeType switch
     {
@@ -546,6 +721,26 @@ public sealed record RevisionRecollectionRequest(CollectionLane Lane = Collectio
 public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);
 public sealed record CreateRacePeriodRecollectionRequest(DateOnly From, DateOnly To, string Provider = "JRA",
     string? BatchId = null);
+public enum RaceEntryOwnerRepairEligibility
+{
+    CardRetrievalCandidate,
+    ExistingRequest,
+    OutsideCardLookupPeriod,
+}
+public sealed record RaceEntryOwnerRepairCandidate(string RaceId, string ResourceId, string? RaceName,
+    string RacecourseCode, int RaceNumber, int EntryCount, int MissingOwnerCount, DateOnly Date = default,
+    RaceEntryOwnerRepairEligibility Eligibility = RaceEntryOwnerRepairEligibility.CardRetrievalCandidate,
+    string? EligibilityReason = null);
+public sealed record RaceEntryOwnerRepairPreview(DateOnly Date, int RaceCount,
+    IReadOnlyList<RaceEntryOwnerRepairCandidate> Candidates);
+public sealed record RaceEntryOwnerRepairRequest(DateOnly Date, IReadOnlyList<string> RaceIds,
+    string? BatchId = null);
+public sealed record RaceEntryOwnerRepairReceipt(string BatchId, int TargetCount, int TasksCreated,
+    IReadOnlyList<Guid> TaskIds);
+public sealed record RaceEntryOwnerMigrationProgress(string BatchId, int Requested, int Corrected,
+    int Processing, int Failed, int Unavailable, int Remaining,
+    IReadOnlyList<RaceEntryOwnerRepairCandidate> Candidates, int Eligible = 0,
+    int OutsideCardLookupPeriod = 0);
 
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,
