@@ -186,6 +186,8 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 2026-09-19: production shadow run `35424418215` はAPI読取、46 finding、既知recovery 1 groupのpreviewに成功した。ASP.NETのJSON enumが数値であるためwriterが全findingをskipする統合不具合を検出し、数値/文字列の両表現をcanonical classificationへ正規化した。補正apply前に修正し、Python 5件で回帰確認した。
 - 2026-09-19: 起票再実行 `35424498489` で、同一report内の同一fingerprintが初回作成直後の未追跡recordをdirty競合と判定することを確認した。入力をfingerprint単位で先に集約し、Python 6件で同一run内の重複抑止を追加確認した。
 - 2026-09-19: 起票再実行 `35424554752` で、Gitが未追跡change recordディレクトリを省略表示したため検証対象を列挙できないことを確認した。workflowの列挙を `--untracked-files=all` に変更し、README単位でvalidation/commitする契約に修正した。
+- 2026-09-19: production canary `35424643889` は事前backupを作成し、5件を検査、0件変更、5件skip、0件失敗で安全に完了した。初期recipeがOwnerを扱わない一方でclassifierがOwnerを既知扱いしていた境界差を検出したため、Ownerは未知エラーとして起票するよう分類をrecipe対象と一致させた。
+- 2026-09-19: 最終本番確認 `35425200781` でfinding branchへmainをmergeする時点のbot identity未設定を検出した。identity設定をbranch準備前へ移し、merge commitとfinding commitで同じ限定bot identityを使用するよう修正した。
 
 ## Deviations and follow-up
 
