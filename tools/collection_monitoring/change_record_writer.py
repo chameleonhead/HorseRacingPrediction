@@ -192,9 +192,13 @@ def process_report(repo: Path, report: dict[str, Any], apply: bool) -> dict[str,
     created: list[str] = []
     updated: list[str] = []
     skipped: list[str] = []
+    seen: set[str] = set()
     for finding in report.get("findings", []):
         classification = normalize_classification(finding.get("classification"))
         fingerprint = sanitize(finding.get("fingerprint"), 64)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
         if classification not in ACTIONABLE_CLASSIFICATIONS:
             skipped.append(fingerprint)
             continue

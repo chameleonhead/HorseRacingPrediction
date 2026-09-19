@@ -67,6 +67,12 @@ class ChangeRecordWriterTests(unittest.TestCase):
         text = (self.repo / result["created"][0]).read_text(encoding="utf-8")
         self.assertIn("- Classification: `ProgramBug`", text)
 
+    def test_duplicate_fingerprint_in_one_report_is_coalesced(self):
+        report = self.report(3)
+        report["findings"].append(dict(report["findings"][0]))
+        result = process_report(self.repo, report, True)
+        self.assertEqual(1, len(result["created"]))
+
     def test_dirty_existing_record_is_not_overwritten(self):
         first = process_report(self.repo, self.report(), True)
         path = self.repo / first["created"][0]
