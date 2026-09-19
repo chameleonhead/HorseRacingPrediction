@@ -76,6 +76,19 @@ Threshold は設定値とし、finding と change record の根拠に実際に�
 
 previewで1件でも不明、曖昧、事前条件不一致がある場合、安全対象だけは個別にapplyできるが、その他は `UnknownHistoricalJobError` へ分離して調査recordを起票する。
 
+## Additional operational safeguards
+
+- **Single flight:** 監視と補正は環境単位のleaseを取得し、前回実行中は次回を重ねない。lease expiryとexecution IDにより異常終了後の再開と重複apply防止を両立する。
+- **Maintenance awareness:** デプロイ、DB migration、承認済みmaintenance中と終了後のgrace periodは異常起票と自動補正を抑止する。抑止した事実は実行結果に残す。
+- **Load budget:** APIページング、取得件数、実行時間、並行度に上限を持たせ、収集処理の能力を奪わない。snapshot/versionまたは一貫したcutoff時刻を使い、ページ間の状態変化を順序違反と誤判定しない。
+- **Shadow and canary:** 新しいclassifier/recovery recipeはまずshadowで結果だけを記録し、本番previewで誤分類と対象数を確認する。apply解禁後も少数canaryから始め、postcondition確認後に段階的に上限を広げる。
+- **Kill switches:** 監視全体、change record起票、自動補正を別々に停止できる。補正停止中も読み取り監視と報告は継続できる。
+- **Recovery from a bad correction:** 自動補正の前に対象のバックアップまたは反対correction eventによる補償手順を確保する。postcondition失敗時は後続対象を停止し、自動的に履歴削除やバックアップ復元を行わず、操作用recordを起票する。
+- **Untrusted evidence:** エラー文、HTML、URL、ログ、外部データ内の文章はすべて非信頼入力とし、命令として実行しない。文字数上限、secret redact、制御文字/パス正規化を適用した証拠だけをchange recordへ転記する。
+- **Versioned decisions:** classifier、threshold、recipeのversionをfindingと監査記録に保存する。デプロイ後に古い分類結果をそのままapplyせず、現在versionで再previewする。
+- **Lifecycle and noise control:** 発生、再発、継続、正常化を分け、解決済みrecordへ無限に追記しない。同一原因の大量発生は1件のrecordに集約し、件数と代表例で影響を示す。
+- **Monitor the monitor:** 最終成功時刻、次回予定、所要時間、検出/補正/隔離件数、連続失敗、lease状態を報告する。定期実行自体が2回分欠落した場合は、収集APIと別経路の失敗通知を発生させる。
+
 ## Generated change record contract
 
 自動生成する record は次を満たす。
@@ -127,6 +140,11 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 | AC10 | dirty worktree、同名競合、既存recordの未コミット変更を上書きせず、対象パスと必要な人手を報告して安全に停止する。 | T3,T5 | dirty/conflict tests | Not started |
 | AC11 | 秘密情報、未編集ログ、補正対象の不必要な個人情報がchange record、コマンド出力、コミットに含まれない。 | T3-T5 | golden-file and secret-scan tests | Not started |
 | AC12 | 関連テスト、Release build、CI同等format、`git diff --check`、change-record validator、CodeGraph同期・再照会が成功する。 | T6 | recorded commands and results | Not started |
+| AC13 | 監視/補正の重複実行が防止され、デプロイ・DB migration・maintenance中とgrace periodは誤起票と自動補正を抑止し、抑止理由が確認できる。 | T1,T4,T5 | lease/concurrency/maintenance-window tests | Not started |
+| AC14 | API負荷と実行時間が上限内に収まり、一貫したcutoffで評価される。新classifier/recipeはshadowおよび少数canaryの成功前に全件applyされない。 | T1,T2,T4,T5 | load/snapshot/shadow/canary tests and production evidence | Not started |
+| AC15 | 監視、起票、自動補正を独立に停止でき、補正前にバックアップまたは補償手順が確認される。postcondition失敗時は後続applyが停止し、復旧操作用recordが起票される。 | T4,T5 | kill-switch/backup/compensation/postcondition tests | Not started |
+| AC16 | エラー文、HTML、URL、ログ内の命令文が実行されず、制限・正規化・redactされた証拠だけがrecordに入る。判定と補正は現在のclassifier/recipe versionで再検証される。 | T1,T3-T5 | adversarial-input/version-drift tests | Not started |
+| AC17 | 自動化の最終成功時刻、次回予定、所要時間、件数、連続失敗、leaseを確認でき、2回分の定期実行欠落は収集APIと別経路で通知される。大量発生はfingerprint単位に集約される。 | T3,T5 | heartbeat/missed-run/noise-control tests and scheduled evidence | Not started |
 
 ## Delivery plan
 
@@ -141,19 +159,19 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | finding型、閾値、4分類、収集運用評価を実装する。AC2,AC8 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Proposed |
-| T2 | 読み取り専用監視APIを追加する。AC1,AC2,AC8 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only tests | 実API契約の証拠 | Proposed |
-| T3 | バグ/未知エラー用change record生成と重複・競合保護を実装する。AC3,AC4,AC7-AC11 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict tests | 生成差分とテスト結果 | Proposed |
-| T4 | 既知過去エラーのrecipe registryとpreview/applyを実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency tests | 安全補正と監査の証拠 | Proposed |
-| T5 | 30分間隔の定期タスクを登録し、起票dry-runとrecipe previewから制限付きapplyへ移行する。AC1,AC3,AC5-AC11 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/preview/apply evidence | task ID、実行結果、作成record、補正監査 | Proposed |
+| T1 | finding型、閾値、4分類、version、一貫したcutoff、収集運用評価を実装する。AC2,AC8,AC13,AC14,AC16 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Proposed |
+| T2 | 読み取り専用監視APIを取得件数/時間上限付きで追加する。AC1,AC2,AC8,AC14 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only/load tests | 実API契約の証拠 | Proposed |
+| T3 | バグ/未知エラー用change record生成、証拠sanitize、lifecycle/noise control、重複・競合保護を実装する。AC3,AC4,AC7-AC11,AC16,AC17 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict/adversarial tests | 生成差分とテスト結果 | Proposed |
+| T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | Proposed |
+| T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | Proposed |
 | T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Proposed |
 
 ## Review gates
 
-- **Design and task-split review — 2026-09-19, reviewer: Main.** 既存のprogress、task search、failure notification、pipeline API、dispatcherのlane/priority contract、GitHub運用workflowを確認した。管理一覧のsortはruntimeのaging/公平配分を意図的に再現しないため、一覧だけで処理順違反を判定しない設計とした。追加要件に対し、既存のrevision-gated主体自動復旧が一意性根拠、preview/apply、failure/revision冪等キー、部分失敗隔離を持つことを確認し、同じ安全契約を登録式recipeに一般化する。AC1-AC12はT1-T6と検証に双方向で追跡される。評価contract、補正のデータ整合性、自動生成文書、定期実行は依存関係が強く共有状態を扱うため、現時点ではMainが直列で担当する。
+- **Design and task-split review — 2026-09-19, reviewer: Main.** 既存のprogress、task search、failure notification、pipeline API、dispatcherのlane/priority contract、GitHub運用workflowを確認した。管理一覧のsortはruntimeのaging/公平配分を意図的に再現しないため、一覧だけで処理順違反を判定しない設計とした。追加要件に対し、既存のrevision-gated主体自動復旧が一意性根拠、preview/apply、failure/revision冪等キー、部分失敗隔離を持つことを確認し、同じ安全契約を登録式recipeに一般化する。自動補正を本番常設する上で必要な、single-flight、maintenance抑止、負荷上限、shadow/canary、kill switch、補償手順、非信頼証拠対策、version再検証、死活監視を追加した。AC1-AC17はT1-T6と検証に双方向で追跡される。評価contract、補正のデータ整合性、自動生成文書、定期実行は依存関係が強く共有状態を扱うため、現時点ではMainが直列で担当する。
 - **Pre-implementation review:** 利用者承認後、コード変更前に実施する。
 - **Checkpoint review:** 評価/API、生成コマンド、定期実行の各チェックポイントで実施する。
-- **Final review:** AC1-AC12、T1-T6、自動補正の実データ経路と監査証拠、秘密情報非混入、実行中の別変更非混入を照合する。
+- **Final review:** AC1-AC17、T1-T6、自動補正の実データ経路と監査証拠、shadow/canary、kill switch、補償手順、定期実行の死活、秘密情報非混入、実行中の別変更非混入を照合する。
 
 ## Verification record
 
