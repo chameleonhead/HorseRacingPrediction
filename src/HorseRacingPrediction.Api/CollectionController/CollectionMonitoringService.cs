@@ -222,7 +222,7 @@ public sealed class CollectionMonitoringService(
     {
         if (string.Equals(group.ErrorCode, "SubjectNotIdentified", StringComparison.Ordinal)
             && group.SampleResources.All(x => x.Type is ResourceType.Horse or ResourceType.Jockey
-                or ResourceType.Trainer or ResourceType.Owner))
+                or ResourceType.Trainer))
             return CollectionFindingClassification.KnownHistoricalJobError;
         if (string.Equals(group.ErrorCode, "StructuralPageFailure", StringComparison.Ordinal)
             || string.Equals(group.ErrorCode, "ValidationFailure", StringComparison.Ordinal)

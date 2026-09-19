@@ -46,6 +46,21 @@ public sealed class CollectionMonitoringServiceTests
     }
 
     [TestMethod]
+    public async Task Inspect_DoesNotClassifyUnsupportedOwnerFailureAsKnownRecovery()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        await CreateFailureAsync(scope.Store, now, "owner-profile", ResourceType.Owner,
+            "SubjectNotIdentified", "owner heading mismatch");
+
+        var finding = (await scope.CreateService().InspectAsync(now.AddMinutes(1))).Findings
+            .Single(x => x.Kind == "ActionableFailureGroup");
+
+        Assert.AreEqual(CollectionFindingClassification.UnknownHistoricalJobError, finding.Classification);
+        Assert.IsNull(finding.RecoveryRecipeId);
+    }
+
+    [TestMethod]
     public async Task Inspect_DetectsStalledDueTaskWithoutChangingIt()
     {
         using var scope = new MonitoringStoreScope();
