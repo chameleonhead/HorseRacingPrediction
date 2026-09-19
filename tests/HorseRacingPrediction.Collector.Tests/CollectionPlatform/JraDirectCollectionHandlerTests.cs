@@ -1,4 +1,5 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Collector.CollectionPlatform;
 using HorseRacingPrediction.Collector.Tests.TestSupport;
 using HorseRacingPrediction.Contracts;
@@ -207,6 +208,44 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.HasCount(1, card.RefreshRequests);
         Assert.HasCount(1, result.Requests);
         Assert.AreEqual(race, result.Requests.Single());
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_HistoricalResultOnly_RequestsHorseProfileWithIdentityAndRaceProvenance()
+    {
+        var date = new DateOnly(2020, 5, 3);
+        var race = new RaceId(date, RaceCourse.Kyoto, 11);
+        const string horseName = "ロンドンコーリング";
+        const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3";
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [9], [],
+                "https://example.test/result/11", true,
+                Entries: [new RaceEntry(9, horseName, 5, "テスト騎手", 55m,
+                    HorseSourceIdentity: horseUrl)]),
+        };
+        var requests = new RecordingRequestSink();
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results, requests: requests,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20200503:Kyoto:11"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "京都", ["number"] = "11" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        var item = requests.Requests.Single().Items.Single(x => x.ResourceType == ResourceType.Horse.ToString());
+        Assert.AreEqual(DeterministicIdGenerator.BuildHorseId(horseName, horseUrl), item.ResourceId);
+        Assert.AreEqual(horseUrl, item.ExplicitUrl);
+        Assert.AreEqual(date, item.EffectiveDate);
+        Assert.AreEqual("domain-race", item.Attributes!["requestedByRaceId"]);
+        Assert.AreEqual("Race", item.Attributes["discoveredFromType"]);
+        Assert.AreEqual("2020-05-03", item.Attributes["referenceRaceDate"]);
+        Assert.AreEqual("Kyoto", item.Attributes["referenceRaceCourse"]);
+        Assert.AreEqual("11", item.Attributes["referenceRaceNumber"]);
     }
 
     [TestMethod]
@@ -664,6 +703,25 @@ public sealed class JraDirectCollectionHandlerTests
             CancellationToken cancellationToken) => Task.FromResult(new CollectionRequestBulkResponse(
             request.Items.Select(item => new CollectionRequestBulkOutcome(item.ItemKey, "Rejected",
                 ErrorCode: "ResourceSuppressed")).ToArray()));
+    }
+
+    private sealed class RecordingRequestSink : ICollectionRequestSink
+    {
+        public List<CollectionRequestBulkRequest> Requests { get; } = [];
+
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
+            IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CollectionRequestBulkResponse> RequestManyAsync(CollectionRequestBulkRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new CollectionRequestBulkResponse(request.Items
+                .Select(item => new CollectionRequestBulkOutcome(item.ItemKey, "Created", Guid.NewGuid(), Guid.NewGuid()))
+                .ToArray()));
+        }
     }
 
     [TestMethod]

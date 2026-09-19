@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
+using System.Globalization;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -62,11 +64,18 @@ public sealed partial class JraNavigator
 
     private async Task<JraSubjectPage> FindHorseAsync(JraSubjectIdentity subject, CancellationToken token)
     {
+        const int maximumReferenceCandidates = 8;
+        const int maximumHistoryPagesPerCandidate = 12;
+        const int maximumHistoryPagesTotal = 48;
         await OpenHorseSearchAsync(subject.Name, token);
         var found = new List<(PageLinkSnapshot Link, int Page, JraSubjectPage? Parsed)>();
         var evidence = new BoundedHorseCandidateEvidence();
+        var evidenceDetails = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pages = new HashSet<string>();
         var pageNumber = 0;
+        var inspectedReferenceCandidates = 0;
+        var inspectedHistoryPages = 0;
+        var referenceStopwatch = Stopwatch.StartNew();
         while (true)
         {
             var snapshot = await _browser.GetDataPageSnapshotAsync(token);
@@ -93,24 +102,76 @@ public sealed partial class JraNavigator
             foreach (var link in candidates)
             {
                 if (subject.SourceIdentity is not null && link.Url != subject.SourceIdentity) continue;
-                if (subject.BirthDate is null) { found.Add((link, pageNumber, null)); continue; }
+                var useReferenceRace = subject.SourceIdentity is null
+                    && subject.BirthDate is null
+                    && subject.ReferenceRace is not null;
+                if (subject.BirthDate is null && !useReferenceRace)
+                {
+                    found.Add((link, pageNumber, null));
+                    continue;
+                }
+                if (useReferenceRace)
+                {
+                    inspectedReferenceCandidates++;
+                    if (inspectedReferenceCandidates > maximumReferenceCandidates
+                        || inspectedHistoryPages >= maximumHistoryPagesTotal
+                        || referenceStopwatch.Elapsed > TimeSpan.FromSeconds(30))
+                        throw ReferenceBudgetExceeded(subject, evidence, evidenceDetails, _browser.CurrentUrl);
+                }
                 await _browser.ClickLinkForSnapshotAsync(link, token);
                 await _browser.WaitForContentAsync(["競走馬情報", subject.Name], token);
+                token.ThrowIfCancellationRequested();
                 var candidate = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(token), "Horse");
-                if (SubjectProfilePageParser.TryDate(candidate.Profile.Fields.GetValueOrDefault("生年月日") ?? "", out var birth) && birth == subject.BirthDate)
-                    found.Add((link, pageNumber, candidate));
-                await _browser.GoBackForSnapshotAsync(token);
+                var firstCandidate = candidate;
+                var historyPageCount = 1;
+                var historySignatures = new HashSet<string>(StringComparer.Ordinal);
+                if (useReferenceRace) inspectedHistoryPages++;
+                var temporalContradiction = useReferenceRace
+                    ? DescribeTemporalContradiction(candidate, subject.ReferenceRace!.Date)
+                    : null;
+                var referenceMatched = useReferenceRace && temporalContradiction is null
+                    && ContainsRace(candidate, subject.ReferenceRace!);
+                while (!referenceMatched && useReferenceRace && candidate.NextPage is not null
+                    && temporalContradiction is null
+                    && !HistoryHasPassedReferenceDate(candidate, subject.ReferenceRace!.Date))
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!historySignatures.Add(string.Join('|', candidate.Races.Select(race => race.Key))))
+                        throw new JraCollectionException("競走馬履歴のページ送りが進みません。");
+                    if (historyPageCount >= maximumHistoryPagesPerCandidate
+                        || inspectedHistoryPages >= maximumHistoryPagesTotal
+                        || referenceStopwatch.Elapsed > TimeSpan.FromSeconds(30))
+                        throw ReferenceBudgetExceeded(subject, evidence, evidenceDetails, _browser.CurrentUrl);
+                    candidate = await NextHorseHistoryPageAsync(candidate, token)
+                        ?? throw new JraCollectionException("競走馬履歴の次ページを取得できませんでした。");
+                    historyPageCount++;
+                    inspectedHistoryPages++;
+                    referenceMatched = ContainsRace(candidate, subject.ReferenceRace);
+                }
+                if (useReferenceRace)
+                    evidenceDetails[link.Url] = temporalContradiction
+                        ?? (referenceMatched ? "起点レース完全一致" : "起点レース一致なし");
+                if ((subject.BirthDate is not null
+                        && SubjectProfilePageParser.TryDate(firstCandidate.Profile.Fields.GetValueOrDefault("生年月日") ?? "", out var birth)
+                        && birth == subject.BirthDate)
+                    || (useReferenceRace && referenceMatched))
+                    found.Add((link, pageNumber, firstCandidate));
+                for (var historyPage = 0; historyPage < historyPageCount; historyPage++)
+                    await _browser.GoBackForSnapshotAsync(token);
             }
             var next = FindNext(links);
             if (next is null) break;
             await _browser.ClickLinkForSnapshotAsync(next, token); pageNumber++;
         }
         var recordedCandidates = evidence.Items.Select(x =>
-            new JraSubjectIdentificationCandidate(x.Title, x.Url)).ToArray();
+            new JraSubjectIdentificationCandidate(x.Title, x.Url,
+                evidenceDetails.GetValueOrDefault(x.Url))).ToArray();
         if (found.Count != 1)
             throw new JraSubjectIdentificationException(
                 found.Count == 0
-                    ? JraSubjectIdentificationFailureKind.NoCandidate
+                    ? subject.SourceIdentity is null && subject.BirthDate is null && subject.ReferenceRace is not null
+                        ? JraSubjectIdentificationFailureKind.HistoricalRaceEvidenceUnavailable
+                        : JraSubjectIdentificationFailureKind.NoCandidate
                     : JraSubjectIdentificationFailureKind.MultipleCandidates,
                 subject.SubjectType, subject.Name, candidates: recordedCandidates,
                 requestedUrl: subject.SourceIdentity, finalUrl: _browser.CurrentUrl);
@@ -136,6 +197,85 @@ public sealed partial class JraNavigator
         }
         return page;
     }
+
+    private static bool ContainsRace(JraSubjectPage page, RaceId referenceRace) => page.Races.Any(history =>
+        history.Date == referenceRace.Date
+        && RaceCourseNames.Parse(history.Course) == referenceRace.Course
+        && history.Link is not null
+        && TryGetRaceId(history.Link.Url, page.Url, out var race)
+        && race == referenceRace);
+
+    private static bool HistoryHasPassedReferenceDate(JraSubjectPage page, DateOnly referenceDate)
+    {
+        var dates = page.Races.Where(race => race.Date is not null).Select(race => race.Date!.Value).ToArray();
+        return dates.Length > 0 && dates.All(date => date < referenceDate);
+    }
+
+    private static string? DescribeTemporalContradiction(JraSubjectPage page, DateOnly referenceDate)
+    {
+        var fields = page.Profile.Fields;
+        if (SubjectProfilePageParser.TryDate(fields.GetValueOrDefault("生年月日") ?? string.Empty, out var birth)
+            && birth > referenceDate)
+            return $"生年月日{birth:yyyy-MM-dd}が起点レース日より後";
+        var deregistrationText = fields.GetValueOrDefault("抹消年月日")
+            ?? fields.GetValueOrDefault("登録抹消日")
+            ?? string.Empty;
+        if (SubjectProfilePageParser.TryDate(deregistrationText, out var deregistration)
+            && deregistration < referenceDate)
+            return $"抹消年月日{deregistration:yyyy-MM-dd}が起点レース日より前";
+        return null;
+    }
+
+    private static bool TryGetRaceId(string url, string baseUrl, out RaceId race)
+    {
+        race = null!;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var resolved)
+            && (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var parent) || !Uri.TryCreate(parent, url, out resolved)))
+            return false;
+        if (!resolved.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !resolved.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            || !resolved.AbsolutePath.Equals("/JRADB/accessS.html", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var match = Regex.Match(Uri.UnescapeDataString(resolved.Query),
+            @"(?:^|[?&])CNAME=pw01sde10(?<course>\d{2})\d{8}(?<number>\d{2})(?<date>\d{8})/",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success
+            || !DateOnly.TryParseExact(match.Groups["date"].Value, "yyyyMMdd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date)
+            || !int.TryParse(match.Groups["number"].Value, out var number)
+            || number is < 1 or > 12)
+            return false;
+        var course = match.Groups["course"].Value switch
+        {
+            "01" => RaceCourse.Sapporo,
+            "02" => RaceCourse.Hakodate,
+            "03" => RaceCourse.Fukushima,
+            "04" => RaceCourse.Niigata,
+            "05" => RaceCourse.Tokyo,
+            "06" => RaceCourse.Nakayama,
+            "07" => RaceCourse.Chukyo,
+            "08" => RaceCourse.Kyoto,
+            "09" => RaceCourse.Hanshin,
+            "10" => RaceCourse.Kokura,
+            _ => RaceCourse.Unknown,
+        };
+        if (course == RaceCourse.Unknown) return false;
+        race = new RaceId(date, course, number);
+        return true;
+    }
+
+    private static JraSubjectIdentificationException ReferenceBudgetExceeded(
+        JraSubjectIdentity subject,
+        BoundedHorseCandidateEvidence evidence,
+        IReadOnlyDictionary<string, string> details,
+        string? finalUrl) => new(
+        JraSubjectIdentificationFailureKind.HistoricalRaceEvidenceBudgetExceeded,
+        subject.SubjectType,
+        subject.Name,
+        candidates: evidence.Items.Select(item => new JraSubjectIdentificationCandidate(
+            item.Title, item.Url, details.GetValueOrDefault(item.Url))),
+        requestedUrl: subject.SourceIdentity,
+        finalUrl: finalUrl);
 
     internal sealed class BoundedHorseCandidateEvidence
     {

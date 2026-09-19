@@ -1424,4 +1424,90 @@ public sealed class JraNavigatorTests
         CollectionAssert.AreEqual(new[] { "競走馬情報", "テストホース" },
             browser.ContentWaits.Single().ToArray());
     }
+
+    [TestMethod]
+    public async Task ToSubjectProfileAsync_DuplicateHorse_UsesExactHistoricalRaceEvidence()
+    {
+        const string searchFormUrl = "https://www.jra.go.jp/JRADB/accessO.html";
+        const string searchResultUrl = "https://www.jra.go.jp/JRADB/search/horse";
+        const string retiredProfileUrl = "https://www.jra.go.jp/JRADB/accessU.html?horse=retired";
+        const string currentProfileUrl = "https://www.jra.go.jp/JRADB/accessU.html?horse=current";
+        const string exactRaceUrl =
+            "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604030620260912/00";
+        var referenceRace = new RaceId(new DateOnly(2026, 9, 12), RaceCourse.Nakayama, 6);
+        var browser = new FakeWebBrowser();
+        browser.SetClickDestination("競走馬検索", searchFormUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(searchResultUrl, new TestPageSnapshot(searchResultUrl, "競走馬検索", [new(
+            "検索結果", string.Empty,
+            [new(retiredProfileUrl, "ロンドンコーリング"), new(currentProfileUrl, "ロンドンコーリング")],
+            [], [], ["競走馬検索"])]));
+        browser.SetSnapshot(retiredProfileUrl, BuildHorseProfile(
+            retiredProfileUrl, "ロンドンコーリング", "2000年1月2日", "2003年4月1日", null));
+        browser.SetSnapshot(currentProfileUrl, BuildHorseProfile(
+            currentProfileUrl, "ロンドンコーリング", "2023年1月2日", null, exactRaceUrl));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var page = await navigator.ToSubjectProfileAsync(
+            new("Horse", "ロンドンコーリング", ReferenceRace: referenceRace));
+
+        Assert.AreEqual(currentProfileUrl, page.Profile.SourceIdentity);
+        Assert.IsTrue(page.Races.Any(race => race.Date == referenceRace.Date
+            && race.Course == "中山" && race.Link?.Url == exactRaceUrl));
+    }
+
+    [TestMethod]
+    public async Task ToSubjectProfileAsync_DuplicateHorse_WithoutExactRace_StopsWithTemporalEvidence()
+    {
+        const string searchFormUrl = "https://www.jra.go.jp/JRADB/accessO.html";
+        const string searchResultUrl = "https://www.jra.go.jp/JRADB/search/horse";
+        const string retiredProfileUrl = "https://www.jra.go.jp/JRADB/accessU.html?horse=retired";
+        const string otherProfileUrl = "https://www.jra.go.jp/JRADB/accessU.html?horse=other";
+        var browser = new FakeWebBrowser();
+        browser.SetClickDestination("競走馬検索", searchFormUrl);
+        browser.SetSubmitDestination(searchResultUrl);
+        browser.SetSnapshot(searchResultUrl, new TestPageSnapshot(searchResultUrl, "競走馬検索", [new(
+            "検索結果", string.Empty,
+            [new(retiredProfileUrl, "ロンドンコーリング"), new(otherProfileUrl, "ロンドンコーリング")],
+            [], [], ["競走馬検索"])]));
+        browser.SetSnapshot(retiredProfileUrl, BuildHorseProfile(
+            retiredProfileUrl, "ロンドンコーリング", "2000年1月2日", "2003年4月1日", null));
+        browser.SetSnapshot(otherProfileUrl, BuildHorseProfile(
+            otherProfileUrl, "ロンドンコーリング", "2023年1月2日", null, null));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var error = await Assert.ThrowsExactlyAsync<JraSubjectIdentificationException>(() =>
+            navigator.ToSubjectProfileAsync(new("Horse", "ロンドンコーリング",
+                ReferenceRace: new(new DateOnly(2026, 9, 12), RaceCourse.Nakayama, 6))));
+
+        Assert.AreEqual(JraSubjectIdentificationFailureKind.HistoricalRaceEvidenceUnavailable, error.Kind);
+        Assert.IsTrue(error.Candidates.Any(candidate =>
+            candidate.Url == retiredProfileUrl
+            && candidate.Evidence?.Contains("抹消年月日2003-04-01") == true));
+        Assert.IsTrue(error.Candidates.Any(candidate =>
+            candidate.Url == otherProfileUrl && candidate.Evidence == "起点レース一致なし"));
+    }
+
+    private static TestPageSnapshot BuildHorseProfile(
+        string profileUrl,
+        string name,
+        string birthDate,
+        string? deregistrationDate,
+        string? raceUrl)
+    {
+        var profileRows = new List<IReadOnlyList<string>> { new[] { "生年月日", birthDate } };
+        if (deregistrationDate is not null)
+            profileRows.Add(new[] { "抹消年月日", deregistrationDate });
+        var tables = new List<TestPageTable> { new(["項目", "値"], profileRows) };
+        if (raceUrl is not null)
+        {
+            IReadOnlyList<IReadOnlyList<string>> rows = [new[] { "2026年9月12日", "中山", "第6競走" }];
+            IReadOnlyList<IReadOnlyList<TestPageCell>> cells = [[
+                new("2026年9月12日"), new("中山"),
+                new("第6競走", [new("a", [], "第6競走", raceUrl)])]];
+            tables.Add(new(["年月日", "場", "レース名"], rows, cells));
+        }
+        return new(profileUrl, "競走馬情報", [new(
+            "競走馬情報", string.Empty, [], [], tables, [$"競走馬情報 {name}"])]);
+    }
 }

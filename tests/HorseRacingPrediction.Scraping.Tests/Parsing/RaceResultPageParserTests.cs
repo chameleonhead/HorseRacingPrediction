@@ -47,6 +47,33 @@ public sealed class RaceResultPageParserTests
     }
 
     [TestMethod]
+    public void Parse_HorseNameCellProfileLink_SetsHorseSourceIdentity()
+    {
+        const string profilePath = "/JRADB/accessU.html?CNAME=pw01dud102024102539/E3";
+        var rows = new[] { new[] { "1", "9", "ロンドンコーリング", "木幡 巧也", "1:13.4" } };
+        var cells = new[]
+        {
+            new[]
+            {
+                new TestPageCell("1"), new TestPageCell("9"),
+                new TestPageCell("ロンドンコーリング", [new("a", [], "ロンドンコーリング", profilePath)]),
+                new TestPageCell("木幡 巧也"), new TestPageCell("1:13.4"),
+            },
+        };
+        var table = new TestPageTable(["着順", "馬番", "馬名", "騎手", "タイム"], rows, cells);
+        var payout = new TestPageTable(["式別", "組合せ", "払戻金"], [["単勝", "9", "250円"]]);
+        var snapshot = new TestPageSnapshot("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202604030620260912/00",
+            "2026年9月12日 中山 6R 結果",
+            [new TestPageSection("レース結果", "天候 曇 ダート 不良", [], [], [table, payout],
+                ["2026年9月12日 中山 6R", "テストレース"])]);
+
+        var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud102024102539/E3",
+            page.Results.Single().HorseSourceIdentity);
+    }
+
+    [TestMethod]
     public void Parse_OfficialRaceCancellationWithoutResultTable_ReturnsTerminalCancellationPage()
     {
         var section = new TestPageSection("レース結果", "第11競走は取り止めとなりました", [], [], [],

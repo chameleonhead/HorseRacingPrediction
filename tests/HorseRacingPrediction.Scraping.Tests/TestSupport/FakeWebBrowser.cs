@@ -141,6 +141,17 @@ internal sealed class FakeWebBrowser : IWebBrowser
         throw new InvalidOperationException($"No click destination configured for text: {text}");
     }
 
+    public Task<string> ClickLinkAsync(
+        PageLinkSnapshot link,
+        CancellationToken cancellationToken = default)
+    {
+        _history.Push(CurrentUrl);
+        CurrentUrl = link.Url;
+        NavigatedUrls.Add(link.Url);
+        ClickedTexts.Add(link.Title);
+        return Task.FromResult(string.Empty);
+    }
+
     public Task<string> SelectOptionAsync(
         string fieldText,
         string optionText,
