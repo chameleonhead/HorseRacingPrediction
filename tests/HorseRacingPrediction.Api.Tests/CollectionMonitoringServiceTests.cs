@@ -145,6 +145,22 @@ public sealed class CollectionMonitoringServiceTests
         Assert.HasCount(1, await scope.Store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10));
     }
 
+    [TestMethod]
+    public async Task KnownRecoveryPreview_RequiresAnActuallyEligibleCandidate()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        await CreateFailureAsync(scope.Store, now, "horse-profile", ResourceType.Horse,
+            "SubjectNotIdentified", "missing deterministic identity evidence");
+        var service = scope.CreateService(new() { RecoveryEnabled = true });
+
+        var preview = await service.PreviewKnownRecoveryAsync(now.AddMinutes(1));
+
+        Assert.AreEqual(0, preview.MatchingFindingCount);
+        Assert.IsFalse(preview.SafeToApply);
+        StringAssert.Contains(preview.BlockingReason, "No matching");
+    }
+
     private static async Task CreateFailureAsync(CollectionPlatformStore store, DateTimeOffset now,
         string definitionId, ResourceType type, string errorCode, string message)
     {

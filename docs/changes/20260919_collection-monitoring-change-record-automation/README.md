@@ -188,6 +188,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 2026-09-19: 起票再実行 `35424554752` で、Gitが未追跡change recordディレクトリを省略表示したため検証対象を列挙できないことを確認した。workflowの列挙を `--untracked-files=all` に変更し、README単位でvalidation/commitする契約に修正した。
 - 2026-09-19: production canary `35424643889` は事前backupを作成し、5件を検査、0件変更、5件skip、0件失敗で安全に完了した。初期recipeがOwnerを扱わない一方でclassifierがOwnerを既知扱いしていた境界差を検出したため、Ownerは未知エラーとして起票するよう分類をrecipe対象と一致させた。
 - 2026-09-19: 最終本番確認 `35425200781` でfinding branchへmainをmergeする時点のbot identity未設定を検出した。identity設定をbranch準備前へ移し、merge commitとfinding commitで同じ限定bot identityを使用するよう修正した。
+- 2026-09-19: 本番previewが事前条件を満たさずskipされる候補もmatchingとして数え、不要なbackup/applyを繰り返し得ることを確認した。recipeの詳細条件を読み取り専用で先に評価し、実際に補正または抑止できる候補だけをcanary上限へ数えるよう共通化した。focused 11件が成功した。
 
 ## Deviations and follow-up
 
