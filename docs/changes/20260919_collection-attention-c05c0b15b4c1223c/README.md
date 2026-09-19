@@ -1,13 +1,13 @@
-# [自動検知] 1 trainer-profile tasks are stalled in Running.
+# [自動検知] 1 race-detail tasks are stalled in Running.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `ccd44d6598e4154b`
+- Finding fingerprint: `c05c0b15b4c1223c`
 - Classification: `OperationalCondition`
 - Kind: `StalledActiveTask`
-- Severity: `medium`
+- Severity: `high`
 - Classifier version: `1`
 
 ## Completion summary
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:40:56.5982606+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T14:42:00.7716914+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -35,12 +35,12 @@
 
 ## Evidence
 
-- `definition=trainer-profile`
+- `definition=race-detail`
 - `status=Running`
-- `lane=Background`
-- `priority=50`
-- `oldest=2026-09-18T11:00:03.9142520+09:00`
-- `sampleTaskIds=b2f1948c-4b31-47bf-9baa-f16f9d87f943`
+- `lane=Realtime`
+- `priority=100`
+- `oldest=2026-09-17T18:33:33.0381102+09:00`
+- `sampleTaskIds=9277266e-f9f3-45a8-8f81-7b3543b0d084`
 
 ## Proposed investigation
 
@@ -53,7 +53,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `ccd44d6598e4154b` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `c05c0b15b4c1223c` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,15 +65,11 @@
 
 ## Observation history
 
-- 2026-09-19T14:42:00.7716914+09:00: 再観測。severity=`medium`、summary=1 trainer-profile tasks are stalled in Running.。
-
-- 2026-09-19T14:41:12.3940259+09:00: 再観測。severity=`medium`、summary=1 trainer-profile tasks are stalled in Running.。
-
-- 2026-09-19T14:40:56.5982606+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T14:42:00.7716914+09:00: 初回検出。severity=`high`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `ccd44d6598e4154b` の調査・判断・検証の正本である。
+- このchange recordがfinding `c05c0b15b4c1223c` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -81,4 +77,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-ccd44d6598e4154b`
+- Directory: `20260919_collection-attention-c05c0b15b4c1223c`
