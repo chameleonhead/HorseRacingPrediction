@@ -1,10 +1,10 @@
-# [自動検知] race-discovery has 1 actionable TargetClosedException failures.
+# [自動検知] owner-identity has 48 actionable SubjectNotIdentified failures.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `731261d15ca6cff0`
+- Finding fingerprint: `60ab5e1bd5a26511`
 - Classification: `UnknownHistoricalJobError`
 - Kind: `ActionableFailureGroup`
 - Severity: `medium`
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T17:13:51.8037398+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T21:13:46.1384412+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -35,13 +35,13 @@
 
 ## Evidence
 
-- `definition=race-discovery`
+- `definition=owner-identity`
 - `status=Failed`
-- `errorCode=TargetClosedException`
-- `count=1`
-- `firstFailedAt=2026-09-19T16:44:35.8824849+09:00`
-- `lastFailedAt=2026-09-19T16:44:35.8824849+09:00`
-- `sampleResources=Race/JRA/discovery:2026091818`
+- `errorCode=SubjectNotIdentified`
+- `count=48`
+- `firstFailedAt=2026-09-19T20:54:16.3800783+09:00`
+- `lastFailedAt=2026-09-19T21:11:24.6392416+09:00`
+- `sampleResources=Owner/JRA/owner-47b8d470-bc2c-56ce-977e-962d0074c67e,Owner/JRA/owner-8224f690-04e2-5899-8351-c7e2cd15c131,Owner/JRA/owner-9315783d-3a5e-5243-a833-1be87c8d0494,Owner/JRA/owner-e7264464-0e97-552d-9600-44eae0b454b8,Owner/JRA/owner-e14fe530-5445-5c92-beb0-4823109ca01d`
 
 ## Proposed investigation
 
@@ -54,7 +54,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `731261d15ca6cff0` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `60ab5e1bd5a26511` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -66,29 +66,11 @@
 
 ## Observation history
 
-- 2026-09-19T21:13:46.1384412+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T20:47:26.3675359+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T20:43:39.4965676+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T20:13:43.2116985+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T19:43:52.7457668+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T19:13:54.8561706+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T18:43:53.3712534+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T18:13:56.9430307+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T17:43:53.8891729+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
-
-- 2026-09-19T17:13:51.8037398+09:00: 初回検出。severity=`medium`、classification=`UnknownHistoricalJobError`。
+- 2026-09-19T21:13:46.1384412+09:00: 初回検出。severity=`medium`、classification=`UnknownHistoricalJobError`。
 
 ## Documentation updates
 
-- このchange recordがfinding `731261d15ca6cff0` の調査・判断・検証の正本である。
+- このchange recordがfinding `60ab5e1bd5a26511` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -96,4 +78,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-731261d15ca6cff0`
+- Directory: `20260919_collection-attention-60ab5e1bd5a26511`
