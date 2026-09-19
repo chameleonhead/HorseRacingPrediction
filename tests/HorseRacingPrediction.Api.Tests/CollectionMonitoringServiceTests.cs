@@ -25,6 +25,7 @@ public sealed class CollectionMonitoringServiceTests
 
         Assert.IsNotNull(report);
         Assert.IsTrue(report.Enabled);
+        Assert.AreEqual(CollectionMonitoringOutcome.Healthy, report.Outcome);
     }
 
     [TestMethod]
@@ -40,9 +41,23 @@ public sealed class CollectionMonitoringServiceTests
 
         var finding = report.Findings.Single(x => x.Kind == "ActionableFailureGroup");
         Assert.AreEqual(CollectionFindingClassification.ProgramBug, finding.Classification);
+        Assert.AreEqual(CollectionMonitoringOutcome.ActionRequired, report.Outcome);
         Assert.IsFalse(finding.Evidence.Any(x => x.Contains("```", StringComparison.Ordinal)));
         Assert.IsFalse(finding.Evidence.Any(x => x.Contains("<!--", StringComparison.Ordinal)));
         Assert.AreEqual("1", finding.ClassifierVersion);
+    }
+
+    [TestMethod]
+    public async Task Inspect_UsesFindingRecordedForNonUrgentFindings()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        await CreateFailureAsync(scope.Store, now, "horse-profile", ResourceType.Horse,
+            "SubjectNotIdentified", "known historical identity failure");
+
+        var report = await scope.CreateService().InspectAsync(now.AddMinutes(1));
+
+        Assert.AreEqual(CollectionMonitoringOutcome.FindingRecorded, report.Outcome);
     }
 
     [TestMethod]
