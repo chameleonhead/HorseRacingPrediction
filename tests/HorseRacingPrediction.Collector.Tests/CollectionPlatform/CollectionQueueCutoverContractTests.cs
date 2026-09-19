@@ -11,25 +11,15 @@ public sealed class CollectionQueueCutoverContractTests
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
     private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
-    private static string MonitoringWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-monitoring.yml"));
     private static string LocalMonitoringRunner => File.ReadAllText(Path.Combine(Root, "tools", "collection_monitoring", "invoke_local_monitor.ps1"));
     private static string Compose => File.ReadAllText(Path.Combine(Root, "deploy", "docker-compose.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
 
     [TestMethod]
-    public void MonitoringWorkflow_RecognizesNumericActionRequiredOutcome()
+    public void MonitoringWorkflow_IsRemovedAfterLocalCodexTaskCutover()
     {
-        StringAssert.Contains(MonitoringWorkflow, ".outcome == 2");
-        StringAssert.Contains(MonitoringWorkflow, "Mark actionable monitoring result");
-    }
-
-    [TestMethod]
-    public void MonitoringWorkflow_IsReadOnlyAndDoesNotCreatePullRequests()
-    {
-        StringAssert.Contains(MonitoringWorkflow, "contents: read");
-        Assert.IsFalse(MonitoringWorkflow.Contains("pull-requests: write", StringComparison.Ordinal));
-        Assert.IsFalse(MonitoringWorkflow.Contains("gh pr create", StringComparison.Ordinal));
-        Assert.IsFalse(MonitoringWorkflow.Contains("change_record_writer.py", StringComparison.Ordinal));
+        Assert.IsFalse(File.Exists(Path.Combine(Root, ".github", "workflows", "collection-monitoring.yml")));
+        Assert.IsTrue(File.Exists(Path.Combine(Root, "tools", "collection_monitoring", "invoke_local_monitor.ps1")));
     }
 
     [TestMethod]
