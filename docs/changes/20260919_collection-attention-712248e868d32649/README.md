@@ -64,6 +64,8 @@
 
 ## Observation history
 
+- 2026-09-19T22:13:49.9542440+09:00: 再観測。severity=`high`、summary=24 of 24 discovered races for 2026-09-19 do not have a current card.。
+
 - 2026-09-19T22:12:20.5523210+09:00: 初回検出。severity=`high`、classification=`OperationalCondition`。
 
 ## Documentation updates
