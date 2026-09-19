@@ -1,13 +1,13 @@
-# [自動検知] 2 trainer-profile tasks are stalled in Ready.
+# [自動検知] The collection pipeline has remained paused beyond the allowed duration.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `98e19fe16717d933`
+- Finding fingerprint: `854a28e622207b67`
 - Classification: `OperationalCondition`
-- Kind: `StalledActiveTask`
-- Severity: `medium`
+- Kind: `UnexpectedPipelinePause`
+- Severity: `high`
 - Classifier version: `1`
 
 ## Completion summary
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T15:43:52.0331893+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T17:43:53.8891729+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -35,17 +35,13 @@
 
 ## Evidence
 
-- `definition=trainer-profile`
-- `status=Ready`
-- `lane=Background`
-- `priority=60`
-- `oldest=2026-09-18T10:59:11.6253090+09:00`
-- `sampleTaskIds=404448c3-b6f7-4ad3-af29-de7a43cacd41,d689c4ac-6a1b-4e1c-bf3d-a202250a753e`
+- `pausedAt=2026-09-19T16:44:35.8824849+09:00`
+- `reason=Unexpected collection failure notification e20c9481-4c40-4aec-a07f-fb9dd1d64440: Task=c5561eb9-0280-401e-ba7c-ad051657ac2c; Error=TargetClosedException; Target page, context or browser has been closedCall log: - navigating to "https://www.jra.go.jp/keiba/", waiting until "domcontentloaded"`
 
 ## Proposed investigation
 
 1. pipeline、lease、dispatcher、worker capacityの保存済み状態を調査する。
-2. 推奨scopeを検証する: Inspect worker capacity, leases, availability, and the most recent attempts.
+2. 推奨scopeを検証する: Confirm whether the pause is intentional and resume only after the blocking condition is understood.
 3. 修正案または補正案ごとのデータ損失、誤結合、再発、rollbackリスクを比較する。
 4. 観測可能な受け入れ基準を確定し、利用者の承認を得る。
 
@@ -53,7 +49,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `98e19fe16717d933` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `854a28e622207b67` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,15 +61,11 @@
 
 ## Observation history
 
-- 2026-09-19T17:43:53.8891729+09:00: 再観測。severity=`medium`、summary=4 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=4 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T15:43:52.0331893+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T17:43:53.8891729+09:00: 初回検出。severity=`high`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `98e19fe16717d933` の調査・判断・検証の正本である。
+- このchange recordがfinding `854a28e622207b67` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -81,4 +73,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-98e19fe16717d933`
+- Directory: `20260919_collection-attention-854a28e622207b67`
