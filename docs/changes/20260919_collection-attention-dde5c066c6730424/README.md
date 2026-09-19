@@ -65,6 +65,8 @@
 
 ## Observation history
 
+- 2026-09-19T20:47:26.3675359+09:00: 再観測。severity=`high`、summary=Stalled higher-priority work was bypassed by at least three dispatch decisions in the same lane.。
+
 - 2026-09-19T20:43:39.4965676+09:00: 再観測。severity=`high`、summary=Stalled higher-priority work was bypassed by at least three dispatch decisions in the same lane.。
 
 - 2026-09-19T20:13:43.2116985+09:00: 再観測。severity=`high`、summary=Stalled higher-priority work was bypassed by at least three dispatch decisions in the same lane.。
