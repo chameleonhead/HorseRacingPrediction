@@ -36,6 +36,7 @@
 - 要対応状態をPR閲覧に依存せず利用者へ通知し、解消まで再通知する。
 - 要対応状態の発生、継続、acknowledgement、正常化を監査可能にする。
 - 通知経路自体の欠落を収集APIとは独立した経路で検知する。
+- 安全性を機械判定できる一過性の全体停止は、利用者への都度確認なしにpipelineを再開して収集を継続する。
 
 ## Non-goals
 
@@ -51,6 +52,18 @@
 
 恒久運用は、always-onのサービスまたはクラウドschedulerを一次検知・通知にし、Codexを診断、証拠整理、修正案change record作成に使うhybridを推奨する。ローカルCodex taskだけではPCまたはデスクトップアプリ停止中の保証がないため、唯一の死活監視にはしない。
 
+### Automatic continuation policy
+
+次の条件をすべて満たす停止を `AutomaticSafeResume` とし、停止証拠を保存した後にpipelineだけを再開する。失敗taskの履歴削除、failure解決、データ補正、同一taskの強制再実行は行わない。
+
+- pipelineの停止理由とfailure notificationが同一taskを指す。
+- error分類が事前登録済みの一過性インフラ障害であり、初期登録は `race-discovery` の `TargetClosedException` に限定する。
+- validation、parse、identity、ページ構造変化、データ不整合、権限、maintenance、手動停止ではない。
+- 同一fingerprintの連続自動再開が設定上限内である。初期値は6時間に1回、同一原因で再停止した場合は自動再開せず人へ通知する。
+- 再開後にpipelineがunpausedであり、実行中または完了件数の進行を観測できる。
+
+条件外は `HumanDecisionRequired` とし、change recordと通知を作るが再開しない。自動再開後も原因分類のコード修正案は別途起票し、再発防止を追跡する。
+
 ## Acceptance criteria
 
 | ID | Observable criterion | Verification | State |
@@ -60,7 +73,9 @@
 | AC3 | 正常化時に一度だけ復旧通知され、過去の要対応通知とfingerprintで追跡できる。 | transition tests | Not started |
 | AC4 | 監視が2回連続失敗、または60分以上欠落した場合、収集APIと別経路で通知される。 | missed-run/failure-sequence tests | Not started |
 | AC5 | 通知には停止開始、継続時間、原因task/error、finding/change record URL、人の判断事項が含まれ、秘密情報を含まない。 | output contract and secret scan | Not started |
-| AC6 | 通知処理は収集状態、task、データ、コード、PRを変更しない。 | before/after state assertions | Not started |
+| AC6 | 通知処理は収集状態、task、データ、コード、PRを変更せず、自動継続処理は許可されたpipeline resumeだけに分離される。 | before/after state assertions | Not started |
+| AC7 | 登録済みの一過性停止は証拠保存後にpipelineだけが自動再開され、収集の進行が観測される。 | production-shaped safe-resume test | Not started |
+| AC8 | 同一原因の再停止、未登録error、整合性関連error、maintenance/手動停止では自動再開されず要対応通知になる。 | negative-policy and rate-limit tests | Not started |
 
 ## Task plan
 
@@ -70,6 +85,7 @@
 | T2 | 独立通知sink、dedupe、ack、復旧通知を接続する。 | Main | T1 | automation configuration/tooling | delivery tests | Dependent |
 | T3 | 監視欠落を外部schedulerから検知するhybrid経路を接続する。 | Main + operator | T1 | deployment/automation | missed-run drill | Dependent |
 | T4 | pause fixtureで初回、継続、ack、復旧、監視不能を通し、14日安定化指標へ反映する。 | Main | T1-T3 | tests/docs | drill evidence | Dependent |
+| T5 | allowlist、再開回数上限、再開後progress検証を持つ安全な自動継続を接続する。 | Main | T1-T3 | monitoring/recovery automation | positive/negative production-shaped tests | Dependent |
 
 ## Review gates
 
@@ -80,4 +96,13 @@
 ## Human decision required
 
 - 本recordの恒久修正案を承認するか。
-- 現在停止中の `race-discovery` taskについて、原因調査後に限定再実行とpipeline再開を行うか。これは通知修正とは別の復旧操作として明示承認を必要とする。
+- 本recordの承認後は、`AutomaticSafeResume` 条件に一致する停止について都度承認を求めない。条件外の停止、失敗taskの再実行、データ補正、コード修正は引き続き個別の承認境界とする。
+
+## Incident recovery ledger
+
+- Incident: 2026-09-19 16:44 JST、`race-discovery` の `TargetClosedException` によりpipelineが全体停止。
+- Temporary recovery: 20:50 JST、停止理由とfailure groupを読み取り確認し、pipelineだけを再開。20:51および20:52 JSTに `isPaused=false`、実行中task 1件を確認。
+- Root cause: 閉じたbrowser sessionはhandler内で一度再試行されるが、二度目の例外は上位classifierで `PermanentFailure` となり、既定の `StopPipeline` により全体停止する。監視側は検知を成功runとして扱い通知しなかった。
+- Corrective proposal: typed notification state、独立通知、限定allowlistによる自動継続、再開回数上限、進行検証を実装する。
+- Permanent fix: Not started; approval pending.
+- Remaining risk: 同じ例外が再発した場合は恒久修正前のため自動再開せず通知する。
