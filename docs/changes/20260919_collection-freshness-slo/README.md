@@ -1,6 +1,6 @@
 # 週末レース情報の期限内収集を監視する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Code | Verified | race-detail task metadataのread-only projectionと4種の鮮度findingを実装。 |
 | Verification | Verified | 金曜境界、0件unknown、本番形状24/24・0/24、結果grace/18:30 fixtureを含む11テストが成功。 |
-| Deployment/operation | In progress | PR merge後のapp-deployとproduction shadowを本recordへ追記する。 |
+| Deployment/operation | Verified | deploy run 35448297743とproduction shadow run 35448927212で確認。 |
 
 ## Context
 
@@ -107,7 +107,7 @@ findingには対象日、評価時刻、期限、分母・分子・欠落数、�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | coverage snapshot、期限設定、4 findingの決定的評価を実装する。AC1-AC4,AC6,AC7 | Main | Lead tier | Approval | CollectionOperations/API monitoring and tests | evaluator/store tests | boundary and denominator evidence | Verified |
 | T2 | monitoring endpoint、writer、通知へcoverage evidenceとlifecycleを接続する。AC1-AC3,AC5-AC7 | Main | Lead tier | T1 | API/tooling/automation tests | integration/golden tests | generated finding and notification | Verified |
-| T3 | 本番read-only shadow、金曜/開催後checkpoint、正常化を検証し文書を更新する。AC5-AC7 | Main + operator | Lead tier | T1,T2 | automation/docs | production shadow and secret scan | scheduled evidence | In progress |
+| T3 | 本番read-only shadow、金曜/開催後checkpoint、正常化を検証し文書を更新する。AC5-AC7 | Main + operator | Lead tier | T1,T2 | automation/docs | production shadow and secret scan | scheduled evidence | Verified |
 
 ## Review gates
 
@@ -124,6 +124,7 @@ findingには対象日、評価時刻、期限、分母・分子・欠落数、�
 - 現行監視はtask停止・滞留を検出するが、上記のdomain completenessをfindingにしないことを確認した。
 - 2026-09-19 22:12 JST: deployment後shadow run 35445057660で鮮度findingが生成されることを確認した。一方、最新待機taskのmetadataを優先したため、保存済みの9月19日Cardも24/24不足と誤判定した。projectionをtask metadataではなく永続 `race_artifact_states` と `race_scheduling_evidence` 優先へ修正し、回帰テストを追加した。
 - 2026-09-19 22:46 JST: shadow run 35446435137で数値enumを含むActionRequired判定とwarning出力を確認した。永続artifactにも9月19日Card状態が移行されておらず、domainではEntryCount/ResultDeclaredAtが24/24存在するのにCard 0/24とする誤検知が残った。domain race summaryの件数をartifact projectionへ併合し、artifact移行遅延だけでは欠落扱いしない回帰テストを追加した。9月20日のdomain 0/24は引き続きCriticalとする。
+- 2026-09-19 23:30 JST: deploy run 35448297743成功後のshadow run 35448927212で、9月19日のCard/Result 24/24はfindingから消え、9月20日のCard 0/24だけがHighで残ることを確認した。全actionable findingはownerTaskと次の安全な操作を持ち、workflowはPRを生成しなかった。
 
 ## Human decision required
 

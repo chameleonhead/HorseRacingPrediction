@@ -10,9 +10,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 2026-09-19にユーザーが本recordの実装を明示承認。T1から順に実装中。 |
-| Verification | Not started | 静的な原因確認を実施済み。回帰・本番検証は各タスクに定義した。 |
-| Deployment/operation | Not started | 現行監視はGitHub Actions経由。ローカルAPI runnerへの切替が必要。 |
+| Code | Verified | owner ID共有契約、dispatch compatibility、flow診断、原因routing、DPAPI local runnerを実装。 |
+| Verification | Verified | API 256/257、Collector 276/276、CI、runner dry-run、production read-only runが成功。 |
+| Deployment/operation | Externally blocked | 本番revisionとread-only監視は確認済み。ローカルrunnerの初回DPAPI資格情報入力だけ利用者作業待ち。 |
 
 ## Context
 
@@ -87,24 +87,24 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | race entryから作られたowner task IDをowner参照APIが同一ownerとして解決し、既存IDも移行中に参照できる。 | T1 | producer→API integration test、既存ID inventory、migration preview | Not started |
-| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Not started |
-| AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Not started |
-| AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Not started |
-| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Not started |
-| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Not started |
-| AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Not started |
+| AC1 | race entryから作られたowner task IDをowner参照APIが同一ownerとして解決し、既存IDも移行中に参照できる。 | T1 | producer→API integration test、既存ID inventory、migration preview | Verified |
+| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Verified |
+| AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Verified |
+| AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Verified |
+| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Externally blocked |
+| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Verified |
+| AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Proposed |
-| T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Proposed |
-| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Proposed |
-| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Proposed |
-| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Proposed |
-| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Proposed |
+| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Verified |
+| T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Verified |
+| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Verified |
+| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Verified |
+| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Externally blocked |
+| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Verified |
 
 ## Review gates
 
@@ -120,7 +120,14 @@
 - 2026-09-19: CodeGraphでdispatch findingがlaneだけを比較しworker capabilityを照合しないことを確認した。
 - 2026-09-19: origin/mainの35件の`collection-attention-*` recordと、直近監視の49 findingを棚卸しした。
 - 2026-09-19: 本番監視の直近値をautomation memoryと実行証拠から照合した。秘密値と未編集ログは記録していない。
+- 2026-09-19: PR #46をCI run 35447676532成功後にmerge。PR #47で未承認owner migrationをpreview-onlyへ変更し、deploy run 35448297743は全job成功、pipeline pauseなし。
+- 2026-09-19: production read-only run 35448855309/35448927212が成功。51 findingすべてに原因・ownerTask・次操作があり、GitHub write/PR生成なし。内訳はfailure 3、dispatch 20、stalled 27、freshness 1。
+- 2026-09-19: `%LOCALAPPDATA%` のsettings/DPAPI credentialが未設定であることを確認。fixture dry-runは秘密値なしでmemoryとaction summaryを生成した。
 
 ## Deviations and follow-up
 
 - always-onの外部死活監視は本変更のACを妨げない除外follow-upとし、ownerはoperator、再検討条件はローカル監視の60分超欠落または14日予定実行率99%未満とする。
+
+## Human decision required
+
+- ローカルrunnerの初回設定として、`settings.json`のbase URL作成と `invoke_local_monitor.ps1 -ProvisionCredential` でproduction API keyを対話入力する。資格情報は現在のWindowsユーザー向けDPAPI暗号化ファイルとなり、リポジトリやautomation promptへ保存しない。

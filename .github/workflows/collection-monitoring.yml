@@ -48,7 +48,7 @@ jobs:
           jq -e '(.enabled | type == "boolean") and (.changeRecordEnabled | type == "boolean") and (.findings | type == "array")' "$work/report.json" >/dev/null
           jq '{cutoff, completedAt, enabled, changeRecordEnabled, suppressed, suppressionReason, truncated, outcome, actionRequired: (.outcome == 2 or .outcome == "actionRequired"), findingCount: (.findings | length)}' \
             "$work/report.json" | tee "$work/summary.json"
-          jq '{findingKinds: ([.findings[].kind] | group_by(.) | map({kind: .[0], count: length})), freshness: [.findings[] | select(.kind == "WeekendCardCoverageMissing" or .kind == "WeekendDiscoveryCoverageUnknown" or .kind == "RaceResultFreshnessMiss" or .kind == "RaceDayResultCoverageMissing") | {kind, severity, summary, evidence, ownerTask, nextSafeOperation}]}' \
+          jq '{findingKinds: ([.findings[].kind] | group_by(.) | map({kind: .[0], count: length})), freshness: [.findings[] | select(.kind == "WeekendCardCoverageMissing" or .kind == "WeekendDiscoveryCoverageUnknown" or .kind == "RaceResultFreshnessMiss" or .kind == "RaceDayResultCoverageMissing") | {kind, severity, summary, evidence, ownerTask, nextSafeOperation}], busiestFlows: (.definitionFlows | sort_by(-.active) | .[:20])}' \
             "$work/report.json"
           echo "report=$work/report.json" >> "$GITHUB_OUTPUT"
           echo "records_enabled=$(jq -r '.enabled and .changeRecordEnabled and (.suppressed | not)' "$work/report.json")" >> "$GITHUB_OUTPUT"
