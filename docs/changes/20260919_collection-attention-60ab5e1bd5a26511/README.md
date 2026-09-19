@@ -66,6 +66,8 @@
 
 ## Observation history
 
+- 2026-09-19T22:12:20.5523210+09:00: 再観測。severity=`medium`、summary=owner-identity has 144 actionable SubjectNotIdentified failures.。
+
 - 2026-09-19T21:43:58.6619323+09:00: 再観測。severity=`medium`、summary=owner-identity has 144 actionable SubjectNotIdentified failures.。
 
 - 2026-09-19T21:13:46.1384412+09:00: 初回検出。severity=`medium`、classification=`UnknownHistoricalJobError`。
