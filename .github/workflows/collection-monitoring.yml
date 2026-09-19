@@ -67,6 +67,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git ls-remote --exit-code --heads origin "$FINDING_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$FINDING_BRANCH"
             git checkout -B "$FINDING_BRANCH" "origin/$FINDING_BRANCH"
@@ -97,8 +99,6 @@ jobs:
           test "${#records[@]}" -gt 0
           python .codex/skills/document-driven-development/scripts/validate_change_records.py "${records[@]}"
           git diff --check -- "${records[@]}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- "${records[@]}"
           git commit -m "Record collection monitoring findings"
           git push --set-upstream origin "$FINDING_BRANCH"
