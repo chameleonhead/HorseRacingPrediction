@@ -217,7 +217,9 @@ public sealed class JraSubjectCollectionHandlerTests
             ["referenceRaceNumber"] = "2",
         }) with
         {
-            EffectiveDate = new DateOnly(2026, 9, 19),
+            // Recovery can be requested after the historical race date. The corroborated
+            // race metadata, not the task's scheduling date, identifies the evidence race.
+            EffectiveDate = new DateOnly(2026, 9, 20),
             Locations = [new(0, failedUrl, ResourceLocationSource.Explicit,
                 ResourceLocationStatus.Unknown, null)],
         };
