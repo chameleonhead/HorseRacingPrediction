@@ -305,6 +305,31 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task KeyedRecovery_RecreatesTaskWhenOriginallyReusedActiveTaskHasBecomeTerminal()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var active = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now);
+        var keyed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
+            now.AddSeconds(1), batchId: "repair:one", payloadFingerprint: "target-one");
+        Assert.AreEqual(active.TaskId, keyed.TaskId);
+        var lease = await store.AcquireAsync(active.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(active.TaskId, lease.LeaseToken, now.AddSeconds(3),
+            new(CollectionAttemptResult.Succeeded)));
+
+        var replay = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
+            now.AddSeconds(4), batchId: "repair:one", payloadFingerprint: "target-one");
+
+        Assert.AreNotEqual(Guid.Empty, replay.TaskId);
+        Assert.AreNotEqual(active.TaskId, replay.TaskId);
+        Assert.IsTrue(replay.CreatedTask);
+        Assert.AreEqual(keyed.RequestId, replay.RequestId);
+        Assert.AreEqual(CollectionTaskStatus.Ready,
+            (await store.GetTasksAsync(limit: 10)).Single(x => x.TaskId == replay.TaskId).Status);
+    }
+
+    [TestMethod]
     public async Task TaskMetadata_RejectsSecretBearingKeysBeforePersistence()
     {
         var store = await CreateStoreAsync();

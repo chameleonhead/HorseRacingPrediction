@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.Application.Queries.ReadModels;
@@ -38,11 +40,69 @@ public static partial class EndpointExtensions
                     JstTime.Now(), int.MaxValue, token).ConfigureAwait(false);
                 var byId = active.Where(IsSubjectIdentificationFailure)
                     .ToDictionary(x => x.NotificationId);
-                var missing = request.Items.Where(x => !byId.ContainsKey(x.NotificationId)).ToArray();
+                using var db = provider.CreateContext();
+                var requestedIds = request.Items.Select(x => x.NotificationId).ToArray();
+                var issueById = await db.SubjectIdentificationRepairIssues
+                    .Where(x => requestedIds.Contains(x.IssueId) && x.Status == "Open")
+                    .ToDictionaryAsync(x => x.IssueId, token).ConfigureAwait(false);
+                var missing = request.Items.Where(x => !byId.ContainsKey(x.NotificationId)
+                    && !issueById.ContainsKey(x.NotificationId)).ToArray();
                 if (missing.Length > 0)
                     return Results.Conflict(new[] { "対象の失敗状態が変わりました。再読込してください。" });
 
-                using var db = provider.CreateContext();
+                if (issueById.Count > 0)
+                {
+                    if (issueById.Count != request.Items.Count)
+                        return Results.Conflict(new[] { "事前判定候補と収集失敗は分けて実行してください。" });
+                    var issuePlans = new List<(SubjectIdentificationRepairIssue Issue,
+                        (string Id, string Name, Uri? Url) Target)>();
+                    foreach (var issue in issueById.Values)
+                    {
+                        var target = await ResolvePreDispatchRepairTargetAsync(db, issue, token).ConfigureAwait(false);
+                        if (target is null)
+                            return Results.Conflict(new[] { $"{issue.SubjectType}/{issue.SubjectId}: 補正先を一意に確認できません。" });
+                        issuePlans.Add((issue, target.Value));
+                    }
+                    var issueReceipts = new List<CollectionRequestReceipt>();
+                    foreach (var plan in issuePlans)
+                    {
+                        var issue = plan.Issue;
+                        var target = plan.Target;
+                        var recoveryKey = $"subject-repair:{issue.IssueId:N}:{issue.Occurrence}";
+                        var recoveryFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                            string.Join('|', issue.SubjectType, issue.DefinitionId, 3, target.Id,
+                                target.Url?.AbsoluteUri ?? string.Empty)))).ToLowerInvariant();
+                        CollectionRequestReceipt receipt;
+                        try
+                        {
+                            receipt = await collectionStore.RequestAsync(
+                                new(Enum.Parse<ResourceType>(issue.SubjectType), "JRA", target.Id),
+                                new(issue.DefinitionId), 3, CollectionReason.Recovery, JstTime.Now(),
+                                CollectionLane.Normal, (int)CollectionPriority.High, target.Url, recoveryKey,
+                                attributes: new Dictionary<string, string>
+                                {
+                                    ["name"] = target.Name,
+                                    ["requestedByRaceId"] = issue.RequestedByRaceId!,
+                                }, cancellationToken: token, payloadFingerprint: recoveryFingerprint)
+                                .ConfigureAwait(false);
+                        }
+                        catch (CollectionRequestIdempotencyMismatchException)
+                        {
+                            return Results.Conflict(new[]
+                            {
+                                $"{issue.SubjectType}/{issue.SubjectId}: 修復要求後に補正先が変化しました。再度候補を生成してください。",
+                            });
+                        }
+                        issue.Status = "Resolved"; issue.ResolvedAt = JstTime.Now();
+                        issue.TargetSubjectId = target.Id; issue.RecoveryTaskId = receipt.TaskId;
+                        issueReceipts.Add(receipt);
+                    }
+                    await db.SaveChangesAsync(token).ConfigureAwait(false);
+                    return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(
+                        request.Items.Count, issueReceipts.Count(x => x.CreatedTask),
+                        issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Select(x => x.TaskId).ToArray()));
+                }
+
                 var horsePreview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token)
                     .ConfigureAwait(false);
                 var plans = new List<(PendingCollectionFailureNotification Failure, Uri? Url, int Revision,
@@ -217,11 +277,72 @@ public static partial class EndpointExtensions
                     : IsObsoleteSubjectReference(failure.ErrorMessage) ? "DismissRecommended" : "Blocked",
                 ready, blocked, suggestedUrl, merge?.CandidateId, merge?.TargetHorseId ?? redirectedTarget));
         }
+        var issues = await db.SubjectIdentificationRepairIssues.AsNoTracking()
+            .Where(x => x.Status == "Open").OrderByDescending(x => x.CreatedAt).ToArrayAsync(token)
+            .ConfigureAwait(false);
+        foreach (var issue in issues)
+        {
+            var target = await ResolvePreDispatchRepairTargetAsync(db, issue, token).ConfigureAwait(false);
+            result.Add(new(issue.IssueId, Guid.Empty, Enum.Parse<ResourceType>(issue.SubjectType),
+                issue.SubjectId, issue.DefinitionId, issue.ReasonMessage, issue.CreatedAt,
+                target is null ? "Blocked" : "MergeReady", target is not null,
+                target is null ? "補正先を一意に確認できません。" : null, issue.SourceUrl,
+                MergeTargetId: target?.Id));
+        }
         return result;
     }
 
+    private static async Task<(string Id, string Name, Uri? Url)?> ResolvePreDispatchRepairTargetAsync(
+        EventStoreDbContext db, SubjectIdentificationRepairIssue issue, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(issue.RequestedByRaceId)) return null;
+        var race = await db.RacePredictionContexts.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.RaceId == issue.RequestedByRaceId, token).ConfigureAwait(false);
+        if (race is null || !Enum.TryParse<ResourceType>(issue.SubjectType, out var type)) return null;
+        var ids = type switch
+        {
+            ResourceType.Horse => race.Entries.Select(x => x.HorseId),
+            ResourceType.Jockey => race.Entries.Select(x => x.JockeyId).Where(x => x is not null).Cast<string>(),
+            ResourceType.Trainer => race.Entries.Select(x => x.TrainerId).Where(x => x is not null).Cast<string>(),
+            _ => [],
+        };
+        var candidates = new List<(string Id, string Name)>();
+        foreach (var id in ids.Distinct(StringComparer.Ordinal))
+        {
+            var name = type switch
+            {
+                ResourceType.Horse => await db.Horses.AsNoTracking().Where(x => x.HorseId == id)
+                    .Select(x => x.RegisteredName).SingleOrDefaultAsync(token),
+                ResourceType.Jockey => await db.Jockeys.AsNoTracking().Where(x => x.JockeyId == id)
+                    .Select(x => x.DisplayName).SingleOrDefaultAsync(token),
+                ResourceType.Trainer => await db.Trainers.AsNoTracking().Where(x => x.TrainerId == id)
+                    .Select(x => x.DisplayName).SingleOrDefaultAsync(token),
+                _ => null,
+            };
+            if (name is null) continue;
+            var normalized = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), name);
+            var expectedName = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), issue.SubjectName);
+            if (!string.Equals(normalized, expectedName, StringComparison.Ordinal)) continue;
+            var canonical = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name);
+            var expectedId = type == ResourceType.Horse
+                ? HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(canonical,
+                    HorseRacingPrediction.ApiClient.JraSourceIdentity.TryNormalizeHorse(issue.SourceIdentity, out _)
+                        ? issue.SourceIdentity : null)
+                : HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+                    type == ResourceType.Jockey ? "jockey" : "trainer",
+                    HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(canonical));
+            if (id == expectedId) candidates.Add((id, name));
+        }
+        if (candidates.DistinctBy(x => x.Id).Count() != 1) return null;
+        var target = candidates[0];
+        return (target.Id, target.Name,
+            TryNormalizeCorrectionUrl(issue.SourceUrl, out var url) ? url : null);
+    }
+
     private static bool IsSubjectIdentificationFailure(PendingCollectionFailureNotification failure) =>
-        string.Equals(failure.ErrorCode, SubjectNotIdentifiedErrorCode, StringComparison.Ordinal)
+        (string.Equals(failure.ErrorCode, SubjectNotIdentifiedErrorCode, StringComparison.Ordinal)
+            || string.Equals(failure.ErrorCode, "SubjectResourceMissing", StringComparison.Ordinal)
+            || string.Equals(failure.ErrorCode, "SubjectProjectionNotReady", StringComparison.Ordinal))
         && failure.Resource.Type is ResourceType.Horse or ResourceType.Jockey
             or ResourceType.Trainer or ResourceType.Owner;
 

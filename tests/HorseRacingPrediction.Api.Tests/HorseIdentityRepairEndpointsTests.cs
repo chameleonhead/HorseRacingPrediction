@@ -6,6 +6,7 @@ using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace HorseRacingPrediction.Api.Tests;
@@ -13,6 +14,183 @@ namespace HorseRacingPrediction.Api.Tests;
 [TestClass]
 public sealed class HorseIdentityRepairEndpointsTests
 {
+    [TestMethod]
+    public async Task PreDispatchIssue_IsVisibleAndCreatesCanonicalRecoveryWithoutSourceSuppression()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var name = $"事前補正馬{Guid.NewGuid():N}";
+        var targetId = DeterministicIdGenerator.BuildHorseId(name, null);
+        var raceId = $"race-{Guid.NewGuid():D}";
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
+            new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 1, "事前補正", raceId))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
+            new { EntryCount = 1 })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: name))).StatusCode);
+        var issueId = Guid.NewGuid();
+        using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            db.SubjectIdentificationRepairIssues.Add(new SubjectIdentificationRepairIssue
+            {
+                IssueId = issueId,
+                SubjectType = "Horse",
+                SubjectId = $"legacy-{Guid.NewGuid():N}",
+                SubjectName = name,
+                DefinitionId = "horse-profile",
+                RequestedByRaceId = raceId,
+                ReasonCode = "SubjectIdentityRepairRequired",
+                ReasonMessage = "ID不整合",
+                EvidenceFingerprint = Guid.NewGuid().ToString("N"),
+                Status = "Open",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.NotificationId == issueId);
+        Assert.IsTrue(candidate.SafeToExecute);
+        Assert.AreEqual(targetId, candidate.MergeTargetId);
+        using var execute = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest([new(issueId)]));
+        Assert.AreEqual(HttpStatusCode.Accepted, execute.StatusCode);
+        Assert.IsTrue((await store.GetTasksAsync(limit: 100)).Any(x => x.Resource.Id == targetId));
+        using var verifyDb = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
+        var issue = (await verifyDb.SubjectIdentificationRepairIssues.FindAsync(issueId))!;
+        Assert.AreEqual("Resolved", issue.Status);
+        var recoveryTaskId = issue.RecoveryTaskId;
+        issue.Status = "Open";
+        issue.ResolvedAt = null;
+        issue.RecoveryTaskId = null;
+        await verifyDb.SaveChangesAsync();
+
+        using var replay = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest([new(issueId)]));
+        Assert.AreEqual(HttpStatusCode.Accepted, replay.StatusCode);
+        var tasks = (await store.GetTasksAsync(limit: 100)).Where(x => x.Resource.Id == targetId).ToArray();
+        Assert.HasCount(1, tasks);
+        Assert.AreEqual(recoveryTaskId, tasks[0].TaskId);
+    }
+
+    [TestMethod]
+    public async Task PreDispatchIssue_BatchValidationFailureCreatesNoRecoveryTask()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var name = $"一括検証馬{Guid.NewGuid():N}";
+        var targetId = DeterministicIdGenerator.BuildHorseId(name, null);
+        var raceId = $"race-{Guid.NewGuid():D}";
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
+            new RegisterHorseRequest(name, name, null, null, HorseId: targetId))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 2, "一括検証", raceId))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
+            new { EntryCount = 1 })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: name))).StatusCode);
+        var validIssueId = Guid.NewGuid();
+        var invalidIssueId = Guid.NewGuid();
+        using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            db.SubjectIdentificationRepairIssues.AddRange(
+                CreateIssue(validIssueId, raceId, targetId, name),
+                CreateIssue(invalidIssueId, $"race-{Guid.NewGuid():D}", $"legacy-{Guid.NewGuid():N}", name));
+            await db.SaveChangesAsync();
+        }
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+
+        using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest([new(validIssueId), new(invalidIssueId)]));
+
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.IsFalse((await store.GetTasksAsync(limit: 100)).Any(x => x.Resource.Id == targetId));
+    }
+
+    [TestMethod]
+    public async Task PreDispatchIssue_ChangedTargetWithinOccurrenceDoesNotReuseStaleRecovery()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var firstName = $"変更前馬{Guid.NewGuid():N}";
+        var secondName = $"変更後馬{Guid.NewGuid():N}";
+        var firstId = DeterministicIdGenerator.BuildHorseId(firstName, null);
+        var secondId = DeterministicIdGenerator.BuildHorseId(secondName, null);
+        var raceId = $"race-{Guid.NewGuid():D}";
+        foreach (var (id, name) in new[] { (firstId, firstName), (secondId, secondName) })
+            Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/horses",
+                new RegisterHorseRequest(name, name, null, null, HorseId: id))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync("/api/races",
+            new CreateRaceRequest(new DateOnly(2026, 9, 20), "TOKYO", 3, "変更検証", raceId))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
+            new { EntryCount = 2 })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(firstId, 1, null, null, 1, 55, "M", 3, null, null,
+                HorseName: firstName))).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+            new RegisterEntryRequest(secondId, 2, null, null, 2, 55, "M", 3, null, null,
+                HorseName: secondName))).StatusCode);
+        var issueId = Guid.NewGuid();
+        using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            db.SubjectIdentificationRepairIssues.Add(CreateIssue(issueId, raceId, $"legacy-{Guid.NewGuid():N}", firstName));
+            await db.SaveChangesAsync();
+        }
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+        using var first = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest([new(issueId)]));
+        Assert.AreEqual(HttpStatusCode.Accepted, first.StatusCode);
+        using (var db = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            var issue = await db.SubjectIdentificationRepairIssues.FindAsync(issueId);
+            issue!.Status = "Open";
+            issue.ResolvedAt = null;
+            issue.RecoveryTaskId = null;
+            issue.TargetSubjectId = null;
+            issue.SubjectName = secondName;
+            await db.SaveChangesAsync();
+        }
+
+        using var changed = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
+            new ExecuteSubjectIdentificationRepairRequest([new(issueId)]));
+
+        Assert.AreEqual(HttpStatusCode.Conflict, changed.StatusCode);
+        var recoveryIds = (await store.GetTasksAsync(limit: 100)).Select(x => x.Resource.Id).ToArray();
+        CollectionAssert.Contains(recoveryIds, firstId);
+        CollectionAssert.DoesNotContain(recoveryIds, secondId);
+    }
+
+    private static SubjectIdentificationRepairIssue CreateIssue(
+        Guid issueId, string raceId, string subjectId, string name) => new()
+        {
+            IssueId = issueId,
+            SubjectType = "Horse",
+            SubjectId = subjectId,
+            SubjectName = name,
+            DefinitionId = "horse-profile",
+            RequestedByRaceId = raceId,
+            ReasonCode = "SubjectIdentityRepairRequired",
+            ReasonMessage = "ID不整合",
+            EvidenceFingerprint = Guid.NewGuid().ToString("N"),
+            Status = "Open",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
     [TestMethod]
     public async Task SubjectNotIdentified_MissingName_IsBlockedBeforeRecovery()
     {

@@ -36,8 +36,10 @@ public sealed class SqliteDatabaseMigrator
     ];
     private static readonly HashSet<string> JraProfileEnsureCreatedTables =
         [.. PreviousEnsureCreatedTables, "JraSubjectProfileReadModel"];
-    private static readonly HashSet<string> CurrentEnsureCreatedTables =
+    private static readonly HashSet<string> HorseIdentityEnsureCreatedTables =
         [.. JraProfileEnsureCreatedTables, "HorseIdentityRepairCandidates", "HorseIdentityRepairRedirects"];
+    private static readonly HashSet<string> CurrentEnsureCreatedTables =
+        [.. HorseIdentityEnsureCreatedTables, "SubjectIdentificationRepairIssues"];
 
     private readonly IDbContextProvider<EventStoreDbContext> _contextProvider;
     private readonly SqliteMigrationOptions _options;
@@ -97,9 +99,11 @@ public sealed class SqliteDatabaseMigrator
 
         var isInitialSchema = existingTables.SetEquals(InitialTables);
         var isCurrentEnsureCreatedSchema = existingTables.SetEquals(CurrentEnsureCreatedTables);
+        var isHorseIdentityEnsureCreatedSchema = existingTables.SetEquals(HorseIdentityEnsureCreatedTables);
         var isJraProfileEnsureCreatedSchema = existingTables.SetEquals(JraProfileEnsureCreatedTables);
         var isPreviousEnsureCreatedSchema = existingTables.SetEquals(PreviousEnsureCreatedTables);
-        if (!isInitialSchema && !isCurrentEnsureCreatedSchema && !isJraProfileEnsureCreatedSchema && !isPreviousEnsureCreatedSchema)
+        if (!isInitialSchema && !isCurrentEnsureCreatedSchema && !isHorseIdentityEnsureCreatedSchema
+            && !isJraProfileEnsureCreatedSchema && !isPreviousEnsureCreatedSchema)
         {
             var missing = InitialTables.Except(existingTables).OrderBy(x => x);
             var unexpected = existingTables.Except(InitialTables).OrderBy(x => x);
@@ -117,6 +121,12 @@ public sealed class SqliteDatabaseMigrator
             ? migrations.Where(migration =>
                 !migration.EndsWith("_StandardizeJstDateTimes", StringComparison.Ordinal)).ToList()
             : (IReadOnlyCollection<string>)[initialMigration];
+        if (isHorseIdentityEnsureCreatedSchema)
+        {
+            baselineMigrations = migrations.Where(migration =>
+                !migration.EndsWith("_StandardizeJstDateTimes", StringComparison.Ordinal)
+                && !migration.EndsWith("_AddSubjectIdentificationRepairIssues", StringComparison.Ordinal)).ToList();
+        }
         if (isJraProfileEnsureCreatedSchema)
         {
             baselineMigrations = migrations.Where(migration =>

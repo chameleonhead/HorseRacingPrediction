@@ -45,6 +45,7 @@ public class SqliteDbContextProviderTests
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)));
         Assert.IsTrue(applied.Any(x => x.EndsWith("_AddHorseIdentityRepair", StringComparison.Ordinal)));
+        Assert.IsTrue(applied.Any(x => x.EndsWith("_AddSubjectIdentificationRepairIssues", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -89,6 +90,7 @@ public class SqliteDbContextProviderTests
         await using (var previous = provider.CreateContext())
         {
             await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE SubjectIdentificationRepairIssues");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairCandidates");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairRedirects");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE JraSubjectProfileReadModel");
@@ -108,6 +110,7 @@ public class SqliteDbContextProviderTests
         await using (var previous = provider.CreateContext())
         {
             await previous.Database.EnsureCreatedAsync();
+            await previous.Database.ExecuteSqlRawAsync("DROP TABLE SubjectIdentificationRepairIssues");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairCandidates");
             await previous.Database.ExecuteSqlRawAsync("DROP TABLE HorseIdentityRepairRedirects");
             await previous.Database.ExecuteSqlRawAsync("INSERT INTO Horses (HorseId, RegisteredName, NormalizedName, Aliases) VALUES ('horse-legacy', 'preserved', 'preserved', '[]')");

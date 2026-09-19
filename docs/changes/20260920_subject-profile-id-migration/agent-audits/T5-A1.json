@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260920_subject-profile-id-migration",
+  "taskId": "T5",
+  "attemptId": "T5-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "route": {"tier": "worker", "requestedModel": "runtime-default", "observedModel": null, "observationSource": null, "modelTelemetryReason": "collaboration runtime did not expose the worker model"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "collaboration runtime did not expose per-worker usage"},
+  "scope": ["subject repair issue model", "EventStoreDbContext", "EF migration and snapshot", "focused persistence tests"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "runtime did not expose review usage or active time"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "runtime did not expose reliable worker elapsed effort"},
+  "startRevision": "d6ac4fc",
+  "endRevisionOrPatch": "working-tree:T5-repair-issue-persistence",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead integrated the issue into the API path and corrected SQLite baseline migration handling.", "retries": 0, "leadCorrections": 1, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 1, "decision": "accept"}
+}

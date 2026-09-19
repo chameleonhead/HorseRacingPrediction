@@ -37,6 +37,7 @@ public class EventStoreDbContext : DbContext
     public DbSet<OwnerMergeAuditReadModel> OwnerMergeAudits => Set<OwnerMergeAuditReadModel>();
     public DbSet<HorseIdentityRepairCandidateReadModel> HorseIdentityRepairCandidates => Set<HorseIdentityRepairCandidateReadModel>();
     public DbSet<HorseIdentityRepairRedirectReadModel> HorseIdentityRepairRedirects => Set<HorseIdentityRepairRedirectReadModel>();
+    public DbSet<SubjectIdentificationRepairIssue> SubjectIdentificationRepairIssues => Set<SubjectIdentificationRepairIssue>();
 
     public EventStoreDbContext(DbContextOptions<EventStoreDbContext> options)
         : base(options)
@@ -90,6 +91,13 @@ public class EventStoreDbContext : DbContext
         {
             entity.HasKey(x => x.SourceHorseId);
             entity.HasIndex(x => x.TargetHorseId);
+        });
+
+        modelBuilder.Entity<SubjectIdentificationRepairIssue>(entity =>
+        {
+            entity.HasKey(x => x.IssueId);
+            entity.HasIndex(x => x.EvidenceFingerprint).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.CreatedAt });
         });
 
         modelBuilder.Entity<HorseReadModel>(entity =>

@@ -151,6 +151,7 @@ public sealed partial class CollectionPlatformStore
     {
         resource = resource.Normalize();
         var metadataJson = SerializeTaskMetadata(attributes);
+        CollectionRequestEntity? resumableRequest = null;
         if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
             throw new ArgumentException("Provider and resource id are required.", nameof(resource));
         if (requestedRevision < 1) throw new ArgumentOutOfRangeException(nameof(requestedRevision));
@@ -172,8 +173,10 @@ public sealed partial class CollectionPlatformStore
                 var keyedActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
                     x.ResourcePk == keyedRequest.ResourcePk && x.DefinitionId == keyedRequest.DefinitionId,
                     cancellationToken).ConfigureAwait(false);
-                return new(keyedRequest.RequestId,
-                    keyedTask?.TaskId ?? keyedActive?.TaskId ?? Guid.Empty, false);
+                if (keyedTask is not null || keyedActive is not null)
+                    return new(keyedRequest.RequestId,
+                        keyedTask?.TaskId ?? keyedActive!.TaskId, false);
+                resumableRequest = keyedRequest;
             }
         }
 
@@ -231,9 +234,13 @@ public sealed partial class CollectionPlatformStore
                 var existingActive = await db.ActiveTasks.AsNoTracking().FirstOrDefaultAsync(x =>
                     x.ResourcePk == resourceEntity.ResourcePk && x.DefinitionId == definition.Value,
                     cancellationToken).ConfigureAwait(false);
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return new(existingRequest.RequestId,
-                    existingTask?.TaskId ?? existingActive?.TaskId ?? Guid.Empty, false);
+                if (existingTask is not null || existingActive is not null)
+                {
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    return new(existingRequest.RequestId,
+                        existingTask?.TaskId ?? existingActive!.TaskId, false);
+                }
+                resumableRequest ??= existingRequest;
             }
         }
 
@@ -268,7 +275,7 @@ public sealed partial class CollectionPlatformStore
             }
         }
 
-        var request = new CollectionRequestEntity
+        var request = resumableRequest ?? new CollectionRequestEntity
         {
             RequestId = Guid.NewGuid(),
             ResourcePk = resourceEntity.ResourcePk,
@@ -283,7 +290,7 @@ public sealed partial class CollectionPlatformStore
             BatchId = batchId,
             PayloadFingerprint = payloadFingerprint,
         };
-        db.Requests.Add(request);
+        if (resumableRequest is null) db.Requests.Add(request);
 
         var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
             && x.DefinitionId == definition.Value, cancellationToken);
@@ -2188,50 +2195,6 @@ public sealed partial class CollectionPlatformStore
         }
         return result.OrderBy(item => item.Definition.Value, StringComparer.Ordinal)
             .ThenBy(item => item.Resource.Id, StringComparer.Ordinal).ToArray();
-    }
-
-    public async Task<SubjectProfileMigrationState?> GetSubjectProfileMigrationStateAsync(Guid sourceTaskId,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = CreateDbContext();
-        var row = await (from task in db.Tasks.AsNoTracking()
-                         join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-                         where task.TaskId == sourceTaskId
-                         select new { task, resource }).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        if (row is null) return null;
-        var metadata = DeserializeTaskMetadata(row.task.MetadataJson ?? row.resource.AttributesJson);
-        if (!metadata.TryGetValue("migrationTargetId", out var targetId) || string.IsNullOrWhiteSpace(targetId))
-            return null;
-        return new(sourceTaskId, new(row.resource.Type, row.resource.Provider, row.resource.ResourceId), targetId,
-            metadata.GetValueOrDefault("migrationRecoveryRequired") == "true",
-            metadata.GetValueOrDefault("migrationSuppressionRequired") == "true",
-            metadata.ContainsKey("migrationCompletedAt"));
-    }
-
-    public async Task MarkSubjectProfileMigrationAsync(Guid sourceTaskId, string targetId,
-        bool recoveryRequired, bool suppressionRequired, DateTimeOffset? completedAt = null,
-        CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await using var db = CreateDbContext();
-            var task = await db.Tasks.SingleOrDefaultAsync(item => item.TaskId == sourceTaskId, cancellationToken)
-                .ConfigureAwait(false) ?? throw new KeyNotFoundException($"Collection task {sourceTaskId} was not found.");
-            var metadata = new Dictionary<string, string>(
-                DeserializeTaskMetadata(task.MetadataJson ?? "{}"), StringComparer.Ordinal);
-            if (metadata.TryGetValue("migrationTargetId", out var existing)
-                && !string.Equals(existing, targetId, StringComparison.Ordinal))
-                throw new InvalidOperationException("The source task already has a different migration target.");
-            metadata["migrationTargetId"] = targetId;
-            metadata["migrationRecoveryRequired"] = recoveryRequired ? "true" : "false";
-            metadata["migrationSuppressionRequired"] = suppressionRequired ? "true" : "false";
-            if (completedAt.HasValue) metadata["migrationCompletedAt"] = completedAt.Value.ToString("O");
-            task.MetadataJson = SerializeTaskMetadata(metadata);
-            task.UpdatedAt = completedAt ?? task.UpdatedAt;
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally { _gate.Release(); }
     }
 
     public async Task<ObsoleteSubjectProfileTaskCleanupResult> RetireObsoleteSubjectProfileTasksAsync(

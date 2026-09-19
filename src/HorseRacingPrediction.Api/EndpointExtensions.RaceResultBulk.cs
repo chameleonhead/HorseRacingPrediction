@@ -151,9 +151,9 @@ public static partial class EndpointExtensions
             else if (request.IsRaceCard)
             {
                 var jobOutcomes = await RequestSubjectProfileJobsAsync(raceIdValue, request.RaceDate,
-                    accepted, collectionStore, cancellationToken).ConfigureAwait(false);
+                    accepted, collectionStore, dbContextProvider, cancellationToken).ConfigureAwait(false);
                 foreach (var rejected in jobOutcomes.Where(item => item.Status == "Rejected"))
-                    errors.Add($"プロフィール収集ジョブ登録エラー: {rejected.ItemKey} — {rejected.ErrorCode}: {rejected.Message}");
+                    errors.Add($"主体識別情報の補正候補として記録: {rejected.ItemKey} — {rejected.ErrorCode}: {rejected.Message}");
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
@@ -169,7 +169,8 @@ public static partial class EndpointExtensions
         string raceId, DateOnly raceDate,
         IReadOnlyList<(Shared.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)> entries,
-        CollectionPlatformStore store, CancellationToken cancellationToken)
+        CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> dbContextProvider,
+        CancellationToken cancellationToken)
     {
         var today = Shared.Time.JstTime.Today();
         var realtime = raceDate >= today && raceDate <= today.AddDays(7);
@@ -195,7 +196,113 @@ public static partial class EndpointExtensions
             .ToArray();
         if (candidates.Length == 0) return [];
 
-        var items = candidates.Select(subject =>
+        using var db = dbContextProvider.CreateContext();
+        var race = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+            .SingleAsync(item => item.RaceId == raceId, cancellationToken).ConfigureAwait(false);
+        var horseIds = candidates.Where(x => x.Type == ResourceType.Horse).Select(x => x.Id!).ToArray();
+        var jockeyIds = candidates.Where(x => x.Type == ResourceType.Jockey).Select(x => x.Id!).ToArray();
+        var trainerIds = candidates.Where(x => x.Type == ResourceType.Trainer).Select(x => x.Id!).ToArray();
+        var horses = await db.Set<HorseReadModel>().AsNoTracking().Where(x => horseIds.Contains(x.HorseId))
+            .ToDictionaryAsync(x => x.HorseId, cancellationToken).ConfigureAwait(false);
+        var jockeys = await db.Set<JockeyReadModel>().AsNoTracking().Where(x => jockeyIds.Contains(x.JockeyId))
+            .ToDictionaryAsync(x => x.JockeyId, cancellationToken).ConfigureAwait(false);
+        var trainers = await db.Set<TrainerReadModel>().AsNoTracking().Where(x => trainerIds.Contains(x.TrainerId))
+            .ToDictionaryAsync(x => x.TrainerId, cancellationToken).ConfigureAwait(false);
+        var rejected = new List<CollectionRequestBatchOutcome>();
+        var repairIssues = new List<SubjectIdentificationRepairIssue>();
+        var ready = candidates.Where(subject =>
+        {
+            var referenced = subject.Type switch
+            {
+                ResourceType.Horse => race.Entries.Any(x => x.HorseId == subject.Id),
+                ResourceType.Jockey => race.Entries.Any(x => x.JockeyId == subject.Id),
+                ResourceType.Trainer => race.Entries.Any(x => x.TrainerId == subject.Id),
+                ResourceType.Owner => true,
+                _ => false,
+            };
+            var projectedName = subject.Type switch
+            {
+                ResourceType.Horse when horses.TryGetValue(subject.Id!, out var horse) => horse.RegisteredName,
+                ResourceType.Jockey when jockeys.TryGetValue(subject.Id!, out var jockey) => jockey.DisplayName,
+                ResourceType.Trainer when trainers.TryGetValue(subject.Id!, out var trainer) => trainer.DisplayName,
+                ResourceType.Owner => subject.Name,
+                _ => null,
+            };
+            var valid = referenced && projectedName is not null
+                && string.Equals(Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), projectedName),
+                    Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), subject.Name!),
+                    StringComparison.Ordinal)
+                && string.Equals(subject.Id, ExpectedSubjectJobId(subject), StringComparison.Ordinal);
+            if (valid || subject.Type == ResourceType.Owner) return true;
+            rejected.Add(new($"{subject.Type}:{subject.Id}", "Rejected",
+                ErrorCode: "SubjectIdentityRepairRequired",
+                Message: "主体投影、名称、またはRaceEntry参照が一致しないためLambdaへ送信しません。"));
+            var evidence = $"{raceId}|{subject.Type}|{subject.Id}|{subject.Name}|{subject.SourceIdentity}";
+            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(evidence));
+            var fingerprint = Convert.ToHexString(hash).ToLowerInvariant();
+            repairIssues.Add(new()
+            {
+                IssueId = new Guid(hash[..16]),
+                SubjectType = subject.Type.ToString(),
+                SubjectId = subject.Id!,
+                SubjectName = subject.Name!,
+                DefinitionId = subject.Type switch
+                {
+                    ResourceType.Horse => "horse-profile",
+                    ResourceType.Jockey => "jockey-profile",
+                    ResourceType.Trainer => "trainer-profile",
+                    _ => string.Empty,
+                },
+                RequestedByRaceId = raceId,
+                SourceIdentity = subject.SourceIdentity,
+                SourceUrl = subject.Type is ResourceType.Jockey or ResourceType.Trainer ? subject.SourceIdentity : null,
+                ReasonCode = "SubjectIdentityRepairRequired",
+                ReasonMessage = "主体投影、名称、決定論的ID、またはRaceEntry参照が一致しません。",
+                EvidenceFingerprint = fingerprint,
+                Status = "Open",
+                CreatedAt = Shared.Time.JstTime.Now(),
+            });
+            return false;
+        }).ToArray();
+        if (repairIssues.Count > 0)
+        {
+            var fingerprints = repairIssues.Select(x => x.EvidenceFingerprint).ToArray();
+            var existing = await db.SubjectIdentificationRepairIssues
+                .Where(x => fingerprints.Contains(x.EvidenceFingerprint))
+                .ToDictionaryAsync(x => x.EvidenceFingerprint, cancellationToken).ConfigureAwait(false);
+            foreach (var issue in repairIssues)
+            {
+                if (existing.TryGetValue(issue.EvidenceFingerprint, out var current))
+                {
+                    if (current.Status == "Resolved") current.Occurrence++;
+                    current.Status = "Open"; current.ResolvedAt = null;
+                    current.TargetSubjectId = null; current.RecoveryTaskId = null;
+                    current.ReasonMessage = issue.ReasonMessage; current.CreatedAt = issue.CreatedAt;
+                }
+                else db.SubjectIdentificationRepairIssues.Add(issue);
+            }
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+                foreach (var issue in repairIssues)
+                {
+                    var current = await db.SubjectIdentificationRepairIssues.SingleAsync(
+                        x => x.EvidenceFingerprint == issue.EvidenceFingerprint, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (current.Status == "Resolved") current.Occurrence++;
+                    current.Status = "Open"; current.ResolvedAt = null;
+                    current.TargetSubjectId = null; current.RecoveryTaskId = null;
+                    current.ReasonMessage = issue.ReasonMessage; current.CreatedAt = issue.CreatedAt;
+                }
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var items = ready.Select(subject =>
         {
             var definition = subject.Type switch
             {
@@ -234,11 +341,30 @@ public static partial class EndpointExtensions
         }).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
             items.Select(item => item.ItemKey))))).ToLowerInvariant()[..24];
-        return await store.RequestManyAsync($"race-subjects:{raceId}:{fingerprint}", items,
-            Shared.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+        var accepted = items.Length == 0 ? [] : await store.RequestManyAsync(
+            $"race-subjects:{raceId}:{fingerprint}", items, Shared.Time.JstTime.Now(), cancellationToken)
+            .ConfigureAwait(false);
+        return [.. accepted, .. rejected];
     }
 
     private sealed record SubjectJob(ResourceType Type, string? Id, string? Name, string? SourceIdentity);
+
+    private static string? ExpectedSubjectJobId(SubjectJob subject)
+    {
+        var canonical = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(
+            subject.Type.ToString(), subject.Name!);
+        return subject.Type switch
+        {
+            ResourceType.Horse => DeterministicIdGenerator.BuildHorseId(canonical,
+                JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _) ? subject.SourceIdentity : null),
+            ResourceType.Jockey => DeterministicIdGenerator.BuildEntityId("jockey",
+                DeterministicIdGenerator.NormalizeKey(canonical)),
+            ResourceType.Trainer => DeterministicIdGenerator.BuildEntityId("trainer",
+                DeterministicIdGenerator.NormalizeKey(canonical)),
+            ResourceType.Owner => subject.Id,
+            _ => null,
+        };
+    }
 
     private static bool IsAllowedJraProfileUrl(string? value, ResourceType type, out Uri? uri)
     {

@@ -8,6 +8,7 @@ using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -224,6 +225,51 @@ public class RaceEndpointsTests
         CollectionAssert.AreEquivalent(subjectTasks.Select(task => task.TaskId).ToArray(),
             replayTasks!.Where(task => subjectTasks.Select(existingTask => existingTask.Resource.Id)
                     .Contains(task.Resource.Id)).Select(task => task.TaskId).ToArray());
+    }
+
+    [TestMethod]
+    public async Task DeclareRaceResultBulk_PreflightMismatchCreatesRepairIssueWithoutProfileTask()
+    {
+        var date = new DateOnly(2026, 9, 20);
+        var course = $"PREFLIGHT-{Guid.NewGuid():N}";
+        var name = $"事前判定馬{Guid.NewGuid():N}";
+        var first = new DeclareRaceResultBulkRequest(date, course, 1, "事前判定", EntryCount: 1,
+            Entries: [new(1, 1, null, null, null, null, null, HorseName: name)],
+            WinningHorseName: name, DeclaredAt: DateTimeOffset.UtcNow);
+        var firstResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
+        firstResponse.EnsureSuccessStatusCode();
+        const string identity = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026654321/00";
+        var second = first with
+        {
+            IsRaceCard = true,
+            Entries = [new(1, 1, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsTrue(body!.Errors.Any(x => x.Contains("SubjectIdentityRepairRequired", StringComparison.Ordinal)));
+        using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
+        var issue = await db.SubjectIdentificationRepairIssues.SingleAsync(x => x.RequestedByRaceId == body.RaceId);
+        Assert.AreEqual("Open", issue.Status);
+        var tasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
+            "/api/admin/collection/tasks?limit=1000", JsonOptions);
+        Assert.IsFalse(tasks!.Any(x => x.Resource.Id == issue.SubjectId && x.Definition.Value == "horse-profile"));
+
+        issue.Status = "Resolved";
+        issue.ResolvedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var repeated = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
+        repeated.EnsureSuccessStatusCode();
+        var repeatedIssues = await db.SubjectIdentificationRepairIssues
+            .Where(x => x.RequestedByRaceId == body.RaceId).ToArrayAsync();
+        Assert.HasCount(1, repeatedIssues);
+        Assert.AreEqual(issue.IssueId, repeatedIssues[0].IssueId);
+        Assert.AreEqual("Open", repeatedIssues[0].Status);
+        Assert.AreEqual(2, repeatedIssues[0].Occurrence);
+        Assert.IsNull(repeatedIssues[0].ResolvedAt);
     }
 
     [TestMethod]

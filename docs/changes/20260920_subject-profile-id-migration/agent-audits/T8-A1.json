@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260920_subject-profile-id-migration",
+  "taskId": "T8",
+  "attemptId": "T8-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "route": {"tier": "review", "requestedModel": "runtime-default", "observedModel": null, "observationSource": null, "modelTelemetryReason": "collaboration runtime did not expose the reviewer model"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "collaboration runtime did not expose per-reviewer usage"},
+  "scope": ["read-only"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "runtime did not expose review usage or active time"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "runtime did not expose reliable reviewer elapsed effort"},
+  "startRevision": "d6ac4fc",
+  "endRevisionOrPatch": "working-tree:pre-dispatch-review-1",
+  "outcome": {"verificationPassed": true, "qualityPassed": false, "scopePassed": true, "independentChallenge": "Found crash-replay idempotency, batch prevalidation, and evidence-recurrence counterexamples.", "retries": 0, "leadCorrections": 3, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "decision": "revise"}
+}
