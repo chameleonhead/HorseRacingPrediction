@@ -1,12 +1,12 @@
-# [自動検知] 1 trainer-profile tasks are stalled in Ready.
+# [自動検知] race-discovery has 1 actionable TargetClosedException failures.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `0ab1761d7f4c75b5`
-- Classification: `OperationalCondition`
-- Kind: `StalledActiveTask`
+- Finding fingerprint: `731261d15ca6cff0`
+- Classification: `UnknownHistoricalJobError`
+- Kind: `ActionableFailureGroup`
 - Severity: `medium`
 - Classifier version: `1`
 
@@ -20,11 +20,11 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:55:51.4140850+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T17:13:51.8037398+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
-- 運用状態の異常原因を特定し、収集順序または実行能力を安全に回復する。
+- 過去ジョブエラーの原因と影響範囲を特定し、安全な補正またはコード修正方法を決定する。
 - 同じfingerprintの再観測をこのrecordへ集約する。
 - 対応後に監視findingが解消したことを確認する。
 
@@ -35,17 +35,18 @@
 
 ## Evidence
 
-- `definition=trainer-profile`
-- `status=Ready`
-- `lane=Normal`
-- `priority=70`
-- `oldest=2026-09-18T11:40:04.9286502+09:00`
-- `sampleTaskIds=a55077b9-76cd-403e-9af4-c92b78013b83`
+- `definition=race-discovery`
+- `status=Failed`
+- `errorCode=TargetClosedException`
+- `count=1`
+- `firstFailedAt=2026-09-19T16:44:35.8824849+09:00`
+- `lastFailedAt=2026-09-19T16:44:35.8824849+09:00`
+- `sampleResources=Race/JRA/discovery:2026091818`
 
 ## Proposed investigation
 
-1. pipeline、lease、dispatcher、worker capacityの保存済み状態を調査する。
-2. 推奨scopeを検証する: Inspect worker capacity, leases, availability, and the most recent attempts.
+1. 代表対象を読み取り専用で調査し、原因仮説、対応候補、リスク、次の検証を記録する。
+2. 推奨scopeを検証する: Investigate the cause, impact, options, and safest next diagnostic step.
 3. 修正案または補正案ごとのデータ損失、誤結合、再発、rollbackリスクを比較する。
 4. 観測可能な受け入れ基準を確定し、利用者の承認を得る。
 
@@ -53,7 +54,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `0ab1761d7f4c75b5` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `731261d15ca6cff0` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,21 +66,11 @@
 
 ## Observation history
 
-- 2026-09-19T17:13:51.8037398+09:00: 再観測。severity=`medium`、summary=9 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T16:44:03.1803395+09:00: 再観測。severity=`medium`、summary=1 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=1 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T15:43:52.0331893+09:00: 再観測。severity=`medium`、summary=5 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T15:15:14.3476835+09:00: 再観測。severity=`medium`、summary=2 trainer-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:55:51.4140850+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T17:13:51.8037398+09:00: 初回検出。severity=`medium`、classification=`UnknownHistoricalJobError`。
 
 ## Documentation updates
 
-- このchange recordがfinding `0ab1761d7f4c75b5` の調査・判断・検証の正本である。
+- このchange recordがfinding `731261d15ca6cff0` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -87,4 +78,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-0ab1761d7f4c75b5`
+- Directory: `20260919_collection-attention-731261d15ca6cff0`

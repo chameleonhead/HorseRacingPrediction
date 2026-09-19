@@ -65,6 +65,8 @@
 
 ## Observation history
 
+- 2026-09-19T17:13:51.8037398+09:00: 再観測。severity=`medium`、summary=134 trainer-profile tasks are stalled in Ready.。
+
 - 2026-09-19T16:44:03.1803395+09:00: 再観測。severity=`medium`、summary=134 trainer-profile tasks are stalled in Ready.。
 
 - 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=137 trainer-profile tasks are stalled in Ready.。
