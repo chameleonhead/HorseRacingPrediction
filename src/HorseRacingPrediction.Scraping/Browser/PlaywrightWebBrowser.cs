@@ -132,9 +132,11 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
             browser = await playwright.Chromium.LaunchAsync(resolvedLaunchOptions);
             context = await browser.NewContextAsync(contextOptions ?? CreateDefaultContextOptions());
             var page = await context.NewPageAsync();
-            resolvedLogger.LogInformation(
-                "Playwright browser created. SearchBaseUrl={SearchBaseUrl} Headless={Headless}",
-                string.IsNullOrWhiteSpace(searchBaseUrl) ? DefaultSearchBaseUrl : searchBaseUrl,
+            // SearchBaseUrl is only used later by SearchAsync; no search page is opened here.
+            // Keep browser lifecycle details at Debug level so ordinary collection-job logs do not
+            // misleadingly suggest that a search browser was opened.
+            resolvedLogger.LogDebug(
+                "Playwright browser created for on-demand navigation. Headless={Headless}",
                 resolvedLaunchOptions.Headless);
 
             return new PlaywrightWebBrowser(

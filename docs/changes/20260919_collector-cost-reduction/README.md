@@ -28,7 +28,7 @@ The accepted correction is:
 
 Job registration follows the successful race write rather than sharing its domain transaction. Registration errors are returned in the bulk response, and replay safely retries them. This avoids jobs for failed writes without introducing a distributed transaction.
 
-The existing user-owned `PlaywrightWebBrowser.cs` Debug-log edit is preserved outside this change's commits. `.codex/worktrees/` is also unrelated user-owned state.
+The pre-existing `PlaywrightWebBrowser.cs` edit was reviewed after the main implementation: browser creation does not navigate to `SearchBaseUrl`, so the misleading URL field was removed and the lifecycle message was correctly lowered from Information to Debug. It is included in a separate reviewed commit. `.codex/worktrees/` remains unrelated user-owned state.
 
 ## Goals and non-goals
 
@@ -93,6 +93,7 @@ No work was delegated because API persistence, collection state, parsing contrac
 - `dotnet build HorseRacingPrediction.sln -c Release --no-restore`: passed with zero warnings/errors.
 - `git diff --check`: passed; line-ending notices are informational.
 - CodeGraph was synchronized and the final call-path audit confirmed API-owned registration and no Collector race-derived registration path.
+- Follow-up review confirmed `SearchBaseUrl` is stored at creation but only consumed by `SearchAsync`; changing the creation log to Debug and omitting that URL does not alter navigation behavior.
 
 ## Deployment and rollback
 
