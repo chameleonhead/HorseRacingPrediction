@@ -1,10 +1,10 @@
-# [自動検知] 662 horse-profile tasks are stalled in Ready.
+# [自動検知] 1 horse-profile tasks are stalled in Running.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `3b92d066a5375a69`
+- Finding fingerprint: `8d67eb2177c75671`
 - Classification: `OperationalCondition`
 - Kind: `StalledActiveTask`
 - Severity: `high`
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:40:56.5982606+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T15:43:52.0331893+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -36,11 +36,11 @@
 ## Evidence
 
 - `definition=horse-profile`
-- `status=Ready`
+- `status=Running`
 - `lane=Realtime`
 - `priority=70`
-- `oldest=2026-09-17T19:02:58.9659134+09:00`
-- `sampleTaskIds=98ca7b3c-e323-4d1b-9d0c-bbde72055bdd,f7c00232-2ebf-432c-bd5d-ee7f0beb8200,0ee82751-33c9-4fa2-b892-02839245c045,1e2e5615-0a87-45b6-9b7d-44d9008a2be4,24003ed2-a8a4-40b2-ae53-270f2cd38456`
+- `oldest=2026-09-17T19:15:49.5104756+09:00`
+- `sampleTaskIds=8eb2d5b2-73c9-4303-9cd6-3e4e31d37b52`
 
 ## Proposed investigation
 
@@ -53,7 +53,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `3b92d066a5375a69` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `8d67eb2177c75671` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,21 +65,11 @@
 
 ## Observation history
 
-- 2026-09-19T15:43:52.0331893+09:00: 再観測。severity=`high`、summary=646 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T15:15:14.3476835+09:00: 再観測。severity=`high`、summary=705 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:55:51.4140850+09:00: 再観測。severity=`high`、summary=667 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:42:00.7716914+09:00: 再観測。severity=`high`、summary=673 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:41:12.3940259+09:00: 再観測。severity=`high`、summary=665 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:40:56.5982606+09:00: 初回検出。severity=`high`、classification=`OperationalCondition`。
+- 2026-09-19T15:43:52.0331893+09:00: 初回検出。severity=`high`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `3b92d066a5375a69` の調査・判断・検証の正本である。
+- このchange recordがfinding `8d67eb2177c75671` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -87,4 +77,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-3b92d066a5375a69`
+- Directory: `20260919_collection-attention-8d67eb2177c75671`
