@@ -13,8 +13,7 @@ on:
         default: recover
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: horse-racing-prediction-collection-monitoring
@@ -29,7 +28,6 @@ jobs:
       DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
       LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
       API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
-      FINDING_BRANCH: automation/collection-monitoring-findings
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,67 +53,13 @@ jobs:
           echo "outcome=$(jq -r '.outcome' "$work/report.json")" >> "$GITHUB_OUTPUT"
           echo "action_required=$(jq -r '.outcome == 2 or .outcome == "actionRequired"' "$work/report.json")" >> "$GITHUB_OUTPUT"
 
-      - name: Preview generated change records
+      - name: Validate root-cause routing
         if: steps.inspect.outputs.records_enabled == 'true'
         shell: bash
         run: |
-          python tools/collection_monitoring/change_record_writer.py \
-            --repo . --report "${{ steps.inspect.outputs.report }}"
-
-      - name: Prepare finding branch
-        if: steps.inspect.outputs.records_enabled == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin "$FINDING_BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$FINDING_BRANCH"
-            git checkout -B "$FINDING_BRANCH" "origin/$FINDING_BRANCH"
-            git merge --no-edit origin/main
-          else
-            git checkout -b "$FINDING_BRANCH" origin/main
-          fi
-
-      - name: Create or update change records
-        if: steps.inspect.outputs.records_enabled == 'true'
-        id: records
-        shell: bash
-        run: |
-          set -euo pipefail
-          result="$(python tools/collection_monitoring/change_record_writer.py \
-            --repo . --report "${{ steps.inspect.outputs.report }}" --apply)"
-          echo "$result" | jq .
-          echo "changed=$(echo "$result" | jq '(.created + .updated) | length > 0')" >> "$GITHUB_OUTPUT"
-
-      - name: Validate and publish change records
-        if: steps.records.outputs.changed == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t records < <(git status --short --untracked-files=all | awk '{print $2}' | grep '^docs/changes/.*/README.md$')
-          test "${#records[@]}" -gt 0
-          python .codex/skills/document-driven-development/scripts/validate_change_records.py "${records[@]}"
-          git diff --check -- "${records[@]}"
-          git add -- "${records[@]}"
-          git commit -m "Record collection monitoring findings"
-          git push --set-upstream origin "$FINDING_BRANCH"
-
-      - name: Create or reuse monitoring pull request
-        if: steps.records.outputs.changed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if ! gh pr list --head "$FINDING_BRANCH" --state open --json number --jq 'length > 0' | grep -q true; then
-            if ! gh pr create --base main --head "$FINDING_BRANCH" \
-              --title "Record collection monitoring findings" \
-              --body "Automated proposed change records generated from sanitized collection monitoring findings. No program fix or unknown-error data correction is applied by this pull request."; then
-              echo "GitHub Actions could not create the monitoring PR. Repository administrators must enable Actions to create pull requests, or provide the approved repository-scoped GitHub App fallback. See this run for the failed capability check." >&2
-              exit 1
-            fi
-          fi
+          jq -e 'all(.findings[] | select(.classification == 0 or .classification == 2 or .classification == 3 or .classification == "ProgramBug" or .classification == "UnknownHistoricalJobError" or .classification == "OperationalCondition");
+            (.rootCauseHypothesis | length > 0) and (.ownerTask | length > 0) and (.nextSafeOperation | length > 0))' \
+            "${{ steps.inspect.outputs.report }}" >/dev/null
 
       - name: Preview known historical recovery
         id: recovery_preview
@@ -162,4 +106,4 @@ jobs:
         if: steps.inspect.outputs.action_required == 'true'
         shell: bash
         run: |
-          echo "::warning title=Collection monitoring action required::The probe succeeded, but the collection state requires operator attention. See the run summary and monitoring pull request."
+          echo "::warning title=Collection monitoring action required::The probe succeeded, but the collection state requires operator attention. Use the root-cause task and next safe operation in the report."

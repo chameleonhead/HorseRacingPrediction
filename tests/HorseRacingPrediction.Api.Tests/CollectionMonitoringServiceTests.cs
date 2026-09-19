@@ -91,6 +91,12 @@ public sealed class CollectionMonitoringServiceTests
         var report = await service.InspectAsync(now);
 
         Assert.IsTrue(report.Findings.Any(x => x.Kind == "StalledActiveTask"));
+        var routed = report.Findings.Single(x => x.Kind == "StalledActiveTask");
+        Assert.AreEqual("T3", routed.OwnerTask);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(routed.RootCauseHypothesis));
+        var flow = report.DefinitionFlows!.Single(x => x.Definition == "horse-history");
+        Assert.AreEqual(1, flow.Arrived);
+        Assert.AreEqual(1, flow.Active);
         var task = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
         Assert.AreEqual(before.Status, task.Status);
     }
@@ -126,6 +132,36 @@ public sealed class CollectionMonitoringServiceTests
 
         Assert.IsTrue(report.Truncated);
         Assert.IsFalse(report.ChangeRecordEnabled);
+    }
+
+    [TestMethod]
+    public void DispatchOrderViolation_RequiresCompatibleDefinition()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        var waiting = MonitoringTask("horse-profile", 100, now.AddHours(-2));
+        var incompatible = Enumerable.Range(1, 3)
+            .Select(_ => MonitoringDispatch("trainer-profile", 10, now.AddMinutes(-10))).ToArray();
+        var snapshot = new CollectionMonitoringSnapshot(now, new(false, null, null), [waiting], incompatible,
+            false);
+
+        Assert.IsEmpty(scope.CreateService().FindDispatchOrderViolations(snapshot, now));
+    }
+
+    [TestMethod]
+    public void DispatchOrderViolation_ReportsRepeatedCompatibleBypass()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        var waiting = MonitoringTask("horse-profile", 100, now.AddHours(-2));
+        var compatible = Enumerable.Range(1, 3)
+            .Select(index => MonitoringDispatch("horse-profile", 10, now.AddMinutes(-10 + index))).ToArray();
+        var snapshot = new CollectionMonitoringSnapshot(now, new(false, null, null), [waiting], compatible,
+            false);
+
+        var finding = scope.CreateService().FindDispatchOrderViolations(snapshot, now).Single();
+
+        Assert.IsTrue(finding.Evidence.Contains("compatibilityKey=JRA|Definition|horse-profile|Realtime"));
     }
 
     [TestMethod]
@@ -273,6 +309,16 @@ public sealed class CollectionMonitoringServiceTests
         RaceArtifactStatus card, RaceArtifactStatus result) => new(
         Guid.NewGuid(), new(ResourceType.Race, "JRA", id), CollectionTaskStatus.Ready,
         start.AddHours(-1), start, card, result);
+
+    private static CollectionMonitoringTaskSnapshot MonitoringTask(string definition, int priority,
+        DateTimeOffset availableAt) => new(Guid.NewGuid(), new(ResourceType.Horse, "JRA", Guid.NewGuid().ToString("N")),
+        new(definition), CollectionTaskStatus.Ready, CollectionLane.Realtime, priority, availableAt, availableAt,
+        availableAt, null, null, 0, $"JRA|Definition|{definition}|Realtime");
+
+    private static CollectionMonitoringDispatchSnapshot MonitoringDispatch(string definition, int priority,
+        DateTimeOffset dispatchedAt) => new(Guid.NewGuid(), Guid.NewGuid(), new(definition), CollectionLane.Realtime,
+        priority, dispatchedAt.AddMinutes(-1), dispatchedAt.AddHours(-1), dispatchedAt,
+        $"JRA|Definition|{definition}|Realtime");
 
     private static async Task CreateFailureAsync(CollectionPlatformStore store, DateTimeOffset now,
         string definitionId, ResourceType type, string errorCode, string message)

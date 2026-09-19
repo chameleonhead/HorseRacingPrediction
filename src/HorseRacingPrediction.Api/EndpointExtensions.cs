@@ -1808,7 +1808,8 @@ public static partial class EndpointExtensions
             {
                 using var dbContext = dbContextProvider.CreateContext();
                 var owners = await BuildOwnersAsync(dbContext, cancellationToken).ConfigureAwait(false);
-                var owner = owners.SingleOrDefault(x => x.OwnerId == ownerId);
+                var owner = owners.SingleOrDefault(x => x.OwnerId == ownerId
+                    || x.NameVariants.Any(name => OwnerIdentityContract.CreateLegacyId(name) == ownerId));
                 if (owner is null) return Results.NotFound();
 
                 var names = owner.NameVariants.ToHashSet(StringComparer.Ordinal);
@@ -2605,18 +2606,10 @@ public static partial class EndpointExtensions
             }).ToList();
     }
 
-    private static string NormalizeOwnerName(string value)
-        => value.Normalize(NormalizationForm.FormKC)
-            .Replace("株式会社", "", StringComparison.Ordinal)
-            .Replace("（株）", "", StringComparison.Ordinal)
-            .Replace("(株)", "", StringComparison.Ordinal)
-            .Replace(" ", "", StringComparison.Ordinal)
-            .Replace("　", "", StringComparison.Ordinal)
-            .Trim()
-            .ToUpperInvariant();
+    private static string NormalizeOwnerName(string value) => OwnerIdentityContract.NormalizeName(value);
 
     private static string CreateOwnerId(string normalizedName)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedName)))[..20].ToLowerInvariant();
+        => OwnerIdentityContract.CreateId(normalizedName);
 
     private static ApiContracts.HorseReadModel ToAgentHorse(HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel model)
         => new()

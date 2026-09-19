@@ -1,0 +1,15 @@
+{
+  "completedAt": "2026-09-19T23:00:00+09:00",
+  "outcome": 2,
+  "findings": [
+    {
+      "fingerprint": "0123456789abcdef",
+      "kind": "StalledActiveTask",
+      "classification": 3,
+      "severity": "high",
+      "rootCauseHypothesis": "Arrival exceeds completion capacity.",
+      "ownerTask": "T3",
+      "nextSafeOperation": "Inspect flow diagnostics."
+    }
+  ]
+}

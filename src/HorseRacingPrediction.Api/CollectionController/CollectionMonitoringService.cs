@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using EventFlow.EntityFramework;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -51,7 +52,10 @@ public sealed record CollectionOperationalFinding(
     IReadOnlyList<string> Evidence,
     string SuggestedScope,
     string? RecoveryRecipeId,
-    string ClassifierVersion);
+    string ClassifierVersion,
+    string? RootCauseHypothesis = null,
+    string? OwnerTask = null,
+    string? NextSafeOperation = null);
 
 public sealed record CollectionMonitoringReport(
     DateTimeOffset Cutoff,
@@ -62,7 +66,19 @@ public sealed record CollectionMonitoringReport(
     string? SuppressionReason,
     bool Truncated,
     IReadOnlyList<CollectionOperationalFinding> Findings,
-    CollectionMonitoringOutcome Outcome = CollectionMonitoringOutcome.Healthy);
+    CollectionMonitoringOutcome Outcome = CollectionMonitoringOutcome.Healthy,
+    IReadOnlyList<CollectionDefinitionFlowDiagnostic>? DefinitionFlows = null);
+
+public sealed record CollectionDefinitionFlowDiagnostic(
+    string Definition,
+    string Lane,
+    string CompatibilityKey,
+    int Arrived,
+    int Dispatched,
+    int Completed,
+    int Active,
+    double OldestAgeMinutes,
+    string Classification);
 
 public enum CollectionMonitoringOutcome
 {
@@ -93,6 +109,16 @@ public sealed record CollectionKnownRecoveryExecution(
     int Failed);
 
 internal sealed record DomainRaceFreshness(DateOnly RaceDate, bool HasCard, bool HasResult);
+
+public sealed record OwnerIdentityMigrationPreview(
+    int DistinctOwnerNames,
+    int CanonicalIds,
+    int LegacyIds,
+    int AliasMappedNames,
+    IReadOnlyList<OwnerIdentityMigrationSample> Samples);
+
+public sealed record OwnerIdentityMigrationSample(string DisplayName, string CanonicalId, string LegacyId,
+    bool HasAliasMapping);
 
 public sealed class CollectionMonitoringService(
     CollectionPlatformStore store,
@@ -189,14 +215,34 @@ public sealed class CollectionMonitoringService(
 
         var ordered = findings.OrderByDescending(x => SeverityRank(x.Severity)).ThenBy(x => x.Fingerprint)
             .Take(Math.Clamp(_options.MaxFindings, 1, 1_000)).ToArray();
-        var outcome = ordered.Any(x => x.Kind == "UnexpectedPipelinePause"
+        var hasUnmappedActionable = ordered.Any(x =>
+            (x.Classification is CollectionFindingClassification.ProgramBug
+                or CollectionFindingClassification.UnknownHistoricalJobError
+                or CollectionFindingClassification.OperationalCondition)
+            && string.IsNullOrWhiteSpace(x.OwnerTask));
+        var outcome = hasUnmappedActionable
+            ? CollectionMonitoringOutcome.MonitorFailed
+            : ordered.Any(x => x.Kind == "UnexpectedPipelinePause"
                                        || x.Severity is "high" or "critical")
             ? CollectionMonitoringOutcome.ActionRequired
             : ordered.Length > 0
                 ? CollectionMonitoringOutcome.FindingRecorded
                 : CollectionMonitoringOutcome.Healthy;
+        var flowDiagnostics = (snapshot.DefinitionFlows ?? []).Select(x => new CollectionDefinitionFlowDiagnostic(
+            x.Definition.Value, x.Lane.ToString(), x.CompatibilityKey, x.Arrived, x.Dispatched, x.Completed,
+            x.Active, x.OldestActiveAt is null ? 0 : Math.Max(0, (now - x.OldestActiveAt.Value).TotalMinutes),
+            ClassifyFlow(x))).ToArray();
         return new(now, DateTimeOffset.UtcNow, true, _options.ChangeRecordEnabled, false, null,
-            snapshot.Truncated, ordered, outcome);
+            snapshot.Truncated, ordered, outcome, flowDiagnostics);
+    }
+
+    private static string ClassifyFlow(CollectionDefinitionFlowSnapshot flow)
+    {
+        if (flow.Active == 0) return "Healthy";
+        if (flow.Dispatched == 0 && flow.Arrived > 0) return "StarvationOrCapabilityGap";
+        if (flow.Arrived > flow.Completed && flow.Completed > 0) return "CapacityBelowArrivalRate";
+        if (flow.OldestActiveAt is not null && flow.Arrived == 0) return "IntentionalWaitOrLegacyBacklog";
+        return "NeedsEvidence";
     }
 
     internal IReadOnlyList<CollectionOperationalFinding> EvaluateFreshness(
@@ -300,6 +346,30 @@ public sealed class CollectionMonitoringService(
                 x.EntryCount.HasValue && x.EntryCount.Value > 0,
                 x.ResultDeclaredAt.HasValue))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<OwnerIdentityMigrationPreview> PreviewOwnerIdentityMigrationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (domainProvider is null)
+            return new(0, 0, 0, 0, []);
+        using var db = domainProvider.CreateContext();
+        var horseNames = await db.Horses.AsNoTracking().Where(x => x.OwnerName != null)
+            .Select(x => x.OwnerName!).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var contextNames = await db.RacePredictionContexts.AsNoTracking().ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var names = horseNames.Concat(contextNames.SelectMany(x => x.Entries)
+                .Where(x => !string.IsNullOrWhiteSpace(x.OwnerName)).Select(x => x.OwnerName!))
+            .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var mapped = (await db.OwnerAliasMappings.AsNoTracking().Select(x => x.NormalizedAlias)
+                .ToListAsync(cancellationToken).ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+        var samples = names.Take(20).Select(name => new OwnerIdentityMigrationSample(name,
+            OwnerIdentityContract.CreateId(name), OwnerIdentityContract.CreateLegacyId(name),
+            mapped.Contains(OwnerIdentityContract.NormalizeName(name)))).ToArray();
+        return new(names.Length,
+            names.Select(OwnerIdentityContract.CreateId).Distinct(StringComparer.Ordinal).Count(),
+            names.Select(OwnerIdentityContract.CreateLegacyId).Distinct(StringComparer.Ordinal).Count(),
+            names.Count(x => mapped.Contains(OwnerIdentityContract.NormalizeName(x))), samples);
     }
 
     private IEnumerable<DateOnly> GetCardCheckpointDates(DateOnly today, TimeSpan localTime)
@@ -411,7 +481,7 @@ public sealed class CollectionMonitoringService(
         _ => false,
     };
 
-    private IEnumerable<CollectionOperationalFinding> FindDispatchOrderViolations(
+    internal IEnumerable<CollectionOperationalFinding> FindDispatchOrderViolations(
         CollectionMonitoringSnapshot snapshot,
         DateTimeOffset now)
     {
@@ -423,7 +493,9 @@ public sealed class CollectionMonitoringService(
             .ToArray();
         foreach (var higher in snapshot.ActiveTasks.Where(x => IsStalled(x, now)))
         {
+            if (string.IsNullOrWhiteSpace(higher.CompatibilityKey)) continue;
             var bypasses = dispatches.Where(dispatch => dispatch.Lane == higher.Lane
+                    && string.Equals(dispatch.CompatibilityKey, higher.CompatibilityKey, StringComparison.Ordinal)
                     && higher.AvailableAt <= dispatch.DispatchedAt
                     && higher.CreatedAt <= dispatch.DispatchedAt
                     && EffectivePriority(higher.Priority, higher.CreatedAt, dispatch.DispatchedAt)
@@ -437,6 +509,7 @@ public sealed class CollectionMonitoringService(
                 "Stalled higher-priority work was bypassed by at least three dispatch decisions in the same lane.",
                 [
                     $"lane={higher.Lane}",
+                    $"compatibilityKey={higher.CompatibilityKey}",
                     $"waitingTaskId={higher.TaskId:D}",
                     $"waitingPriority={higher.Priority}",
                     $"bypassCount={bypasses.Length}",
@@ -454,10 +527,35 @@ public sealed class CollectionMonitoringService(
     {
         var raw = $"{_options.ClassifierVersion}|{kind}|{classification}|{key}";
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)))[..16].ToLowerInvariant();
+        var routing = RouteRootCause(kind, key);
         return new(fingerprint, kind, classification, severity, first, last, Sanitize(summary),
             evidence.Select(Sanitize).Where(x => !string.IsNullOrWhiteSpace(x)).Take(20).ToArray(),
-            Sanitize(suggestedScope), recipe, _options.ClassifierVersion);
+            Sanitize(suggestedScope), recipe, _options.ClassifierVersion,
+            routing.Hypothesis, routing.OwnerTask, routing.NextSafeOperation);
     }
+
+    private static (string Hypothesis, string OwnerTask, string NextSafeOperation) RouteRootCause(
+        string kind, string key) => (kind, key) switch
+        {
+            ("ActionableFailureGroup", var value) when value.Contains("owner", StringComparison.OrdinalIgnoreCase) =>
+                ("Owner identity producer and lookup contracts may disagree.", "T1",
+                    "Run the owner identity compatibility preview; do not rewrite stored IDs."),
+            ("DispatchOrderViolation", _) =>
+                ("Compatible higher-priority work may have been repeatedly bypassed.", "T2",
+                    "Inspect the recorded compatibility definition and envelope sequence."),
+            ("StalledActiveTask" or "RetryWaitingBacklog", _) =>
+                ("Arrival, dispatch, or completion capacity may be imbalanced.", "T3",
+                    "Compare definition flow rates and oldest age at the same cutoff."),
+            ("ActionableFailureGroup", var value) when value.Contains("TargetClosed", StringComparison.OrdinalIgnoreCase) =>
+                ("The observation may predate the deployed closed-session recovery revision.", "T6",
+                    "Confirm deployed revision and re-observe before creating another fix."),
+            ("WeekendCardCoverageMissing" or "WeekendDiscoveryCoverageUnknown" or "RaceResultFreshnessMiss"
+                or "RaceDayResultCoverageMissing", _) =>
+                ("Required race data is not confirmed in the domain by its checkpoint.", "T6",
+                    "Verify deployed revision and inspect the read-only freshness evidence."),
+            _ => ("The finding requires consolidated operational triage.", "T3",
+                "Inspect the definition flow diagnostic and representative task evidence."),
+        };
 
     private static int EffectivePriority(int priority, DateTimeOffset createdAt, DateTimeOffset now)
         => priority + Math.Min(30, Math.Max(0, (int)(now - createdAt).TotalHours / 6));
