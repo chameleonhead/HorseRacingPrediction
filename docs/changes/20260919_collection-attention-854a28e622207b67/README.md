@@ -61,6 +61,8 @@
 
 ## Observation history
 
+- 2026-09-19T19:13:54.8561706+09:00: 再観測。severity=`high`、summary=The collection pipeline has remained paused beyond the allowed duration.。
+
 - 2026-09-19T18:43:53.3712534+09:00: 再観測。severity=`high`、summary=The collection pipeline has remained paused beyond the allowed duration.。
 
 - 2026-09-19T18:13:56.9430307+09:00: 再観測。severity=`high`、summary=The collection pipeline has remained paused beyond the allowed duration.。
