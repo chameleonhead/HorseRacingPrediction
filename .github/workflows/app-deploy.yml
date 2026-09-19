@@ -426,34 +426,4 @@ jobs:
           preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
             "$base/migrations/race-entry-owners/preview")"
           echo "Race entry owner migration preview: $preview"
-          if [ "$(jq '.remaining' <<<"$preview")" = "0" ]; then
-            echo "Race entry owner migration is already complete; skipping pipeline pause."
-            exit 0
-          fi
-          resume() {
-            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-              "$base/pipeline/resume" >/dev/null || true
-          }
-          trap resume EXIT
-          curl --fail --silent --show-error -X POST \
-            -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
-            --data '{"reason":"deployment race entry owner migration"}' \
-            "$base/pipeline/pause" >/dev/null
-          for i in $(seq 1 30); do
-            running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
-              "$base/tasks?status=Running&limit=1")"
-            if [ "$(jq 'length' <<<"$running")" = "0" ]; then
-              break
-            fi
-            if [ "$i" = "30" ]; then
-              echo "Collection tasks did not drain before owner migration" >&2
-              exit 1
-            fi
-            sleep 10
-          done
-          preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-            "$base/migrations/race-entry-owners/preview")"
-          echo "Race entry owner migration preview: $preview"
-          applied="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-            "$base/migrations/race-entry-owners/apply")"
-          echo "Race entry owner migration queued: $applied"
+          echo "Owner migration remains preview-only until its target-selection change record is approved."
