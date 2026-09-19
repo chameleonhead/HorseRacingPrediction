@@ -45,6 +45,8 @@
 - `.github/workflows/collection-dlq-diagnostics.yml`: APIのDLQ関連ログ・直近バックアップ・障害グループを秘密情報を表示せず確認し、明示confirmation付きで `DeadLetterQueue` グループだけをRecovery・再開できる手動運用を追加する。
 - 本change record: 配備前後の件数、イメージSHA、バックアップ、回復結果、Lambda/queue/画面の検証証拠を記録する。
 
+2026-09-20 supersession note: `.github/workflows/collection-dlq-diagnostics.yml` は [収集運用専用GitHub Actionsを廃止する](../20260920_remove-collection-operations-actions/README.md) により削除した。上記は当時の復旧証跡であり、現行の手動運用はCodexタスクから同じ管理APIの安全条件を確認して実行する。
+
 ## Technical impact
 
 - DLQ本文の解析を、現行Envelopeと旧単件通知を区別する小さなparserへ分離する。
