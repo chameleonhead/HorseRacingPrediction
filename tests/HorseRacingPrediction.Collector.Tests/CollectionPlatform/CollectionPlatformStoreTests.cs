@@ -35,6 +35,31 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task RequestManyAsync_AcceptsAndPersistsReferenceRaceMetadata()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var attributes = new Dictionary<string, string>
+        {
+            ["referenceRaceDate"] = "2026-09-19",
+            ["referenceRaceCourse"] = "Nakayama",
+            ["referenceRaceNumber"] = "2",
+        };
+        var item = new CollectionRequestBatchItem("Horse:H001", new(ResourceType.Horse, "JRA", "H001"),
+            HorseProfile, 7, CollectionReason.Discovery, CollectionLane.Realtime, 70, null,
+            new DateOnly(2026, 9, 19), attributes);
+
+        var outcome = (await store.RequestManyAsync("race-subjects:race-1", [item], now)).Single();
+
+        Assert.AreEqual("Created", outcome.Status);
+        var lease = await store.AcquireAsync(outcome.Receipt!.TaskId, 1, now.AddSeconds(1), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual("2026-09-19", lease.Attributes["referenceRaceDate"]);
+        Assert.AreEqual("Nakayama", lease.Attributes["referenceRaceCourse"]);
+        Assert.AreEqual("2", lease.Attributes["referenceRaceNumber"]);
+    }
+
+    [TestMethod]
     public async Task RequestManyAsync_ConcurrentStoresBindSamePayloadAndRejectDifferentPayload()
     {
         var firstStore = await CreateStoreAsync();
