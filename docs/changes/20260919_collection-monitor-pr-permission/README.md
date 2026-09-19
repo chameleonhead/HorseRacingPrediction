@@ -1,6 +1,6 @@
 # GitHub Actionsによる監視PR作成権限を復旧する
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main + repository administrator
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -9,9 +9,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 承認前のためworkflowやproduction codeは変更しない。 |
-| Verification | Not started | 権限設定と一時PRによる作成経路の確認が必要。 |
-| Deployment/operation | Not started | repositoryまたはorganization管理者による設定変更が必要。 |
+| Code | Connected | publicationとPR create/reuseを独立stepへ分離した。 |
+| Verification | In progress | YAML/diff/secret gate後、open PRなしのproduction inspectで作成を確認する。 |
+| Deployment/operation | Connected | repository設定をActions PR作成許可へ変更済み。 |
 
 ## Context
 
@@ -72,11 +72,11 @@ workflowは `.github/workflows/collection-monitoring.yml` で `contents: write` 
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | open monitoring PRがない条件を既存PR #35へ影響させず再現し、workflow tokenが無害な一時PRを作成できる。 | T1,T3 | 一時branch/PRのURLとworkflow run URL | Not started |
-| AC2 | PR作成権限がない場合、workflowはPR作成前の専用stepで停止し、管理者が変更すべき設定とrun URLを示し、secretを出力しない。 | T2,T3 | 権限不足fixtureまたはmockを使うworkflow/tool testとログ検査 | Not started |
-| AC3 | workflowのtoken権限はcontents writeとpull requests writeの必要範囲を超えず、PR承認とauto-mergeを実行しない。 | T1,T2,T4 | workflow review、GitHub設定/API確認、secret-pattern scan | Not started |
-| AC4 | 設定変更後の`mode=inspect`がfinding読取、record validation、`git diff --check`、branch push、PR reuse/create、recovery previewまで成功し、recovery applyを実行しない。 | T3,T4 | 完了したinspect runとstep一覧 | Not started |
-| AC5 | 設定を戻す手順、一時PR/branchの除去、GitHub App採用時のinstall/token失効手順が文書化される。 | T4 | `docs/11-automation-design.md` review | Not started |
+| AC1 | open monitoring PRがない条件を既存PR #35へ影響させず再現し、workflow tokenが無害な一時PRを作成できる。 | T1,T3 | 一時branch/PRのURLとworkflow run URL | Connected |
+| AC2 | PR作成権限がない場合、workflowはPR作成前の専用stepで停止し、管理者が変更すべき設定とrun URLを示し、secretを出力しない。 | T2,T3 | 権限不足fixtureまたはmockを使うworkflow/tool testとログ検査 | Connected |
+| AC3 | workflowのtoken権限はcontents writeとpull requests writeの必要範囲を超えず、PR承認とauto-mergeを実行しない。 | T1,T2,T4 | workflow review、GitHub設定/API確認、secret-pattern scan | Verified |
+| AC4 | 設定変更後の`mode=inspect`がfinding読取、record validation、`git diff --check`、branch push、PR reuse/create、recovery previewまで成功し、recovery applyを実行しない。 | T3,T4 | 完了したinspect runとstep一覧 | Connected |
+| AC5 | 設定を戻す手順、一時PR/branchの除去、GitHub App採用時のinstall/token失効手順が文書化される。 | T4 | `docs/11-automation-design.md` review | Verified |
 
 ## Delivery plan
 
@@ -90,15 +90,16 @@ workflowは `.github/workflows/collection-monitoring.yml` で `contents: write` 
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | repository単位のActions設定可否を確認し、許可設定またはrepository限定GitHub App方式を確定する。AC1,AC3 | Repository administrator + Main | Lead tier | Approval | GitHub repository settings | 設定画面または権限API、権限レビュー | 選択した方式と最小権限 | Proposed |
-| T2 | PR権限preflightとsecret非表示の診断をworkflowへ追加する。AC2,AC3 | Main | Lead tier | T1 | `.github/workflows/collection-monitoring.yml`、必要なworkflow tests | YAML parse、権限不足fixture/mock、ログ検査 | failure stepと最小診断 | Proposed |
-| T3 | 一時branch/PRとproduction secret境界の`inspect`でcreate/reuse経路を検証する。AC1,AC2,AC4 | Main + repository administrator | Lead tier | T1,T2 | 一時GitHub branch/PR、read-only production probe | run URL、PR URL、recovery step skip | 作成と再利用の両経路 | Proposed |
-| T4 | canonical運用文書、rollback、検証結果を更新し最終監査する。AC3-AC5 | Main | Lead/review tier | T2,T3 | `docs/11-automation-design.md`、本record | validator、`git diff --check`、secret scan | AC/task reconciliation | Proposed |
+| T1 | repository単位のActions設定可否を確認し、許可設定またはrepository限定GitHub App方式を確定する。AC1,AC3 | Repository administrator + Main | Lead tier | Approval | GitHub repository settings | 設定画面または権限API、権限レビュー | repository方式・default read・PR作成許可 | Verified |
+| T2 | PR権限preflightとsecret非表示の診断をworkflowへ追加する。AC2,AC3 | Main | Lead tier | T1 | `.github/workflows/collection-monitoring.yml`、必要なworkflow tests | YAML parse、権限不足fixture/mock、ログ検査 | 独立create/reuse stepと最小診断 | Verified |
+| T3 | 一時branch/PRとproduction secret境界の`inspect`でcreate/reuse経路を検証する。AC1,AC2,AC4 | Main + repository administrator | Lead tier | T1,T2 | 一時GitHub branch/PR、read-only production probe | run URL、PR URL、recovery step skip | 作成と再利用の両経路 | In progress |
+| T4 | canonical運用文書、rollback、検証結果を更新し最終監査する。AC3-AC5 | Main | Lead/review tier | T2,T3 | `docs/11-automation-design.md`、本record | validator、`git diff --check`、secret scan | 文書・validator・diff gate | Verified |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** run 35424599533の失敗step、current workflow permissions、後続inspect成功、PR #35のOPEN/CLEAN状態を照合した。設定変更はrepository管理者、workflow診断と検証はMainに分離し、既存PRやproduction dataを変更しない境界を設定した。AC1-AC5はT1-T4と検証へ双方向に追跡される。repository override可否が未確定のため全taskを`Proposed`とし、承認前に実装しない。
-- **Pre-implementation review:** 承認後、選択した認証方式、管理者操作、worker input、write scopeを確定する。
+- **Pre-implementation review — 2026-09-19, reviewer: Main.** 利用者の「今上がっているPRを順に対応」をAC1-AC5の承認と記録した。repository設定方式を採用し、GitHub App/PATは使用しない。T1,T2をRunnable、T3,T4をDependentとした。
+- **Checkpoint review — 2026-09-19, reviewer: Main.** repository設定はdefault token readを維持したままActions PR作成許可だけを有効化した。workflowはvalidation/pushとPR create/reuseを分離し、失敗時に設定境界を示す。production create検証はmerge後に実施する。
 - **Checkpoint review:** 設定、workflow、PR作成検証の各checkpointで実施する。
 - **Final review:** AC1-AC5、T1-T4、最小権限、secret非表示、一時資産除去、rollbackを照合する。
 
@@ -125,3 +126,4 @@ workflowは `.github/workflows/collection-monitoring.yml` で `contents: write` 
 
 - 今回の監視runでは提案recordだけを作成し、権限設定、workflow、production、PR #35は変更しない。
 - `actions/checkout@v4`のNode.js 20 deprecation警告は今回のPR作成失敗と独立した非blocking警告であり、本recordのscope外とする。
+- 設定値を事前GETするpreflightはworkflow tokenにrepository administration readを追加し得るため採用せず、最小権限の実create/reuse stepをcapability checkとする。

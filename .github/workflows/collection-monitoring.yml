@@ -89,8 +89,6 @@ jobs:
       - name: Validate and publish change records
         if: steps.records.outputs.changed == 'true'
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mapfile -t records < <(git status --short --untracked-files=all | awk '{print $2}' | grep '^docs/changes/.*/README.md$')
@@ -100,10 +98,21 @@ jobs:
           git add -- "${records[@]}"
           git commit -m "Record collection monitoring findings"
           git push --set-upstream origin "$FINDING_BRANCH"
+
+      - name: Create or reuse monitoring pull request
+        if: steps.records.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
           if ! gh pr list --head "$FINDING_BRANCH" --state open --json number --jq 'length > 0' | grep -q true; then
-            gh pr create --base main --head "$FINDING_BRANCH" \
+            if ! gh pr create --base main --head "$FINDING_BRANCH" \
               --title "Record collection monitoring findings" \
-              --body "Automated proposed change records generated from sanitized collection monitoring findings. No program fix or unknown-error data correction is applied by this pull request."
+              --body "Automated proposed change records generated from sanitized collection monitoring findings. No program fix or unknown-error data correction is applied by this pull request."; then
+              echo "GitHub Actions could not create the monitoring PR. Repository administrators must enable Actions to create pull requests, or provide the approved repository-scoped GitHub App fallback. See this run for the failed capability check." >&2
+              exit 1
+            fi
           fi
 
       - name: Preview known historical recovery
