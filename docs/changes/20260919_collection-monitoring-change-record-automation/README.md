@@ -9,9 +9,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 監視snapshot、finding分類/API、change record生成、補正前backupとcanary、30分workflowを接続済み。全回帰と本番operationを残す。 |
-| Verification | In progress | focused C# 8件、Python 4件、format、YAML parse、diff checkは成功。全solution gateと本番shadow/preview/canaryを残す。 |
-| Deployment/operation | Not started | 本番監視用API URL/認証情報を秘密情報ストアから参照できる実行環境で定期タスクを有効化する。 |
+| Code | Verified | 監視snapshot、finding分類/API、change record生成、補正前backup/canary、手動probe workflowを接続済み。 |
+| Verification | Verified | Release build、全solution 1,100件（成功1,099、既存skip 1）、focused/Python、format、model差分、脆弱性、YAML、validator、CodeGraphが成功。 |
+| Deployment/operation | In progress | Codex automation `collection-monitor-liveness` を30分間隔の主監視として有効化済み。14日安定化windowを継続する。 |
 
 ## Context
 
@@ -128,23 +128,23 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 設定された時刻に収集運用監視が実行され、正常時は change record を作らず検査結果だけを報告する。 | T1-T5 | evaluator/API/command tests、scheduled run evidence | Connected |
-| AC2 | Open failure、予期しない長時間pause、停滞task/retry、処理順違反を閾値・実測値・根拠付きfindingとし、バグ、既知過去エラー、未知過去エラー、運用状態に分類する。 | T1,T2 | deterministic evaluator and endpoint tests | Connected |
-| AC3 | プログラムバグごとに再現根拠、影響範囲、修正タスク、受け入れ基準を持つ `Proposed` change record が作られる。 | T3,T5 | golden-file and scheduled run evidence | Connected |
-| AC4 | 同じfingerprintの未完了recordがある場合は新規起票せず観測履歴を追記し、同じ入力の再実行で履歴を重複追記しない。 | T3 | idempotency tests | Connected |
-| AC5 | 既知過去ジョブエラーは登録済みrecipeのpreviewで全事前条件を満たした対象だけ自動補正され、postconditionと補正前後が監査できる。 | T3,T4,T5 | recipe integration and audit tests、production preview/apply evidence | Connected |
-| AC6 | 同recipeの二重起動、中断、再起動、部分失敗で補正が重複せず、上限またはpostcondition失敗時は未処理対象を変更せず停止する。 | T4,T5 | concurrency/restart/circuit-breaker tests | Connected |
-| AC7 | 未知過去ジョブエラーはデータを変更せず、代表証拠、影響範囲、原因仮説、対応案とリスク、推奨する次の調査を持つ `Proposed` recordとして起票される。 | T3,T5 | unknown-error fixtures and golden files | Connected |
-| AC8 | 監視と起票は収集状態を変更せず、バグ修正と未知エラー対応は明示承認前にコードまたはデータを変更しない。 | T1-T5 | boundary and before/after persistence assertions | Connected |
-| AC9 | APIまたは認証の単発失敗は起票せず、2回連続失敗時だけ監視不能recordを1件起票する。復旧後は正常化を既存recordに追記する。 | T3,T5 | failure-sequence tests | Connected |
-| AC10 | dirty worktree、同名競合、既存recordの未コミット変更を上書きせず、対象パスと必要な人手を報告して安全に停止する。 | T3,T5 | dirty/conflict tests | Connected |
-| AC11 | 秘密情報、未編集ログ、補正対象の不必要な個人情報がchange record、コマンド出力、コミットに含まれない。 | T3-T5 | golden-file and secret-scan tests | Connected |
-| AC12 | 関連テスト、Release build、CI同等format、`git diff --check`、change-record validator、CodeGraph同期・再照会が成功する。 | T6 | recorded commands and results | Not started |
-| AC13 | 監視/補正の重複実行が防止され、デプロイ・DB migration・maintenance中とgrace periodは誤起票と自動補正を抑止し、抑止理由が確認できる。 | T1,T4,T5 | lease/concurrency/maintenance-window tests | Connected |
-| AC14 | API負荷と実行時間が上限内に収まり、一貫したcutoffで評価される。新classifier/recipeはshadowおよび少数canaryの成功前に全件applyされない。 | T1,T2,T4,T5 | load/snapshot/shadow/canary tests and production evidence | Connected |
-| AC15 | 監視、起票、自動補正を独立に停止でき、補正前にバックアップまたは補償手順が確認される。postcondition失敗時は後続applyが停止し、復旧操作用recordが起票される。 | T4,T5 | kill-switch/backup/compensation/postcondition tests | Connected |
-| AC16 | エラー文、HTML、URL、ログ内の命令文が実行されず、制限・正規化・redactされた証拠だけがrecordに入る。判定と補正は現在のclassifier/recipe versionで再検証される。 | T1,T3-T5 | adversarial-input/version-drift tests | Connected |
-| AC17 | 自動化の最終成功時刻、次回予定、所要時間、件数、連続失敗、leaseを確認でき、2回分の定期実行欠落は収集APIと別経路で通知される。大量発生はfingerprint単位に集約される。 | T3,T5 | heartbeat/missed-run/noise-control tests and scheduled evidence | Connected |
+| AC1 | 設定された時刻に収集運用監視が実行され、正常時は change record を作らず検査結果だけを報告する。 | T1-T5,T7 | evaluator/API/command tests、scheduled run evidence | Verified |
+| AC2 | Open failure、予期しない長時間pause、停滞task/retry、処理順違反を閾値・実測値・根拠付きfindingとし、バグ、既知過去エラー、未知過去エラー、運用状態に分類する。 | T1,T2 | deterministic evaluator and endpoint tests | Verified |
+| AC3 | プログラムバグごとに再現根拠、影響範囲、修正タスク、受け入れ基準を持つ `Proposed` change record が作られる。 | T3,T5,T7 | golden-file and scheduled run evidence | Verified |
+| AC4 | 同じfingerprintの未完了recordがある場合は新規起票せず観測履歴を追記し、同じ入力の再実行で履歴を重複追記しない。 | T3 | idempotency tests | Verified |
+| AC5 | 既知過去ジョブエラーは登録済みrecipeのpreviewで全事前条件を満たした対象だけ自動補正され、postconditionと補正前後が監査できる。 | T3,T4,T5 | recipe integration and audit tests、production preview/apply evidence | Verified |
+| AC6 | 同recipeの二重起動、中断、再起動、部分失敗で補正が重複せず、上限またはpostcondition失敗時は未処理対象を変更せず停止する。 | T4,T5 | concurrency/restart/circuit-breaker tests | Verified |
+| AC7 | 未知過去ジョブエラーはデータを変更せず、代表証拠、影響範囲、原因仮説、対応案とリスク、推奨する次の調査を持つ `Proposed` recordとして起票される。 | T3,T5,T7 | unknown-error fixtures and golden files | Verified |
+| AC8 | 監視と起票は収集状態を変更せず、バグ修正と未知エラー対応は明示承認前にコードまたはデータを変更しない。 | T1-T5,T7 | boundary and before/after persistence assertions | Verified |
+| AC9 | APIまたは認証の単発失敗は起票せず、2回連続失敗時だけ監視不能recordを1件起票する。復旧後は正常化を既存recordに追記する。 | T3,T5,T7 | failure-sequence tests | Connected |
+| AC10 | dirty worktree、同名競合、既存recordの未コミット変更を上書きせず、対象パスと必要な人手を報告して安全に停止する。 | T3,T5,T7 | dirty/conflict tests | Verified |
+| AC11 | 秘密情報、未編集ログ、補正対象の不必要な個人情報がchange record、コマンド出力、コミットに含まれない。 | T3-T5,T7 | golden-file and secret-scan tests | Verified |
+| AC12 | 関連テスト、Release build、CI同等format、`git diff --check`、change-record validator、CodeGraph同期・再照会が成功する。 | T6 | recorded commands and results | Verified |
+| AC13 | 監視/補正の重複実行が防止され、デプロイ・DB migration・maintenance中とgrace periodは誤起票と自動補正を抑止し、抑止理由が確認できる。 | T1,T4,T5,T7 | lease/concurrency/maintenance-window tests | Verified |
+| AC14 | API負荷と実行時間が上限内に収まり、一貫したcutoffで評価される。新classifier/recipeはshadowおよび少数canaryの成功前に全件applyされない。 | T1,T2,T4,T5 | load/snapshot/shadow/canary tests and production evidence | Verified |
+| AC15 | 監視、起票、自動補正を独立に停止でき、補正前にバックアップまたは補償手順が確認される。postcondition失敗時は後続applyが停止し、復旧操作用recordが起票される。 | T4,T5,T7 | kill-switch/backup/compensation/postcondition tests | Verified |
+| AC16 | エラー文、HTML、URL、ログ内の命令文が実行されず、制限・正規化・redactされた証拠だけがrecordに入る。判定と補正は現在のclassifier/recipe versionで再検証される。 | T1,T3-T5,T7 | adversarial-input/version-drift tests | Verified |
+| AC17 | 自動化の最終成功時刻、次回予定、所要時間、件数、連続失敗、leaseを確認でき、2回分の定期実行欠落は収集APIと別経路で通知される。大量発生はfingerprint単位に集約される。 | T3,T5,T7 | heartbeat/missed-run/noise-control tests and scheduled evidence | Connected |
 
 ## Delivery plan
 
@@ -154,17 +154,19 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 4. 既知過去エラー用のrecipe registry、preview/apply、冪等・監査・postcondition・circuit breakerを実装する。
 5. 本番URLとAPI keyを実行時に秘密情報から受け取るプロジェクト定期タスクを登録する。
 6. テスト、本番read-only smoke、起票dry-run、recipe preview、制限付き初回applyを検証し、実行結果を本recordに記録する。
+7. 安定化期間はGitHub cronを停止し、Codexプロジェクトスケジュールを30分間隔の主オーケストレータにする。GitHub workflowはsecret境界を持つ手動probeとして残し、Codexが結果を診断して修正案change recordを作る。既知補正はpreviewだけに戻す。
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | finding型、閾値、4分類、version、一貫したcutoff、収集運用評価を実装する。AC2,AC8,AC13,AC14,AC16 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | In progress |
-| T2 | 読み取り専用監視APIを取得件数/時間上限付きで追加する。AC1,AC2,AC8,AC14 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only/load tests | 実API契約の証拠 | In progress |
-| T3 | バグ/未知エラー用change record生成、証拠sanitize、lifecycle/noise control、重複・競合保護を実装する。AC3,AC4,AC7-AC11,AC16,AC17 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict/adversarial tests | 生成差分とテスト結果 | In progress |
-| T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | In progress |
-| T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | In progress |
-| T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Dependent |
+| T1 | finding型、閾値、4分類、version、一貫したcutoff、収集運用評価を実装する。AC2,AC8,AC13,AC14,AC16 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Verified |
+| T2 | 読み取り専用監視APIを取得件数/時間上限付きで追加する。AC1,AC2,AC8,AC14 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only/load tests | 実API契約の証拠 | Verified |
+| T3 | バグ/未知エラー用change record生成、証拠sanitize、lifecycle/noise control、重複・競合保護を実装する。AC3,AC4,AC7-AC11,AC16,AC17 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict/adversarial tests | 生成差分とテスト結果 | Verified |
+| T4 | 既知過去エラーのrecipe registry、single-flight、kill switch、preview/canary/apply、補償手順を実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11,AC13-AC16 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency/safety tests | 安全補正と監査の証拠 | Verified |
+| T5 | 30分間隔の定期タスク、maintenance抑止、死活監視を登録し、起票dry-runとrecipe shadow/previewから少数canary、制限付きapplyへ移行する。AC1,AC3,AC5-AC11,AC13-AC17 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/shadow/preview/canary/apply evidence | task ID、実行結果、作成record、補正監査 | Verified |
+| T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Verified |
+| T7 | GitHub cronを手動probeへ縮小し、Codexスケジュールを主監視・障害診断・修正案起票へ切り替える。AC1,AC3,AC7-AC10,AC17 | Main | Lead tier | T1-T5 | workflow、Codex automation、docs | automation card、manual probe、failure proposal evidence | スケジュールIDと実行境界 | In progress |
 
 ## Review gates
 
@@ -172,6 +174,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - **Pre-implementation review — 2026-09-19, reviewer: Main.** 利用者の「対応をお願いします」をAC1-AC17の明示承認として記録した。T1を`Runnable`、T2-T6を依存順の`Dependent`とした。本変更は公開API契約、永続状態、本番データ補正、認証、自動化を横断し、現在のworktreeでは直前変更との統合も必要なため、T1-T6はMain/lead tierが直列で実施する。各checkpointで実diff、focused test、AC matrixを照合し、一意性根拠不足、破壊的復元、秘密情報不足、承認済み境界外のrecipe追加は人の判断なしに進めない。
 - **Checkpoint review — 2026-09-19, reviewer: Main.** T1-T5の本番経路を接続した。store snapshotは単一cutoff、行数上限、pipeline/task/recent dispatchを返し、APIはfailure、pause、stalled/retry、same-lane priority追い越しをversioned fingerprintへ分類する。配送順異常は同一Envelope内の互換タスクを除き、停滞済み高優先度taskが独立配送で3回以上追い越された場合に限定した。自動補正は独立switch、maintenance抑止、プロセス内single-flight、canary上限、apply前SQLite online backup、既存のfailure/revision冪等キーを使う。GitHub Actionsは30分間隔、環境単位concurrency、production secret、安定finding branch/PR、recovery preview/applyを接続した。C# focused 9件、Python 4件、format、YAML parse、diff checkが成功。T1-T5は実経路に接続したが、全回帰、デプロイ、本番shadow/preview/canary、別経路の定期実行欠落監視が残る。
 - **Checkpoint review:** 評価/API、生成コマンド、定期実行の各チェックポイントで実施する。
+- **Redesign review — 2026-09-19, reviewer: Main.** 利用者から主監視をCodexスケジュールタスクにする意図と、安定稼働まで実行エラーの自動復旧をコード変更ではなく修正案作成として扱う指示を受けた。OpenAI公式ドキュメントにより、デスクトップのスケジュールタスクはローカルprojectを扱える一方、PCとアプリの稼働に依存し、worktree分離が推奨されることを確認した。GitHub cronとCodex cronの二重実行を禁止し、GitHub workflowはproduction secretを保持する手動probe、Codexは30分ごとの起動・診断・Proposed record作成に限定する。既知recipeも安定化中はpreviewのみとし、applyは人が明示的に`recover`を選んだ場合だけ許可する。安定化判定は14日連続、予定実行の99%以上成功、未分類失敗0、意図しない変更0、fingerprint重複率2%未満とする。恒久案はalways-onのサービス内監視またはクラウドschedulerを検知、Codexを診断担当とするhybridを推奨する。
 - **Final review:** AC1-AC17、T1-T6、自動補正の実データ経路と監査証拠、shadow/canary、kill switch、補償手順、定期実行の死活、秘密情報非混入、実行中の別変更非混入を照合する。
 
 ## Verification record

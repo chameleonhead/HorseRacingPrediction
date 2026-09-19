@@ -59,7 +59,9 @@
 プログラムバグは修正用change record、未知の過去ジョブエラーは原因仮説・影響範囲・対応候補・推奨調査を持つchange recordとして起票する。既知の過去ジョブエラーは、一意性根拠、revision条件、preview、冪等キー、postcondition、実行上限、監査記録を持つ登録済みの自動安全recipeに限り自動補正する。曖昧・未登録・事前条件不一致の対象は変更せず、未知エラー調査へ分離する。
 
 バグ修正と未知エラー対応の自動承認・自動デプロイは行わない。評価契約、自動補正の安全境界、重複抑止、秘密情報境界、受け入れ基準は [収集運用を監視し起票と安全な過去ジョブ補正を自動化する](changes/20260919_collection-monitoring-change-record-automation/README.md) を正本とする。2026-09-19に、読み取り専用評価API、change record生成、既知エラーのrevision-gated補正、定期workflowを実装した。
-常設実行はsingle-flight、maintenance抑止、負荷上限、shadow/canary、起票と補正の独立kill switch、事前backup、外部証拠の非信頼扱い、定期実行自体の別経路死活監視を必須とする。未知エラーは調査用change recordまで、プログラムバグは修正用change recordまでを自動化し、人の承認なしにコード変更や未知データ補正を実行しない。
+安定化期間の定期実行主体はCodexのプロジェクトスケジュールタスクとし、GitHub workflowはAPI keyを使う手動probeとしてCodexから起動する。single-flight、maintenance抑止、負荷上限、起票と補正の独立kill switch、事前backup、外部証拠の非信頼扱いを必須とする。実行エラー、未知エラー、プログラムバグは原因・修正案・検証手順を持つchange recordまでを自動化し、人の承認なしにコード変更、未知データ補正、mergeを実行しない。既知データ補正も安定化期間中は自動applyせずpreviewに限定する。
+
+CodexのローカルスケジュールはPCとデスクトップアプリの稼働に依存するため、恒久的な24時間監視の正本にはしない。安定化後は、収集サービス内のdurable lease付き監視またはクラウドスケジューラを検知の正本、Codexを診断・修正案作成の担当とする構成を再評価する。
 
 ## 長期収集計画の定期見直し（提案）
 
