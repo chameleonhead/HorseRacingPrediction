@@ -11,8 +11,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 設計承認後に同定コンテキスト、候補検証、revisionを実装する。 |
-| Verification | Not started | 同名馬、根拠レース、時系列矛盾、既存identity優先の反例テストが必要。 |
+| Code | Verified locally | Result link伝播、Result-only主体request、Race provenance検証、exact履歴照合、bounded診断、revision 4を実装した。 |
+| Verification | Verified locally | Release build警告0、固定テスト1,137件成功・既知skip 1。 |
 | Deployment/operation | Not started | 配備後に対象ジョブを新revisionでpreview/recoveryし、結果を確認する。 |
 
 ## Context
@@ -132,18 +132,18 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 検証済みsource identityまたは生年月日があるtaskは既存根拠を優先し、race fallbackで別URLを選ばない。 | T1,T2,T3 | navigator/handler regression tests | Not started |
-| AC2 | Race由来であること、canonical Race ID、EffectiveDateが相互整合しないtaskはrace evidenceを使用しない。 | T1,T3 | provenance counterexample tests | Not started |
-| AC3 | 結果だけを取得する過去レースでも、結果行の検証済みHorse linkがRaceResult保存、canonical RaceEntry、horse-profile requestまで失われず伝播する。 | T1,T3 | historical result fixture through parser/handler/API persistence | Not started |
-| AC4 | 結果行linkを利用できない場合、同名候補のうち起点レースの日付・場・番号に完全一致する公開履歴を持つ候補が1頭だけなら、そのURLをidentityとして収集成功する。 | T2,T3 | duplicate candidate fixture and handler integration | Not started |
-| AC5 | 起点レース一致が0件または複数件なら自動選択せず、候補ごとの一致・時系列矛盾・過去証拠取得不能理由をboundedに記録する。 | T2,T3 | zero/multiple/unavailable/page-boundary tests | Not started |
-| AC6 | 抹消年月日がレース前、生年月日がレース後の候補は矛盾と判定するが、それだけで残り候補を成功扱いしない。結果ページの性齢から逆算した生年も採用根拠にしない。 | T2,T3 | 2003/2026, future-born and old-age-notation counterexamples | Not started |
-| AC7 | 先頭ページより古いレース、70戦超、抹消済み馬、履歴ページ境界、循環、候補上限、キャンセル、JRA外結果を安全に処理し、アクセス量は同名fallback対象に限定される。 | T2,T3 | historical navigation bounds and cancellation tests | Not started |
+| AC1 | 検証済みsource identityまたは生年月日があるtaskは既存根拠を優先し、race fallbackで別URLを選ばない。 | T1,T2,T3 | navigator/handler regression tests | Verified |
+| AC2 | Race由来であること、canonical Race ID、EffectiveDateが相互整合しないtaskはrace evidenceを使用しない。 | T1,T3 | provenance counterexample tests | Verified |
+| AC3 | 結果だけを取得する過去レースでも、結果行の検証済みHorse linkがRaceResult保存、canonical RaceEntry、horse-profile requestまで失われず伝播する。 | T1,T3 | historical result fixture through parser/handler/API persistence | Verified |
+| AC4 | 結果行linkを利用できない場合、同名候補のうち起点レースの日付・場・番号に完全一致する公開履歴を持つ候補が1頭だけなら、そのURLをidentityとして収集成功する。 | T2,T3 | duplicate candidate fixture and handler integration | Verified |
+| AC5 | 起点レース一致が0件または複数件なら自動選択せず、候補ごとの一致・時系列矛盾・過去証拠取得不能理由をboundedに記録する。 | T2,T3 | zero/multiple/unavailable/page-boundary tests | Verified |
+| AC6 | 抹消年月日がレース前、生年月日がレース後の候補は矛盾と判定するが、それだけで残り候補を成功扱いしない。結果ページの性齢から逆算した生年も採用根拠にしない。 | T2,T3 | 2003/2026, future-born and old-age-notation counterexamples | Verified |
+| AC7 | 先頭ページより古いレース、70戦超、抹消済み馬、履歴ページ境界、循環、候補上限、キャンセル、JRA外結果を安全に処理し、アクセス量は同名fallback対象に限定される。 | T2,T3 | historical navigation bounds and cancellation tests | Verified |
 | AC8 | 新revisionのpreviewで対象ロンドンコーリングtaskのprovenanceを確認し、安全条件を満たす場合だけ1件のRecoveryを作成する。満たさない場合は理由付きで未適用にする。 | T4 | production preview/apply evidence | Not started |
 | AC9 | 既存の同名別馬、RaceEntry、旧failure履歴はmerge・削除・書換えされず、過去RaceEntryは再取得時も同じcanonical Horseへ収束する。 | T3,T4 | persistence diff, idempotent reacquisition and production post-check | Not started |
-| AC10 | Result-onlyの実経路で、結果行linkがparser、workflow result、API保存、RaceEntry、重複排除されたsubject request、horse-profile handlerまで接続される。Card併用時も同じHorse taskを二重作成しない。 | T1,T3 | transport/persistence/dispatch end-to-end test | Not started |
-| AC11 | fallback探索はprofile/page/timeの共有budget内で動作し、超過を候補なしや一時障害へ丸めず、同revisionで自動再試行しない。identity付き通常経路の追加navigationは0である。 | T2,T3 | budget, telemetry and retry-classification tests | Not started |
-| AC12 | name由来旧Horseとcanonical Horseが分かれる場合、証明済みRaceEntryだけが冪等に付け替わる。旧Horseに参照が残ればmerge/redirectせず、参照ゼロの場合だけ旧task/failureが既存ledger付きrepairで閉じる。 | T3,T4 | repair preview/apply, reference and repeat-run tests | Not started |
+| AC10 | Result-onlyの実経路で、結果行linkがparser、workflow result、API保存、RaceEntry、重複排除されたsubject request、horse-profile handlerまで接続される。Card併用時も同じHorse taskを二重作成しない。 | T1,T3 | transport/persistence/dispatch end-to-end test | Verified |
+| AC11 | fallback探索はprofile/page/timeの共有budget内で動作し、超過を候補なしや一時障害へ丸めず、同revisionで自動再試行しない。identity付き通常経路の追加navigationは0である。 | T2,T3 | budget, telemetry and retry-classification tests | Verified |
+| AC12 | name由来旧Horseとcanonical Horseが分かれる場合、証明済みRaceEntryだけが冪等に付け替わる。旧Horseに参照が残ればmerge/redirectせず、参照ゼロの場合だけ旧task/failureが既存ledger付きrepairで閉じる。 | T3,T4 | repair preview/apply, reference and repeat-run tests | Locally verified; production pending |
 
 ## Delivery plan
 
@@ -156,9 +156,9 @@
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | RaceCard/過去RaceResultのHorse linkとRace provenanceを検証し、Result-only主体requestまで伝播する。 | Main | Lead tier | Approval | Race result parser/model/workflow、Collector handler | historical parser/transport/dispatch tests | AC1-AC3,AC10 | In progress |
-| T2 | link欠落時の同名候補exact race照合、時系列矛盾診断、共有探索budgetを実装する。 | Main | Lead tier | T1 | Navigator、subject model/parser、failure evidence | historical navigator/budget fixtures | AC4-AC7,AC11 | Dependent |
-| T3 | 過去開催、反例、主体dispatch、Horse ID分岐、冪等再取得、統合、回帰、format/buildを検証する。 | Main | Lead/review tier | T1,T2 | tests | focused/full CI-equivalent gates | AC1-AC7,AC9-AC12 | Dependent |
+| T1 | RaceCard/過去RaceResultのHorse linkとRace provenanceを検証し、Result-only主体requestまで伝播する。 | Main | Lead tier | Approval | Race result parser/model/workflow、Collector handler | historical parser/transport/dispatch tests | AC1-AC3,AC10 | Verified |
+| T2 | link欠落時の同名候補exact race照合、時系列矛盾診断、共有探索budgetを実装する。 | Main | Lead tier | T1 | Navigator、subject model/parser、failure evidence | historical navigator/budget fixtures | AC4-AC7,AC11 | Verified |
+| T3 | 過去開催、反例、主体dispatch、Horse ID分岐、冪等再取得、統合、回帰、format/buildを検証する。 | Main | Lead/review tier | T1,T2 | tests | focused/full CI-equivalent gates | AC1-AC7,AC9-AC12 | Verified |
 | T4 | revision更新、repair preview、配備、対象Recovery、過去再取得post-checkを行う。 | Main | Lead/review tier | T3 | definition、repair、change record、production operation | preview/apply evidence | AC8-AC9,AC12 | Dependent |
 
 ## Review gates
@@ -166,7 +166,7 @@
 - **Design and task-split review — 2026-09-19, reviewer: Main.** CodeGraph indexは利用不能だったため、handler、navigator、parser、task producer、UI/store、既存change recordを直接追跡した。2件の読み取り専用調査を分離し、主担当が結果を統合した。ACはproducer provenance、候補照合、反例、安全な本番Recoveryへ接続した。identityと本番データ完全性に関わるため実装はMainが直列所有する。
 - **Concern and agreement review — 2026-09-19, reviewer: Main.** source identity優先、Race provenance検証、時系列だけで選択しないこと、過去RaceResultの公式link伝播、Result-only主体dispatch、全履歴ページングと共有budget、旧年齢表記、Horse ID分岐後のrepair、年代別実画面証拠、対象task metadata未確認を材料化した。Open decisionはなく、C1-C11は設計内で安全側へ解決した。ユーザー承認は未取得。
 - **Pre-implementation review — 2026-09-19, reviewer: Main.** ユーザーの「対応をお願いします」を、直前に要約した設計、AC1-AC12、C1-C11の処置に対する明示承認として記録した。T1をIn progress、T2-T4を依存順にDependentとした。T1はparser/model/workflow/handlerの共有contractをMainが直列所有する。並行委譲は書込なしのテスト・経路棚卸しに限定し、identity、persistence、repair、本番操作の判断はMainが保持する。各taskはfocused testと実transport証拠が得られなければVerifiedにしない。
-- **Checkpoint review:** 実装中に実施する。
+- **Checkpoint review — 2026-09-19, reviewer: Main.** Result-only transport、provenance反例、同名exact履歴照合、時系列矛盾の非採用、bounded failureをfocused testで確認した。最新`origin/main`へ今回の5コミットだけを載せ替え、format、Release build、非External全テストを再実行した。T1-T3とローカルACをVerified、配備・対象preview・RecoveryをT4に残した。
 - **Final review:** 全ACと本番post-check後に実施する。
 
 ## Verification record
@@ -175,11 +175,15 @@
 - 2026-09-19: `JraSubjectCollectionHandler` と `JraNavigator.FindHorseAsync` は起点レースを読まず、URL、生年月日、名前だけで候補を判定することを確認した。
 - 2026-09-19: JRA公式プロフィール `pw01dud102024102539/E3` に2024年2月26日生まれのロンドンコーリングと2026年9月12日中山6Rの履歴があることを確認した。
 - 2026-09-19: 対象管理画面はログインを要求したため、本turnでは対象task metadataの実値をUI確認していない。コード経路と公開JRA情報から設計し、本番previewをAC8の必須gateとした。
-- 2026-09-19: production codeは変更していない。
+- 2026-09-19（設計時点）: production codeは変更していない。
 - 2026-09-19: ユーザー指摘を受け、過去レースを結果ページだけから取得する経路を追加調査した。契約には
   `RaceResultEntryBulkDto.HorseSourceIdentity` が既にある一方、`RaceResultEntry` とparserは結果行のHorse linkを保持していないことを確認し、結果行linkの抽出・伝播を第一経路、全プロフィール履歴照合をfallbackとする設計へ更新した。
 - 2026-09-19: 追加レビューで、Result-only分岐は `RequestReferencedSubjectsAsync` を呼ばず、workflow resultも主体行を返さない接続欠落を確認した。さらに最大32候補×複数履歴pageの負荷、name由来Horse IDの残存、年代別Horse linkの外部証拠不足をmaterial concernとして追加し、AC10-AC12とC8-C11で閉じた。
+- 2026-09-19: Checkpoint reviewでResult馬名cellの公式profile linkをparser→bulk DTO→canonical RaceEntry→Result-only subject requestへ接続した。Race provenanceは発見元種別・provider・resource ID・EffectiveDate・Race各要素の一致時だけNavigatorへ渡す。
+- 2026-09-19: 同名fallbackはsource identity・生年月日より低い優先順位に限定し、JRA結果URLから復元した日付・場・番号の完全一致だけを採用する。2003年抹消などの時系列矛盾は候補診断に残すが、残り候補の単独採用根拠にはしない。
+- 2026-09-19: 候補8、候補別履歴12ページ、全体48ページ、30秒の共有budget、循環検知、対象日通過停止、キャンセルを実装した。budget超過と一致不能は別のstructured failureで、subject handlerはRetryAtなしのterminalな同定不能として保存する。
+- 2026-09-19: `dotnet restore HorseRacingPrediction.sln`、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release solution build（警告0）、`dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"`を最新`origin/main`基点で実行した。1,137件成功、既知skip 1、失敗0。
 
 ## Deviations and follow-up
 
-- なし。承認前のため実装・本番操作は未実施。
+- ローカル実装・検証は設計どおり完了した。本番preview/recoveryはPR mergeと新revision配備後に実施する。
