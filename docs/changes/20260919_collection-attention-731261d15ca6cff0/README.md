@@ -66,6 +66,8 @@
 
 ## Observation history
 
+- 2026-09-19T18:13:56.9430307+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
+
 - 2026-09-19T17:43:53.8891729+09:00: 再観測。severity=`medium`、summary=race-discovery has 1 actionable TargetClosedException failures.。
 
 - 2026-09-19T17:13:51.8037398+09:00: 初回検出。severity=`medium`、classification=`UnknownHistoricalJobError`。
