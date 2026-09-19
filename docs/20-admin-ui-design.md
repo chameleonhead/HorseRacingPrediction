@@ -292,6 +292,8 @@ erDiagram
 
 レース詳細ヘッダーの「JRAから再取得」で対象を確認して依頼する。受付後は状態とジョブリンクを表示し、完了時に詳細を再読込する。取得できた変更点をすべて更新し、欠落値を保持する。「払戻」タブで8種類の払戻を確認できる。[決定と検証](changes/20260908_race-detail-reacquisition/README.md)を参照。
 
+2026-09-19再提案: 収集管理はRaceを1リソース・1行・1active jobのまま表示し、その配下のCard/Result facetを`Card保存エラー / Result取得済み`等として独立表示する。総実行、公開確認、技術失敗を分け、availability待ちにretryを促さず、read-only auditから復旧操作へ接続しない。情報階層と狭幅表示は[Raceリソース中心の取得状態機械](changes/20260919_race-detail-phase-recovery/README.md)および[画面モック](changes/20260919_race-detail-phase-recovery/mocks/job-detail-phases.md)を正とし、承認前は現行表示を変更しない。
+
 出走表と結果表を別々のデータ構造として見せず、`RaceEntry` をレースに参加する馬の関係オブジェクトとして扱う。
 
 | 段階 | 主要表示 | 補助表示 |

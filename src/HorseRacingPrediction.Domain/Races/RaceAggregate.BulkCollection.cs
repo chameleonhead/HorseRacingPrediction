@@ -35,13 +35,36 @@ public partial class RaceAggregate
 
         foreach (var entry in data.Entries)
         {
-            if (_state.Entries.Any(x => x.EntryId == entry.EntryId))
+            var current = _state.Entries.LastOrDefault(x => x.EntryId == entry.EntryId);
+            if (current is null)
+            {
+                RegisterEntry(entry.EntryId, entry.HorseId, entry.HorseNumber,
+                    entry.JockeyId, entry.TrainerId, entry.GateNumber, entry.AssignedWeight,
+                    entry.SexCode, entry.Age, entry.DeclaredWeight, entry.DeclaredWeightDiff,
+                    entry.RunningStyleCode, entry.OwnerName);
+                continue;
+            }
+
+            var merged = current with
+            {
+                JockeyId = entry.JockeyId ?? current.JockeyId,
+                TrainerId = entry.TrainerId ?? current.TrainerId,
+                GateNumber = entry.GateNumber ?? current.GateNumber,
+                AssignedWeight = entry.AssignedWeight ?? current.AssignedWeight,
+                SexCode = entry.SexCode ?? current.SexCode,
+                Age = entry.Age ?? current.Age,
+                DeclaredWeight = entry.DeclaredWeight ?? current.DeclaredWeight,
+                DeclaredWeightDiff = entry.DeclaredWeightDiff ?? current.DeclaredWeightDiff,
+                RunningStyleCode = entry.RunningStyleCode ?? current.RunningStyleCode,
+                OwnerName = string.IsNullOrWhiteSpace(entry.OwnerName) ? current.OwnerName : entry.OwnerName
+            };
+            if (merged == current)
                 continue;
 
-            RegisterEntry(entry.EntryId, entry.HorseId, entry.HorseNumber,
-                entry.JockeyId, entry.TrainerId, entry.GateNumber, entry.AssignedWeight,
-                entry.SexCode, entry.Age, entry.DeclaredWeight, entry.DeclaredWeightDiff,
-                entry.RunningStyleCode, entry.OwnerName);
+            RegisterEntry(merged.EntryId, merged.HorseId, merged.HorseNumber,
+                merged.JockeyId, merged.TrainerId, merged.GateNumber, merged.AssignedWeight,
+                merged.SexCode, merged.Age, merged.DeclaredWeight, merged.DeclaredWeightDiff,
+                merged.RunningStyleCode, merged.OwnerName);
         }
 
         if (!string.IsNullOrWhiteSpace(data.WinningHorseName)

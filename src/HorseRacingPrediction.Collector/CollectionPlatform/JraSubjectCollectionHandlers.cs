@@ -311,7 +311,7 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                 if (priorityUntil is not null)
                     requestAttributes["weekendPriorityUntil"] = priorityUntil.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 itemsByRace.TryAdd(resource.Id, new CollectionRequestBulkItem(
-                    resource.Id, resource.Type.ToString(), resource.Provider, resource.Id, "race-detail", 1,
+                    resource.Id, resource.Type.ToString(), resource.Provider, resource.Id, "race-detail", 2,
                     CollectionReason.Discovery.ToString(), lane.ToString(), priority, url?.AbsoluteUri,
                     effectiveDate, requestAttributes));
             }

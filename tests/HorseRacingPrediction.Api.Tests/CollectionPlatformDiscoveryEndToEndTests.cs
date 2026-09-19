@@ -34,7 +34,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
                 1, "initial", false);
             await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
-                1, "initial", false);
+                2, "artifact state machine", false);
             await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds,
                 1, "initial", false);
 
@@ -110,7 +110,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 Provider = "JRA",
                 ResourceId = detail.Resource.Id,
                 DefinitionId = "race-detail",
-                RequestedRevision = 1,
+                RequestedRevision = 2,
                 Reason = CollectionReason.Discovery,
                 Lane = CollectionLane.Realtime,
                 Priority = 80,

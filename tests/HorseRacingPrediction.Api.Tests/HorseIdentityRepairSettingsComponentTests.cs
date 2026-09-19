@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Bunit;
 using HorseRacingPrediction.Api.Contracts;
+using HorseRacingPrediction.Api.CollectionController;
 using HorseRacingPrediction.Api.Security;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Api.Web.ApiBrowsing;
@@ -16,6 +17,30 @@ namespace HorseRacingPrediction.Api.Tests;
 [TestClass]
 public sealed class HorseIdentityRepairSettingsComponentTests
 {
+    [TestMethod]
+    public async Task RaceOwnerMigration_PreviewsBeforeApplying()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new RaceOwnerRepairHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Settings>();
+
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("マイグレーションを確認")).Instance.OnClick.InvokeAsync());
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "15 / 16 頭"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .First(x => x.Markup.Contains("マイグレーションを適用")).Instance.OnClick.InvokeAsync());
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Last(x => x.Markup.Contains("マイグレーションを適用"))
+            .Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "馬主情報のマイグレーションを適用しました"));
+        Assert.IsTrue(handler.Applied);
+    }
+
     [TestMethod]
     public async Task SafeAndBlockedCandidates_OnlySafeCandidateCanBeApplied()
     {
@@ -123,7 +148,8 @@ public sealed class HorseIdentityRepairSettingsComponentTests
 
         var cut = context.Render<Settings>();
         cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "URLを指定せず主体情報から探索"));
-        Assert.IsEmpty(cut.FindComponents<FluentTextField>());
+        Assert.IsFalse(cut.FindComponents<FluentTextField>()
+            .Any(x => x.Instance.Label?.Contains("URL", StringComparison.OrdinalIgnoreCase) == true));
         var candidate = cut.FindComponents<FluentCheckbox>()
             .First(x => x.Markup.Contains("trainer-1", StringComparison.Ordinal));
         Assert.IsFalse(candidate.Instance.Disabled);
@@ -236,6 +262,32 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             AppliedCandidateIds = body!.CandidateIds.ToArray();
             return Ok(new ApplyHorseIdentityRepairResponse(
                 "20260913-jra-horse-identity-repair", 1, 0, 2, 0));
+        }
+    }
+
+    private sealed class RaceOwnerRepairHandler : HttpMessageHandler
+    {
+        public bool Applied { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            var progress = new RaceEntryOwnerMigrationProgress("migration:race-entry-owners:v2", 1, 0, 1, 0, 0, 1,
+                [new("race-target", "20260919:Hanshin:11", "大阪スポーツ杯", "阪神", 11, 16, 15,
+                    new(2026, 9, 19))], Eligible: 1);
+            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/preview", StringComparison.Ordinal))
+                return Ok(progress);
+            if (request.Method == HttpMethod.Get && path.EndsWith("race-entry-owners/progress", StringComparison.Ordinal))
+                return Ok(progress);
+            if (request.Method == HttpMethod.Post && path.EndsWith("race-entry-owners/apply", StringComparison.Ordinal))
+            {
+                Applied = true;
+                return Ok(progress);
+            }
+            if (path.EndsWith("subject-identification", StringComparison.Ordinal))
+                return Ok(new SubjectIdentificationRepairPreviewResponse([]));
+            return Ok(new HorseIdentityRepairPreviewResponse("20260913-jra-horse-identity-repair", []));
         }
     }
 

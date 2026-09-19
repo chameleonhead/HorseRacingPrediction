@@ -57,6 +57,63 @@ public sealed class RaceAggregateBulkCollectionTests
         Assert.AreEqual(0, aggregate.Version);
     }
 
+    [TestMethod]
+    public void ApplyBulkRaceResult_ExistingEntry_MergesLaterCollectedValuesWithoutErasingIdentity()
+    {
+        var aggregate = new RaceAggregate(RaceId.New);
+        var observedAt = DateTimeOffset.UtcNow;
+        var initial = CreateData(observedAt) with
+        {
+            Entries = [new("entry-1", "horse-1", 1, null, null, null, null, null, null, null, null, null, null)],
+            EntryResults = [],
+            WinningHorseName = null,
+            DeclaredAt = null,
+            Payouts = null
+        };
+        aggregate.ApplyBulkRaceResult(initial);
+        var versionAfterInitial = aggregate.Version;
+
+        var enriched = initial with
+        {
+            Entries = [new("entry-1", "horse-1", 1, "jockey-1", "trainer-1", 1, 56m, "M", 4, 480m, 2m, "FRONT", "Owner One")]
+        };
+        aggregate.ApplyBulkRaceResult(enriched);
+
+        var entry = aggregate.GetDetails().Entries.Single();
+        Assert.AreEqual("horse-1", entry.HorseId);
+        Assert.AreEqual(1, entry.HorseNumber);
+        Assert.AreEqual("jockey-1", entry.JockeyId);
+        Assert.AreEqual("trainer-1", entry.TrainerId);
+        Assert.AreEqual("Owner One", entry.OwnerName);
+        Assert.IsTrue(aggregate.Version > versionAfterInitial);
+    }
+
+    [TestMethod]
+    public void ApplyBulkRaceResult_ReplayAndNullOwner_AreIdempotentAndNonDestructive()
+    {
+        var aggregate = new RaceAggregate(RaceId.New);
+        var data = CreateData(DateTimeOffset.UtcNow) with
+        {
+            Entries = [CreateData(DateTimeOffset.UtcNow).Entries[0] with { OwnerName = "Owner One" }],
+            EntryResults = [],
+            WinningHorseName = null,
+            DeclaredAt = null,
+            Payouts = null
+        };
+        aggregate.ApplyBulkRaceResult(data);
+        var version = aggregate.Version;
+
+        aggregate.ApplyBulkRaceResult(data);
+        Assert.AreEqual(version, aggregate.Version);
+
+        aggregate.ApplyBulkRaceResult(data with
+        {
+            Entries = [data.Entries[0] with { OwnerName = null }]
+        });
+        Assert.AreEqual(version, aggregate.Version);
+        Assert.AreEqual("Owner One", aggregate.GetDetails().Entries.Single().OwnerName);
+    }
+
     private static BulkRaceResultData CreateData(DateTimeOffset observedAt) => new(
         new DateOnly(2026, 9, 15), "NAKAYAMA", 11, "Collected race", 1,
         "G1", "TURF", 2000, "RIGHT",

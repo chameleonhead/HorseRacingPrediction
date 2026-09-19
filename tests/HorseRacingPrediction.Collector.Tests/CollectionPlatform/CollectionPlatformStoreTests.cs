@@ -191,6 +191,60 @@ public sealed class CollectionPlatformStoreTests
     private static readonly CollectionDefinitionId HorseProfile = new("horse-profile");
     private static readonly ResourceKey Horse = new(ResourceType.Horse, "jra", "H123");
 
+    [TestMethod]
+    [DataRow("Succeeded")]
+    [DataRow("Failed")]
+    [DataRow("Cancelled")]
+    [DataRow("DeadLetter")]
+    public async Task TerminalTask_MaterializesExactlyOneHigherRevisionRequest(string terminal)
+    {
+        var store = CreateStore();
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 1,
+            "Initial revision", false);
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var first = await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial, now);
+        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 2,
+            "Revision materialization", true);
+        var higher = await store.RequestAsync(Horse, HorseProfile, 2, CollectionReason.DefinitionChanged,
+            now.AddSeconds(1), CollectionLane.Background, (int)CollectionPriority.Background,
+            attributes: new Dictionary<string, string> { ["name"] = "new-revision" });
+        Assert.AreEqual(first.TaskId, higher.TaskId);
+
+        switch (terminal)
+        {
+            case "Succeeded":
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(2), new(CollectionAttemptResult.Succeeded)));
+                break;
+            case "Failed":
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(2), new(CollectionAttemptResult.PermanentFailure,
+                        FailureImpact: CollectionFailureImpact.Isolated)));
+                break;
+            case "Cancelled":
+                Assert.IsTrue(await store.CancelTaskAsync(first.TaskId, now.AddSeconds(2)));
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                    now.AddSeconds(3), new(CollectionAttemptResult.Cancelled)));
+                break;
+            case "DeadLetter":
+                Assert.IsTrue(await store.ReconcileDeadLetterAsync(first.TaskId, 1, now.AddSeconds(2)));
+                break;
+        }
+
+        var tasks = await store.GetTasksAsync(limit: 10);
+        Assert.HasCount(2, tasks);
+        var followUp = tasks.Single(x => x.TaskId != first.TaskId);
+        Assert.AreEqual(2, followUp.RequestedRevision);
+        Assert.AreEqual(CollectionTaskStatus.Ready, followUp.Status);
+        Assert.AreEqual(CollectionLane.Background, followUp.Lane);
+        Assert.AreEqual((int)CollectionPriority.Background, followUp.Priority);
+        await store.SetPausedAsync(false, null, now.AddSeconds(4));
+        var followUpLease = await store.AcquireAsync(followUp.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
+        Assert.AreEqual("new-revision", followUpLease!.Attributes["name"]);
+    }
+
     [TestInitialize]
     public void Setup()
     {
@@ -856,7 +910,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(14L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(17L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1164,7 +1218,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 14;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 17;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1289,6 +1343,66 @@ public sealed class CollectionPlatformStoreTests
         Assert.HasCount(25, states.Items);
         Assert.AreEqual(1, errors.TotalCount);
         Assert.AreEqual("H055", errors.Items[0].Resource.Id);
+    }
+
+    [TestMethod]
+    public async Task RaceDetailCompletion_PersistsIndependentFacetsEvidenceAndStageHistory()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var now = new DateTimeOffset(2026, 9, 19, 1, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2026, 9, 19));
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var start = now.AddHours(5);
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed", RetryAt: start,
+                StageOutcomes:
+                [
+                    new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true),
+                    new("ConfirmResult", RaceArtifactKind.Result,
+                        CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed"),
+                ],
+                RaceEvidence: new(start, "JRA-RaceCard", now))));
+
+        var detail = await store.GetResourceDetailAsync(race, definition);
+        Assert.IsNotNull(detail);
+        var artifacts = detail.RaceArtifacts!;
+        Assert.AreEqual(RaceArtifactStatus.Current,
+            artifacts.Single(x => x.Artifact == RaceArtifactKind.Card).Status);
+        Assert.AreEqual(RaceArtifactStatus.AwaitingPublication,
+            artifacts.Single(x => x.Artifact == RaceArtifactKind.Result).Status);
+        Assert.AreEqual(start, detail.RaceEvidence!.OfficialStartAt);
+        Assert.HasCount(2, detail.StageOutcomes!);
+        Assert.IsTrue(await store.HasActiveTaskAsync(race, definition));
+        var resumed = await store.AcquireAsync(receipt.TaskId, 2, start, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(resumed);
+        Assert.AreEqual(RaceArtifactStatus.Current.ToString(), resumed.Attributes["cardArtifactStatus"]);
+        Assert.AreEqual(start, DateTimeOffset.Parse(resumed.Attributes["officialStartAt"]));
+    }
+
+    [TestMethod]
+    public async Task RaceLocationOutcome_PersistsArtifactClassification()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now);
+        var locationId = await store.UpsertLocationAsync(race, definition,
+            new Uri("https://example.test/card/10"), ResourceLocationSource.Discovered, DateTimeOffset.UtcNow);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [new(locationId, CollectionAttemptResult.Succeeded, Artifact: RaceArtifactKind.Card)]));
+
+        var locations = await store.ResolveLocationsAsync(race, definition);
+        Assert.AreEqual(RaceArtifactKind.Card, locations.Single().Artifact);
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()
@@ -1744,6 +1858,41 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
         Assert.AreEqual("StructuralPageFailure",
             (await store.GetPendingFailureNotificationsAsync(now.AddSeconds(2), 10)).Single().ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task ClosedSessionFailures_RetryInIsolationUntilBurstThresholdThenPause()
+    {
+        var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+        {
+            StateDirectory = _directory,
+            ClosedSessionFailureThreshold = 3,
+            ClosedSessionFailureWindowMinutes = 10,
+        }));
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+            "Initial profile extractor", false);
+        var now = new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero);
+
+        for (var index = 1; index <= 3; index++)
+        {
+            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", $"CLOSED-{index}"),
+                HorseProfile, 7, CollectionReason.Initial, now.AddSeconds(index));
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(index),
+                TimeSpan.FromMinutes(5));
+            Assert.IsNotNull(lease);
+            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken,
+                now.AddSeconds(index * 10),
+                new(CollectionAttemptResult.TransientFailure, "TargetClosedException",
+                    "Target page, context or browser has been closed")));
+
+            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+            Assert.AreEqual(index < 3 ? CollectionTaskStatus.Ready : CollectionTaskStatus.Failed, task.Status);
+            Assert.AreEqual(index >= 3, (await store.GetPipelineStateAsync()).IsPaused);
+        }
+
+        var notification = (await store.GetPendingFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
+        Assert.AreEqual("TargetClosedException", notification.ErrorCode);
+        StringAssert.Contains((await store.GetPipelineStateAsync()).Reason!, "TargetClosedException");
     }
 
     [TestMethod]

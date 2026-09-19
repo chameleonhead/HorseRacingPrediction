@@ -21,6 +21,8 @@
 詳細なモデル、制約、状態遷移、公平 scheduling、location fallback、移行手順、受け入れ基準は change record に定義する。承認後、Phase 1 に先立って確定した型・table・API 契約を本書へ同期する。
 
 > 2026-09-14 提案: `ResourceType.Race` の `race-card` と `race-result` を単一 `race-detail` definition へ統合する。JST の対象日が今日から 5 日前以降なら出馬表を先に domain write し、当日以前は同一 task/session で結果へ遷移する。それより古い場合だけ結果を直接取得する。直近レースは両方の保存成功まで Current にせず、結果未公開・未来日は次回時刻付きで待機する。Location schema は増やさず、JRA URL と取得ページ identity で入口を検証する。切替時は旧collection dataを捨てず、Resource/State/Location/Request/Task/FailureをIDと移行元provenanceを維持して `race-detail` へtransactionalにマージし、不足する直近レースへ補完requestを作ってから旧definitionを無効化する。切替と検証の正は [直近レースの出馬表・結果を一体収集する](changes/20260914_recent-race-detail-collection/README.md) とし、承認・実装までは既存 definition を維持する。
+
+> 2026-09-19 再提案: 上記統合のResource/Task一意性は維持するが、Task statusを複数artifactの完全性正本として使わない。同じcanonical Race配下にCard/Result facet state、更新可能な公式StartTime evidence、ArtifactKind付きLocationを持たせ、1件のactive `race-detail` taskをfacetを前進させるcontrollerとする。Attemptはstage outcomeをappend-onlyに保存し、Race全体状態はfacetから導出する。これにより同一Raceのjobを増やさず、Card failureとResult waitを分離できる。正本は[Raceリソース中心の取得状態機械](changes/20260919_race-detail-phase-recovery/README.md)とし、承認前は現行動作を変更しない。
 > 結果公開状態は開催日単位ではなくRace単位とする。同日内で発走前・発走後未公開・結果未確定・公開済みが混在しても、未公開のRaceだけを同じactive taskの `RetryWaiting` とし、公開済みRaceのCurrent化と後続Raceの出馬表更新を妨げない。
 
 2026-09-14にこの提案を実装した。新規レース収集の正規形は `ResourceType.Race / race-detail` であり、直近5日はRaceCardと公式RaceResultの両方が成功した場合だけCurrent、それ以前は公式RaceResultの成功でCurrentになる。発走前・未公開・未確定は次回確認時刻を持つretryable availabilityとして扱う。
@@ -54,3 +56,5 @@
 18. Horse/Jockey/Trainer/Ownerの保存と後続Task生成は、同じ一括主体解決境界が返すcanonical IDを共有する。高速化経路もsource identity、名称正規化、Owner aliasを欠落させず、producerは表示名から独自にIDを再計算しない。過去Taskの互換修復は強い識別子、起点RaceEntry、既存alias、redirectを根拠にpreview/applyし、名前だけの自動統合、履歴削除、無期限再試行を行わない。詳細は[主体ジョブのcanonical ID整合と過去ジョブフォールバック](changes/20260918_canonical-subject-job-fallback/README.md)を参照する。
 
 > 2026-09-18提案: 同一URL内の主体一覧→プロフィール遷移では、通信静止や本文の存在ではなく、期待するプロフィール見出しと対象名を画面成立条件にする。成立しない既知の構造エラーはFailed/要対応として対象単位に終端し、同revisionで再試行せず、無関係な収集全体は停止しない。完了通知に型付きfailure impactを持たせ、明示的に隔離可能な場合だけ非停止とする。既存要対応はpreviewで原因分類し、一意性を証明できる対象だけをrevision recoveryする。impact欠落、未分類の恒久障害、内容検証失敗は従来どおり安全停止する。設計と承認状態は[プロフィール画面を確実に待機し、既存エラーを安全に復旧する](changes/20260918_isolate-structural-collection-failures/README.md)を正とし、承認・実装までは現行の全体停止規則を維持する。
+
+閉じたbrowser/page/contextは構造・データ整合性障害ではなくsession-level transientとして扱う。実行scopeでfresh sessionを一度だけ試し、それでも失敗したattemptはcanonical `TargetClosedException` として遅延再配送する。ただし既定10分窓で3件に達した場合はbrowser基盤の広域障害とみなし、3件目をfailure notificationへ保存してpipelineを停止する。閾値と時間窓は設定可能とし、unknown、identity、validation、data-integrity failureの停止境界は変更しない。詳細と運用証拠は[TargetClosedExceptionによる収集全体停止を局所化する](changes/20260919_collection-target-closed-pause-recovery/README.md)を正本とする。

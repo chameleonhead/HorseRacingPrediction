@@ -4,7 +4,7 @@
 @inject IJSRuntime JS
 
 <RaceOpsObjectHeader BackHref="@BackHref" BackLabel="← 収集管理に戻る" Title="@DefinitionLabel" Section="運用 / 収集管理" Description="@ResourceDescription" Status="@StatusLabel" StatusTone="@StatusTone">
-    <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="@(busy || detail is null)">通常の方法で再取得</FluentButton></Actions>
+    <Actions><FluentButton OnClick="LoadAsync" Disabled="busy">更新</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="RequestAsync" Disabled="@(busy || detail is null || AvailabilityWaitAttempt is not null)">通常の方法で再取得</FluentButton></Actions>
 </RaceOpsObjectHeader>
 
 @if (loading) { <UiState Kind="loading" Title="収集詳細を読み込んでいます" /> }
@@ -27,6 +27,16 @@ else if (detail is not null)
         <div class="profile-fact"><span>最終取得</span><strong>@Time(detail.State?.LastCollectedAt)</strong></div>
         <div class="profile-fact"><span>次回予定</span><strong>@Time(detail.State?.NextCollectionAt)</strong></div>
     </section>
+    @if (detail.RaceArtifacts is { Count: > 0 })
+    {
+        <section class="profile-facts" aria-label="Race取得状態">
+            @foreach (var artifact in detail.RaceArtifacts)
+            {
+                <div class="profile-fact"><span>@ArtifactLabel(artifact.Artifact)</span><strong>@ArtifactStatusLabel(artifact.Status)</strong><small>最終保存: @Time(artifact.LastPersistedAt) / 次回: @Time(artifact.NextDueAt)</small></div>
+            }
+            <div class="profile-fact"><span>公式発走時刻</span><strong>@Time(detail.RaceEvidence?.OfficialStartAt)</strong><small>@(detail.RaceEvidence?.Provenance ?? "未確認")</small></div>
+        </section>
+    }
     @if (LatestTask is { } currentTask && IsActive(currentTask.Status))
     {
         <FluentMessageBar Intent="@MessageIntent.Info" Title="@ActiveTaskTitle(currentTask.Status)">
@@ -95,6 +105,8 @@ else if (detail is not null)
         ["requestedByHorseId"]="発見元競走馬", ["requestedByHorseName"]="発見元競走馬名",
     };
     private static string MetadataLabel(string key)=>MetadataLabels.GetValueOrDefault(key,key);
+    private static string ArtifactLabel(RaceArtifactKind value)=>value==RaceArtifactKind.Card?"出馬表":"結果";
+    private static string ArtifactStatusLabel(RaceArtifactStatus value)=>value switch{RaceArtifactStatus.Unknown=>"判定不能",RaceArtifactStatus.AwaitingPublication=>"公開待ち",RaceArtifactStatus.Due=>"取得可能",RaceArtifactStatus.Collecting=>"取得中",RaceArtifactStatus.Current=>"取得済み",RaceArtifactStatus.Blocked=>"要対応",RaceArtifactStatus.Unavailable=>"対象外",_=>value.ToString()};
     private PendingCollectionFailureNotification? ActiveFailure=>detail?.Failures?.Where(x=>x.ResolutionStatus is CollectionFailureResolutionStatus.Open or CollectionFailureResolutionStatus.RecoveryInProgress).OrderByDescending(x=>x.FailedAt).FirstOrDefault();
     private CollectionAttemptSummary? ActiveFailureAttempt=>ActiveFailure is null?null:detail?.Attempts.Where(x=>x.TaskId==ActiveFailure.TaskId).OrderByDescending(x=>x.StartedAt).FirstOrDefault();
     private CollectionAttemptSummary? AvailabilityWaitAttempt=>LatestTask?.Status!=CollectionTaskStatus.RetryWaiting?null:detail?.Attempts.Where(x=>x.TaskId==LatestTask.TaskId&&x.Result==CollectionAttemptResult.ResourceNotYetAvailable).OrderByDescending(x=>x.StartedAt).FirstOrDefault();

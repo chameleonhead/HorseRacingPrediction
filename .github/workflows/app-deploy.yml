@@ -410,3 +410,43 @@ jobs:
               echo "AWS_SECRET_ACCESS_KEY=$COLLECTION_QUEUE_AWS_SECRET_ACCESS_KEY"
             } >> "$env_file"
             chmod 600 "$env_file"
+
+  migrate-race-entry-owners:
+    needs: [deploy, deploy-collector-lambda]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Queue race entry owner data migration
+        env:
+          DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        run: |
+          base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
+          resume() {
+            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+              "$base/pipeline/resume" >/dev/null || true
+          }
+          trap resume EXIT
+          curl --fail --silent --show-error -X POST \
+            -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
+            --data '{"reason":"deployment race entry owner migration"}' \
+            "$base/pipeline/pause" >/dev/null
+          for i in $(seq 1 30); do
+            running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" \
+              "$base/tasks?status=Running&limit=1")"
+            if [ "$(jq 'length' <<<"$running")" = "0" ]; then
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "Collection tasks did not drain before owner migration" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+            "$base/migrations/race-entry-owners/preview")"
+          echo "Race entry owner migration preview: $preview"
+          applied="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
+            "$base/migrations/race-entry-owners/apply")"
+          echo "Race entry owner migration queued: $applied"

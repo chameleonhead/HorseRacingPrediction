@@ -108,6 +108,7 @@ internal static class TestApplicationFactory
         app.MapSubjectCollectionEndpoints();
         app.MapRaceOddsEndpoints();
         app.MapCollectionMonitoringEndpoints();
+        app.MapCollectionPlatformEndpoints();
 
         await app.StartAsync();
         var client = app.GetTestClient();

@@ -14,10 +14,12 @@ public sealed partial class CollectionPlatformStore
         "backfillDate", "batchId", "birthDate", "course", "discoveredFromId", "discoveredFromProvider",
         "discoveredFromType", "discoveryAncestors", "discoveryDepth", "domainRaceId", "name", "number",
         "date", "day", "distance", "entries", "layout", "meeting", "month", "observations", "observedAt",
-        "owner", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
+        "owner", "ownerRepair", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
         "sourceIdentity", "sourceUrl", "startTime", "trainer", "weekendPriorityUntil", "weight", "year",
     };
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
+    private readonly int _closedSessionFailureThreshold;
+    private readonly TimeSpan _closedSessionFailureWindow;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate;
 
@@ -31,6 +33,9 @@ public sealed partial class CollectionPlatformStore
             ? "collection-platform.db" : value.DatabaseFileName);
         _dbOptions = new DbContextOptionsBuilder<CollectionPlatformDbContext>()
             .UseSqlite($"Data Source={path};Pooling=False;Default Timeout=30").Options;
+        _closedSessionFailureThreshold = Math.Clamp(value.ClosedSessionFailureThreshold, 1, 100);
+        _closedSessionFailureWindow = TimeSpan.FromMinutes(
+            Math.Clamp(value.ClosedSessionFailureWindowMinutes, 1, 1_440));
         _gate = Gates.GetOrAdd(path, static _ => new SemaphoreSlim(1, 1));
         using var db = CreateDbContext();
         CollectionPlatformSchemaMigrator.Migrate(db);
@@ -39,6 +44,8 @@ public sealed partial class CollectionPlatformStore
     internal CollectionPlatformStore(DbContextOptions<CollectionPlatformDbContext> dbOptions)
     {
         _dbOptions = dbOptions;
+        _closedSessionFailureThreshold = 3;
+        _closedSessionFailureWindow = TimeSpan.FromMinutes(10);
         using (var context = new CollectionPlatformDbContext(dbOptions))
         {
             var key = context.Database.GetConnectionString() ?? Guid.NewGuid().ToString("N");
@@ -265,6 +272,9 @@ public sealed partial class CollectionPlatformStore
             DefinitionId = definition.Value,
             RequestedRevision = requestedRevision,
             Reason = reason,
+            Lane = lane,
+            Priority = priority,
+            MetadataJson = metadataJson,
             RequestedAt = requestedAt,
             ExplicitUrl = explicitUrl?.AbsoluteUri,
             BatchId = batchId,
@@ -292,6 +302,15 @@ public sealed partial class CollectionPlatformStore
                 or CollectionReason.PeriodRecollection)
                 await StartFailureRecoveryAsync(db, resourceEntity.ResourcePk, definition.Value,
                     active.TaskId, requestedAt, cancellationToken).ConfigureAwait(false);
+            var activeState = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+                && x.DefinitionId == definition.Value, cancellationToken).ConfigureAwait(false);
+            if (activeState is not null)
+            {
+                activeState.RequiredRevision = Math.Max(activeState.RequiredRevision, requestedRevision);
+                if (activeState.AppliedRevision < activeState.RequiredRevision)
+                    activeState.Status = CollectionStateStatus.Pending;
+                activeState.UpdatedAt = requestedAt;
+            }
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new CollectionRequestReceipt(request.RequestId, active.TaskId, false);
         }
@@ -350,6 +369,56 @@ public sealed partial class CollectionPlatformStore
 
     private static CollectionLane StrongerLane(CollectionLane left, CollectionLane right) =>
         (CollectionLane)Math.Min((int)left, (int)right);
+
+    private static async Task<bool> MaterializeUnsatisfiedRevisionAsync(CollectionPlatformDbContext db,
+        CollectionTaskEntity completedTask, CollectionStateEntity state, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (state.RequiredRevision <= completedTask.RequestedRevision
+            || await db.ActiveTasks.AnyAsync(x => x.ResourcePk == completedTask.ResourcePk
+                && x.DefinitionId == completedTask.DefinitionId && x.TaskId != completedTask.TaskId,
+                cancellationToken).ConfigureAwait(false))
+            return false;
+
+        var request = await db.Requests
+            .Where(x => x.ResourcePk == completedTask.ResourcePk
+                && x.DefinitionId == completedTask.DefinitionId
+                && x.RequestedRevision >= state.RequiredRevision)
+            .OrderByDescending(x => x.RequestedAt)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (request is null) return false;
+
+        var followUp = new CollectionTaskEntity
+        {
+            TaskId = Guid.NewGuid(),
+            RequestId = request.RequestId,
+            ResourcePk = completedTask.ResourcePk,
+            DefinitionId = completedTask.DefinitionId,
+            RequestedRevision = state.RequiredRevision,
+            Status = CollectionTaskStatus.Ready,
+            Lane = request.Lane,
+            Priority = request.Priority,
+            AvailableAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+            DispatchGeneration = 1,
+            MetadataJson = request.MetadataJson,
+        };
+        db.Tasks.Add(followUp);
+        db.ActiveTasks.Add(new CollectionActiveTaskEntity
+        { ResourcePk = completedTask.ResourcePk, DefinitionId = completedTask.DefinitionId, TaskId = followUp.TaskId });
+        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+        {
+            OutboxId = Guid.NewGuid(),
+            TaskId = followUp.TaskId,
+            DispatchGeneration = 1,
+            AvailableAt = now,
+            CreatedAt = now,
+        });
+        state.Status = CollectionStateStatus.Pending;
+        state.NextCollectionAt = now;
+        return true;
+    }
 
     private static bool IsOrdinaryRegistration(CollectionReason reason)
         => reason is CollectionReason.Initial or CollectionReason.Backfill or CollectionReason.Discovery;
@@ -427,6 +496,9 @@ public sealed partial class CollectionPlatformStore
                     DefinitionId = definition.Value,
                     RequestedRevision = requestedRevision,
                     Reason = reason,
+                    Lane = lane,
+                    Priority = priority,
+                    MetadataJson = metadataJson,
                     RequestedAt = requestedAt,
                     BatchId = batchId,
                 };
@@ -544,7 +616,7 @@ public sealed partial class CollectionPlatformStore
                 .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
                 .Where(x => x.Valid)
                 .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
-                    x.Location.Status, x.Location.LastVerifiedAt)).ToList();
+                    x.Location.Status, x.Location.LastVerifiedAt, x.Location.Artifact)).ToList();
             if (CollectionHttpUrl.TryCreate(request.ExplicitUrl, out var explicitUrl))
                 candidates.Insert(0, new(0, explicitUrl!, ResourceLocationSource.Explicit,
                     ResourceLocationStatus.Unknown, null));
@@ -574,12 +646,28 @@ public sealed partial class CollectionPlatformStore
             state.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var taskAttributes = new Dictionary<string, string>(
+                DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), StringComparer.Ordinal);
+            var raceEvidence = resource.Type == ResourceType.Race
+                ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
+                    x => x.ResourcePk == resource.ResourcePk, cancellationToken).ConfigureAwait(false)
+                : null;
+            if (raceEvidence?.OfficialStartAt is { } officialStartAt)
+                taskAttributes["officialStartAt"] = officialStartAt.ToString("O");
+            if (resource.Type == ResourceType.Race)
+            {
+                var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
+                    x.ResourcePk == resource.ResourcePk).ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var facet in facets)
+                    taskAttributes[facet.Artifact == RaceArtifactKind.Card
+                        ? "cardArtifactStatus" : "resultArtifactStatus"] = facet.Status.ToString();
+            }
             return new LeasedCollectionTask(task.TaskId, task.RequestId,
                 new ResourceKey(resource.Type, resource.Provider, resource.ResourceId),
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
                 task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
                 resource.EffectiveDate,
-                DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), candidates);
+                taskAttributes, candidates);
         }
         finally { _gate.Release(); }
     }
@@ -622,15 +710,87 @@ public sealed partial class CollectionPlatformStore
             attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
             attempt.HttpStatusCode = completion.HttpStatusCode;
             attempt.PageIdentification = completion.PageIdentification;
+            if (completion.StageOutcomes is { Count: > 0 })
+            {
+                foreach (var stage in completion.StageOutcomes)
+                {
+                    db.AttemptStageOutcomes.Add(new CollectionAttemptStageOutcomeEntity
+                    {
+                        StageOutcomeId = Guid.NewGuid(),
+                        AttemptId = attempt.AttemptId,
+                        Stage = stage.Stage,
+                        Artifact = stage.Artifact,
+                        Result = stage.Result,
+                        ErrorCode = stage.ErrorCode,
+                        ErrorMessage = stage.ErrorMessage,
+                        RequestedUrl = stage.RequestedUrl?.AbsoluteUri,
+                        FinalUrl = stage.FinalUrl?.AbsoluteUri,
+                        Persisted = stage.Persisted,
+                    });
+                    var facet = await db.RaceArtifactStates.SingleOrDefaultAsync(x =>
+                        x.ResourcePk == task.ResourcePk && x.Artifact == stage.Artifact, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (facet is null)
+                    {
+                        facet = new RaceArtifactStateEntity
+                        {
+                            ResourcePk = task.ResourcePk,
+                            Artifact = stage.Artifact,
+                            RequiredRevision = task.RequestedRevision,
+                        };
+                        db.RaceArtifactStates.Add(facet);
+                    }
+                    facet.LastAttemptId = attempt.AttemptId;
+                    facet.LastObservedAt = now;
+                    facet.UpdatedAt = now;
+                    facet.RequiredRevision = Math.Max(facet.RequiredRevision, task.RequestedRevision);
+                    facet.ErrorCode = stage.ErrorCode;
+                    facet.ErrorMessage = stage.ErrorMessage;
+                    facet.NextDueAt = stage.Result == CollectionAttemptResult.ResourceNotYetAvailable
+                        ? completion.RetryAt : null;
+                    if (stage.Result == CollectionAttemptResult.NotApplicable)
+                        facet.Status = RaceArtifactStatus.Unavailable;
+                    else if (stage.Persisted)
+                    {
+                        facet.Status = RaceArtifactStatus.Current;
+                        facet.AppliedRevision = Math.Max(facet.AppliedRevision, task.RequestedRevision);
+                        facet.LastPersistedAt = now;
+                        facet.ErrorCode = null;
+                        facet.ErrorMessage = null;
+                    }
+                    else if (stage.Result == CollectionAttemptResult.ResourceNotYetAvailable)
+                        facet.Status = RaceArtifactStatus.AwaitingPublication;
+                    else if (stage.Result != CollectionAttemptResult.Succeeded)
+                        facet.Status = RaceArtifactStatus.Blocked;
+                }
+            }
+            if (completion.RaceEvidence is { } evidence)
+            {
+                var row = await db.RaceSchedulingEvidence.SingleOrDefaultAsync(
+                    x => x.ResourcePk == task.ResourcePk, cancellationToken).ConfigureAwait(false);
+                if (row is null)
+                {
+                    row = new RaceSchedulingEvidenceEntity { ResourcePk = task.ResourcePk };
+                    db.RaceSchedulingEvidence.Add(row);
+                }
+                row.OfficialStartAt = evidence.OfficialStartAt ?? row.OfficialStartAt;
+                row.Provenance = evidence.Provenance ?? row.Provenance;
+                row.VerifiedAt = evidence.VerifiedAt ?? row.VerifiedAt;
+                row.UpdatedAt = now;
+            }
             foreach (var outcome in locationOutcomes)
             {
+                if (outcome.LocationId <= 0)
+                    continue;
                 var candidate = await db.Locations.SingleAsync(x => x.LocationId == outcome.LocationId,
                     cancellationToken);
                 ApplyLocationOutcome(candidate, outcome.Result, now, outcome.ErrorCode);
+                candidate.Artifact = outcome.Artifact ?? candidate.Artifact;
             }
             if (completion.RequestedUrl is not null)
             {
                 var requested = completion.RequestedUrl.AbsoluteUri;
+                var requestedArtifact = ArtifactForUrl(completion.StageOutcomes, completion.RequestedUrl);
                 var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
                     && x.DefinitionId == task.DefinitionId && x.Url == requested, cancellationToken);
                 if (location is null)
@@ -642,10 +802,12 @@ public sealed partial class CollectionPlatformStore
                         Url = requested,
                         Source = ResourceLocationSource.Explicit,
                         Status = ResourceLocationStatus.Unknown,
+                        Artifact = requestedArtifact,
                         DiscoveredAt = now,
                     };
                     db.Locations.Add(location);
                 }
+                location.Artifact = requestedArtifact ?? location.Artifact;
                 if (completion.Result == CollectionAttemptResult.Succeeded)
                 {
                     location.Status = ResourceLocationStatus.Active;
@@ -664,6 +826,7 @@ public sealed partial class CollectionPlatformStore
                 && completion.FinalUrl != completion.RequestedUrl)
             {
                 var redirected = completion.FinalUrl.AbsoluteUri;
+                var redirectedArtifact = ArtifactForUrl(completion.StageOutcomes, completion.FinalUrl);
                 var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
                     && x.DefinitionId == task.DefinitionId && x.Url == redirected, cancellationToken);
                 if (location is null)
@@ -674,16 +837,31 @@ public sealed partial class CollectionPlatformStore
                         Url = redirected,
                         Source = ResourceLocationSource.Redirected,
                         Status = ResourceLocationStatus.Active,
+                        Artifact = redirectedArtifact,
                         DiscoveredAt = now,
                         LastVerifiedAt = now,
                     });
-                else { location.Status = ResourceLocationStatus.Active; location.LastVerifiedAt = now; }
+                else
+                {
+                    location.Status = ResourceLocationStatus.Active;
+                    location.LastVerifiedAt = now;
+                    location.Artifact = redirectedArtifact ?? location.Artifact;
+                }
             }
             task.LeaseToken = null;
             task.LeaseExpiresAt = null;
             task.UpdatedAt = now;
             var state = await db.States.SingleAsync(x => x.ResourcePk == task.ResourcePk
                 && x.DefinitionId == task.DefinitionId, cancellationToken);
+            var closedSessionBurst = false;
+            if (IsClosedSessionFailure(completion))
+            {
+                var windowStart = now.Subtract(_closedSessionFailureWindow);
+                var recentClosedSessionFailures = await db.Attempts.AsNoTracking().CountAsync(x =>
+                    x.FinishedAt >= windowStart && x.ErrorCode == "TargetClosedException", cancellationToken)
+                    .ConfigureAwait(false);
+                closedSessionBurst = recentClosedSessionFailures + 1 >= _closedSessionFailureThreshold;
+            }
 
             if (task.CancellationRequestedAt.HasValue || completion.Result == CollectionAttemptResult.Cancelled)
             {
@@ -696,6 +874,9 @@ public sealed partial class CollectionPlatformStore
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 if (!suppressed && await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
+                if (!suppressed)
+                    await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                        .ConfigureAwait(false);
             }
             else if (completion.Result == CollectionAttemptResult.Succeeded)
             {
@@ -710,45 +891,8 @@ public sealed partial class CollectionPlatformStore
                 if (state.Status == CollectionStateStatus.Current)
                     await ResolveFailuresAsync(db, task.ResourcePk, task.DefinitionId, now, cancellationToken)
                         .ConfigureAwait(false);
-                if (state.AppliedRevision < state.RequiredRevision)
-                {
-                    var followUpRequests = await db.Requests
-                        .Where(x => x.ResourcePk == task.ResourcePk && x.DefinitionId == task.DefinitionId
-                                    && x.RequestedRevision >= state.RequiredRevision)
-                        .ToListAsync(cancellationToken).ConfigureAwait(false);
-                    var followUpRequest = followUpRequests.OrderByDescending(x => x.RequestedAt).FirstOrDefault();
-                    if (followUpRequest is not null)
-                    {
-                        var followUp = new CollectionTaskEntity
-                        {
-                            TaskId = Guid.NewGuid(),
-                            RequestId = followUpRequest.RequestId,
-                            ResourcePk = task.ResourcePk,
-                            DefinitionId = task.DefinitionId,
-                            RequestedRevision = state.RequiredRevision,
-                            Status = CollectionTaskStatus.Ready,
-                            Lane = task.Lane,
-                            Priority = task.Priority,
-                            AvailableAt = now,
-                            CreatedAt = now,
-                            UpdatedAt = now,
-                            DispatchGeneration = 1,
-                            MetadataJson = task.MetadataJson,
-                        };
-                        db.Tasks.Add(followUp);
-                        db.ActiveTasks.Add(new CollectionActiveTaskEntity
-                        { ResourcePk = task.ResourcePk, DefinitionId = task.DefinitionId, TaskId = followUp.TaskId });
-                        db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
-                        {
-                            OutboxId = Guid.NewGuid(),
-                            TaskId = followUp.TaskId,
-                            DispatchGeneration = 1,
-                            AvailableAt = now,
-                            CreatedAt = now,
-                        });
-                        state.Status = CollectionStateStatus.Pending;
-                    }
-                }
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
             else if (completion.Result == CollectionAttemptResult.NotApplicable)
             {
@@ -760,8 +904,10 @@ public sealed partial class CollectionPlatformStore
                 db.ActiveTasks.Remove(await db.ActiveTasks.SingleAsync(x => x.TaskId == taskId, cancellationToken));
                 await ResolveFailuresAsync(db, task.ResourcePk, task.DefinitionId, now, cancellationToken)
                     .ConfigureAwait(false);
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
-            else if (IsRetryable(completion.Result) || completion.RetryAt.HasValue)
+            else if (!closedSessionBurst && (IsRetryable(completion.Result) || completion.RetryAt.HasValue))
             {
                 task.Status = CollectionTaskStatus.RetryWaiting;
                 task.AvailableAt = completion.RetryAt ?? now.Add(DefaultRetryDelay(completion.Result, task.AttemptCount));
@@ -789,6 +935,8 @@ public sealed partial class CollectionPlatformStore
                     pausePipeline: completion.Result != CollectionAttemptResult.ResourceNotFound
                         && completion.FailureImpact != CollectionFailureImpact.Isolated,
                     cancellationToken).ConfigureAwait(false);
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
             }
             state.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -950,7 +1098,7 @@ public sealed partial class CollectionPlatformStore
                 && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
         var locations = locationRows.OrderByDescending(x => x.LastVerifiedAt ?? x.DiscoveredAt)
             .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url),
-            x.Source, x.Status, x.LastVerifiedAt)).ToList();
+            x.Source, x.Status, x.LastVerifiedAt, x.Artifact)).ToList();
         requestHistoryPage = Math.Max(1, requestHistoryPage);
         taskHistoryPage = Math.Max(1, taskHistoryPage);
         attemptHistoryPage = Math.Max(1, attemptHistoryPage);
@@ -1000,9 +1148,28 @@ public sealed partial class CollectionPlatformStore
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         failureRows = failureRows.OrderByDescending(x => x.Notification.FailedAt).ToList();
         var failures = failureRows.Select(ToFailure).ToList();
+        var artifactRows = item.Type == ResourceType.Race
+            ? await db.RaceArtifactStates.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk)
+                .OrderBy(x => x.Artifact).ToListAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+        var artifacts = artifactRows.Select(x => new RaceArtifactSnapshot(x.Artifact, x.Status,
+            x.AppliedRevision, x.RequiredRevision, x.LastObservedAt, x.LastPersistedAt, x.NextDueAt,
+            x.ErrorCode, x.ErrorMessage)).ToList();
+        var evidenceRow = item.Type == ResourceType.Race
+            ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
+                x => x.ResourcePk == item.ResourcePk, cancellationToken).ConfigureAwait(false)
+            : null;
+        var evidence = evidenceRow is null ? null : new RaceSchedulingEvidence(evidenceRow.OfficialStartAt,
+            evidenceRow.Provenance, evidenceRow.VerifiedAt);
+        var attemptIds = attemptRows.Select(x => x.AttemptId).ToList();
+        var stageRows = await db.AttemptStageOutcomes.AsNoTracking().Where(x => attemptIds.Contains(x.AttemptId))
+            .OrderByDescending(x => x.StageOutcomeId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var stageOutcomes = stageRows.Select(x => new CollectionAttemptStageSummary(x.StageOutcomeId,
+            x.AttemptId, x.Stage, x.Artifact, x.Result, x.ErrorCode, x.ErrorMessage, x.RequestedUrl,
+            x.FinalUrl, x.Persisted)).ToList();
         return new(state, locations, requests, tasks, attempts, requestTotal, taskTotal,
             attemptTotal, requestHistoryPage, historyPageSize, latestTask, taskHistoryPage, attemptHistoryPage,
-            failures);
+            failures, artifacts, evidence, stageOutcomes);
     }
 
     public async Task<CollectionExecutionBatchDetail?> GetExecutionBatchAsync(Guid executionBatchId,
@@ -1224,7 +1391,7 @@ public sealed partial class CollectionPlatformStore
             .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
             .Where(x => x.Valid)
             .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
-                x.Location.Status, x.Location.LastVerifiedAt))
+                x.Location.Status, x.Location.LastVerifiedAt, x.Location.Artifact))
             .ToList();
     }
 
@@ -1852,10 +2019,20 @@ public sealed partial class CollectionPlatformStore
         var rows = await query.OrderBy(x => x.resource.Type).ThenBy(x => x.resource.ResourceId)
             .ThenBy(x => x.state.DefinitionId).Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var raceResourcePks = rows.Where(x => x.resource.Type == ResourceType.Race)
+            .Select(x => x.resource.ResourcePk).Distinct().ToArray();
+        var artifactRows = await db.RaceArtifactStates.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk)).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var artifactsByResource = artifactRows.GroupBy(x => x.ResourcePk).ToDictionary(x => x.Key,
+            x => (IReadOnlyList<RaceArtifactSnapshot>)x.OrderBy(a => a.Artifact).Select(a =>
+                new RaceArtifactSnapshot(a.Artifact, a.Status, a.AppliedRevision, a.RequiredRevision,
+                    a.LastObservedAt, a.LastPersistedAt, a.NextDueAt, a.ErrorCode, a.ErrorMessage)).ToList());
         return new(total, page, pageSize, rows.Select(x => new CollectionStateSnapshot(
             new(x.resource.Type, x.resource.Provider, x.resource.ResourceId), new(x.state.DefinitionId),
             x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
-            x.state.NextCollectionAt, x.state.Status)).ToList());
+            x.state.NextCollectionAt, x.state.Status,
+            artifactsByResource.GetValueOrDefault(x.resource.ResourcePk))).ToList());
     }
 
     public async Task<CollectionReadinessSnapshot> GetReadinessAsync(string requestedByRaceId,
@@ -1952,6 +2129,8 @@ public sealed partial class CollectionPlatformStore
                 state.UpdatedAt = now;
                 if (await ReopenFailuresAsync(db, taskId, cancellationToken).ConfigureAwait(false) > 0)
                     state.Status = CollectionStateStatus.Failed;
+                await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
+                    .ConfigureAwait(false);
                 var pending = await db.DispatchOutbox.Where(x => x.TaskId == taskId && x.DispatchedAt == null)
                     .ToListAsync(cancellationToken);
                 foreach (var item in pending) item.DispatchedAt = now;
@@ -2167,6 +2346,9 @@ public sealed partial class CollectionPlatformStore
                         DefinitionId = "race-detail",
                         RequestedRevision = 1,
                         Reason = CollectionReason.DefinitionChanged,
+                        Lane = CollectionLane.Realtime,
+                        Priority = (int)CollectionPriority.High,
+                        MetadataJson = target.AttributesJson,
                         RequestedAt = now,
                     };
                     var task = new CollectionTaskEntity
@@ -2442,6 +2624,33 @@ public sealed partial class CollectionPlatformStore
             .ToList();
     }
 
+    public async Task<IReadOnlyList<CollectionBatchResourceStatus>> GetBatchResourceStatusesAsync(string batchId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return [];
+        await using var db = CreateDbContext();
+        var requests = await (from request in db.Requests.AsNoTracking()
+                              join resource in db.Resources.AsNoTracking() on request.ResourcePk equals resource.ResourcePk
+                              where request.BatchId == batchId
+                              select new { request, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var result = new List<CollectionBatchResourceStatus>(requests.Count);
+        foreach (var row in requests.GroupBy(x => (x.request.ResourcePk, x.request.DefinitionId)).Select(x => x
+                     .OrderByDescending(y => y.request.RequestedAt).First()))
+        {
+            var taskStatus = await db.Tasks.AsNoTracking().Where(x => x.ResourcePk == row.request.ResourcePk
+                    && x.DefinitionId == row.request.DefinitionId)
+                .OrderByDescending(x => x.CreatedAt).Select(x => (CollectionTaskStatus?)x.Status)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var state = await db.States.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.ResourcePk == row.request.ResourcePk && x.DefinitionId == row.request.DefinitionId,
+                cancellationToken).ConfigureAwait(false);
+            result.Add(new(new(row.resource.Type, row.resource.Provider, row.resource.ResourceId),
+                row.request.RequestedRevision, taskStatus, state?.Status,
+                state?.AppliedRevision ?? 0, state?.RequiredRevision ?? row.request.RequestedRevision));
+        }
+        return result;
+    }
+
     public async Task<bool> HeartbeatAsync(Guid taskId, string leaseToken, DateTimeOffset now,
         TimeSpan extension, CancellationToken cancellationToken = default)
     {
@@ -2493,6 +2702,8 @@ public sealed partial class CollectionPlatformStore
             var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken);
             if (active is not null) db.ActiveTasks.Remove(active);
             await QueueFailureNotificationAsync(db, task, "DeadLetterQueue", errorMessage, now, true, cancellationToken)
+                .ConfigureAwait(false);
+            await MaterializeUnsatisfiedRevisionAsync(db, task, state, now, cancellationToken)
                 .ConfigureAwait(false);
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -3005,6 +3216,10 @@ public sealed partial class CollectionPlatformStore
         CollectionAttemptResult.TransientFailure or CollectionAttemptResult.ResourceNotYetAvailable
         or CollectionAttemptResult.AccessLimited;
 
+    private static bool IsClosedSessionFailure(CollectionAttemptCompletion completion)
+        => completion.Result == CollectionAttemptResult.TransientFailure
+           && string.Equals(completion.ErrorCode, "TargetClosedException", StringComparison.Ordinal);
+
     private static TimeSpan DefaultRetryDelay(CollectionAttemptResult result, int attemptCount)
     {
         var seconds = Math.Min(900, 15 * Math.Pow(2, Math.Clamp(attemptCount - 1, 0, 6)));
@@ -3243,6 +3458,9 @@ public sealed partial class CollectionPlatformStore
             row.QueueMessageId = null;
         }
     }
+
+    private static RaceArtifactKind? ArtifactForUrl(IReadOnlyList<CollectionStageOutcome>? stages, Uri url)
+        => stages?.LastOrDefault(x => x.RequestedUrl == url || x.FinalUrl == url)?.Artifact;
 
     private static async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
         Guid envelopeId, CancellationToken cancellationToken)

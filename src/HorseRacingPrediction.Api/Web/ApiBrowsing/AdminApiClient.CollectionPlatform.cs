@@ -218,6 +218,21 @@ public sealed partial class AdminApiClient
         => SendCollectionPlatformAsync<RacePeriodRecollectionReceipt>(HttpMethod.Post,
             $"{CollectionPlatformPath}/race-period-recollections", request, token);
 
+    public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> PreviewRaceEntryOwnerMigrationAsync(
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/preview", new { }, token);
+
+    public Task<AdminApiResult<RaceEntryOwnerMigrationProgress>> ApplyRaceEntryOwnerMigrationAsync(
+        CancellationToken token = default)
+        => SendCollectionPlatformAsync<RaceEntryOwnerMigrationProgress>(HttpMethod.Post,
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/apply", new { }, token);
+
+    public Task<RaceEntryOwnerMigrationProgress?> GetRaceEntryOwnerMigrationProgressAsync(
+        CancellationToken token = default)
+        => GetJsonAsync<RaceEntryOwnerMigrationProgress>(
+            $"{CollectionPlatformPath}/migrations/race-entry-owners/progress", token);
+
     private async Task<AdminApiResult<T>> SendCollectionPlatformAsync<T>(HttpMethod method, string path,
         object body, CancellationToken token)
     {
