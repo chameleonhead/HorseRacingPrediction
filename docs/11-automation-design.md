@@ -56,6 +56,8 @@
 
 要対応のfailure notification、長時間停滞したactive task、予期しないpipeline pause、lane/priority/公平配分契約に反する処理順を定期的に評価する。実行層は型付きの決定的findingを返し、定期自動化は新規findingごとに `Proposed` change recordを作る。同じfingerprintの未完了recordは新規作成せず、観測履歴を追記する。
 
+監視APIはprobeの実行成否とは別に `Healthy`、`FindingRecorded`、`ActionRequired`、`MonitorFailed` を返す。GitHub Actionsは `ActionRequired` をwarningとして可視化し、30分cronは登録済みデータ補正canaryと限定的なpipeline継続だけを実行する。独立heartbeatは読み取り専用で、要対応の継続通知、復旧通知、監視欠落、週末データ鮮度を現在のCodexスレッドへ配送する。自動pipeline継続は `race-discovery` の `TargetClosedException`、原因task一致、直近6時間に同一fingerprintのresumeなし、maintenance/手動停止でない場合に限り、失敗taskや通知を変更せずpipelineのみresumeして進行を再確認する。
+
 プログラムバグは修正用change record、未知の過去ジョブエラーは原因仮説・影響範囲・対応候補・推奨調査を持つchange recordとして起票する。既知の過去ジョブエラーは、一意性根拠、revision条件、preview、冪等キー、postcondition、実行上限、監査記録を持つ登録済みの自動安全recipeに限り自動補正する。曖昧・未登録・事前条件不一致の対象は変更せず、未知エラー調査へ分離する。
 
 バグ修正と未知エラー対応の自動承認・自動デプロイは行わない。評価契約、自動補正の安全境界、重複抑止、秘密情報境界、受け入れ基準は [収集運用を監視し起票と安全な過去ジョブ補正を自動化する](changes/20260919_collection-monitoring-change-record-automation/README.md) を正本とする。2026-09-19に、読み取り専用評価API、change record生成、既知エラーのrevision-gated補正、定期workflowを実装した。
