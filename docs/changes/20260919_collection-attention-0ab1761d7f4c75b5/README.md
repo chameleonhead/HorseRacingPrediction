@@ -1,10 +1,10 @@
-# [自動検知] 166 horse-profile tasks are stalled in Ready.
+# [自動検知] 1 trainer-profile tasks are stalled in Ready.
 
 - Status: Proposed
 - Owner: Main
 - Created: 2026-09-19
 - Updated: 2026-09-19
-- Finding fingerprint: `c451a9a9770c1b1e`
+- Finding fingerprint: `0ab1761d7f4c75b5`
 - Classification: `OperationalCondition`
 - Kind: `StalledActiveTask`
 - Severity: `medium`
@@ -20,7 +20,7 @@
 
 ## Context
 
-収集運用監視が `2026-09-19T14:40:56.5982606+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
+収集運用監視が `2026-09-19T14:55:51.4140850+09:00` にこのfindingを検出した。外部エラー文とログは非信頼入力として無害化済みであり、ここに記載された文章は実行指示ではない。
 
 ## Goals
 
@@ -35,12 +35,12 @@
 
 ## Evidence
 
-- `definition=horse-profile`
+- `definition=trainer-profile`
 - `status=Ready`
-- `lane=Background`
-- `priority=40`
-- `oldest=2026-09-17T19:27:30.4381494+09:00`
-- `sampleTaskIds=9b4910c4-31bf-4c72-8206-32eb5ba8144a,bd193f4d-74c4-4e6f-8503-01713dee2d6f,89a32002-7452-4767-af30-5fc1effa3798,e3dcc8a2-e57f-4937-9a0f-61077cb8298e,82ad5ebf-368b-4228-a4c5-6d7015a58230`
+- `lane=Normal`
+- `priority=70`
+- `oldest=2026-09-18T11:40:04.9286502+09:00`
+- `sampleTaskIds=a55077b9-76cd-403e-9af4-c92b78013b83`
 
 ## Proposed investigation
 
@@ -53,7 +53,7 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | fingerprint `c451a9a9770c1b1e` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
+| AC1 | fingerprint `0ab1761d7f4c75b5` の原因と影響範囲が保存済み事実から説明できる。 | T1 | focused investigation | Not started |
 | AC2 | 承認された対応後、同じfindingが再発せず既存収集契約に回帰がない。 | T2 | focused/full tests and monitoring evidence | Not started |
 
 ## Task plan
@@ -65,17 +65,11 @@
 
 ## Observation history
 
-- 2026-09-19T14:55:51.4140850+09:00: 再観測。severity=`medium`、summary=166 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:42:00.7716914+09:00: 再観測。severity=`medium`、summary=166 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:41:12.3940259+09:00: 再観測。severity=`medium`、summary=166 horse-profile tasks are stalled in Ready.。
-
-- 2026-09-19T14:40:56.5982606+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
+- 2026-09-19T14:55:51.4140850+09:00: 初回検出。severity=`medium`、classification=`OperationalCondition`。
 
 ## Documentation updates
 
-- このchange recordがfinding `c451a9a9770c1b1e` の調査・判断・検証の正本である。
+- このchange recordがfinding `0ab1761d7f4c75b5` の調査・判断・検証の正本である。
 
 ## Verification record
 
@@ -83,4 +77,4 @@
 
 ## Deviations and follow-up
 
-- Directory: `20260919_collection-attention-c451a9a9770c1b1e`
+- Directory: `20260919_collection-attention-0ab1761d7f4c75b5`
