@@ -4,7 +4,7 @@
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
-- Updated: 2026-09-19
+- Updated: 2026-09-20
 - JRA site contract impact: Updated — `docs/27-jra-site-collection-contract.md`へ、RaceResult馬名cellのHorse profile linkをidentityとして取得できること、年代により欠落し得ること、URL推測禁止を追記した。
 
 ## Completion summary
@@ -160,7 +160,8 @@
 | T2 | link欠落時の同名候補exact race照合、時系列矛盾診断、共有探索budgetを実装する。 | Main | Lead tier | T1 | Navigator、subject model/parser、failure evidence | historical navigator/budget fixtures | AC4-AC7,AC11 | Verified |
 | T3 | 過去開催、反例、主体dispatch、Horse ID分岐、冪等再取得、統合、回帰、format/buildを検証する。 | Main | Lead/review tier | T1,T2 | tests | focused/full CI-equivalent gates | AC1-AC7,AC9-AC12 | Verified |
 | T4 | revision更新、repair preview、配備、対象Recovery、過去再取得post-checkを行う。 | Main | Lead/review tier | T3 | definition、repair、change record、production operation | preview/apply evidence | AC8-AC9,AC12 | Dependent |
-| T5 | Race主体batchで追加した参照レースmetadataを保存層で受理し、本番失敗を再発防止する。 | Main | Lead tier | T1 | CollectionPlatformStore、store regression test | production-shaped batch persistence test、full CI、再配備 | AC3,AC10 | In progress |
+| T5 | Race主体batchで追加した参照レースmetadataを保存層で受理し、本番失敗を再発防止する。 | Main | Lead tier | T1 | CollectionPlatformStore、store regression test | production-shaped batch persistence test、full CI、再配備 | AC3,AC10 | Verified |
+| T6 | 文脈依存のHorse URLが直接遷移に失敗しても、Raceで証明済みidentityを保持して相対・絶対URLを同一視する。 | Main | Lead tier | T5 | subject handler、navigator、profile validation、tests | direct-failure fallbackとrelative/absolute identity tests、full CI、本番Recovery | AC1,AC3-AC5,AC9-AC10 | In progress |
 
 ## Review gates
 
@@ -186,6 +187,9 @@
 - 2026-09-19: `dotnet restore HorseRacingPrediction.sln`、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、Release solution build（警告0）、`dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"`を最新`origin/main`基点で実行した。1,137件成功、既知skip 1、失敗0。
 - 2026-09-19: 初回配備後の本番実行でRace本体・結果保存は成功したが、後続主体batchは全件`InvalidRequest`になった。`referenceRaceDate`、`referenceRaceCourse`、`referenceRaceNumber`がtask metadata許可リストへ未登録で、保存境界が各itemを拒否したことを特定した。3 keyを許可リストへ追加し、batch作成からtask leaseのmetadata復元までを通す回帰テストを追加した。
 - 2026-09-19: T5修正後にformat、Release solution build（警告0）、migration差分なし、非External全テストを実行し、1,138件成功、既知skip 1、失敗0を確認した。本番再配備と同一Race再実行は未完了。
+- 2026-09-20: T5を配備し、同一Raceを直接APIで再取得した。Race taskは成功し、後続Horse revision 4 taskに3つの参照レースmetadataと公式`sourceIdentity`、explicit URLが保存されたため、初回の全件`InvalidRequest`は解消した。
+- 2026-09-20: Horse task実行では、JRAの文脈依存URLが直接遷移で検索画面へ戻った後、handlerが`sourceIdentity`を外して名前検索し、再度`MultipleCandidates`になった。Race根拠付きの場合はidentityを保持し、JRA Horse identityを相対・絶対URL間で正規化比較するT6を追加した。
+- 2026-09-20: T6のdirect-failure fallbackとrelative/absolute identity回帰テスト、format、Release build（警告0）、migration差分なし、非External全テストを実行した。1,139件成功、既知skip 1、失敗0。本番再配備とHorse Recoveryは未完了。
 
 ## Incident ledger
 
@@ -193,8 +197,8 @@
 - Temporary recovery: データを削除・書換えず、失敗taskとattemptを診断証拠として保持した。
 - Root cause: producerが追加した3つの参照レースmetadata keyと、保存層の明示的allowlistが不整合だった。handler単体テストがrecording sinkまでで終了し、実保存境界を通していなかった。
 - Corrective proposal: 承認済み設計内の局所欠陥としてallowlistを修正し、実保存境界を通る回帰テスト後に再配備・同一Race再実行する。
-- Permanent fix: Implemented locally; deployment and production verification pending.
-- Remaining risk: 再配備後にRace主体batchと対象Horse taskが終端成功することを確認するまで、AC3、AC8-AC10、AC12の本番証拠は未完了。
+- Permanent fix: T5 deployed and verified for batch acceptance. T6 implemented locally; deployment and production verification pending.
+- Remaining risk: T6再配備後に対象Horse taskが終端成功することを確認するまで、AC1、AC3-AC5、AC8-AC10、AC12の本番証拠は未完了。
 
 ## Deviations and follow-up
 

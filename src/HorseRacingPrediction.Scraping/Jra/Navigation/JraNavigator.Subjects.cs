@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.Globalization;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -101,7 +102,8 @@ public sealed partial class JraNavigator
             }
             foreach (var link in candidates)
             {
-                if (subject.SourceIdentity is not null && link.Url != subject.SourceIdentity) continue;
+                if (subject.SourceIdentity is not null
+                    && !SourceIdentityMatches(subject.SubjectType, link.Url, subject.SourceIdentity)) continue;
                 var useReferenceRace = subject.SourceIdentity is null
                     && subject.BirthDate is null
                     && subject.ReferenceRace is not null;
@@ -204,6 +206,13 @@ public sealed partial class JraNavigator
         && history.Link is not null
         && TryGetRaceId(history.Link.Url, page.Url, out var race)
         && race == referenceRace);
+
+    private static bool SourceIdentityMatches(string subjectType, string left, string right) =>
+        string.Equals(left, right, StringComparison.Ordinal)
+        || (subjectType == "Horse"
+            && JraSourceIdentity.TryNormalizeHorse(left, out var leftIdentity)
+            && JraSourceIdentity.TryNormalizeHorse(right, out var rightIdentity)
+            && string.Equals(leftIdentity, rightIdentity, StringComparison.Ordinal));
 
     private static bool HistoryHasPassedReferenceDate(JraSubjectPage page, DateOnly referenceDate)
     {

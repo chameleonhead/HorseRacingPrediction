@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.Contracts;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Scraping.Browser;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -78,13 +79,22 @@ public static class SubjectProfilePageParser
             throw new JraSubjectIdentificationException(
                 JraSubjectIdentificationFailureKind.BirthDateMismatch, expected.SubjectType, expected.Name,
                 page.Profile.Name, finalUrl: page.Url);
-        if (expected.SourceIdentity is not null && expected.SourceIdentity != page.Profile.SourceIdentity)
+        if (expected.SourceIdentity is not null
+            && !SourceIdentityMatches(expected.SubjectType, expected.SourceIdentity, page.Profile.SourceIdentity))
             throw new JraSubjectIdentificationException(
                 JraSubjectIdentificationFailureKind.SourceIdentityMismatch, expected.SubjectType, expected.Name,
                 page.Profile.Name,
                 [new(page.Profile.Name, page.Profile.SourceIdentity ?? page.Url)],
                 expected.SourceIdentity, page.Url);
     }
+
+    private static bool SourceIdentityMatches(string subjectType, string expected, string? actual) =>
+        string.Equals(expected, actual, StringComparison.Ordinal)
+        || (subjectType == "Horse"
+            && JraSourceIdentity.TryNormalizeHorse(expected, out var expectedIdentity)
+            && JraSourceIdentity.TryNormalizeHorse(actual, out var actualIdentity)
+            && string.Equals(expectedIdentity, actualIdentity, StringComparison.Ordinal));
+
     public static bool TryDate(string value, out DateOnly date) => DateOnly.TryParseExact(value.Trim(),
         new[] { "yyyy年M月d日", "yyyy/MM/dd", "yyyy/M/d" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);
 }
