@@ -17,6 +17,12 @@ ACTIONABLE_CLASSIFICATIONS = {
     "UnknownHistoricalJobError",
     "OperationalCondition",
 }
+CLASSIFICATION_BY_VALUE = {
+    0: "ProgramBug",
+    1: "KnownHistoricalJobError",
+    2: "UnknownHistoricalJobError",
+    3: "OperationalCondition",
+}
 
 
 def sanitize(value: Any, limit: int = 500) -> str:
@@ -25,6 +31,12 @@ def sanitize(value: Any, limit: int = 500) -> str:
     text = text.replace("```", "'''").replace("<!--", "&lt;!--").replace("-->", "--&gt;")
     text = re.sub(r"\s+", " ", text).strip()
     return text[:limit]
+
+
+def normalize_classification(value: Any) -> str:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return CLASSIFICATION_BY_VALUE.get(value, str(value))
+    return sanitize(value, 64)
 
 
 def parse_timestamp(value: str) -> dt.datetime:
@@ -181,18 +193,20 @@ def process_report(repo: Path, report: dict[str, Any], apply: bool) -> dict[str,
     updated: list[str] = []
     skipped: list[str] = []
     for finding in report.get("findings", []):
-        classification = sanitize(finding.get("classification"), 64)
+        classification = normalize_classification(finding.get("classification"))
         fingerprint = sanitize(finding.get("fingerprint"), 64)
         if classification not in ACTIONABLE_CLASSIFICATIONS:
             skipped.append(fingerprint)
             continue
         if not re.fullmatch(r"[a-f0-9]{8,64}", fingerprint):
             raise ValueError(f"Invalid finding fingerprint: {fingerprint}")
+        normalized_finding = dict(finding)
+        normalized_finding["classification"] = classification
         existing = find_existing(repo, fingerprint)
         if existing:
             if status_for_path(repo, existing):
                 raise RuntimeError(f"Refusing to overwrite dirty change record: {existing}")
-            if apply and append_observation(existing, finding, observed_at):
+            if apply and append_observation(existing, normalized_finding, observed_at):
                 updated.append(existing.relative_to(repo).as_posix())
             continue
         date = parse_timestamp(observed_at).strftime("%Y%m%d")
@@ -202,7 +216,7 @@ def process_report(repo: Path, report: dict[str, Any], apply: bool) -> dict[str,
             raise RuntimeError(f"Refusing to overwrite conflicting path: {target}")
         if apply:
             target.parent.mkdir(parents=True, exist_ok=False)
-            target.write_text(render_record(finding, observed_at, directory_name), encoding="utf-8", newline="\n")
+            target.write_text(render_record(normalized_finding, observed_at, directory_name), encoding="utf-8", newline="\n")
             created.append(target.relative_to(repo).as_posix())
     return {"created": created, "updated": updated, "skipped": skipped, "apply": apply}
 

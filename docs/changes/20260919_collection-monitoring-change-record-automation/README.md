@@ -183,6 +183,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 2026-09-19: `CollectionMonitoringServiceTests` と `SubjectIdentificationAutoRecoveryTests` の9件が成功し、認証境界、バグ分類、停滞検知の読み取り専用性、取得上限/truncation、起票switch、maintenance抑止、補正switch、canary=1、backup作成、残対象保持を確認した。
 - 2026-09-19: Pythonツール4件が成功し、無害化したProposed record生成、同一観測の冪等性、新時刻の追記、既知recoveryの非起票、dirty recordの書き換え拒否を確認した。
 - 2026-09-19: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、workflow YAML parse、`git diff --check`が成功した。`codegraph sync .` は変更なしと報告したため、checkpoint commit後に新規symbolを再照会する。
+- 2026-09-19: production shadow run `35424418215` はAPI読取、46 finding、既知recovery 1 groupのpreviewに成功した。ASP.NETのJSON enumが数値であるためwriterが全findingをskipする統合不具合を検出し、数値/文字列の両表現をcanonical classificationへ正規化した。補正apply前に修正し、Python 5件で回帰確認した。
 
 ## Deviations and follow-up
 

@@ -61,6 +61,12 @@ class ChangeRecordWriterTests(unittest.TestCase):
         self.assertEqual([], result["created"])
         self.assertEqual(["abcdef1234567890"], result["skipped"])
 
+    def test_numeric_json_enum_is_normalized(self):
+        result = process_report(self.repo, self.report(0), True)
+        self.assertEqual(1, len(result["created"]))
+        text = (self.repo / result["created"][0]).read_text(encoding="utf-8")
+        self.assertIn("- Classification: `ProgramBug`", text)
+
     def test_dirty_existing_record_is_not_overwritten(self):
         first = process_report(self.repo, self.report(), True)
         path = self.repo / first["created"][0]
