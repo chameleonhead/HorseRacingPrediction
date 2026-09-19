@@ -222,10 +222,15 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         CancellationToken cancellationToken)
     {
         var raceId = ParseRaceId(task);
-        task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
-        await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
+        return await JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync(sessions,
+            (session, token) => CollectWithSessionAsync(task, raceId, session, token), cancellationToken)
             .ConfigureAwait(false);
-        var session = sessionLease.Session;
+    }
+
+    private async Task<CollectionAttemptCompletion> CollectWithSessionAsync(LeasedCollectionTask task,
+        RaceId raceId, JraSession session, CancellationToken cancellationToken)
+    {
+        task.Attributes.TryGetValue("domainRaceId", out var domainRaceId);
         var workflow = cardWorkflows(session);
         var today = TodayJst();
         var requiresCard = raceId.Date >= today.AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
@@ -293,9 +298,17 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     LocationOutcomes: locationOutcomes);
             }
         }
+        string? subjectBatchError = null;
         if (requiresCard && requests is not null && result?.Entries is not null)
-            await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await RequestReferencedSubjectsAsync(task, result.Entries, result.RaceId!, requests,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (ReferencedSubjectBatchException ex)
+            {
+                subjectBatchError = ex.Message;
+            }
         if (requiresCard && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         var firstResultCheck = FirstResultCheck(raceId.Date, task.Attributes);
@@ -354,6 +367,12 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed",
                 "Race result is not officially confirmed.", RequestedUrl: ToUri(raceResult.SourceUrl),
                 RetryAt: NextResultRetry(raceId.Date), LocationOutcomes: locationOutcomes);
+        if (subjectBatchError is not null)
+            return new(CollectionAttemptResult.ValidationFailure, "ReferencedSubjectBatchRejected",
+                subjectBatchError, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
+                FinalUrl: ToUri(raceResult.SourceUrl),
+                PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
+                LocationOutcomes: locationOutcomes, FailureImpact: CollectionFailureImpact.Isolated);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
             FinalUrl: ToUri(raceResult.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
             LocationOutcomes: locationOutcomes);
@@ -441,7 +460,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
             var id = subject.Type == ResourceType.Horse
                 ? DeterministicIdGenerator.BuildHorseId(subject.Name, subject.SourceIdentity)
-                : DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix, subject.Name);
+                : DeterministicIdGenerator.BuildEntityId(descriptor.IdPrefix,
+                    DeterministicIdGenerator.NormalizeKey(subject.Name));
             var attributes = new Dictionary<string, string>
             {
                 ["name"] = subject.Name,
@@ -468,11 +488,34 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             .ToArray();
         if (items.Length == 0) return;
         var response = await sink.RequestManyAsync(new(batchId, items), cancellationToken).ConfigureAwait(false);
+        ValidateReferencedSubjectBatchResponse(items, response);
+    }
+
+    internal static void ValidateReferencedSubjectBatchResponse(
+        IReadOnlyList<CollectionRequestBulkItem> items, CollectionRequestBulkResponse response)
+    {
         var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
         var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
         var validStatuses = new HashSet<string>(["Created", "Reused", "Accepted"], StringComparer.Ordinal);
         if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
             || response.Outcomes.Any(outcome => !validStatuses.Contains(outcome.Status)))
-            throw new InvalidOperationException("Referenced subject batch response was incomplete or rejected.");
+        {
+            var returnedKeys = response.Outcomes.Select(outcome => outcome.ItemKey).ToHashSet(StringComparer.Ordinal);
+            var allFailures = items.Where(item => !returnedKeys.Contains(item.ItemKey))
+                .Select(item => $"{item.ItemKey}:Missing")
+                .Concat(response.Outcomes.Where(outcome => !validStatuses.Contains(outcome.Status))
+                    .Select(outcome => $"{outcome.ItemKey}:{outcome.ErrorCode ?? outcome.Status}"))
+                .ToArray();
+            var failures = allFailures
+                .Take(20)
+                .ToArray();
+            var omitted = allFailures.Length - failures.Length;
+            var detail = string.Join(", ", failures);
+            if (omitted > 0) detail += $", +{omitted} more";
+            throw new ReferencedSubjectBatchException(
+                $"Referenced subject batch response was incomplete or rejected. Items=[{detail}]");
+        }
     }
+
+    internal sealed class ReferencedSubjectBatchException(string message) : InvalidOperationException(message);
 }

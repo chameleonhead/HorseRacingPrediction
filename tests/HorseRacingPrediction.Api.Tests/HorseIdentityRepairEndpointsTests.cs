@@ -91,6 +91,33 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
+    public async Task ObsoletePedigreeReference_IsRecommendedForDismissalInsteadOfRetry()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var store = application.Services.GetRequiredService<CollectionPlatformStore>();
+        var definition = new CollectionDefinitionId("horse-profile");
+        await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse, 3, "test", false);
+        var resource = new ResourceKey(ResourceType.Horse, "JRA", $"obsolete-{Guid.NewGuid():N}");
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receipt = await store.RequestAsync(resource, definition, 3, CollectionReason.Discovery, now);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified",
+                "同定不能: 公開検索に一致候補がありません。期待=Horse:トイムム 産駒"));
+
+        var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
+            "/api/admin/repairs/subject-identification");
+        var candidate = preview!.Candidates.Single(x => x.SubjectId == resource.Id);
+
+        Assert.AreEqual("DismissRecommended", candidate.Evaluation);
+        Assert.IsFalse(candidate.SafeToExecute);
+        StringAssert.Contains(candidate.BlockingReason, "同じ条件では再失敗");
+    }
+
+    [TestMethod]
     public async Task DismissSubjectIdentification_WithNonSubjectNotification_UpdatesNothing()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
@@ -253,7 +280,7 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
-    public async Task SubjectNotIdentified_ParameterlessJraUrl_IsIgnoredAndRecoveredWithoutUrl()
+    public async Task SubjectNotIdentified_ParameterlessJraUrl_RemainsBlockedWithoutSafeCorrection()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -275,18 +302,14 @@ public sealed class HorseIdentityRepairEndpointsTests
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
             "/api/admin/repairs/subject-identification");
         var candidate = preview!.Candidates.Single(x => x.NotificationId == failure.NotificationId);
-        Assert.AreEqual("RetryReady", candidate.Evaluation);
-        Assert.IsTrue(candidate.SafeToExecute);
+        Assert.AreEqual("Blocked", candidate.Evaluation);
+        Assert.IsFalse(candidate.SafeToExecute);
         Assert.IsNull(candidate.SuggestedUrl);
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest(
                 [new ExecuteSubjectIdentificationRepairItem(candidate.NotificationId, invalid.AbsoluteUri)]));
-        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<ExecuteSubjectIdentificationRepairResponse>();
-        Assert.AreEqual(1, result!.CreatedTaskCount);
-        var detail = await store.GetResourceDetailPagedAsync(resource, new("trainer-profile"));
-        Assert.IsNull(detail!.Requests.OrderByDescending(x => x.RequestedAt).First().ExplicitUrl);
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [TestMethod]

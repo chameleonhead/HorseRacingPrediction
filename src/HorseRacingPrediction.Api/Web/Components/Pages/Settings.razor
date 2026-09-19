@@ -360,7 +360,9 @@
     }
 
     private string SubjectStatusLabel(SubjectIdentificationRepairCandidateResponse candidate) =>
-        !SubjectActionable(candidate) ? "要確認" : candidate.Evaluation == "MergeReady" ? "名寄せ後に再収集" : "再収集可能";
+        candidate.Evaluation == "DismissRecommended" ? "対応不要候補"
+            : !SubjectActionable(candidate) ? "要確認"
+            : candidate.Evaluation == "MergeReady" ? "名寄せ後に再収集" : "再収集可能";
 
     private static string SubjectTypeLabel(ResourceType type) => type switch
     {

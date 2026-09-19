@@ -162,6 +162,72 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task DeclareRaceResultBulk_RaceCardUsesHorseSourceIdentityForCanonicalEntryId()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var course = $"IDENTITY-{Guid.NewGuid():N}";
+        const string horseName = "識別子付き競走馬";
+        const string sourceIdentity =
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026123456/00";
+        var request = new DeclareRaceResultBulkRequest(date, course, 1, "主体ID検証",
+            EntryCount: 1,
+            Entries:
+            [
+                new RaceResultEntryBulkDto(1, 1, "1:35.0", null, null, null, null,
+                    HorseName: horseName, JockeyName: "▲識別 騎手", TrainerName: "識別 調教師（美浦）",
+                    HorseSourceIdentity: sourceIdentity),
+            ],
+            WinningHorseName: horseName, DeclaredAt: DateTimeOffset.UtcNow);
+
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(body);
+        Assert.IsEmpty(body.Errors);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body.RaceId}", JsonOptions);
+        Assert.IsNotNull(race);
+        var entry = race.Entries.Single();
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(
+            horseName, sourceIdentity), entry.HorseId);
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+            "jockey", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey("識別 騎手")), entry.JockeyId);
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+            "trainer", HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey("識別 調教師")), entry.TrainerId);
+    }
+
+    [TestMethod]
+    public async Task RefreshRaceCard_SourceIdentityReplacesLegacyNameBasedHorseId()
+    {
+        var date = new DateOnly(2030, 1, 2);
+        const string course = "中山";
+        const string horseName = "既存ID補正馬";
+        const string sourceIdentity =
+            "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026654321/00";
+        var initial = new DeclareRaceResultBulkRequest(date, course, 2, "既存ID補正",
+            EntryCount: 1, WinningHorseName: horseName, DeclaredAt: DateTimeOffset.UtcNow,
+            Entries: [new(1, 1, "1:36.0", null, null, null, null, HorseName: horseName)]);
+        var initialResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", initial, JsonOptions);
+        var initialBody = await initialResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+        Assert.IsNotNull(initialBody);
+
+        var refresh = new DeclareRaceResultBulkRequest(date, course, 2, "既存ID補正", EntryCount: 1,
+            Entries:
+            [
+                new(1, null, null, null, null, null, null, HorseName: horseName,
+                    HorseSourceIdentity: sourceIdentity),
+            ],
+            TargetRaceId: initialBody.RaceId, RefreshExistingData: true, IsRaceCard: true);
+        var refreshResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", refresh, JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{initialBody.RaceId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
+        Assert.IsNotNull(race);
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(
+            horseName, sourceIdentity), race.Entries.Single().HorseId);
+    }
+
+    [TestMethod]
     public async Task DeclareRaceResultBulk_InvalidEntries_ReturnsStructuredRejections()
     {
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk",

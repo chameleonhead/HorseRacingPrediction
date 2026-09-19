@@ -95,9 +95,14 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             return new(CollectionAttemptResult.Succeeded,
                 PageIdentification: $"OwnerIdentity:JRA:{task.Resource.Id}");
         }
-        await using var sessionLease = await JraSessionExecutionScope.AcquireAsync(sessions, cancellationToken)
+        return await JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync(sessions,
+            (session, token) => CollectWithSessionAsync(task, identity, session, token), cancellationToken)
             .ConfigureAwait(false);
-        var session = sessionLease.Session;
+    }
+
+    private async Task<CollectionAttemptCompletion> CollectWithSessionAsync(LeasedCollectionTask task,
+        JraSubjectIdentity identity, JraSession session, CancellationToken cancellationToken)
+    {
         JraSubjectPage? page = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         foreach (var location in task.Locations ?? [])
@@ -247,7 +252,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
                     reference.Name, null, null, cancellationToken).ConfigureAwait(false),
                 ResourceType.Horse when entityWriter is not null => await entityWriter.UpsertHorseAsync(
                     reference.Name, null, null, null, cancellationToken).ConfigureAwait(false),
-                _ => DeterministicIdGenerator.BuildEntityId(child.IdPrefix, reference.Name),
+                _ => DeterministicIdGenerator.BuildEntityId(child.IdPrefix,
+                    DeterministicIdGenerator.NormalizeKey(
+                        SubjectProfilePageParser.CanonicalizeDisplayName(reference.Type.ToString(), reference.Name))),
             };
             if (ancestors.Contains(childId)) continue;
             await sink.RequestAsync(new(reference.Type, "JRA", childId), child.Definition, child.CurrentRevision,

@@ -65,13 +65,20 @@ public static partial class EndpointExtensions
             }
 
             var horseName = item.HorseName?.Trim() ?? entryId;
+            var canonicalHorseName = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", horseName);
+            var canonicalJockeyName = string.IsNullOrWhiteSpace(item.JockeyName) ? null
+                : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
+            var canonicalTrainerName = string.IsNullOrWhiteSpace(item.TrainerName) ? null
+                : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
             var horseId = isExistingEntry
                 ? existing!.Entries.Single(entry => entry.EntryId == entryId).HorseId
-                : DeterministicIdGenerator.BuildEntityId("horse", DeterministicIdGenerator.NormalizeKey(horseName));
-            var jockeyId = string.IsNullOrWhiteSpace(item.JockeyName) ? null : DeterministicIdGenerator.BuildEntityId(
-                "jockey", DeterministicIdGenerator.NormalizeKey(item.JockeyName));
-            var trainerId = string.IsNullOrWhiteSpace(item.TrainerName) ? null : DeterministicIdGenerator.BuildEntityId(
-                "trainer", DeterministicIdGenerator.NormalizeKey(item.TrainerName));
+                : DeterministicIdGenerator.BuildHorseId(canonicalHorseName, item.HorseSourceIdentity);
+            var jockeyId = string.IsNullOrWhiteSpace(canonicalJockeyName) ? null
+                : DeterministicIdGenerator.BuildEntityId("jockey",
+                    DeterministicIdGenerator.NormalizeKey(canonicalJockeyName));
+            var trainerId = string.IsNullOrWhiteSpace(canonicalTrainerName) ? null
+                : DeterministicIdGenerator.BuildEntityId("trainer",
+                    DeterministicIdGenerator.NormalizeKey(canonicalTrainerName));
             var entry = new EntryDetails(entryId, horseId, item.HorseNumber, jockeyId, trainerId,
                 item.GateNumber, item.AssignedWeight, item.SexCode, item.Age, item.BodyWeight,
                 item.BodyWeightChange, null, item.OwnerName);
@@ -79,7 +86,7 @@ public static partial class EndpointExtensions
                 item.MarginText, item.LastThreeFurlongTime, item.AbnormalResultCode, item.PrizeMoney,
                 item.CornerPositions, item.Popularity, item.OriginalFinishPosition, item.IsDeadHeat,
                 item.Average1F, item.AdditionalPrizeMoney);
-            accepted.Add((item, entry, result, horseName, item.JockeyName, item.TrainerName));
+            accepted.Add((item, entry, result, canonicalHorseName, canonicalJockeyName, canonicalTrainerName));
             outcomes.Add(new("Entry", key, "Accepted"));
         }
 

@@ -5,11 +5,16 @@ namespace HorseRacingPrediction.Contracts;
 
 public static partial class JraSubjectNameNormalizer
 {
+    private static readonly char[] JockeyAllowanceMarks = ['▲', '△', '☆', '★', '◇', '▽'];
+
     public static string CanonicalizeDisplayName(string subjectType, string value)
     {
         var canonical = value.Normalize(NormalizationForm.FormKC).Trim();
         if (subjectType is "Trainer" or "Jockey")
             canonical = AffiliationSuffix().Replace(canonical, string.Empty).Trim();
+        if (subjectType == "Jockey")
+            while (canonical.Length > 0 && JockeyAllowanceMarks.Contains(canonical[0]))
+                canonical = canonical[1..].TrimStart();
         if (subjectType == "Horse")
             canonical = HorseRegistrationMark().Replace(canonical, string.Empty).Trim();
         return canonical;

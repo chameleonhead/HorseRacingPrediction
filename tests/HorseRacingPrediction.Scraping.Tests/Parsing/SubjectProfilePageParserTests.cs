@@ -18,6 +18,8 @@ public sealed class SubjectProfilePageParserTests
             SubjectProfilePageParser.CanonicalizeDisplayName("Horse", "マルチ パレスラン"));
         Assert.AreEqual("尾形 和幸",
             SubjectProfilePageParser.CanonicalizeDisplayName("Trainer", "尾形 和幸（美浦）"));
+        Assert.AreEqual("識別 騎手",
+            SubjectProfilePageParser.CanonicalizeDisplayName("Jockey", "▲識別 騎手（美浦）"));
         Assert.AreEqual(SubjectProfilePageParser.NormalizeIdentityName("Trainer", "尾形 和幸"),
             SubjectProfilePageParser.NormalizeIdentityName("Trainer", "尾形 和幸(美浦)"));
     }

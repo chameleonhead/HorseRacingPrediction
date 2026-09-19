@@ -197,7 +197,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         var schedule = new FakeJraScheduleCollectionWorkflow
         { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
         var sink = new RecordingSink();
-        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink);
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero)));
 
         await Assert.ThrowsExactlyAsync<JraRaceIdentityMismatchException>(() =>
             handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));

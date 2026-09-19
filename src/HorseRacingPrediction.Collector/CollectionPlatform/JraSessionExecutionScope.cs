@@ -91,6 +91,44 @@ public static class JraSessionExecutionScope
             ownsSession: true);
     }
 
+    public static async Task<T> ExecuteWithClosedSessionRetryAsync<T>(IJraSessionFactory factory,
+        Func<JraSession, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        ArgumentNullException.ThrowIfNull(operation);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await using var lease = await AcquireAsync(factory, cancellationToken).ConfigureAwait(false);
+                return await operation(lease.Session, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (attempt == 0 && ex is not OperationCanceledException
+                && !cancellationToken.IsCancellationRequested && IsClosedBrowserSession(ex))
+            {
+                await InvalidateCurrentSessionAsync(factory).ConfigureAwait(false);
+            }
+        }
+    }
+
+    internal static bool IsClosedBrowserSession(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+            if (string.Equals(current.GetType().Name, "TargetClosedException", StringComparison.Ordinal)
+                || current.Message.Contains("page, context or browser has been closed",
+                    StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    private static async ValueTask InvalidateCurrentSessionAsync(IJraSessionFactory factory)
+    {
+        var state = Current.Value;
+        if (state is not null && ReferenceEquals(state.Factory, factory))
+            await state.InvalidateAsync().ConfigureAwait(false);
+    }
+
     public static CollectionDispatchCompatibilityKey? CurrentCompatibilityKey => Current.Value?.CompatibilityKey;
 
     private sealed class ScopeState(IJraSessionFactory factory,
@@ -98,30 +136,41 @@ public static class JraSessionExecutionScope
     {
         private readonly object _gate = new();
         private Task<JraSession>? _session;
+        private bool _browserCreated;
 
         public IJraSessionFactory Factory { get; } = factory;
         public CollectionDispatchCompatibilityKey? CompatibilityKey { get; } = compatibilityKey;
         public bool BrowserCreated
         {
-            get { lock (_gate) return _session is not null; }
+            get { lock (_gate) return _browserCreated; }
         }
 
         public Task<JraSession> GetSessionAsync(CancellationToken cancellationToken)
         {
             lock (_gate)
-                return _session ??= Factory.CreateAsync(cancellationToken);
+            {
+                if (_session is not null) return _session;
+                _browserCreated = true;
+                return _session = Factory.CreateAsync(cancellationToken);
+            }
         }
 
         public async ValueTask DisposeAsync()
         {
             Task<JraSession>? session;
-            lock (_gate) session = _session;
+            lock (_gate)
+            {
+                session = _session;
+                _session = null;
+            }
             if (session is null) return;
             JraSession ownedSession;
             try { ownedSession = await session.ConfigureAwait(false); }
             catch { return; } // Construction failed, so no owned session exists to dispose.
             await ownedSession.DisposeAsync().ConfigureAwait(false);
         }
+
+        public ValueTask InvalidateAsync() => DisposeAsync();
     }
 }
 

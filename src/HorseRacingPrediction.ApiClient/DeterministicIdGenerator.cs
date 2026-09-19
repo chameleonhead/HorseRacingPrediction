@@ -51,7 +51,7 @@ public static class DeterministicIdGenerator
     {
         var key = JraSourceIdentity.TryNormalizeHorse(jraSourceIdentity, out var identity)
             ? $"JRA|{identity}"
-            : NormalizeDisplayName(registeredName);
+            : NormalizeKey(registeredName);
         return BuildEntityId("horse", key);
     }
 

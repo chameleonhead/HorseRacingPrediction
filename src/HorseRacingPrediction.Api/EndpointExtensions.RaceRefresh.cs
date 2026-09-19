@@ -39,16 +39,22 @@ public static partial class EndpointExtensions
                 return Results.BadRequest(new[] { "出走馬の識別情報が不足しています。" });
             var old = existing.Entries.FirstOrDefault(x => x.HorseNumber == source.HorseNumber);
             var entryId = old?.EntryId ?? DeterministicIdGenerator.BuildRaceEntryId(id, source.HorseNumber);
-            static string? SubjectId(string kind, string? name) => string.IsNullOrWhiteSpace(name) ? null
-                : DeterministicIdGenerator.BuildEntityId(kind, DeterministicIdGenerator.NormalizeKey(name));
-            var horseId = SubjectId("horse", source.HorseName)!;
-            var jockeyId = SubjectId("jockey", source.JockeyName);
-            var trainerId = SubjectId("trainer", source.TrainerName);
+            static string? SubjectId(string prefix, string subjectType, string? name) => string.IsNullOrWhiteSpace(name) ? null
+                : DeterministicIdGenerator.BuildEntityId(prefix,
+                    DeterministicIdGenerator.NormalizeKey(
+                        Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, name)));
+            var horseName = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", source.HorseName);
+            var horseId = DeterministicIdGenerator.BuildHorseId(horseName, source.HorseSourceIdentity);
+            var jockeyId = SubjectId("jockey", "Jockey", source.JockeyName);
+            var trainerId = SubjectId("trainer", "Trainer", source.TrainerName);
             // 既存の出走登録では手入力IDや別の正規化規則も使われる。同じ名前なら関連IDを維持する。
             if (old is not null)
             {
                 var horse = await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(old.HorseId), token);
-                if (horse is not null && NormalizeDisplayName(horse.RegisteredName) == NormalizeDisplayName(source.HorseName)) horseId = old.HorseId;
+                if (string.IsNullOrWhiteSpace(source.HorseSourceIdentity)
+                    && horse is not null
+                    && NormalizeDisplayName(horse.RegisteredName) == NormalizeDisplayName(source.HorseName))
+                    horseId = old.HorseId;
                 if (old.JockeyId is not null && source.JockeyName is not null)
                 {
                     var jockey = await queries.ProcessAsync(new ReadModelByIdQuery<JockeyReadModel>(old.JockeyId), token);

@@ -245,7 +245,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         try
         {
             var cleanedNormalizedName = JockeyNameNormalizer.Normalize(normalizedName ?? cleanedDisplayName);
-            var normalized = DeterministicIdGenerator.NormalizeDisplayName(cleanedNormalizedName);
+            var normalized = DeterministicIdGenerator.NormalizeKey(
+                JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", cleanedNormalizedName));
             var jockeyId = DeterministicIdGenerator.BuildEntityId("jockey", normalized);
 
             await UpdateJockeyAsync(jockeyId, cleanedDisplayName, normalized, affiliationCode, cancellationToken)
@@ -295,7 +296,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
         try
         {
-            var normalized = DeterministicIdGenerator.NormalizeDisplayName(normalizedName ?? displayName);
+            var normalized = DeterministicIdGenerator.NormalizeKey(
+                JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", normalizedName ?? displayName));
             var trainerId = DeterministicIdGenerator.BuildEntityId("trainer", normalized);
 
             await UpdateTrainerAsync(trainerId, displayName, normalized, affiliationCode, cancellationToken)

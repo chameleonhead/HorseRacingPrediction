@@ -50,6 +50,7 @@ public static partial class EndpointExtensions
                 foreach (var item in request.Items)
                 {
                     var failure = byId[item.NotificationId];
+                    var hasExplicitCorrection = IsValidCorrectionUrl(item.CorrectionUrl);
                     var detail = await collectionStore.GetResourceDetailPagedAsync(
                         failure.Resource, failure.Definition, cancellationToken: token).ConfigureAwait(false);
                     if (HasMissingNameFailure(detail, failure.TaskId))
@@ -92,6 +93,13 @@ public static partial class EndpointExtensions
                                     && x.RepairId == HorseIdentityRepairId)
                                 .Select(x => x.TargetHorseId).SingleOrDefaultAsync(token).ConfigureAwait(false);
                     }
+                    if (merge is null && redirectTarget is null && !hasExplicitCorrection
+                        && (!IsValidCorrectionUrl(storedUrl) || IsUnsafeStoredRepairEvidence(failure.ErrorMessage)))
+                        return Results.Conflict(new[]
+                        {
+                            $"{failure.Resource.Type}/{failure.Resource.Id}: " +
+                            "同一性を証明できる補正先がありません。対応不要として閉じるか、確認済みURLを指定してください。",
+                        });
                     plans.Add((failure, correctionUrl, state.RequiredRevision, merge, redirectTarget));
                 }
 
@@ -198,11 +206,15 @@ public static partial class EndpointExtensions
             var blocked = missingName ? "主体名がないため再収集できません。"
                 : merges.Length > 1 ? "同じ統合元に複数の統合先候補があります。"
                 : merge is { SafeToApply: false } ? merge.BlockingReason
+                : merge is null && redirectedTarget is null
+                    && (!IsValidCorrectionUrl(suggestedUrl) || IsUnsafeStoredRepairEvidence(failure.ErrorMessage))
+                    ? "同一性を証明できる補正先がありません。同じ条件では再失敗するため、対応不要として閉じるか確認済みURLを指定してください。"
                 : null;
             var ready = blocked is null;
             result.Add(new(failure.NotificationId, failure.TaskId, failure.Resource.Type,
                 failure.Resource.Id, failure.Definition.Value, failure.ErrorMessage, failure.FailedAt,
-                ready ? merge is null && redirectedTarget is null ? "RetryReady" : "MergeReady" : "Blocked",
+                ready ? merge is null && redirectedTarget is null ? "RetryReady" : "MergeReady"
+                    : IsObsoleteSubjectReference(failure.ErrorMessage) ? "DismissRecommended" : "Blocked",
                 ready, blocked, suggestedUrl, merge?.CandidateId, merge?.TargetHorseId ?? redirectedTarget));
         }
         return result;
@@ -212,6 +224,15 @@ public static partial class EndpointExtensions
         string.Equals(failure.ErrorCode, SubjectNotIdentifiedErrorCode, StringComparison.Ordinal)
         && failure.Resource.Type is ResourceType.Horse or ResourceType.Jockey
             or ResourceType.Trainer or ResourceType.Owner;
+
+    private static bool IsObsoleteSubjectReference(string? message) =>
+        message?.Contains(" 産駒", StringComparison.Ordinal) == true
+        || message?.Contains("公開検索に一致候補がありません", StringComparison.Ordinal) == true;
+
+    private static bool IsUnsafeStoredRepairEvidence(string? message) =>
+        IsObsoleteSubjectReference(message)
+        || message?.Contains("取得プロフィールの名前が一致しません", StringComparison.Ordinal) == true
+        || message?.Contains("公開識別子が一致しません", StringComparison.Ordinal) == true;
 
     internal static bool IsValidCorrectionUrl(string? value) => TryCreateCorrectionUrl(value, out _);
 

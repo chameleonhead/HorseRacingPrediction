@@ -49,6 +49,45 @@ public sealed class JraSessionExecutionScopeTests
     }
 
     [TestMethod]
+    public async Task ClosedSession_IsDisposedAndCurrentOperationRetriesOnceWithFreshSession()
+    {
+        var factory = new TrackingSessionFactory();
+        var calls = 0;
+
+        await JraSessionExecutionScope.ExecuteAsync(factory, async cancellationToken =>
+        {
+            var result = await JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync(factory,
+                (_, _) => ++calls == 1
+                    ? Task.FromException<string>(new TargetClosedException())
+                    : Task.FromResult("recovered"), cancellationToken);
+
+            Assert.AreEqual("recovered", result);
+        }, CancellationToken.None);
+
+        Assert.AreEqual(2, calls);
+        Assert.AreEqual(2, factory.CreateCallCount);
+        Assert.IsTrue(factory.Browsers.All(x => x.IsDisposed && x.DisposeCallCount == 1));
+    }
+
+    [TestMethod]
+    public async Task ClosedSession_SecondFailureIsNotRetriedIndefinitely()
+    {
+        var factory = new TrackingSessionFactory();
+        var calls = 0;
+
+        await Assert.ThrowsAsync<TargetClosedException>(() => JraSessionExecutionScope.ExecuteAsync(factory,
+            cancellationToken => JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync<string>(factory,
+                (_, _) =>
+                {
+                    calls++;
+                    return Task.FromException<string>(new TargetClosedException());
+                }, cancellationToken), CancellationToken.None));
+
+        Assert.AreEqual(2, calls);
+        Assert.AreEqual(2, factory.CreateCallCount);
+    }
+
+    [TestMethod]
     public async Task MeasuredExecution_LogsApiAndNonApiTimeOnceAfterDisposal()
     {
         var factory = new TrackingSessionFactory();
@@ -261,6 +300,9 @@ public sealed class JraSessionExecutionScopeTests
             throw new InvalidOperationException("dispose-error-secret");
         }
     }
+
+    private sealed class TargetClosedException()
+        : Exception("Target page, context or browser has been closed");
 
     private sealed class ManualClock : ICollectionTaskTelemetryClock
     {

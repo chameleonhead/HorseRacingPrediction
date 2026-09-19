@@ -295,7 +295,7 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task HorseProfile_DeduplicatesParentsAndRejectsSelfReference()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
-        var currentId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var currentId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var requests = new RecordingRequestSink();
         var sessions = SubjectSessions("A", new Dictionary<string, string>
         {
@@ -633,7 +633,7 @@ public sealed class JraSubjectCollectionHandlerTests
     public async Task HorseProfile_CyclicParentGraphStopsAtAncestor()
     {
         var descriptor = JraSubjectCollectionDefinitions.For(ResourceType.Horse);
-        var aId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var aId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var firstRequests = new RecordingRequestSink();
         await new JraSubjectProfileCollectionHandler(descriptor,
                 SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),
@@ -653,7 +653,7 @@ public sealed class JraSubjectCollectionHandlerTests
     [TestMethod]
     public async Task HorseProfile_MaximumDepthStopsFurtherExpansion()
     {
-        var id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId("horse", "A");
+        var id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("A");
         var requests = new RecordingRequestSink();
         await new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
                 SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B" }),

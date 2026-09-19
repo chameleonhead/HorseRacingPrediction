@@ -182,3 +182,4 @@ change recordのStatusは「承認済みscope全体の完了」を表す一方�
 
 - production preview時点でrepair/recovery候補は0件だったため、Horse統合やRecovery task作成は行わなかった。これは対象がすでに収束していた結果であり、追加変更を避ける安全側の完了として扱う。
 - 初回maintenance previewはremote hostの`jq`不在、初回applyはTask状態名の誤り、SNS smoke初回は古いTerraform stateのoutput不在を検出した。いずれも外部データ変更またはSNS publish前に停止し、runner側解析、`Running`状態、AWS APIによるtopic解決へ修正後に再検証した。
+- 2026-09-18: UAC2は個別経路では成立していたが、高速化後のbulk RaceEntry保存がHorse source identityを保持せず、保存主体と子Taskのcanonical IDが分岐する本番回帰を確認した。Jockey/Trainerの名称正規化差とOwnerの別ID体系も同じ境界の未検証箇所である。当時の完了履歴は書き換えず、[主体ジョブのcanonical ID整合と過去ジョブフォールバック](../20260918_canonical-subject-job-fallback/README.md)で全入口と過去ジョブ修復を再設計・再検証する。
