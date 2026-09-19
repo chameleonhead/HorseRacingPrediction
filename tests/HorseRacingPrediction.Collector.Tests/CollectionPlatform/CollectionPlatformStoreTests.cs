@@ -1408,6 +1408,11 @@ public sealed class CollectionPlatformStoreTests
             artifacts.Single(x => x.Artifact == RaceArtifactKind.Result).Status);
         Assert.AreEqual(start, detail.RaceEvidence!.OfficialStartAt);
         Assert.HasCount(2, detail.StageOutcomes!);
+        var monitoringRace = (await store.GetMonitoringSnapshotAsync(
+            now.AddMinutes(1), now.AddDays(-1), 100)).RaceFreshness!.Single();
+        Assert.AreEqual(RaceArtifactStatus.Current, monitoringRace.CardStatus);
+        Assert.AreEqual(RaceArtifactStatus.AwaitingPublication, monitoringRace.ResultStatus);
+        Assert.AreEqual(start, monitoringRace.OfficialStartAt);
         Assert.IsTrue(await store.HasActiveTaskAsync(race, definition));
         var resumed = await store.AcquireAsync(receipt.TaskId, 2, start, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(resumed);
@@ -1889,6 +1894,41 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
         Assert.AreEqual("StructuralPageFailure",
             (await store.GetPendingFailureNotificationsAsync(now.AddSeconds(2), 10)).Single().ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task ClosedSessionFailures_RetryInIsolationUntilBurstThresholdThenPause()
+    {
+        var store = new CollectionPlatformStore(Options.Create(new CollectionPlatformOptions
+        {
+            StateDirectory = _directory,
+            ClosedSessionFailureThreshold = 3,
+            ClosedSessionFailureWindowMinutes = 10,
+        }));
+        await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 7,
+            "Initial profile extractor", false);
+        var now = new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.Zero);
+
+        for (var index = 1; index <= 3; index++)
+        {
+            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", $"CLOSED-{index}"),
+                HorseProfile, 7, CollectionReason.Initial, now.AddSeconds(index));
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(index),
+                TimeSpan.FromMinutes(5));
+            Assert.IsNotNull(lease);
+            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken,
+                now.AddSeconds(index * 10),
+                new(CollectionAttemptResult.TransientFailure, "TargetClosedException",
+                    "Target page, context or browser has been closed")));
+
+            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+            Assert.AreEqual(index < 3 ? CollectionTaskStatus.Ready : CollectionTaskStatus.Failed, task.Status);
+            Assert.AreEqual(index >= 3, (await store.GetPipelineStateAsync()).IsPaused);
+        }
+
+        var notification = (await store.GetPendingFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
+        Assert.AreEqual("TargetClosedException", notification.ErrorCode);
+        StringAssert.Contains((await store.GetPipelineStateAsync()).Reason!, "TargetClosedException");
     }
 
     [TestMethod]

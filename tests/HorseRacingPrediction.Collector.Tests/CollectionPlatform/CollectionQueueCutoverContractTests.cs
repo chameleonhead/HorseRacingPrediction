@@ -11,8 +11,37 @@ public sealed class CollectionQueueCutoverContractTests
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
     private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
+    private static string MonitoringWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-monitoring.yml"));
+    private static string LocalMonitoringRunner => File.ReadAllText(Path.Combine(Root, "tools", "collection_monitoring", "invoke_local_monitor.ps1"));
     private static string Compose => File.ReadAllText(Path.Combine(Root, "deploy", "docker-compose.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
+
+    [TestMethod]
+    public void MonitoringWorkflow_RecognizesNumericActionRequiredOutcome()
+    {
+        StringAssert.Contains(MonitoringWorkflow, ".outcome == 2");
+        StringAssert.Contains(MonitoringWorkflow, "Mark actionable monitoring result");
+    }
+
+    [TestMethod]
+    public void MonitoringWorkflow_IsReadOnlyAndDoesNotCreatePullRequests()
+    {
+        StringAssert.Contains(MonitoringWorkflow, "contents: read");
+        Assert.IsFalse(MonitoringWorkflow.Contains("pull-requests: write", StringComparison.Ordinal));
+        Assert.IsFalse(MonitoringWorkflow.Contains("gh pr create", StringComparison.Ordinal));
+        Assert.IsFalse(MonitoringWorkflow.Contains("change_record_writer.py", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void LocalMonitoringRunner_UsesDpapiFilesAndRequiresCauseRouting()
+    {
+        StringAssert.Contains(LocalMonitoringRunner, "Export-Clixml");
+        StringAssert.Contains(LocalMonitoringRunner, "Import-Clixml");
+        StringAssert.Contains(LocalMonitoringRunner, "rootCauseHypothesis");
+        StringAssert.Contains(LocalMonitoringRunner, "ownerTask");
+        StringAssert.Contains(LocalMonitoringRunner, "nextSafeOperation");
+        Assert.IsFalse(LocalMonitoringRunner.Contains("gh ", StringComparison.Ordinal));
+    }
 
     [TestMethod]
     public void Terraform_DefinesOnlyResourceCollectionQueuePair()
@@ -62,6 +91,19 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(DeployWorkflow, "$base/pipeline/resume");
         StringAssert.Contains(DeployWorkflow, "jq '.sourceResources'");
         StringAssert.Contains(DeployWorkflow, "jq '.errors | length'");
+    }
+
+    [TestMethod]
+    public void DeployWorkflow_SkipsCompletedOwnerMigrationBeforePausingPipeline()
+    {
+        var migration = DeployWorkflow.IndexOf("migrate-race-entry-owners:", StringComparison.Ordinal);
+        var preview = DeployWorkflow.IndexOf("race-entry-owners/preview", migration, StringComparison.Ordinal);
+        var pause = DeployWorkflow.IndexOf("$base/pipeline/pause", preview, StringComparison.Ordinal);
+
+        Assert.IsGreaterThanOrEqualTo(0, migration);
+        Assert.IsGreaterThan(migration, preview);
+        Assert.IsGreaterThan(preview, pause);
+        StringAssert.Contains(DeployWorkflow[migration..], "jq '.remaining'");
     }
 
     [TestMethod]

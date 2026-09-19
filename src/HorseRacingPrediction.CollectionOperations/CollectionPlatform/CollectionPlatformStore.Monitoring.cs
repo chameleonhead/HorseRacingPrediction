@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
@@ -37,16 +38,34 @@ public sealed partial class CollectionPlatformStore
 
         var dispatchRows = await (from outbox in db.DispatchOutbox.AsNoTracking()
                                   join task in db.Tasks.AsNoTracking() on outbox.TaskId equals task.TaskId
+                                  join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
                                   where outbox.DispatchedAt != null
                                         && outbox.DispatchedAt <= cutoff
                                         && outbox.DispatchedAt >= dispatchesFrom
                                   orderby outbox.DispatchedAt descending, outbox.OutboxId
-                                  select new { outbox, task })
+                                  select new { outbox, task, resource })
             .Take(limit + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var truncated = activeRows.Count > limit || dispatchRows.Count > limit;
+        var raceRows = await (from task in db.Tasks.AsNoTracking()
+                              join resource in db.Resources.AsNoTracking()
+                                  on task.ResourcePk equals resource.ResourcePk
+                              where task.CreatedAt <= cutoff && task.DefinitionId == "race-detail"
+                              orderby task.UpdatedAt descending, task.TaskId
+                              select new { task, resource })
+            .Take(limit + 1)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var flowTasks = await db.Tasks.AsNoTracking()
+            .Where(x => x.CreatedAt <= cutoff && (x.CreatedAt >= dispatchesFrom || x.FinishedAt >= dispatchesFrom))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var flowResourcePks = flowTasks.Select(x => x.ResourcePk).Distinct().ToArray();
+        var flowResources = await db.Resources.AsNoTracking().Where(x => flowResourcePks.Contains(x.ResourcePk))
+            .ToDictionaryAsync(x => x.ResourcePk, cancellationToken).ConfigureAwait(false);
+
+        var truncated = activeRows.Count > limit || dispatchRows.Count > limit || raceRows.Count > limit;
         var active = activeRows.Take(limit).Select(x => new CollectionMonitoringTaskSnapshot(
             x.task.TaskId,
             new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
@@ -59,7 +78,8 @@ public sealed partial class CollectionPlatformStore
             x.task.UpdatedAt,
             x.task.StartedAt,
             x.task.LeaseExpiresAt,
-            x.task.AttemptCount)).ToArray();
+            x.task.AttemptCount,
+            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane))).ToArray();
         var dispatches = dispatchRows.Take(limit).Select(x => new CollectionMonitoringDispatchSnapshot(
             x.outbox.EnvelopeId ?? Guid.Empty,
             x.task.TaskId,
@@ -68,8 +88,69 @@ public sealed partial class CollectionPlatformStore
             x.task.Priority,
             x.outbox.AvailableAt,
             x.outbox.CreatedAt,
-            x.outbox.DispatchedAt!.Value)).ToArray();
-        return new(cutoff, pipeline, active, dispatches, truncated);
+            x.outbox.DispatchedAt!.Value,
+            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane))).ToArray();
+        var latestRaceRows = raceRows.Take(limit)
+            .GroupBy(x => x.resource.ResourcePk)
+            .Select(x => x.OrderByDescending(y => y.task.UpdatedAt).First())
+            .ToArray();
+        var raceResourcePks = latestRaceRows.Select(x => x.resource.ResourcePk).ToArray();
+        var artifactRows = await db.RaceArtifactStates.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var artifactByResource = artifactRows.ToLookup(x => x.ResourcePk);
+        var scheduleByResource = await db.RaceSchedulingEvidence.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk))
+            .ToDictionaryAsync(x => x.ResourcePk, cancellationToken).ConfigureAwait(false);
+        var races = latestRaceRows.Select(x =>
+        {
+            var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                x.task.MetadataJson ?? x.resource.AttributesJson) ?? [];
+            var artifacts = artifactByResource[x.resource.ResourcePk];
+            return new CollectionRaceFreshnessSnapshot(
+                x.task.TaskId,
+                new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
+                x.task.Status,
+                x.task.UpdatedAt,
+                scheduleByResource.GetValueOrDefault(x.resource.ResourcePk)?.OfficialStartAt
+                    ?? ParseInstant(attributes.GetValueOrDefault("officialStartAt")),
+                artifacts.FirstOrDefault(y => y.Artifact == RaceArtifactKind.Card)?.Status
+                    ?? ParseArtifactStatus(attributes.GetValueOrDefault("cardArtifactStatus")),
+                artifacts.FirstOrDefault(y => y.Artifact == RaceArtifactKind.Result)?.Status
+                    ?? ParseArtifactStatus(attributes.GetValueOrDefault("resultArtifactStatus")));
+        }).ToArray();
+        var dispatchedTaskIds = dispatchRows.Select(x => x.task.TaskId).ToHashSet();
+        var flows = flowTasks.GroupBy(x => new { x.DefinitionId, x.Lane })
+            .Select(group => new CollectionDefinitionFlowSnapshot(
+                new(group.Key.DefinitionId), group.Key.Lane,
+                string.Join(',', group.Select(x => MonitoringCompatibilityKey(flowResources[x.ResourcePk],
+                        x.DefinitionId, x.Lane)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),
+                group.Count(x => x.CreatedAt >= dispatchesFrom),
+                group.Count(x => dispatchedTaskIds.Contains(x.TaskId)),
+                group.Count(x => x.FinishedAt >= dispatchesFrom),
+                group.Count(x => x.FinishedAt is null),
+                group.Where(x => x.FinishedAt is null).Select(x => (DateTimeOffset?)x.AvailableAt).Min()))
+            .OrderBy(x => x.Definition.Value, StringComparer.Ordinal).ThenBy(x => x.Lane).ToArray();
+        return new(cutoff, pipeline, active, dispatches, truncated, races, flows);
+    }
+
+    private static DateTimeOffset? ParseInstant(string? value) =>
+        DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+
+    private static RaceArtifactStatus ParseArtifactStatus(string? value) =>
+        Enum.TryParse<RaceArtifactStatus>(value, true, out var parsed) ? parsed : RaceArtifactStatus.Unknown;
+
+    private static string MonitoringCompatibilityKey(CollectionResourceEntity resource, string definitionId,
+        CollectionLane lane)
+    {
+        var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? [];
+        if (resource.EffectiveDate.HasValue
+            && resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
+            return $"{resource.Provider}|RaceDay|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";
+        if (resource.Type == ResourceType.Horse
+            && attributes.GetValueOrDefault("weekendPriorityUntil") is { Length: > 0 } weekend)
+            return $"{resource.Provider}|WeekendSubjects|{weekend}|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";
+        return $"{resource.Provider}|Definition|{definitionId}|{resource.EffectiveDate:yyyy-MM-dd}|{lane}";
     }
 
     public async Task<CollectionMonitoringBackup> CreateMonitoringBackupAsync(
