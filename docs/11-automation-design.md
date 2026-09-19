@@ -52,11 +52,13 @@
 - 取り込み時刻とデータソースを必ず保存する
 - 訂正は上書きせず訂正イベントで表現する
 
-## 収集運用の監視と change record 起票（提案）
+## 収集運用の監視、起票、過去ジョブ補正（提案）
 
 要対応のfailure notification、長時間停滞したactive task、予期しないpipeline pause、lane/priority/公平配分契約に反する処理順を定期的に評価する。実行層は型付きの決定的findingを返し、定期自動化は新規findingごとに `Proposed` change recordを作る。同じfingerprintの未完了recordは新規作成せず、観測履歴を追記する。
 
-監視は読み取り専用とし、収集タスクの再実行、キャンセル、pipeline pause/resume、自動修復、自動承認は行わない。評価契約、重複抑止、秘密情報境界、受け入れ基準は [収集運用を監視し change record を自動起票する](changes/20260919_collection-monitoring-change-record-automation/README.md) を正本とする。承認前のため未実装である。
+プログラムバグは修正用change record、未知の過去ジョブエラーは原因仮説・影響範囲・対応候補・推奨調査を持つchange recordとして起票する。既知の過去ジョブエラーは、一意性根拠、revision条件、preview、冪等キー、postcondition、実行上限、監査記録を持つ登録済みの自動安全recipeに限り自動補正する。曖昧・未登録・事前条件不一致の対象は変更せず、未知エラー調査へ分離する。
+
+バグ修正と未知エラー対応の自動承認・自動デプロイは行わない。評価契約、自動補正の安全境界、重複抑止、秘密情報境界、受け入れ基準は [収集運用を監視し起票と安全な過去ジョブ補正を自動化する](changes/20260919_collection-monitoring-change-record-automation/README.md) を正本とする。承認前のため未実装である。
 
 ## 長期収集計画の定期見直し（提案）
 
