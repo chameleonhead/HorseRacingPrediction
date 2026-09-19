@@ -217,6 +217,7 @@ API/schemaを先行し、Collector互換を確認してからCollectorを配備�
 - Persistence finding: 後続taskが元taskのlane/priority/metadataを流用すると新revision要求の条件を失うため、schema v17でrequestへ`Lane`、`Priority`、`MetadataJson`を追加し、後続taskはrequestから復元する。
 - Migration review: 固定batch `migration:race-entry-owners:v2`、全Race read-only scan、pause/running-drain gate、公式Card再取得、進捗分類を実経路へ接続した。Horse profileからの直接コピーは存在しない。**ただし後続確認で、全Race scanから全欠損Raceへ要求する設計はCard取得期間外のRaceを補正できないことが判明したため、本項の実装完了判定を撤回し、再設計を要する。**
 - Deployment checkpoint — 2026-09-19: migration完了後も各deployが先にpipelineをpauseしてrunning task drainを待つため、run 35445524181が不要な5分待機後に失敗した。read-only previewの `remaining == 0` をpause前に判定し、完了済みならmigration jobを成功終了する。remainingがある場合のpause/drain/apply/resume境界は維持する。
+- Deployment correction — 2026-09-19: run 35446972643で `remaining > 0` が再発し、通常収集中のRunning task drain待ちで再びdeployを停止した。本record自体が対象選定の再設計待ちで`Proposed`へ戻っているため、deploy時migrationはread-only previewだけに変更し、未承認のapplyとpipeline pauseを除去する。
 - Legacy surface: 旧日付preview/apply APIは外部互換用に残し、applyはpause/drainと同じ固定migration batchへ委譲する。旧Web client/UI callerは0件で、設定画面の操作入口はmigrationへ一本化した。
 - Final state: T6-T8の基盤部分は検証済みだが、owner補正対象の選定はCard取得元制約に違反している。T9、AC5、AC13-AC15は再設計後に再検証するため、本recordを`Proposed`へ戻す。
 - Workflow assessment: テストが承認後の実装中に既存単一request APIの同型欠損を検出し、承認済み範囲内で根本修正・再検証できた。既存DDD/セルフレビュー規約の不足を示す反復失敗ではないためskill変更は行わない。

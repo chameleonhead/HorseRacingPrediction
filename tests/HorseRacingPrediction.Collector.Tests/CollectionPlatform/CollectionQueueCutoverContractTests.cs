@@ -94,16 +94,17 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
-    public void DeployWorkflow_SkipsCompletedOwnerMigrationBeforePausingPipeline()
+    public void DeployWorkflow_PreviewsOwnerMigrationWithoutPausingOrApplying()
     {
         var migration = DeployWorkflow.IndexOf("migrate-race-entry-owners:", StringComparison.Ordinal);
         var preview = DeployWorkflow.IndexOf("race-entry-owners/preview", migration, StringComparison.Ordinal);
-        var pause = DeployWorkflow.IndexOf("$base/pipeline/pause", preview, StringComparison.Ordinal);
+        var section = DeployWorkflow[migration..];
 
         Assert.IsGreaterThanOrEqualTo(0, migration);
         Assert.IsGreaterThan(migration, preview);
-        Assert.IsGreaterThan(preview, pause);
-        StringAssert.Contains(DeployWorkflow[migration..], "jq '.remaining'");
+        StringAssert.Contains(section, "preview-only");
+        Assert.IsFalse(section.Contains("$base/pipeline/pause", StringComparison.Ordinal));
+        Assert.IsFalse(section.Contains("race-entry-owners/apply", StringComparison.Ordinal));
     }
 
     [TestMethod]
