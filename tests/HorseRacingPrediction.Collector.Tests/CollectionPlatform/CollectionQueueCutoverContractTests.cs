@@ -9,8 +9,6 @@ public sealed class CollectionQueueCutoverContractTests
     private static string Main => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "main.tf"));
     private static string Outputs => File.ReadAllText(Path.Combine(Root, "infra", "collector-lambda", "outputs.tf"));
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
-    private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
-    private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
     private static string LocalMonitoringRunner => File.ReadAllText(Path.Combine(Root, "tools", "collection_monitoring", "invoke_local_monitor.ps1"));
     private static string Compose => File.ReadAllText(Path.Combine(Root, "deploy", "docker-compose.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
@@ -98,37 +96,11 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
-    public void MaintenanceWorkflow_GatesAndRecoversProductionRepairsSafely()
+    public void CollectionOperationsWorkflows_AreRemovedAfterCodexTaskCutover()
     {
-        StringAssert.Contains(MaintenanceWorkflow, "APPLY-PENDING-COLLECTION-REPAIRS");
-        StringAssert.Contains(MaintenanceWorkflow, "/pipeline/pause");
-        StringAssert.Contains(MaintenanceWorkflow, "status=Running&limit=1");
-        StringAssert.Contains(MaintenanceWorkflow, "select(.safeToApply)");
-        StringAssert.Contains(MaintenanceWorkflow, "select(.safeToExecute)");
-        StringAssert.Contains(MaintenanceWorkflow, "Horse repair idempotency check passed.");
-        StringAssert.Contains(MaintenanceWorkflow, "/pipeline/resume");
-        StringAssert.Contains(MaintenanceWorkflow, "SubscriptionArn!='PendingConfirmation'");
-        StringAssert.Contains(MaintenanceWorkflow, "aws sns publish");
-    }
-
-    [TestMethod]
-    public void DlqRecoveryWorkflow_GatesAndLimitsRecoveryToDeadLetterGroups()
-    {
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-DLQ");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "RECOVER-LEGACY-RACE");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "REPLACE-STUCK-LEGACY-RACE");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, ".status == 8 and .errorCode == \"DeadLetterQueue\"");
-        StringAssert.Contains(DlqDiagnosticsWorkflow,
-            ".errorMessage == \"Race course and number attributes are required.\"");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "test \"$(jq '.items[0].attemptCount'");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "/tasks/${stuck_task}/cancel");
-        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("ENABLE-RECOVERY-CAPACITY", StringComparison.Ordinal));
-        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("COLLECTION_QUEUE_MAX_IN_FLIGHT_ENVELOPES", StringComparison.Ordinal));
+        Assert.IsFalse(File.Exists(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml")));
+        Assert.IsFalse(File.Exists(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml")));
         Assert.IsFalse(Compose.Contains("CollectionQueue__MaxInFlightEnvelopes", StringComparison.Ordinal));
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "/failure-notifications/groups/${group_key}/recover");
-        StringAssert.Contains(DlqDiagnosticsWorkflow, "/pipeline/resume");
-        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("purge-queue", StringComparison.OrdinalIgnoreCase));
-        Assert.IsFalse(DlqDiagnosticsWorkflow.Contains("start-message-move-task", StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]
