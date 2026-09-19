@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -453,8 +455,6 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 x.Type.ToString(), x.Name!), x.SourceIdentity))
             .Where(x => !string.IsNullOrWhiteSpace(x.Name))
             .Distinct();
-        // TaskId fences response-loss retries without changing ordinary Discovery deduplication policy.
-        var batchId = $"race-subjects:{task.TaskId:N}:{requestedByRaceId}";
         var items = subjects.Select(subject =>
         {
             var descriptor = JraSubjectCollectionDefinitions.For(subject.Type);
@@ -487,8 +487,29 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             .Select(group => group.First())
             .ToArray();
         if (items.Length == 0) return;
+        // The payload fingerprint preserves response-loss idempotency while allowing a corrected
+        // canonical-ID payload to supersede an older request made by the same parent task.
+        var batchId = BuildReferencedSubjectBatchId(task.TaskId, items);
         var response = await sink.RequestManyAsync(new(batchId, items), cancellationToken).ConfigureAwait(false);
         ValidateReferencedSubjectBatchResponse(items, response);
+    }
+
+    internal static string BuildReferencedSubjectBatchId(Guid taskId,
+        IReadOnlyList<CollectionRequestBulkItem> items)
+    {
+        var canonicalPayload = string.Join('\n', items.OrderBy(item => item.ItemKey, StringComparer.Ordinal)
+            .Select(item => string.Join('\u001f',
+                item.ItemKey, item.ResourceType, item.Provider, item.ResourceId, item.DefinitionId,
+                item.RequestedRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                item.Reason, item.Lane,
+                item.Priority.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                item.ExplicitUrl ?? string.Empty, item.EffectiveDate?.ToString("yyyy-MM-dd") ?? string.Empty,
+                string.Join('\u001e', (item.Attributes ?? new Dictionary<string, string>())
+                    .OrderBy(attribute => attribute.Key, StringComparer.Ordinal)
+                    .Select(attribute => $"{attribute.Key}={attribute.Value}")))));
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPayload)))
+            .ToLowerInvariant()[..24];
+        return $"race-subjects:{taskId:N}:{fingerprint}";
     }
 
     internal static void ValidateReferencedSubjectBatchResponse(

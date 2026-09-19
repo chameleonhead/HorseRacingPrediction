@@ -15,6 +15,24 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraDirectCollectionHandlerTests
 {
     [TestMethod]
+    public void RaceDetail_SubjectBatchIdIsStableForReplayAndChangesWithCanonicalPayload()
+    {
+        var taskId = Guid.NewGuid();
+        var first = new CollectionRequestBulkItem("Horse:horse-old", "Horse", "JRA", "horse-old",
+            "horse-profile", 3, "Discovery", "Realtime", 100, null, new DateOnly(2026, 9, 19),
+            new Dictionary<string, string> { ["name"] = "テスト馬" });
+        var corrected = first with { ItemKey = "Horse:horse-canonical", ResourceId = "horse-canonical" };
+
+        var originalId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [first]);
+        var replayId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [first]);
+        var correctedId = JraRaceDetailCollectionHandler.BuildReferencedSubjectBatchId(taskId, [corrected]);
+
+        Assert.AreEqual(originalId, replayId);
+        Assert.AreNotEqual(originalId, correctedId);
+        Assert.IsLessThanOrEqualTo(128, correctedId.Length);
+    }
+
+    [TestMethod]
     public void RaceDetail_RejectedSubjectBatchPreservesItemAndErrorCode()
     {
         var item = new CollectionRequestBulkItem("Horse:horse-1", "Horse", "JRA", "horse-1",

@@ -141,6 +141,7 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 - **Pre-implementation review** — Reviewer: Main。Inputs: 2026-09-19本番のrace bulk generic failure、Horse `SubjectNotIdentified` 20件、Trainer `TargetClosedException`、現行repair UI/API、承認済みAC1–AC17。Decision: ユーザーの実装指示を承認としてStatusを`Approved`へ移行した。共有contract・migration・本番データ整合はwrite scopeが重なるためMainが直列実装する。T2のみ`Runnable`、T3–T7は依存解消まで`Dependent`。外部変更はT6完了まで行わない。Escalation: schema/API契約または自動統合根拠を変更する場合だけ再承認へ戻す。
 - **Checkpoint review — 2026-09-19, reviewer: Main.** Horse source identityをbulk DTOから保存まで保持し、Jockey/Trainer/Ownerを含む子Taskと個別upsertを共通表示名正規化 + `NormalizeKey`へ統一した。セルフレビューでHorse fallbackを一時的に表示名そのままへ変え、18頭時の集合照会が3回から57回へ退行する誤りを検出したため、従来の名称fallbackへ戻した。性能回帰試験は3集合照会・1transactionで成功した。
 - **Checkpoint review — 2026-09-19, reviewer: Main.** 閉鎖browser sessionは同一Task内で一度だけ破棄・再生成する。bulkの部分拒否は成功済みRace保存を維持し、ItemKey/error codeを持つisolated failureへ変換した。過去エラーは既存のnotification/revision gate付きrepair APIとSettingsを再利用し、不正URL・誤生成参照・名前/identity不一致を盲目的に再試行しない分類へ強化した。
+- **Checkpoint review — 2026-09-19, reviewer: Main.** 初回配備後の本番再確認で、同じ親Taskの旧payloadと補正後canonical ID payloadが同一batch IDを共有し、3レースが`IdempotencyMismatch`になったことを行別診断から確認した。batch IDをTask IDだけで固定せず、順序を正規化したpayload fingerprintを含めるよう修正した。同じpayloadのresponse-loss retryは同じID、ID・revision・属性等が変わった補正payloadは別IDとなる。
 - **Checkpoint review** — 各契約、producer/repair、UI/本番操作のcheckpointで記録する。
 - **Final review** — 全ACと旧UAC2を実際の入口から再追跡し、未完了・未分類のlegacy ID生成経路がない場合だけImplementedとする。
 
@@ -161,6 +162,8 @@ Loading、候補なし、preview失敗、manifest期限切れ、部分成功を�
 - 2026-09-19: `dotnet format HorseRacingPrediction.sln --verify-no-changes --no-restore` とRelease buildが成功した。
 - 2026-09-19: non-External全体試験で全機能試験が成功した。既存Playwright時間上限試験2件は全体実行時のみホスト負荷で失敗し、各単独再実行は成功した。変更関連focused試験35件とAPI性能/identity試験3件も成功した。
 - 2026-09-19: `codegraph sync .` と変更入口の再照会が成功し、bulk requestの17 caller、session wrapperのhandler/test経路を再確認した。
+- 2026-09-19: commit `9160557` のapp-deploy run `35419108827` はverify、API、Collector Lambda、remote health、legacy race migrationを含め成功した。本番再確認で要対応13件、うち新しい行別診断3件が全て`IdempotencyMismatch`であることを確認し、追加修正へ反映した。
+- 2026-09-19: payload fingerprint batch IDのfocused Collector試験21件、Release build、formatが成功した。
 
 ## Deviations and follow-up
 
