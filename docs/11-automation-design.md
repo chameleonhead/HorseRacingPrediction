@@ -52,6 +52,12 @@
 - 取り込み時刻とデータソースを必ず保存する
 - 訂正は上書きせず訂正イベントで表現する
 
+## 収集運用の監視と change record 起票（提案）
+
+要対応のfailure notification、長時間停滞したactive task、予期しないpipeline pause、lane/priority/公平配分契約に反する処理順を定期的に評価する。実行層は型付きの決定的findingを返し、定期自動化は新規findingごとに `Proposed` change recordを作る。同じfingerprintの未完了recordは新規作成せず、観測履歴を追記する。
+
+監視は読み取り専用とし、収集タスクの再実行、キャンセル、pipeline pause/resume、自動修復、自動承認は行わない。評価契約、重複抑止、秘密情報境界、受け入れ基準は [収集運用を監視し change record を自動起票する](changes/20260919_collection-monitoring-change-record-automation/README.md) を正本とする。承認前のため未実装である。
+
 ## 長期収集計画の定期見直し（提案）
 
 長期バックフィルと馬公式情報補完は、開始時の計画だけで完走させず、永続化された `AcquisitionPlanReview` ジョブで既定15分ごとに再評価する。今週末の出馬表と出走予定馬公式情報の不足を最初に確認し、当日・直近結果、長期バックフィルの順に、未実行ジョブの優先度と次回投入量を調整する。状態別件数、最終進捗、チェックポイント、反復失敗、キュー状態、判断理由、次回予定を保存する。
