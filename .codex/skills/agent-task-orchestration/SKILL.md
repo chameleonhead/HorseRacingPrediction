@@ -15,7 +15,7 @@ Treat model labels as capability/cost tiers, not fixed product names. Select the
 - **Worker tier**: handles bounded, low-ambiguity research, code discovery, mechanical implementation, or test authoring under a written contract.
 - **Review tier**: independently checks the lead's plan or worker output when correctness, security, compatibility, or regression risk justifies it. It may be the lead tier or a separate capable tier.
 
-Do not hard-code model IDs, pricing, or provider assumptions in plans or artifacts. Record the selected tier, measured usage if available, elapsed time, retries, and delegated result so routing can be tuned later.
+Do not hard-code model IDs as permanent policy or infer pricing. At dispatch, however, record the concrete requested model ID rather than `runtime-default` or an abstract worker name so the run can be audited. Record the selected tier, measured usage if available, elapsed time, retries, and delegated result so routing can be tuned later.
 
 For coding, prefer the lowest-cost eligible route, not the lowest-cost model unconditionally. A frozen, narrow, independently verifiable task with no architecture, public-contract, persistence/migration, concurrency, security/privacy, or destructive decision may start with the current cost-sensitive coding model. In this repository that is configured as `low_cost_coding_worker`; resolve current availability at execution time. Bounded multi-file work may use the balanced worker tier. The lead retains ambiguous or high-risk work and all final acceptance.
 
@@ -23,10 +23,10 @@ For coding, prefer the lowest-cost eligible route, not the lowest-cost model unc
 
 1. Define the outcome, constraints, acceptance criteria, and risk level before delegation.
    Before approval, surface material routing, caller-assumption, telemetry, attribution, verification, cost, and review-burden concerns in the governing concern ledger. Convert resolved concerns into acceptance criteria and counterexamples; do not wait for the user to ask whether concerns exist.
-2. Split only work with a clear boundary. For each work item record: `id`, objective, owner, tier, dependencies, read scope, write scope, deliverable, verification command or evidence, and completion state.
+2. Before assigning a lead tier, separate decision work from execution under frozen decisions. Split only work with a clear boundary, exclusive write owner, and independent verification, and only when prompt, integration, and review overhead is likely to remain worthwhile. For each work item record: `id`, objective, owner, tier, dependencies, read scope, write scope, deliverable, verification command or evidence, and completion state. Record a concrete non-delegation reason for every remaining lead-owned stream.
 3. Decide whether items can run in parallel. Parallelize only when they have disjoint write scopes and no ordering dependency. Serialize shared-file edits, schema/API changes, migrations, and integration work. Treat generated files, migration snapshots, shared contracts, and formatters that rewrite common files as shared write scopes even when workers edit different source files. Assign them one owner and record when a reviewed contract is frozen before dependent workers begin.
 4. Send each worker a complete prompt using the contract below. A worker must not infer missing authority from repository access.
-5. Review the returned evidence against acceptance criteria before merging or forwarding it. The lead resolves conflicts and owns the final integrated change.
+5. Integrate compatible slices, then review them by the existing acceptance-criterion-to-task mapping. Closely related criteria may form one review group. Review each group once against its integrated attributable diff and evidence; inspect individual tasks or diffs only when an escalation trigger is present. The lead resolves conflicts and owns the final integrated change.
 6. Record routing results: successful outputs, rework/retries, escalations, measured usage/cost when available, and elapsed time. Evaluate cost per successful outcome, not token price alone.
 7. For delegated coding, create an execution audit using [the audit schema and gates](references/execution-audit.md). Record requested and observed models separately. Include reviewer usage, active review effort, corrections, re-verification, and audit overhead in successful-outcome cost.
 
@@ -42,7 +42,7 @@ Record audit changes only for:
 
 Do not create audit entries for commentary, ordinary successful commands, or routine state transitions. Lead-only tasks require no JSON. A short task may record `Lead — single short task` without further routing prose.
 
-Evaluate delegation per separable workstream. A cross-cutting change may still contain disjoint read-only exploration, fixture work, or independent review. For each lead-owned stream, record why delegation was unsuitable: architecture/public contract, persistence/migration, security/privacy, destructive action, unresolved ambiguity, overlapping writes, unavailable worker, or delegation/review cost exceeding likely benefit. A blanket statement that the whole change overlaps is not sufficient.
+Evaluate delegation per separable workstream after attempting to split decisions from mechanical execution. A cross-cutting change may still contain disjoint read-only exploration, fixture work, mapping, frozen-query implementation, or independent review. For each lead-owned stream, record why delegation was unsuitable: architecture/public contract, persistence/migration, security/privacy, destructive action, unresolved ambiguity, overlapping writes, unavailable worker, integration/final acceptance, single short task, or delegation/review cost exceeding likely benefit. A blanket statement that the whole change overlaps is not sufficient.
 
 For delegated coding, create one compact JSON audit per attempt as described in [the execution-audit reference](references/execution-audit.md). Run `python scripts/audit_agent_execution.py <changed-change-record-path>` after the pre-implementation task plan, after delegated completion, and before final review. A missing validator is a blocking process defect, not permission to skip the audit. Keep normal successful delegated JSON below 2,500 UTF-8 bytes and the task-plan audit additions below 20 nonblank lines in workflow fixtures; simplify before exceeding those bounds.
 
@@ -60,7 +60,9 @@ Every delegated prompt must state:
 - in-scope files/systems and explicit write scope (or `read-only`);
 - out-of-scope actions, especially destructive operations and external side effects;
 - dependencies, starting revision/state, and assumptions;
-- acceptance criteria and required completion evidence (tests, commands, links, or cited sources);
+- linked acceptance-criterion IDs, the local evidence the slice must produce, and required completion evidence (tests, commands, links, or cited sources);
+- frozen decisions and invariants, decisions the worker must not change, and at least one relevant counterexample;
+- the implementation freedom that remains and the exact boundary at which the worker returns the decision to the lead;
 - expected output format, including changed files and unresolved risks;
 - escalation triggers: ambiguity, missing access, conflicting requirements, unsafe operation, failed verification, or scope expansion;
 - whether parallel work is allowed and what other work it must not overlap.
@@ -83,7 +85,7 @@ Escalate to the lead tier when any of the following occurs:
 - independent reviewers disagree on correctness or acceptance;
 - rework is more expensive than reassignment based on observed effort.
 
-At minimum, perform a lead review at decomposition, before integration of worker changes, and after final verification. The review must check scope compliance, acceptance evidence, tests, unintended changes, and unresolved risks. For high-risk work, add an independent review with no access to the worker's conclusion where practical.
+At minimum, perform a lead review at decomposition, before integration of worker changes, and after final verification. The default unit after integration is an acceptance criterion or a closely related criterion group defined by the existing AC-to-task mapping, not each microtask. Check the approved AC and concern dispositions, attributable integrated diff/scope, executable real-path evidence, invariants and non-regression, audit/rework metrics, and open failures. Drill down to task/diff review only when evidence fails or conflicts, a frozen decision changed, scope/ownership is violated, risk-sensitive implementation lacks proof, independent evidence is missing, or retry/review burden exceeds its boundary. Resolve the cause, rerun the group evidence, and make the acceptance decision at group level. For high-risk work, add an independent review with no access to the worker's conclusion where practical.
 
 ## Outcome and cost measurement
 
@@ -96,7 +98,7 @@ Use observable gates for routing decisions:
 
 Keep a worker tier only when it passes quality and scope gates with acceptable rework and improves outcome cost or throughput. Otherwise narrow the task, strengthen the prompt, serialize the work, or promote it to the lead/review tier. These are routing decisions, not permanent model rankings.
 
-Count the full cost of a successful result: worker usage, automated review, human active review time when supplied, retries, lead corrections, promotions, re-verification, and audit overhead. Keep unavailable units separate; do not invent currency conversion or labor rates. Compare routes only across similar task difficulty and attributable patches. Fewer than five comparable successes may inform a note but may not change a persistent default.
+Count the full cost of a successful result: task/prompt preparation, worker usage, integration, acceptance-group review, conditional detail review, automated review, human active review time when supplied, retries, lead corrections, promotions, re-verification, and audit overhead. Keep unavailable units separate; do not invent currency conversion or labor rates. Compare routes only across similar task difficulty and attributable patches. If fragmentation makes this total worse, combine slices or promote the route. Fewer than five comparable successes may inform a note but may not change a persistent default.
 
 Persistent routing, prompt, reasoning, or budget improvements require repeated comparable evidence, one material security/data/scope/false-completion failure, or at least five successful samples. Change one bounded factor, validate it, run an independent forward test, define an observation period and rollback condition, and record escaped defects. Generate recommendations autonomously, but do not expand approved scope or silently rewrite unrelated policy.
 

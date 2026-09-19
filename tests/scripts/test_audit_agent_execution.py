@@ -34,6 +34,17 @@ def markdown(rows, failures=""):
 {failures}"""
 
 
+def markdown_v2(rows, criteria=None, failures=""):
+    criteria = criteria or [("AC1", "T1"), ("AC2", "T2")]
+    ac_rows = "".join(f"| {ac_id} | observable outcome | {tasks} | command evidence | Verified |\n" for ac_id, tasks in criteria)
+    return markdown(rows, failures).replace(
+        "- Status: Approved",
+        "- Status: Approved\n- Orchestration schema: 2\n\n## Acceptance criteria\n\n"
+        "| ID | Observable criterion | Tasks | Verification | State |\n"
+        "| --- | --- | --- | --- | --- |\n" + ac_rows,
+    )
+
+
 def attempt():
     return {
         "schemaVersion": 1,
@@ -51,6 +62,17 @@ def attempt():
         "review": {"usageAvailability": "unavailable", "totalTokens": None, "activeMinutes": None, "reason": "review telemetry was not exposed"},
         "outcome": {"verificationPassed": True, "qualityPassed": True, "scopePassed": True, "independentChallenge": "validator tests", "promoted": False, "escapedDefects": 0, "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "escalations": 0, "decision": "accept"},
     }
+
+
+def attempt_v2():
+    record = attempt()
+    record["schemaVersion"] = 2
+    record["acceptanceCriteria"] = ["AC2"]
+    record["route"]["requestedModel"] = "gpt-5.6-luna"
+    record["overhead"] = {"availability": "unavailable", "preparationMinutes": None, "integrationMinutes": None, "auditMinutes": None, "reason": "active effort telemetry was not captured"}
+    record["outcome"]["reviewMode"] = "ac-group"
+    record["outcome"]["detailReviewReason"] = None
+    return record
 
 
 class CompactAuditTests(unittest.TestCase):
@@ -109,6 +131,49 @@ class CompactAuditTests(unittest.TestCase):
         self.assertLess(len(json.dumps(record, separators=(",", ":")).encode("utf-8")), 2500)
         self.assertEqual([], MODULE.validate_attempt(record))
         self.assertEqual([], self.issues(markdown([LEAD, WORKER]), record))
+
+    def test_schema_two_accepts_concrete_model_and_ac_group_review(self):
+        record = attempt_v2()
+        self.assertLess(len(json.dumps(record, separators=(",", ":")).encode("utf-8")), 2500)
+        self.assertEqual([], self.issues(markdown_v2([LEAD, WORKER]), record))
+
+    def test_schema_two_rejects_abstract_requested_model(self):
+        for model in ("runtime-default", "cost-sensitive-coding-worker"):
+            with self.subTest(model=model):
+                record = attempt_v2()
+                record["route"]["requestedModel"] = model
+                self.assertTrue(any("concrete model ID" in issue for issue in self.issues(markdown_v2([LEAD, WORKER]), record)))
+
+    def test_schema_two_requires_audit_ac_membership_to_match_task_mapping(self):
+        record = attempt_v2()
+        record["acceptanceCriteria"] = ["AC1"]
+        self.assertTrue(any("Task-to-AC mapping" in issue for issue in self.issues(markdown_v2([LEAD, WORKER]), record)))
+
+    def test_schema_two_requires_specific_lead_non_delegation_reason(self):
+        vague = LEAD.replace("Lead: public contract", "Lead: keep with lead")
+        issues = self.issues(markdown_v2([vague], [("AC1", "T1")]))
+        self.assertTrue(any("concrete non-delegation reason" in issue for issue in issues))
+        self.assertEqual([], self.issues(markdown_v2([LEAD], [("AC1", "T1")])))
+
+    def test_detailed_review_requires_trigger_reason(self):
+        record = attempt_v2()
+        record["outcome"]["reviewMode"] = "detailed"
+        self.assertTrue(any("detailReviewReason" in issue for issue in MODULE.validate_attempt(record)))
+        record["outcome"]["detailReviewReason"] = "scope ownership mismatch"
+        self.assertEqual([], MODULE.validate_attempt(record))
+
+    def test_schema_two_tracks_preparation_integration_and_audit_overhead(self):
+        record = attempt_v2()
+        record["overhead"] = {"availability": "complete", "preparationMinutes": 4, "integrationMinutes": 3, "auditMinutes": 1, "reason": None}
+        self.assertEqual([], MODULE.validate_attempt(record))
+        record["overhead"]["integrationMinutes"] = None
+        self.assertTrue(any("complete overhead" in issue for issue in MODULE.validate_attempt(record)))
+
+    def test_ac_group_review_does_not_require_detail_reason(self):
+        record = attempt_v2()
+        self.assertEqual([], MODULE.validate_attempt(record))
+        record["outcome"]["detailReviewReason"] = "routine microtask inspection"
+        self.assertTrue(any("must leave" in issue for issue in MODULE.validate_attempt(record)))
 
     def test_unavailable_usage_requires_reason(self):
         record = attempt()

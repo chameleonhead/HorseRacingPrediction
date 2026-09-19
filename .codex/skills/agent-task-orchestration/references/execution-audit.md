@@ -10,6 +10,8 @@ Add three columns to the existing task plan:
 - `Audit`: `none` for lead-only work or delegated attempt IDs such as `T2-A1`.
 - `Result metrics`: `usage availability; retries N; corrections N; reviews N`.
 
+For orchestration schema 2 records, the acceptance table's `Tasks` column defines each task's review-group membership. Lead routing states a concrete non-delegation reason. Delegated attempts use audit schema 2 and name the concrete requested model ID; abstract values such as `runtime-default` or a worker alias are not auditable model selections.
+
 Lead-only tasks require no JSON. Do not repeat objective, scope, verification, evidence, or state in audit prose.
 
 ## Recording events
@@ -29,15 +31,16 @@ Store one JSON file per attempt under `docs/changes/<change>/agent-audits/<attem
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "changeId": "20260920_example",
   "taskId": "T2",
   "attemptId": "T2-A1",
   "state": "completed",
   "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC2", "AC4"],
   "route": {
     "tier": "worker",
-    "requestedModel": "runtime-default",
+    "requestedModel": "gpt-5.6-luna",
     "observedModel": null,
     "observationSource": null,
     "modelTelemetryReason": "runtime did not expose worker model"
@@ -53,6 +56,13 @@ Store one JSON file per attempt under `docs/changes/<change>/agent-audits/<attem
     "totalTokens": null,
     "activeMinutes": null,
     "reason": "runtime did not expose review usage or active time"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry was not captured"
   },
   "elapsed": {
     "availability": "unavailable",
@@ -72,18 +82,23 @@ Store one JSON file per attempt under `docs/changes/<change>/agent-audits/<attem
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
     "decision": "accept"
   }
 }
 ```
 
-At dispatch, use `state: "active"`, leave outcome, review telemetry, and elapsed telemetry values null, and never prefill completion data. Requested model describes configuration intent; do not copy it into `observedModel`. At completion, unavailable or partial model, usage, review, or elapsed telemetry uses null plus one short reason.
+At dispatch, use `state: "active"`, leave outcome, review telemetry, and elapsed telemetry values null, and never prefill completion data. Requested model describes concrete configuration intent; do not copy it into `observedModel`. At completion, unavailable or partial model, usage, review, or elapsed telemetry uses null plus one short reason. `reviewMode` is normally `ac-group`; use `detailed` only after a documented drill-down trigger and record that trigger in `detailReviewReason`. A detailed review still returns to the AC group for acceptance.
 
 ## Gates
 
 - Active task write scopes may not overlap unless dependencies serialize them.
 - A delegated active or verified task links every attempt JSON; dependent/unstarted tasks do not.
 - `Verified` requires a completed attempt, successful verification, a decision, and no open linked material failure.
+- In orchestration schema 2, every task is linked from at least one AC, delegated audit `acceptanceCriteria` exactly matches that mapping, and lead-owned routing gives a concrete non-delegation reason.
+- Model-specific success or cost statistics include only runs whose observed model is independently available; a concrete requested ID alone proves intent, not execution.
+- Successful-outcome cost includes prompt preparation, worker execution, integration, AC-group review, conditional detail review, correction, re-verification, and audit overhead. Combine slices or promote the route when fragmentation worsens the total.
 - Normal successful JSON stays below 2,500 UTF-8 bytes. Fixture task-plan audit additions stay below 20 nonblank lines.
 - Do not estimate tokens, duration, model identity, or currency.
 - Fewer than five comparable successful samples may inform a note but cannot change persistent routing defaults.

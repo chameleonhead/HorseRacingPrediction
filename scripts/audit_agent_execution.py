@@ -25,6 +25,12 @@ VALID_STATES = {"proposed", "runnable", "in progress", "dependent", "externally 
 NONE_VALUES = {"none", "n/a", "not applicable", "lead-only", "-"}
 AVAILABILITY = {"complete", "partial", "unavailable"}
 DECISIONS = {"accept", "revise", "promote", "reject"}
+ABSTRACT_MODELS = {"runtime default", "cost sensitive coding worker", "low cost coding worker", "worker model", "worker", "default"}
+LEAD_REASONS = {
+    "architecture", "public contract", "persistence", "migration", "security", "privacy",
+    "destructive", "ambiguity", "overlapping writes", "unavailable worker", "integration",
+    "final acceptance", "single short task", "process contract", "review cost",
+}
 
 
 @dataclass(frozen=True)
@@ -80,6 +86,15 @@ def _attempt_ids(value: str) -> list[str]:
     return [] if _normal(value) in NONE_VALUES else re.findall(r"\b[A-Za-z][A-Za-z0-9_-]*-A\d+\b", value)
 
 
+def _task_refs(value: str) -> set[str]:
+    refs = {item.upper() for item in re.findall(r"\bT\d+\b", value, re.I)}
+    for start, end in re.findall(r"\bT(\d+)\s*-\s*T?(\d+)\b", value, re.I):
+        first, last = int(start), int(end)
+        if first <= last and last - first <= 100:
+            refs.update(f"T{number}" for number in range(first, last + 1))
+    return refs
+
+
 def _scope_parts(value: str) -> set[str]:
     if _normal(value) in {"read only", *NONE_VALUES}:
         return set()
@@ -122,9 +137,13 @@ def validate_attempt(record: Any) -> list[str]:
     """Validate a compact delegated-attempt record."""
     issues: list[str] = []
     root = _object(record, "$", issues)
-    if root.get("schemaVersion") != 1:
-        issues.append("$.schemaVersion must equal 1")
+    version = root.get("schemaVersion")
+    if version not in {1, 2}:
+        issues.append("$.schemaVersion must equal 1 or 2")
     allowed = {"schemaVersion", "changeId", "taskId", "attemptId", "state", "taskDifficulty", "route", "usage", "elapsed", "scope", "startRevision", "endRevisionOrPatch", "review", "outcome"}
+    if version == 2:
+        allowed.add("acceptanceCriteria")
+        allowed.add("overhead")
     if extras := sorted(set(root) - allowed):
         issues.append("unexpected top-level fields: " + ", ".join(extras))
     for key in ("changeId", "taskId", "attemptId", "startRevision"):
@@ -139,6 +158,15 @@ def validate_attempt(record: Any) -> list[str]:
     for key in ("tier", "requestedModel"):
         if not _nonempty(route.get(key)):
             issues.append(f"$.route.{key} must be a non-empty string")
+    requested_model = route.get("requestedModel")
+    if version == 2 and isinstance(requested_model, str) and _normal(requested_model) in ABSTRACT_MODELS:
+        issues.append("$.route.requestedModel must be a concrete model ID, not a default or worker alias")
+    if version == 2:
+        criteria = root.get("acceptanceCriteria")
+        if not isinstance(criteria, list) or not criteria or not all(isinstance(item, str) and re.fullmatch(r"AC\d+", item.strip(), re.I) for item in criteria):
+            issues.append("$.acceptanceCriteria must be a non-empty AC ID array")
+        elif len({_normal(item) for item in criteria}) != len(criteria):
+            issues.append("$.acceptanceCriteria must not contain duplicates")
     observed, source = route.get("observedModel"), route.get("observationSource")
     if (observed is None) != (source is None):
         issues.append("$.route observedModel and observationSource must both be set or both be null")
@@ -200,9 +228,30 @@ def validate_attempt(record: Any) -> list[str]:
             issues.append("unavailable review usage must leave totalTokens null")
         if review_availability in {"partial", "unavailable"} and not _nonempty(review.get("reason")):
             issues.append(f"{review_availability} review usage requires reason")
+    if version == 2:
+        overhead = _object(root.get("overhead"), "$.overhead", issues)
+        overhead_availability = overhead.get("availability")
+        for key in ("preparationMinutes", "integrationMinutes", "auditMinutes"):
+            _nonnegative(overhead.get(key), f"$.overhead.{key}", issues, nullable=True)
+        if attempt_state == "active":
+            if any(overhead.get(key) is not None for key in ("availability", "preparationMinutes", "integrationMinutes", "auditMinutes", "reason")):
+                issues.append("active attempt must leave overhead telemetry null")
+        else:
+            if overhead_availability not in AVAILABILITY:
+                issues.append("$.overhead.availability must be complete, partial, or unavailable")
+            values = [overhead.get(key) for key in ("preparationMinutes", "integrationMinutes", "auditMinutes")]
+            if overhead_availability == "complete" and any(value is None for value in values):
+                issues.append("complete overhead telemetry requires all minute values")
+            if overhead_availability == "unavailable" and any(value is not None for value in values):
+                issues.append("unavailable overhead telemetry must leave minute values null")
+            if overhead_availability in {"partial", "unavailable"} and not _nonempty(overhead.get("reason")):
+                issues.append(f"{overhead_availability} overhead telemetry requires reason")
     outcome = _object(root.get("outcome"), "$.outcome", issues)
     if attempt_state == "active":
-        for key in ("verificationPassed", "qualityPassed", "scopePassed", "independentChallenge", "promoted", "escapedDefects", "retries", "leadCorrections", "reviewPasses", "escalations", "decision"):
+        keys = ("verificationPassed", "qualityPassed", "scopePassed", "independentChallenge", "promoted", "escapedDefects", "retries", "leadCorrections", "reviewPasses", "escalations", "decision")
+        if version == 2:
+            keys += ("reviewMode", "detailReviewReason")
+        for key in keys:
             if outcome.get(key) is not None:
                 issues.append(f"active attempt must leave $.outcome.{key} null")
     else:
@@ -215,13 +264,23 @@ def validate_attempt(record: Any) -> list[str]:
             _nonnegative(outcome.get(key), f"$.outcome.{key}", issues)
         if outcome.get("decision") not in DECISIONS:
             issues.append("$.outcome.decision must be accept, revise, promote, or reject")
+        if version == 2:
+            if outcome.get("reviewMode") not in {"ac-group", "detailed"}:
+                issues.append("$.outcome.reviewMode must be ac-group or detailed")
+            if outcome.get("reviewMode") == "detailed" and not _nonempty(outcome.get("detailReviewReason")):
+                issues.append("detailed review requires $.outcome.detailReviewReason")
+            if outcome.get("reviewMode") == "ac-group" and outcome.get("detailReviewReason") is not None:
+                issues.append("ac-group review must leave $.outcome.detailReviewReason null")
     if outcome.get("decision") == "accept" and not all(outcome.get(key) is True for key in ("verificationPassed", "qualityPassed", "scopePassed")):
         issues.append("accept requires verificationPassed, qualityPassed, and scopePassed true")
     return issues
 
 
 def validate_change_record(path: Path, repo: Path) -> list[str]:
-    tables = _tables(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    tables = _tables(text)
+    schema_match = re.search(r"^-\s*Orchestration schema:\s*(\d+)\s*$", text, re.I | re.M)
+    orchestration_schema = int(schema_match.group(1)) if schema_match else 1
     plans = [table for table in tables if table.heading == "task plan"]
     if not plans:
         return ["missing ## Task plan table"]
@@ -248,6 +307,16 @@ def validate_change_record(path: Path, repo: Path) -> list[str]:
                     audit_by_attempt[attempt_id] = (audit_path, record)
             except (OSError, json.JSONDecodeError):
                 issues.append(f"{audit_path.relative_to(repo)} is not valid JSON")
+    acceptance_tables = [table for table in tables if table.heading == "acceptance criteria"]
+    task_to_criteria: dict[str, set[str]] = {}
+    if orchestration_schema >= 2:
+        if len(acceptance_tables) != 1 or not {"id", "tasks"}.issubset(set(acceptance_tables[0].headers)):
+            issues.append("orchestration schema 2 requires one Acceptance criteria table with ID and Tasks columns")
+        else:
+            for criterion in acceptance_tables[0].rows:
+                ac_id = criterion.get("id", "").strip()
+                for task_id in _task_refs(criterion.get("tasks", "")):
+                    task_to_criteria.setdefault(task_id, set()).add(ac_id.upper())
     task_ids, active_scopes, rows_by_id, referenced_attempts = set(), [], {}, set()
     for number, row in enumerate(plan.rows, start=1):
         task_id = row["id"].strip()
@@ -276,6 +345,13 @@ def validate_change_record(path: Path, repo: Path) -> list[str]:
         if len(attempts) != len(set(attempts)):
             issues.append(f"{label}: duplicate attempt ID in Audit")
         delegated = delegated or bool(attempts)
+        expected_criteria = task_to_criteria.get(task_id.upper(), set())
+        if orchestration_schema >= 2 and not expected_criteria:
+            issues.append(f"{label}: task must be linked from at least one acceptance criterion")
+        if orchestration_schema >= 2 and not delegated:
+            routing = _normal(row["routing"])
+            if not any(reason in routing for reason in LEAD_REASONS):
+                issues.append(f"{label}: lead routing requires a concrete non-delegation reason")
         if delegated and state in ACTIVE_OR_COMPLETE:
             for metric in ("retries", "corrections", "reviews"):
                 if not re.search(rf"\b{metric}\s+\d+\b", metrics):
@@ -296,6 +372,12 @@ def validate_change_record(path: Path, repo: Path) -> list[str]:
                 continue
             audit_path, record = audit_by_attempt[attempt_id]
             issues.extend(f"{audit_path.relative_to(repo)}: {item}" for item in validate_attempt(record))
+            if orchestration_schema >= 2:
+                if record.get("schemaVersion") != 2:
+                    issues.append(f"{attempt_id}: orchestration schema 2 requires audit schemaVersion 2")
+                actual_criteria = {item.upper() for item in record.get("acceptanceCriteria", []) if isinstance(item, str)}
+                if actual_criteria != expected_criteria:
+                    issues.append(f"{attempt_id}: acceptanceCriteria must match the Task-to-AC mapping")
             if record.get("state") == "completed":
                 completed_records.append(record)
             if record.get("taskId") != task_id:
