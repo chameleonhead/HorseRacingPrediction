@@ -65,6 +65,8 @@
 
 ## Observation history
 
+- 2026-09-19T16:44:03.1803395+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
+
 - 2026-09-19T16:13:43.7245779+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
 
 - 2026-09-19T15:43:52.0331893+09:00: 再観測。severity=`medium`、summary=1858 race-detail tasks are stalled in Ready.。
