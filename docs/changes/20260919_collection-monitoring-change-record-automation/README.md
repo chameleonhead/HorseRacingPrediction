@@ -102,6 +102,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 監視評価はLLMの自由判定ではなくテスト可能なドメインコードで行い、LLM/定期タスクは実行と要約に限定する。
 - 初期運用は30分間隔とし、単発の監視通信失敗では起票しない。
 - プログラムバグと未知エラーはchange recordの明示承認前に修正しない。既知過去エラーは、承認済みrecipeの `AutomaticSafe` 範囲だけ自動補正する。
+- 初期の自動補正recipeは、すでに本番実績と専用テストがある `SubjectIdentificationAutoRecovery` のrevision-gated補正だけとする。新しいrecipeの追加は、対象・同一性根拠・事前/事後条件・上限・本番previewを別の承認済みchange recordで確定してからregistryへ追加する。
 - 未知エラーのchange recordには単な起票だけでなく、原因仮説、追加調査、対応案、各案のリスク、推奨する次の操作を記載する。
 - 処理順検証は管理画面の安定sortではなく、dispatcherのlane allocator、priority、aging、available time、compatibility groupと実際の配送履歴を使う。
 
@@ -143,7 +144,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 | T1 | finding型、閾値、4分類、収集運用評価を実装する。AC2,AC8 | Main | Lead tier | Approval | CollectionOperationsとfocused tests | evaluator tests | 各findingの決定的証拠 | Proposed |
 | T2 | 読み取り専用監視APIを追加する。AC1,AC2,AC8 | Main | Lead tier | T1 | API endpointとAPI tests | endpoint/auth/read-only tests | 実API契約の証拠 | Proposed |
 | T3 | バグ/未知エラー用change record生成と重複・競合保護を実装する。AC3,AC4,AC7-AC11 | Main | Lead tier | T1 | tooling、template、tool tests | golden/idempotency/conflict tests | 生成差分とテスト結果 | Proposed |
-| T4 | 既知過去エラーのrecipe registryとpreview/applyを実装する。AC5,AC6,AC8,AC11 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency tests | 安全補正と監査の証拠 | Proposed |
+| T4 | 既知過去エラーのrecipe registryとpreview/applyを実装し、初期recipeとして既存のrevision-gated主体自動復旧を登録する。AC5,AC6,AC8,AC11 | Main | Lead tier | T1 | CollectionOperations、API、persistence、tests | recipe/idempotency/concurrency tests | 安全補正と監査の証拠 | Proposed |
 | T5 | 30分間隔の定期タスクを登録し、起票dry-runとrecipe previewから制限付きapplyへ移行する。AC1,AC3,AC5-AC11 | Main + operator | Lead tier | T2-T4 | automation configuration、change record、登録済みrecovery APIのみ | dry-run/preview/apply evidence | task ID、実行結果、作成record、補正監査 | Proposed |
 | T6 | 回帰、CI同等検証、CodeGraph、文書、最終監査を完了する。AC12 | Main | Lead/review tier | T1-T5 | tests、docs、本record | full verification matrix | AC/task全件の完了証拠 | Proposed |
 
