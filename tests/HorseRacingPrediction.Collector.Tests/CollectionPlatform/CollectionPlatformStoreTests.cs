@@ -42,6 +42,102 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task ObsoleteSubjectProfileTasks_IncludesTerminalResourceMissingAndPreservesEvidence()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(
+            new(ResourceType.Horse, "JRA", "legacy-horse"), HorseProfile, 7,
+            CollectionReason.Discovery, now, CollectionLane.Realtime, (int)CollectionPriority.High,
+            explicitUrl: new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=legacy"),
+            effectiveDate: new(2026, 9, 18),
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "Legacy Horse",
+                ["sourceIdentity"] = "jra:legacy",
+                ["sourceUrl"] = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=legacy",
+                ["requestedByRaceId"] = "race-1",
+            });
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.PermanentFailure, "SubjectResourceMissing", "target missing",
+                FailureImpact: CollectionFailureImpact.Isolated)));
+
+        var candidates = await store.GetObsoleteSubjectProfileTasksAsync();
+
+        var candidate = candidates.Single();
+        Assert.AreEqual(receipt.TaskId, candidate.TaskId);
+        Assert.AreEqual(CollectionTaskStatus.Failed, candidate.Status);
+        Assert.AreEqual("Legacy Horse", candidate.Name);
+        Assert.AreEqual("jra:legacy", candidate.SourceIdentity);
+        Assert.AreEqual("https://www.jra.go.jp/JRADB/accessU.html?CNAME=legacy", candidate.SourceUrl!.AbsoluteUri);
+        Assert.AreEqual("race-1", candidate.RequestedByRaceId);
+        Assert.AreEqual(7, candidate.RequestedRevision);
+        Assert.AreEqual(CollectionLane.Realtime, candidate.Lane);
+        Assert.AreEqual((int)CollectionPriority.High, candidate.Priority);
+        Assert.AreEqual(new(2026, 9, 18), candidate.EffectiveDate);
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, candidate.LatestResult);
+    }
+
+    [TestMethod]
+    public async Task ObsoleteSubjectProfileTasks_ExcludesUnrelatedErrorsAndNonRaceDerivedWork()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+
+        await CreateFailedTask("unrelated", "SubjectProjectionNotReady", null);
+        await CreateFailedTask("non-race", "SubjectResourceMissing", "   ");
+        await CreateFailedTask("different-error", "Timeout", "race-1");
+
+        Assert.IsEmpty(await store.GetObsoleteSubjectProfileTasksAsync());
+
+        async Task CreateFailedTask(string id, string errorCode, string? raceId)
+        {
+            var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id), HorseProfile, 7,
+                CollectionReason.Discovery, now,
+                attributes: raceId is null
+                    ? new Dictionary<string, string> { ["name"] = id }
+                    : new Dictionary<string, string> { ["name"] = id, ["requestedByRaceId"] = raceId });
+            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            Assert.IsNotNull(lease);
+            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+                new(CollectionAttemptResult.PermanentFailure, errorCode, "failure",
+                    FailureImpact: CollectionFailureImpact.Isolated)));
+        }
+    }
+
+    [TestMethod]
+    public async Task ObsoleteSubjectProfileTasks_RunningRetryRetainsFailureEvidenceAndCancelsOnCompletion()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "running-legacy"), HorseProfile, 7,
+            CollectionReason.Discovery, now, attributes: new Dictionary<string, string>
+            {
+                ["name"] = "Running Legacy",
+                ["requestedByRaceId"] = "race-running",
+            });
+        var firstLease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(firstLease);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, firstLease.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady", "missing",
+                RetryAt: now.AddSeconds(2))));
+        var runningLease = await store.AcquireAsync(receipt.TaskId, 2, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(runningLease);
+
+        var candidate = (await store.GetObsoleteSubjectProfileTasksAsync()).Single();
+        Assert.AreEqual(CollectionTaskStatus.Running, candidate.Status);
+        Assert.AreEqual("SubjectProjectionNotReady", candidate.ErrorCode);
+        var retirement = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId], now.AddSeconds(3));
+        Assert.AreEqual(1, retirement.RunningCancellationRequests);
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, runningLease.LeaseToken, now.AddSeconds(4),
+            new(CollectionAttemptResult.Succeeded)));
+        Assert.AreEqual(CollectionTaskStatus.Cancelled,
+            (await store.GetTasksAsync(limit: 1000)).Single(item => item.TaskId == receipt.TaskId).Status);
+    }
+
+    [TestMethod]
     public async Task RequestManyAsync_CommitsOneDatabaseTransaction()
     {
         var path = Path.Combine(_directory, "transaction-counter.db");

@@ -113,10 +113,18 @@ public sealed record CollectionRequestBatchOutcome(string ItemKey, string Status
 public sealed record CollectionResourceSuppressionResult(int CancelledTasks, int RunningCancellationRequests);
 public sealed record ObsoleteSubjectProfileTask(Guid TaskId, ResourceKey Resource,
     CollectionDefinitionId Definition, CollectionTaskStatus Status, int AttemptCount,
-    string ErrorCode, string? RequestedByRaceId);
+    string ErrorCode, string? RequestedByRaceId,
+    string? Name = null, string? SourceIdentity = null, Uri? SourceUrl = null,
+    int RequestedRevision = 0, CollectionLane Lane = CollectionLane.Normal,
+    int Priority = (int)CollectionPriority.Normal, DateOnly? EffectiveDate = null,
+    DateTimeOffset? AvailableAt = null, DateTimeOffset? CreatedAt = null,
+    DateTimeOffset? LatestFailedAt = null,
+    CollectionAttemptResult? LatestResult = null);
 public sealed record ObsoleteSubjectProfileTaskCleanupResult(bool Executed, int SelectedCount,
     int CancelledCount, int RunningCancellationRequests,
     IReadOnlyList<ObsoleteSubjectProfileTask> Tasks);
+public sealed record SubjectProfileMigrationState(Guid SourceTaskId, ResourceKey SourceResource,
+    string TargetId, bool RecoveryRequired, bool SuppressionRequired, bool Completed);
 public sealed record LegacyRaceDetailMergeReport(bool DryRun, int SourceResources, int TargetResources,
     int Requests, int Tasks, int Attempts, int Locations, int States, int SupplementRequests,
     IReadOnlyList<string> Errors);

@@ -34,6 +34,8 @@ The pre-existing `PlaywrightWebBrowser.cs` edit was reviewed after the main impl
 
 Goals are authoritative job identity, audited retirement of obsolete jobs, safe direct navigation with fallback, and reduced logging cost. Non-goals are guessing kana from kanji, deleting history, removing identity validation, automatically operating production, changing concurrency, or changing Lambda memory.
 
+Follow-up: evidence-based migration of recoverable historical subject IDs supersedes blind retirement for this maintenance surface; see `docs/changes/20260920_subject-profile-id-migration/README.md`. This does not rewrite the original production findings or completed implementation.
+
 ## Concern and agreement ledger
 
 | ID | Concern | Resolution | State |

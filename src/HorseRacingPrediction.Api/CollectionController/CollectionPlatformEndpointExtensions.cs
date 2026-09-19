@@ -1,5 +1,6 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Application.Queries.ReadModels;
+using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
@@ -144,53 +145,92 @@ public static class CollectionPlatformEndpointExtensions
             ObsoleteSubjectProfileCleanupRequest request, CollectionPlatformStore store,
             [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken token) =>
         {
-            var candidates = await store.GetObsoleteSubjectProfileTasksAsync(token).ConfigureAwait(false);
-            if (candidates.Count == 0)
-                return Results.Ok(new ObsoleteSubjectProfileTaskCleanupResult(request.Execute, 0, 0, 0, []));
-            using var db = dbContextProvider.CreateContext();
-            var raceIds = candidates.Select(item => item.RequestedByRaceId!).Distinct(StringComparer.Ordinal).ToArray();
-            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
-                .Where(item => raceIds.Contains(item.RaceId)).ToListAsync(token).ConfigureAwait(false);
-            var raceById = races.ToDictionary(item => item.RaceId, StringComparer.Ordinal);
-            var horseIds = candidates.Where(item => item.Resource.Type == ResourceType.Horse)
-                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
-            var jockeyIds = candidates.Where(item => item.Resource.Type == ResourceType.Jockey)
-                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
-            var trainerIds = candidates.Where(item => item.Resource.Type == ResourceType.Trainer)
-                .Select(item => item.Resource.Id).Distinct(StringComparer.Ordinal).ToArray();
-            var existingHorses = (await db.Set<HorseReadModel>().AsNoTracking()
-                .Where(item => horseIds.Contains(item.HorseId)).Select(item => item.HorseId).ToArrayAsync(token))
-                .ToHashSet(StringComparer.Ordinal);
-            var existingJockeys = (await db.Set<JockeyReadModel>().AsNoTracking()
-                .Where(item => jockeyIds.Contains(item.JockeyId)).Select(item => item.JockeyId).ToArrayAsync(token))
-                .ToHashSet(StringComparer.Ordinal);
-            var existingTrainers = (await db.Set<TrainerReadModel>().AsNoTracking()
-                .Where(item => trainerIds.Contains(item.TrainerId)).Select(item => item.TrainerId).ToArrayAsync(token))
-                .ToHashSet(StringComparer.Ordinal);
-            bool IsExisting(ObsoleteSubjectProfileTask item) => item.Resource.Type switch
+            var preview = await BuildSubjectProfileMigrationPreviewAsync(store, dbContextProvider, token)
+                .ConfigureAwait(false);
+            if (!request.Execute) return Results.Ok(new SubjectProfileMigrationResult(false, preview.Count, 0, 0, 0, preview));
+            if (request.TaskIds is not { Count: > 0 })
+                return Results.BadRequest(new[] { "実行対象のTaskIdを指定してください。" });
+            var requestedIds = request.TaskIds.Distinct().ToArray();
+            if (requestedIds.Length != request.TaskIds.Count)
+                return Results.BadRequest(new[] { "TaskIdが重複しています。" });
+            var selected = preview.Where(item => requestedIds.Contains(item.TaskId)).ToArray();
+            var selectedById = selected.ToDictionary(item => item.TaskId);
+            var migrationStates = new Dictionary<Guid, SubjectProfileMigrationState>();
+            foreach (var taskId in requestedIds.Except(selectedById.Keys))
+                if (await store.GetSubjectProfileMigrationStateAsync(taskId, token).ConfigureAwait(false) is { } state)
+                    migrationStates[taskId] = state;
+            if (selected.Length + migrationStates.Count != requestedIds.Length)
+                return Results.Conflict(new[] { "対象タスクの状態または移行根拠が変わりました。再度previewしてください。" });
+            var blocked = selected.Where(item => !item.SafeToExecute).ToArray();
+            if (blocked.Length > 0)
+                return Results.Conflict(blocked.Select(item => $"{item.TaskId}: {item.BlockingReason}").ToArray());
+
+            var created = 0;
+            var reused = 0;
+            var retired = 0;
+            foreach (var taskId in requestedIds)
             {
-                ResourceType.Horse => existingHorses.Contains(item.Resource.Id),
-                ResourceType.Jockey => existingJockeys.Contains(item.Resource.Id),
-                ResourceType.Trainer => existingTrainers.Contains(item.Resource.Id),
-                _ => false,
-            };
-            bool IsReferenced(ObsoleteSubjectProfileTask item)
-            {
-                if (!raceById.TryGetValue(item.RequestedByRaceId!, out var race)) return false;
-                return item.Resource.Type switch
+                if (migrationStates.TryGetValue(taskId, out var saved))
                 {
-                    ResourceType.Horse => race.Entries.Any(entry => entry.HorseId == item.Resource.Id),
-                    ResourceType.Jockey => race.Entries.Any(entry => entry.JockeyId == item.Resource.Id),
-                    ResourceType.Trainer => race.Entries.Any(entry => entry.TrainerId == item.Resource.Id),
-                    _ => false,
-                };
+                    if (!saved.Completed)
+                    {
+                        if (saved.SuppressionRequired)
+                            await store.SuppressResourceAsync(saved.SourceResource,
+                                "主体ID移行により正規IDで再収集します。", "subject-profile-id-migration",
+                                Shared.Time.JstTime.Now(), token).ConfigureAwait(false);
+                        await store.MarkSubjectProfileMigrationAsync(taskId, saved.TargetId,
+                            saved.RecoveryRequired, saved.SuppressionRequired, Shared.Time.JstTime.Now(), token)
+                            .ConfigureAwait(false);
+                    }
+                    if (saved.RecoveryRequired) reused++;
+                    continue;
+                }
+
+                var item = selectedById[taskId];
+                if (item.Classification == "AutoMigrate")
+                {
+                    var source = item.Source;
+                    var target = new ResourceKey(source.Resource.Type, source.Resource.Provider, item.TargetId!);
+                    var migrationKey = $"subject-id-migration:{source.TaskId:N}:{item.TargetId}:{source.RequestedRevision}";
+                    var attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["name"] = item.TargetName!,
+                        ["requestedByRaceId"] = source.RequestedByRaceId!,
+                        ["migratedFromTaskId"] = source.TaskId.ToString("D"),
+                        ["migrationKey"] = migrationKey,
+                    };
+                    var explicitUrl = IsAllowedSubjectProfileUrl(source.Resource.Type, source.SourceUrl)
+                        ? source.SourceUrl : null;
+                    if (source.Resource.Type == ResourceType.Horse
+                        && JraSourceIdentity.TryNormalizeHorse(source.SourceIdentity, out _))
+                        attributes["sourceIdentity"] = source.SourceIdentity!;
+                    if (explicitUrl is not null) attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
+                    var receipt = await store.RequestAsync(target, source.Definition, source.RequestedRevision,
+                        CollectionReason.Recovery, Shared.Time.JstTime.Now(), CollectionLane.Normal,
+                        (int)CollectionPriority.High, explicitUrl, migrationKey, source.EffectiveDate, attributes,
+                        token, migrationKey).ConfigureAwait(false);
+                    if (receipt.CreatedTask) created++; else reused++;
+                }
+                var suppressionRequired = !item.SourceReferencedAnywhere && !item.SourceProjectionExists
+                    && item.TargetId != item.Source.Resource.Id;
+                var recoveryRequired = item.Classification == "AutoMigrate";
+                await store.MarkSubjectProfileMigrationAsync(item.TaskId, item.TargetId!, recoveryRequired,
+                    suppressionRequired,
+                    cancellationToken: token).ConfigureAwait(false);
+                var retirement = await store.RetireObsoleteSubjectProfileTasksAsync(
+                    [item.TaskId], Shared.Time.JstTime.Now(), token).ConfigureAwait(false);
+                retired += retirement.CancelledCount + retirement.RunningCancellationRequests;
+                if (suppressionRequired)
+                    await store.SuppressResourceAsync(item.Source.Resource,
+                        "主体ID移行により正規IDで再収集します。", "subject-profile-id-migration",
+                        Shared.Time.JstTime.Now(), token).ConfigureAwait(false);
+                await store.MarkSubjectProfileMigrationAsync(item.TaskId, item.TargetId!, recoveryRequired,
+                    suppressionRequired,
+                    Shared.Time.JstTime.Now(), token).ConfigureAwait(false);
             }
-            var obsolete = candidates.Where(item => !IsExisting(item) || !IsReferenced(item)).ToArray();
-            if (!request.Execute)
-                return Results.Ok(new ObsoleteSubjectProfileTaskCleanupResult(false, obsolete.Length, 0, 0, obsolete));
-            return Results.Ok(await store.RetireObsoleteSubjectProfileTasksAsync(
-                obsolete.Select(item => item.TaskId).ToArray(), Shared.Time.JstTime.Now(), token)
-                .ConfigureAwait(false));
+            var refreshed = await BuildSubjectProfileMigrationPreviewAsync(store, dbContextProvider, token)
+                .ConfigureAwait(false);
+            return Results.Ok(new SubjectProfileMigrationResult(true, requestedIds.Length, created, reused, retired, refreshed));
         });
         admin.MapGet("/failure-notifications", async (int? limit, CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.GetActionableFailureNotificationsAsync(
@@ -546,7 +586,146 @@ public static class CollectionPlatformEndpointExtensions
         return endpoints;
     }
 
-    private sealed record ObsoleteSubjectProfileCleanupRequest(bool Execute = false);
+    private static async Task<IReadOnlyList<SubjectProfileMigrationCandidate>> BuildSubjectProfileMigrationPreviewAsync(
+        CollectionPlatformStore store, IDbContextProvider<EventStoreDbContext> provider, CancellationToken token)
+    {
+        var sources = await store.GetObsoleteSubjectProfileTasksAsync(token).ConfigureAwait(false);
+        if (sources.Count == 0) return [];
+        using var db = provider.CreateContext();
+        var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking().ToListAsync(token).ConfigureAwait(false);
+        var raceById = races.ToDictionary(item => item.RaceId, StringComparer.Ordinal);
+        var horseById = (await db.Set<HorseReadModel>().AsNoTracking().ToListAsync(token).ConfigureAwait(false))
+            .ToDictionary(item => item.HorseId, StringComparer.Ordinal);
+        var jockeyById = (await db.Set<JockeyReadModel>().AsNoTracking().ToListAsync(token).ConfigureAwait(false))
+            .ToDictionary(item => item.JockeyId, StringComparer.Ordinal);
+        var trainerById = (await db.Set<TrainerReadModel>().AsNoTracking().ToListAsync(token).ConfigureAwait(false))
+            .ToDictionary(item => item.TrainerId, StringComparer.Ordinal);
+        var result = new List<SubjectProfileMigrationCandidate>(sources.Count);
+        foreach (var source in sources)
+        {
+            if (string.IsNullOrWhiteSpace(source.Name) || string.IsNullOrWhiteSpace(source.RequestedByRaceId)
+                || !raceById.TryGetValue(source.RequestedByRaceId, out var race))
+            {
+                result.Add(Blocked(source, "Unverifiable", "名称または登録元レースを確認できません。"));
+                continue;
+            }
+            var referencedIds = ReferencedIds(race, source.Resource.Type).Distinct(StringComparer.Ordinal).ToArray();
+            if (referencedIds.Length == 0)
+            {
+                result.Add(Blocked(source, "Unverifiable", "登録元レースに同種の主体参照がありません。"));
+                continue;
+            }
+            var existing = referencedIds.Select(id => Subject(source.Resource.Type, id, horseById, jockeyById, trainerById))
+                .Where(item => item is not null).Cast<(string Id, string Name)>().ToArray();
+            if (existing.Length == 0)
+            {
+                result.Add(Blocked(source, "RepairProjection", "RaceEntryの参照先主体が投影されていません。"));
+                continue;
+            }
+            var sourceName = NormalizeSubjectName(source.Resource.Type, source.Name);
+            var nameMatches = existing.Where(item => string.Equals(sourceName,
+                    NormalizeSubjectName(source.Resource.Type, item.Name), StringComparison.Ordinal))
+                .DistinctBy(item => item.Id).ToArray();
+            if (nameMatches.Length > 1)
+            {
+                result.Add(Blocked(source, "Ambiguous", "登録元レース内に同一名称の移行先が複数あります。"));
+                continue;
+            }
+            var matching = nameMatches
+                .Where(item => string.Equals(item.Id, ExpectedSubjectId(source, item.Name), StringComparison.Ordinal))
+                .ToArray();
+            if (matching.Length == 0)
+            {
+                result.Add(Blocked(source, "IdentityConflict", "名称、現在のID生成規則、またはJRA identityがRaceEntryと一致しません。"));
+                continue;
+            }
+            var target = matching[0];
+            if (target.Id == source.Resource.Id)
+            {
+                result.Add(Blocked(source, "RetryExisting", "主体IDは既に正しいため、保存404の原因調査または既存IDでの再実行が必要です。",
+                    target.Id, target.Name));
+                continue;
+            }
+            var state = await store.GetStateAsync(
+                new(source.Resource.Type, source.Resource.Provider, target.Id), source.Definition, token)
+                .ConfigureAwait(false);
+            var current = state is not null && state.AppliedRevision >= source.RequestedRevision
+                && state.Status == CollectionStateStatus.Current;
+            var referencedAnywhere = races.Any(item => ReferencedIds(item, source.Resource.Type)
+                .Contains(source.Resource.Id, StringComparer.Ordinal));
+            var sourceProjectionExists = Subject(source.Resource.Type, source.Resource.Id,
+                horseById, jockeyById, trainerById) is not null;
+            result.Add(new(source.TaskId, source, current ? "AlreadyCurrent" : "AutoMigrate", true, null,
+                target.Id, target.Name, referencedAnywhere, sourceProjectionExists));
+        }
+        return result;
+    }
+
+    private static SubjectProfileMigrationCandidate Blocked(ObsoleteSubjectProfileTask source,
+        string classification, string reason, string? targetId = null, string? targetName = null) =>
+        new(source.TaskId, source, classification, false, reason, targetId, targetName, true);
+
+    private static IEnumerable<string> ReferencedIds(RacePredictionContextReadModel race, ResourceType type) =>
+        type switch
+        {
+            ResourceType.Horse => race.Entries.Select(item => item.HorseId),
+            ResourceType.Jockey => race.Entries.Select(item => item.JockeyId).Where(id => id is not null).Cast<string>(),
+            ResourceType.Trainer => race.Entries.Select(item => item.TrainerId).Where(id => id is not null).Cast<string>(),
+            _ => [],
+        };
+
+    private static (string Id, string Name)? Subject(ResourceType type, string id,
+        IReadOnlyDictionary<string, HorseReadModel> horses, IReadOnlyDictionary<string, JockeyReadModel> jockeys,
+        IReadOnlyDictionary<string, TrainerReadModel> trainers) => type switch
+        {
+            ResourceType.Horse when horses.TryGetValue(id, out var horse) => (id, horse.RegisteredName),
+            ResourceType.Jockey when jockeys.TryGetValue(id, out var jockey) => (id, jockey.DisplayName),
+            ResourceType.Trainer when trainers.TryGetValue(id, out var trainer) => (id, trainer.DisplayName),
+            _ => null,
+        };
+
+    private static string NormalizeSubjectName(ResourceType type, string name) =>
+        Shared.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(),
+            Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name));
+
+    private static string ExpectedSubjectId(ObsoleteSubjectProfileTask source, string targetName)
+    {
+        var canonical = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(
+            source.Resource.Type.ToString(), targetName);
+        if (source.Resource.Type == ResourceType.Horse)
+        {
+            var identity = JraSourceIdentity.TryNormalizeHorse(source.SourceIdentity, out _)
+                ? source.SourceIdentity : null;
+            return DeterministicIdGenerator.BuildHorseId(canonical, identity);
+        }
+        var prefix = source.Resource.Type == ResourceType.Jockey ? "jockey" : "trainer";
+        return DeterministicIdGenerator.BuildEntityId(prefix, DeterministicIdGenerator.NormalizeKey(canonical));
+    }
+
+    private static bool IsAllowedSubjectProfileUrl(ResourceType type, Uri? url)
+    {
+        if (url is null || url.Scheme != Uri.UriSchemeHttps
+            || !url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return false;
+        var path = type switch
+        {
+            ResourceType.Horse => "/JRADB/accessU.html",
+            ResourceType.Jockey => "/JRADB/accessK.html",
+            ResourceType.Trainer => "/JRADB/accessC.html",
+            _ => string.Empty,
+        };
+        return url.AbsolutePath.Equals(path, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(url.Query.TrimStart('?'));
+    }
+
+    private sealed record ObsoleteSubjectProfileCleanupRequest(bool Execute = false,
+        IReadOnlyList<Guid>? TaskIds = null);
+    private sealed record SubjectProfileMigrationCandidate(Guid TaskId, ObsoleteSubjectProfileTask Source,
+        string Classification, bool SafeToExecute, string? BlockingReason, string? TargetId = null,
+        string? TargetName = null, bool SourceReferencedAnywhere = true,
+        bool SourceProjectionExists = true);
+    private sealed record SubjectProfileMigrationResult(bool Executed, int SelectedCount,
+        int CreatedRecoveryTasks, int ReusedRecoveryTasks, int RetiredSourceTasks,
+        IReadOnlyList<SubjectProfileMigrationCandidate> Candidates);
 
     private static RaceEntryOwnerRepairCandidate ToRaceEntryOwnerRepairCandidate(
         RacePredictionContextReadModel race)

@@ -16,6 +16,9 @@ public sealed partial class CollectionPlatformStore
         "date", "day", "distance", "entries", "layout", "meeting", "month", "observations", "observedAt",
         "owner", "ownerRepair", "position", "requestedByHorseId", "requestedByHorseName", "requestedByRaceId", "sex", "source",
         "sourceIdentity", "sourceUrl", "startTime", "trainer", "weekendPriorityUntil", "weight", "year",
+        "migratedFromTaskId", "migrationKey", "migrationTargetId", "migrationRecoveryRequired",
+        "migrationSuppressionRequired",
+        "migrationCompletedAt",
     };
     private readonly DbContextOptions<CollectionPlatformDbContext> _dbOptions;
     private readonly int _closedSessionFailureThreshold;
@@ -2147,34 +2150,88 @@ public sealed partial class CollectionPlatformStore
     {
         await using var db = CreateDbContext();
         var definitions = new[] { "horse-profile", "jockey-profile", "trainer-profile" };
-        var activeStatuses = new[] { CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
-            CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.Running };
+        var candidateStatuses = new[] { CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
+            CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.WaitingDiscovery,
+            CollectionTaskStatus.Running, CollectionTaskStatus.Failed, CollectionTaskStatus.DeadLetter };
         var rows = await (from task in db.Tasks.AsNoTracking()
                           join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
-                          where definitions.Contains(task.DefinitionId) && activeStatuses.Contains(task.Status)
-                          select new { task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+                          join request in db.Requests.AsNoTracking() on task.RequestId equals request.RequestId
+                          where definitions.Contains(task.DefinitionId) && candidateStatuses.Contains(task.Status)
+                          select new { task, resource, request }).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (rows.Count == 0) return [];
         var taskIds = rows.Select(row => row.task.TaskId).ToArray();
-        var latestAttempts = (await db.Attempts.AsNoTracking().Where(attempt => taskIds.Contains(attempt.TaskId))
+        var latestAttempts = (await db.Attempts.AsNoTracking().Where(attempt => taskIds.Contains(attempt.TaskId)
+                    && (attempt.ErrorCode == "SubjectProjectionNotReady"
+                        || attempt.ErrorCode == "SubjectResourceMissing"))
                 .OrderByDescending(attempt => attempt.AttemptNumber).ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
             .GroupBy(attempt => attempt.TaskId).ToDictionary(group => group.Key, group => group.First());
         var result = new List<ObsoleteSubjectProfileTask>();
         foreach (var row in rows)
         {
-            if (!latestAttempts.TryGetValue(row.task.TaskId, out var attempt)
-                || !string.Equals(attempt.ErrorCode, "SubjectProjectionNotReady", StringComparison.Ordinal))
+            if (!latestAttempts.TryGetValue(row.task.TaskId, out var attempt))
                 continue;
             var metadata = DeserializeTaskMetadata(row.task.MetadataJson ?? row.resource.AttributesJson);
             if (!metadata.TryGetValue("requestedByRaceId", out var raceId) || string.IsNullOrWhiteSpace(raceId))
                 continue;
+            var sourceUrl = metadata.GetValueOrDefault("sourceUrl") ?? row.request.ExplicitUrl;
+            Uri? parsedSourceUrl = null;
+            if (CollectionHttpUrl.TryCreate(sourceUrl, out var validSourceUrl)) parsedSourceUrl = validSourceUrl;
             result.Add(new(row.task.TaskId,
                 new(row.resource.Type, row.resource.Provider, row.resource.ResourceId),
                 new(row.task.DefinitionId), row.task.Status, row.task.AttemptCount,
-                attempt.ErrorCode!, raceId));
+                attempt.ErrorCode!, raceId,
+                metadata.GetValueOrDefault("name"), metadata.GetValueOrDefault("sourceIdentity"),
+                parsedSourceUrl, row.task.RequestedRevision, row.task.Lane, row.task.Priority,
+                row.resource.EffectiveDate, row.task.AvailableAt, row.task.CreatedAt,
+                attempt.FinishedAt ?? attempt.StartedAt, attempt.Result));
         }
         return result.OrderBy(item => item.Definition.Value, StringComparer.Ordinal)
             .ThenBy(item => item.Resource.Id, StringComparer.Ordinal).ToArray();
+    }
+
+    public async Task<SubjectProfileMigrationState?> GetSubjectProfileMigrationStateAsync(Guid sourceTaskId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDbContext();
+        var row = await (from task in db.Tasks.AsNoTracking()
+                         join resource in db.Resources.AsNoTracking() on task.ResourcePk equals resource.ResourcePk
+                         where task.TaskId == sourceTaskId
+                         select new { task, resource }).SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (row is null) return null;
+        var metadata = DeserializeTaskMetadata(row.task.MetadataJson ?? row.resource.AttributesJson);
+        if (!metadata.TryGetValue("migrationTargetId", out var targetId) || string.IsNullOrWhiteSpace(targetId))
+            return null;
+        return new(sourceTaskId, new(row.resource.Type, row.resource.Provider, row.resource.ResourceId), targetId,
+            metadata.GetValueOrDefault("migrationRecoveryRequired") == "true",
+            metadata.GetValueOrDefault("migrationSuppressionRequired") == "true",
+            metadata.ContainsKey("migrationCompletedAt"));
+    }
+
+    public async Task MarkSubjectProfileMigrationAsync(Guid sourceTaskId, string targetId,
+        bool recoveryRequired, bool suppressionRequired, DateTimeOffset? completedAt = null,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var db = CreateDbContext();
+            var task = await db.Tasks.SingleOrDefaultAsync(item => item.TaskId == sourceTaskId, cancellationToken)
+                .ConfigureAwait(false) ?? throw new KeyNotFoundException($"Collection task {sourceTaskId} was not found.");
+            var metadata = new Dictionary<string, string>(
+                DeserializeTaskMetadata(task.MetadataJson ?? "{}"), StringComparer.Ordinal);
+            if (metadata.TryGetValue("migrationTargetId", out var existing)
+                && !string.Equals(existing, targetId, StringComparison.Ordinal))
+                throw new InvalidOperationException("The source task already has a different migration target.");
+            metadata["migrationTargetId"] = targetId;
+            metadata["migrationRecoveryRequired"] = recoveryRequired ? "true" : "false";
+            metadata["migrationSuppressionRequired"] = suppressionRequired ? "true" : "false";
+            if (completedAt.HasValue) metadata["migrationCompletedAt"] = completedAt.Value.ToString("O");
+            task.MetadataJson = SerializeTaskMetadata(metadata);
+            task.UpdatedAt = completedAt ?? task.UpdatedAt;
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
     }
 
     public async Task<ObsoleteSubjectProfileTaskCleanupResult> RetireObsoleteSubjectProfileTasksAsync(

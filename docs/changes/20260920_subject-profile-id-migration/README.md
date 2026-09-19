@@ -1,6 +1,6 @@
 # Subject profile job ID migration
 
-- Status: Proposed
+- Status: Implemented
 - Change record schema: 2
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-20
@@ -10,9 +10,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | Production changes wait for explicit approval. |
-| Verification | Not started | Classification, idempotency, failure/restart, and regression tests are planned. |
-| Deployment/operation | Not started | Production preview/apply is outside this implementation and requires a later explicit operation. |
+| Code | Complete | Evidence-based preview/apply, durable restart markers, guarded suppression, and candidate evidence are implemented. |
+| Verification | Complete | API 44/44, store 90/90, solution build, format, audit validation, CodeGraph sync, and independent AC1-AC7 review pass. |
+| Deployment/operation | Excluded | Production preview/apply remains a separately authorized operation; this change executed no production migration. |
 
 ## Context
 
@@ -86,41 +86,58 @@ Jockey/Trainer profile URLs remain validated collection locators, not identity p
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Names are not globally unique; Jockey/Trainer URLs do not prove the persistence ID. | A name-only merge can corrupt identity. | Require one in-race referenced target plus name/current-ID agreement; Horse identity is an additional hard gate. | AC2/T2; ambiguity and identity-conflict tests | Agree | Pending | Resolved in design |
-| C2 | Event-store projections and collection storage do not share a transaction. | Evidence may change between preview and apply. | Revalidate at apply, create target first, then retire source; deterministic key makes replay safe. | AC4/T3; stale-preview and restart tests | Agree | Pending | Resolved in design |
-| C3 | Resource suppression affects every definition/task for an ID. | A valid source could be disabled too broadly. | Suppress only a proven phantom with zero RaceEntry references; otherwise retire only the selected task. | AC5/T3; remaining-reference test | Agree | Pending | Resolved in design |
-| C4 | Terminal `SubjectResourceMissing` tasks currently escape cleanup. | Recoverable evidence remains stranded. | Include relevant active and terminal tasks while preserving history. | AC1/T1; terminal-selection test | Agree | Pending | Resolved in design |
-| C5 | Automatically repairing missing subject projections would broaden domain mutation. | A maintenance operation could invent domain entities. | Classify as `RepairProjection`; do not create subjects or profile jobs until the authoritative projection is repaired. | AC3/T2; missing-projection test | Agree | Pending | Resolved in design |
-| C6 | Production apply is destructive operational work. | Incorrect execution could retire live tasks. | Deliver dry-run/apply code and tests only; production execution requires separate explicit authorization and reviewed preview. | AC6/T4 | Agree | Pending | Resolved in design |
+| C1 | Names are not globally unique; Jockey/Trainer URLs do not prove the persistence ID. | A name-only merge can corrupt identity. | Require one in-race referenced target plus name/current-ID agreement; Horse identity is an additional hard gate. | AC2/T2; ambiguity and identity-conflict tests | Agree | Approved | Resolved in design |
+| C2 | Event-store projections and collection storage do not share a transaction. | Evidence may change between preview and apply. | Revalidate at apply, create target first, then persist a durable restart marker before retiring source; deterministic keys make replay safe. | AC4/T3; restart and mixed-batch tests | Agree | Approved | Resolved in design |
+| C3 | Resource suppression affects every definition/task for an ID. | A valid source could be disabled too broadly. | Suppress only when both the source projection is absent and RaceEntry references are zero; otherwise retire only the selected task. | AC5/T3; source-projection guard test | Agree | Approved | Resolved in design |
+| C4 | Terminal `SubjectResourceMissing` tasks currently escape cleanup. | Recoverable evidence remains stranded. | Include relevant active and terminal tasks while preserving history. | AC1/T1; terminal-selection test | Agree | Approved | Resolved in design |
+| C5 | Automatically repairing missing subject projections would broaden domain mutation. | A maintenance operation could invent domain entities. | Classify as `RepairProjection`; do not create subjects or profile jobs until the authoritative projection is repaired. | AC3/T2; missing-projection test | Agree | Approved | Resolved in design |
+| C6 | Production apply is destructive operational work. | Incorrect execution could retire live tasks. | Deliver dry-run/apply code and tests only; production execution requires separate explicit authorization and reviewed preview. | AC6/T4 | Agree | Approved | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | Preview includes race-derived active `SubjectProjectionNotReady` and terminal `SubjectResourceMissing` tasks, preserves name/source/provenance evidence, and excludes unrelated work. | T1,T2 | Store and endpoint tests. | Not started |
-| AC2 | Horse/Jockey/Trainer migrate automatically only for one existing target referenced by the stated race with canonical-name and deterministic-ID agreement; Horse identity conflicts block. | T2 | Positive and counterexample classification tests. | Not started |
-| AC3 | Same-ID, already-current, projection-missing, ambiguous, conflicting, and unverifiable cases receive distinct non-destructive classifications. | T2 | Classification matrix tests. | Not started |
-| AC4 | Apply revalidates evidence, creates or reuses the canonical Recovery task before retiring source work, and is idempotent after partial/repeated execution. | T3 | API/store integration and restart tests. | Not started |
-| AC5 | Source history is retained; resource-wide suppression occurs only with zero remaining RaceEntry references; running-task cancellation cannot restore obsolete work. | T3 | Persistence, concurrency, and history assertions. | Not started |
-| AC6 | The operation remains dry-run-first, requires explicit candidate selection, exposes blocking reasons, and performs no production execution in this change. | T2,T3,T4 | Endpoint contract tests and final review. | Not started |
-| AC7 | Existing authoritative race-card profile-job creation, URL fallback, Horse repair, and profile failure classification regressions continue to pass. | T3,T4 | Focused suites plus solution build/format gates. | Not started |
+| AC1 | Preview includes race-derived active `SubjectProjectionNotReady` and terminal `SubjectResourceMissing` tasks, preserves name/source/provenance evidence, and excludes unrelated work. | T1,T2 | Store and endpoint tests. | Verified |
+| AC2 | Horse/Jockey/Trainer migrate automatically only for one existing target referenced by the stated race with canonical-name and deterministic-ID agreement; Horse identity conflicts block. | T2 | Positive and counterexample classification tests. | Verified |
+| AC3 | Same-ID, already-current, projection-missing, ambiguous, conflicting, and unverifiable cases receive distinct non-destructive classifications. | T2 | Classification matrix tests. | Verified |
+| AC4 | Apply revalidates evidence, creates or reuses the canonical Recovery task before retiring source work, and is idempotent after partial/repeated execution. | T3 | API/store integration, marker restart, and mixed replay tests. | Verified |
+| AC5 | Source history is retained; resource-wide suppression occurs only with zero remaining RaceEntry references and no source projection; running-task cancellation cannot restore obsolete work. | T3 | Persistence, source projection, cancellation, and history assertions. | Verified |
+| AC6 | The operation remains dry-run-first, requires explicit candidate selection, exposes blocking reasons, and performs no production execution in this change. | T2,T3,T4 | Endpoint contract tests and final review. | Verified |
+| AC7 | Existing authoritative race-card profile-job creation, URL fallback, Horse repair, and profile failure classification regressions continue to pass. | T3,T4 | Focused suites plus solution build/format gates. | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Extend migration candidate/result models and store selection evidence. | Worker | Worker | Approval | Collection models/store and store tests | Focused store tests | Selection and evidence fixtures pass. | Proposed | Worker — bounded persistence slice after contract freeze | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T2 | Implement API-owned classification and dry-run contract for all subject types. | Main | Lead | T1 | Collection maintenance endpoint/contracts and API tests | Classification matrix through endpoint | Every classification and counterexample is observable. | Proposed | Lead — identity and public-contract decisions | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T3 | Implement revalidated, idempotent apply and source retirement. | Main | Lead | T2 | Store/API repair path and integration tests | Apply/replay/race/history tests | Target-first recovery and safe retirement pass. | Proposed | Lead — persistence, concurrency, destructive boundary | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T4 | Integrate, sync CodeGraph, run regressions, and independently review. | Review worker; Main integrates | Review/Lead | T1-T3 | read-only review; record updates by Main | Focused suites, format, build, validator, graph trace | Independent verdict and final reconciliation. | Proposed | Reviewer — independent data-integrity challenge | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T1 | Extend migration candidate/result models and store selection evidence. | Worker | Worker | Approval | `src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionModels.cs`<br>`src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs`<br>`tests/HorseRacingPrediction.Collector.Tests/CollectionPlatform/CollectionPlatformStoreTests.cs` | Focused store tests | Evidence fields and terminal selection pass all 89 store tests. | Verified | Worker — bounded persistence slice after contract freeze | `T1-A1.json` | unavailable; retries 0; corrections 0; reviews 1 |
+| T2 | Implement API-owned classification and dry-run contract for all subject types. | Main | Lead | T1 | Collection maintenance endpoint/contracts and API tests | Classification matrix through endpoint | Horse/Jockey/Trainer, same-ID, identity-conflict, and explicit-selection tests pass. | Verified | Lead — identity and public-contract decisions | none | unavailable; retries 0; corrections 1; reviews 1 |
+| T3 | Implement revalidated, idempotent apply and source retirement. | Main | Lead | T2 | Store/API repair path and integration tests | Apply/replay/race/history tests | Target-first recovery, replay reuse, history retention, and running cancellation tests pass. | Verified | Lead — persistence, concurrency, destructive boundary | none | unavailable; retries 0; corrections 1; reviews 1 |
+| T4 | Integrate, sync CodeGraph, run regressions, and independently review. | Review worker; Main integrates | Review/Lead | T1-T3 | read-only | Focused suites, format, build, validator, graph trace | Independent ACCEPT after counterexample corrections; all gates pass. | Verified | Reviewer — independent data-integrity challenge | `T4-A1.json`, `T4-A2.json` | unavailable; retries 0; corrections 6; reviews 3 |
 
 ## Review gates
 
 - **Design and task-split review:** Main owns identity rules, endpoint contract, destructive semantics, integration, and final acceptance. The bounded store-selection slice can be delegated after approval; independent final review is read-only. Write scopes are serialized because store models are shared.
 - **Concern and agreement review:** C1-C6 cover identity ambiguity, cross-store consistency, suppression breadth, terminal-task visibility, domain-repair boundary, and production authority. No unresolved technical decision remains; user disposition is pending.
-- **Pre-implementation review:** Pending approval. Production code must not change before this gate.
-- **Checkpoint review:** Pending.
-- **Final review:** Pending.
+- **Pre-implementation review:** Approved by the user on 2026-09-20. T1 is runnable with exclusive ownership of collection models/store and store tests. T2-T4 are dependency-gated. Worker input is the frozen candidate scope/evidence contract and AC1 store slice; ambiguity in terminal selection, metadata bounds, or persistence semantics escalates to Main. Main retains public classification, destructive apply order, integration, and acceptance.
+- **Checkpoint review:** Initial independent review reopened AC4/AC5 for durable replay, mixed batches, and suppression breadth. A second pass found response counter inaccuracies and missing classification counterexamples. All findings were corrected and rerun.
+- **Final review:** Independent reviewer returned ACCEPT for AC1-AC7 after API 9/9 and store 90/90 focused verification. No material finding remains.
+
+## Verification failure ledger
+
+| ID | Task | Original command | Observed failure | Classification | Disposition | Rerun | State |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| F1 | T2 | `dotnet test ... --filter FullyQualifiedName~SubjectProfileIdMigrationTests` | Two migration tests supplied an entry-result row without declaring the race result; the bulk API correctly rejected the fixture. | Test fixture defect | Supply a finish position, winning horse, and declared time so the fixture follows the real race-write contract. | Original gate passes 5/5. | Verified |
+| F2 | T3 | `dotnet test ... --filter FullyQualifiedName~SubjectProfileIdMigrationTests` | Recovery creation rejected the new `migratedFromTaskId` metadata key at the store allowlist. | Deterministic integration defect | Add the two bounded migration provenance keys to the existing metadata allowlist and rerun the original gate. | Original gate passes 5/5. | Verified |
+| F3 | T3 | `dotnet test ... --filter FullyQualifiedName~SubjectProfileIdMigrationTests` | New marker mutation used the read-only metadata interface. | Deterministic compile defect | Copy deserialized metadata into a mutable dictionary. | Original gate passes 9/9. | Verified |
+| F4 | T3 | `dotnet test ... --filter FullyQualifiedName~SubjectProfileIdMigrationTests` | Source-projection fixture used an invalid domain Horse ID and then an ambiguous read-model type name. | Test fixture/compile defect | Use `horse-{guid}` and fully qualify the application read model. | Original gate passes 9/9. | Verified |
+| F5 | T4 | `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` | Endpoint wrapping did not match repository formatting. | Deterministic formatting defect | Apply repository formatter and rerun the exact verify command. | Exact command passes. | Verified |
+
+## Implementation result
+
+- Candidate discovery now retains bounded name, provenance, URL, identity, revision, lane, priority, and latest relevant failure evidence across active and terminal tasks.
+- Preview classifies `AutoMigrate`, `RetryExisting`, `AlreadyCurrent`, `RepairProjection`, `Ambiguous`, `IdentityConflict`, and `Unverifiable` from the stated race and current subject projections.
+- Apply creates/reuses the canonical Recovery task first, persists a durable migration marker, retires the source task, conditionally suppresses only a proven phantom resource, and marks completion. Reapply resumes incomplete work and reports counters accurately.
+- Production migration was intentionally not executed.
 
 ## Documentation updates
 

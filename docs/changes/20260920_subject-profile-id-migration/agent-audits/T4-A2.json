@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260920_subject-profile-id-migration",
+  "taskId": "T4",
+  "attemptId": "T4-A2",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "route": {"tier": "review", "requestedModel": "runtime-default", "observedModel": null, "observationSource": null, "modelTelemetryReason": "collaboration runtime has not exposed the reviewer model"},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "collaboration runtime does not expose per-reviewer usage"},
+  "scope": ["read-only"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "runtime did not expose review usage or active time"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "runtime did not expose reliable reviewer elapsed effort"},
+  "startRevision": "c841e6b",
+  "endRevisionOrPatch": "working-tree:final-independent-review",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Reviewer challenged replay counters and missing classification counterexamples; corrected tree then passed AC1-AC7 review.", "retries": 0, "leadCorrections": 2, "reviewPasses": 2, "promoted": false, "escapedDefects": 0, "escalations": 0, "decision": "accept"}
+}
