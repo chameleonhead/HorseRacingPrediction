@@ -477,6 +477,7 @@ public sealed class RaceCardPageParser
             var raw = fragment.RawUrl ?? fragment.Url?.ToString();
             if (string.IsNullOrWhiteSpace(raw)) continue;
             var resolved = Uri.TryCreate(raw, UriKind.Absolute, out var absolute)
+                && absolute.Scheme is "http" or "https"
                 ? absolute : Uri.TryCreate(new Uri(pageUrl), raw, out var relative) ? relative : null;
             if (resolved is not null && resolved.Scheme == Uri.UriSchemeHttps
                 && resolved.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
