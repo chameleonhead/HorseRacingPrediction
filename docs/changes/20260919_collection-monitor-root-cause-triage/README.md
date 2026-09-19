@@ -92,7 +92,7 @@
 | AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Verified |
 | AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Verified |
 | AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Verified |
-| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | In progress |
+| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Not started |
 | AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Verified |
 | AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Verified |
 
