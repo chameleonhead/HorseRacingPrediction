@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260919_agent-audit-capture-workflow",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "route": {
+    "tier": "worker",
+    "requestedModel": "runtime-default",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "collaboration runtime did not expose the worker model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "collaboration runtime did not expose per-worker usage"
+  },
+  "scope": [
+    "scripts/audit_agent_execution.py",
+    "tests/scripts/test_audit_agent_execution.py"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose reviewer usage or active time"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker elapsed effort"
+  },
+  "startRevision": "38611104fde59ebf7e6642107c226c88e5b5bf63",
+  "endRevisionOrPatch": "patch-sha1:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "T4 independent review plus validator counterexamples",
+    "retries": 1,
+    "leadCorrections": 3,
+    "reviewPasses": 5,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "decision": "accept"
+  }
+}

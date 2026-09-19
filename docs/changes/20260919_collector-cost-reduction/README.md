@@ -61,17 +61,17 @@ Goals are authoritative job identity, audited retirement of obsolete jobs, safe 
 
 ## Task plan
 
-| ID | Task | Owner | Model tier | Depends on | Verification | State |
-| --- | --- | --- | --- | --- | --- | --- |
-| T1 | Move profile-job creation to the bulk API. | Main | Lead | Approval | API/Collector tests | Verified |
-| T2 | Reclassify 404 and remove projection retry. | Main | Lead | T1 | Handler test | Verified |
-| T3 | Add dry-run/execute obsolete-job retirement. | Main | Lead | T1 | Store/endpoint tests | Verified |
-| T4 | Propagate URLs and preserve validated fallback. | Main | Lead | Approval | Parser/fallback tests | Verified |
-| T5 | Apply exact production log filters. | Main | Lead | Approval | Inspection/build | Verified |
-| T6 | Integrate and locally verify. | Main | Lead | T1-T5 | Tests/build/format/diff/CodeGraph | Verified |
-| T7 | Deploy, review/execute cleanup, and observe 48 hours. | Operations | External | T6 | CloudWatch report | Externally blocked |
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | Move profile-job creation to the bulk API. | Main | Lead | Approval | API bulk endpoint, Collector race handler, related tests | API/Collector tests | Authoritative IDs and replay idempotency passed. | Verified | Lead — public contract and architecture | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T2 | Reclassify 404 and remove projection retry. | Main | Lead | T1 | Subject handler and tests | Handler test | 404 is isolated permanent failure without retry. | Verified | Lead — failure contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T3 | Add dry-run/execute obsolete-job retirement. | Main | Lead | T1 | Collection store, admin endpoint, tests | Store/endpoint tests | History-preserving cancellation path passed. | Verified | Lead — persistence and destructive criteria | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T4 | Propagate URLs and preserve validated fallback. | Main | Lead | Approval | Scraping models/parser/workflow and tests | Parser/fallback tests | Direct URL extraction and safe fallback passed. | Verified | Lead — public parsing contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T5 | Apply exact production log filters. | Main | Lead | Approval | Collector configuration | Inspection/build | Exact categories configured; Release build passed. | Verified | Lead — small configuration integrated with change | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T6 | Integrate and locally verify. | Main | Lead | T1-T5 | Entire approved change | Tests/build/format/diff/CodeGraph | 1,113 tests passed; build and final gates passed. | Verified | Lead — integration and final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T7 | Deploy, review/execute cleanup, and observe 48 hours. | Operations | External | T6 | Production only | CloudWatch report | Awaiting explicit production operation. | Externally blocked | Operations — external authority required | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 
-No work was delegated because API persistence, collection state, parsing contracts, and integration overlap materially.
+No agents were used. A later process review found that read-only exploration, fixture work, and independent review were separable even though architecture, persistence, and integration correctly remained with Main. Historical model, token, retry, correction, and review-count telemetry was not captured and is intentionally recorded as unavailable rather than reconstructed.
 
 ## Review gates
 

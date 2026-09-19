@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "changeId": "20260919_agent-audit-capture-workflow",
+  "taskId": "T4",
+  "attemptId": "T4-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "route": {
+    "tier": "review",
+    "requestedModel": "runtime-default",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "collaboration runtime did not expose the reviewer model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "collaboration runtime did not expose per-reviewer usage"
+  },
+  "scope": ["read-only"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose reviewer usage or active time"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable reviewer elapsed effort"
+  },
+  "startRevision": "38611104fde59ebf7e6642107c226c88e5b5bf63",
+  "endRevisionOrPatch": "read-only-review:T4-A1",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Independent read-only scenario and source review",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "decision": "revise"
+  }
+}

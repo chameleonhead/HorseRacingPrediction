@@ -1,173 +1,95 @@
-# Agent execution audit
+# Compact agent execution audit
 
-Use this reference for delegated coding, model-routing audits, usage/cost comparisons, or persistent routing improvements. Keep the compact conclusion in the governing change record and store one JSON artifact per delegated task under `docs/changes/<change>/agent-audits/<task-id>.json`.
+Use this reference only when work is delegated or routing effectiveness is being evaluated. The governing change record keeps one task plan; do not create a second audit ledger.
 
-## Required record
+## Task-plan fields
 
-The validator accepts schema version `2`. Unknown fields are allowed so provider telemetry can evolve, but the required decision fields below must remain explicit. Version 2 makes review-time components exclusive and groups routing statistics by comparable task profile.
+Add three columns to the existing task plan:
+
+- `Routing`: tier plus a short reason, for example `Worker — bounded parser fixture`.
+- `Audit`: `none` for lead-only work or delegated attempt IDs such as `T2-A1`.
+- `Result metrics`: `usage availability; retries N; corrections N; reviews N`.
+
+Lead-only tasks require no JSON. Do not repeat objective, scope, verification, evidence, or state in audit prose.
+
+## Recording events
+
+Write audit data only at:
+
+1. delegated dispatch — identity, route, scope, start revision, telemetry availability;
+2. delegated completion — end revision/patch, outcome, retries, corrections, reviews, verification;
+3. material verification failure — one failure-ledger row, closed only after the original gate passes;
+4. final review — update the compact result tuple.
+
+Ordinary successful commands, commentary, and routine state changes create no audit event.
+
+## Compact delegated attempt
+
+Store one JSON file per attempt under `docs/changes/<change>/agent-audits/<attempt-id>.json`:
 
 ```json
 {
-  "schemaVersion": 2,
-  "identity": {
-    "changeId": "20260919_agent-execution-audit",
-    "taskId": "T2",
-    "attemptId": "T2-A1",
-    "taskClass": "bounded-code",
-    "risk": "low",
-    "startedAt": "2026-09-19T10:00:00+09:00",
-    "completedAt": "2026-09-19T10:12:00+09:00"
-  },
-  "difficulty": {
-    "ambiguity": "low",
-    "executionPaths": 1,
-    "publicContract": false,
-    "persistenceOrMigration": false,
-    "concurrency": false,
-    "securityOrPrivacy": false,
-    "externalDependency": false,
-    "existingTestCoverage": "strong",
-    "expectedWriteScope": ["path/to/file"]
-  },
-  "routing": {
-    "expectedTier": "low-cost-coding",
-    "requestedModel": "gpt-5.6-luna",
-    "requestedReasoningEffort": "medium",
+  "schemaVersion": 1,
+  "changeId": "20260920_example",
+  "taskId": "T2",
+  "attemptId": "T2-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "route": {
+    "tier": "worker",
+    "requestedModel": "runtime-default",
     "observedModel": null,
     "observationSource": null,
-    "verificationState": "unavailable",
-    "unavailableReason": "runtime did not expose worker model metadata"
+    "modelTelemetryReason": "runtime did not expose worker model"
   },
   "usage": {
     "availability": "unavailable",
-    "inputTokens": null,
-    "cachedInputTokens": null,
-    "outputTokens": null,
-    "reasoningTokens": null,
     "totalTokens": null,
-    "configuredBudget": null,
-    "truncated": false,
-    "unavailableReason": "runtime did not expose per-worker usage"
+    "reason": "runtime did not expose per-worker usage"
   },
-  "instruction": {
-    "contractFingerprint": "sha256:...",
-    "objective": true,
-    "scope": true,
-    "dependencies": true,
-    "acceptance": true,
-    "evidence": true,
-    "escalation": true,
-    "outputFormat": true
+  "scope": ["path/owned/by/worker"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "runtime did not expose review usage or active time"
   },
-  "reproducibility": {
-    "startRevision": "commit-or-tree-id",
-    "endRevisionOrPatch": "commit-or-patch-id",
-    "skills": ["agent-task-orchestration"],
-    "toolConfigProfile": "repository-default",
-    "providerModelVersion": null
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime did not expose reliable worker elapsed effort"
   },
-  "attribution": {
-    "startStatusCaptured": true,
-    "workerPatchIdentified": true,
-    "parallelOwnersRecorded": true,
-    "unattributedChanges": false
-  },
-  "quality": {
-    "acceptancePassed": true,
-    "verificationPassed": true,
-    "scopePassed": true,
-    "blockingFindings": 0,
-    "nonBlockingFindings": 0,
-    "workerRetries": 0,
-    "leadCorrectionFiles": 0,
-    "leadCorrectionLines": 0,
-    "promoted": false,
-    "independentChallenge": "existing-regression-suite",
-    "regressionPassed": true
-  },
-  "reviewEffort": {
-    "reviewerTier": "lead",
-    "reviewerModel": null,
-    "reviewUsageTokens": null,
-    "reviewPasses": 1,
-    "elapsedReviewMinutes": 4.0,
-    "pureReviewMinutes": 1.0,
-    "correctionMinutes": 0.0,
-    "reverificationMinutes": 2.0,
-    "auditOverheadMinutes": 1.0,
-    "totalActiveMinutes": 4.0,
-    "availability": "partial",
-    "source": "lead task log"
-  },
-  "cost": {
-    "currency": null,
-    "priceSource": null,
-    "priceObservedAt": null,
-    "worker": null,
-    "automatedReview": null,
-    "humanReview": null,
-    "rework": null,
-    "auditOverhead": null,
-    "totalSuccessfulOutcome": null,
-    "reviewBurdenRatio": null,
-    "humanHourlyRate": null
-  },
-  "baseline": {
-    "comparable": false,
-    "auditIds": [],
-    "reason": "no comparable successful sample yet"
-  },
-  "escapedDefects": [],
+  "startRevision": "commit-id",
+  "endRevisionOrPatch": "patch-id",
   "outcome": {
-    "verdict": "pass-with-telemetry-gap",
-    "leadDecision": "accept",
-    "recommendation": "retain-and-collect-samples"
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "lead counterexample review",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "decision": "accept"
   }
 }
 ```
 
-## Invariants
+At dispatch, use `state: "active"`, leave outcome, review telemetry, and elapsed telemetry values null, and never prefill completion data. Requested model describes configuration intent; do not copy it into `observedModel`. At completion, unavailable or partial model, usage, review, or elapsed telemetry uses null plus one short reason.
 
-- `requestedModel` is configuration intent. Never copy it into `observedModel` without runtime evidence.
-- `verificationState` is `verified`, `mismatch`, or `unavailable`. `verified` requires an observation source. `unavailable` requires a reason.
-- Usage availability is `complete`, `partial`, or `unavailable`. Missing values remain `null`; do not estimate provider telemetry.
-- A pass requires acceptance, verification, scope, regression, zero blocking findings, and attributable work. A telemetry gap changes the verdict to `pass-with-telemetry-gap`, not `fail`.
-- A model mismatch is a failed model-verification gate even when code quality passes.
-- Important worker-authored code and tests require an independent challenge. An existing regression suite is acceptable only for a low-risk mechanical change and the audit states that rationale.
-- Human time components are exclusive active minutes, not unattended wall-clock time. `pureReviewMinutes` excludes correction, re-verification, and audit overhead; `totalActiveMinutes` equals their sum. Convert time to currency only when the user or organization supplied the hourly rate.
-- Currency aggregation requires a price source, observation date, and one currency. Otherwise report tokens, minutes, findings, and corrections separately.
-- `reviewBurdenRatio` uses automated review, human review, rework, and audit overhead cost divided by total successful-outcome cost. Do not compute it when required monetary components are unavailable.
-- Unattributed shared-worktree changes exclude the run from comparative routing statistics.
-- Initial passes and escaped-defect-adjusted passes are separate measures.
+## Gates
 
-## Routing and promotion
+- Active task write scopes may not overlap unless dependencies serialize them.
+- A delegated active or verified task links every attempt JSON; dependent/unstarted tasks do not.
+- `Verified` requires a completed attempt, successful verification, a decision, and no open linked material failure.
+- Normal successful JSON stays below 2,500 UTF-8 bytes. Fixture task-plan audit additions stay below 20 nonblank lines.
+- Do not estimate tokens, duration, model identity, or currency.
+- Fewer than five comparable successful samples may inform a note but cannot change persistent routing defaults.
 
-- Start `bounded-code` tasks with `gpt-5.6-luna` at low or medium reasoning when the contract is frozen, the write scope is narrow, verification is independent, and the task has no architecture, public-contract, persistence/migration, concurrency, security/privacy, or destructive decision.
-- Use `gpt-5.6-terra` for bounded multi-file work that still has settled acceptance and independently verifiable output.
-- Keep ambiguous requirements, architecture, public contracts, persistence/migrations, concurrency correctness, security/privacy, destructive operations, integration, and final acceptance with the lead tier.
-- After one focused correction still fails a gate, or scope/ambiguity expands, promote one tier. Record the failed attempt and its cost instead of overwriting it.
+Validate with:
 
-## Budget recommendations
-
-The tool forms a comparison key from task class, risk, requested model, reasoning effort, and the full difficulty profile. It returns one summary per key and never pools percentiles or sample thresholds across keys. Within a key, use only attributable, quality-passing, baseline-comparable samples without escaped defects for persistent adjustment.
-
-- Fewer than five successful samples: show observations; do not change a persistent default.
-- Five or more: report P50, P90, maximum successful usage, retry usage, truncation, and escaped defects.
-- Recommend only one bounded change at a time: model tier, reasoning effort, token budget, or tighter task boundary.
-- Attach an observation window and rollback condition. A security/data-integrity/scope/false-completion failure immediately recommends suspending the affected low-cost route.
-
-## Review-cost accounting
-
-Report these components separately before any total:
-
-1. worker model tokens/credits/currency;
-2. automated reviewer model tokens/credits/currency;
-3. exclusive pure review, correction, re-verification, and audit-overhead minutes, plus an optional user-supplied labor rate;
-4. retry, correction, promotion, and re-verification cost;
-5. audit overhead.
-
-Do not describe a worker as cheaper merely because its own token use is lower. Compare successful-outcome cost and review burden against a similar baseline. When price or time data is missing, state the gap and retain the raw available units.
-
-## Persistent improvement gate
-
-Persistent skill or configuration changes require repeated comparable evidence, one material security/data/scope/false-completion failure, or at least five successful samples supporting a cheaper route. Apply the smallest change, validate the skill/configuration, run an independent forward test, define the rollback condition, and record the observation period. A recommendation may be generated automatically; changes beyond the approved scope remain proposals.
+```text
+python scripts/audit_agent_execution.py <change-record-path>
+```

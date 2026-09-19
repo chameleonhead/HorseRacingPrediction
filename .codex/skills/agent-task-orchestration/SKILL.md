@@ -30,6 +30,22 @@ For coding, prefer the lowest-cost eligible route, not the lowest-cost model unc
 6. Record routing results: successful outputs, rework/retries, escalations, measured usage/cost when available, and elapsed time. Evaluate cost per successful outcome, not token price alone.
 7. For delegated coding, create an execution audit using [the audit schema and gates](references/execution-audit.md). Record requested and observed models separately. Include reviewer usage, active review effort, corrections, re-verification, and audit overhead in successful-outcome cost.
 
+## Audit-first recording gate
+
+Reuse the DDD task plan as the human-readable audit; do not create a second ledger. For multi-task changes add only `Routing`, `Audit`, and `Result metrics` columns. `Routing` is the owner tier plus a short reason. `Audit` is `none` for lead-only work or the delegated attempt ID. `Result metrics` is `usage availability; retries; lead corrections; review passes`. If telemetry is unavailable, keep the value null in JSON and use one short reason; never infer it.
+
+Record audit changes only for:
+
+- delegated attempt dispatch and completion;
+- a material verification failure and its closure;
+- final aggregation of the four result metrics.
+
+Do not create audit entries for commentary, ordinary successful commands, or routine state transitions. Lead-only tasks require no JSON. A short task may record `Lead — single short task` without further routing prose.
+
+Evaluate delegation per separable workstream. A cross-cutting change may still contain disjoint read-only exploration, fixture work, or independent review. For each lead-owned stream, record why delegation was unsuitable: architecture/public contract, persistence/migration, security/privacy, destructive action, unresolved ambiguity, overlapping writes, unavailable worker, or delegation/review cost exceeding likely benefit. A blanket statement that the whole change overlaps is not sufficient.
+
+For delegated coding, create one compact JSON audit per attempt as described in [the execution-audit reference](references/execution-audit.md). Run `python scripts/audit_agent_execution.py <changed-change-record-path>` after the pre-implementation task plan, after delegated completion, and before final review. A missing validator is a blocking process defect, not permission to skip the audit. Keep normal successful delegated JSON below 2,500 UTF-8 bytes and the task-plan audit additions below 20 nonblank lines in workflow fixtures; simplify before exceeding those bounds.
+
 Before declaring the work complete, the lead performs a focused self-audit of the plan and dependencies, tier/routing choices, worker evidence, material acceptance gaps, and applicable skill instructions, proportional to the task's risk and size. Record material findings and their evidence; a short, low-risk task does not need a separate checklist. Do not complete while a material approved item is runnable, unverified, or unresolved. If the audit demonstrates a reusable process failure, apply `learn-from-implementation-failures`, update the narrowest applicable skill, validate it, and rerun the affected gate. Correct isolated implementation mistakes locally without turning each one into a skill rule.
 
 If a foreseeable concern is first raised only after completion, compare it with the approved design and tests. Reopen the originating record when it invalidates an AC or completion evidence, add the missing counterexample, and apply `learn-from-implementation-failures` when the review process failed to surface the concern. Do not classify it as a future enhancement merely because it was noticed late.
