@@ -23,7 +23,7 @@
 2024年2月26日生まれの牝馬と2026年9月12日中山6Rの出走履歴が公開されている。
 
 - 対象Resource: `horse-392840d9-3ba9-5665-943b-5a778da97f36`
-- 現行コードではRace由来の子taskに `EffectiveDate` と `requestedByRaceId` を保存している。
+- 現行コードではRace由来の子taskに参照レースmetadataと `requestedByRaceId` を保存している。taskの `EffectiveDate` は収集・Recoveryの基準日であり、過去レースの開催日とは限らない。
 - 一方、Horse同定へ渡す値は `name`、`birthDate`、`sourceIdentity` だけで、起点レースを使わない。
 - `sourceIdentity` と `birthDate` がない場合、正規化名が同じ候補をすべて採用し、2件以上なら安全停止する。
 - プロフィールparserは生年月日、抹消年月日を含む公開fieldと出走履歴を読み取れるが、同名候補の解決には使っていない。
@@ -59,7 +59,7 @@
 2. 生年月日がある場合は、従来どおりプロフィールの生年月日完全一致を使用する。
 3. 過去レースの結果ページを含む起点Raceの該当馬番行に、JRA Horse profileへの検証可能なリンクがある場合は、
    Race ID、馬番、正規化馬名を相互検証して、そのリンクを `sourceIdentity` として採用する。
-4. 上記を利用できず、かつ `discoveredFromType=Race`、`requestedByRaceId`、`EffectiveDate` が整合する場合だけ、
+4. 上記を利用できず、かつ `discoveredFromType=Race`、`requestedByRaceId`、参照レースmetadataが整合する場合だけ、
    同名候補プロフィールの全出走履歴を調べる。日付、競馬場、レース番号を含むJRA結果URLからcanonical Race IDを復元し、
    起点レースと完全一致する候補が1頭だけなら、そのプロフィールURLをidentityとして採用する。
 5. 起点レースの完全一致が得られない場合、公開プロフィールの生年月日が起点レース日より後、または抹消年月日が
@@ -81,7 +81,7 @@
 - linkの採用にはJRA正規host・Horse profile path・非空の詳細parameter、該当Race ID、馬番、正規化馬名の一致を要求する。
   行にlinkがない古いレイアウトは正常なfallback対象とし、URLを組み立てて推測しない。
 - Horse同定コンテキストへ `ReferenceRaceId` と `ReferenceRaceDate` を追加し、handlerでtask provenanceを検証して渡す。
-- `requestedByRaceId` の文字列を無条件に信用せず、Resource種別、provider、`EffectiveDate`、Race IDの日付を相互検証する。
+- `requestedByRaceId` の文字列を無条件に信用せず、Resource種別、provider、発見元Race resource ID、参照レースの日付・場・番号を相互検証する。Recoveryの実行日を表すtask `EffectiveDate` は過去レース開催日との一致条件にしない。
 - 同名候補探索は既存の最大32候補・証拠サイズ上限を維持する。
 - 候補履歴は現在の先頭ページだけで判断せず、対象日を見つけるか、日付降順の履歴が対象日を過ぎるまで全ページを
   boundedに辿る。古いレース、抹消済み馬、70戦超の履歴、履歴ページ境界を対象にし、循環検出と既存キャンセルを維持する。
@@ -116,7 +116,7 @@
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | taskの `EffectiveDate` はRace以外のDiscoveryでも設定される。 | 便宜日を出走日と誤認すると別馬を選ぶ。 | Race発見元、canonical `requestedByRaceId`、日付一致の3条件を必須にする。 | AC2/T1/T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C1 | taskの `EffectiveDate` はRace以外のDiscoveryや後日のRecoveryでも設定される。 | 便宜日を出走日と誤認すると別馬を選ぶか、正しい過去レース根拠を失う。 | Race発見元、canonical `requestedByRaceId`、発見元Race resource ID、参照レース3要素の整合を必須にし、task `EffectiveDate` は根拠判定に使わない。 | AC2/T1/T3/T6 | Agree | User explicitly required historical-race support | Resolved in implementation |
 | C2 | 抹消日以前には複数の同名馬が存在し得る。 | 時系列だけでは積極的同定にならない。 | exact race-history一致だけを採用根拠にし、抹消日・生年月日は矛盾排除と診断に限定する。 | AC3-AC5/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
 | C3 | 古いレースはプロフィール履歴の後続ページにある。 | 先頭ページだけではfalse negativeになる。 | 日付順と循環を検証しながらboundedにページ送りする。取得不能時は安全停止する。 | AC4/AC7/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
 | C4 | 保存済みURLの一時失敗後にfallbackすると強いidentityを失う。 | 一時障害が誤った別候補探索へ退行し得る。 | URL失敗は記録し、fallbackでも既知URLと異なる候補をexact race evidenceなしに採用しない。 | AC1/AC5/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
@@ -133,7 +133,7 @@
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
 | AC1 | 検証済みsource identityまたは生年月日があるtaskは既存根拠を優先し、race fallbackで別URLを選ばない。 | T1,T2,T3 | navigator/handler regression tests | Verified |
-| AC2 | Race由来であること、canonical Race ID、EffectiveDateが相互整合しないtaskはrace evidenceを使用しない。 | T1,T3 | provenance counterexample tests | Verified |
+| AC2 | Race由来であること、canonical Race ID、発見元Race resource ID、参照レース3要素が相互整合しないtaskはrace evidenceを使用しない。後日のRecoveryでも整合した過去レース根拠は失わない。 | T1,T3,T6 | provenance counterexample and historical Recovery tests | Verified |
 | AC3 | 結果だけを取得する過去レースでも、結果行の検証済みHorse linkがRaceResult保存、canonical RaceEntry、horse-profile requestまで失われず伝播する。 | T1,T3 | historical result fixture through parser/handler/API persistence | Verified |
 | AC4 | 結果行linkを利用できない場合、同名候補のうち起点レースの日付・場・番号に完全一致する公開履歴を持つ候補が1頭だけなら、そのURLをidentityとして収集成功する。 | T2,T3 | duplicate candidate fixture and handler integration | Verified |
 | AC5 | 起点レース一致が0件または複数件なら自動選択せず、候補ごとの一致・時系列矛盾・過去証拠取得不能理由をboundedに記録する。 | T2,T3 | zero/multiple/unavailable/page-boundary tests | Verified |
@@ -190,6 +190,7 @@
 - 2026-09-20: T5を配備し、同一Raceを直接APIで再取得した。Race taskは成功し、後続Horse revision 4 taskに3つの参照レースmetadataと公式`sourceIdentity`、explicit URLが保存されたため、初回の全件`InvalidRequest`は解消した。
 - 2026-09-20: Horse task実行では、JRAの文脈依存URLが直接遷移で検索画面へ戻った後、handlerが`sourceIdentity`を外して名前検索し、再度`MultipleCandidates`になった。Race根拠付きの場合はidentityを保持し、JRA Horse identityを相対・絶対URL間で正規化比較するT6を追加した。
 - 2026-09-20: T6のdirect-failure fallbackとrelative/absolute identity回帰テスト、format、Release build（警告0）、migration差分なし、非External全テストを実行した。1,139件成功、既知skip 1、失敗0。本番再配備とHorse Recoveryは未完了。
+- 2026-09-20: T6配備後のRecoveryで、task `EffectiveDate` がRecovery実行日、参照レースが前日だったため `ResolveReferenceRace` が正しい過去レース根拠を破棄していたことを確認した。`EffectiveDate` はtaskの基準日であってprovenanceではないため、Race発見元・provider・発見元resource ID・参照レース3要素・`requestedByRaceId` の検証は維持しつつ、日付一致条件を除去した。後日Recoveryの回帰テストへ変更した。
 
 ## Incident ledger
 
@@ -197,7 +198,7 @@
 - Temporary recovery: データを削除・書換えず、失敗taskとattemptを診断証拠として保持した。
 - Root cause: producerが追加した3つの参照レースmetadata keyと、保存層の明示的allowlistが不整合だった。handler単体テストがrecording sinkまでで終了し、実保存境界を通していなかった。
 - Corrective proposal: 承認済み設計内の局所欠陥としてallowlistを修正し、実保存境界を通る回帰テスト後に再配備・同一Race再実行する。
-- Permanent fix: T5 deployed and verified for batch acceptance. T6 implemented locally; deployment and production verification pending.
+- Permanent fix: T5 deployed and verified for batch acceptance. T6 deployed once; historical Recoveryで判明した過剰な`EffectiveDate`一致条件を修正し、再配備・本番検証を進行中。
 - Remaining risk: T6再配備後に対象Horse taskが終端成功することを確認するまで、AC1、AC3-AC5、AC8-AC10、AC12の本番証拠は未完了。
 
 ## Deviations and follow-up

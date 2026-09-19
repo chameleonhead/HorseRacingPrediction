@@ -205,7 +205,6 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         if (!string.Equals(task.Attributes.GetValueOrDefault("discoveredFromType"), ResourceType.Race.ToString(), StringComparison.Ordinal)
             || !string.Equals(task.Attributes.GetValueOrDefault("discoveredFromProvider"), "JRA", StringComparison.OrdinalIgnoreCase)
             || !DateOnly.TryParse(task.Attributes.GetValueOrDefault("referenceRaceDate"), out var date)
-            || task.EffectiveDate != date
             || !Enum.TryParse<RaceCourse>(task.Attributes.GetValueOrDefault("referenceRaceCourse"), true, out var course)
             || course == RaceCourse.Unknown
             || !int.TryParse(task.Attributes.GetValueOrDefault("referenceRaceNumber"), out var number)
