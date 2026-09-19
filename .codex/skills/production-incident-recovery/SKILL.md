@@ -19,6 +19,14 @@ Restore service safely while keeping temporary recovery separate from root-cause
 5. Produce a durable corrective proposal with affected scope, safety boundaries, observable acceptance criteria, regression tests, deployment steps, and production verification. Follow `document-driven-development` when repository behavior or operations must change. Do not edit production code before its approval gate.
 6. After approval, implement and verify the permanent correction. Reproduce the production-shaped failure in a regression test, verify the unaffected safety behavior, deploy, recover only eligible failed work, and observe the production path through its terminal outcome.
 
+## HorseRacingPrediction collection API diagnostics
+
+When diagnosing collection jobs or failure groups in this repository, read
+[`references/collection-platform-api-diagnostics.md`](references/collection-platform-api-diagnostics.md)
+before calling the administration API. Use
+[`scripts/Get-CollectionFailureDiagnostics.ps1`](scripts/Get-CollectionFailureDiagnostics.ps1)
+when a failure-group key is available. The script is read-only and prompts for the API key without placing it in command history.
+
 ## Completion semantics
 
 - If only a pause/resume, restart, retry, failover, or manual isolation was performed, report `temporarily recovered` and continue root-cause analysis in the same task unless the user explicitly limits the request to immediate stabilization.
