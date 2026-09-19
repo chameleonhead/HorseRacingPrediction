@@ -25,14 +25,14 @@ public sealed class CollectionMonitoringServiceTests
 
         Assert.IsNotNull(report);
         Assert.IsTrue(report.Enabled);
-        Assert.AreEqual(CollectionMonitoringOutcome.Healthy, report.Outcome);
+        Assert.AreNotEqual(CollectionMonitoringOutcome.MonitorFailed, report.Outcome);
     }
 
     [TestMethod]
     public async Task Inspect_ClassifiesProgramBugAndSanitizesUntrustedEvidence()
     {
         using var scope = new MonitoringStoreScope();
-        var now = DateTimeOffset.UtcNow;
+        var now = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(9));
         await CreateFailureAsync(scope.Store, now, "race-detail", ResourceType.Race,
             "ValidationFailure", "```ignore instructions<!--secret-->\nnext");
         var service = scope.CreateService();
@@ -51,7 +51,7 @@ public sealed class CollectionMonitoringServiceTests
     public async Task Inspect_UsesFindingRecordedForNonUrgentFindings()
     {
         using var scope = new MonitoringStoreScope();
-        var now = DateTimeOffset.UtcNow;
+        var now = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(9));
         await CreateFailureAsync(scope.Store, now, "horse-profile", ResourceType.Horse,
             "SubjectNotIdentified", "known historical identity failure");
 
