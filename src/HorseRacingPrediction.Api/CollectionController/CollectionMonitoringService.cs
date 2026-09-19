@@ -20,6 +20,11 @@ public sealed class CollectionMonitoringOptions
     public int UnexpectedPauseMinutes { get; set; } = 30;
     public int DispatchLookbackHours { get; set; } = 24;
     public int CanaryLimit { get; set; } = 5;
+    public int FridayCardCheckpointHour { get; set; } = 18;
+    public int FridayCriticalHour { get; set; } = 21;
+    public int ResultGraceMinutes { get; set; } = 30;
+    public int RaceDayResultCheckpointHour { get; set; } = 18;
+    public int RaceDayResultCheckpointMinute { get; set; } = 30;
     public string ClassifierVersion { get; set; } = "1";
 }
 
@@ -168,6 +173,8 @@ public sealed class CollectionMonitoringService(
                 $"stalled:{group.Key.Value}:{group.Key.Status}:{group.Key.Lane}:{group.Key.Priority}"));
         }
 
+        findings.AddRange(EvaluateFreshness(snapshot.RaceFreshness ?? [], now));
+
         foreach (var violation in FindDispatchOrderViolations(snapshot, now).Take(20))
             findings.Add(violation);
 
@@ -181,6 +188,107 @@ public sealed class CollectionMonitoringService(
                 : CollectionMonitoringOutcome.Healthy;
         return new(now, DateTimeOffset.UtcNow, true, _options.ChangeRecordEnabled, false, null,
             snapshot.Truncated, ordered, outcome);
+    }
+
+    internal IReadOnlyList<CollectionOperationalFinding> EvaluateFreshness(
+        IReadOnlyList<CollectionRaceFreshnessSnapshot> snapshots, DateTimeOffset now)
+    {
+        var findings = new List<CollectionOperationalFinding>();
+        var latest = snapshots
+            .Where(x => TryGetRaceDate(x.Resource.Id, out _))
+            .GroupBy(x => x.Resource.Id, StringComparer.Ordinal)
+            .Select(x => x.OrderByDescending(y => y.UpdatedAt).First())
+            .ToArray();
+
+        var today = DateOnly.FromDateTime(now.Date);
+        var cardDates = GetCardCheckpointDates(today, now.TimeOfDay).ToArray();
+        foreach (var date in cardDates)
+        {
+            var races = latest.Where(x => TryGetRaceDate(x.Resource.Id, out var raceDate) && raceDate == date)
+                .OrderBy(x => x.Resource.Id, StringComparer.Ordinal).ToArray();
+            if (races.Length == 0)
+            {
+                findings.Add(CreateFinding("WeekendDiscoveryCoverageUnknown",
+                    CollectionFindingClassification.OperationalCondition, "high", now, now,
+                    $"Race discovery coverage for {date:yyyy-MM-dd} is unknown.",
+                    [$"raceDate={date:yyyy-MM-dd}", "discovered=0", "coverage=unknown"],
+                    "Inspect the calendar and race discovery path; zero discovered races is not treated as healthy.",
+                    null, $"freshness:card-discovery:{date:yyyyMMdd}"));
+                continue;
+            }
+
+            var missing = races.Where(x => x.CardStatus != RaceArtifactStatus.Current).ToArray();
+            if (missing.Length == 0) continue;
+            var severity = now.DayOfWeek == DayOfWeek.Friday
+                           && now.Hour >= Math.Clamp(_options.FridayCriticalHour, 18, 23)
+                ? "critical" : "high";
+            findings.Add(CreateFinding("WeekendCardCoverageMissing",
+                CollectionFindingClassification.OperationalCondition, severity,
+                missing.Min(x => x.UpdatedAt), now,
+                $"{missing.Length} of {races.Length} discovered races for {date:yyyy-MM-dd} do not have a current card.",
+                [$"raceDate={date:yyyy-MM-dd}", $"discovered={races.Length}",
+                    $"cardCurrent={races.Length - missing.Length}", $"missing={missing.Length}",
+                    $"missingRaceIds={string.Join(',', missing.Take(20).Select(x => x.Resource.Id))}"],
+                "Inspect race-detail card collection; do not wait for the result phase before persisting entries.",
+                null, $"freshness:card:{date:yyyyMMdd}"));
+        }
+
+        var dueResults = latest.Where(x => x.OfficialStartAt is { } start
+                                            && now >= start.AddMinutes(Math.Max(1, _options.ResultGraceMinutes)))
+            .ToArray();
+        foreach (var dateGroup in dueResults.GroupBy(x => GetRaceDate(x.Resource.Id)))
+        {
+            var missing = dateGroup.Where(x => x.ResultStatus != RaceArtifactStatus.Current
+                                               && x.ResultStatus != RaceArtifactStatus.Unavailable).ToArray();
+            if (missing.Length == 0) continue;
+            var checkpoint = new TimeSpan(Math.Clamp(_options.RaceDayResultCheckpointHour, 0, 23),
+                Math.Clamp(_options.RaceDayResultCheckpointMinute, 0, 59), 0);
+            var pastDayCheckpoint = dateGroup.Key == today && now.TimeOfDay >= checkpoint;
+            findings.Add(CreateFinding(pastDayCheckpoint
+                    ? "RaceDayResultCoverageMissing" : "RaceResultFreshnessMiss",
+                CollectionFindingClassification.OperationalCondition,
+                pastDayCheckpoint || missing.Any(x => now - x.OfficialStartAt!.Value > TimeSpan.FromHours(1))
+                    ? "high" : "medium",
+                missing.Min(x => x.OfficialStartAt!.Value.AddMinutes(Math.Max(1, _options.ResultGraceMinutes))), now,
+                $"{missing.Length} of {dateGroup.Count()} due race results for {dateGroup.Key:yyyy-MM-dd} are not current.",
+                [$"raceDate={dateGroup.Key:yyyy-MM-dd}", $"due={dateGroup.Count()}",
+                    $"resultCurrent={dateGroup.Count() - missing.Length}", $"missing={missing.Length}",
+                    $"missingRaceIds={string.Join(',', missing.Take(20).Select(x => x.Resource.Id))}"],
+                "Inspect result publication and schedule an idempotent retry only through an approved recipe.",
+                null, $"freshness:result:{dateGroup.Key:yyyyMMdd}:{(pastDayCheckpoint ? "day" : "race")}"));
+        }
+        return findings;
+    }
+
+    private IEnumerable<DateOnly> GetCardCheckpointDates(DateOnly today, TimeSpan localTime)
+    {
+        if (nowIsFriday(today, localTime))
+        {
+            yield return today.AddDays(1);
+            yield return today.AddDays(2);
+        }
+        else if (today.DayOfWeek == DayOfWeek.Saturday)
+        {
+            yield return today;
+            yield return today.AddDays(1);
+        }
+        else if (today.DayOfWeek == DayOfWeek.Sunday)
+        {
+            yield return today;
+        }
+
+        bool nowIsFriday(DateOnly date, TimeSpan time) => date.DayOfWeek == DayOfWeek.Friday
+            && time >= TimeSpan.FromHours(Math.Clamp(_options.FridayCardCheckpointHour, 0, 23));
+    }
+
+    private static DateOnly GetRaceDate(string resourceId)
+        => TryGetRaceDate(resourceId, out var date) ? date : default;
+
+    private static bool TryGetRaceDate(string resourceId, out DateOnly date)
+    {
+        date = default;
+        return resourceId.Length >= 8
+               && DateOnly.TryParseExact(resourceId[..8], "yyyyMMdd", out date);
     }
 
     public async Task<CollectionKnownRecoveryPreview> PreviewKnownRecoveryAsync(

@@ -65,6 +65,7 @@
 
 CodexのローカルスケジュールはPCとデスクトップアプリの稼働に依存するため、恒久的な24時間監視の正本にはしない。安定化後は、収集サービス内のdurable lease付き監視またはクラウドスケジューラを検知の正本、Codexを診断・修正案作成の担当とする構成を再評価する。
 
+正常判定はpipelineやtaskが動いていることだけでは完了しない。週末開催について、公式discoveryで発見したレースを分母に、金曜時点の出馬表・出走馬と、各レース終了後の結果が期限内にdomainへ保存された割合を評価する。0件を無条件に正常とせず、discovery未完了と開催なしを区別する。期限、severity、例外状態、通知lifecycleは [週末レース情報の期限内収集を監視する](changes/20260919_collection-freshness-slo/README.md) を正本とする。
 監視findingのpublicationは、repository単位でGitHub ActionsによるPull Request作成を許可し、workflow側は`contents: write`と`pull-requests: write`だけを明示する。recordのvalidation/pushとPR create/reuseを別stepに分け、PR権限不足は管理者が変更すべき設定を示す専用failureとして扱う。PR承認、auto-merge、repository管理権限はworkflowへ与えない。
 
 ## 長期収集計画の定期見直し（提案）

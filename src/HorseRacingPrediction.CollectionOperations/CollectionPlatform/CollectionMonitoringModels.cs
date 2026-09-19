@@ -24,11 +24,21 @@ public sealed record CollectionMonitoringDispatchSnapshot(
     DateTimeOffset CreatedAt,
     DateTimeOffset DispatchedAt);
 
+public sealed record CollectionRaceFreshnessSnapshot(
+    Guid TaskId,
+    ResourceKey Resource,
+    CollectionTaskStatus Status,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? OfficialStartAt,
+    RaceArtifactStatus CardStatus,
+    RaceArtifactStatus ResultStatus);
+
 public sealed record CollectionMonitoringSnapshot(
     DateTimeOffset Cutoff,
     CollectionPipelineState Pipeline,
     IReadOnlyList<CollectionMonitoringTaskSnapshot> ActiveTasks,
     IReadOnlyList<CollectionMonitoringDispatchSnapshot> RecentDispatches,
-    bool Truncated);
+    bool Truncated,
+    IReadOnlyList<CollectionRaceFreshnessSnapshot>? RaceFreshness = null);
 
 public sealed record CollectionMonitoringBackup(string BackupId, string FileName, DateTimeOffset CreatedAt);
