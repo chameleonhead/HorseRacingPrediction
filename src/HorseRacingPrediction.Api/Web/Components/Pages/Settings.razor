@@ -14,6 +14,59 @@
     <FluentMessageBar Intent="@MessageIntent.Success" Title="データ補正が完了しました">@success</FluentMessageBar>
 }
 
+<section class="entity-section settings-section" aria-labelledby="race-owner-repair-heading">
+    <p class="eyebrow">レースデータ補完</p>
+    <h2 id="race-owner-repair-heading">出走馬の馬主情報を再取得</h2>
+    <p class="section-description">対象日の保存済みレースを確認し、馬主が欠けているレースだけを選んで再取得します。確認だけではデータを変更しません。</p>
+    <div class="operations-form-row">
+        <FluentTextField Label="対象日 (yyyy-MM-dd)" Required="true" @bind-Value="ownerRepairDateText" />
+        <FluentButton Appearance="@Appearance.Outline" OnClick="PreviewOwnerRepairsAsync" Disabled="@busy">欠損を確認</FluentButton>
+    </div>
+    @if (ownerRepairErrors.Count > 0)
+    {
+        <RaceOpsAlert Title="馬主情報の欠損を確認できませんでした" Messages="@ownerRepairErrors" />
+    }
+    @if (ownerRepairLoading)
+    {
+        <UiState Kind="loading" Title="対象日の馬主情報を確認しています" />
+    }
+    else if (ownerRepairPreview is not null && ownerRepairPreview.Candidates.Count == 0)
+    {
+        <UiState Title="馬主情報が欠けているレースはありません" Message="対象日の保存済みレースを確認しました。" />
+    }
+    else if (ownerRepairPreview is not null)
+    {
+        <div class="repair-summary" role="status">
+            <span>確認したレース <strong>@ownerRepairPreview.RaceCount</strong> 件</span>
+            <span>補完候補 <strong>@ownerRepairPreview.Candidates.Count</strong> 件</span>
+        </div>
+        <div class="repair-grid">
+            <FluentDataGrid Items="@ownerRepairPreview.Candidates.AsQueryable()" TGridItem="RaceEntryOwnerRepairCandidate" aria-label="馬主情報の補完候補">
+                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@ownerRepairSelected.Contains(context.RaceId)" CheckStateChanged="@(value => SetOwnerRepairSelected(context.RaceId, value == true))" Disabled="@busy" aria-label="@($"{context.RaceName ?? context.ResourceId}を選択")" /></TemplateColumn>
+                <TemplateColumn Title="レース"><a href="@RaceUrl(context.RaceId)">@(context.RaceName ?? context.ResourceId)</a><small>@context.RacecourseCode @context.RaceNumber R</small></TemplateColumn>
+                <TemplateColumn Title="欠損"><strong>@context.MissingOwnerCount / @context.EntryCount 頭</strong><small>再取得後に非破壊で補完</small></TemplateColumn>
+            </FluentDataGrid>
+        </div>
+        <div class="repair-actions">
+            <span>@ownerRepairSelected.Count 件を選択</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingOwnerRepair = true)" Disabled="@(busy || ownerRepairSelected.Count == 0)">選択したレースを再取得</FluentButton>
+        </div>
+    }
+</section>
+
+<FluentDialog Hidden="@(!confirmingOwnerRepair)" HiddenChanged="@(hidden => confirmingOwnerRepair = !hidden)"
+              Modal="true" TrapFocus="true" AriaLabelledby="owner-repair-confirm-title"
+              Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="owner-repair-confirm-title">選択した@ownerRepairSelected.Count 件を再取得しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <p>選択したRaceリソースだけに通常優先度の再取得を依頼します。既存値は空値で上書きせず、既存エラージョブの自動復旧や優先度変更は行いません。</p>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton OnClick="@(() => confirmingOwnerRepair = false)" Disabled="@busy">戻って確認</FluentButton>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="ExecuteOwnerRepairsAsync" Disabled="@busy">@(busy ? "依頼中…" : "再取得を依頼")</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 <section class="entity-section settings-section" aria-labelledby="subject-repair-heading">
     <p class="eyebrow">要対応データ補正</p>
     <h2 id="subject-repair-heading">主体識別情報の補正</h2>
@@ -255,6 +308,12 @@
     private bool subjectLoading = true;
     private bool confirmingSubjects;
     private bool dismissingSubjects;
+    private string ownerRepairDateText = JstTime.Today().ToString("yyyy-MM-dd");
+    private RaceEntryOwnerRepairPreview? ownerRepairPreview;
+    private IReadOnlyList<string> ownerRepairErrors = [];
+    private readonly HashSet<string> ownerRepairSelected = new(StringComparer.Ordinal);
+    private bool ownerRepairLoading;
+    private bool confirmingOwnerRepair;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
         string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
     private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
@@ -302,6 +361,46 @@
 
     private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
         candidate.SafeToExecute;
+
+    private async Task PreviewOwnerRepairsAsync()
+    {
+        ownerRepairErrors = []; ownerRepairPreview = null; ownerRepairSelected.Clear();
+        if (!DateOnly.TryParseExact(ownerRepairDateText, "yyyy-MM-dd", out var date))
+        {
+            ownerRepairErrors = ["対象日は yyyy-MM-dd 形式で入力してください。"]; return;
+        }
+        ownerRepairLoading = true;
+        try
+        {
+            var result = await Api.GetRaceEntryOwnerRepairPreviewAsync(date);
+            if (result.Success) ownerRepairPreview = result.Value;
+            else ownerRepairErrors = result.Errors;
+        }
+        catch (Exception) { ownerRepairErrors = ["確認結果を取得できませんでした。入力した日付は保持されています。"]; }
+        finally { ownerRepairLoading = false; }
+    }
+
+    private void SetOwnerRepairSelected(string raceId, bool value)
+    {
+        if (value) ownerRepairSelected.Add(raceId); else ownerRepairSelected.Remove(raceId);
+    }
+
+    private async Task ExecuteOwnerRepairsAsync()
+    {
+        if (ownerRepairSelected.Count == 0 || busy || ownerRepairPreview is null) return;
+        busy = true; ownerRepairErrors = []; success = null;
+        try
+        {
+            var batchId = $"repair:race-entry-owners:{ownerRepairPreview.Date:yyyyMMdd}:{Guid.NewGuid():N}";
+            var result = await Api.ExecuteRaceEntryOwnerRepairAsync(new(ownerRepairPreview.Date,
+                ownerRepairSelected.ToArray(), batchId));
+            if (!result.Success || result.Value is null) { ownerRepairErrors = result.Errors; return; }
+            success = $"馬主情報の再取得を {result.Value.TargetCount} レースへ依頼しました（新規タスク {result.Value.TasksCreated} 件）。";
+            ownerRepairSelected.Clear(); ownerRepairPreview = null;
+        }
+        catch (Exception) { ownerRepairErrors = ["依頼結果を確認できませんでした。収集ジョブ一覧で状態を確認してください。"]; }
+        finally { busy = false; confirmingOwnerRepair = false; }
+    }
 
     private bool SubjectSelected(Guid id) => selectedSubjects.Contains(id);
     private bool SubjectCheckState(SubjectIdentificationRepairCandidateResponse candidate) => SubjectSelected(candidate.NotificationId);

@@ -6,13 +6,16 @@ namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 internal static class ResourceLocationOutcomeClassifier
 {
-    public static ResourceLocationOutcome Unexpected(ResourceLocationCandidate location, string errorCode)
-        => new(location.LocationId, CollectionAttemptResult.UnexpectedPage, errorCode);
+    public static ResourceLocationOutcome Unexpected(ResourceLocationCandidate location, string errorCode,
+        RaceArtifactKind? artifact = null)
+        => new(location.LocationId, CollectionAttemptResult.UnexpectedPage, errorCode, artifact);
 
-    public static ResourceLocationOutcome Succeeded(ResourceLocationCandidate location)
-        => new(location.LocationId, CollectionAttemptResult.Succeeded);
+    public static ResourceLocationOutcome Succeeded(ResourceLocationCandidate location,
+        RaceArtifactKind? artifact = null)
+        => new(location.LocationId, CollectionAttemptResult.Succeeded, Artifact: artifact);
 
-    public static ResourceLocationOutcome Failed(ResourceLocationCandidate location, Exception exception)
+    public static ResourceLocationOutcome Failed(ResourceLocationCandidate location, Exception exception,
+        RaceArtifactKind? artifact = null)
     {
         var result = exception switch
         {
@@ -24,6 +27,6 @@ internal static class ResourceLocationOutcomeClassifier
             JraPageParseException => CollectionAttemptResult.UnexpectedPage,
             _ => CollectionAttemptResult.TransientFailure,
         };
-        return new(location.LocationId, result, exception.GetType().Name);
+        return new(location.LocationId, result, exception.GetType().Name, artifact);
     }
 }

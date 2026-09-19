@@ -544,7 +544,7 @@ public sealed partial class CollectionPlatformStore
                 .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
                 .Where(x => x.Valid)
                 .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
-                    x.Location.Status, x.Location.LastVerifiedAt)).ToList();
+                    x.Location.Status, x.Location.LastVerifiedAt, x.Location.Artifact)).ToList();
             if (CollectionHttpUrl.TryCreate(request.ExplicitUrl, out var explicitUrl))
                 candidates.Insert(0, new(0, explicitUrl!, ResourceLocationSource.Explicit,
                     ResourceLocationStatus.Unknown, null));
@@ -644,10 +644,15 @@ public sealed partial class CollectionPlatformStore
                 {
                     db.AttemptStageOutcomes.Add(new CollectionAttemptStageOutcomeEntity
                     {
-                        StageOutcomeId = Guid.NewGuid(), AttemptId = attempt.AttemptId,
-                        Stage = stage.Stage, Artifact = stage.Artifact, Result = stage.Result,
-                        ErrorCode = stage.ErrorCode, ErrorMessage = stage.ErrorMessage,
-                        RequestedUrl = stage.RequestedUrl?.AbsoluteUri, FinalUrl = stage.FinalUrl?.AbsoluteUri,
+                        StageOutcomeId = Guid.NewGuid(),
+                        AttemptId = attempt.AttemptId,
+                        Stage = stage.Stage,
+                        Artifact = stage.Artifact,
+                        Result = stage.Result,
+                        ErrorCode = stage.ErrorCode,
+                        ErrorMessage = stage.ErrorMessage,
+                        RequestedUrl = stage.RequestedUrl?.AbsoluteUri,
+                        FinalUrl = stage.FinalUrl?.AbsoluteUri,
                         Persisted = stage.Persisted,
                     });
                     var facet = await db.RaceArtifactStates.SingleOrDefaultAsync(x =>
@@ -657,7 +662,8 @@ public sealed partial class CollectionPlatformStore
                     {
                         facet = new RaceArtifactStateEntity
                         {
-                            ResourcePk = task.ResourcePk, Artifact = stage.Artifact,
+                            ResourcePk = task.ResourcePk,
+                            Artifact = stage.Artifact,
                             RequiredRevision = task.RequestedRevision,
                         };
                         db.RaceArtifactStates.Add(facet);
@@ -702,13 +708,17 @@ public sealed partial class CollectionPlatformStore
             }
             foreach (var outcome in locationOutcomes)
             {
+                if (outcome.LocationId <= 0)
+                    continue;
                 var candidate = await db.Locations.SingleAsync(x => x.LocationId == outcome.LocationId,
                     cancellationToken);
                 ApplyLocationOutcome(candidate, outcome.Result, now, outcome.ErrorCode);
+                candidate.Artifact = outcome.Artifact ?? candidate.Artifact;
             }
             if (completion.RequestedUrl is not null)
             {
                 var requested = completion.RequestedUrl.AbsoluteUri;
+                var requestedArtifact = ArtifactForUrl(completion.StageOutcomes, completion.RequestedUrl);
                 var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
                     && x.DefinitionId == task.DefinitionId && x.Url == requested, cancellationToken);
                 if (location is null)
@@ -720,10 +730,12 @@ public sealed partial class CollectionPlatformStore
                         Url = requested,
                         Source = ResourceLocationSource.Explicit,
                         Status = ResourceLocationStatus.Unknown,
+                        Artifact = requestedArtifact,
                         DiscoveredAt = now,
                     };
                     db.Locations.Add(location);
                 }
+                location.Artifact = requestedArtifact ?? location.Artifact;
                 if (completion.Result == CollectionAttemptResult.Succeeded)
                 {
                     location.Status = ResourceLocationStatus.Active;
@@ -742,6 +754,7 @@ public sealed partial class CollectionPlatformStore
                 && completion.FinalUrl != completion.RequestedUrl)
             {
                 var redirected = completion.FinalUrl.AbsoluteUri;
+                var redirectedArtifact = ArtifactForUrl(completion.StageOutcomes, completion.FinalUrl);
                 var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == task.ResourcePk
                     && x.DefinitionId == task.DefinitionId && x.Url == redirected, cancellationToken);
                 if (location is null)
@@ -752,10 +765,16 @@ public sealed partial class CollectionPlatformStore
                         Url = redirected,
                         Source = ResourceLocationSource.Redirected,
                         Status = ResourceLocationStatus.Active,
+                        Artifact = redirectedArtifact,
                         DiscoveredAt = now,
                         LastVerifiedAt = now,
                     });
-                else { location.Status = ResourceLocationStatus.Active; location.LastVerifiedAt = now; }
+                else
+                {
+                    location.Status = ResourceLocationStatus.Active;
+                    location.LastVerifiedAt = now;
+                    location.Artifact = redirectedArtifact ?? location.Artifact;
+                }
             }
             task.LeaseToken = null;
             task.LeaseExpiresAt = null;
@@ -1028,7 +1047,7 @@ public sealed partial class CollectionPlatformStore
                 && x.DefinitionId == definition.Value).ToListAsync(cancellationToken);
         var locations = locationRows.OrderByDescending(x => x.LastVerifiedAt ?? x.DiscoveredAt)
             .Select(x => new ResourceLocationCandidate(x.LocationId, new Uri(x.Url),
-            x.Source, x.Status, x.LastVerifiedAt)).ToList();
+            x.Source, x.Status, x.LastVerifiedAt, x.Artifact)).ToList();
         requestHistoryPage = Math.Max(1, requestHistoryPage);
         taskHistoryPage = Math.Max(1, taskHistoryPage);
         attemptHistoryPage = Math.Max(1, attemptHistoryPage);
@@ -1321,7 +1340,7 @@ public sealed partial class CollectionPlatformStore
             .Select(x => (Location: x, Valid: CollectionHttpUrl.TryCreate(x.Url, out var url), Url: url))
             .Where(x => x.Valid)
             .Select(x => new ResourceLocationCandidate(x.Location.LocationId, x.Url!, x.Location.Source,
-                x.Location.Status, x.Location.LastVerifiedAt))
+                x.Location.Status, x.Location.LastVerifiedAt, x.Location.Artifact))
             .ToList();
     }
 
@@ -3350,6 +3369,9 @@ public sealed partial class CollectionPlatformStore
             row.QueueMessageId = null;
         }
     }
+
+    private static RaceArtifactKind? ArtifactForUrl(IReadOnlyList<CollectionStageOutcome>? stages, Uri url)
+        => stages?.LastOrDefault(x => x.RequestedUrl == url || x.FinalUrl == url)?.Artifact;
 
     private static async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
         Guid envelopeId, CancellationToken cancellationToken)

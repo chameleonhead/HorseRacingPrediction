@@ -103,6 +103,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
         {
             e.ToTable("resource_locations"); e.HasKey(x => x.LocationId);
             e.Property(x => x.Source).HasConversion<string>(); e.Property(x => x.Status).HasConversion<string>();
+            e.Property(x => x.Artifact).HasConversion<string>();
             e.HasIndex(x => new { x.ResourcePk, x.DefinitionId, x.Url }).IsUnique();
         });
         modelBuilder.Entity<CollectionDispatchOutboxEntity>(e =>

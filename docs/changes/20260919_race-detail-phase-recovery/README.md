@@ -13,6 +13,10 @@
 | Verification | Completed | API build、Collector 261件、API 245件（既存skip 1件）とchange-record validatorを実行した。 |
 | Deployment/operation | Not started | push/deployは本変更依頼に含めず、既存エラージョブの復旧も実行していない。 |
 
+> Follow-up: 既存entryがある場合に後着Cardの馬主等を保存しない問題と、未実装だったLocation artifact分類・
+> write失敗時の発走時刻evidence保持は
+> [Race出走馬の後着データ補完](../20260919_race-entry-owner-enrichment/README.md)で扱う。
+
 ## Context
 
 本番では1つの`Race / race-detail`が出馬表保存と結果取得を担う。出馬表保存結果のerrorを確認せず後続の

@@ -221,6 +221,7 @@ public sealed class ResourceLocationEntity
     public string Url { get; set; } = string.Empty;
     public ResourceLocationSource Source { get; set; }
     public ResourceLocationStatus Status { get; set; }
+    public RaceArtifactKind? Artifact { get; set; }
     public DateTimeOffset DiscoveredAt { get; set; }
     public DateTimeOffset? LastVerifiedAt { get; set; }
     public DateTimeOffset? LastFailedAt { get; set; }

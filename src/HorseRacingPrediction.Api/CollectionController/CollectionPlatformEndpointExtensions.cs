@@ -337,6 +337,52 @@ public static class CollectionPlatformEndpointExtensions
                 request.From, request.To, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.Accepted($"/api/admin/collection/backfills/{Uri.EscapeDataString(batchId)}", receipt);
         });
+        admin.MapGet("/repairs/race-entry-owners/preview", async (DateOnly date,
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken token) =>
+        {
+            using var db = dbContextProvider.CreateContext();
+            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+                .Where(x => x.RaceDate == date)
+                .OrderBy(x => x.RacecourseCode).ThenBy(x => x.RaceNumber)
+                .ToListAsync(token).ConfigureAwait(false);
+            var candidates = races.Select(ToRaceEntryOwnerRepairCandidate)
+                .Where(x => x.MissingOwnerCount > 0).ToArray();
+            return Results.Ok(new RaceEntryOwnerRepairPreview(date, races.Count, candidates));
+        });
+        admin.MapPost("/repairs/race-entry-owners", async (RaceEntryOwnerRepairRequest request,
+            [FromServices] IDbContextProvider<EventStoreDbContext> dbContextProvider, CollectionPlatformStore store,
+            CancellationToken token) =>
+        {
+            var selected = request.RaceIds.Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.Ordinal).ToArray();
+            if (selected.Length is 0 or > 24)
+                return Results.BadRequest(new { message = "Select between 1 and 24 races." });
+            using var db = dbContextProvider.CreateContext();
+            var races = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
+                .Where(x => x.RaceDate == request.Date && selected.Contains(x.RaceId))
+                .ToListAsync(token).ConfigureAwait(false);
+            var candidates = races.Select(ToRaceEntryOwnerRepairCandidate)
+                .Where(x => x.MissingOwnerCount > 0).ToArray();
+            if (candidates.Length != selected.Length)
+                return Results.Conflict(new { message = "Selection changed after preview; preview again before executing." });
+            var targets = candidates.Select(x => new CollectionBulkTarget(
+                new(ResourceType.Race, "JRA", x.ResourceId), request.Date,
+                new Dictionary<string, string>
+                {
+                    ["domainRaceId"] = x.RaceId,
+                    ["date"] = request.Date.ToString("yyyy-MM-dd"),
+                    ["course"] = x.RacecourseCode,
+                    ["number"] = x.RaceNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                })).ToArray();
+            var batchId = string.IsNullOrWhiteSpace(request.BatchId)
+                ? $"repair:race-entry-owners:{request.Date:yyyyMMdd}:{Guid.NewGuid():N}"
+                : request.BatchId.Trim();
+            var result = await store.ExecuteBulkRequestAsync(new("race-detail"), 2,
+                CollectionReason.ManualRefresh, targets, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
+                batchId, CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
+            return Results.Accepted(value: new RaceEntryOwnerRepairReceipt(batchId, result.TargetCount,
+                result.TasksCreated, result.Requests.Select(x => x.TaskId).ToArray()));
+        });
         admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetBackfillBatchesAsync(token)));
         admin.MapGet("/backfills/{batchId}", async (string batchId, CollectionPlatformStore store,
@@ -406,6 +452,32 @@ public static class CollectionPlatformEndpointExtensions
                 ? Results.NoContent() : Results.Conflict());
         return endpoints;
     }
+
+    private static RaceEntryOwnerRepairCandidate ToRaceEntryOwnerRepairCandidate(
+        RacePredictionContextReadModel race)
+    {
+        var date = race.RaceDate ?? throw new InvalidOperationException("Race date is required.");
+        var number = race.RaceNumber ?? throw new InvalidOperationException("Race number is required.");
+        var course = CanonicalRaceCourse(race.RacecourseCode);
+        return new(race.RaceId, $"{date:yyyyMMdd}:{course}:{number}", race.RaceName,
+            race.RacecourseCode ?? course, number, race.Entries.Count,
+            race.Entries.Count(x => string.IsNullOrWhiteSpace(x.OwnerName)));
+    }
+
+    private static string CanonicalRaceCourse(string? value) => value?.Trim() switch
+    {
+        "札幌" or "Sapporo" => "Sapporo",
+        "函館" or "Hakodate" => "Hakodate",
+        "福島" or "Fukushima" => "Fukushima",
+        "新潟" or "Niigata" => "Niigata",
+        "東京" or "Tokyo" => "Tokyo",
+        "中山" or "Nakayama" => "Nakayama",
+        "中京" or "Chukyo" => "Chukyo",
+        "京都" or "Kyoto" => "Kyoto",
+        "阪神" or "Hanshin" => "Hanshin",
+        "小倉" or "Kokura" => "Kokura",
+        _ => throw new InvalidOperationException($"Unsupported JRA racecourse '{value}'.")
+    };
 
     private static RevisionImpact BuildImpact(RevisionImpactRequest request) => request.ScopeType switch
     {
@@ -546,6 +618,14 @@ public sealed record RevisionRecollectionRequest(CollectionLane Lane = Collectio
 public sealed record CreateBackfillBatchRequest(int Year, int Month, string Provider = "JRA", string? BatchId = null);
 public sealed record CreateRacePeriodRecollectionRequest(DateOnly From, DateOnly To, string Provider = "JRA",
     string? BatchId = null);
+public sealed record RaceEntryOwnerRepairCandidate(string RaceId, string ResourceId, string? RaceName,
+    string RacecourseCode, int RaceNumber, int EntryCount, int MissingOwnerCount);
+public sealed record RaceEntryOwnerRepairPreview(DateOnly Date, int RaceCount,
+    IReadOnlyList<RaceEntryOwnerRepairCandidate> Candidates);
+public sealed record RaceEntryOwnerRepairRequest(DateOnly Date, IReadOnlyList<string> RaceIds,
+    string? BatchId = null);
+public sealed record RaceEntryOwnerRepairReceipt(string BatchId, int TargetCount, int TasksCreated,
+    IReadOnlyList<Guid> TaskIds);
 
 public sealed record CompleteCollectionAttemptRequest(string LeaseToken, CollectionAttemptResult Result,
     string? ErrorCode = null, string? ErrorMessage = null, string? RequestedUrl = null,

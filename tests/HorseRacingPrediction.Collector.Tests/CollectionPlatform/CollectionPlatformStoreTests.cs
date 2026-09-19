@@ -856,7 +856,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(15L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(16L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1164,7 +1164,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 15;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 16;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1328,6 +1328,27 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(resumed);
         Assert.AreEqual(RaceArtifactStatus.Current.ToString(), resumed.Attributes["cardArtifactStatus"]);
         Assert.AreEqual(start, DateTimeOffset.Parse(resumed.Attributes["officialStartAt"]));
+    }
+
+    [TestMethod]
+    public async Task RaceLocationOutcome_PersistsArtifactClassification()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var now = DateTimeOffset.UtcNow;
+        var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now);
+        var locationId = await store.UpsertLocationAsync(race, definition,
+            new Uri("https://example.test/card/10"), ResourceLocationSource.Discovered, DateTimeOffset.UtcNow);
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+
+        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, LocationOutcomes:
+            [new(locationId, CollectionAttemptResult.Succeeded, Artifact: RaceArtifactKind.Card)]));
+
+        var locations = await store.ResolveLocationsAsync(race, definition);
+        Assert.AreEqual(RaceArtifactKind.Card, locations.Single().Artifact);
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

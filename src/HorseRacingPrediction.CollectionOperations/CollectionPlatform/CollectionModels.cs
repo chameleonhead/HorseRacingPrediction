@@ -210,10 +210,10 @@ public interface INamedRevisionImpactCondition
 }
 
 public sealed record ResourceLocationCandidate(long LocationId, Uri Url, ResourceLocationSource Source,
-    ResourceLocationStatus Status, DateTimeOffset? LastVerifiedAt);
+    ResourceLocationStatus Status, DateTimeOffset? LastVerifiedAt, RaceArtifactKind? Artifact = null);
 
 public sealed record ResourceLocationOutcome(long LocationId, CollectionAttemptResult Result,
-    string? ErrorCode = null);
+    string? ErrorCode = null, RaceArtifactKind? Artifact = null);
 
 public sealed record CollectionTaskNotification(Guid TaskId, long DispatchGeneration, int ContractVersion = 1)
 {

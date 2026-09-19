@@ -243,8 +243,11 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         Uri? successfulLocation = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
         var stageOutcomes = new List<CollectionStageOutcome>();
+        string? cardOwnerError = null;
         RaceSchedulingEvidence? raceEvidence = null;
-        foreach (var location in requiresCard ? task.Locations ?? [] : [])
+        foreach (var location in requiresCard
+                     ? (task.Locations ?? []).Where(x => x.Artifact is null or RaceArtifactKind.Card)
+                     : [])
         {
             JraRaceCardPage? card;
             try
@@ -253,15 +256,18 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 card = page as JraRaceCardPage;
                 if (card is null || card.RaceId != raceId)
                 {
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceCardIdentityMismatch"));
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceCardIdentityMismatch", RaceArtifactKind.Card));
                     continue;
                 }
                 successfulLocation = location.Url;
-                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location, RaceArtifactKind.Card));
+                if (card.StartTime is { } observedStart)
+                    raceEvidence = new RaceSchedulingEvidence(ToJstInstant(raceId.Date, observedStart),
+                        "JRA-RaceCard", _time.GetUtcNow());
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Card));
                 continue;
             }
             try
@@ -276,7 +282,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     location.Url, ToUri(card.Url)));
                 return new(CollectionAttemptResult.ValidationFailure, "RaceCardWriteFailed", ex.Message,
                     RequestedUrl: location.Url, FinalUrl: ToUri(card.Url), LocationOutcomes: locationOutcomes,
-                    StageOutcomes: stageOutcomes);
+                    StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
             }
         }
         if (requiresCard && result is null)
@@ -328,6 +334,9 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
             }
         }
+        if (raceEvidence is null && result?.StartTime is { } collectedStart)
+            raceEvidence = new RaceSchedulingEvidence(ToJstInstant(raceId.Date, collectedStart),
+                "JRA-RaceCard", _time.GetUtcNow());
         if (requiresCard && result is { Error: not null })
         {
             stageOutcomes.Add(new("PersistCard", RaceArtifactKind.Card,
@@ -339,9 +348,17 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             stageOutcomes.Add(new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded,
                 RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl), FinalUrl: ToUri(result.SourceUrl),
                 Persisted: true));
-            if (result.StartTime is { } observedStart)
-                raceEvidence = new RaceSchedulingEvidence(ToJstInstant(raceId.Date, observedStart),
-                    "JRA-RaceCard", _time.GetUtcNow());
+            var ownerCount = result.Entries?.Count(x => !string.IsNullOrWhiteSpace(x.OwnerName)) ?? 0;
+            var entryCount = result.Entries?.Count ?? 0;
+            if (entryCount > 0)
+            {
+                cardOwnerError = ownerCount == entryCount ? null : $"OwnerCount={ownerCount}/{entryCount}";
+                stageOutcomes.Add(cardOwnerError is null
+                    ? new("ValidateCardOwners", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded,
+                        ErrorMessage: $"OwnerCount={ownerCount}/{entryCount}", Persisted: true)
+                    : new("ValidateCardOwners", RaceArtifactKind.Card, CollectionAttemptResult.ValidationFailure,
+                        "RaceCardOwnerIncomplete", cardOwnerError));
+            }
         }
         string? subjectBatchError = null;
         if (requiresCard && result?.Error is null && requests is not null && result?.Entries is not null)
@@ -382,7 +399,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         RaceResultCollectionResult? raceResult = null;
         if (!requiresCard)
         {
-            foreach (var location in task.Locations ?? [])
+            foreach (var location in (task.Locations ?? []).Where(x => x.Artifact is null or RaceArtifactKind.Result))
             {
                 JraRaceResultPage? resultPage;
                 try
@@ -391,15 +408,15 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     resultPage = page as JraRaceResultPage;
                     if (resultPage is null || resultPage.RaceId != raceId)
                     {
-                        locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch"));
+                        locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch", RaceArtifactKind.Result));
                         continue;
                     }
                     successfulLocation = location.Url;
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location));
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location, RaceArtifactKind.Result));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex));
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Result));
                     continue;
                 }
                 try
@@ -476,6 +493,12 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
                 LocationOutcomes: locationOutcomes, FailureImpact: CollectionFailureImpact.Isolated,
                 StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
+        if (cardOwnerError is not null)
+            return new(CollectionAttemptResult.ValidationFailure, "RaceCardOwnerIncomplete", cardOwnerError,
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), FinalUrl: ToUri(raceResult.SourceUrl),
+                PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}", LocationOutcomes: locationOutcomes,
+                FailureImpact: CollectionFailureImpact.Isolated, StageOutcomes: stageOutcomes,
+                RaceEvidence: raceEvidence);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
             FinalUrl: ToUri(raceResult.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
             LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);

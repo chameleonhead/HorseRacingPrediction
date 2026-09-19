@@ -275,7 +275,8 @@ public sealed class JraDirectCollectionHandlerTests
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             now.AddMinutes(5), date, new Dictionary<string, string>
             {
-                ["course"] = "東京", ["number"] = "1",
+                ["course"] = "東京",
+                ["number"] = "1",
             }), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
@@ -303,7 +304,9 @@ public sealed class JraDirectCollectionHandlerTests
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
             DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>
             {
-                ["course"] = "東京", ["number"] = "1", ["startTime"] = "10:00",
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["startTime"] = "10:00",
             }), CancellationToken.None);
 
         Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
@@ -313,6 +316,107 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.IsTrue(completion.StageOutcomes.Any(x => x.Artifact == RaceArtifactKind.Card
             && x.ErrorCode == "RaceCardWriteRejected"));
         Assert.IsTrue(completion.StageOutcomes.Any(x => x.Artifact == RaceArtifactKind.Result && x.Persisted));
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_CardWriteRejection_PreservesParsedStartEvidenceAndClassifiesLocation()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var race = new RaceId(date, RaceCourse.Tokyo, 1);
+        var url = new Uri("https://example.test/card/1");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(url.AbsoluteUri, race, "test", new(10, 0), [])
+            }
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow { OutcomeError = "write rejected" },
+            _ => new FakeJraRaceResultCollectionWorkflow(),
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Unknown, null)]),
+            CancellationToken.None);
+
+        Assert.IsNotNull(completion.RaceEvidence);
+        Assert.AreEqual(new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.FromHours(9)),
+            completion.RaceEvidence.OfficialStartAt);
+        Assert.AreEqual(RaceArtifactKind.Card, completion.LocationOutcomes!.Single().Artifact);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_ResultStage_DoesNotNavigateToCardClassifiedLocation()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var cardUrl = new Uri("https://example.test/card/1");
+        var sessions = new FakeJraSessionFactory();
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new(id, "domain-race", [1], [], "https://example.test/result/1", true)
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date, new Dictionary<string, string>
+            {
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["cardArtifactStatus"] = "Current",
+                ["officialStartAt"] = "2026-09-19T10:00:00+09:00"
+            }, [new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
+                RaceArtifactKind.Card)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsEmpty(sessions.LastNavigator!.DirectUrlRequests);
+        Assert.HasCount(1, results.Requests);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_MissingCardOwner_IsStructuredIsolatedFailureAfterResultPersists()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var race = new RaceId(date, RaceCourse.Tokyo, 1);
+        var url = new Uri("https://example.test/card/1");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(url.AbsoluteUri, race, "test", new(10, 0),
+                    [new RaceEntry(1, "Owner Missing", 1, "Jockey", 55m)])
+            }
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new(id, "domain-race", [1], [], "https://example.test/result/1", true)
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.ManualRefresh, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Unknown, null)]),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
+        Assert.AreEqual("RaceCardOwnerIncomplete", completion.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "ValidateCardOwners"
+            && x.ErrorCode == "RaceCardOwnerIncomplete"));
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "PersistResult" && x.Persisted));
     }
 
     [TestMethod]
