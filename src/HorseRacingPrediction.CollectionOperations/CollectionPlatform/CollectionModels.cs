@@ -100,7 +100,8 @@ public interface ICollectionSchedulePolicy
 
 public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDefinitionId Definition,
     int AppliedRevision, int RequiredRevision, DateTimeOffset? LastCollectedAt,
-    DateTimeOffset? NextCollectionAt, CollectionStateStatus Status);
+    DateTimeOffset? NextCollectionAt, CollectionStateStatus Status,
+    IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null);
 
 public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
 public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Resource,
@@ -157,12 +158,29 @@ public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceK
 
 public enum CollectionFailureImpact { StopPipeline, Isolated }
 
+public enum RaceArtifactKind { Card, Result }
+public enum RaceArtifactStatus { Unknown, AwaitingPublication, Due, Collecting, Current, Blocked, Unavailable }
+
+public sealed record CollectionStageOutcome(string Stage, RaceArtifactKind Artifact,
+    CollectionAttemptResult Result, string? ErrorCode = null, string? ErrorMessage = null,
+    Uri? RequestedUrl = null, Uri? FinalUrl = null, bool Persisted = false);
+
+public sealed record RaceArtifactSnapshot(RaceArtifactKind Artifact, RaceArtifactStatus Status,
+    int AppliedRevision, int RequiredRevision, DateTimeOffset? LastObservedAt,
+    DateTimeOffset? LastPersistedAt, DateTimeOffset? NextDueAt, string? ErrorCode,
+    string? ErrorMessage);
+
+public sealed record RaceSchedulingEvidence(DateTimeOffset? OfficialStartAt,
+    string? Provenance, DateTimeOffset? VerifiedAt);
+
 public sealed record CollectionAttemptCompletion(CollectionAttemptResult Result, string? ErrorCode = null,
     string? ErrorMessage = null, Uri? RequestedUrl = null, Uri? FinalUrl = null,
     int? HttpStatusCode = null, string? PageIdentification = null,
     DateTimeOffset? RetryAt = null, DateTimeOffset? NextCollectionAt = null,
     IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes = null,
-    CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline);
+    CollectionFailureImpact FailureImpact = CollectionFailureImpact.StopPipeline,
+    IReadOnlyList<CollectionStageOutcome>? StageOutcomes = null,
+    RaceSchedulingEvidence? RaceEvidence = null);
 
 public sealed record RevisionImpact(RevisionImpactScopeType ScopeType, string ScopePayload);
 
@@ -317,6 +335,10 @@ public sealed record CollectionAttemptSummary(Guid AttemptId, Guid TaskId, int A
     string? PageIdentification = null, Guid? ExecutionBatchId = null, Guid? DispatchEnvelopeId = null,
     string? QueueMessageId = null, string? LambdaRequestId = null, int? BatchTaskOrdinal = null,
     int? BatchTaskCount = null);
+
+public sealed record CollectionAttemptStageSummary(Guid StageOutcomeId, Guid AttemptId, string Stage,
+    RaceArtifactKind Artifact, CollectionAttemptResult Result, string? ErrorCode,
+    string? ErrorMessage, string? RequestedUrl, string? FinalUrl, bool Persisted);
 public sealed record CollectionAttemptCorrelation(Guid ExecutionBatchId, Guid DispatchEnvelopeId,
     string QueueMessageId, string? LambdaRequestId, int BatchTaskOrdinal, int BatchTaskCount)
 {
@@ -336,7 +358,10 @@ public sealed record CollectionResourceDetail(CollectionStateSnapshot? State,
     IReadOnlyList<CollectionTaskSummary> Tasks, IReadOnlyList<CollectionAttemptSummary> Attempts,
     int RequestTotal = 0, int TaskTotal = 0, int AttemptTotal = 0, int HistoryPage = 1, int HistoryPageSize = 25,
     CollectionTaskSummary? LatestTask = null, int? TaskHistoryPage = null, int? AttemptHistoryPage = null,
-    IReadOnlyList<PendingCollectionFailureNotification>? Failures = null)
+    IReadOnlyList<PendingCollectionFailureNotification>? Failures = null,
+    IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null,
+    RaceSchedulingEvidence? RaceEvidence = null,
+    IReadOnlyList<CollectionAttemptStageSummary>? StageOutcomes = null)
 {
     public int RequestHistoryPage => HistoryPage;
     public int EffectiveTaskHistoryPage => TaskHistoryPage ?? HistoryPage;

@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 14;
+    internal const int CurrentVersion = 15;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -359,6 +359,53 @@ internal static class CollectionPlatformSchemaMigrator
                       AND t.DispatchGeneration = o.DispatchGeneration
                 );
                 INSERT INTO collection_schema_history (version, applied_at) VALUES (14, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
+                .ConfigureAwait(false);
+        }
+
+        if (version < 15)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS race_artifact_states (
+                    ResourcePk INTEGER NOT NULL,
+                    Artifact TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    AppliedRevision INTEGER NOT NULL,
+                    RequiredRevision INTEGER NOT NULL,
+                    LastObservedAt TEXT NULL,
+                    LastPersistedAt TEXT NULL,
+                    NextDueAt TEXT NULL,
+                    LastAttemptId TEXT NULL,
+                    ErrorCode TEXT NULL,
+                    ErrorMessage TEXT NULL,
+                    UpdatedAt TEXT NOT NULL,
+                    CONSTRAINT PK_race_artifact_states PRIMARY KEY (ResourcePk, Artifact)
+                );
+                CREATE INDEX IF NOT EXISTS IX_race_artifact_states_Status_NextDueAt
+                    ON race_artifact_states (Status, NextDueAt);
+                CREATE TABLE IF NOT EXISTS race_scheduling_evidence (
+                    ResourcePk INTEGER NOT NULL CONSTRAINT PK_race_scheduling_evidence PRIMARY KEY,
+                    OfficialStartAt TEXT NULL,
+                    Provenance TEXT NULL,
+                    VerifiedAt TEXT NULL,
+                    UpdatedAt TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS collection_attempt_stage_outcomes (
+                    StageOutcomeId TEXT NOT NULL CONSTRAINT PK_collection_attempt_stage_outcomes PRIMARY KEY,
+                    AttemptId TEXT NOT NULL,
+                    Stage TEXT NOT NULL,
+                    Artifact TEXT NOT NULL,
+                    Result TEXT NOT NULL,
+                    ErrorCode TEXT NULL,
+                    ErrorMessage TEXT NULL,
+                    RequestedUrl TEXT NULL,
+                    FinalUrl TEXT NULL,
+                    Persisted INTEGER NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_collection_attempt_stage_outcomes_AttemptId_Stage
+                    ON collection_attempt_stage_outcomes (AttemptId, Stage);
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (15, $appliedAt);
                 """, cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);

@@ -856,7 +856,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(14L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(15L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1164,7 +1164,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 14;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 15;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1289,6 +1289,45 @@ public sealed class CollectionPlatformStoreTests
         Assert.HasCount(25, states.Items);
         Assert.AreEqual(1, errors.TotalCount);
         Assert.AreEqual("H055", errors.Items[0].Resource.Id);
+    }
+
+    [TestMethod]
+    public async Task RaceDetailCompletion_PersistsIndependentFacetsEvidenceAndStageHistory()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var race = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var now = new DateTimeOffset(2026, 9, 19, 1, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2026, 9, 19));
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var start = now.AddHours(5);
+
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed", RetryAt: start,
+                StageOutcomes:
+                [
+                    new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true),
+                    new("ConfirmResult", RaceArtifactKind.Result,
+                        CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed"),
+                ],
+                RaceEvidence: new(start, "JRA-RaceCard", now))));
+
+        var detail = await store.GetResourceDetailAsync(race, definition);
+        Assert.IsNotNull(detail);
+        var artifacts = detail.RaceArtifacts!;
+        Assert.AreEqual(RaceArtifactStatus.Current,
+            artifacts.Single(x => x.Artifact == RaceArtifactKind.Card).Status);
+        Assert.AreEqual(RaceArtifactStatus.AwaitingPublication,
+            artifacts.Single(x => x.Artifact == RaceArtifactKind.Result).Status);
+        Assert.AreEqual(start, detail.RaceEvidence!.OfficialStartAt);
+        Assert.HasCount(2, detail.StageOutcomes!);
+        Assert.IsTrue(await store.HasActiveTaskAsync(race, definition));
+        var resumed = await store.AcquireAsync(receipt.TaskId, 2, start, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(resumed);
+        Assert.AreEqual(RaceArtifactStatus.Current.ToString(), resumed.Attributes["cardArtifactStatus"]);
+        Assert.AreEqual(start, DateTimeOffset.Parse(resumed.Attributes["officialStartAt"]));
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

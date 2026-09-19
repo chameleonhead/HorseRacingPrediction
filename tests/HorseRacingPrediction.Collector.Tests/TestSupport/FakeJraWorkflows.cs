@@ -32,19 +32,20 @@ internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollection
     {
         RefreshRequests.Add((page.RaceId, targetRaceId));
         return Task.FromResult(new RaceCardRaceOutcome(page.RaceId.Number, targetRaceId ?? "created-race",
-            page.RaceName, page.Url, null, page.Entries));
+            page.RaceName, page.Url, OutcomeError, page.Entries, page.StartTime));
     }
     public List<(RaceId Race, string? Target)> RefreshRequests { get; } = [];
     public Task<RaceCardRaceOutcome> RefreshAsync(RaceId raceId, string? targetRaceId, CancellationToken cancellationToken = default)
     {
         RefreshRequests.Add((raceId, targetRaceId));
         if (ThrowOnCollect is not null) throw ThrowOnCollect;
-        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId ?? "created-race", "レース", "https://example.test/card", null));
+        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId ?? "created-race", "レース", "https://example.test/card", OutcomeError));
     }
 
     public Func<DateOnly, RaceCourse, RaceCardCollectionResult>? ResultFactory { get; set; }
 
     public Exception? ThrowOnCollect { get; set; }
+    public string? OutcomeError { get; set; }
 
     public List<(DateOnly Date, RaceCourse Course)> Requests { get; } = new();
 

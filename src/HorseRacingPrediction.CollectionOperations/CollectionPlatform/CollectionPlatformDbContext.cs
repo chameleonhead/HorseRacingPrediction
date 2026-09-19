@@ -16,6 +16,9 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionTaskEntity> Tasks => Set<CollectionTaskEntity>();
     public DbSet<CollectionActiveTaskEntity> ActiveTasks => Set<CollectionActiveTaskEntity>();
     public DbSet<CollectionAttemptEntity> Attempts => Set<CollectionAttemptEntity>();
+    public DbSet<CollectionAttemptStageOutcomeEntity> AttemptStageOutcomes => Set<CollectionAttemptStageOutcomeEntity>();
+    public DbSet<RaceArtifactStateEntity> RaceArtifactStates => Set<RaceArtifactStateEntity>();
+    public DbSet<RaceSchedulingEvidenceEntity> RaceSchedulingEvidence => Set<RaceSchedulingEvidenceEntity>();
     public DbSet<ResourceLocationEntity> Locations => Set<ResourceLocationEntity>();
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
     public DbSet<CollectionExecutionLeaseEntity> ExecutionLeases => Set<CollectionExecutionLeaseEntity>();
@@ -107,6 +110,22 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
             e.ToTable("collection_task_outbox"); e.HasKey(x => x.OutboxId);
             e.HasIndex(x => new { x.DispatchedAt, x.AvailableAt });
             e.HasIndex(x => new { x.DispatchedAt, x.ReservedUntilUnixMilliseconds });
+        });
+        modelBuilder.Entity<CollectionAttemptStageOutcomeEntity>(e =>
+        {
+            e.ToTable("collection_attempt_stage_outcomes"); e.HasKey(x => x.StageOutcomeId);
+            e.Property(x => x.Artifact).HasConversion<string>(); e.Property(x => x.Result).HasConversion<string>();
+            e.HasIndex(x => new { x.AttemptId, x.Stage }).IsUnique();
+        });
+        modelBuilder.Entity<RaceArtifactStateEntity>(e =>
+        {
+            e.ToTable("race_artifact_states"); e.HasKey(x => new { x.ResourcePk, x.Artifact });
+            e.Property(x => x.Artifact).HasConversion<string>(); e.Property(x => x.Status).HasConversion<string>();
+            e.HasIndex(x => new { x.Status, x.NextDueAt });
+        });
+        modelBuilder.Entity<RaceSchedulingEvidenceEntity>(e =>
+        {
+            e.ToTable("race_scheduling_evidence"); e.HasKey(x => x.ResourcePk);
         });
         modelBuilder.Entity<CollectionExecutionLeaseEntity>(e =>
         {

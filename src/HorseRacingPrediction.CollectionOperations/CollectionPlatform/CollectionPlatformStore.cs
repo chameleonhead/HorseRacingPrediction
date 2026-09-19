@@ -574,12 +574,28 @@ public sealed partial class CollectionPlatformStore
             state.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var taskAttributes = new Dictionary<string, string>(
+                DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), StringComparer.Ordinal);
+            var raceEvidence = resource.Type == ResourceType.Race
+                ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
+                    x => x.ResourcePk == resource.ResourcePk, cancellationToken).ConfigureAwait(false)
+                : null;
+            if (raceEvidence?.OfficialStartAt is { } officialStartAt)
+                taskAttributes["officialStartAt"] = officialStartAt.ToString("O");
+            if (resource.Type == ResourceType.Race)
+            {
+                var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
+                    x.ResourcePk == resource.ResourcePk).ToListAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var facet in facets)
+                    taskAttributes[facet.Artifact == RaceArtifactKind.Card
+                        ? "cardArtifactStatus" : "resultArtifactStatus"] = facet.Status.ToString();
+            }
             return new LeasedCollectionTask(task.TaskId, task.RequestId,
                 new ResourceKey(resource.Type, resource.Provider, resource.ResourceId),
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
                 task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
                 resource.EffectiveDate,
-                DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson), candidates);
+                taskAttributes, candidates);
         }
         finally { _gate.Release(); }
     }
@@ -622,6 +638,68 @@ public sealed partial class CollectionPlatformStore
             attempt.FinalUrl = completion.FinalUrl?.AbsoluteUri;
             attempt.HttpStatusCode = completion.HttpStatusCode;
             attempt.PageIdentification = completion.PageIdentification;
+            if (completion.StageOutcomes is { Count: > 0 })
+            {
+                foreach (var stage in completion.StageOutcomes)
+                {
+                    db.AttemptStageOutcomes.Add(new CollectionAttemptStageOutcomeEntity
+                    {
+                        StageOutcomeId = Guid.NewGuid(), AttemptId = attempt.AttemptId,
+                        Stage = stage.Stage, Artifact = stage.Artifact, Result = stage.Result,
+                        ErrorCode = stage.ErrorCode, ErrorMessage = stage.ErrorMessage,
+                        RequestedUrl = stage.RequestedUrl?.AbsoluteUri, FinalUrl = stage.FinalUrl?.AbsoluteUri,
+                        Persisted = stage.Persisted,
+                    });
+                    var facet = await db.RaceArtifactStates.SingleOrDefaultAsync(x =>
+                        x.ResourcePk == task.ResourcePk && x.Artifact == stage.Artifact, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (facet is null)
+                    {
+                        facet = new RaceArtifactStateEntity
+                        {
+                            ResourcePk = task.ResourcePk, Artifact = stage.Artifact,
+                            RequiredRevision = task.RequestedRevision,
+                        };
+                        db.RaceArtifactStates.Add(facet);
+                    }
+                    facet.LastAttemptId = attempt.AttemptId;
+                    facet.LastObservedAt = now;
+                    facet.UpdatedAt = now;
+                    facet.RequiredRevision = Math.Max(facet.RequiredRevision, task.RequestedRevision);
+                    facet.ErrorCode = stage.ErrorCode;
+                    facet.ErrorMessage = stage.ErrorMessage;
+                    facet.NextDueAt = stage.Result == CollectionAttemptResult.ResourceNotYetAvailable
+                        ? completion.RetryAt : null;
+                    if (stage.Result == CollectionAttemptResult.NotApplicable)
+                        facet.Status = RaceArtifactStatus.Unavailable;
+                    else if (stage.Persisted)
+                    {
+                        facet.Status = RaceArtifactStatus.Current;
+                        facet.AppliedRevision = Math.Max(facet.AppliedRevision, task.RequestedRevision);
+                        facet.LastPersistedAt = now;
+                        facet.ErrorCode = null;
+                        facet.ErrorMessage = null;
+                    }
+                    else if (stage.Result == CollectionAttemptResult.ResourceNotYetAvailable)
+                        facet.Status = RaceArtifactStatus.AwaitingPublication;
+                    else if (stage.Result != CollectionAttemptResult.Succeeded)
+                        facet.Status = RaceArtifactStatus.Blocked;
+                }
+            }
+            if (completion.RaceEvidence is { } evidence)
+            {
+                var row = await db.RaceSchedulingEvidence.SingleOrDefaultAsync(
+                    x => x.ResourcePk == task.ResourcePk, cancellationToken).ConfigureAwait(false);
+                if (row is null)
+                {
+                    row = new RaceSchedulingEvidenceEntity { ResourcePk = task.ResourcePk };
+                    db.RaceSchedulingEvidence.Add(row);
+                }
+                row.OfficialStartAt = evidence.OfficialStartAt ?? row.OfficialStartAt;
+                row.Provenance = evidence.Provenance ?? row.Provenance;
+                row.VerifiedAt = evidence.VerifiedAt ?? row.VerifiedAt;
+                row.UpdatedAt = now;
+            }
             foreach (var outcome in locationOutcomes)
             {
                 var candidate = await db.Locations.SingleAsync(x => x.LocationId == outcome.LocationId,
@@ -1000,9 +1078,28 @@ public sealed partial class CollectionPlatformStore
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         failureRows = failureRows.OrderByDescending(x => x.Notification.FailedAt).ToList();
         var failures = failureRows.Select(ToFailure).ToList();
+        var artifactRows = item.Type == ResourceType.Race
+            ? await db.RaceArtifactStates.AsNoTracking().Where(x => x.ResourcePk == item.ResourcePk)
+                .OrderBy(x => x.Artifact).ToListAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+        var artifacts = artifactRows.Select(x => new RaceArtifactSnapshot(x.Artifact, x.Status,
+            x.AppliedRevision, x.RequiredRevision, x.LastObservedAt, x.LastPersistedAt, x.NextDueAt,
+            x.ErrorCode, x.ErrorMessage)).ToList();
+        var evidenceRow = item.Type == ResourceType.Race
+            ? await db.RaceSchedulingEvidence.AsNoTracking().SingleOrDefaultAsync(
+                x => x.ResourcePk == item.ResourcePk, cancellationToken).ConfigureAwait(false)
+            : null;
+        var evidence = evidenceRow is null ? null : new RaceSchedulingEvidence(evidenceRow.OfficialStartAt,
+            evidenceRow.Provenance, evidenceRow.VerifiedAt);
+        var attemptIds = attemptRows.Select(x => x.AttemptId).ToList();
+        var stageRows = await db.AttemptStageOutcomes.AsNoTracking().Where(x => attemptIds.Contains(x.AttemptId))
+            .OrderByDescending(x => x.StageOutcomeId).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var stageOutcomes = stageRows.Select(x => new CollectionAttemptStageSummary(x.StageOutcomeId,
+            x.AttemptId, x.Stage, x.Artifact, x.Result, x.ErrorCode, x.ErrorMessage, x.RequestedUrl,
+            x.FinalUrl, x.Persisted)).ToList();
         return new(state, locations, requests, tasks, attempts, requestTotal, taskTotal,
             attemptTotal, requestHistoryPage, historyPageSize, latestTask, taskHistoryPage, attemptHistoryPage,
-            failures);
+            failures, artifacts, evidence, stageOutcomes);
     }
 
     public async Task<CollectionExecutionBatchDetail?> GetExecutionBatchAsync(Guid executionBatchId,
@@ -1852,10 +1949,20 @@ public sealed partial class CollectionPlatformStore
         var rows = await query.OrderBy(x => x.resource.Type).ThenBy(x => x.resource.ResourceId)
             .ThenBy(x => x.state.DefinitionId).Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var raceResourcePks = rows.Where(x => x.resource.Type == ResourceType.Race)
+            .Select(x => x.resource.ResourcePk).Distinct().ToArray();
+        var artifactRows = await db.RaceArtifactStates.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk)).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var artifactsByResource = artifactRows.GroupBy(x => x.ResourcePk).ToDictionary(x => x.Key,
+            x => (IReadOnlyList<RaceArtifactSnapshot>)x.OrderBy(a => a.Artifact).Select(a =>
+                new RaceArtifactSnapshot(a.Artifact, a.Status, a.AppliedRevision, a.RequiredRevision,
+                    a.LastObservedAt, a.LastPersistedAt, a.NextDueAt, a.ErrorCode, a.ErrorMessage)).ToList());
         return new(total, page, pageSize, rows.Select(x => new CollectionStateSnapshot(
             new(x.resource.Type, x.resource.Provider, x.resource.ResourceId), new(x.state.DefinitionId),
             x.state.AppliedRevision, x.state.RequiredRevision, x.state.LastCollectedAt,
-            x.state.NextCollectionAt, x.state.Status)).ToList());
+            x.state.NextCollectionAt, x.state.Status,
+            artifactsByResource.GetValueOrDefault(x.resource.ResourcePk))).ToList());
     }
 
     public async Task<CollectionReadinessSnapshot> GetReadinessAsync(string requestedByRaceId,

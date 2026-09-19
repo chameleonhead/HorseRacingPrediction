@@ -174,6 +174,45 @@ public sealed class CollectionAttemptEntity
     public int? BatchTaskCount { get; set; }
 }
 
+public sealed class CollectionAttemptStageOutcomeEntity
+{
+    public Guid StageOutcomeId { get; set; }
+    public Guid AttemptId { get; set; }
+    public string Stage { get; set; } = string.Empty;
+    public RaceArtifactKind Artifact { get; set; }
+    public CollectionAttemptResult Result { get; set; }
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? RequestedUrl { get; set; }
+    public string? FinalUrl { get; set; }
+    public bool Persisted { get; set; }
+}
+
+public sealed class RaceArtifactStateEntity
+{
+    public long ResourcePk { get; set; }
+    public RaceArtifactKind Artifact { get; set; }
+    public RaceArtifactStatus Status { get; set; }
+    public int AppliedRevision { get; set; }
+    public int RequiredRevision { get; set; }
+    public DateTimeOffset? LastObservedAt { get; set; }
+    public DateTimeOffset? LastPersistedAt { get; set; }
+    public DateTimeOffset? NextDueAt { get; set; }
+    public Guid? LastAttemptId { get; set; }
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class RaceSchedulingEvidenceEntity
+{
+    public long ResourcePk { get; set; }
+    public DateTimeOffset? OfficialStartAt { get; set; }
+    public string? Provenance { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class ResourceLocationEntity
 {
     public long LocationId { get; set; }
