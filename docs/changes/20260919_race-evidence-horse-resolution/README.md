@@ -1,6 +1,6 @@
 # レース根拠で同名競走馬を安全に解決する
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
@@ -116,17 +116,17 @@
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | taskの `EffectiveDate` はRace以外のDiscoveryでも設定される。 | 便宜日を出走日と誤認すると別馬を選ぶ。 | Race発見元、canonical `requestedByRaceId`、日付一致の3条件を必須にする。 | AC2/T1/T3 | Agree | Pending | Resolved in design |
-| C2 | 抹消日以前には複数の同名馬が存在し得る。 | 時系列だけでは積極的同定にならない。 | exact race-history一致だけを採用根拠にし、抹消日・生年月日は矛盾排除と診断に限定する。 | AC3-AC5/T2/T3 | Agree | Pending | Resolved in design |
-| C3 | 古いレースはプロフィール履歴の後続ページにある。 | 先頭ページだけではfalse negativeになる。 | 日付順と循環を検証しながらboundedにページ送りする。取得不能時は安全停止する。 | AC4/AC7/T2/T3 | Agree | Pending | Resolved in design |
-| C4 | 保存済みURLの一時失敗後にfallbackすると強いidentityを失う。 | 一時障害が誤った別候補探索へ退行し得る。 | URL失敗は記録し、fallbackでも既知URLと異なる候補をexact race evidenceなしに採用しない。 | AC1/AC5/T2/T3 | Agree | Pending | Resolved in design |
-| C5 | 対象画面は認証が必要で、本turnではtask metadataの実値をUIから取得できていない。コード上はRace子taskに根拠が保存されるが、対象legacy taskに揃うかは未確認。 | 対象だけは自動復旧対象外になる可能性がある。 | 実装前後のpreviewで3 provenance属性を確認し、不足なら起点RaceResult/Cardからidentityを再取得する別候補として表示し、推測適用しない。 | AC8/T4 | Agree | Pending | Resolved in design |
-| C6 | 過去レースはRaceCardが取得対象外または非公開で、プロフィール履歴も後続ページに分割される。 | 現行開催向けの先頭ページだけの設計では、過去収集が失敗または同名誤選択になる。 | 結果行の公式Horse linkを第一根拠として保存し、欠落時は全履歴のexact Race照合へfallbackする。双方で証明できない場合は安全停止する。 | AC3-AC7/T1-T4 | Agree | Pending | Resolved in design |
-| C7 | 過去結果の性齢から生年を逆算すると、旧年齢表記や開催日境界の影響を受ける。 | 古いレースで別世代の同名馬を誤選択し得る。 | 性齢は診断表示に限定し、source linkまたはexact Race一致の代用にしない。 | AC4-AC6/T2,T3 | Agree | Pending | Resolved in design |
-| C8 | 現行Result-only経路は結果保存後に主体request batchを作らず、`RaceResultCollectionResult`も検証済みsubject行を返さない。 | parser/DTOへlinkを足すだけでは過去レースのhorse-profile収集に接続されない。 | 結果保存→検証済みsubject evidence返却→重複排除したrequest batchまでを同じACでend-to-end検証する。 | AC3/AC10/T1,T3 | Agree | Pending | Resolved in design |
-| C9 | 同名候補は最大32件で、各プロフィール履歴は複数ページになり得る。 | 1 taskが大量のJRA navigationを発生させ、timeoutやアクセス負荷を増やす。 | profile/page/timeの共有budgetを設け、超過は非retryの識別不能として記録する。通常のidentity付き経路には追加アクセスしない。 | AC7/AC11/T2,T3 | Agree | Pending | Resolved in design |
-| C10 | identity取得でname由来Horseとは別のcanonical Horse IDが生成される。 | 正しい新taskが成功しても、旧RaceEntry・旧failure・旧Horseが残り二重表示になり得る。 | 証明済みRaceEntryだけを付替え、参照残存時はmergeしない。参照ゼロ時だけ既存repairのredirect/ledger境界で閉じる。 | AC9/AC12/T3,T4 | Agree | Pending | Resolved in design |
-| C11 | 過去年代のRaceResult馬名cellにHorse linkが常にあることは未確認であり、JRA公式案内は結果掲載範囲を示してもDOM要素を保証しない。 | 外部E2Eを確認せず実装すると年代別layoutで欠落・誤linkを見逃す。 | 直近、2000年代、可能な最古年代の実画面を確認し、fixture化する。link欠落年代は正式fallbackとして扱い、取得可を保証しない。 | AC3/AC10/T1,T3 | Agree | Pending | Resolved in design |
+| C1 | taskの `EffectiveDate` はRace以外のDiscoveryでも設定される。 | 便宜日を出走日と誤認すると別馬を選ぶ。 | Race発見元、canonical `requestedByRaceId`、日付一致の3条件を必須にする。 | AC2/T1/T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C2 | 抹消日以前には複数の同名馬が存在し得る。 | 時系列だけでは積極的同定にならない。 | exact race-history一致だけを採用根拠にし、抹消日・生年月日は矛盾排除と診断に限定する。 | AC3-AC5/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C3 | 古いレースはプロフィール履歴の後続ページにある。 | 先頭ページだけではfalse negativeになる。 | 日付順と循環を検証しながらboundedにページ送りする。取得不能時は安全停止する。 | AC4/AC7/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C4 | 保存済みURLの一時失敗後にfallbackすると強いidentityを失う。 | 一時障害が誤った別候補探索へ退行し得る。 | URL失敗は記録し、fallbackでも既知URLと異なる候補をexact race evidenceなしに採用しない。 | AC1/AC5/T2/T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C5 | 対象画面は認証が必要で、本turnではtask metadataの実値をUIから取得できていない。コード上はRace子taskに根拠が保存されるが、対象legacy taskに揃うかは未確認。 | 対象だけは自動復旧対象外になる可能性がある。 | 実装前後のpreviewで3 provenance属性を確認し、不足なら起点RaceResult/Cardからidentityを再取得する別候補として表示し、推測適用しない。 | AC8/T4 | Agree | Approved 2026-09-19 | Resolved in design |
+| C6 | 過去レースはRaceCardが取得対象外または非公開で、プロフィール履歴も後続ページに分割される。 | 現行開催向けの先頭ページだけの設計では、過去収集が失敗または同名誤選択になる。 | 結果行の公式Horse linkを第一根拠として保存し、欠落時は全履歴のexact Race照合へfallbackする。双方で証明できない場合は安全停止する。 | AC3-AC7/T1-T4 | Agree | Approved 2026-09-19 | Resolved in design |
+| C7 | 過去結果の性齢から生年を逆算すると、旧年齢表記や開催日境界の影響を受ける。 | 古いレースで別世代の同名馬を誤選択し得る。 | 性齢は診断表示に限定し、source linkまたはexact Race一致の代用にしない。 | AC4-AC6/T2,T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C8 | 現行Result-only経路は結果保存後に主体request batchを作らず、`RaceResultCollectionResult`も検証済みsubject行を返さない。 | parser/DTOへlinkを足すだけでは過去レースのhorse-profile収集に接続されない。 | 結果保存→検証済みsubject evidence返却→重複排除したrequest batchまでを同じACでend-to-end検証する。 | AC3/AC10/T1,T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C9 | 同名候補は最大32件で、各プロフィール履歴は複数ページになり得る。 | 1 taskが大量のJRA navigationを発生させ、timeoutやアクセス負荷を増やす。 | profile/page/timeの共有budgetを設け、超過は非retryの識別不能として記録する。通常のidentity付き経路には追加アクセスしない。 | AC7/AC11/T2,T3 | Agree | Approved 2026-09-19 | Resolved in design |
+| C10 | identity取得でname由来Horseとは別のcanonical Horse IDが生成される。 | 正しい新taskが成功しても、旧RaceEntry・旧failure・旧Horseが残り二重表示になり得る。 | 証明済みRaceEntryだけを付替え、参照残存時はmergeしない。参照ゼロ時だけ既存repairのredirect/ledger境界で閉じる。 | AC9/AC12/T3,T4 | Agree | Approved 2026-09-19 | Resolved in design |
+| C11 | 過去年代のRaceResult馬名cellにHorse linkが常にあることは未確認であり、JRA公式案内は結果掲載範囲を示してもDOM要素を保証しない。 | 外部E2Eを確認せず実装すると年代別layoutで欠落・誤linkを見逃す。 | 直近、2000年代、可能な最古年代の実画面を確認し、fixture化する。link欠落年代は正式fallbackとして扱い、取得可を保証しない。 | AC3/AC10/T1,T3 | Agree | Approved 2026-09-19 | Resolved in design |
 
 ## Acceptance criteria
 
@@ -156,16 +156,16 @@
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | RaceCard/過去RaceResultのHorse linkとRace provenanceを検証し、Result-only主体requestまで伝播する。 | Main | Lead tier | Approval | Race result parser/model/workflow、Collector handler | historical parser/transport/dispatch tests | AC1-AC3,AC10 | Proposed |
-| T2 | link欠落時の同名候補exact race照合、時系列矛盾診断、共有探索budgetを実装する。 | Main | Lead tier | T1 | Navigator、subject model/parser、failure evidence | historical navigator/budget fixtures | AC4-AC7,AC11 | Proposed |
-| T3 | 過去開催、反例、主体dispatch、Horse ID分岐、冪等再取得、統合、回帰、format/buildを検証する。 | Main | Lead/review tier | T1,T2 | tests | focused/full CI-equivalent gates | AC1-AC7,AC9-AC12 | Proposed |
-| T4 | revision更新、repair preview、配備、対象Recovery、過去再取得post-checkを行う。 | Main | Lead/review tier | T3 | definition、repair、change record、production operation | preview/apply evidence | AC8-AC9,AC12 | Proposed |
+| T1 | RaceCard/過去RaceResultのHorse linkとRace provenanceを検証し、Result-only主体requestまで伝播する。 | Main | Lead tier | Approval | Race result parser/model/workflow、Collector handler | historical parser/transport/dispatch tests | AC1-AC3,AC10 | In progress |
+| T2 | link欠落時の同名候補exact race照合、時系列矛盾診断、共有探索budgetを実装する。 | Main | Lead tier | T1 | Navigator、subject model/parser、failure evidence | historical navigator/budget fixtures | AC4-AC7,AC11 | Dependent |
+| T3 | 過去開催、反例、主体dispatch、Horse ID分岐、冪等再取得、統合、回帰、format/buildを検証する。 | Main | Lead/review tier | T1,T2 | tests | focused/full CI-equivalent gates | AC1-AC7,AC9-AC12 | Dependent |
+| T4 | revision更新、repair preview、配備、対象Recovery、過去再取得post-checkを行う。 | Main | Lead/review tier | T3 | definition、repair、change record、production operation | preview/apply evidence | AC8-AC9,AC12 | Dependent |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** CodeGraph indexは利用不能だったため、handler、navigator、parser、task producer、UI/store、既存change recordを直接追跡した。2件の読み取り専用調査を分離し、主担当が結果を統合した。ACはproducer provenance、候補照合、反例、安全な本番Recoveryへ接続した。identityと本番データ完全性に関わるため実装はMainが直列所有する。
 - **Concern and agreement review — 2026-09-19, reviewer: Main.** source identity優先、Race provenance検証、時系列だけで選択しないこと、過去RaceResultの公式link伝播、Result-only主体dispatch、全履歴ページングと共有budget、旧年齢表記、Horse ID分岐後のrepair、年代別実画面証拠、対象task metadata未確認を材料化した。Open decisionはなく、C1-C11は設計内で安全側へ解決した。ユーザー承認は未取得。
-- **Pre-implementation review:** 承認後に実施する。
+- **Pre-implementation review — 2026-09-19, reviewer: Main.** ユーザーの「対応をお願いします」を、直前に要約した設計、AC1-AC12、C1-C11の処置に対する明示承認として記録した。T1をIn progress、T2-T4を依存順にDependentとした。T1はparser/model/workflow/handlerの共有contractをMainが直列所有する。並行委譲は書込なしのテスト・経路棚卸しに限定し、identity、persistence、repair、本番操作の判断はMainが保持する。各taskはfocused testと実transport証拠が得られなければVerifiedにしない。
 - **Checkpoint review:** 実装中に実施する。
 - **Final review:** 全ACと本番post-check後に実施する。
 
