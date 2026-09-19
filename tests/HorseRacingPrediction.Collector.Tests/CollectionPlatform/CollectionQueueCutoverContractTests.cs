@@ -11,8 +11,16 @@ public sealed class CollectionQueueCutoverContractTests
     private static string DeployWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "app-deploy.yml"));
     private static string MaintenanceWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-maintenance.yml"));
     private static string DlqDiagnosticsWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-dlq-diagnostics.yml"));
+    private static string MonitoringWorkflow => File.ReadAllText(Path.Combine(Root, ".github", "workflows", "collection-monitoring.yml"));
     private static string Compose => File.ReadAllText(Path.Combine(Root, "deploy", "docker-compose.yml"));
     private static string ApiSettings => File.ReadAllText(Path.Combine(Root, "src", "HorseRacingPrediction.Api", "appsettings.json"));
+
+    [TestMethod]
+    public void MonitoringWorkflow_RecognizesNumericActionRequiredOutcome()
+    {
+        StringAssert.Contains(MonitoringWorkflow, ".outcome == 2");
+        StringAssert.Contains(MonitoringWorkflow, "Mark actionable monitoring result");
+    }
 
     [TestMethod]
     public void Terraform_DefinesOnlyResourceCollectionQueuePair()

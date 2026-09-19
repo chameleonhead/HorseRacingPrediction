@@ -48,12 +48,12 @@ jobs:
           curl --fail --silent --show-error --max-time 90 \
             -H "X-Api-Key: $API_KEY" "$base/findings" > "$work/report.json"
           jq -e '(.enabled | type == "boolean") and (.changeRecordEnabled | type == "boolean") and (.findings | type == "array")' "$work/report.json" >/dev/null
-          jq '{cutoff, completedAt, enabled, changeRecordEnabled, suppressed, suppressionReason, truncated, outcome, actionRequired: (.outcome == "actionRequired"), findingCount: (.findings | length)}' \
+          jq '{cutoff, completedAt, enabled, changeRecordEnabled, suppressed, suppressionReason, truncated, outcome, actionRequired: (.outcome == 2 or .outcome == "actionRequired"), findingCount: (.findings | length)}' \
             "$work/report.json" | tee "$work/summary.json"
           echo "report=$work/report.json" >> "$GITHUB_OUTPUT"
           echo "records_enabled=$(jq -r '.enabled and .changeRecordEnabled and (.suppressed | not)' "$work/report.json")" >> "$GITHUB_OUTPUT"
           echo "outcome=$(jq -r '.outcome' "$work/report.json")" >> "$GITHUB_OUTPUT"
-          echo "action_required=$(jq -r '.outcome == "actionRequired"' "$work/report.json")" >> "$GITHUB_OUTPUT"
+          echo "action_required=$(jq -r '.outcome == 2 or .outcome == "actionRequired"' "$work/report.json")" >> "$GITHUB_OUTPUT"
 
       - name: Preview generated change records
         if: steps.inspect.outputs.records_enabled == 'true'
