@@ -122,6 +122,7 @@ findingには対象日、評価時刻、期限、分母・分子・欠落数、�
 - 同時刻: 9月20日のrace summaryは0件。一方、task searchでは `race-detail` が24件存在し、すべて翌日9:35 JSTを次回時刻とするReady状態だった。
 - 代表の中山8Rは9月17日18:35 JSTのattemptが `RaceNotStarted` で終了し、required revision 1、applied revision 0、last collectedなし。金曜時点でdomainのcard/entriesを確認できない。
 - 現行監視はtask停止・滞留を検出するが、上記のdomain completenessをfindingにしないことを確認した。
+- 2026-09-19 22:12 JST: deployment後shadow run 35445057660で鮮度findingが生成されることを確認した。一方、最新待機taskのmetadataを優先したため、保存済みの9月19日Cardも24/24不足と誤判定した。projectionをtask metadataではなく永続 `race_artifact_states` と `race_scheduling_evidence` 優先へ修正し、回帰テストを追加した。
 
 ## Human decision required
 

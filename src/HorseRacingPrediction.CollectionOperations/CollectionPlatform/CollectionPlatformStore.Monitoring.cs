@@ -80,18 +80,34 @@ public sealed partial class CollectionPlatformStore
             x.outbox.AvailableAt,
             x.outbox.CreatedAt,
             x.outbox.DispatchedAt!.Value)).ToArray();
-        var races = raceRows.Take(limit).Select(x =>
+        var latestRaceRows = raceRows.Take(limit)
+            .GroupBy(x => x.resource.ResourcePk)
+            .Select(x => x.OrderByDescending(y => y.task.UpdatedAt).First())
+            .ToArray();
+        var raceResourcePks = latestRaceRows.Select(x => x.resource.ResourcePk).ToArray();
+        var artifactRows = await db.RaceArtifactStates.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk))
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var artifactByResource = artifactRows.ToLookup(x => x.ResourcePk);
+        var scheduleByResource = await db.RaceSchedulingEvidence.AsNoTracking()
+            .Where(x => raceResourcePks.Contains(x.ResourcePk))
+            .ToDictionaryAsync(x => x.ResourcePk, cancellationToken).ConfigureAwait(false);
+        var races = latestRaceRows.Select(x =>
         {
             var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(
                 x.task.MetadataJson ?? x.resource.AttributesJson) ?? [];
+            var artifacts = artifactByResource[x.resource.ResourcePk];
             return new CollectionRaceFreshnessSnapshot(
                 x.task.TaskId,
                 new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
                 x.task.Status,
                 x.task.UpdatedAt,
-                ParseInstant(attributes.GetValueOrDefault("officialStartAt")),
-                ParseArtifactStatus(attributes.GetValueOrDefault("cardArtifactStatus")),
-                ParseArtifactStatus(attributes.GetValueOrDefault("resultArtifactStatus")));
+                scheduleByResource.GetValueOrDefault(x.resource.ResourcePk)?.OfficialStartAt
+                    ?? ParseInstant(attributes.GetValueOrDefault("officialStartAt")),
+                artifacts.FirstOrDefault(y => y.Artifact == RaceArtifactKind.Card)?.Status
+                    ?? ParseArtifactStatus(attributes.GetValueOrDefault("cardArtifactStatus")),
+                artifacts.FirstOrDefault(y => y.Artifact == RaceArtifactKind.Result)?.Status
+                    ?? ParseArtifactStatus(attributes.GetValueOrDefault("resultArtifactStatus")));
         }).ToArray();
         return new(cutoff, pipeline, active, dispatches, truncated, races);
     }
