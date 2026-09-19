@@ -1,8 +1,6 @@
 name: collection-monitoring
 
 on:
-  schedule:
-    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -120,7 +118,7 @@ jobs:
           echo "safe=$(jq -r '.safeToApply' "$RUNNER_TEMP/collection-monitoring/recovery-preview.json")" >> "$GITHUB_OUTPUT"
 
       - name: Apply registered recovery canary
-        if: (github.event_name == 'schedule' || inputs.mode == 'recover') && steps.recovery_preview.outputs.safe == 'true'
+        if: inputs.mode == 'recover' && steps.recovery_preview.outputs.safe == 'true'
         shell: bash
         run: |
           set -euo pipefail

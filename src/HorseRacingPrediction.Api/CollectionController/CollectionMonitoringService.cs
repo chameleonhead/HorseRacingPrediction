@@ -172,7 +172,9 @@ public sealed class CollectionMonitoringService(
         CancellationToken cancellationToken = default)
     {
         var report = await InspectAsync(now, cancellationToken).ConfigureAwait(false);
-        var count = report.Findings.Count(x => x.RecoveryRecipeId == SubjectRecoveryRecipeId);
+        var count = report.Suppressed ? 0
+            : await SubjectIdentificationAutoRecovery.GetEligibleCandidateCountAsync(store, cancellationToken)
+                .ConfigureAwait(false);
         var blocked = report.Suppressed ? report.SuppressionReason
             : !_options.RecoveryEnabled ? "Automatic recovery is disabled."
             : count == 0 ? "No matching known historical errors were found."
