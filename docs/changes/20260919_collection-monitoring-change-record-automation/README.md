@@ -185,6 +185,7 @@ previewで1件でも不明、曖昧、事前条件不一致がある場合、安
 - 2026-09-19: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`、workflow YAML parse、`git diff --check`が成功した。`codegraph sync .` は変更なしと報告したため、checkpoint commit後に新規symbolを再照会する。
 - 2026-09-19: production shadow run `35424418215` はAPI読取、46 finding、既知recovery 1 groupのpreviewに成功した。ASP.NETのJSON enumが数値であるためwriterが全findingをskipする統合不具合を検出し、数値/文字列の両表現をcanonical classificationへ正規化した。補正apply前に修正し、Python 5件で回帰確認した。
 - 2026-09-19: 起票再実行 `35424498489` で、同一report内の同一fingerprintが初回作成直後の未追跡recordをdirty競合と判定することを確認した。入力をfingerprint単位で先に集約し、Python 6件で同一run内の重複抑止を追加確認した。
+- 2026-09-19: 起票再実行 `35424554752` で、Gitが未追跡change recordディレクトリを省略表示したため検証対象を列挙できないことを確認した。workflowの列挙を `--untracked-files=all` に変更し、README単位でvalidation/commitする契約に修正した。
 
 ## Deviations and follow-up
 

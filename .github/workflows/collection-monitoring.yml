@@ -93,7 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mapfile -t records < <(git status --short | awk '{print $2}' | grep '^docs/changes/.*/README.md$')
+          mapfile -t records < <(git status --short --untracked-files=all | awk '{print $2}' | grep '^docs/changes/.*/README.md$')
           test "${#records[@]}" -gt 0
           python .codex/skills/document-driven-development/scripts/validate_change_records.py "${records[@]}"
           git diff --check -- "${records[@]}"
