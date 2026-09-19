@@ -66,7 +66,7 @@
 CodexのローカルスケジュールはPCとデスクトップアプリの稼働に依存するため、恒久的な24時間監視の正本にはしない。安定化後は、収集サービス内のdurable lease付き監視またはクラウドスケジューラを検知の正本、Codexを診断・修正案作成の担当とする構成を再評価する。
 
 正常判定はpipelineやtaskが動いていることだけでは完了しない。週末開催について、公式discoveryで発見したレースを分母に、金曜時点の出馬表・出走馬と、各レース終了後の結果が期限内にdomainへ保存された割合を評価する。0件を無条件に正常とせず、discovery未完了と開催なしを区別する。期限、severity、例外状態、通知lifecycleは [週末レース情報の期限内収集を監視する](changes/20260919_collection-freshness-slo/README.md) を正本とする。
-GitHub Actionsの監視workflowは手動診断用のread-only経路とし、`contents: read`だけを持つ。change recordの生成、branch push、PR作成は行わない。ローカルrunnerの資格情報は `%LOCALAPPDATA%\HorseRacingPrediction\CollectionMonitor` 配下へ保存し、API keyはWindows DPAPIで現在ユーザーに暗号化する。詳細は [収集監視を観測記録から原因分析と実行タスクへ変更する](changes/20260919_collection-monitor-root-cause-triage/README.md) を正本とする。
+監視の実行経路はCodexのローカルスケジュールタスクに一本化し、`collection-monitoring` GitHub Actions workflowは削除する。手動診断も同じローカルrunnerを使用し、監視からchange recordの自動生成、branch push、PR作成は行わない。ローカルrunnerの資格情報は `%LOCALAPPDATA%\HorseRacingPrediction\CollectionMonitor` 配下へ保存し、API keyはWindows DPAPIで現在ユーザーに暗号化する。詳細は [収集監視を観測記録から原因分析と実行タスクへ変更する](changes/20260919_collection-monitor-root-cause-triage/README.md) を正本とする。
 
 ## 長期収集計画の定期見直し（提案）
 
