@@ -103,7 +103,7 @@
 - GitHub Actions summaryへoutcomeを出力し、`ActionRequired` はwarning annotationを生成する。
 - Codex cron `collection-monitor-liveness` を30分間隔のrecover監視へ更新し、既知データ補正canary、race-discoveryの単発 `TargetClosedException` に限定した6時間rate-limit付きpipeline resume、進行確認、未知errorの提案起票を接続した。
 - heartbeat `collection-incident-notifier` を独立した読み取り専用通知経路として更新し、要対応、継続、復旧、自動復旧、監視欠落、鮮度不足の通知契約を設定した。
-- `CollectionMonitoringServiceTests` 9件、format、YAML parse、change-record validator、`git diff --check` を通過した。
+- `CollectionMonitoringServiceTests` 12件、workflow contract tests、format、YAML parse、change-record validator、`git diff --check` を通過した。本番shadowでJSON enumが数値 `2` と判明したため、workflowは数値と文字列の両方を `ActionRequired` として扱う回帰修正を追加した。
 
 ## Human decision required
 

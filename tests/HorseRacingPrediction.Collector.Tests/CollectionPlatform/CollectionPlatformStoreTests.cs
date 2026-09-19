@@ -1377,6 +1377,11 @@ public sealed class CollectionPlatformStoreTests
             artifacts.Single(x => x.Artifact == RaceArtifactKind.Result).Status);
         Assert.AreEqual(start, detail.RaceEvidence!.OfficialStartAt);
         Assert.HasCount(2, detail.StageOutcomes!);
+        var monitoringRace = (await store.GetMonitoringSnapshotAsync(
+            now.AddMinutes(1), now.AddDays(-1), 100)).RaceFreshness!.Single();
+        Assert.AreEqual(RaceArtifactStatus.Current, monitoringRace.CardStatus);
+        Assert.AreEqual(RaceArtifactStatus.AwaitingPublication, monitoringRace.ResultStatus);
+        Assert.AreEqual(start, monitoringRace.OfficialStartAt);
         Assert.IsTrue(await store.HasActiveTaskAsync(race, definition));
         var resumed = await store.AcquireAsync(receipt.TaskId, 2, start, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(resumed);

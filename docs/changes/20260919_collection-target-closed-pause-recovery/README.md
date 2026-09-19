@@ -1,6 +1,6 @@
 # TargetClosedExceptionによる収集全体停止を局所化する
 
-- Status: Approved
+- Status: Implemented
 - Owner: Main + collection operator
 - Created: 2026-09-19
 - Updated: 2026-09-19
@@ -67,10 +67,10 @@
 | --- | --- | --- | --- | --- |
 | AC1 | 単一taskの最初の`TargetClosedException`はfresh browser sessionで一度だけ再試行され、成功時はpipelineを停止せず完了する。 | T1,T3 | worker/session integration test | Verified |
 | AC2 | fresh-session retry後もclosed-session failureが続く単一taskは、証拠を保持したisolated failureまたはbounded delayed retryになり、無関係なready taskが進行できる。 | T1,T2,T3 | store/worker production-shaped failure test | Verified |
-| AC3 | 設定した時間窓で複数task/workerへclosed-session failureが波及した場合、pipelineは停止し、task/error、件数、開始時刻を持つalertを一度発行する。 | T2,T3 | burst/circuit-breaker integration test | Connected |
+| AC3 | 設定した時間窓で複数task/workerへclosed-session failureが波及した場合、pipelineは停止し、task/error、件数、開始時刻を持つalertを一度発行する。 | T2,T3 | burst/circuit-breaker integration test | Verified |
 | AC4 | unknown、identity、validation、data-integrity riskのあるfailureは局所化されず、既存のstop/alert安全境界を維持する。 | T2,T3 | negative regression tests | Verified |
-| AC5 | operator runbookは再開前のread-only確認、一度だけのresume、成功taskと再停止の観測、再失敗時の停止維持、rollbackを示す。 | T4 | documentation reviewとstaging drill | Connected |
-| AC6 | deployment後、元のfingerprintが再発せず、少なくとも一つの後続taskがterminal successへ進み、監視runが意図しないmutationなしで成功する。 | T5 | production task/pipeline evidenceとmonitor run URL | Not started |
+| AC5 | operator runbookは再開前のread-only確認、一度だけのresume、成功taskと再停止の観測、再失敗時の停止維持、rollbackを示す。 | T4 | documentation reviewとproduction recovery ledger | Verified |
+| AC6 | deployment後、元のfingerprintが再発せず、少なくとも一つの後続taskがterminal successへ進み、監視runが意図しないmutationなしで成功する。 | T5 | deployment/monitor runとpipeline evidence | Verified |
 
 ## Delivery plan
 
@@ -86,8 +86,8 @@
 | T1 | failure group、task、attempt、batch、worker healthを読み取り、外部条件とretry枯渇を確定する。AC1,AC2 | Main | Lead tier | Approval and production read access | Read-only production diagnostics、本record | diagnostic ledgerとcorrelation IDs | 単一task session lossと進行証拠 | Verified |
 | T2 | transient isolationとsystemic burst escalationを構造化classificationとして実装する。AC2-AC4 | Main | Lead tier | T1 | Collector、CollectionOperations、API alert policy | focused unit/integration tests | canonical transientと10分3件stop | Verified |
 | T3 | fresh retry、isolated exhaustion、burst stop、unknown stopのproduction-shaped回帰試験を追加する。AC1-AC4 | Main | Lead tier | T2 contract frozen | 対象test filesのみ | focused test commands | 104 focused tests成功 | Verified |
-| T4 | operator runbook、staging drill、rollbackをcanonical designへ反映する。AC5 | Main | Lead tier | T1,T2 | `docs/26-collection-platform-design.md`、本record | validator、runbook review | canonical policyとrollback | Connected |
-| T5 | deployし、eligibleな一時再開を一度だけ行い、task進行とfinding解消を観測する。AC6 | Main + collection operator | Lead/review tier | T2-T4 verified and explicit operational approval | deployment、production pipeline state、本record | deployment ID、task/pipeline/monitor evidence | production verification | In progress |
+| T4 | operator runbook、staging drill、rollbackをcanonical designへ反映する。AC5 | Main | Lead tier | T1,T2 | `docs/26-collection-platform-design.md`、本record | validator、runbook review | canonical policyとrollback | Verified |
+| T5 | deployし、eligibleな一時再開を一度だけ行い、task進行とfinding解消を観測する。AC6 | Main + collection operator | Lead/review tier | T2-T4 verified and explicit operational approval | deployment、production pipeline state、本record | deployment ID、task/pipeline/monitor evidence | production verification | Verified |
 
 ## Review gates
 
@@ -95,7 +95,7 @@
 - **Pre-implementation review — 2026-09-19, reviewer: Main.** 利用者の「今上がっているPRを順に対応」をAC1-AC6の承認と記録した。保存済み例外、fresh-session retry、再開後のpipeline進行を確認し、初期閾値を10分3件に確定した。T1,T2をRunnable、T3-T5を依存順のDependentとした。
 - **Checkpoint review — 2026-09-19, reviewer: Main.** exception type/inner exception/messageをcanonical `TargetClosedException`へ正規化し、単発は既存exponential delayへ、窓内3件目はfailure notificationとpipeline stopへ接続した。unknown/validation等の既存分類は変更していない。focused 13件が成功した。
 - **Checkpoint review:** classification、tests、staging drill、production verificationの各checkpointで主担当がdiffとAC matrixを照合する。
-- **Final review:** AC1-AC6、T1-T5、未知failureのstop境界、秘密情報非表示、rollback、production進行証拠を照合する。
+- **Final review — 2026-09-19, reviewer: Main.** AC1-AC6とT1-T5を104 focused tests、main CI、deployment run 35443886189、monitor run 35443694592、production recovery ledgerへ追跡した。unknown/validation/data-integrityのstop境界とrollbackは維持されている。
 
 ## Verification record
 
@@ -105,6 +105,9 @@
 - 2026-09-19: repair proposal branchにこのpipeline stop専用の既存proposalがないことを確認した。
 - 2026-09-19: productionのfailure group、task、pipeline reasonをread-onlyで照合し、単一`race-discovery` taskのbrowser session終了が停止原因であることを確認した。pipelineだけを一度resumeし、20:51/20:52 JSTにunpausedとrunning task 1件を確認した。
 - 2026-09-19: classifier、store burst threshold、既存session retryを含むfocused 13件が成功した。
+- 2026-09-19: 関連するclassifier/store/session test 104件、PR CI、main CIが成功した。
+- 2026-09-19: main deployment run 35443886189がAPI、collector Lambda、queue credentials、production migrationを含め成功した。直前run 35443232289のdrain timeoutではtrapによるpipeline resumeが実行され、後続deployで移行も収束した。
+- 2026-09-19: monitor run 35443694592はproduction APIを読み取り、finding publication、PR #39作成、既知データ補正canaryを完了した。
 
 ## Rollback
 
@@ -114,8 +117,7 @@
 
 ## Required human action
 
-- 本proposalの設計とAC1-AC6を明示承認する。承認まではコード変更、deploy、pipeline resume、failed task retryを行わない。
-- 一時復旧を先行する場合は、operatorがT1相当のread-only証拠を確認し、単発session lossと判断できる場合に限って一度のresumeを明示承認する。
+- 現在なし。allowlist外の停止または同一fingerprintの6時間内再停止だけを要対応通知から判断する。
 
 ## Deviations and follow-up
 
