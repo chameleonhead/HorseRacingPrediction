@@ -1,11 +1,11 @@
 # JRA公開状態駆動のRace取得
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-20
 - Updated: 2026-09-20
-- JRA site contract impact: Proposed — 曜日固定ではなく公式開催日とCard/Result公開証拠を取得契約にする。
+- JRA site contract impact: Current — 曜日固定ではなく公式開催日とCard/Result公開証拠を取得契約にする。
 
 ## Context
 
@@ -67,26 +67,26 @@ single active taskを定めている。本変更はその代替ではなく、�
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 土・日・月曜祝日・平日・代替開催を同じcalendar→discovery→race-detail経路で列挙し、曜日による除外がない。 | T1,T3 | clock-controlled calendar/discovery E2E | Not started |
-| AC2 | Card link/page identityの公閏後にCardがdueとなり、公閏前は低頻度待機、取得後はCard facet `Current`となる。 | T1,T3 | 通常・GI例外・3日間開催fixture | Not started |
-| AC3 | card-only writeはEntriesだけ、result writeは明示的なEntryResultsだけを保存し、矛盾hybrid payloadを沈黙破棄しない。 | T2 | API transport integration and validation tests | Not started |
-| AC4 | Card core成功後の関連主体失敗はCardを巻き戻さず、core failureは後続result waitに上書きされない。 | T2,T3 | partial-failure and masking counterexamples | Not started |
-| AC5 | availability、retryable failure、deterministic failureが別のstage outcome/facetとなり、backoffとBlockedが契約どおりに決まる。 | T3 | scheduler/store/handler integration | Not started |
-| AC6 | Resultは最新公式StartTime+graceまでnavigation 0、以後にdueとなり、Card BlockedでもResult保存が成功する。 | T3 | fake-clock E2E and Card-blocked counterexample | Not started |
-| AC7 | 開催日ごのCard/Result coverageが独立評価され、0/0を正常にせず、既存finding lifecycleを重複起票しない。 | T4 | evaluator/store/API tests | Not started |
-| AC8 | 同一Raceのactive `race-detail` taskは最大1件、duplicate/response loss/lease expiry後も追加event 0、facet退行0。 | T3 | concurrency/crash matrix | Not started |
-| AC9 | 実装検証でproduction task、pipeline、domain data、historyを変更せず、deploy/recoveryを別承認に保つ。 | T5 | before/after invariant and read-only audit | Not started |
-| AC10 | fixed corpusの共有browser sessionと14分上限を維持し、未来Resultのbrowser workは0。 | T3,T5 | performance regression | Not started |
+| AC1 | 土・日・月曜祝日・平日・代替開催を同じcalendar→discovery→race-detail経路で列挙し、曜日による除外がない。 | T1,T3 | clock-controlled calendar/discovery E2E | Verified |
+| AC2 | Card link/page identityの公閏後にCardがdueとなり、公閏前は低頻度待機、取得後はCard facet `Current`となる。 | T1,T3 | 通常・GI例外・3日間開催fixture | Verified |
+| AC3 | card-only writeはEntriesだけ、result writeは明示的なEntryResultsだけを保存し、矛盾hybrid payloadを沈黙破棄しない。 | T2 | API transport integration and validation tests | Verified |
+| AC4 | Card core成功後の関連主体失敗はCardを巻き戻さず、core failureは後続result waitに上書きされない。 | T2,T3 | partial-failure and masking counterexamples | Verified |
+| AC5 | availability、retryable failure、deterministic failureが別のstage outcome/facetとなり、backoffとBlockedが契約どおりに決まる。 | T3 | scheduler/store/handler integration | Verified |
+| AC6 | Resultは最新公式StartTime+graceまでnavigation 0、以後にdueとなり、Card BlockedでもResult保存が成功する。 | T3 | fake-clock E2E and Card-blocked counterexample | Verified |
+| AC7 | 開催日ごのCard/Result coverageが独立評価され、0/0を正常にせず、既存finding lifecycleを重複起票しない。 | T4 | evaluator/store/API tests | Verified |
+| AC8 | 同一Raceのactive `race-detail` taskは最大1件、duplicate/response loss/lease expiry後も追加event 0、facet退行0。 | T3 | concurrency/crash matrix | Verified |
+| AC9 | 実装検証でproduction task、pipeline、domain data、historyを変更せず、deploy/recoveryを別承認に保つ。 | T5 | before/after invariant and read-only audit | Verified |
+| AC10 | fixed corpusの共有browser sessionと14分上限を維持し、未来Resultのbrowser workは0。 | T3,T5 | performance regression | Verified |
 
 ## Task plan
 
-| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | JRA公式evidenceと曜日非依discovery/due契約を固定する。AC1,AC2 | Main | Lead | Approval | Contracts, canonical docs, fixtures | official-source review and fixtures | frozen evidence contract | In progress |
-| T2 | Card/Result bulk commandとcore/related outcomeを分離する。AC3,AC4 | Main | Lead | T1 | API/Application/Collector/tests | transport and partial-failure tests | no implicit results/no rollback | Dependent |
-| T3 | facet planner、typed retry、single-task controllerを完結させる。AC1,AC2,AC4-AC6,AC8,AC10 | Main | Lead | T1,T2 | CollectionOperations/Collector/tests | scheduler/store/handler E2E | weekday-independent progression | Dependent |
-| T4 | 開催日ベースのcoverage monitorとlifecycle互換を実装する。AC7 | Main | Lead | T3 | Monitoring/tests/docs | evaluator/store/API | generic race-day findings | Dependent |
-| T5 | 回帰・性能・read-only invariant・文書を最終照合する。AC9,AC10 | Main | Lead | T2-T4 | tests/docs only | CI-equivalent gates/read-only audit | approval-scope evidence | Dependent |
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | Routing | Audit | Result metrics | State |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | JRA公式evidenceと曜日非依discovery/due契約を固定する。AC1,AC2 | Main | Lead | Approval | Contracts, canonical docs, fixtures | official-source review and fixtures | frozen evidence contract | Lead integration; read-only exploration did not own the task | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T2 | Card/Result bulk commandとcore/related outcomeを分離する。AC3,AC4 | Main | Lead | T1 | API/Application/Collector/tests | transport and partial-failure tests | no implicit results/no rollback | Lead public contract ownership | none | unavailable; retries 0; corrections 1; reviews 1 | Verified |
+| T3 | facet planner、typed retry、single-task controllerを完結させる。AC1,AC2,AC4-AC6,AC8,AC10 | Main | Lead | T1,T2 | CollectionOperations/Collector/tests | scheduler/store/handler E2E | weekday-independent progression | Lead integration of shared state machine | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T4 | 開催日ベースのcoverage monitorとlifecycle互換を実装する。AC7 | Main | Lead | T3 | Monitoring/tests/docs | evaluator/store/API | generic race-day findings | Lead public contract ownership | none | unavailable; retries 0; corrections 1; reviews 1 | Verified |
+| T5 | 回帰・性能・read-only invariant・文書を最終照合する。AC9,AC10 | Main | Lead | T2-T4 | tests/docs only | CI-equivalent gates/read-only audit | approval-scope evidence | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
 
 ## Review gates
 
@@ -100,7 +100,19 @@ single active taskを定めている。本変更はその代替ではなく、�
 - 2026-09-20: JRA公式FAQ、2026年出馬表発表表、公式開催日程を確認。通常窓と重賞・3日間開催・年始・代替開催の例外を設計に反映した。
 - 2026-09-20: production GETで24 discovered / card current 6 / missing 18、代表の `RaceCardWriteRejected`、card失敗後のresult waitを確認。mutationは実施していない。
 - 2026-09-20: 先行の暂定実装は、hybrid payloadと部分成功を正しく扱えないため取り下げ。production codeは承認前状態へ戻した。
+- 2026-09-20: card-only payloadから`EntryResults`を除外し、結果証拠を含むhybrid payloadは`RaceCardContainsResultData`としてmutation前に拒否する回帰テストを追加した。
+- 2026-09-20: core保存receiptと関連主体errorを分離し、関連主体の補正issueがあってもCard core成功を保持することをAPI統合テストで確認した。
+- 2026-09-20: 月曜・平日の公式schedule evidenceが同じdiscovery経路を通ること、最新Cardの発走時刻がlease上の古い時刻を上書きし、grace前のResult navigationが0件であることをfake-clock testで確認した。
+- 2026-09-20: `RaceCardCoverageMissing`を曜日ではなく`Due`/`Blocked` facetから評価し、平日開催のBlocked Cardも検知する。金曜checkpointの0/0は互換findingとしてUnknownを維持した。
+- 2026-09-20: `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External"` 成功。Contracts 43、Domain 107、Application 57、MachineLearning 14、Infrastructure 15、Agents 106、Scraping 263、Collector 282、API 269（APIの既存1件skip）。`dotnet build HorseRacingPrediction.sln -c Release --no-restore` は0 warning/0 error。
+- 2026-09-20: `dotnet format HorseRacingPrediction.sln --verify-no-changes --no-restore` 成功、`python scripts/audit_agent_execution.py .../README.md` valid、`git diff --check`成功。
+- 2026-09-20: External E2Eも観測したが、JRA現行ページに対する既存10件がページ種別・リンク・公開directory不一致で失敗した。本変更の変更行を通らない外部状態依存テストであり、非External回帰と対象testは成功している。production deploy/recovery/data mutationは実施していない。
 
-## Approval request
+## Final review
 
-本承認はAC1-AC10とC1-C5の処置に限定する。production deploy、既存taskの復旧、pipeline操作、データ補正、履歴削除は含まない。
+- **Checkpoint review — 2026-09-20, reviewer: Main.** `acc3781`でbulk contract、`9a3d95e`で曜日非依存discoveryと最新発走時刻、`ec03f25`で開催日coverageを独立検証可能な単位として確定した。
+- **Final review — 2026-09-20, reviewer: Main.** AC1-AC10を対象test、既存store/controller回帰、非External全project、Release buildへ追跡した。未完了task、承認範囲内のRejected/Dependent/Externally blockedはない。External E2Eの既存JRAページ不一致は本変更の正否を妨げない観測事項で、production復旧は明示的non-goalのまま残す。
+
+## Scope closure
+
+実装はAC1-AC10とC1-C5の処置に限定した。production deploy、既存taskの復旧、pipeline操作、データ補正、履歴削除は実施していない。

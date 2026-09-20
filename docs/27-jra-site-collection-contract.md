@@ -9,8 +9,8 @@
 本書は、JRA公式Webサイトのどの画面から何を取得できるか、画面間をどのように遷移するか、
 取得できない情報を何で代用してはいけないかを定める保守用の正本である。
 
-> 2026-09-20 提案: 通常の曜日・時刻はprobe hintに限定し、公式calendar、Card/Result link、page identity、
-> 公式StartTimeを正本とする曜日非依存の取得契約を提案中である。承認・実装の状態は
+> 2026-09-20 現行契約: 通常の曜日・時刻はprobe hintに限定し、公式calendar、Card/Result link、page identity、
+> 公式StartTimeを正本とする曜日非依存の取得契約を採用した。実装と検証の状態は
 > [JRA公開状態駆動のRace取得](changes/20260920_event-driven-race-acquisition/README.md)を参照する。
 
 JRAサイトの実装詳細を推測して依存する文書ではない。利用者がブラウザーで確認できる画面と
