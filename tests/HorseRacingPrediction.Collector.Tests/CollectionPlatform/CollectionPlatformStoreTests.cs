@@ -486,6 +486,30 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task OrdinaryRegistration_ReusedTaskMergesLaterExplicitRaceResultLocation()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "combined", false);
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260920:Nakayama:6");
+        var now = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero);
+        var cardUrl = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604060620260920/0D");
+        var resultUrl = new Uri("https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106202604060620260920/C9");
+
+        var first = await store.RequestAsync(resource, definition, 2, CollectionReason.Discovery, now,
+            explicitUrl: cardUrl);
+        var reused = await store.RequestAsync(resource, definition, 2, CollectionReason.Discovery,
+            now.AddMinutes(1), explicitUrl: resultUrl);
+
+        Assert.IsFalse(reused.CreatedTask);
+        Assert.AreEqual(first.TaskId, reused.TaskId);
+        var locations = await store.ResolveLocationsAsync(resource, definition);
+        Assert.HasCount(2, locations);
+        Assert.AreEqual(RaceArtifactKind.Card, locations.Single(x => x.Url == cardUrl).Artifact);
+        Assert.AreEqual(RaceArtifactKind.Result, locations.Single(x => x.Url == resultUrl).Artifact);
+    }
+
+    [TestMethod]
     public async Task OrdinaryRegistration_CreatesTaskForANewerRevision()
     {
         var store = await CreateStoreAsync();

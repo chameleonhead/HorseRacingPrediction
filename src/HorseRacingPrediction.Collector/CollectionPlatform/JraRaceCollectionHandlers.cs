@@ -497,6 +497,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message));
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message,
                 RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), RetryAt: NextResultRetry(raceId.Date),
+                PageIdentification: session.Navigate.LastNavigationTrace,
                 LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
         }
         if (raceResult.Errors.Count > 0)
@@ -543,7 +544,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 FailureImpact: CollectionFailureImpact.Isolated, StageOutcomes: stageOutcomes,
                 RaceEvidence: raceEvidence);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl) ?? ToUri(raceResult.SourceUrl),
-            FinalUrl: ToUri(raceResult.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
+            FinalUrl: ToUri(raceResult.SourceUrl),
+            PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}; {session.Navigate.LastNavigationTrace}",
             LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
     }
 

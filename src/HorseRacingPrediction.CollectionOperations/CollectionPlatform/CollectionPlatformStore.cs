@@ -218,6 +218,30 @@ public sealed partial class CollectionPlatformStore
             if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
         }
 
+        if (explicitUrl is not null)
+        {
+            var location = await db.Locations.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
+                && x.DefinitionId == definition.Value && x.Url == explicitUrl.AbsoluteUri, cancellationToken)
+                .ConfigureAwait(false);
+            if (location is null)
+            {
+                db.Locations.Add(new ResourceLocationEntity
+                {
+                    ResourcePk = resourceEntity.ResourcePk,
+                    DefinitionId = definition.Value,
+                    Url = explicitUrl.AbsoluteUri,
+                    Source = ResourceLocationSource.Explicit,
+                    Status = ResourceLocationStatus.Unknown,
+                    Artifact = InferRaceArtifact(resource, explicitUrl),
+                    DiscoveredAt = requestedAt,
+                });
+            }
+            else
+            {
+                location.Artifact ??= InferRaceArtifact(resource, explicitUrl);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(batchId))
         {
             var existingRequest = await db.Requests.AsNoTracking().FirstOrDefaultAsync(x =>
@@ -380,6 +404,17 @@ public sealed partial class CollectionPlatformStore
 
     private static CollectionLane StrongerLane(CollectionLane left, CollectionLane right) =>
         (CollectionLane)Math.Min((int)left, (int)right);
+
+    private static RaceArtifactKind? InferRaceArtifact(ResourceKey resource, Uri url)
+    {
+        if (resource.Type != ResourceType.Race
+            || !url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)) return null;
+        if (url.AbsolutePath.Equals("/JRADB/accessD.html", StringComparison.OrdinalIgnoreCase))
+            return RaceArtifactKind.Card;
+        if (url.AbsolutePath.Equals("/JRADB/accessS.html", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(url.Query)) return RaceArtifactKind.Result;
+        return null;
+    }
 
     private static async Task<bool> MaterializeUnsatisfiedRevisionAsync(CollectionPlatformDbContext db,
         CollectionTaskEntity completedTask, CollectionStateEntity state, DateTimeOffset now,

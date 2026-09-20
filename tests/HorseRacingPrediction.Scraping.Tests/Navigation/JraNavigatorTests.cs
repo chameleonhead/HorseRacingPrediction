@@ -626,12 +626,17 @@ public sealed class JraNavigatorTests
     [TestMethod]
     public async Task ToRaceResultAsync_FromSameRaceCard_UsesResultLinkWithoutReturningToResultTop()
     {
-        const string raceCardUrl = "https://www.jra.go.jp/keiba/sample/card/0905/11/";
-        const string raceResultUrl = "https://www.jra.go.jp/keiba/sample/result/0905/11/";
+        const string raceCardUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604051120260905/0D";
+        const string raceResultUrl = "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106202604051120260905/C9";
+        const string wrongRaceResultUrl = "https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106202604051020260905/C9";
         var browser = new FakeWebBrowser();
         browser.SetCurrentUrl(raceCardUrl);
         browser.SetSnapshot(raceCardUrl, BuildRaceCardSnapshot(raceCardUrl, "11R"));
-        browser.SetLinks(raceCardUrl, [new TestPageLink(raceResultUrl, "11レース結果")]);
+        browser.SetLinks(raceCardUrl,
+        [
+            new TestPageLink(wrongRaceResultUrl, "レース結果"),
+            new TestPageLink(raceResultUrl, "レース結果"),
+        ]);
         browser.SetSnapshot(raceResultUrl, BuildRaceResultSnapshot(raceResultUrl, "11R"));
         var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
             today: () => new DateOnly(2026, 9, 5));
@@ -643,6 +648,37 @@ public sealed class JraNavigatorTests
         CollectionAssert.Contains(browser.NavigatedUrls, raceResultUrl);
         CollectionAssert.DoesNotContain(browser.NavigatedUrls, ResultSelectionUrl);
         CollectionAssert.DoesNotContain(browser.NavigatedUrls, KeibaTopUrl);
+        CollectionAssert.DoesNotContain(browser.NavigatedUrls, wrongRaceResultUrl);
+        StringAssert.Contains(navigator.LastNavigationTrace!, "Route=CardDirect");
+        StringAssert.Contains(navigator.LastNavigationTrace!, "CandidateLabel=レース結果");
+    }
+
+    [TestMethod]
+    public async Task ToRaceResultAsync_FragmentRaceControl_ClicksInsteadOfNavigating()
+    {
+        const string raceListUrl = "https://www.jra.go.jp/JRADB/accessS.html";
+        const string fragmentControl = "https://www.jra.go.jp/JRADB/accessS.html#";
+        var browser = new FakeWebBrowser();
+        browser.SetCurrentUrl(KeibaTopUrl);
+        browser.SetClickDestination("レース結果", ResultSelectionUrl);
+        browser.SetSnapshot(ResultSelectionUrl,
+            BuildMeetingSelectionSnapshot(ResultSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", raceListUrl);
+        browser.SetLinks(raceListUrl,
+        [
+            new TestPageLink(fragmentControl, "11レース"),
+            new TestPageLink(fragmentControl, "レース結果"),
+        ]);
+        browser.SetSnapshot(fragmentControl, BuildRaceResultSnapshot(fragmentControl, "11R"));
+        var navigator = new JraNavigator(browser, CreateReader(browser), logger: null,
+            today: () => new DateOnly(2026, 9, 5));
+
+        var page = await navigator.ToRaceResultAsync(
+            new RaceId(new DateOnly(2026, 9, 5), RaceCourse.Nakayama, 11));
+
+        Assert.AreEqual(JraPageKind.RaceResult, page.Kind);
+        CollectionAssert.Contains(browser.ClickedTexts, "11レース");
+        StringAssert.Contains(navigator.LastNavigationTrace!, "Route=RaceControlClick");
     }
 
     [TestMethod]

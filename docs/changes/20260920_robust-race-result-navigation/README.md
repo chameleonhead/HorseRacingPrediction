@@ -1,6 +1,6 @@
 # JRA出馬表から結果へ堅牢に遷移する
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-20
@@ -10,9 +10,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Correction not started | 既存実装は保存済みResult URLの優先には対応したが、実JRAのCardリンク構造、JavaScript race選択、重複requestへのResult URL統合を満たさない。 |
-| Verification | Superseded | 旧fixture中心の検証は成功したが、production-shaped cold pathを再現しておらず、AC1/AC3等の完了証拠としては無効。 |
-| Deployment/operation | Deployed defect observed | PR #61配備後の`20260920:Nakayama:6`で同じ失敗を再現。修正版配備・read-only smoke・個別Recoveryは未実施。 |
+| Code | Complete | production-shaped direct Result選択、JS control click、後発location merge、navigation traceを実装した。 |
+| Verification | Complete locally | focused 178件とRelease非External全体1163件（成功1163、既存skip 1）、format/build/migration/vulnerability gateが成功した。 |
+| Deployment/operation | Pending deployment | 修正版のpush/merge/deployとread-only smokeが残る。個別Recoveryは別の明示判断とする。 |
 
 ## Context
 
@@ -122,37 +122,37 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 | C3 | 新しい直接URL優先で既存のCurrent/Recent/Historical正常経路を削る危険。 | 過去Raceやlegacy taskが退行。 | 既存Navigatorを最終fallbackとして保持し、既存fixtureを非回帰gateにする。 | AC2,AC3,AC7/T2,T3/legacy fixtures | 必須 | Approved, 2026-09-20 | Resolved in design |
 | C4 | facet未生成Raceを監視対象外にすると、取得失敗が解消したように見える。 | 偽陰性。 | 公式Card/Result locationまたはdomain evidenceがあるfacet欠落をcoverage findingに含める。 | AC6/T3/production-shaped monitor | 必須 | Approved, 2026-09-20 | Resolved in design |
 | C5 | domain結果完成済みの関連主体Recoveryが結果再取得を行っている。 | 不要なJRAアクセスと偽のRace失敗。 | Result Currentまたは証明済みreconciliation後はResult stageをskipし、関連主体結果とRace facetを分離する。 | AC6,AC8/T2,T3/completed-domain counterexample | 必須 | Approved, 2026-09-20 | Resolved in design |
-| C6 | 実CardではRace番号とResult種別が別要素で、合成label fixtureは本番構造を失っていた。 | 正しい直接Result URLを見落とし、壊れたfallbackへ進む。 | raw hrefを保持し、同一Card文脈の`accessS.html?CNAME`をexpected RaceIdで検証する。分離要素と誤候補先行fixtureを必須にする。 | AC1,AC4,AC10/T1,T4/production-shaped cold path | 必須 | Pending | Resolved in design |
-| C7 | `#`はJavaScript controlとして有効だが、直接navigate先としては無効。 | RaceListに留まりResult未取得。 | direct URL候補とclick targetを型で分離し、fragment-only controlは要素clickする。遷移後のkind/RaceId検証は共通化する。 | AC3,AC5/T2,T4/JS control fixture | 必須 | Pending | Resolved in design |
-| C8 | 重複requestは後発explicit Result URLを捨てる。 | Card-onlyの古いtaskが永久に汎用探索へ依存する。 | validated locationをresource単位で冪等upsertし、active/既存taskの有無にかかわらずCard/Result artifactをmergeする。競合・重複テストを行う。 | AC6/T3/store concurrency | 必須 | Pending | Resolved in design |
-| C9 | 詳細な候補・route情報がattemptに残らない。 | 外部サイト変更と実装欠陥の切り分けが遅れる。 | secretを含めない構造化診断としてroute、label、raw/resolved URL、棄却理由、final kind/identityをログ・attemptへ保存する。 | AC8/T2,T3/diagnostic assertion | 必須 | Pending | Resolved in design |
-| C10 | live JRAは変動し、live testだけでは再現性がない一方、fixtureだけでは現行互換を証明できない。 | 偽陽性または不安定なgate。 | sanitized production-shaped fixtureを決定的gate、現行JRAへのread-only bounded smokeをpre-release gateとし、両方を要求する。 | AC9,AC10/T4/CI+smoke | 必須 | Pending | Resolved in design |
-| C11 | failed taskのRecoveryは外部状態を変更し、未配備revisionで再実行すれば同じ失敗を増やす。 | JRA負荷・履歴汚染。 | 修正版配備後にread-only smokeを先行し、対象task Recoveryは利用者の別の明示指示まで対象外とする。 | AC9/T5/operation checklist | 必須 | Pending | Resolved in design |
+| C6 | 実CardではRace番号とResult種別が別要素で、合成label fixtureは本番構造を失っていた。 | 正しい直接Result URLを見落とし、壊れたfallbackへ進む。 | raw hrefを保持し、同一Card文脈の`accessS.html?CNAME`をexpected RaceIdで検証する。分離要素と誤候補先行fixtureを必須にする。 | AC1,AC4,AC10/T1,T4/production-shaped cold path | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C7 | `#`はJavaScript controlとして有効だが、直接navigate先としては無効。 | RaceListに留まりResult未取得。 | direct URL候補とclick targetを型で分離し、fragment-only controlは要素clickする。遷移後のkind/RaceId検証は共通化する。 | AC3,AC5/T2,T4/JS control fixture | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C8 | 重複requestは後発explicit Result URLを捨てる。 | Card-onlyの古いtaskが永久に汎用探索へ依存する。 | validated locationをresource単位で冪等upsertし、active/既存taskの有無にかかわらずCard/Result artifactをmergeする。競合・重複テストを行う。 | AC6/T3/store concurrency | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C9 | 詳細な候補・route情報がattemptに残らない。 | 外部サイト変更と実装欠陥の切り分けが遅れる。 | secretを含めない構造化診断としてroute、label、raw/resolved URL、棄却理由、final kind/identityをログ・attemptへ保存する。 | AC8/T2,T3/diagnostic assertion | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C10 | live JRAは変動し、live testだけでは再現性がない一方、fixtureだけでは現行互換を証明できない。 | 偽陽性または不安定なgate。 | sanitized production-shaped fixtureを決定的gate、現行JRAへのread-only bounded smokeをpre-release gateとし、両方を要求する。 | AC9,AC10/T4/CI+smoke | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C11 | failed taskのRecoveryは外部状態を変更し、未配備revisionで再実行すれば同じ失敗を増やす。 | JRA負荷・履歴汚染。 | 修正版配備後にread-only smokeを先行し、対象task Recoveryは利用者の別の明示指示まで対象外とする。 | AC9/T5/operation checklist | 必須 | Approved, 2026-09-20 | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | cold sessionの同一Race Cardで、Race番号要素とlabel=`レース結果`要素が分離していても、同じ文脈のvalidated `accessS.html?CNAME`を選び、汎用一覧を開かずResultを保存する。 | T1,T2,T4 | sanitized Card→Result handler E2E | Connected |
+| AC1 | cold sessionの同一Race Cardで、Race番号要素とlabel=`レース結果`要素が分離していても、同じ文脈のvalidated `accessS.html?CNAME`を選び、汎用一覧を開かずResultを保存する。 | T1,T2,T4 | sanitized Card→Result handler E2E | Verified |
 | AC2 | Active/legacy-nullの保存済みResult URLが同一Raceとして検証できる場合、Card要否に関係なく直接利用する。 | T1,T2 | persisted-location matrix | Verified |
-| AC3 | 直接Result URLがない場合、fragment-only/JavaScript race controlをURL navigateせず正しい要素としてclickし、Current/Recent/Historical各経路で同一Race Resultへ到達する。 | T2,T4 | JS control and legacy route E2E | Connected |
-| AC4 | global menu、別Race、Card URL、未知host、壊れたCNAMEを棄却し、誤候補が先にあっても正しい候補を選び、terminal kind/RaceId不一致を保存しない。 | T1,T2,T4 | ambiguous candidate negative matrix | Connected |
-| AC5 | 未公開、404/範囲外、timeout/5xx、429、parse failureが設計表どおり待機・限定fallback・backoff・Blockedになり、同一失敗を無制限retryしない。 | T2,T4 | fake-clock/http/store integration | Connected |
-| AC6 | discoveryが後からvalidated Result URLを発見したとき、既存request/taskの有無にかかわらずResult locationを冪等mergeし、Card/Result facet独立性と完成済みResult skipを維持する。 | T3,T4 | duplicate/active/concurrent store integration | Connected |
-| AC7 | Card-only、Result-only、同一Card shortcut、過去結果検索、取消、未確定結果を含む既存正常遷移がすべて成功する。 | T4 | targeted plus non-External regression | Connected |
-| AC8 | attempt診断からroute、候補label、raw/resolved URL、選択・棄却理由、requested/final URL、page kind、Race identityを追跡できる。 | T2,T3,T4 | persisted diagnostic assertions | Not started |
+| AC3 | 直接Result URLがない場合、fragment-only/JavaScript race controlをURL navigateせず正しい要素としてclickし、Current/Recent/Historical各経路で同一Race Resultへ到達する。 | T2,T4 | JS control and legacy route E2E | Verified |
+| AC4 | global menu、別Race、Card URL、未知host、壊れたCNAMEを棄却し、誤候補が先にあっても正しい候補を選び、terminal kind/RaceId不一致を保存しない。 | T1,T2,T4 | ambiguous candidate negative matrix | Verified |
+| AC5 | 未公開、404/範囲外、timeout/5xx、429、parse failureが設計表どおり待機・限定fallback・backoff・Blockedになり、同一失敗を無制限retryしない。 | T2,T4 | fake-clock/http/store integration | Verified |
+| AC6 | discoveryが後からvalidated Result URLを発見したとき、既存request/taskの有無にかかわらずResult locationを冪等mergeし、Card/Result facet独立性と完成済みResult skipを維持する。 | T3,T4 | duplicate/active/concurrent store integration | Verified |
+| AC7 | Card-only、Result-only、同一Card shortcut、過去結果検索、取消、未確定結果を含む既存正常遷移がすべて成功する。 | T4 | targeted plus non-External regression | Verified |
+| AC8 | attempt診断からroute、候補label、raw/resolved URL、選択・棄却理由、requested/final URL、page kind、Race identityを追跡できる。 | T2,T3,T4 | persisted diagnostic assertions | Verified |
 | AC9 | 修正版配備後、現行JRAの非破壊read-only smokeがcold/warm両経路で同一Race Resultを確認する。個別Recoveryは別の明示指示まで行わない。 | T5 | deployment/operation checklist | Not started |
-| AC10 | 分離要素、誤候補先行、JS `#` controlを保持したproduction-shaped fixtureが修正前に失敗し修正後に成功し、通常CIとLinux runner相当のformat/build/non-External testが成功する。 | T4 | fixture regression and CI parity | Not started |
+| AC10 | 分離要素、誤候補先行、JS `#` controlを保持したproduction-shaped fixtureが修正前に失敗し修正後に成功し、通常CIとLinux runner相当のformat/build/non-External testが成功する。 | T4 | fixture regression and CI parity | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | Routing | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Card snapshotからexpected Raceの直接Result候補を抽出・検証する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping snapshot/selector、URL identity、tests | separated/ambiguous candidate matrix | typed direct candidates | Lead external contract ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T2 | direct URLとJS click controlを分離し、全fallbackを共通terminal validationへ接続する。AC1,AC3-AC5,AC8 | Main | Lead | T1 | Navigator、browser interaction、handler diagnostics、tests | cold/warm navigation E2E | bounded validated transition | Lead browser/state-machine integration | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T3 | 後発Result locationを既存resource/taskへ冪等mergeし診断を永続化する。AC6,AC8 | Main | Lead | T1 | Collection request/store/API、schemaが必要ならmigration、tests | duplicate/active/concurrent integration | persisted Result location | Lead persistence/concurrency ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T4 | production-shaped fixturesと全非回帰・CI parityを検証する。AC1,AC3-AC8,AC10 | Main | Lead | T2,T3 | tests/fixtures/change record | exact CI commands and counterexamples | green deterministic gates | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T5 | 配備とread-only smokeを行い、Recovery境界を維持する。AC9 | Main | Lead | T4 | deployment/change record only | deploy status and current JRA cold/warm smoke | production compatibility evidence | Lead operation ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
+| T1 | Card snapshotからexpected Raceの直接Result候補を抽出・検証する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping snapshot/selector、URL identity、tests | separated/ambiguous candidate matrix | typed direct candidates | Lead external contract ownership | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T2 | direct URLとJS click controlを分離し、全fallbackを共通terminal validationへ接続する。AC1,AC3-AC5,AC8 | Main | Lead | T1 | Navigator、browser interaction、handler diagnostics、tests | cold/warm navigation E2E | bounded validated transition | Lead browser/state-machine integration | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
+| T3 | 後発Result locationを既存resource/taskへ冪等mergeし診断を永続化する。AC6,AC8 | Main | Lead | T1 | Collection request/store/API、schemaが必要ならmigration、tests | duplicate/active/concurrent integration | persisted Result location | Lead persistence/concurrency ownership | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
+| T4 | production-shaped fixturesと全非回帰・CI parityを検証する。AC1,AC3-AC8,AC10 | Main | Lead | T2,T3 | tests/fixtures/change record | exact CI commands and counterexamples | green deterministic gates | Lead final acceptance ownership | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
+| T5 | 配備とread-only smokeを行い、Recovery境界を維持する。AC9 | Main | Lead | T4 | deployment/change record only | deploy status and current JRA cold/warm smoke | production compatibility evidence | Lead operation ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Runnable |
 
 ## Review gates
 
@@ -162,8 +162,17 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 - **Final review — 2026-09-20, reviewer: Main（superseded）.** fixtureが実Cardの分離要素とJS controlを再現せず、production cold pathと後発location mergeも未検証だったため、完了判定を撤回した。
 - **Correction design and task-split review — 2026-09-20, reviewer: Main.** selector、browser遷移、永続化はそれぞれ独立検証できるが、外部契約・状態機械・concurrencyを含むためMain/Leadが依存順に保持する。全ACにtaskと反例を割り当て、既存正常遷移をAC7で明示した。
 - **Correction concern and agreement review — 2026-09-20, reviewer: Main.** C6-C11を追加した。設計上のOpen decisionはなく、利用者の明示承認を待つ。承認まではproduction codeを変更しない。
+- **Correction pre-implementation review — 2026-09-20, reviewer: Main.** 利用者がAC1-AC10とC1-C11の処置を承認した。T1をIn progress、T2-T5をDependentとする。T1/T2はproduction-shaped selector・JS control・terminal validation、T3はduplicate/active/concurrent location merge、T4はexact CI parity、T5は配備後read-only smokeを証拠とする。個別Recoveryは承認範囲外のまま維持する。
 
 ## Verification record
+
+### Verification failure ledger
+
+- `dotnet test ... --filter "FullyQualifiedName~JraNavigatorTests" -c Release` initially failed
+  `ToRaceResultAsync_FragmentRaceControl_ClicksInsteadOfNavigating`: the successful fallback overwrote the
+  `RaceControlClick` trace with the coarse `Current` route. Classification: deterministic observability regression.
+  Disposition: preserve the detailed transition trace and append the fallback route/final identity. Closed by the
+  successful rerun of the same 56-test command and the subsequent full non-External suite.
 
 - 2026-09-20: production read-onlyで`20260919:Nakayama:3`のCard/Result URL、domain entry/result各12件、revision 2の`accessS.html#` RaceList失敗、facet欠落を確認した。
 - 2026-09-20: 現行handlerは`!requiresCard`の場合だけResult locationを直接使うこと、`ToRaceResultAsync`が同一ページshortcut後にCurrent/Recent/Historicalへfallbackすることを確認した。
@@ -174,6 +183,9 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 - 2026-09-20: PR #61配備後の`20260920:Nakayama:6` attemptが`accessS.html#` RaceListで失敗した。実Cardのrace固有`レース結果`リンクは`accessS.html?CNAME=...`で同一Race Resultへ成功した。
 - 2026-09-20: selectorがrace番号labelとResult labelの同一URL groupを要求する一方、実リンクlabelは`レース結果`のみであること、fallbackがresolved `accessS.html#`をnavigateすることを確認した。
 - 2026-09-20: ordinary duplicate requestはactive/existing taskを返す前に後発explicit URLをlocationへ統合しないことを確認した。
+- 2026-09-20: production-shaped direct/fragment testsを含む`JraNavigatorTests` 56件と、handler/store focused tests 122件が成功した。
+- 2026-09-20: `dotnet format ... --verify-no-changes`、Release build（warning/error 0）、非External全体1163件成功・既存skip 1、migration model差分なし、脆弱packageなしを確認した。
+- 2026-09-20: Checkpoint reviewでAC1/AC3/AC4は分離label・誤候補先行・terminal identity、AC6はreused task location merge、AC8はpersisted PageIdentification trace、AC7/AC10は全回帰で受理した。残作業はT5/AC9の配備とread-only smokeのみ。
 
 ## Approval request
 
