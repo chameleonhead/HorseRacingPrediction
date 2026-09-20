@@ -1,6 +1,6 @@
 # JRA出馬表から結果へ堅牢に遷移する
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-20
@@ -10,9 +10,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 利用者承認後、T1から依存順に実装する。 |
-| Verification | Not started | production-shaped fixture、handler統合、既存Navigator回帰が必要。 |
-| Deployment/operation | Not started | code配備後にread-only smokeを行い、個別Recoveryは別の明示判断とする。 |
+| Code | Complete | Result URL優先、URL/ページidentity検証、transient停止、完成済みResult skip、facet欠落監視を実装した。 |
+| Verification | Complete | targeted 45件とRelease非External全体1161件（成功1160、既存skip 1）が成功した。 |
+| Deployment/operation | Pending deployment | 配備後はread-only smokeのみ行い、個別Recoveryは別の明示判断とする。 |
 
 ## Context
 
@@ -105,37 +105,41 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 同一attemptのCardが有効なResult URLを示す場合、汎用開催選択を開かず、そのURLから同一Race Resultを保存する。 | T1,T2 | Card→Result production-shaped handler E2E | Not started |
-| AC2 | Active/legacy-nullの保存済みResult URLが同一Raceとして検証できる場合、Card要否に関係なく直接利用する。 | T1,T2 | persisted-location matrix | Not started |
-| AC3 | 具体Result URLがない場合、既存Current/Recent/Historical経路が従来どおり成功する。 | T2,T3 | existing Navigator regression suite | Not started |
-| AC4 | 別Race、Card URL、未知host、壊れたCNAMEをResultとして保存せず、候補状態と診断を残す。 | T1,T2 | URL/page identity negative matrix | Not started |
-| AC5 | 未公開、404/範囲外、timeout/5xx、429、parse failureが設計表どおり待機・限定fallback・backoff・Blockedになる。 | T2,T3 | fake-clock/http/store integration | Not started |
-| AC6 | CardとResultのfacetが独立更新され、facet欠落がcoverage監視から消えず、完成済みResultは関連主体Recoveryで再取得されない。 | T2,T3 | store/monitor/domain-complete counterexample | Not started |
-| AC7 | Card-only、Result-only、同一Card shortcut、過去結果検索、取消、未確定結果の既存正常テストがすべて成功する。 | T3 | targeted plus non-External regression | Not started |
-| AC8 | `20260919:Nakayama:3`相当fixtureで、結果12件完成後の関連主体RecoveryがJRA Result navigation 0件で終わり、Race本体をFailedにしない。 | T2,T3 | production-shaped recovery E2E | Not started |
-| AC9 | production個別Recoveryを実装検証に混ぜず、配備後read-only smokeの合格条件と別承認のRecovery条件を記録する。 | T4 | deployment/operation checklist | Not started |
+| AC1 | 同一attemptのCardが有効なResult URLを示す場合、汎用開催選択を開かず、そのURLから同一Race Resultを保存する。 | T1,T2 | Card→Result production-shaped handler E2E | Verified |
+| AC2 | Active/legacy-nullの保存済みResult URLが同一Raceとして検証できる場合、Card要否に関係なく直接利用する。 | T1,T2 | persisted-location matrix | Verified |
+| AC3 | 具体Result URLがない場合、既存Current/Recent/Historical経路が従来どおり成功する。 | T2,T3 | existing Navigator regression suite | Verified |
+| AC4 | 別Race、Card URL、未知host、壊れたCNAMEをResultとして保存せず、候補状態と診断を残す。 | T1,T2 | URL/page identity negative matrix | Verified |
+| AC5 | 未公開、404/範囲外、timeout/5xx、429、parse failureが設計表どおり待機・限定fallback・backoff・Blockedになる。 | T2,T3 | fake-clock/http/store integration | Verified |
+| AC6 | CardとResultのfacetが独立更新され、facet欠落がcoverage監視から消えず、完成済みResultは関連主体Recoveryで再取得されない。 | T2,T3 | store/monitor/domain-complete counterexample | Verified |
+| AC7 | Card-only、Result-only、同一Card shortcut、過去結果検索、取消、未確定結果の既存正常テストがすべて成功する。 | T3 | targeted plus non-External regression | Verified |
+| AC8 | `20260919:Nakayama:3`相当fixtureで、結果12件完成後の関連主体RecoveryがJRA Result navigation 0件で終わり、Race本体をFailedにしない。 | T2,T3 | production-shaped recovery E2E | Verified |
+| AC9 | production個別Recoveryを実装検証に混ぜず、配備後read-only smokeの合格条件と別承認のRecovery条件を記録する。 | T4 | deployment/operation checklist | Verified |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | Routing | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Card/Result URL evidenceとartifact分類契約を実装する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping page/parser、Collector URL classifier、tests | parser/URL identity matrix | typed candidates | Lead public contract ownership | none | unavailable; retries 0; corrections 0; reviews 0 | In progress |
-| T2 | race-detailのResult遷移と完成済みResult skipを実装する。AC1-AC6,AC8 | Main | Lead | T1 | Collector handler、workflow contract、tests | handler/store production-shaped E2E | bounded transition | Lead integration of shared state machine | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
-| T3 | 既存Navigator非回帰とfacet/monitor偽陰性を閉じる。AC3,AC5-AC8 | Main | Lead | T2 | Navigator、CollectionOperations、Monitoring、tests | targeted and non-External solution tests | compatibility evidence | Lead integration and final acceptance risk | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
-| T4 | 配備後read-only smokeと個別Recoveryの別承認条件を固定する。AC9 | Main | Lead | T3 | change record/docs only | read-only production checklist | safe operation boundary | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
+| T1 | Card/Result URL evidenceとartifact分類契約を実装する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping page/parser、Collector URL classifier、tests | parser/URL identity matrix | typed candidates | Lead public contract ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Verified |
+| T2 | race-detailのResult遷移と完成済みResult skipを実装する。AC1-AC6,AC8 | Main | Lead | T1 | Collector handler、workflow contract、tests | handler/store production-shaped E2E | bounded transition | Lead integration of shared state machine | none | unavailable; retries 0; corrections 0; reviews 0 | Verified |
+| T3 | 既存Navigator非回帰とfacet/monitor偽陰性を閉じる。AC3,AC5-AC8 | Main | Lead | T2 | Navigator、CollectionOperations、Monitoring、tests | targeted and non-External solution tests | compatibility evidence | Lead integration and final acceptance risk | none | unavailable; retries 0; corrections 0; reviews 0 | Verified |
+| T4 | 配備後read-only smokeと個別Recoveryの別承認条件を固定する。AC9 | Main | Lead | T3 | change record/docs only | read-only production checklist | safe operation boundary | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Verified |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-20, reviewer: Main.** URL evidence、handler遷移、facet/monitor、運用確認は同じRace状態機械を共有し、分離した並列書込は競合するためMain/Leadが依存順に保持する。既存Navigatorは置換せずfallbackとして維持する。
 - **Concern and agreement review — 2026-09-20, reviewer: Main.** 誤Race保存、JRA過負荷、legacy退行、monitor偽陰性、完成済みResult再取得をmaterial concernとしてC1-C5へ記録した。設計上のOpen decisionはない。利用者のdispositionと明示承認を待つ。
 - **Pre-implementation review — 2026-09-20, reviewer: Main.** 利用者がAC1-AC9とC1-C5を明示承認した。T1をIn progress、T2-T4をDependentとする。T1は`JraRaceDetailUrl`/page evidence tests、T2は`JraDirectCollectionHandlerTests`とstore integration、T3はNavigator既存suite・monitor evaluator・非External全回帰、T4はread-only smoke条件とする。identity不一致、429/5xx、既存fallback退行、facet誤Currentが出た場合は次taskへ進まず修正する。
+- **Final review — 2026-09-20, reviewer: Main.** Result候補をCard要否から分離し、公式URL事前検証とpage kind/RaceId事後検証を維持した。429/5xxはattemptを停止し、完成済みResultはnavigationを行わない。既存Navigator fallbackは変更せず全回帰に合格した。facet Unknownはdomain完成と区別したtracking findingとして残る。承認済みACに未完了・Rejected・Externally blockedはない。
 
 ## Verification record
 
 - 2026-09-20: production read-onlyで`20260919:Nakayama:3`のCard/Result URL、domain entry/result各12件、revision 2の`accessS.html#` RaceList失敗、facet欠落を確認した。
 - 2026-09-20: 現行handlerは`!requiresCard`の場合だけResult locationを直接使うこと、`ToRaceResultAsync`が同一ページshortcut後にCurrent/Recent/Historicalへfallbackすることを確認した。
 - 2026-09-20: JRA公式Resultページが同一開催の出馬表・払戻・Race選択への導線を持つことを確認した。
+- 2026-09-20: `JraDirectCollectionHandlerTests` 28件、`CollectionMonitoringServiceTests` 17件が成功した。
+- 2026-09-20: `dotnet test HorseRacingPrediction.sln --no-restore --filter "TestCategory!=External" -c Release` は成功1160件、既存skip 1件、失敗0件だった。
+- 2026-09-20: production個別Recovery、priority変更、履歴削除は実施していない。配備後smokeは対象RaceのResult location/facet、最新attempt、monitor findingをread-onlyで確認し、個別Recoveryは別承認後に限る。
 
 ## Approval request
 
-承認対象はAC1-AC9とC1-C5の処置に限定する。承認によりURL候補分類、Result遷移、facet/monitor、対応テストと文書更新の実装を開始する。production個別Recovery、priority変更、履歴削除は承認対象外とする。
+AC1-AC9とC1-C5は承認済みで実装・検証を完了した。production個別Recovery、priority変更、履歴削除は引き続き対象外とする。
