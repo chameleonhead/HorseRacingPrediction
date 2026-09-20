@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Code | Complete | production-shaped direct Result選択、JS control click、後発location merge、navigation traceを実装した。 |
 | Verification | Complete locally | focused 178件とRelease非External全体1163件（成功1163、既存skip 1）、format/build/migration/vulnerability gateが成功した。 |
-| Deployment/operation | Pending deployment | 修正版のpush/merge/deployとread-only smokeが残る。個別Recoveryは別の明示判断とする。 |
+| Deployment/operation | Deployed; execution evidence pending | PR #62をmainへmergeしrun 35491841781が成功。対象Raceにはattempt 0のReady taskが既に存在するが、個別Recoveryは実行せず、修正版navigationのproduction実行証拠を待つ。 |
 
 ## Context
 
@@ -152,7 +152,7 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 | T2 | direct URLとJS click controlを分離し、全fallbackを共通terminal validationへ接続する。AC1,AC3-AC5,AC8 | Main | Lead | T1 | Navigator、browser interaction、handler diagnostics、tests | cold/warm navigation E2E | bounded validated transition | Lead browser/state-machine integration | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
 | T3 | 後発Result locationを既存resource/taskへ冪等mergeし診断を永続化する。AC6,AC8 | Main | Lead | T1 | Collection request/store/API、schemaが必要ならmigration、tests | duplicate/active/concurrent integration | persisted Result location | Lead persistence/concurrency ownership | none | unavailable; retries 0; corrections 0; reviews 1 | Verified |
 | T4 | production-shaped fixturesと全非回帰・CI parityを検証する。AC1,AC3-AC8,AC10 | Main | Lead | T2,T3 | tests/fixtures/change record | exact CI commands and counterexamples | green deterministic gates | Lead final acceptance ownership | none | unavailable; retries 1; corrections 1; reviews 1 | Verified |
-| T5 | 配備とread-only smokeを行い、Recovery境界を維持する。AC9 | Main | Lead | T4 | deployment/change record only | deploy status and current JRA cold/warm smoke | production compatibility evidence | Lead operation ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Runnable |
+| T5 | 配備とread-only smokeを行い、Recovery境界を維持する。AC9 | Main | Lead | T4 | deployment/change record only | deploy status and current JRA cold/warm smoke | production compatibility evidence | Lead operation ownership | none | unavailable; retries 0; corrections 0; reviews 1 | Externally blocked |
 
 ## Review gates
 
@@ -186,6 +186,8 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 - 2026-09-20: production-shaped direct/fragment testsを含む`JraNavigatorTests` 56件と、handler/store focused tests 122件が成功した。
 - 2026-09-20: `dotnet format ... --verify-no-changes`、Release build（warning/error 0）、非External全体1163件成功・既存skip 1、migration model差分なし、脆弱packageなしを確認した。
 - 2026-09-20: Checkpoint reviewでAC1/AC3/AC4は分離label・誤候補先行・terminal identity、AC6はreused task location merge、AC8はpersisted PageIdentification trace、AC7/AC10は全回帰で受理した。残作業はT5/AC9の配備とread-only smokeのみ。
+- 2026-09-20: PR #62をmerge commit `0e3c3d0b4a38c79cdf38417a93e5578e28528470`でmainへ統合し、app-deploy run `35491841781`の全jobが成功した。Lambda LastModifiedは2026-09-20 14:38 JST。
+- 2026-09-20: production read-only smokeで対象Raceに新しいReady task `f25d31c6-76e3-4476-a875-baa918a2818d`（attempt 0）が存在し、旧failed attempt以降の修正版実行証拠はまだないことを確認した。個別Recoveryは実行していないためAC9/T5を未完了のまま保持する。
 
 ## Approval request
 
