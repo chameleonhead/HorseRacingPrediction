@@ -1,6 +1,6 @@
 # JRA出馬表から結果へ堅牢に遷移する
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-20
@@ -10,7 +10,7 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | 本記録の明示承認後に実装する。 |
+| Code | In progress | 利用者承認後、T1から依存順に実装する。 |
 | Verification | Not started | production-shaped fixture、handler統合、既存Navigator回帰が必要。 |
 | Deployment/operation | Not started | code配備後にread-only smokeを行い、個別Recoveryは別の明示判断とする。 |
 
@@ -95,11 +95,11 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | 具体Result URLを文字列だけで信用すると別Raceや古い導線を保存し得る。 | 誤Race結果は重大なデータ汚染。 | host/path/CNAME事前検証とpage kind/RaceId事後検証を両方必須にする。 | AC1,AC4/T1,T2/identity mismatch | 必須 | Pending | Resolved in design |
-| C2 | timeout/429後もfallbackを連続するとJRA負荷と制限を悪化させる。 | cascading failure。 | transient/access failureではattemptを止め、候補fallbackは404・範囲外・identity mismatchに限定する。 | AC5/T2/http matrix | 必須 | Pending | Resolved in design |
-| C3 | 新しい直接URL優先で既存のCurrent/Recent/Historical正常経路を削る危険。 | 過去Raceやlegacy taskが退行。 | 既存Navigatorを最終fallbackとして保持し、既存fixtureを非回帰gateにする。 | AC2,AC3,AC7/T2,T3/legacy fixtures | 必須 | Pending | Resolved in design |
-| C4 | facet未生成Raceを監視対象外にすると、取得失敗が解消したように見える。 | 偽陰性。 | 公式Card/Result locationまたはdomain evidenceがあるfacet欠落をcoverage findingに含める。 | AC6/T3/production-shaped monitor | 必須 | Pending | Resolved in design |
-| C5 | domain結果完成済みの関連主体Recoveryが結果再取得を行っている。 | 不要なJRAアクセスと偽のRace失敗。 | Result Currentまたは証明済みreconciliation後はResult stageをskipし、関連主体結果とRace facetを分離する。 | AC6,AC8/T2,T3/completed-domain counterexample | 必須 | Pending | Resolved in design |
+| C1 | 具体Result URLを文字列だけで信用すると別Raceや古い導線を保存し得る。 | 誤Race結果は重大なデータ汚染。 | host/path/CNAME事前検証とpage kind/RaceId事後検証を両方必須にする。 | AC1,AC4/T1,T2/identity mismatch | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C2 | timeout/429後もfallbackを連続するとJRA負荷と制限を悪化させる。 | cascading failure。 | transient/access failureではattemptを止め、候補fallbackは404・範囲外・identity mismatchに限定する。 | AC5/T2/http matrix | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C3 | 新しい直接URL優先で既存のCurrent/Recent/Historical正常経路を削る危険。 | 過去Raceやlegacy taskが退行。 | 既存Navigatorを最終fallbackとして保持し、既存fixtureを非回帰gateにする。 | AC2,AC3,AC7/T2,T3/legacy fixtures | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C4 | facet未生成Raceを監視対象外にすると、取得失敗が解消したように見える。 | 偽陰性。 | 公式Card/Result locationまたはdomain evidenceがあるfacet欠落をcoverage findingに含める。 | AC6/T3/production-shaped monitor | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C5 | domain結果完成済みの関連主体Recoveryが結果再取得を行っている。 | 不要なJRAアクセスと偽のRace失敗。 | Result Currentまたは証明済みreconciliation後はResult stageをskipし、関連主体結果とRace facetを分離する。 | AC6,AC8/T2,T3/completed-domain counterexample | 必須 | Approved, 2026-09-20 | Resolved in design |
 
 ## Acceptance criteria
 
@@ -119,15 +119,16 @@ Cardが必要だったかどうかはResult候補利用の条件にしない。
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | Routing | Audit | Result metrics | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Card/Result URL evidenceとartifact分類契約を実装する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping page/parser、Collector URL classifier、tests | parser/URL identity matrix | typed candidates | Lead public contract ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T2 | race-detailのResult遷移と完成済みResult skipを実装する。AC1-AC6,AC8 | Main | Lead | T1 | Collector handler、workflow contract、tests | handler/store production-shaped E2E | bounded transition | Lead integration of shared state machine | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T3 | 既存Navigator非回帰とfacet/monitor偽陰性を閉じる。AC3,AC5-AC8 | Main | Lead | T2 | Navigator、CollectionOperations、Monitoring、tests | targeted and non-External solution tests | compatibility evidence | Lead integration and final acceptance risk | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
-| T4 | 配備後read-only smokeと個別Recoveryの別承認条件を固定する。AC9 | Main | Lead | T3 | change record/docs only | read-only production checklist | safe operation boundary | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Proposed |
+| T1 | Card/Result URL evidenceとartifact分類契約を実装する。AC1,AC2,AC4 | Main | Lead | Approval | Scraping page/parser、Collector URL classifier、tests | parser/URL identity matrix | typed candidates | Lead public contract ownership | none | unavailable; retries 0; corrections 0; reviews 0 | In progress |
+| T2 | race-detailのResult遷移と完成済みResult skipを実装する。AC1-AC6,AC8 | Main | Lead | T1 | Collector handler、workflow contract、tests | handler/store production-shaped E2E | bounded transition | Lead integration of shared state machine | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
+| T3 | 既存Navigator非回帰とfacet/monitor偽陰性を閉じる。AC3,AC5-AC8 | Main | Lead | T2 | Navigator、CollectionOperations、Monitoring、tests | targeted and non-External solution tests | compatibility evidence | Lead integration and final acceptance risk | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
+| T4 | 配備後read-only smokeと個別Recoveryの別承認条件を固定する。AC9 | Main | Lead | T3 | change record/docs only | read-only production checklist | safe operation boundary | Lead final acceptance ownership | none | unavailable; retries 0; corrections 0; reviews 0 | Dependent |
 
 ## Review gates
 
 - **Design and task-split review — 2026-09-20, reviewer: Main.** URL evidence、handler遷移、facet/monitor、運用確認は同じRace状態機械を共有し、分離した並列書込は競合するためMain/Leadが依存順に保持する。既存Navigatorは置換せずfallbackとして維持する。
 - **Concern and agreement review — 2026-09-20, reviewer: Main.** 誤Race保存、JRA過負荷、legacy退行、monitor偽陰性、完成済みResult再取得をmaterial concernとしてC1-C5へ記録した。設計上のOpen decisionはない。利用者のdispositionと明示承認を待つ。
+- **Pre-implementation review — 2026-09-20, reviewer: Main.** 利用者がAC1-AC9とC1-C5を明示承認した。T1をIn progress、T2-T4をDependentとする。T1は`JraRaceDetailUrl`/page evidence tests、T2は`JraDirectCollectionHandlerTests`とstore integration、T3はNavigator既存suite・monitor evaluator・非External全回帰、T4はread-only smoke条件とする。identity不一致、429/5xx、既存fallback退行、facet誤Currentが出た場合は次taskへ進まず修正する。
 
 ## Verification record
 
