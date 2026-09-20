@@ -11,7 +11,15 @@
 .repair-actions { border-top: 1px solid var(--neutral-stroke-rest); justify-content: flex-end; padding-top: 14px; }
 .repair-confirm-list { max-height: 240px; overflow: auto; }
 .warning-note { background: var(--neutral-fill-secondary-rest); border-left: 3px solid var(--status-warning-foreground-1); padding: 12px; }
+.normalization-search { align-items: end; display: grid; gap: 12px; grid-template-columns: minmax(140px, 220px) minmax(220px, 1fr) auto; }
+.normalization-field { min-width: 0; }
+.normalization-field fluent-select, .normalization-field fluent-text-field { width: 100%; }
+.normalization-actions .normalization-selection { margin-left: auto; }
+.field-error { color: var(--error); margin: -6px 0 0; }
+.repair-result-list { margin: 0; }
 @media (max-width: 760px) {
+    .normalization-search { align-items: stretch; grid-template-columns: 1fr; }
+    .normalization-actions .normalization-selection { margin-left: 0; }
     .repair-filter { margin-left: 0; width: 100%; }
     .repair-filter select { flex: 1; }
     .repair-grid { display: none; }

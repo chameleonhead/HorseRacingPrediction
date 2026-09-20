@@ -46,6 +46,7 @@ public static partial class EndpointExtensions
             .AddEndpointFilter<RaceWriteEndpointFilter>()
             .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
         MapHorseIdentityRepairEndpoints(writeGroup);
+        MapSubjectNameNormalizationEndpoints(writeGroup);
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]

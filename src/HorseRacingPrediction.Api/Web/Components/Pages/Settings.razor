@@ -14,6 +14,104 @@
     <FluentMessageBar Intent="@MessageIntent.Success" Title="データ補正が完了しました">@success</FluentMessageBar>
 }
 
+<section class="entity-section settings-section" aria-labelledby="name-normalization-heading">
+    <p class="eyebrow">登録済みデータ補正</p>
+    <h2 id="name-normalization-heading">登録済み名称の正規化</h2>
+    <p class="section-description">競走馬・騎手・調教師を名称またはIDで検索し、現在の共通規則による変更内容を確認してから補正します。ID、名寄せ、プロフィール、収集履歴は変更しません。</p>
+    <div class="normalization-search">
+        <div class="normalization-field">
+            <FluentSelect TOption="string" Label="対象種別" Style="width:100%;" @bind-Value="normalizationType">
+                <FluentOption TOption="string" Value="Trainer">調教師</FluentOption>
+                <FluentOption TOption="string" Value="Jockey">騎手</FluentOption>
+                <FluentOption TOption="string" Value="Horse">競走馬</FluentOption>
+            </FluentSelect>
+        </div>
+        <div class="normalization-field"><FluentTextField Label="名称またはID" Style="width:100%;" @bind-Value="normalizationQuery" /></div>
+        <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => SearchNormalizationAsync(1))" Disabled="@(normalizationLoading || busy)">
+            @(normalizationLoading ? "検索中…" : "検索")
+        </FluentButton>
+    </div>
+    @if (normalizationValidation is not null)
+    {
+        <p class="field-error" role="alert">@normalizationValidation</p>
+    }
+    @if (normalizationErrors.Count > 0)
+    {
+        <RaceOpsAlert Title="名称の補正候補を取得できませんでした" Messages="@normalizationErrors" />
+    }
+    @if (!normalizationSearched)
+    {
+        <UiState Title="対象を検索してください" Message="名称の一部またはIDを入力すると、補正前後を比較できます。" />
+    }
+    else if (normalizationLoading && normalizationPage is null)
+    {
+        <UiState Kind="loading" Title="補正候補を検索しています" />
+    }
+    else if (normalizationPage is not null && normalizationPage.Items.Count == 0)
+    {
+        <UiState Title="一致する対象がありません" Message="対象種別または検索語を変えて、もう一度検索してください。" />
+    }
+    else if (normalizationPage is not null)
+    {
+        <div class="repair-summary" role="status">
+            <span>検索結果 <strong>@normalizationPage.TotalCount</strong> 件</span>
+            <span>補正可能 <strong>@normalizationPage.Items.Count(x => x.CanApply)</strong> 件</span>
+            <FluentButton Appearance="@Appearance.Stealth" OnClick="SelectAllApplicableNormalization"
+                          Disabled="@(busy || normalizationPage.Items.All(x => !x.CanApply))">このページの補正可能な対象をすべて選択</FluentButton>
+        </div>
+        <div class="repair-grid">
+            <FluentDataGrid Items="@normalizationPage.Items.AsQueryable()" TGridItem="SubjectNameNormalizationCandidate" aria-label="名称の正規化候補">
+                <TemplateColumn Title="選択"><FluentCheckbox ThreeState="true" CheckState="@NormalizationSelected(context)" CheckStateChanged="@(value => SetNormalizationSelected(context, value == true))" Disabled="@(!context.CanApply || busy)" aria-label="@($"{context.CurrentDisplayName}を選択")" /></TemplateColumn>
+                <TemplateColumn Title="対象"><strong>@context.CurrentDisplayName</strong><small>@SubjectTypeLabel(context.SubjectType) / @context.SubjectId</small></TemplateColumn>
+                <TemplateColumn Title="現在"><span>@context.CurrentDisplayName</span><small>正規化名: @context.CurrentNormalizedName</small></TemplateColumn>
+                <TemplateColumn Title="補正後"><span>@context.ProposedDisplayName</span><small>正規化名: @context.ProposedNormalizedName</small></TemplateColumn>
+                <TemplateColumn Title="判定"><RaceOpsStatusBadge Label="@(context.CanApply ? "補正可能" : context.HasChanges ? "要確認" : "変更なし")" Tone="@(context.CanApply ? "success" : "warning")" /><small>@context.BlockingReason</small></TemplateColumn>
+            </FluentDataGrid>
+        </div>
+        <div class="repair-cards" aria-label="名称の正規化候補">
+            @foreach (var candidate in normalizationPage.Items)
+            {
+                <article class="repair-card">
+                    <div class="repair-card-status">
+                        <FluentCheckbox ThreeState="true" CheckState="@NormalizationSelected(candidate)" CheckStateChanged="@(value => SetNormalizationSelected(candidate, value == true))" Disabled="@(!candidate.CanApply || busy)" aria-label="@($"{candidate.CurrentDisplayName}を選択")" />
+                        <RaceOpsStatusBadge Label="@(candidate.CanApply ? "補正可能" : candidate.HasChanges ? "要確認" : "変更なし")" Tone="@(candidate.CanApply ? "success" : "warning")" />
+                    </div>
+                    <dl>
+                        <dt>対象</dt><dd><strong>@candidate.CurrentDisplayName</strong><small>@SubjectTypeLabel(candidate.SubjectType) / @candidate.SubjectId</small></dd>
+                        <dt>現在</dt><dd>@candidate.CurrentDisplayName<small>正規化名: @candidate.CurrentNormalizedName</small></dd>
+                        <dt>補正後</dt><dd>@candidate.ProposedDisplayName<small>正規化名: @candidate.ProposedNormalizedName</small></dd>
+                        <dt>判定</dt><dd>@(candidate.BlockingReason ?? "補正可能")</dd>
+                    </dl>
+                </article>
+            }
+        </div>
+        <div class="repair-actions normalization-actions">
+            <FluentButton OnClick="@(() => SearchNormalizationAsync(normalizationPage.Page - 1))" Disabled="@(busy || normalizationLoading || normalizationPage.Page <= 1)">前へ</FluentButton>
+            <span>@normalizationPage.Page / @NormalizationTotalPages ページ</span>
+            <FluentButton OnClick="@(() => SearchNormalizationAsync(normalizationPage.Page + 1))" Disabled="@(busy || normalizationLoading || normalizationPage.Page >= NormalizationTotalPages)">次へ</FluentButton>
+            <span class="normalization-selection">@selectedNormalization.Count 件を選択</span>
+            <FluentButton Appearance="@Appearance.Accent" OnClick="@(() => confirmingNormalization = true)" Disabled="@(busy || selectedNormalization.Count == 0)">選択した対象を補正</FluentButton>
+        </div>
+        @if (normalizationResult is not null)
+        {
+            <div class="repair-summary" role="status"><span>補正 <strong>@normalizationResult.AppliedCount</strong> 件</span><span>スキップ <strong>@normalizationResult.SkippedCount</strong> 件</span><span>失敗 <strong>@normalizationResult.FailedCount</strong> 件</span></div>
+            @if (normalizationResult.Items.Any(x => x.Status != "Applied"))
+            {
+                <ul class="repair-result-list">@foreach (var item in normalizationResult.Items.Where(x => x.Status != "Applied")){<li><strong>@SubjectTypeLabel(item.SubjectType) @item.SubjectId:</strong> @item.Message</li>}</ul>
+            }
+        }
+    }
+</section>
+
+<FluentDialog Hidden="@(!confirmingNormalization)" HiddenChanged="@(hidden => confirmingNormalization = !hidden)" Modal="true" TrapFocus="true" AriaLabelledby="normalization-confirm-title" Style="width:min(680px, calc(100vw - 32px));">
+    <FluentDialogHeader ShowDismiss="@(!busy)"><h2 id="normalization-confirm-title">選択した@selectedNormalization.Count 件の名称を補正しますか？</h2></FluentDialogHeader>
+    <FluentDialogBody>
+        <ul class="repair-confirm-list">@foreach (var candidate in SelectedNormalizationCandidates){<li><strong>@SubjectTypeLabel(candidate.SubjectType) @candidate.SubjectId</strong>: @candidate.CurrentDisplayName → @candidate.ProposedDisplayName</li>}</ul>
+        <p>表示名と正規化名だけを、検索時に表示した内容へ更新します。検索後に名称が変わった対象や、同じ正規化名を持つ別IDがある対象は自動的にスキップします。</p>
+    </FluentDialogBody>
+    <FluentDialogFooter><FluentButton OnClick="@(() => confirmingNormalization = false)" Disabled="@busy">戻って確認</FluentButton><FluentButton Appearance="@Appearance.Accent" OnClick="ApplyNormalizationAsync" Disabled="@busy">@(busy ? "補正中…" : "名称を補正")</FluentButton></FluentDialogFooter>
+</FluentDialog>
+
 <section class="entity-section settings-section" aria-labelledby="race-owner-repair-heading">
     <p class="eyebrow">レースデータマイグレーション</p>
     <h2 id="race-owner-repair-heading">出走馬の馬主情報を補正</h2>
@@ -318,6 +416,16 @@
     private IReadOnlyList<string> ownerRepairErrors = [];
     private bool ownerRepairLoading;
     private bool confirmingOwnerRepair;
+    private string normalizationType = "Trainer";
+    private string normalizationQuery = string.Empty;
+    private SubjectNameNormalizationPage? normalizationPage;
+    private SubjectNameNormalizationApplyResult? normalizationResult;
+    private readonly HashSet<string> selectedNormalization = new(StringComparer.Ordinal);
+    private IReadOnlyList<string> normalizationErrors = [];
+    private string? normalizationValidation;
+    private bool normalizationSearched;
+    private bool normalizationLoading;
+    private bool confirmingNormalization;
     private IReadOnlyList<SubjectIdentificationRepairCandidateResponse> FilteredSubjectCandidates =>
         string.IsNullOrWhiteSpace(subjectFilter) ? subjectCandidates : subjectCandidates.Where(x => x.SubjectType.ToString() == subjectFilter).ToArray();
     private IEnumerable<SubjectIdentificationRepairCandidateResponse> SelectedSubjectCandidates =>
@@ -335,6 +443,10 @@
     };
     private IEnumerable<HorseIdentityRepairCandidateResponse> SelectedCandidates =>
         candidates.Where(x => selected.Contains(x.CandidateId));
+    private int NormalizationTotalPages => normalizationPage is null ? 1
+        : Math.Max(1, (int)Math.Ceiling((double)normalizationPage.TotalCount / normalizationPage.PageSize));
+    private IEnumerable<SubjectNameNormalizationCandidate> SelectedNormalizationCandidates =>
+        normalizationPage?.Items.Where(NormalizationSelected) ?? [];
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -372,6 +484,62 @@
 
     private static bool SubjectActionable(SubjectIdentificationRepairCandidateResponse candidate) =>
         candidate.SafeToExecute;
+
+    private async Task SearchNormalizationAsync(int page)
+    {
+        normalizationValidation = null;
+        normalizationErrors = [];
+        if (string.IsNullOrWhiteSpace(normalizationQuery))
+        {
+            normalizationValidation = "名称またはIDを入力してください。";
+            return;
+        }
+        normalizationSearched = true;
+        normalizationLoading = true;
+        try
+        {
+            var type = Enum.Parse<ResourceType>(normalizationType);
+            normalizationPage = await Api.SearchSubjectNameNormalizationAsync(type, normalizationQuery.Trim(), Math.Max(1, page));
+            selectedNormalization.RemoveWhere(key => normalizationPage is null || normalizationPage.Items.All(x => NormalizationKey(x) != key || !x.CanApply));
+        }
+        catch (Exception)
+        {
+            normalizationErrors = ["検索結果を取得できませんでした。入力を保ったまま、もう一度検索してください。"];
+        }
+        finally { normalizationLoading = false; }
+    }
+
+    private static string NormalizationKey(SubjectNameNormalizationCandidate candidate) => $"{candidate.SubjectType}:{candidate.SubjectId}";
+    private bool NormalizationSelected(SubjectNameNormalizationCandidate candidate) => selectedNormalization.Contains(NormalizationKey(candidate));
+    private void SetNormalizationSelected(SubjectNameNormalizationCandidate candidate, bool value)
+    {
+        var key = NormalizationKey(candidate);
+        if (value && candidate.CanApply) selectedNormalization.Add(key); else selectedNormalization.Remove(key);
+    }
+    private void SelectAllApplicableNormalization()
+    {
+        if (normalizationPage is null) return;
+        foreach (var candidate in normalizationPage.Items.Where(x => x.CanApply)) selectedNormalization.Add(NormalizationKey(candidate));
+    }
+    private async Task ApplyNormalizationAsync()
+    {
+        if (busy || normalizationPage is null || selectedNormalization.Count == 0) return;
+        var items = normalizationPage.Items.Where(NormalizationSelected)
+            .Select(x => new ApplySubjectNameNormalizationItem(x.SubjectType, x.SubjectId, x.ManifestToken)).ToArray();
+        if (items.Length == 0) return;
+        busy = true; normalizationErrors = []; success = null;
+        try
+        {
+            var result = await Api.ApplySubjectNameNormalizationAsync(new ApplySubjectNameNormalizationRequest(items));
+            if (!result.Success || result.Value is null) { normalizationErrors = result.Errors; return; }
+            normalizationResult = result.Value;
+            success = $"登録済み名称を {result.Value.AppliedCount} 件補正しました。";
+            selectedNormalization.Clear();
+            await SearchNormalizationAsync(normalizationPage.Page);
+        }
+        catch (Exception) { normalizationErrors = ["補正結果を確認できませんでした。再検索して現在の状態を確認してください。"]; }
+        finally { busy = false; confirmingNormalization = false; }
+    }
 
     private async Task PreviewOwnerMigrationAsync()
     {

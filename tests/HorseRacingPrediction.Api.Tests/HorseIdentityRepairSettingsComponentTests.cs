@@ -223,6 +223,54 @@ public sealed class HorseIdentityRepairSettingsComponentTests
         StringAssert.Contains(errorCut.Markup, "時間をおいて再読込");
     }
 
+    [TestMethod]
+    public async Task SubjectNameNormalization_SearchesSelectsAndAppliesPreviewedCandidate()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new SubjectNameNormalizationHandler();
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Settings>();
+
+        var query = cut.FindComponents<FluentTextField>().Single(x => x.Instance.Label == "名称またはID");
+        await cut.InvokeAsync(() => query.Instance.ValueChanged.InvokeAsync("村山"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">検索<", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "村山 明（栗東）"));
+        StringAssert.Contains(cut.Markup, "村山 明");
+        StringAssert.Contains(cut.Markup, "補正可能");
+        var checkbox = cut.FindComponents<FluentCheckbox>()
+            .First(x => x.Markup.Contains("村山 明（栗東）を選択", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => checkbox.Instance.CheckStateChanged.InvokeAsync(true));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("選択した対象を補正", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "検索後に名称が変わった対象"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">名称を補正<", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "登録済み名称を 1 件補正しました"));
+        Assert.IsTrue(handler.Applied);
+    }
+
+    [TestMethod]
+    public async Task SubjectNameNormalization_EmptyQueryShowsInlineGuidance()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        using var http = new HttpClient(new SubjectNameNormalizationHandler()) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = context.Render<Settings>();
+
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains(">検索<", StringComparison.Ordinal)).Instance.OnClick.InvokeAsync());
+
+        StringAssert.Contains(cut.Markup, "名称またはIDを入力してください");
+    }
+
     private static BunitContext CreateContext(IServiceProvider services, HttpClient http)
     {
         var context = new BunitContext();
@@ -262,6 +310,32 @@ public sealed class HorseIdentityRepairSettingsComponentTests
             AppliedCandidateIds = body!.CandidateIds.ToArray();
             return Ok(new ApplyHorseIdentityRepairResponse(
                 "20260913-jra-horse-identity-repair", 1, 0, 2, 0));
+        }
+    }
+
+    private sealed class SubjectNameNormalizationHandler : HttpMessageHandler
+    {
+        public bool Applied { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            if (request.Method == HttpMethod.Get && path.EndsWith("subject-name-normalization", StringComparison.Ordinal))
+                return Ok(new SubjectNameNormalizationPage([
+                    new(ResourceType.Trainer, "trainer-1", "村山 明（栗東）", "むらやまあきら", "村山 明", "村山明",
+                        true, true, "Ready", null, [], "manifest-1")], 1, 1, 25));
+            if (request.Method == HttpMethod.Post && path.EndsWith("subject-name-normalization/apply", StringComparison.Ordinal))
+            {
+                var body = await request.Content!.ReadFromJsonAsync<ApplySubjectNameNormalizationRequest>(
+                    cancellationToken: cancellationToken);
+                Applied = body?.Items.Single().ManifestToken == "manifest-1";
+                return Ok(new SubjectNameNormalizationApplyResult(1, 1, 0, 0,
+                    [new(ResourceType.Trainer, "trainer-1", "Applied", "名称を補正しました。")]));
+            }
+            if (path.EndsWith("subject-identification", StringComparison.Ordinal))
+                return Ok(new SubjectIdentificationRepairPreviewResponse([]));
+            return Ok(new HorseIdentityRepairPreviewResponse("20260913-jra-horse-identity-repair", []));
         }
     }
 

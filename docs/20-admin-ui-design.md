@@ -232,6 +232,8 @@ erDiagram
 
 要対応データ補正の正本はCollection Platformでactiveな `SubjectNotIdentified` failure notificationとし、運用者が `/settings` で元ジョブとエラーを確認して、保存済みの主体情報による再収集を実行する。補正URLの入力は要求しない。パラメーターなしのJRA `access*.html` は主体locationとして使わず、競走馬・騎手・調教師は名前等から公式プロフィールを探索し、馬主はRaceEntry由来の名前で内部identityを解決する。名寄せ候補0件も正常に扱う。自動名寄せするのは、既存のHorse repairが同一JRA識別子または同一RaceEntry由来の一意な統合先を証明できる競走馬だけである。一般の収集失敗は `/jobs`、主体識別の補正は `/settings` を正とする。詳細は [URLを使わない主体識別Recovery](changes/20260914_subject-identity-url-free-recovery/README.md) を参照する。
 
+「データ品質」には、登録済みの競走馬・騎手・調教師を名称またはIDで検索し、共通のJRA名称正規化規則による補正前後を比較して選択適用する「登録済み名称の正規化」を置く。空検索による全件取得や一括自動適用は行わず、server-side pagingされた検索結果から、変更があり別IDと衝突しない候補だけを選択できる。確認Dialogは補正前後、件数、ID・alias・名寄せ・プロフィール・収集履歴を変更しないことを示す。検索後に値が変わった対象と、正規化後に同種別の別IDと衝突する対象はapply時にも再検証して変更しない。馬主はalias／統合モデルが異なるためこのツールに含めない。loading、検索前、0件、変更候補なし、error、部分成功を区別し、狭幅でも前後比較とPrimary Actionを保持する。詳細は [登録済み主体名称の検索・選択補正ツール](changes/20260920_subject-name-normalization-tool/README.md) を正本とする。
+
 ### 5.9 レース一覧 `/races`
 
 「検索機能」ではなく、レースオブジェクトのコレクションとして設計する。日付と開催場は強い認知軸だが、複数日表示とページングの境界を壊すグループ見出しにはせず、各行から絞り込める属性として扱う。
