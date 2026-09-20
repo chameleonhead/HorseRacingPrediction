@@ -234,6 +234,50 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task DeclareRaceResultBulk_CardOnlyCreatesEntriesWithoutUndeclaredResults()
+    {
+        var date = new DateOnly(2026, 9, 20);
+        var course = $"CARD-ONLY-{Guid.NewGuid():N}";
+        var request = new DeclareRaceResultBulkRequest(date, course, 1, "出馬表のみ",
+            EntryCount: 2, IsRaceCard: true,
+            Entries:
+            [
+                new(1, null, null, null, null, null, null, HorseName: "出馬表馬1"),
+                new(2, null, null, null, null, null, null, HorseName: "出馬表馬2"),
+            ]);
+
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+        var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body!.RaceId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsEmpty(body.Errors, string.Join(" | ", body.Errors));
+        Assert.IsNotNull(race);
+        Assert.HasCount(2, race.Entries);
+        Assert.IsEmpty(race.EntryResults);
+        Assert.IsNull(race.ResultDeclaredAt);
+
+        var declaredAt = DateTimeOffset.UtcNow;
+        var resultResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", request with
+        {
+            IsRaceCard = false,
+            WinningHorseName = "出馬表馬1",
+            DeclaredAt = declaredAt,
+            Entries =
+            [
+                new(1, 1, "1:35.0", null, null, null, null, HorseName: "出馬表馬1"),
+                new(2, 2, "1:35.2", null, null, null, null, HorseName: "出馬表馬2"),
+            ],
+        }, JsonOptions);
+        var completedRace = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body.RaceId}", JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, resultResponse.StatusCode);
+        Assert.IsNotNull(completedRace);
+        Assert.HasCount(2, completedRace.EntryResults);
+        Assert.IsNotNull(completedRace.ResultDeclaredAt);
+    }
+
+    [TestMethod]
     public async Task DeclareRaceResultBulk_PreflightMismatchCreatesRepairIssueWithoutProfileTask()
     {
         var date = new DateOnly(2026, 9, 20);

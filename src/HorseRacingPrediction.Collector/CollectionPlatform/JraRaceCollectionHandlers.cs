@@ -387,6 +387,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         var firstResultCheck = FirstResultCheck(raceId.Date, task.Attributes, result?.StartTime);
+        if (requiresCard && result is { Error: not null }
+            && (firstResultCheck is null || _time.GetUtcNow() < firstResultCheck))
+        {
+            return new(CollectionAttemptResult.ValidationFailure, "RaceCardWriteRejected", result.Error,
+                RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl),
+                FinalUrl: ToUri(result.SourceUrl), FailureImpact: CollectionFailureImpact.Isolated,
+                LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
+        }
         if (raceId.Date >= today && firstResultCheck is null)
         {
             var retryAt = _time.GetUtcNow().AddMinutes(30);

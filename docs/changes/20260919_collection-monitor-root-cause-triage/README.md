@@ -4,16 +4,16 @@
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
-- Updated: 2026-09-19
+- Updated: 2026-09-20
 - JRA site contract impact: None
 
 ## Completion summary
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Verified | owner ID共有契約、dispatch compatibility、flow診断、原因routing、DPAPI local runnerを実装。 |
-| Verification | Verified | API 256/257、Collector 276/276、CI、runner dry-run、production read-only runが成功。 |
-| Deployment/operation | Externally blocked | 本番revisionとread-only監視は確認済み。ローカルrunnerの初回DPAPI資格情報入力だけ利用者作業待ち。 |
+| Code | Verified | owner ID共有契約、dispatch compatibility、flow診断、原因routing、DPAPI local runnerに加え、card-only bulk契約不整合とcard error maskingをT6aで修正。 |
+| Verification | Verified | production read-onlyで原因を特定し、card-only→result follow-up、card rejection、金曜・結果境界、API 270/271、Collector 280/280、Release build、formatを検証。production修正後snapshotだけはdeploy禁止のため未実施。 |
+| Deployment/operation | Externally blocked | production変更とdeployは今回の明示的禁止範囲。実装検証後もfinding解消には別途のdeploy許可とread-only再観測が必要。 |
 
 ## Context
 
@@ -22,6 +22,13 @@
 直近の主な観測値は、Realtime laneの停滞がtrainer 98件、owner 69件、race-discovery 2件、horse 800件、jockey 69件、ownerの`SubjectNotIdentified`が156件、`TargetClosedException`が1件、Normal laneの`DispatchOrderViolation`が継続、である。pipelineは停止していない。これらを同じ重さの個別findingとして扱わず、以下の原因候補へ集約する。
 
 ## Root-cause analysis
+
+### R6 Card-only bulkが未確定の着順を結果として送る（productionとコードで確認済み）
+
+- 2026-09-20 11:49 JSTのsnapshotは、9月20日のdiscovery済み24レースに対しcard current 6、欠落18を示した。fingerprintは `f9acf64f21c590dc`。
+- revision 2の代表attemptは出馬表ページを取得したが、APIで `RaceCardWriteRejected: Entry results require a declared race result.` となった。
+- `JraRaceCardCollectionWorkflow.RefreshPageAsync` はcard entryの結果項目をnullで送る。新規race用の `ApplyCollectedRaceResultBulkAsync` はそれら全件を `EntryResultDetails` へ変換し、結果未確定でも `BulkRaceResultData.EntryResults` に入れる。そのため、cardだけを保存すべき経路が結果確定前のvalidationで拒否される。
+- 既存race更新経路は `IsRaceCard` 時にresult配列をnullとしており、新規作成経路との契約非対称が技術的欠陥。
 
 ### R1 Owner ID契約の不一致（コード上確認済み）
 
@@ -79,11 +86,11 @@
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | owner IDの変更は保存済みtask、alias、URLとの互換性を壊し得る。 | 既存参照切れ、重複owner | 既存両IDのinventory、互換lookup、移行preview、rollbackをT1に必須化する。 | AC1/T1 | 統一は必要だが一括置換は不可 | Pending | Resolved in design |
-| C2 | capability情報が履歴にない場合、過去のdispatch違反を確定できない。 | 偽陽性または見逃し | 判定不能はProgramBugにせず`InsufficientEvidence`とし、将来のenvelopeへ判定根拠を保存する。 | AC2/T2 | 証拠不足を不具合断定しない | Pending | Resolved in design |
-| C3 | ローカルheartbeatはPC/Codex停止中に実行できない。 | 死活監視の空白 | 本変更は利用者指定どおりローカル主経路とし、60分欠落を次回起動時に通知する。always-on外部監視は除外follow-upとする。 | AC5/T5 | 制約を明示して採用 | Pending | Accepted risk |
-| C4 | 既存35 recordを削除すると監査証跡を失う。 | 過去経緯の消失 | 削除せず、本recordから原因別に参照し、以後の反復追記だけを停止する。 | AC4/T4 | 保存して正本を一本化 | Pending | Resolved in design |
-| C5 | API keyの誤出力は認証情報漏洩になる。 | 本番アクセス侵害 | DPAPI、リポジトリ外、標準出力禁止、redaction test、秘密情報scanを必須化する。 | AC5/T5 | 平文設定は不可 | Pending | Resolved in design |
+| C1 | owner IDの変更は保存済みtask、alias、URLとの互換性を壊し得る。 | 既存参照切れ、重複owner | 既存両IDのinventory、互換lookup、移行preview、rollbackをT1に必須化する。 | AC1/T1 | 統一は必要だが一括置換は不可 | Approved with record, 2026-09-19 | Resolved in design |
+| C2 | capability情報が履歴にない場合、過去のdispatch違反を確定できない。 | 偽陽性または見逃し | 判定不能はProgramBugにせず`InsufficientEvidence`とし、将来のenvelopeへ判定根拠を保存する。 | AC2/T2 | 証拠不足を不具合断定しない | Approved with record, 2026-09-19 | Resolved in design |
+| C3 | ローカルheartbeatはPC/Codex停止中に実行できない。 | 死活監視の空白 | 本変更は利用者指定どおりローカル主経路とし、60分欠落を次回起動時に通知する。always-on外部監視は除外follow-upとする。 | AC5/T5 | 制約を明示して採用 | Approved with record, 2026-09-19 | Accepted risk |
+| C4 | 既存35 recordを削除すると監査証跡を失う。 | 過去経緯の消失 | 削除せず、本recordから原因別に参照し、以後の反復追記だけを停止する。 | AC4/T4 | 保存して正本を一本化 | Approved with record, 2026-09-19 | Resolved in design |
+| C5 | API keyの誤出力は認証情報漏洩になる。 | 本番アクセス侵害 | DPAPI、リポジトリ外、標準出力禁止、redaction test、秘密情報scanを必須化する。 | AC5/T5 | 平文設定は不可 | Approved with record, 2026-09-19 | Resolved in design |
 | C6 | GitHub Actionsを削除すると、PCまたはCodex停止中に代替probeを実行できない。既存C3と同じ可用性制約が残る。 | ローカル停止中の監視空白 | 利用者の一本化指示を優先し、workflowを削除する。60分欠落通知と14日予定実行率99%未満を外部監視再検討条件として維持する。 | AC8/T7 | 二重経路を残さず削除するが、可用性riskは明示する | Accepted by explicit removal request, 2026-09-19 | Accepted risk |
 
 ## Acceptance criteria
@@ -94,8 +101,8 @@
 | AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Verified |
 | AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Verified |
 | AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Verified |
-| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Not started |
-| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。 | T6 | deployed revision照合とproduction read-only verification | Verified |
+| AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Verified |
+| AC6 | 配備済みrevisionを確認し、既修正の`TargetClosedException`、freshness、actionable outcomeは重複修正せず、配備後観測で解消または継続を判定する。継続時は金曜日までの出馬表保存とレース後の結果保存を独立に成立させる。 | T6,T6a | deployed revision照合、card-only/result boundary tests、production read-only verification | Connected |
 | AC7 | actionable findingに原因仮説、影響、証拠、所有task、次の操作がないrunは成功扱いにならず、利用者へ具体的な要対応を返す。 | T4,T5 | monitor outcome contract tests | Verified |
 | AC8 | リポジトリに`collection-monitoring` GitHub Actions workflowが存在せず、監視と手動診断の実行経路がローカルrunnerへ一本化されている。 | T7 | workflow不存在contract test、repository-wide literal search | Verified |
 
@@ -107,8 +114,9 @@
 | T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Verified |
 | T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Verified |
 | T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Verified |
-| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Externally blocked |
+| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Verified |
 | T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Verified |
+| T6a | 継続した `WeekendCardCoverageMissing` のcard-only bulk契約不整合を修正し、出馬表と結果を独立検証する。AC6 | Main | Lead tier | T6の継続snapshot | API bulk adapter/tests、record。production/deployは対象外 | card-only新規race、result follow-up、金曜/official-start境界、関連回帰 | local gates成功。deploy後read-only snapshotは利用者の禁止により未実施 | Externally blocked |
 | T7 | `collection-monitoring` GitHub Actions workflowを削除し、契約テストと正本ドキュメントをローカルrunner単独経路へ更新する。AC8 | Main | High capability | 利用者の明示的な削除指示 | workflow、contract test、docs | focused test、literal search | workflow不存在とローカルrunner存続 | Verified |
 
 ## Review gates
@@ -118,6 +126,9 @@
 - **Pre-implementation review — 2026-09-19, T7:** 利用者の明示的な削除指示を既存Approved recordの決定変更承認として記録した。write scopeはworkflow、既存contract test、監視正本文書に限定し、ローカルrunnerや他の保守workflowは変更しない。削除後の監視空白riskはC3/C6で受容済みとした。
 - **Checkpoint review — 2026-09-19, T7:** workflow削除、contract test反転、正本文書更新のdiffをAC8と照合した。他の保守workflow、ローカルrunner、API実装には変更がない。
 - **Final review — 2026-09-19, T7:** AC8とT7はfocused test、change-record validator、format gate、literal searchでVerified。履歴change record内の参照は当時の実装証跡として保持し、現行runtime entry pointではない。record全体はAC5/T5の利用者によるDPAPI資格情報入力待ちのためApprovedを維持する。
+- **Pre-implementation review — 2026-09-20, T6a:** 利用者がT6と対応ACに従う原因解消、境界テスト、回帰テスト、record更新を明示的に依頼したことを、継続findingに対する既承認AC6のclosure authorizationとして記録した。production変更、pipeline操作、履歴削除、データ補正、deployは明示的に対象外。共有bulk契約と本番データ整合性判定のためMainが実装を所有し、読み取り専用の経路探索だけをexplorerに委譲する。反例はcard-only入力が空の `EntryResults` を永続化せず、後続の結果入力は全着順を永続化すること。
+- **Checkpoint review — 2026-09-20, T6a:** production snapshot、代表attempt、実transportのcard-only→result follow-up、handlerのcard failure→result wait反例をAC6で統合確認した。API/Collectorの全回帰とRelease buildは成功。CodeGraphは `.codegraph` indexが存在せず利用不能だったため、ソースと実API証拠でtraceした。
+- **Final review — 2026-09-20, T6a:** codeとlocal verificationはquality/scope gateを通過。読み取り専用委譲は変更0、再試行0、利用量取得不能で、Mainが独立にproduction evidenceと実行testへ照合した。production deployと既存taskへの変更は明示的禁止のため実施せず、AC6はConnected、recordはApprovedを維持する。
 
 ## Verification record
 
@@ -130,6 +141,10 @@
 - 2026-09-19: `%LOCALAPPDATA%` のsettings/DPAPI credentialが未設定であることを確認。fixture dry-runは秘密値なしでmemoryとaction summaryを生成した。
 - 2026-09-19: 利用者のCodexタスク一本化指示に従い、`.github/workflows/collection-monitoring.yml`を削除した。contract testでworkflow不存在とローカルrunner存続を固定し、`docs/11-automation-design.md`を更新した。
 - 2026-09-19: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功。`CollectionQueueCutoverContractTests`は12/12成功。`validate_change_records.py`はissues=0。repository-wide literal searchで残ったworkflow名は、本recordの削除証跡、不存在contract test、過去のImplemented change recordだけであることを確認した。
+- 2026-09-20 11:49 JST: local runnerでproduction monitoring GETを実行。`WeekendCardCoverageMissing` (`f9acf64f21c590dc`) は9月20日分24 discovered、card current 6、missing 18でHighのまま継続。production mutationは行っていない。
+- 2026-09-20: 代表resource `20260920:Hanshin:1`のread-only詳細で、revision 1 attemptの `RaceCardWriteRejected` と、revision 2 replacement attemptの成功を確認。`20260920:Hanshin:4`はcardが保存されないまま結果公開待ちを繰り返している。
+- 2026-09-20: card-only新規raceがEntriesのみを保存し、後続resultがEntryResults/ResultDeclaredAtを保存するtransport integration、card write rejectionが発走待ちに隠れないhandler反例、金曜17:59:59/18:00/20:59:59/21:00、発走+29:59.9999999/+30:00、開催日18:29:59/18:30の境界を追加した。
+- 2026-09-20: API suite 270成功・既存skip 1、Collector suite 280成功、Release solution buildは警告0/エラ0、`dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功。change-record validatorで既存のPending user dispositionを承認事実に整合させた。
 
 ## Deviations and follow-up
 
@@ -137,4 +152,4 @@
 
 ## Human decision required
 
-- ローカルrunnerの初回設定として、`settings.json`のbase URL作成と `invoke_local_monitor.ps1 -ProvisionCredential` でproduction API keyを対話入力する。資格情報は現在のWindowsユーザー向けDPAPI暗号化ファイルとなり、リポジトリやautomation promptへ保存しない。
+- 修正済みcodeのproduction deployを許可するか。許可後はcontrolled deploy、既存taskを書き換えない自然実行または別承認の復旧、read-only snapshotで出馬表と結果を独立に確認する。
