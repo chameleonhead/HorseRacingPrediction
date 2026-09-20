@@ -262,31 +262,34 @@ public sealed class CollectionMonitoringService(
             .ToArray();
 
         var today = DateOnly.FromDateTime(now.Date);
-        var cardDates = GetCardCheckpointDates(today, now.TimeOfDay).ToArray();
-        foreach (var date in cardDates)
+        var cardDates = latest
+            .Where(x => TryGetRaceDate(x.Resource.Id, out var raceDate)
+                        && raceDate >= today.AddDays(-1) && raceDate <= today.AddDays(7)
+                        && x.CardStatus is RaceArtifactStatus.Due or RaceArtifactStatus.Blocked)
+            .Select(x => GetRaceDate(x.Resource.Id)).Distinct().OrderBy(x => x).ToArray();
+        if (cardDates.Length == 0 && today.DayOfWeek == DayOfWeek.Friday
+            && now.TimeOfDay >= TimeSpan.FromHours(Math.Clamp(_options.FridayCardCheckpointHour, 0, 23)))
         {
-            var races = latest.Where(x => TryGetRaceDate(x.Resource.Id, out var raceDate) && raceDate == date)
-                .OrderBy(x => x.Resource.Id, StringComparer.Ordinal).ToArray();
-            if (races.Length == 0)
-            {
+            foreach (var date in new[] { today.AddDays(1), today.AddDays(2) })
                 findings.Add(CreateFinding("WeekendDiscoveryCoverageUnknown",
                     CollectionFindingClassification.OperationalCondition, "high", now, now,
                     $"Race discovery coverage for {date:yyyy-MM-dd} is unknown.",
                     [$"raceDate={date:yyyy-MM-dd}", "discovered=0", "coverage=unknown"],
-                    "Inspect the calendar and race discovery path; zero discovered races is not treated as healthy.",
+                    "Inspect the official calendar and race discovery path; zero discovered races is not treated as healthy.",
                     null, $"freshness:card-discovery:{date:yyyyMMdd}"));
-                continue;
-            }
-
+        }
+        foreach (var date in cardDates)
+        {
+            var races = latest.Where(x => TryGetRaceDate(x.Resource.Id, out var raceDate) && raceDate == date)
+                .OrderBy(x => x.Resource.Id, StringComparer.Ordinal).ToArray();
             var domainCardCount = domainRaces.Count(x => x.RaceDate == date && x.HasCard);
             var artifactCardCount = races.Count(x => x.CardStatus == RaceArtifactStatus.Current);
             var missingCount = Math.Max(0, races.Length - Math.Max(artifactCardCount, domainCardCount));
             var missing = races.Where(x => x.CardStatus != RaceArtifactStatus.Current).Take(missingCount).ToArray();
             if (missing.Length == 0) continue;
-            var severity = now.DayOfWeek == DayOfWeek.Friday
-                           && now.Hour >= Math.Clamp(_options.FridayCriticalHour, 18, 23)
+            var severity = missing.Any(x => x.CardStatus == RaceArtifactStatus.Blocked)
                 ? "critical" : "high";
-            findings.Add(CreateFinding("WeekendCardCoverageMissing",
+            findings.Add(CreateFinding("RaceCardCoverageMissing",
                 CollectionFindingClassification.OperationalCondition, severity,
                 missing.Min(x => x.UpdatedAt), now,
                 $"{missing.Length} of {races.Length} discovered races for {date:yyyy-MM-dd} do not have a current card.",
@@ -370,27 +373,6 @@ public sealed class CollectionMonitoringService(
             names.Select(OwnerIdentityContract.CreateId).Distinct(StringComparer.Ordinal).Count(),
             names.Select(OwnerIdentityContract.CreateLegacyId).Distinct(StringComparer.Ordinal).Count(),
             names.Count(x => mapped.Contains(OwnerIdentityContract.NormalizeName(x))), samples);
-    }
-
-    private IEnumerable<DateOnly> GetCardCheckpointDates(DateOnly today, TimeSpan localTime)
-    {
-        if (nowIsFriday(today, localTime))
-        {
-            yield return today.AddDays(1);
-            yield return today.AddDays(2);
-        }
-        else if (today.DayOfWeek == DayOfWeek.Saturday)
-        {
-            yield return today;
-            yield return today.AddDays(1);
-        }
-        else if (today.DayOfWeek == DayOfWeek.Sunday)
-        {
-            yield return today;
-        }
-
-        bool nowIsFriday(DateOnly date, TimeSpan time) => date.DayOfWeek == DayOfWeek.Friday
-            && time >= TimeSpan.FromHours(Math.Clamp(_options.FridayCardCheckpointHour, 0, 23));
     }
 
     private static DateOnly GetRaceDate(string resourceId)
@@ -549,7 +531,7 @@ public sealed class CollectionMonitoringService(
             ("ActionableFailureGroup", var value) when value.Contains("TargetClosed", StringComparison.OrdinalIgnoreCase) =>
                 ("The observation may predate the deployed closed-session recovery revision.", "T6",
                     "Confirm deployed revision and re-observe before creating another fix."),
-            ("WeekendCardCoverageMissing" or "WeekendDiscoveryCoverageUnknown" or "RaceResultFreshnessMiss"
+            ("RaceCardCoverageMissing" or "WeekendCardCoverageMissing" or "WeekendDiscoveryCoverageUnknown" or "RaceResultFreshnessMiss"
                 or "RaceDayResultCoverageMissing", _) =>
                 ("Required race data is not confirmed in the domain by its checkpoint.", "T6",
                     "Verify deployed revision and inspect the read-only freshness evidence."),

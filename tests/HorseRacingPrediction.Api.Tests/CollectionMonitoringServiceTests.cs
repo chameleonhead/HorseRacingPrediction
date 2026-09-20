@@ -223,14 +223,14 @@ public sealed class CollectionMonitoringServiceTests
                 RaceArtifactStatus.Current, RaceArtifactStatus.Current))
             .Concat(Enumerable.Range(1, 24).Select(index => RaceFreshness(
                 $"20260920:Course:{index}", now.AddDays(1).AddHours(-6),
-                RaceArtifactStatus.AwaitingPublication, RaceArtifactStatus.AwaitingPublication)))
+                RaceArtifactStatus.Blocked, RaceArtifactStatus.AwaitingPublication)))
             .ToArray();
 
         var findings = service.EvaluateFreshness(races, now);
 
-        Assert.IsFalse(findings.Any(x => x.Kind == "WeekendCardCoverageMissing"
+        Assert.IsFalse(findings.Any(x => x.Kind == "RaceCardCoverageMissing"
                                          && x.Evidence.Contains("raceDate=2026-09-19")));
-        var sunday = findings.Single(x => x.Kind == "WeekendCardCoverageMissing");
+        var sunday = findings.Single(x => x.Kind == "RaceCardCoverageMissing");
         Assert.AreEqual("critical", sunday.Severity);
         Assert.IsTrue(sunday.Evidence.Contains("discovered=24"));
         Assert.IsTrue(sunday.Evidence.Contains("missing=24"));
@@ -250,7 +250,7 @@ public sealed class CollectionMonitoringServiceTests
 
         var findings = service.EvaluateFreshness(races, domain, now);
 
-        Assert.IsFalse(findings.Any(x => x.Kind == "WeekendCardCoverageMissing"));
+        Assert.IsFalse(findings.Any(x => x.Kind == "RaceCardCoverageMissing"));
         Assert.IsFalse(findings.Any(x => x.Kind is "RaceDayResultCoverageMissing" or "RaceResultFreshnessMiss"));
     }
 
@@ -262,17 +262,17 @@ public sealed class CollectionMonitoringServiceTests
         var now = new DateTimeOffset(2026, 9, 18, 21, 5, 0, TimeSpan.FromHours(9));
         var races = Enumerable.Range(1, 24).Select(index => RaceFreshness(
             $"20260920:Course:{index}", now.AddDays(1).AddHours(-6),
-            RaceArtifactStatus.Unknown, RaceArtifactStatus.Unknown)).ToArray();
+            RaceArtifactStatus.Blocked, RaceArtifactStatus.Unknown)).ToArray();
 
         var finding = service.EvaluateFreshness(races, [], now)
-            .Single(x => x.Kind == "WeekendCardCoverageMissing");
+            .Single(x => x.Kind == "RaceCardCoverageMissing");
 
         Assert.AreEqual("critical", finding.Severity);
         Assert.IsTrue(finding.Evidence.Contains("missing=24"));
     }
 
     [TestMethod]
-    public void Freshness_EmptyFridayDiscoveryIsUnknownRatherThanHealthy()
+    public void Freshness_FridayCheckpointTreatsZeroDiscoveryAsUnknown()
     {
         using var scope = new MonitoringStoreScope();
         var service = scope.CreateService();
@@ -281,6 +281,25 @@ public sealed class CollectionMonitoringServiceTests
         var findings = service.EvaluateFreshness([], now);
 
         Assert.HasCount(2, findings.Where(x => x.Kind == "WeekendDiscoveryCoverageUnknown"));
+    }
+
+    [TestMethod]
+    public void Freshness_BlockedWeekdayCard_IsReportedWithoutWeekendRule()
+    {
+        using var scope = new MonitoringStoreScope();
+        var service = scope.CreateService();
+        var now = new DateTimeOffset(2026, 9, 23, 12, 0, 0, TimeSpan.FromHours(9));
+        var races = new[]
+        {
+            RaceFreshness("20260923:Course:1", now.AddHours(-1),
+                RaceArtifactStatus.Blocked, RaceArtifactStatus.AwaitingPublication),
+        };
+
+        var finding = service.EvaluateFreshness(races, now)
+            .Single(x => x.Kind == "RaceCardCoverageMissing");
+
+        Assert.AreEqual("critical", finding.Severity);
+        Assert.IsTrue(finding.Evidence.Contains("raceDate=2026-09-23"));
     }
 
     [TestMethod]
