@@ -18,13 +18,10 @@ public sealed partial class JraNavigator
         if (subject.SubjectType is not ("Trainer" or "Jockey")) throw new ArgumentException("対象の種別が不正です。");
         var isJockey = subject.SubjectType == "Jockey";
         var label = isJockey ? "騎手" : "調教師";
-        await ToKeibaTopAsync(cancellationToken);
-        await _browser.ClickForSnapshotAsync("騎手・調教師", cancellationToken);
-        var directoryLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
-        var profileLink = directoryLinks.FirstOrDefault(l => HasPath(l.Url,
-            isJockey ? "/datafile/meikan/jockey.html" : "/datafile/meikan/trainer.html"))
-            ?? throw new JraCollectionException($"{label}プロフィールの公開リンクが見つかりません。");
-        await _browser.ClickLinkForSnapshotAsync(profileLink, cancellationToken);
+        var directoryUrl = isJockey
+            ? "https://www.jra.go.jp/datafile/meikan/jockey.html"
+            : "https://www.jra.go.jp/datafile/meikan/trainer.html";
+        await _browser.NavigateForSnapshotAsync(directoryUrl, cancellationToken);
         foreach (var initial in new[] { "あ行", "か行", "さ行", "た行", "な行", "は行", "ま行", "や行", "ら行", "わ行" })
         {
             var beforeLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
@@ -45,9 +42,12 @@ public sealed partial class JraNavigator
             return page;
         }
         // 引退者も公開一覧から探す。現役一覧にないことを取得成功として扱わない。
-        await ToKeibaTopAsync(cancellationToken);
-        await _browser.ClickForSnapshotAsync("騎手・調教師", cancellationToken);
-        await _browser.ClickForSnapshotAsync(isJockey ? "引退騎手一覧" : "引退調教師一覧", cancellationToken);
+        await _browser.NavigateForSnapshotAsync(directoryUrl, cancellationToken);
+        var retiredLabel = isJockey ? "引退騎手一覧" : "引退調教師一覧";
+        var retiredLink = SelectUniqueJraLink(
+            await _browser.GetLinksAsync(cancellationToken: cancellationToken), retiredLabel)
+            ?? throw new JraCollectionException($"{retiredLabel}の公開リンクが見つかりません。");
+        await _browser.ClickLinkForSnapshotAsync(retiredLink, cancellationToken);
         var retiredLinks = await _browser.GetLinksAsync(cancellationToken: cancellationToken);
         var retiredMatches = retiredLinks.Where(l => SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType, l.Title)
             == SubjectProfilePageParser.NormalizeIdentityName(subject.SubjectType, subject.Name)).ToArray();
@@ -61,6 +61,35 @@ public sealed partial class JraNavigator
         var result = SubjectProfilePageParser.Parse(await _browser.GetDataPageSnapshotAsync(cancellationToken), subject.SubjectType);
         SubjectProfilePageParser.Validate(result, subject);
         return result;
+    }
+
+    internal static PageLinkSnapshot? SelectUniqueJraLink(
+        IEnumerable<PageLinkSnapshot> links,
+        string title)
+    {
+        var matches = links.Where(link => string.Equals(link.Title.Trim(), title, StringComparison.Ordinal))
+            .Select(link => (Link: link, Url: NormalizeJraUrl(link.Url)))
+            .ToArray();
+        if (matches.Length == 0) return null;
+        if (matches.Any(match => match.Url is null))
+            throw new JraCollectionException($"{title}の公開リンクが安全なJRA URLではありません。");
+
+        var distinctUrls = matches.Select(match => match.Url!.AbsoluteUri)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctUrls.Length != 1)
+            throw new JraCollectionException($"{title}の公開リンクを一意に確認できません。");
+
+        return matches[0].Link;
+    }
+
+    private static Uri? NormalizeJraUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var url)
+            || !url.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return url;
     }
 
     private async Task<JraSubjectPage> FindHorseAsync(JraSubjectIdentity subject, CancellationToken token)

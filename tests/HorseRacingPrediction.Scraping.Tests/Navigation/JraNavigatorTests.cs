@@ -1,4 +1,5 @@
 using HorseRacingPrediction.Scraping.Browser;
+using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -57,6 +58,75 @@ public sealed class JraNavigatorTests
     public void HasPath_HandlesRelativeAbsoluteAndPseudoActionUrls(string url, bool expected)
     {
         Assert.AreEqual(expected, JraNavigator.HasPath(url, "/datafile/meikan/trainer.html"));
+    }
+
+    [TestMethod]
+    [DataRow("Trainer", "村山 明（栗東）", "引退調教師一覧",
+        "https://www.jra.go.jp/datafile/meikan/trainer.html")]
+    [DataRow("Jockey", "テスト騎手", "引退騎手一覧",
+        "https://www.jra.go.jp/datafile/meikan/jockey.html")]
+    public async Task ToSubjectProfileAsync_SubjectUsesOfficialDirectoryWithoutAmbiguousMenuClick(
+        string subjectType,
+        string name,
+        string retiredLabel,
+        string directoryUrl)
+    {
+        var browser = new FakeWebBrowser();
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+
+        var error = await Assert.ThrowsExactlyAsync<JraCollectionException>(() =>
+            navigator.ToSubjectProfileAsync(new(subjectType, name)));
+
+        Assert.Contains(retiredLabel, error.Message);
+        Assert.AreEqual(2, browser.NavigatedUrls.Count(url => url == directoryUrl));
+        Assert.IsFalse(browser.ClickedTexts.Contains("騎手・調教師"));
+    }
+
+    [TestMethod]
+    public void SelectUniqueJraLink_DuplicateSameDestination_ReturnsFirst()
+    {
+        var first = new PageLinkSnapshot(
+            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師一覧");
+        var second = new PageLinkSnapshot(
+            "https://www.jra.go.jp/datafile/meikan/retire/trainer.html", "引退調教師一覧");
+
+        var selected = JraNavigator.SelectUniqueJraLink([first, second], "引退調教師一覧");
+
+        Assert.AreSame(first, selected);
+    }
+
+    [TestMethod]
+    public void SelectUniqueJraLink_DifferentDestinations_Stops()
+    {
+        var links = new[]
+        {
+            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/a.html", "引退調教師一覧"),
+            new PageLinkSnapshot("https://www.jra.go.jp/datafile/meikan/retire/b.html", "引退調教師一覧"),
+        };
+
+        Assert.ThrowsExactly<JraCollectionException>(() =>
+            JraNavigator.SelectUniqueJraLink(links, "引退調教師一覧"));
+    }
+
+    [TestMethod]
+    [DataRow("https://example.test/retired")]
+    [DataRow("http://www.jra.go.jp/datafile/meikan/retire/trainer.html")]
+    [DataRow("javascript:void(0)")]
+    public void SelectUniqueJraLink_UnsafeDestination_Stops(string url)
+    {
+        var links = new[]
+        {
+            new PageLinkSnapshot(url, "引退調教師一覧"),
+        };
+
+        Assert.ThrowsExactly<JraCollectionException>(() =>
+            JraNavigator.SelectUniqueJraLink(links, "引退調教師一覧"));
+    }
+
+    [TestMethod]
+    public void SelectUniqueJraLink_Missing_ReturnsNull()
+    {
+        Assert.IsNull(JraNavigator.SelectUniqueJraLink([], "引退調教師一覧"));
     }
 
     private static TestPageSnapshot BuildCalendarSnapshot(
