@@ -321,7 +321,8 @@ public sealed class JraDirectCollectionHandlerTests
             CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease", now.AddMinutes(5), date,
             new Dictionary<string, string>
             {
-                ["course"] = "東京", ["number"] = "1",
+                ["course"] = "東京",
+                ["number"] = "1",
                 ["officialStartAt"] = "2026-09-19T01:00:00+00:00",
             },
             [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Unknown, null,
