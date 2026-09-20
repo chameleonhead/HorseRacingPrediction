@@ -27,6 +27,7 @@ public sealed partial class JraNavigator
     private readonly JraPageReader _pageReader;
     private readonly ILogger<JraNavigator> _logger;
     private readonly Func<DateOnly> _today;
+    public string? LastNavigationTrace { get; private set; }
 
     /// <summary>
     /// RaceCard（出馬表）探索対象期間の日数（依頼書3.1節の<c>RaceCardLookupPeriod</c>）。
@@ -566,6 +567,7 @@ public sealed partial class JraNavigator
         RaceId race,
         CancellationToken cancellationToken = default)
     {
+        LastNavigationTrace = $"Destination=RaceResult; ExpectedRace={race}; CurrentUrl={_browser.CurrentUrl}";
         _logger.LogInformation(
             "JRA navigation start. Destination=RaceResult Race={Race} CurrentUrl={CurrentUrl}",
             race,
@@ -576,15 +578,15 @@ public sealed partial class JraNavigator
 
         try
         {
-            if (await TryNavigateRaceNumberLinkAsync(
-                    race.Number,
-                    JraNavigationLinks.RaceResult,
-                    cancellationToken))
+            if (await TryNavigateRaceResultLinkAsync(race, cancellationToken)
+                || await TryNavigateRaceNumberLinkAsync(
+                    race.Number, JraNavigationLinks.RaceResult, cancellationToken))
             {
                 page = await _pageReader.ReadAsync(cancellationToken);
 
                 if (page is JraRaceResultPage resultPage && resultPage.RaceId == race)
                 {
+                    LastNavigationTrace += $"; FinalKind={page.Kind}; FinalUrl={page.Url}";
                     return page;
                 }
 
@@ -655,6 +657,8 @@ public sealed partial class JraNavigator
             route,
             page.Kind,
             page.Url);
+
+        LastNavigationTrace = $"{LastNavigationTrace}; FallbackRoute={route}; FinalKind={page.Kind}; FinalUrl={page.Url}";
 
         return page;
     }
@@ -1333,11 +1337,43 @@ public sealed partial class JraNavigator
             return false;
         }
 
-        await _browser.NavigateForSnapshotAsync(
-            url,
-            cancellationToken);
+        if (IsFragmentOnlyControl(targetUrl, url))
+        {
+            var link = links.FirstOrDefault(candidate =>
+                string.Equals(candidate.Url, targetUrl, StringComparison.OrdinalIgnoreCase));
+            if (link is null) return false;
+            LastNavigationTrace = $"Route=RaceControlClick; CandidateLabel={link.Title}; RawUrl={link.Url}; ResolvedUrl={url}";
+            await _browser.ClickLinkForSnapshotAsync(link, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            LastNavigationTrace = $"Route=RaceNumberUrl; RawUrl={targetUrl}; ResolvedUrl={url}";
+            await _browser.NavigateForSnapshotAsync(url, cancellationToken).ConfigureAwait(false);
+        }
 
         return true;
+    }
+
+    private async Task<bool> TryNavigateRaceResultLinkAsync(RaceId race, CancellationToken cancellationToken)
+    {
+        var links = await _browser.GetLinksAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        var targetUrl = JraRaceLinkSelector.FindResultUrl(
+            links.Select(link => (link.Url, link.Title)), race, JraNavigationLinks.RaceResult, _browser.CurrentUrl);
+        if (targetUrl is null) return false;
+        var url = ResolveUrl(_browser.CurrentUrl, targetUrl);
+        if (url is null || IsFragmentOnlyControl(targetUrl, url)) return false;
+        var selected = links.First(link => string.Equals(link.Url, targetUrl, StringComparison.OrdinalIgnoreCase));
+        LastNavigationTrace = $"Route=CardDirect; CandidateCount={links.Count}; CandidateLabel={selected.Title}; RawUrl={targetUrl}; ResolvedUrl={url}";
+        await _browser.NavigateForSnapshotAsync(url, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private static bool IsFragmentOnlyControl(string rawUrl, string resolvedUrl)
+    {
+        if (rawUrl.Trim().EndsWith('#')) return true;
+        if (!Uri.TryCreate(resolvedUrl, UriKind.Absolute, out var resolved)
+            || string.IsNullOrEmpty(resolved.Fragment)) return false;
+        return string.IsNullOrEmpty(resolved.Query) && resolved.Fragment == "#";
     }
 
     private static string RaceCourseName(RaceCourse course)
