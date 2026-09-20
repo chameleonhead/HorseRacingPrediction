@@ -48,14 +48,14 @@ attempt 1-4 は `TimeoutException`、attempt 5 は `InvalidOperationException`�
 | AC2 | 引退者一覧リンクが欠落、JRA外・非HTTP(S)、または異なる遷移先を持つ場合は停止する。 | navigator negative tests | Verified |
 | AC3 | 共通クリック処理、馬検索、レース画面、特定trainer IDを変更しない。 | diff review、repository search | Verified |
 | AC4 | trainer/jockey profile navigationと外部JRAサイトに依存しないScraping回帰テストが成功する。 | focused test、deterministic Scraping regression、format gate | Verified |
-| AC5 | deploy後、対象resourceのreplacement taskが成功し、fingerprint `65ee2aecb8544f5c` が監視から消える。失敗履歴は削除しない。 | production read-only group/resource/batch/monitor evidence | Externally blocked |
+| AC5 | deploy後、代表resource `trainer-ae6f6e74-ec5a-5954-8d2b-4e324b6cb0d1` のreplacement taskが成功し、applied revisionがrequired revisionへ到達し、このresourceに同じ曖昧クリックエラーの未解決failureが新規発生しない。過去の失敗履歴は削除しない。 | production read-only resource/task/attempt evidence | Externally blocked |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 騎手・調教師入口だけのリンク選択と反例テストを実装する。AC1-AC4 | Main | High capability | User approval | `JraNavigator.Subjects.cs`、navigation tests | focused tests、Scraping regression、format gate | 63 focused、277 deterministic regression、format成功 | Verified |
-| T2 | 明示許可されたdeploy/recovery後に対象を再観測する。AC5 | Main + operator | High capability | T1、deploy/recovery authorization | recordのみ（production mutationは別許可） | read-only monitoring diagnostics | replacement成功、fingerprint消失 | Externally blocked |
+| T2 | 明示許可されたdeploy/recovery後に代表resourceだけを再観測する。AC5 | Main + operator | High capability | T1、deploy/recovery authorization | recordのみ（production mutationは別許可） | read-only resource diagnostics | replacement成功、revision到達、同一resourceで再発なし | Externally blocked |
 
 ## Review gates
 
@@ -64,7 +64,7 @@ attempt 1-4 は `TimeoutException`、attempt 5 は `InvalidOperationException`�
 - **Approval — 2026-09-20.** 利用者は問題箇所単位の個別対応、すなわち共通クリック処理を変更せず騎手・調教師入口だけを修正する設計を確認し、実装を明示的に依頼した。
 - **Pre-implementation review — 2026-09-20, reviewer: Main.** T1をRunnable、T2をDependentとした。T1のwrite scopeは`JraNavigator.Subjects.cs`とnavigation testsだけで、期待する反例は公式一覧への直接route、引退一覧の同一リンク重複、異なるリンク先、欠落・unsafe URL。コード確認でトップメニューがJavaScript要素であることを確認したため、承認済みの個別対応内で一覧リンク探索から公式URL直接遷移へ実装方法を具体化した。共通browser変更、production操作が必要なら停止して再設計する。
 - **Checkpoint review — 2026-09-20, reviewer: Main.** AC1-AC4を統合diffと実行証拠で確認した。変更は`JraNavigator.Subjects.cs`とnavigation testsに限定され、共通browserは未変更。JRA公式trainer/jockey一覧URLはいずれもHTTP 200で最終URL不変だった。
-- **Final review — 2026-09-20, reviewer: Main.** T1とAC1-AC4はVerified。T2/AC5は明示的に禁止されたdeploy/recoveryを必要とするためExternally blockedで、recordはApprovedを維持する。全Scraping suiteでは外部JRAのrace-result画面に依存する既存SiteE2E 4件が`RaceListPage`を返して失敗したが、変更箇所と無関係なためproduction verificationと分離し、外部サイト非依存277件を回帰gateとした。
+- **Final review — 2026-09-20, reviewer: Main.** T1とAC1-AC4はVerified。利用者判断によりproduction確認は全体fingerprintではなく今回の代表resource 1件だけを追跡する。T2/AC5は明示的に禁止されたdeploy/recoveryを必要とするためExternally blockedで、recordはApprovedを維持する。全Scraping suiteでは外部JRAのrace-result画面に依存する既存SiteE2E 4件が`RaceListPage`を返して失敗したが、変更箇所と無関係なためproduction verificationと分離し、外部サイト非依存277件を回帰gateとした。
 
 ## Production evidence
 
@@ -76,6 +76,7 @@ attempt 1-4 は `TimeoutException`、attempt 5 は `InvalidOperationException`�
 - Flow at same cutoff: trainer-profile Realtime arrived 149 / dispatched 210 / completed 205 / active 6 / oldest 40.1 minutes。definition全体の停止ではない。
 - Evidence gap: clickable候補のhref/DOM snapshotはattemptへ保存されず、過去HTMLから同一遷移先を直接証明できない。
 - Mutation performed: none。
+- Tracking scope: 今回の代表resource `trainer-ae6f6e74-ec5a-5954-8d2b-4e324b6cb0d1` だけを追跡する。fingerprint全体の消失や他resourceの同種failureは本変更の完了判定に使用しない。
 
 ## Documentation updates
 
@@ -88,3 +89,4 @@ attempt 1-4 は `TimeoutException`、attempt 5 は `InvalidOperationException`�
 - `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`: 成功、warningなし。
 - JRA公式一覧URL確認: trainer/jockeyともHTTP 200、redirectなし、一覧ラベルを含む。
 - 全Scraping suite: 287件中282成功、1 skip、4失敗。4件はいずれも外部JRA race-result SiteE2Eで期待した`RaceResultPage`ではなく`RaceListPage`が返る既存外部状態であり、本変更のsubject navigation経路を通らない。
+- 2026-09-20 read-only再観測: 代表resourceはstatus Failed、applied revision 0 / required revision 3、latest task `f0bca3fd-41d6-4c61-ba24-9acdfa66aa63`、attempt 5、未解決failure 1件。最新errorは修正対象の曖昧な`騎手・調教師`クリックで、production mutationは行っていない。
