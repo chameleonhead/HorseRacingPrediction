@@ -162,7 +162,7 @@ public sealed class CollectionMonitoringServiceTests
         var finding = scope.CreateService().FindDispatchOrderViolations(snapshot, now).Single();
 
         Assert.IsTrue(finding.Evidence.Contains("compatibilityKey=JRA|Definition|horse-profile|Realtime"));
-        Assert.IsTrue(finding.Evidence.Contains("waitingDispatchCandidate=True"));
+        Assert.IsTrue(finding.Evidence.Any(x => x.StartsWith("waitingDispatchCandidateSince=", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -172,7 +172,24 @@ public sealed class CollectionMonitoringServiceTests
         var now = DateTimeOffset.UtcNow;
         var waiting = MonitoringTask("horse-profile", 100, now.AddHours(-2)) with
         {
-            IsDispatchCandidate = false
+            DispatchCandidateSince = null
+        };
+        var compatible = Enumerable.Range(1, 3)
+            .Select(index => MonitoringDispatch("horse-profile", 10, now.AddMinutes(-10 + index))).ToArray();
+        var snapshot = new CollectionMonitoringSnapshot(now, new(false, null, null), [waiting], compatible,
+            false);
+
+        Assert.IsEmpty(scope.CreateService().FindDispatchOrderViolations(snapshot, now));
+    }
+
+    [TestMethod]
+    public void DispatchOrderViolation_IgnoresDispatchesBeforeReservationExpired()
+    {
+        using var scope = new MonitoringStoreScope();
+        var now = DateTimeOffset.UtcNow;
+        var waiting = MonitoringTask("horse-profile", 100, now.AddHours(-2)) with
+        {
+            DispatchCandidateSince = now.AddMinutes(-5)
         };
         var compatible = Enumerable.Range(1, 3)
             .Select(index => MonitoringDispatch("horse-profile", 10, now.AddMinutes(-10 + index))).ToArray();
@@ -218,13 +235,13 @@ public sealed class CollectionMonitoringServiceTests
             new("horse-profile"), 1, CollectionReason.Initial, now.AddHours(-2));
 
         var before = await scope.Store.GetMonitoringSnapshotAsync(now, now.AddDays(-1), 100);
-        Assert.IsTrue(before.ActiveTasks.Single().IsDispatchCandidate);
+        Assert.AreEqual(now.AddHours(-2), before.ActiveTasks.Single().DispatchCandidateSince);
         var pending = (await scope.Store.GetPendingDispatchesAsync(now, 10)).Single();
         await scope.Store.MarkDispatchedAsync(pending.OutboxId, now.AddMinutes(-1));
 
         var after = await scope.Store.GetMonitoringSnapshotAsync(now, now.AddDays(-1), 100);
         Assert.AreEqual(CollectionTaskStatus.Ready, after.ActiveTasks.Single().Status);
-        Assert.IsFalse(after.ActiveTasks.Single().IsDispatchCandidate);
+        Assert.IsNull(after.ActiveTasks.Single().DispatchCandidateSince);
     }
 
     [TestMethod]
@@ -376,7 +393,7 @@ public sealed class CollectionMonitoringServiceTests
     private static CollectionMonitoringTaskSnapshot MonitoringTask(string definition, int priority,
         DateTimeOffset availableAt) => new(Guid.NewGuid(), new(ResourceType.Horse, "JRA", Guid.NewGuid().ToString("N")),
         new(definition), CollectionTaskStatus.Ready, CollectionLane.Realtime, priority, availableAt, availableAt,
-        availableAt, null, null, 0, $"JRA|Definition|{definition}|Realtime", true);
+        availableAt, null, null, 0, $"JRA|Definition|{definition}|Realtime", availableAt);
 
     private static CollectionMonitoringDispatchSnapshot MonitoringDispatch(string definition, int priority,
         DateTimeOffset dispatchedAt) => new(Guid.NewGuid(), Guid.NewGuid(), new(definition), CollectionLane.Realtime,

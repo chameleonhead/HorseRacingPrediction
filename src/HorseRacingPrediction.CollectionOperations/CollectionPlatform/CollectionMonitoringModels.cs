@@ -14,7 +14,7 @@ public sealed record CollectionMonitoringTaskSnapshot(
     DateTimeOffset? LeaseExpiresAt,
     int AttemptCount,
     string? CompatibilityKey = null,
-    bool IsDispatchCandidate = false);
+    DateTimeOffset? DispatchCandidateSince = null);
 
 public sealed record CollectionMonitoringDispatchSnapshot(
     Guid EnvelopeId,

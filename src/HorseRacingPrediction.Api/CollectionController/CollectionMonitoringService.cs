@@ -493,11 +493,12 @@ public sealed class CollectionMonitoringService(
                     x.DispatchedAt))
                 .ThenBy(x => x.AvailableAt).ThenBy(x => x.CreatedAt).ThenBy(x => x.TaskId).First())
             .ToArray();
-        foreach (var higher in snapshot.ActiveTasks.Where(x => x.IsDispatchCandidate && IsStalled(x, now)))
+        foreach (var higher in snapshot.ActiveTasks.Where(x => x.DispatchCandidateSince.HasValue && IsStalled(x, now)))
         {
             if (string.IsNullOrWhiteSpace(higher.CompatibilityKey)) continue;
             var bypasses = dispatches.Where(dispatch => dispatch.Lane == higher.Lane
                     && string.Equals(dispatch.CompatibilityKey, higher.CompatibilityKey, StringComparison.Ordinal)
+                    && higher.DispatchCandidateSince!.Value <= dispatch.DispatchedAt
                     && higher.AvailableAt <= dispatch.DispatchedAt
                     && higher.CreatedAt <= dispatch.DispatchedAt
                     && EffectivePriority(higher.Priority, higher.CreatedAt, dispatch.DispatchedAt)
@@ -512,7 +513,7 @@ public sealed class CollectionMonitoringService(
                 [
                     $"lane={higher.Lane}",
                     $"compatibilityKey={higher.CompatibilityKey}",
-                    $"waitingDispatchCandidate={higher.IsDispatchCandidate}",
+                    $"waitingDispatchCandidateSince={higher.DispatchCandidateSince:O}",
                     $"waitingTaskId={higher.TaskId:D}",
                     $"waitingPriority={higher.Priority}",
                     $"bypassCount={bypasses.Length}",
