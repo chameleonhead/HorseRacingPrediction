@@ -726,6 +726,31 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task TaskViewCounts_RunningIncludesOnlyUnexpiredLeasesWithoutReclaimingTasks()
+    {
+        var store = await CreateStoreAsync();
+        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
+        var expired = await store.RequestAsync(new(ResourceType.Horse, "JRA", "EXPIRED"),
+            HorseProfile, 7, CollectionReason.Initial, now.AddMinutes(-10));
+        var active = await store.RequestAsync(new(ResourceType.Horse, "JRA", "ACTIVE"),
+            HorseProfile, 7, CollectionReason.Initial, now);
+        Assert.IsNotNull(await store.AcquireAsync(active.TaskId, 1, now, TimeSpan.FromMinutes(5)));
+        Assert.IsNotNull(await store.AcquireAsync(expired.TaskId, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(1)));
+
+        var counts = await store.GetTaskViewCountsAsync();
+        await using var db = new CollectionPlatformDbContext(
+            new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
+                .Options);
+        var expiredTask = await db.Tasks.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId);
+        var expiredAttempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId);
+
+        Assert.AreEqual(1, counts.Counts["running"]);
+        Assert.AreEqual(CollectionTaskStatus.Running, expiredTask.Status);
+        Assert.AreEqual(CollectionAttemptResult.Running, expiredAttempt.Result);
+    }
+
+    [TestMethod]
     public async Task SearchTasks_OrdersIncompleteBeforeSucceeded_ThenLanePriorityAndDefinitionAcrossPages()
     {
         var store = await CreateStoreAsync();

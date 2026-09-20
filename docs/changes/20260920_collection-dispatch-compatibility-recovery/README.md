@@ -1,6 +1,6 @@
-# Collection dispatch compatibility recovery
+# Collection processing count consistency
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: HorseRacingPrediction team
 - Created: 2026-09-20
@@ -11,67 +11,58 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Production stabilization | Partial | Running tasks naturally fell from 51 reported, to 2, to 1, to 0 as leases expired. No mutation was performed. SQS still had 64 invisible wake messages at 11:47 JST. |
-| Root cause | Confirmed | Dispatch compatibility is derived from mutable resource attributes, while execution validates immutable task metadata. Recovery tasks with empty metadata are grouped as `WeekendSubjects` after later resource updates and fail compatibility validation. |
-| Permanent correction | Proposed | Awaiting approval of AC1-AC4. |
-| Deployment/verification | Not started | Requires implementation, deployment, and production observation. |
+| Production diagnosis | Complete | The displayed count included tasks whose Running lease had already expired. |
+| Code | Complete | The processing count now includes only currently valid Running leases. |
+| Verification | In progress | Store and component regressions passed; a production read-back remains. |
+| Error correction | Excluded | Dispatch compatibility, Lambda errors, SQS recovery, retries, and task-state mutation are explicitly outside this change. |
 
-## Incident evidence
+## Scope and decision
 
-- Observed on 2026-09-20 between 10:54 and 11:47 JST.
-- Lambda reserved concurrency was 1; SQS showed 0 visible and 64 invisible messages with a 5,400-second visibility timeout.
-- The task view showed 2 actual Running tasks during diagnosis, then 1, then 0. The reported 51 did not represent 51 simultaneous Lambda executions.
-- CloudWatch Logs Insights over two hours found 88 Lambda invocations, 62 `CollectionDispatchCompatibilityException` messages, and one completion API `502 Bad Gateway`.
-- Four Lambda code deployments occurred at 10:54, 11:04, 11:23, and 11:33 JST. These amplified churn but are not the compatibility defect itself.
-- Example task `62a13b80-3197-4a3d-b7cf-6e03937b7602` was a Recovery task with empty immutable metadata. Its resource had later acquired `weekendPriorityUntil`, so the dispatcher classified it as `WeekendSubjects`; the leased task could not satisfy that key and the Lambda terminated before completing the attempt.
-- Running attempts were eventually reclaimed as `LeaseExpired`; no queue, task, failure, or deployment state was mutated during diagnosis.
+The Jobs page `処理中` badge currently counts the latest task row whenever `Status == Running`, even if `LeaseExpiresAt` is already in the past. Lease recovery is performed elsewhere, so a stalled dispatcher or failed Lambda can leave the badge temporarily much higher than the number of tasks that can still be executing.
 
-## Technical cause
-
-`GetPendingDispatchesAsync` and `BuildExecutionEnvelopeAsync` deserialize `CollectionResourceEntity.AttributesJson`. That value is mutable and can be replaced by later requests. `CollectionPlatformWorkerClient.IsCompatible` validates `LeasedCollectionTask.Attributes`, which comes from the task's immutable metadata. These two sources can therefore produce different grouping keys for the same task.
-
-The compatibility exception is thrown before the handler exception boundary. The attempt is not completed and Lambda exits abnormally, leaving the task Running until lease expiry. With batched execution this also prevents later tasks in the envelope from running.
+The user directed this change to correct only the processing count and not the underlying collection errors. The count will include only latest tasks whose status is Running and whose lease expiry is later than the current time. The read does not reclaim, retry, cancel, complete, or otherwise mutate a task.
 
 ## Concern and agreement ledger
 
 | ID | Concern | Evidence and impact | Recommended disposition | Alternatives | Residual risk | AC/task/counterexample | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Mutable resource attributes can change dispatch grouping after task creation. | Confirmed by production task history and source trace. | Derive both initial and execution envelopes from immutable task metadata. | Remove compatibility validation. | Existing rows with empty metadata must remain valid Definition groups. | AC1/T1; Recovery task plus later weekend resource update. | Keep validation and unify the source. | Pending | Open decision |
-| C2 | A compatibility invariant failure strands a lease and aborts the rest of a batch. | 62 occurrences and unfinished attempts were observed. | Reject/release the execution before task acquisition where possible; retain a defensive terminal path that never leaves an acquired attempt Running. | Treat it as an ordinary transient handler failure. | Silent retry loops must not hide invariant defects. | AC2/T2; mismatch before first task and after partial batch. | Fail safely and preserve diagnostics. | Pending | Open decision |
-| C3 | Immediate queue mutation could discard diagnostic or valid wake messages. | 64 messages are invisible and wake messages are hints backed by DB outbox state. | Do not purge/delete; allow visibility and lease recovery, then verify durable redispatch after the fix. | Purge the queue or manually retry every task. | Recovery is slower until the 90-minute visibility timeout elapses. | AC3/T3; no destructive queue action. | Preserve evidence and data. | Pending | Open decision |
-| C4 | Repeated deployments during backlog processing increase ambiguity and lease churn. | Four deployments occurred within 39 minutes. | Deployment verification must include a drained/observed window and no repeated redeploy during the production smoke check. | Continue rapid redeploys. | Unrelated API 502 may recur independently. | AC4/T4. | Use one controlled deployment and observation window. | Pending | Open decision |
+| C1 | Counting status alone reports expired work as processing. | Production count fell as lease recovery ran; source count ignores `LeaseExpiresAt`. | Count only unexpired Running leases. | Reclaim leases in the GET request. | A clock boundary can change the badge between refreshes, which is intended. | AC1/T1; expired Running row. | Use a read-only predicate. | User limited work to count consistency. | Resolved in design |
+| C2 | Fixing task state or Lambda errors would exceed the requested scope. | Compatibility errors were diagnosed separately. | Do not change worker, dispatcher, SQS, lease recovery, or error handling. | Bundle the error fix. | Underlying failures may continue, but the count will no longer represent expired leases as active processing. | AC2/T1. | Keep the change isolated. | Explicitly excluded by user. | Excluded follow-up |
 
 ## Acceptance criteria
 
 | ID | Criterion | Task | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | Dispatcher reservation, execution-envelope reconstruction, and worker validation derive compatibility from the same immutable task metadata and produce a Definition group for a Recovery task whose resource is later updated with weekend metadata. | T1 | Store/API/collector integration counterexample. | Not started |
-| AC2 | A compatibility mismatch cannot leave an acquired attempt Running, cannot report successful batch completion, and does not prevent eligible work from being redispatched after lease/release recovery. | T2 | Mismatch, partial-batch, lease-expiry, and replay tests. | Not started |
-| AC3 | Production recovery preserves task/failure history and does not purge SQS; after deployment, Running and invisible counts converge while at least one current race-detail task completes successfully. | T3 | Production API, SQS, Lambda, and task-history observation. | Not started |
-| AC4 | Deployment is performed once under a recorded observation window; compatibility errors remain zero and no completion API 5xx occurs during the smoke period. | T4 | CloudWatch Logs Insights and Lambda/SQS metrics. | Not started |
+| AC1 | `処理中` counts a latest Running task only while its lease is unexpired; an expired Running task contributes zero without changing its stored status or attempt history. | T1 | Store counterexample and existing latest-task-count tests. | Verified |
+| AC2 | No production path for dispatch compatibility, Lambda execution, SQS, retry, task recovery, or failure classification is changed. | T1 | Diff inventory and focused regressions. | Verified |
+| AC3 | After deployment, the badge/API count equals the number of latest Running tasks with currently valid leases. | T2 | Production task-view count and task lease evidence. | Not started |
 
 ## Task plan
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | Unify dispatch compatibility on immutable task metadata. | Main | Lead | Approval | Collection store, dispatcher, focused tests | Dispatcher/store tests | Production-shaped Recovery/resource-update fixture passes. | Proposed |
-| T2 | Make compatibility failures release or complete work without stranded attempts or aborted eligible batches. | Main | Lead | T1 | store/collector invocation boundary and tests | Collector and execution-lease tests | Mismatch/replay/partial-batch counterexamples pass. | Proposed |
-| T3 | Deploy and observe non-destructive recovery. | Main | Lead | T1-T2 | production deployment and read-only verification | API/SQS/Lambda evidence | Backlog progresses, Running converges, race-detail succeeds. | Proposed |
-| T4 | Close incident and document verification. | Main | Lead/Review | T3 | this record, read-only review | final review and validators | AC1-AC4 Verified with no open incident item. | Proposed |
+| T1 | Filter the task-view Running count by lease validity and add regression coverage. | Main | Lead | User scope direction | store count method and focused store tests | focused store tests, build, format, diff | Active lease counts one; expired lease counts zero; no task mutation. | Verified |
+| T2 | Deploy once and verify the production count. | Main | Lead | T1 | deployment and read-only production diagnostics | API count and task lease evidence | Production count matches valid leases. | In progress |
 
 ## Review gates
 
-- **Design and task-split review:** Compatibility and lease semantics cross dispatcher, persistence, Lambda invocation, and production recovery, so Lead retains implementation and integration. Focused read-only review may be delegated after approval.
-- **Concern and agreement review:** C1-C4 are material and await user disposition. No destructive recovery is proposed.
-- **Pre-implementation review:** Pending approval.
-- **Checkpoint review:** Pending implementation.
-- **Final review:** Requires code verification, one controlled deployment, and production observation.
+- **Design and task-split review:** This is a single predicate plus regression test; delegation overhead exceeds the implementation cost. Production deployment remains a separate dependent step.
+- **Concern and agreement review:** C1 is resolved by a read-only predicate. C2 records the user's explicit exclusion of error correction.
+- **Pre-implementation review:** T1 is Runnable with exclusive ownership of the count method and test. T2 is Dependent. Test must prove no mutation.
+- **Checkpoint review:** T1 passed 93 store tests, 12 API component tests, solution build, formatter verification, and diff scope review. The regression also reads task and attempt rows directly to prove the count request does not mutate them.
+- **Final review:** Requires AC1-AC3 Verified and no error-path changes.
+
+## Incident evidence retained
+
+- At 11:44 JST the management API had 2 actual Running task rows while the earlier UI report was 51.
+- The count subsequently moved as leases were reclaimed, confirming that stale Running rows contributed to the display.
+- SQS/Lambda compatibility errors remain diagnosis only and are not corrected by this change.
 
 ## Documentation updates
 
-- This incident record is the canonical source for the 2026-09-20 processing-count incident.
-- No separate architecture document currently defines dispatch compatibility metadata; implementation will update one only if a canonical runtime document is found.
+- This record is the canonical scope for the processing-count correction.
+- No architecture or operational document changes are required because task lifecycle behavior is unchanged.
 
 ## Rollback
 
-Roll back the code deployment if compatible tasks stop dispatching or queue depth grows after the smoke window. Do not purge the queue. Preserve DB outbox, attempts, failure notifications, and SQS/DLQ evidence for replay under the prior version.
+Revert the count predicate and its test. This change performs no data migration or production task mutation.

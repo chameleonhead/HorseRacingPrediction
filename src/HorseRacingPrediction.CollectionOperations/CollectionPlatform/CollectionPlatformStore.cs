@@ -1975,6 +1975,7 @@ public sealed partial class CollectionPlatformStore
         var latestTasks = tasks.GroupBy(x => new { x.ResourcePk, x.DefinitionId })
             .Select(group => group.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.TaskId).First())
             .ToList();
+        var now = HorseRacingPrediction.Contracts.Time.JstTime.Now();
         var counts = latestTasks.GroupBy(x => x.Status).ToDictionary(x => x.Key, x => x.Count());
         int Count(params CollectionTaskStatus[] statuses) => statuses.Sum(x => counts.GetValueOrDefault(x));
         var openFailureTaskIds = (await db.FailureNotifications.AsNoTracking()
@@ -1987,7 +1988,8 @@ public sealed partial class CollectionPlatformStore
         return new(new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["attention"] = actionableCount,
-            ["running"] = Count(CollectionTaskStatus.Running),
+            ["running"] = latestTasks.Count(x => x.Status == CollectionTaskStatus.Running
+                && x.LeaseExpiresAt > now),
             ["waiting"] = Count(CollectionTaskStatus.Pending, CollectionTaskStatus.Ready,
                 CollectionTaskStatus.RetryWaiting, CollectionTaskStatus.WaitingDiscovery),
             ["recent"] = Count(CollectionTaskStatus.Succeeded),
