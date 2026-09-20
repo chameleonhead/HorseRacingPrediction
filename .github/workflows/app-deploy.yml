@@ -30,7 +30,7 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -84,7 +84,7 @@ jobs:
 
   build-and-push:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       image_name: ${{ steps.image.outputs.image_name }}
     steps:
@@ -118,7 +118,7 @@ jobs:
 
   deploy:
     needs: [build-and-push, deploy-collector-lambda]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - uses: actions/checkout@v7
@@ -274,7 +274,7 @@ jobs:
 
   deploy-collector-lambda:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     defaults:
       run:
@@ -413,7 +413,7 @@ jobs:
 
   migrate-race-entry-owners:
     needs: [deploy, deploy-collector-lambda]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production
     steps:
       - name: Queue race entry owner data migration
