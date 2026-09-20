@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.5.11709.299 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{01FEC711-9F75-4D0C-8675-19927808A35D}"
 EndProject
@@ -54,6 +54,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.CollectionInitializer", "tools\HorseRacingPrediction.CollectionInitializer\HorseRacingPrediction.CollectionInitializer.csproj", "{63092778-2EA1-46FF-A976-ADE838CB8064}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.CollectionCutover", "tools\HorseRacingPrediction.CollectionCutover\HorseRacingPrediction.CollectionCutover.csproj", "{EA0290D2-A8CD-453C-A7DB-56E53D047590}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HorseRacingPrediction.Web", "src\HorseRacingPrediction.Web\HorseRacingPrediction.Web.csproj", "{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -341,6 +343,18 @@ Global
 		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x64.Build.0 = Release|Any CPU
 		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x86.ActiveCfg = Release|Any CPU
 		{EA0290D2-A8CD-453C-A7DB-56E53D047590}.Release|x86.Build.0 = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|x64.Build.0 = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Debug|x86.Build.0 = Debug|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|x64.ActiveCfg = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|x64.Build.0 = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|x86.ActiveCfg = Release|Any CPU
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -369,5 +383,9 @@ Global
 		{95767FE8-0D35-47E2-8AC9-1B5A6139522D} = {468426AC-176E-4D83-8FF4-971D5324FBD8}
 		{63092778-2EA1-46FF-A976-ADE838CB8064} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{EA0290D2-A8CD-453C-A7DB-56E53D047590} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{9B6B67EF-65D4-41F6-99E8-52D4F44B453F} = {01FEC711-9F75-4D0C-8675-19927808A35D}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B0948C37-EF6A-4A6A-AC22-6A6CE865F336}
 	EndGlobalSection
 EndGlobal
