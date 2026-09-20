@@ -399,12 +399,15 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         }
         if (firstResultCheck is { } dueAt && _time.GetUtcNow() < dueAt)
         {
+            var retryAt = result?.Error is null
+                ? dueAt
+                : new[] { dueAt, _time.GetUtcNow().AddMinutes(30) }.Min();
             stageOutcomes.Add(new("AwaitOfficialStart", RaceArtifactKind.Result,
                 CollectionAttemptResult.ResourceNotYetAvailable, "RaceNotStarted",
                 "Race result is not available before the first result check."));
             return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceNotStarted",
                 "Race result is not available before the first result check.", RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
-                RetryAt: dueAt, LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes,
+                RetryAt: retryAt, LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes,
                 RaceEvidence: raceEvidence);
         }
 
@@ -522,11 +525,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     private DateTimeOffset? FirstResultCheck(DateOnly date, IReadOnlyDictionary<string, string> attributes,
         TimeOnly? observedStartTime)
     {
+        if (observedStartTime is { } currentStart)
+            return ToJstInstant(date, currentStart)
+                .AddMinutes(Math.Max(0, _options.ResultCheckGraceMinutes));
         if (attributes.TryGetValue("officialStartAt", out var instant)
             && DateTimeOffset.TryParse(instant, out var officialStart))
             return officialStart.AddMinutes(Math.Max(0, _options.ResultCheckGraceMinutes));
-        var time = observedStartTime;
-        if (time is null && attributes.TryGetValue("startTime", out var value)
+        TimeOnly? time = null;
+        if (attributes.TryGetValue("startTime", out var value)
             && TimeOnly.TryParse(value, out var parsed)) time = parsed;
         return time is null ? null : ToJstInstant(date, time.Value)
             .AddMinutes(Math.Max(0, _options.ResultCheckGraceMinutes));

@@ -298,6 +298,42 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_CurrentCardStartTimeSupersedesLeasedOfficialStart()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var race = new RaceId(date, RaceCourse.Tokyo, 1);
+        var url = new Uri("https://example.test/card/1");
+        var now = new DateTimeOffset(2026, 9, 19, 1, 10, 0, TimeSpan.Zero);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(url.AbsoluteUri, race, "test", new(10, 30), [])
+            }
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(now));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease", now.AddMinutes(5), date,
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京", ["number"] = "1",
+                ["officialStartAt"] = "2026-09-19T01:00:00+00:00",
+            },
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Unknown, null,
+                RaceArtifactKind.Card)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceNotStarted", completion.ErrorCode);
+        Assert.AreEqual(new DateTimeOffset(2026, 9, 19, 1, 35, 0, TimeSpan.Zero), completion.RetryAt);
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_ResultStage_DoesNotNavigateToCardClassifiedLocation()
     {
         var date = new DateOnly(2026, 9, 19);

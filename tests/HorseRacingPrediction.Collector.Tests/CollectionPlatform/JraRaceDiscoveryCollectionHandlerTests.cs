@@ -13,6 +13,34 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraRaceDiscoveryCollectionHandlerTests
 {
     [TestMethod]
+    [DataRow("2026-09-21")]
+    [DataRow("2026-09-23")]
+    public async Task Discovery_UsesOfficialScheduleEvidenceRegardlessOfWeekday(string dateText)
+    {
+        var date = DateOnly.Parse(dateText);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (target, course) => new JraRaceListPage("https://example.test/list",
+                    target, course, [new(new(target, course, 1), "test", new(10, 0),
+                        "https://example.test/card/1", "https://example.test/result/1")]),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero)));
+
+        var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.Race
+            && x.Resource.Id == $"{date:yyyyMMdd}:Nakayama:1"));
+    }
+
+    [TestMethod]
     public async Task Discovery_ExpandsActualRaceListIntoNewPlatformRequests()
     {
         var date = new DateOnly(2026, 9, 12);
