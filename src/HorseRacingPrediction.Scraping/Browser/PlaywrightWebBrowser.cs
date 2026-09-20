@@ -1372,15 +1372,34 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
                 continue;
             }
 
+            var resolvedUrl = ResolveAbsoluteUrl(_page.Url, descriptor.Url);
+            if (resolvedUrl is null)
+            {
+                continue;
+            }
+
             var link = new PageLinkSnapshot(
-                descriptor.Url,
-                string.IsNullOrWhiteSpace(descriptor.Title) ? descriptor.Url : NormalizeText(descriptor.Title),
+                resolvedUrl,
+                string.IsNullOrWhiteSpace(descriptor.Title) ? resolvedUrl : NormalizeText(descriptor.Title),
                 descriptor.Region);
             if (!seenLinks.Add(LinkIdentity(link))) continue;
             links.Add(link);
         }
 
         return links;
+    }
+
+    private static string? ResolveAbsoluteUrl(string? pageUrl, string? href)
+    {
+        if (string.IsNullOrWhiteSpace(href)
+            || !Uri.TryCreate(pageUrl, UriKind.Absolute, out var pageUri)
+            || !Uri.TryCreate(pageUri, href, out var resolvedUri)
+            || !resolvedUri.IsAbsoluteUri)
+        {
+            return null;
+        }
+
+        return resolvedUri.AbsoluteUri;
     }
 
     private static string LinkIdentity(PageLinkSnapshot link)
@@ -1466,8 +1485,9 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
 
     private async Task<PageLinkSnapshot?> CreateLinkAsync(ILocator anchor)
     {
-        var url = await anchor.GetAttributeAsync("href") ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(url))
+        var rawUrl = await anchor.GetAttributeAsync("href") ?? string.Empty;
+        var url = ResolveAbsoluteUrl(_page.Url, rawUrl);
+        if (url is null)
         {
             return null;
         }
@@ -1475,7 +1495,7 @@ public sealed partial class PlaywrightWebBrowser : IWebBrowser
         var title = await GetLocatorTextAsync(anchor);
         var ariaLabel = NormalizeText(await anchor.GetAttributeAsync("aria-label"));
         var titleAttribute = NormalizeText(await anchor.GetAttributeAsync("title"));
-        if (IsDomainSearchPseudoActionAnchor(title, ariaLabel, titleAttribute, url))
+        if (IsDomainSearchPseudoActionAnchor(title, ariaLabel, titleAttribute, rawUrl))
         {
             return null;
         }

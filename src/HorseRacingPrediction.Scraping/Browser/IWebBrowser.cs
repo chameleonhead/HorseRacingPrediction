@@ -111,6 +111,7 @@ public interface IWebBrowser : IAsyncDisposable
 
     /// <summary>
     /// 現在のページからリンク（&lt;a&gt; 要素の href）を抽出する。
+    /// Playwright 実装は現在ページを基準に解決した絶対 URL を返す。
     /// </summary>
     /// <param name="maxResults">抽出する最大リンク数</param>
     /// <param name="cancellationToken">キャンセルトークン</param>

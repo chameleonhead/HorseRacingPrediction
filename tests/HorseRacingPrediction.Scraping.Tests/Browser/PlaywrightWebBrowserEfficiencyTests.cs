@@ -30,6 +30,9 @@ public sealed class PlaywrightWebBrowserEfficiencyTests
             Assert.HasCount(count, links);
             Assert.AreEqual("Link 0", links[0].Title);
             Assert.AreEqual($"Link {count - 1}", links[^1].Title);
+            Assert.IsTrue(links.All(link => Uri.TryCreate(link.Url, UriKind.Absolute, out _)),
+                "Playwright から返すリンクはすべて絶対 URL であること");
+            Assert.AreEqual(new Uri(new Uri(path), "target-0.html").AbsoluteUri, links[0].Url);
         }
         finally
         {
