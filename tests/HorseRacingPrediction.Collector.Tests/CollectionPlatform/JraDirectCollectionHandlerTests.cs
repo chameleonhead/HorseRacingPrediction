@@ -428,7 +428,9 @@ public sealed class JraDirectCollectionHandlerTests
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string>
             {
-                ["course"] = "東京", ["number"] = "1", ["resultArtifactStatus"] = "Current",
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["resultArtifactStatus"] = "Current",
             },
             [new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
                 RaceArtifactKind.Card)]), CancellationToken.None);
@@ -466,7 +468,9 @@ public sealed class JraDirectCollectionHandlerTests
             DateTimeOffset.UtcNow.AddMinutes(5), date,
             new Dictionary<string, string>
             {
-                ["course"] = "東京", ["number"] = "1", ["cardArtifactStatus"] = "Current",
+                ["course"] = "東京",
+                ["number"] = "1",
+                ["cardArtifactStatus"] = "Current",
                 ["officialStartAt"] = "2026-09-19T10:00:00+09:00",
             },
             [new(1, resultUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
