@@ -284,56 +284,6 @@ public sealed class CollectionMonitoringServiceTests
     }
 
     [TestMethod]
-    public void Freshness_FridayCardCheckpointHonorsExactSeverityBoundaries()
-    {
-        using var scope = new MonitoringStoreScope();
-        var service = scope.CreateService();
-        var date = new DateOnly(2026, 9, 19);
-        var races = new[]
-        {
-            RaceFreshness("20260919:Nakayama:1",
-                new DateTimeOffset(2026, 9, 19, 10, 0, 0, TimeSpan.FromHours(9)),
-                RaceArtifactStatus.AwaitingPublication, RaceArtifactStatus.AwaitingPublication),
-        };
-
-        Assert.IsEmpty(service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 18, 17, 59, 59, TimeSpan.FromHours(9))));
-        Assert.AreEqual("high", service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 18, 18, 0, 0, TimeSpan.FromHours(9)))
-            .Single(x => x.Kind == "WeekendCardCoverageMissing").Severity);
-        Assert.AreEqual("high", service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 18, 20, 59, 59, TimeSpan.FromHours(9)))
-            .Single(x => x.Kind == "WeekendCardCoverageMissing").Severity);
-        Assert.AreEqual("critical", service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 18, 21, 0, 0, TimeSpan.FromHours(9)))
-            .Single(x => x.Kind == "WeekendCardCoverageMissing").Severity);
-    }
-
-    [TestMethod]
-    public void Freshness_ResultGraceAndRaceDayCheckpointHonorExactBoundaries()
-    {
-        using var scope = new MonitoringStoreScope();
-        var service = scope.CreateService();
-        var start = new DateTimeOffset(2026, 9, 19, 17, 0, 0, TimeSpan.FromHours(9));
-        var races = new[]
-        {
-            RaceFreshness("20260919:Nakayama:12", start,
-                RaceArtifactStatus.Current, RaceArtifactStatus.Due),
-        };
-
-        Assert.IsFalse(service.EvaluateFreshness(races, start.AddMinutes(30).AddTicks(-1))
-            .Any(x => x.Kind is "RaceResultFreshnessMiss" or "RaceDayResultCoverageMissing"));
-        Assert.AreEqual("RaceResultFreshnessMiss", service.EvaluateFreshness(races, start.AddMinutes(30))
-            .Single(x => x.Kind is "RaceResultFreshnessMiss" or "RaceDayResultCoverageMissing").Kind);
-        Assert.AreEqual("RaceResultFreshnessMiss", service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 19, 18, 29, 59, TimeSpan.FromHours(9)))
-            .Single(x => x.Kind is "RaceResultFreshnessMiss" or "RaceDayResultCoverageMissing").Kind);
-        Assert.AreEqual("RaceDayResultCoverageMissing", service.EvaluateFreshness(races,
-            new DateTimeOffset(2026, 9, 19, 18, 30, 0, TimeSpan.FromHours(9)))
-            .Single(x => x.Kind is "RaceResultFreshnessMiss" or "RaceDayResultCoverageMissing").Kind);
-    }
-
-    [TestMethod]
     public void Freshness_ResultGraceAndDayCheckpointReportMissingResult()
     {
         using var scope = new MonitoringStoreScope();

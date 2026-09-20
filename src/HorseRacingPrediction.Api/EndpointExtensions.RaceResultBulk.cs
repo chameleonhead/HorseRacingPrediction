@@ -99,7 +99,7 @@ public static partial class EndpointExtensions
             request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
             request.EntryCount, gradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
             accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)).Select(item => item.Entry).ToArray(),
-            request.IsRaceCard ? [] : accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
+            accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
             string.IsNullOrWhiteSpace(request.WinningHorseName)
                 ? null
                 : request.DeclaredAt ?? Shared.Time.JstTime.Now(),

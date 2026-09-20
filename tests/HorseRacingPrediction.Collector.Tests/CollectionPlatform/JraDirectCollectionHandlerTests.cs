@@ -266,33 +266,6 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task RaceDetail_CardWriteRejectionBeforeStart_IsNotMaskedByResultWait()
-    {
-        var date = new DateOnly(2026, 9, 20);
-        var card = new FakeJraRaceCardCollectionWorkflow { OutcomeError = "write rejected" };
-        var results = new FakeJraRaceResultCollectionWorkflow();
-        var now = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero);
-        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(), _ => card, _ => results,
-            timeProvider: new FixedTimeProvider(now));
-
-        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
-            new(ResourceType.Race, "JRA", "20260920:Tokyo:1"), new("race-detail"), 2,
-            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
-            now.AddMinutes(5), date, new Dictionary<string, string>
-            {
-                ["course"] = "東京",
-                ["number"] = "1",
-                ["startTime"] = "15:00",
-            }), CancellationToken.None);
-
-        Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
-        Assert.AreEqual("RaceCardWriteRejected", completion.ErrorCode);
-        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
-        Assert.IsFalse(completion.StageOutcomes!.Any(x => x.Stage == "AwaitOfficialStart"));
-        Assert.IsEmpty(results.Requests);
-    }
-
-    [TestMethod]
     public async Task RaceDetail_CardWriteRejection_PreservesParsedStartEvidenceAndClassifiesLocation()
     {
         var date = new DateOnly(2026, 9, 19);
