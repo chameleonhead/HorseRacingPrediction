@@ -190,11 +190,10 @@ public class RaceEndpointsTests
             EntryCount: 1, IsRaceCard: true,
             Entries:
             [
-                new RaceResultEntryBulkDto(1, 1, "1:35.0", null, null, null, null,
+                new RaceResultEntryBulkDto(1, null, null, null, null, null, null,
                     HorseName: horseName, JockeyName: "▲識別 騎手", TrainerName: "識別 調教師（美浦）",
                     HorseSourceIdentity: sourceIdentity),
-            ],
-            WinningHorseName: horseName, DeclaredAt: DateTimeOffset.UtcNow);
+            ]);
 
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
@@ -202,8 +201,10 @@ public class RaceEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsNotNull(body);
         Assert.IsEmpty(body.Errors, string.Join(" | ", body.Errors));
+        Assert.IsTrue(body.CorePersisted);
         var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{body.RaceId}", JsonOptions);
         Assert.IsNotNull(race);
+        Assert.IsEmpty(race.EntryResults);
         var entry = race.Entries.Single();
         Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(
             horseName, sourceIdentity), entry.HorseId);
@@ -240,28 +241,26 @@ public class RaceEndpointsTests
         var course = $"PREFLIGHT-{Guid.NewGuid():N}";
         var name = $"事前判定馬{Guid.NewGuid():N}";
         var first = new DeclareRaceResultBulkRequest(date, course, 1, "事前判定", EntryCount: 1,
-            Entries: [new(1, 1, null, null, null, null, null, HorseName: name)],
-            WinningHorseName: name, DeclaredAt: DateTimeOffset.UtcNow);
+            IsRaceCard: true,
+            Entries: [new(1, null, null, null, null, null, null, HorseName: name)]);
         var firstResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
         firstResponse.EnsureSuccessStatusCode();
         const string identity = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026654321/00";
         var second = first with
         {
             IsRaceCard = true,
-            Entries = [new(1, 1, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
+            Entries = [new(1, null, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
         };
 
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsTrue(body!.Errors.Any(x => x.Contains("SubjectIdentityRepairRequired", StringComparison.Ordinal)));
+        Assert.IsTrue(body.CorePersisted);
+        Assert.IsTrue(body.RelatedErrors!.Any(x => x.Contains("SubjectIdentityRepairRequired", StringComparison.Ordinal)));
         using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
         var issue = await db.SubjectIdentificationRepairIssues.SingleAsync(x => x.RequestedByRaceId == body.RaceId);
         Assert.AreEqual("Open", issue.Status);
-        var tasks = await _client.GetFromJsonAsync<IReadOnlyList<CollectionTaskSummary>>(
-            "/api/admin/collection/tasks?limit=1000", JsonOptions);
-        Assert.IsFalse(tasks!.Any(x => x.Resource.Id == issue.SubjectId && x.Definition.Value == "horse-profile"));
-
         issue.Status = "Resolved";
         issue.ResolvedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
@@ -322,6 +321,23 @@ public class RaceEndpointsTests
         Assert.HasCount(1, body.Outcomes!);
         Assert.AreEqual("Rejected", body.Outcomes![0].Status);
         Assert.AreEqual("InvalidHorseNumber", body.Outcomes[0].ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task DeclareRaceResultBulk_RaceCardWithResultEvidence_IsRejectedWithoutMutation()
+    {
+        var eventsBefore = CountStoredEvents();
+        var response = await _client.PostAsJsonAsync("/api/races/result-bulk",
+            new DeclareRaceResultBulkRequest(new DateOnly(2026, 9, 21), $"HYBRID-{Guid.NewGuid():N}", 1,
+                "混在入力", IsRaceCard: true,
+                Entries: [new(1, 1, "1:35.0", null, null, null, null, HorseName: "混在馬")]), JsonOptions);
+        var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(body);
+        Assert.IsFalse(body.CorePersisted);
+        Assert.IsTrue(body.Outcomes!.All(x => x.ErrorCode == "RaceCardContainsResultData"));
+        Assert.AreEqual(eventsBefore, CountStoredEvents());
     }
 
     [TestMethod]

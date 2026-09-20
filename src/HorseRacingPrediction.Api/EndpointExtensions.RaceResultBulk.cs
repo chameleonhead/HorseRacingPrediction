@@ -41,6 +41,7 @@ public static partial class EndpointExtensions
         if (existing is not null && string.IsNullOrEmpty(existing.RaceId)) existing = null;
 
         var errors = new List<string>();
+        var relatedErrors = new List<string>();
         var outcomes = new List<Shared.DeclareRaceResultBulkItemOutcome>();
         var accepted = new List<(Shared.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)>();
@@ -94,12 +95,20 @@ public static partial class EndpointExtensions
             outcomes.Add(new("Entry", key, "Accepted"));
         }
 
+        if (request.IsRaceCard && HasRaceResultEvidence(request))
+        {
+            const string message = "Race-card requests must not contain result data.";
+            errors.Add($"出馬表登録エラー: {message}");
+            MarkAcceptedOutcomesFailed(outcomes, "RaceCardContainsResultData", message);
+            return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+        }
+
         var gradeCode = ResolveCollectedGradeCode(request.GradeCode, request.RaceName, existing?.RaceName);
         var data = new BulkRaceResultData(
             request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
             request.EntryCount, gradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
             accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)).Select(item => item.Entry).ToArray(),
-            accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
+            request.IsRaceCard ? [] : accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
             string.IsNullOrWhiteSpace(request.WinningHorseName)
                 ? null
                 : request.DeclaredAt ?? Shared.Time.JstTime.Now(),
@@ -115,6 +124,7 @@ public static partial class EndpointExtensions
                 request.TrackCondition.DirtConditionCode, request.TrackCondition.GoingDescriptionText),
             request.StewardReportText);
 
+        var corePersisted = false;
         try
         {
             ValidateCollectedRaceResultBulk(data, existing);
@@ -153,11 +163,26 @@ public static partial class EndpointExtensions
             }
             else if (request.IsRaceCard)
             {
-                var jobOutcomes = await RequestSubjectProfileJobsAsync(raceIdValue, request.RaceDate,
-                    accepted, collectionStore, dbContextProvider, cancellationToken).ConfigureAwait(false);
-                foreach (var rejected in jobOutcomes.Where(item => item.Status == "Rejected"))
-                    errors.Add($"主体識別情報の補正候補として記録: {rejected.ItemKey} — {rejected.ErrorCode}: {rejected.Message}");
+                corePersisted = true;
+                try
+                {
+                    var jobOutcomes = await RequestSubjectProfileJobsAsync(raceIdValue, request.RaceDate,
+                        accepted, collectionStore, dbContextProvider, cancellationToken).ConfigureAwait(false);
+                    foreach (var rejected in jobOutcomes.Where(item => item.Status == "Rejected"))
+                    {
+                        var message = $"主体識別情報の補正候補として記録: {rejected.ItemKey} — {rejected.ErrorCode}: {rejected.Message}";
+                        errors.Add(message);
+                        relatedErrors.Add(message);
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+                {
+                    var message = $"関連主体収集要求エラー: {ex.Message}";
+                    errors.Add(message);
+                    relatedErrors.Add(message);
+                }
             }
+            else if (result.IsSuccess) corePersisted = true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -165,8 +190,26 @@ public static partial class EndpointExtensions
             MarkAcceptedOutcomesFailed(outcomes, "RaceBulkCommandFailed", ex.Message);
         }
 
-        return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes));
+        return Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceIdValue, errors, outcomes,
+            corePersisted, relatedErrors));
     }
+
+    private static bool HasRaceResultEvidence(Shared.DeclareRaceResultBulkRequest request)
+        => !string.IsNullOrWhiteSpace(request.WinningHorseName)
+           || request.DeclaredAt is not null
+           || request.Payouts is not null
+           || (request.Entries ?? []).Any(item => item.FinishPosition is not null
+               || !string.IsNullOrWhiteSpace(item.OfficialTime)
+               || !string.IsNullOrWhiteSpace(item.MarginText)
+               || !string.IsNullOrWhiteSpace(item.LastThreeFurlongTime)
+               || !string.IsNullOrWhiteSpace(item.AbnormalResultCode)
+               || item.PrizeMoney is not null
+               || item.Popularity is not null
+               || item.OriginalFinishPosition is not null
+               || item.IsDeadHeat
+               || !string.IsNullOrWhiteSpace(item.CornerPositions)
+               || item.Average1F is not null
+               || item.AdditionalPrizeMoney is not null);
 
     private static async Task<IReadOnlyList<CollectionRequestBatchOutcome>> RequestSubjectProfileJobsAsync(
         string raceId, DateOnly raceDate,
