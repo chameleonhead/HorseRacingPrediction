@@ -121,8 +121,6 @@
 
 ## Verification record
 
-- 2026-09-20 11:48 JST: fingerprint `65ee2aecb8544f5c` をproduction read-only APIで診断。`trainer-profile` 1件、group `617A82F777D7E281`、resource `trainer-ae6f6e74-ec5a-5954-8d2b-4e324b6cb0d1` のattempt 5が重複する`騎手・調教師`クリック候補でterminal failureになった。attempt 1-4と同一batchの先行3 taskはtimeout。Realtime flowはarrived 149 / dispatched 210 / completed 205 / active 6でdefinition全体の停止ではない。production mutationは行っていない。
-- 2026-09-20: T3の診断から新規program bugを特定し、未承認のクリック選択規則変更を `docs/changes/20260920_equivalent-click-target-resolution/README.md` にProposedとして分離した。deploy、retry、failure削除は行っていない。
 - 2026-09-19: CodeGraphでowner task producerのUUID v5 IDとowner APIのSHA-256 ID、異なる正規化規則、collectorの直接GET経路を確認した。
 - 2026-09-19: CodeGraphでdispatch findingがlaneだけを比較しworker capabilityを照合しないことを確認した。
 - 2026-09-19: origin/mainの35件の`collection-attention-*` recordと、直近監視の49 findingを棚卸しした。
