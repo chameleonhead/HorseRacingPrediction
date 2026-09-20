@@ -8,7 +8,6 @@ using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Contracts.Time;
 using HorseRacingPrediction.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace HorseRacingPrediction.Api;
