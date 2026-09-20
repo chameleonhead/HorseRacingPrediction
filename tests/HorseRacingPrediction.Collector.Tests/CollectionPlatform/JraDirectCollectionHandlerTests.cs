@@ -366,6 +366,118 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_AfterCollectingCard_UsesResultClassifiedLocationBeforeFallback()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var race = new RaceId(date, RaceCourse.Tokyo, 1);
+        var cardUrl = new Uri("https://example.test/card/1");
+        var resultUrl = new Uri("https://example.test/result/1");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => url == cardUrl
+                    ? new JraRaceCardPage(url.AbsoluteUri, race, "test", new(10, 0), [])
+                    : new JraRaceResultPage(url.AbsoluteUri, race, "test", []),
+            },
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" },
+            [
+                new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
+                    RaceArtifactKind.Card),
+                new(2, resultUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
+                    RaceArtifactKind.Result),
+            ]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        CollectionAssert.AreEqual(new[] { cardUrl, resultUrl }, sessions.LastNavigator!.DirectUrlRequests);
+        Assert.HasCount(1, results.RefreshPageRequests);
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_CurrentResult_SkipsResultNavigationAfterCardRepair()
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var race = new RaceId(date, RaceCourse.Tokyo, 1);
+        var cardUrl = new Uri("https://example.test/card/1");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => new JraRaceCardPage(url.AbsoluteUri, race, "test", new(10, 0), []),
+            },
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京", ["number"] = "1", ["resultArtifactStatus"] = "Current",
+            },
+            [new(1, cardUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
+                RaceArtifactKind.Card)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsEmpty(results.RefreshPageRequests);
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.ErrorCode == "RaceResultAlreadyCurrent"));
+    }
+
+    [TestMethod]
+    [DataRow(429, CollectionAttemptResult.AccessLimited)]
+    [DataRow(503, CollectionAttemptResult.TransientFailure)]
+    public async Task RaceDetail_ResultCandidateAccessFailure_StopsBeforeFallback(
+        int statusCode, CollectionAttemptResult expected)
+    {
+        var date = new DateOnly(2026, 9, 19);
+        var resultUrl = new Uri($"https://example.test/result/{statusCode}");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new HttpRequestException("candidate failed", null,
+                    (System.Net.HttpStatusCode)statusCode),
+            },
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 19, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260919:Tokyo:1"), new("race-detail"), 2,
+            CollectionReason.Recovery, CollectionLane.Normal, 50, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string>
+            {
+                ["course"] = "東京", ["number"] = "1", ["cardArtifactStatus"] = "Current",
+                ["officialStartAt"] = "2026-09-19T10:00:00+09:00",
+            },
+            [new(1, resultUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null,
+                RaceArtifactKind.Result)]), CancellationToken.None);
+
+        Assert.AreEqual(expected, completion.Result);
+        Assert.HasCount(1, sessions.LastNavigator!.DirectUrlRequests);
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_MissingCardOwner_IsStructuredIsolatedFailureAfterResultPersists()
     {
         var date = new DateOnly(2026, 9, 19);

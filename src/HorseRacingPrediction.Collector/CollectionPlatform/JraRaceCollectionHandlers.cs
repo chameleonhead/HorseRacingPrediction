@@ -234,6 +234,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var today = TodayJst();
         var cardAlreadyCurrent = string.Equals(task.Attributes.GetValueOrDefault("cardArtifactStatus"),
             RaceArtifactStatus.Current.ToString(), StringComparison.OrdinalIgnoreCase);
+        var resultAlreadyCurrent = string.Equals(task.Attributes.GetValueOrDefault("resultArtifactStatus"),
+            RaceArtifactStatus.Current.ToString(), StringComparison.OrdinalIgnoreCase);
         var ownerRepair = task.Attributes.TryGetValue("ownerRepair", out var ownerRepairValue)
             && string.Equals(ownerRepairValue, "true", StringComparison.OrdinalIgnoreCase);
         var requiresCard = !cardAlreadyCurrent
@@ -241,6 +243,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         RaceCardRaceOutcome? result = null;
         Uri? successfulLocation = null;
         var locationOutcomes = new List<ResourceLocationOutcome>();
+        var attemptedCardLocationIds = new HashSet<long>();
         var stageOutcomes = new List<CollectionStageOutcome>();
         string? cardOwnerError = null;
         RaceSchedulingEvidence? raceEvidence = null;
@@ -254,9 +257,11 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 StageOutcomes: stageOutcomes);
         }
         foreach (var location in requiresCard
-                     ? (task.Locations ?? []).Where(x => x.Artifact is null or RaceArtifactKind.Card)
+                     ? (task.Locations ?? []).Where(x => IsCandidateForArtifact(
+                         x, RaceArtifactKind.Card, ResourceType.RaceCard, raceId))
                      : [])
         {
+            attemptedCardLocationIds.Add(location.LocationId);
             JraRaceCardPage? card;
             try
             {
@@ -386,6 +391,28 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         }
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
+        if (resultAlreadyCurrent)
+        {
+            stageOutcomes.Add(new("ResolveResult", RaceArtifactKind.Result,
+                CollectionAttemptResult.NotApplicable, "RaceResultAlreadyCurrent",
+                "The current result artifact already satisfies the requested revision."));
+            if (result?.Error is not null)
+                return new(CollectionAttemptResult.ValidationFailure, "RaceCardWriteRejected", result.Error,
+                    RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl), FinalUrl: ToUri(result.SourceUrl),
+                    PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}", LocationOutcomes: locationOutcomes,
+                    FailureImpact: CollectionFailureImpact.Isolated, StageOutcomes: stageOutcomes,
+                    RaceEvidence: raceEvidence);
+            if (cardOwnerError is not null)
+                return new(CollectionAttemptResult.ValidationFailure, "RaceCardOwnerIncomplete", cardOwnerError,
+                    RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), FinalUrl: ToUri(result?.SourceUrl),
+                    PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}", LocationOutcomes: locationOutcomes,
+                    FailureImpact: CollectionFailureImpact.Isolated, StageOutcomes: stageOutcomes,
+                    RaceEvidence: raceEvidence);
+            return new(CollectionAttemptResult.Succeeded,
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
+                FinalUrl: ToUri(result?.SourceUrl), PageIdentification: $"RaceDetail:JRA:{task.Resource.Id}",
+                LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
+        }
         var firstResultCheck = FirstResultCheck(raceId.Date, task.Attributes, result?.StartTime);
         if (raceId.Date >= today && firstResultCheck is null)
         {
@@ -413,44 +440,51 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
 
         var resultWorkflow = resultWorkflows(session);
         RaceResultCollectionResult? raceResult = null;
-        if (!requiresCard)
+        foreach (var location in (task.Locations ?? []).Where(x => !attemptedCardLocationIds.Contains(x.LocationId)
+                     && IsCandidateForArtifact(x, RaceArtifactKind.Result, ResourceType.RaceResult, raceId)))
         {
-            foreach (var location in (task.Locations ?? []).Where(x => x.Artifact is null or RaceArtifactKind.Result))
+            JraRaceResultPage? resultPage;
+            try
             {
-                JraRaceResultPage? resultPage;
-                try
+                var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
+                resultPage = page as JraRaceResultPage;
+                if (resultPage is null || resultPage.RaceId != raceId)
                 {
-                    var page = await session.Navigate.ToUrlAsync(location.Url, cancellationToken).ConfigureAwait(false);
-                    resultPage = page as JraRaceResultPage;
-                    if (resultPage is null || resultPage.RaceId != raceId)
-                    {
-                        locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch", RaceArtifactKind.Result));
-                        continue;
-                    }
-                    successfulLocation = location.Url;
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location, RaceArtifactKind.Result));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Result));
+                    locationOutcomes.Add(ResourceLocationOutcomeClassifier.Unexpected(location, "RaceResultIdentityMismatch", RaceArtifactKind.Result));
                     continue;
                 }
-                try
+                successfulLocation = location.Url;
+                locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location, RaceArtifactKind.Result));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                var outcome = ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Result);
+                locationOutcomes.Add(outcome);
+                if (outcome.Result is CollectionAttemptResult.AccessLimited or CollectionAttemptResult.TransientFailure)
                 {
-                    raceResult = await resultWorkflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty,
-                        cancellationToken).ConfigureAwait(false);
-                    break;
+                    stageOutcomes.Add(new("ResolveResult", RaceArtifactKind.Result, outcome.Result,
+                        outcome.ErrorCode, ex.Message, location.Url));
+                    return new(outcome.Result, outcome.ErrorCode, ex.Message, RequestedUrl: location.Url,
+                        RetryAt: NextResultRetry(raceId.Date), LocationOutcomes: locationOutcomes,
+                        StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    stageOutcomes.Add(new("PersistResult", RaceArtifactKind.Result,
-                        CollectionAttemptResult.ValidationFailure, "RaceResultWriteFailed", ex.Message,
-                        location.Url, ToUri(resultPage.Url)));
-                    return new(CollectionAttemptResult.ValidationFailure, "RaceResultWriteFailed", ex.Message,
-                        RequestedUrl: location.Url, FinalUrl: ToUri(resultPage.Url),
-                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes,
-                        RaceEvidence: raceEvidence);
-                }
+                continue;
+            }
+            try
+            {
+                raceResult = await resultWorkflow.RefreshPageAsync(resultPage, domainRaceId, string.Empty,
+                    cancellationToken).ConfigureAwait(false);
+                break;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                stageOutcomes.Add(new("PersistResult", RaceArtifactKind.Result,
+                    CollectionAttemptResult.ValidationFailure, "RaceResultWriteFailed", ex.Message,
+                    location.Url, ToUri(resultPage.Url)));
+                return new(CollectionAttemptResult.ValidationFailure, "RaceResultWriteFailed", ex.Message,
+                    RequestedUrl: location.Url, FinalUrl: ToUri(resultPage.Url),
+                    LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes,
+                    RaceEvidence: raceEvidence);
             }
         }
         try
@@ -514,6 +548,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     }
 
     private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
+
+    private static bool IsCandidateForArtifact(ResourceLocationCandidate location, RaceArtifactKind artifact,
+        ResourceType resourceType, RaceId raceId)
+    {
+        if (location.Artifact is { } classified && classified != artifact) return false;
+        return !location.Url.Host.Equals("www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+               || JraRaceDetailUrl.Validate(location.Url, resourceType, raceId) is not null;
+    }
 
     private DateOnly TodayJst()
     {
