@@ -147,7 +147,7 @@ jobs:
           strip_components: 1
 
       - name: Restart remote stack
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           IMAGE_NAME: ${{ needs.build-and-push.outputs.image_name }}
           IMAGE_TAG: sha-${{ github.sha }}
@@ -384,7 +384,7 @@ jobs:
           exit 1
 
       - name: Install API collection queue credentials
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           APP_DIRECTORY: ${{ env.APP_DIRECTORY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
