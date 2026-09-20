@@ -11,7 +11,7 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | commit `62eb745`でdispatch候補証拠、effective-priority envelope代表、group上限時のpriority admissionを修正した。 |
-| Verification | In progress | 初回CI成功後、review P2のdispatch時点candidacy指摘を修正。再回帰と更新CIが残る。 |
+| Verification | Verified | review P2をdispatch時点candidacy比較で修正し、更新CI run `35495961189`と再reviewが成功。PR #64はmerge可能。 |
 | Deployment/operation | Externally blocked | production deployは明示的許可の対象外。配備後read-only監視で2 fingerprintの消失確認が必要。 |
 
 ## Context
@@ -54,7 +54,7 @@
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
 | AC1 | 既配送Ready task、reservation中のhistorical dispatch、agingされたenvelope代表、group上限超過の反例で偽陽性と高priority除外が再発しない。 | T1 | focused tests、API regression、Release build | Verified |
-| AC2 | 修正branchのPRで必須CIが成功し、review findingが解消され、merge可能な状態になる。 | T2 | GitHub PR checks、review、merge state | Not started |
+| AC2 | 修正branchのPRで必須CIが成功し、review findingが解消され、merge可能な状態になる。 | T2 | GitHub PR checks、review、merge state | Verified |
 | AC3 | 許可された配備後のproduction read-only監視で`2923d81f0c1f3296`と`dde5c066c6730424`が再観測されない。 | T3 | deployed revision照合、連続read-only monitor | Not started |
 
 ## Task plan
@@ -62,7 +62,7 @@
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | dispatch monitorとadmissionを修正し反例テストを追加する。AC1 | Main | High capability | Approval | monitoring、dispatcher、tests | focused/API/solution gates | dispatch-time candidacyを含むpatchとtests | Verified | Lead — public contract and final acceptance | none | unavailable; retries 0; corrections 1; reviews 2 |
-| T2 | PRを作成しCIとreview findingを閉じる。AC2 | Main | High capability | T1 | PR、必要時は同一code/test scope | required checks、review | green mergeable PR | In progress | Lead — integration and final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T2 | PRを作成しCIとreview findingを閉じる。AC2 | Main | High capability | T1 | PR、必要時は同一code/test scope | required checks、review | green mergeable PR | Verified | Lead — integration and final acceptance | none | unavailable; retries 0; corrections 1; reviews 2 |
 | T3 | 許可後にdeployしread-only monitorで2 fingerprint消失を確認する。AC3 | Operator | High capability | T2、明示的deploy許可 | production deployment evidence、record | deployed revision、monitor snapshots | 2系統の非再観測 | Externally blocked | Operator — destructive production boundary | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 
 ## Review gates
@@ -72,6 +72,7 @@
 - **Pre-implementation review — 2026-09-20, reviewer: Main.** T1は既存承認範囲でVerified、T2はRunnableからIn progress、T3は明示許可待ちのExternally blocked。追加codingが必要な場合は既存反例とCIを再実行する。
 - **Checkpoint review — 2026-09-20, reviewer: Main.** commit `62eb745`をAC1へ照合。focused 28/28、API 270 passed/1 skipped、Release build 0 warning/0 error、format gate、record validatorsが成功。solution回帰の非関連browser timing failureは単独再実行で成功した。
 - **Checkpoint review — 2026-09-20, reviewer: Codex + Main.** PR review P2は、snapshot時点で候補に戻ったtaskが過去のreservation中dispatchまで遡って違反扱いされる反例を指摘した。指摘を採用し、`DispatchCandidateSince`をavailabilityと直近reservation expiryから算出してdispatchごとに比較する反例を追加。focused 29/29、API 271 passed/1 skipped、Release build 0 warning/0 error、format gate成功。基点record差分は専用recordへ移し、PRから除去した。
+- **Final review — 2026-09-20, reviewer: Codex + Main.** commit `753dcd8`の再reviewは追加findingなしで完了し、CI run `35495961189`は全gate成功。未解決threadはなく、PR #64は`CLEAN`かつ`MERGEABLE`。AC1とAC2をVerified、production境界のAC3だけをExternally blockedとして残す。
 
 ## Verification record
 
@@ -79,7 +80,8 @@
 - 2026-09-20: 15:41 JSTのproduction read-only監視で2 fingerprint継続を確認。未配備revisionの期待結果であり、解消証拠には使用しない。
 - 2026-09-20: PR #64初回CI run `35494971190`成功。Codex review P2 `discussion_r4056338476`を受理し、dispatch時点candidacyの反例を実装、focused 29/29成功。
 - 2026-09-20: review修正後、API 271 passed/1 skipped、Release build 0 warning/0 error、`dotnet format ... --verify-no-changes`成功。
+- 2026-09-20: commit `753dcd8`のCI run `35495961189`成功。Codex再reviewは追加findingなしで完了し、初回P2 threadは解消済み。PR #64は競合なしでmerge可能。
 
 ## Deviations and follow-up
 
-- production deployと配備後monitorは明示許可待ち。次の安全な操作はPR CIとreviewの完了である。
+- production deployと配備後monitorは明示許可待ち。残作業は、許可後の配備revision照合と、2 fingerprintを対象にした連続read-only監視だけである。
