@@ -100,6 +100,11 @@ Navigationは次を守る。
   identity検証を行える場合だけ候補として利用する。
 - ブラウザー待機は目的画面の見出し・表・Race identity等、利用者に見える準備完了条件を用いる。
   `NetworkIdle`や非公開通信の完了を仕様にしない。
+- Card上のRace番号要素と`レース結果`要素が別でも、同じRace文脈とvalidated CNAMEから直接Result URLを選べるようにする。
+  `#`などのJavaScript controlはURL候補ではなくclick targetとして扱い、どの経路も遷移後にpage kindとRace identityを検証する。
+- discoveryが後から同一RaceのResult URLを発見した場合、既存request/taskの有無にかかわらず、Cardとは別artifactのlocationとして
+  冪等に統合する。このcorrective contractの承認・実装状態は
+  [堅牢なResult navigation変更記録](changes/20260920_robust-race-result-navigation/README.md)を正本とする。
 
 JRA公式FAQでは1986年以降のレース結果を案内し、直近と古い結果で入口が分かれる旨が説明されている。
 また2000年以前は一部情報や表示条件が異なり得る。したがって、年代差を一つのDOM形式へ推測で
