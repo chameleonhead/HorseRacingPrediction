@@ -489,9 +489,11 @@ public sealed class CollectionMonitoringService(
         // envelope as one dispatch decision and require repeated bypass of already-stalled work.
         var dispatches = snapshot.RecentDispatches
             .GroupBy(x => x.EnvelopeId == Guid.Empty ? x.TaskId : x.EnvelopeId)
-            .Select(group => group.OrderByDescending(x => x.Priority).First())
+            .Select(group => group.OrderByDescending(x => EffectivePriority(x.Priority, x.CreatedAt,
+                    x.DispatchedAt))
+                .ThenBy(x => x.AvailableAt).ThenBy(x => x.CreatedAt).ThenBy(x => x.TaskId).First())
             .ToArray();
-        foreach (var higher in snapshot.ActiveTasks.Where(x => IsStalled(x, now)))
+        foreach (var higher in snapshot.ActiveTasks.Where(x => x.IsDispatchCandidate && IsStalled(x, now)))
         {
             if (string.IsNullOrWhiteSpace(higher.CompatibilityKey)) continue;
             var bypasses = dispatches.Where(dispatch => dispatch.Lane == higher.Lane
@@ -510,6 +512,7 @@ public sealed class CollectionMonitoringService(
                 [
                     $"lane={higher.Lane}",
                     $"compatibilityKey={higher.CompatibilityKey}",
+                    $"waitingDispatchCandidate={higher.IsDispatchCandidate}",
                     $"waitingTaskId={higher.TaskId:D}",
                     $"waitingPriority={higher.Priority}",
                     $"bypassCount={bypasses.Length}",

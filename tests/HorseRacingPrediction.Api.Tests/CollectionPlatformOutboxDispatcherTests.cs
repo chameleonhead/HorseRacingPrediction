@@ -334,9 +334,10 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             await store.RegisterDefinitionAsync(new("race-card"), "card", ResourceType.RaceCard, 1, "initial", false);
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var date = new DateOnly(2026, 9, 13);
-            for (var index = 1; index <= 25; index++)
+            for (var index = 1; index <= 26; index++)
                 await store.RequestAsync(new(ResourceType.RaceCard, "JRA", $"R{index}"), new("race-card"), 1,
-                    CollectionReason.Initial, now, CollectionLane.Realtime, 80, effectiveDate: date,
+                    CollectionReason.Initial, now, CollectionLane.Realtime, index >= 25 ? 100 : 10,
+                    effectiveDate: date,
                     attributes: new Dictionary<string, string>
                     {
                         ["course"] = index <= 12 ? "Nakayama" : "Hanshin",
@@ -358,7 +359,10 @@ public sealed class CollectionPlatformOutboxDispatcherTests
 
             Assert.HasCount(1, queue.Messages);
             Assert.HasCount(24, queue.Messages.Single().Tasks);
-            Assert.HasCount(1, await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow, 100));
+            var tasks = (await store.GetTasksAsync(limit: 100)).ToDictionary(x => x.Resource.Id, x => x.TaskId);
+            Assert.IsTrue(queue.Messages.Single().Tasks.Any(x => x.TaskId == tasks["R25"]));
+            Assert.IsTrue(queue.Messages.Single().Tasks.Any(x => x.TaskId == tasks["R26"]));
+            Assert.HasCount(2, await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow, 100));
         }
         finally { Directory.Delete(directory, true); }
     }

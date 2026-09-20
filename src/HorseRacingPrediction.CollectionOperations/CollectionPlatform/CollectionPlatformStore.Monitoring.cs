@@ -65,6 +65,20 @@ public sealed partial class CollectionPlatformStore
         var flowResources = await db.Resources.AsNoTracking().Where(x => flowResourcePks.Contains(x.ResourcePk))
             .ToDictionaryAsync(x => x.ResourcePk, cancellationToken).ConfigureAwait(false);
 
+        var activeTaskIds = activeRows.Select(x => x.task.TaskId).ToArray();
+        var cutoffMilliseconds = cutoff.ToUnixTimeMilliseconds();
+        var dispatchCandidateTaskIds = (await (from outbox in db.DispatchOutbox.AsNoTracking()
+                                               join task in db.Tasks.AsNoTracking()
+                                                   on outbox.TaskId equals task.TaskId
+                                               where activeTaskIds.Contains(outbox.TaskId)
+                                                     && outbox.DispatchGeneration == task.DispatchGeneration
+                                                     && outbox.DispatchedAt == null
+                                                     && outbox.AvailableAt <= cutoff
+                                                     && (outbox.ReservedUntilUnixMilliseconds == null
+                                                         || outbox.ReservedUntilUnixMilliseconds <= cutoffMilliseconds)
+                                               select outbox.TaskId)
+            .Distinct().ToListAsync(cancellationToken).ConfigureAwait(false)).ToHashSet();
+
         var truncated = activeRows.Count > limit || dispatchRows.Count > limit || raceRows.Count > limit;
         var active = activeRows.Take(limit).Select(x => new CollectionMonitoringTaskSnapshot(
             x.task.TaskId,
@@ -79,7 +93,8 @@ public sealed partial class CollectionPlatformStore
             x.task.StartedAt,
             x.task.LeaseExpiresAt,
             x.task.AttemptCount,
-            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane))).ToArray();
+            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane),
+            dispatchCandidateTaskIds.Contains(x.task.TaskId))).ToArray();
         var dispatches = dispatchRows.Take(limit).Select(x => new CollectionMonitoringDispatchSnapshot(
             x.outbox.EnvelopeId ?? Guid.Empty,
             x.task.TaskId,
