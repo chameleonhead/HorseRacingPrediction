@@ -303,6 +303,17 @@ public sealed class CollectionMonitoringService(
         var dueResults = latest.Where(x => x.OfficialStartAt is { } start
                                             && now >= start.AddMinutes(Math.Max(1, _options.ResultGraceMinutes)))
             .ToArray();
+        var untrackedResults = dueResults.Where(x => x.ResultStatus == RaceArtifactStatus.Unknown).ToArray();
+        if (untrackedResults.Length > 0)
+            findings.Add(CreateFinding("RaceResultArtifactTrackingMissing",
+                CollectionFindingClassification.OperationalCondition, "high",
+                untrackedResults.Min(x => x.OfficialStartAt!.Value.AddMinutes(
+                    Math.Max(1, _options.ResultGraceMinutes))), now,
+                $"{untrackedResults.Length} due race results have no tracked result artifact state.",
+                [$"missing={untrackedResults.Length}",
+                    $"missingRaceIds={string.Join(',', untrackedResults.Take(20).Select(x => x.Resource.Id))}"],
+                "Reconcile the result facet from exact race identity and revision evidence; do not recollect a result that is already complete in the domain.",
+                null, "freshness:result-artifact-tracking"));
         foreach (var dateGroup in dueResults.GroupBy(x => GetRaceDate(x.Resource.Id)))
         {
             var domainResultCount = domainRaces.Count(x => x.RaceDate == dateGroup.Key && x.HasResult);

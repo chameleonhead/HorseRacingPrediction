@@ -13,6 +13,10 @@
 > 公式StartTimeを正本とする曜日非依存の取得契約を採用した。実装と検証の状態は
 > [JRA公開状態駆動のRace取得](changes/20260920_event-driven-race-acquisition/README.md)を参照する。
 
+> 2026-09-20 提案: CardからResultへ進む場合も、具体Result URLとRace identityを汎用開催一覧探索より
+> 優先し、Card要否で保存済みResult locationを無視しない。既存の正常fallbackを維持する設計は
+> [堅牢なRace Result遷移](changes/20260920_robust-race-result-navigation/README.md)を参照する。
+
 JRAサイトの実装詳細を推測して依存する文書ではない。利用者がブラウザーで確認できる画面と
 公式案内を契約境界とし、非公開API、内部JSON、偶然残っているURL、ページ間で意味が異なる
 同名項目には依存しない。

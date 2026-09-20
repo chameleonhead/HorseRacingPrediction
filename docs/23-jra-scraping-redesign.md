@@ -2,6 +2,10 @@
 
 Resource 中心の次期収集基盤では、本書の Page/Parser/Navigator を Direct Collection と Discovery の双方から再利用する。URL は ResourceLocation 候補として扱い、取得後に expected resource type/provider/id を検証する。候補選択、location status、fallback、request/task state は [26-collection-platform-design.md](26-collection-platform-design.md) の責務であり、Parser/Navigator に永続ジョブ制御を持ち込まない。2026-09-11 現在は Proposed である。
 
+> 2026-09-20 提案: Race結果は、同一attemptのCardが示す具体Result URL、保存済みResult location、
+> 現行Current/Recent/Historical fallbackの順に、事前URL検証と事後Race identity検証を伴って遷移する。
+> 設計と承認状態は[堅牢なRace Result遷移](changes/20260920_robust-race-result-navigation/README.md)を参照する。
+
 ## 1. 目的
 
 既存の `IWebBrowser` / `PlaywrightWebBrowser` の上に、JRAサイト専用のスクレイピング層を実装する。

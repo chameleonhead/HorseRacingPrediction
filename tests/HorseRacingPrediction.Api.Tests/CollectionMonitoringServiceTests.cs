@@ -252,6 +252,8 @@ public sealed class CollectionMonitoringServiceTests
 
         Assert.IsFalse(findings.Any(x => x.Kind == "RaceCardCoverageMissing"));
         Assert.IsFalse(findings.Any(x => x.Kind is "RaceDayResultCoverageMissing" or "RaceResultFreshnessMiss"));
+        var tracking = findings.Single(x => x.Kind == "RaceResultArtifactTrackingMissing");
+        Assert.IsTrue(tracking.Evidence.Contains("missing=24"));
     }
 
     [TestMethod]
