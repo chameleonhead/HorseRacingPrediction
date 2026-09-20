@@ -1,6 +1,6 @@
 # JRA公開状態駆動のRace取得
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-20
@@ -57,11 +57,11 @@ single active taskを定めている。本変更はその代替ではなく、�
 
 | ID | Concern and evidence | Impact | Recommended disposition | AC/task/counterexample | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | JRA公式も通常時刻に複数例外があると明記。 | 曜日/固定時刻は取得漏れを生む。 | 固定時刻はprobe hintに限定し、公式calendar/link/page identityを正本にする。 | AC1,AC2/T1,T3/月曜・代替開催 | 必須 | Pending | Resolved in design |
-| C2 | `IsRaceCard` だけでresult全破棄するとhybrid callerの結果を沈黙破棄する。 | 結果欠損 | Card/Result commandを明示分離するか、矛盾payloadをvalidation errorにする。 | AC3/T2/hybrid payload | 沈黙破棄不可 | Pending | Resolved in design |
-| C3 | bulk responseのErrorsにcore writeと関連jobが混在。 | Card成功をBlockedと誤判定。 | typed stage outcomeとcore receiptを別記録し、関連job失敗でCardを退行させない。 | AC4/T2/subject partial failure | 必須 | Pending | Resolved in design |
-| C4 | availabilityとdeterministic failureの一律retryは無駄な負荷または取得放棄を生む。 | JRA負荷、欠落固定 | typed policy、backoff、deadline、Blocked通知を独立テストする。 | AC5,AC6/T3/未公開・HTTP一過性・validation | 必須 | Pending | Resolved in design |
-| C5 | 既存production taskは旧scheduleを保持。 | code deployだけで現findingが解消しない可能性。 | 実装と復旧を分離し、本承認では復旧mutationを許可しない。 | AC9/T5/legacy task | 安全境界を維持 | Pending | Resolved in design |
+| C1 | JRA公式も通常時刻に複数例外があると明記。 | 曜日/固定時刻は取得漏れを生む。 | 固定時刻はprobe hintに限定し、公式calendar/link/page identityを正本にする。 | AC1,AC2/T1,T3/月曜・代替開催 | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C2 | `IsRaceCard` だけでresult全破棄するとhybrid callerの結果を沈黙破棄する。 | 結果欠損 | Card/Result commandを明示分離するか、矛盾payloadをvalidation errorにする。 | AC3/T2/hybrid payload | 沈黙破棄不可 | Approved, 2026-09-20 | Resolved in design |
+| C3 | bulk responseのErrorsにcore writeと関連jobが混在。 | Card成功をBlockedと誤判定。 | typed stage outcomeとcore receiptを別記録し、関連job失敗でCardを退行させない。 | AC4/T2/subject partial failure | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C4 | availabilityとdeterministic failureの一律retryは無駄な負荷または取得放棄を生む。 | JRA負荷、欠落固定 | typed policy、backoff、deadline、Blocked通知を独立テストする。 | AC5,AC6/T3/未公開・HTTP一過性・validation | 必須 | Approved, 2026-09-20 | Resolved in design |
+| C5 | 既存production taskは旧scheduleを保持。 | code deployだけで現findingが解消しない可能性。 | 実装と復旧を分離し、本承認では復旧mutationを許可しない。 | AC9/T5/legacy task | 安全境界を維持 | Approved, 2026-09-20 | Resolved in design |
 
 ## Acceptance criteria
 
@@ -82,7 +82,7 @@ single active taskを定めている。本変更はその代替ではなく、�
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | JRA公式evidenceと曜日非依discovery/due契約を固定する。AC1,AC2 | Main | Lead | Approval | Contracts, canonical docs, fixtures | official-source review and fixtures | frozen evidence contract | Proposed |
+| T1 | JRA公式evidenceと曜日非依discovery/due契約を固定する。AC1,AC2 | Main | Lead | Approval | Contracts, canonical docs, fixtures | official-source review and fixtures | frozen evidence contract | In progress |
 | T2 | Card/Result bulk commandとcore/related outcomeを分離する。AC3,AC4 | Main | Lead | T1 | API/Application/Collector/tests | transport and partial-failure tests | no implicit results/no rollback | Dependent |
 | T3 | facet planner、typed retry、single-task controllerを完結させる。AC1,AC2,AC4-AC6,AC8,AC10 | Main | Lead | T1,T2 | CollectionOperations/Collector/tests | scheduler/store/handler E2E | weekday-independent progression | Dependent |
 | T4 | 開催日ベースのcoverage monitorとlifecycle互換を実装する。AC7 | Main | Lead | T3 | Monitoring/tests/docs | evaluator/store/API | generic race-day findings | Dependent |
@@ -93,6 +93,7 @@ single active taskを定めている。本変更はその代替ではなく、�
 - **Design and task-split review — 2026-09-20, reviewer: Main.** 既存phase-recoveryのresource/facet/single-task設計を維持し、曜日非依存の公式evidence、bulk contract、typed retry、generic coverageに分割した。共有契約・状態機械・永続化・production整合性を跨ぐため実装と統合はMain/Leadが所有する。
 - **Concern and agreement review — 2026-09-20, reviewer: Main.** 例外開催、payload沈黙破棄、部分成功、retry誤分類、legacy taskをmaterial concernとし、C1-C5の処置とACに反映した。Open decisionはないが、user dispositionは未承認。
 - **Pre-implementation review:** 承認後にT1をRunnableとし、T2-T5を依存順に進める。実装前にテスファイルと最小/回帰コマンドを記録する。
+- **Pre-implementation review — 2026-09-20, reviewer: Main.** 利用者の「課題がなければ実装」という条件付き指示に対し、C1-C5がすべてResolved in design、Open decisionなしと確認し、承認として記録した。T1をIn progress、T2-T5をDependentとする。T1はJRA公式sourceとdiscovery fixture、T2は`RaceEndpointsTests`/handler partial-failure tests、T3はstore/scheduler/handlerとclock tests、T4はmonitor evaluator/store/API tests、T5はAPI/Collector全回帰、Release build、format、validator、read-only invariantを必須とする。production/deploy/recovery操作が必要になった場合は作業を止める。
 
 ## Verification record
 
