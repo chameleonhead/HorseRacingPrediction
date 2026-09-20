@@ -7,7 +7,9 @@ namespace HorseRacingPrediction.Contracts;
 public sealed record DeclareRaceResultBulkResponse(
     string RaceId,
     IReadOnlyList<string> Errors,
-    IReadOnlyList<DeclareRaceResultBulkItemOutcome>? Outcomes = null);
+    IReadOnlyList<DeclareRaceResultBulkItemOutcome>? Outcomes = null,
+    bool CorePersisted = false,
+    IReadOnlyList<string>? RelatedErrors = null);
 
 public sealed record DeclareRaceResultBulkItemOutcome(
     string Scope,

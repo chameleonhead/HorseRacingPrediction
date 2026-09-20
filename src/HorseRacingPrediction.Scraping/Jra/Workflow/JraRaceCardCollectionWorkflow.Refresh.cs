@@ -46,7 +46,9 @@ public sealed partial class JraRaceCardCollectionWorkflow
         var persistedRaceId = targetRaceId ?? saved.RaceId;
         await _writeService.RecordSourceCitationAsync([new CitationSubject("Race", persistedRaceId)],
             card.Url, "JRA出馬表", cancellationToken);
+        var corePersisted = saved.CorePersisted || saved.Errors.Count == 0;
         return new(raceId.Number, persistedRaceId, card.RaceName, card.Url,
-            saved.Errors.Count == 0 ? null : string.Join("; ", saved.Errors), card.Entries, card.StartTime);
+            corePersisted ? null : string.Join("; ", saved.Errors), card.Entries, card.StartTime,
+            saved.RelatedErrors);
     }
 }

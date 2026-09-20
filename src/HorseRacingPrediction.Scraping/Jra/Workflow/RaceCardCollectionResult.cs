@@ -40,4 +40,5 @@ public sealed record RaceCardRaceOutcome(
     string? SourceUrl,
     string? Error,
     IReadOnlyList<RaceEntry>? Entries = null,
-    TimeOnly? StartTime = null);
+    TimeOnly? StartTime = null,
+    IReadOnlyList<string>? RelatedErrors = null);
