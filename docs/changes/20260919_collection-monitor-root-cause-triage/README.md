@@ -11,9 +11,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Verified | T2のdispatch候補証拠、effective-priority envelope代表、group上限時のpriority admissionを実装。 |
-| Verification | Verified | focused 28/28、API 270/271（既存skip 1）、Release build、solution回帰（非関連timing testは単独再実行成功）、format、record validatorが成功。 |
-| Deployment/operation | Externally blocked | T2修正のdeployと配備後read-only再観測は未許可のため未実施。既存T5のローカルrunner初回DPAPI設定待ちも継続。 |
+| Code | Verified | owner ID共有契約、dispatch compatibility、flow診断、原因routing、DPAPI local runnerを実装。 |
+| Verification | Verified | API 256/257、Collector 276/276、CI、runner dry-run、production read-only runが成功。 |
+| Deployment/operation | Externally blocked | 本番revisionとread-only監視は確認済み。ローカルrunnerの初回DPAPI資格情報入力だけ利用者作業待ち。 |
 
 ## Context
 
@@ -79,11 +79,11 @@
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | owner IDの変更は保存済みtask、alias、URLとの互換性を壊し得る。 | 既存参照切れ、重複owner | 既存両IDのinventory、互換lookup、移行preview、rollbackをT1に必須化する。 | AC1/T1 | 統一は必要だが一括置換は不可 | Accepted by record approval, 2026-09-19 | Resolved in design |
-| C2 | capability情報が履歴にない場合、過去のdispatch違反を確定できない。 | 偽陽性または見逃し | 判定不能はProgramBugにせず`InsufficientEvidence`とし、将来のenvelopeへ判定根拠を保存する。 | AC2/T2 | 証拠不足を不具合断定しない | Accepted by record approval, 2026-09-19 | Resolved in design |
-| C3 | ローカルheartbeatはPC/Codex停止中に実行できない。 | 死活監視の空白 | 本変更は利用者指定どおりローカル主経路とし、60分欠落を次回起動時に通知する。always-on外部監視は除外follow-upとする。 | AC5/T5 | 制約を明示して採用 | Accepted by record approval, 2026-09-19 | Accepted risk |
-| C4 | 既存35 recordを削除すると監査証跡を失う。 | 過去経緯の消失 | 削除せず、本recordから原因別に参照し、以後の反復追記だけを停止する。 | AC4/T4 | 保存して正本を一本化 | Accepted by record approval, 2026-09-19 | Resolved in design |
-| C5 | API keyの誤出力は認証情報漏洩になる。 | 本番アクセス侵害 | DPAPI、リポジトリ外、標準出力禁止、redaction test、秘密情報scanを必須化する。 | AC5/T5 | 平文設定は不可 | Accepted by record approval, 2026-09-19 | Resolved in design |
+| C1 | owner IDの変更は保存済みtask、alias、URLとの互換性を壊し得る。 | 既存参照切れ、重複owner | 既存両IDのinventory、互換lookup、移行preview、rollbackをT1に必須化する。 | AC1/T1 | 統一は必要だが一括置換は不可 | Pending | Resolved in design |
+| C2 | capability情報が履歴にない場合、過去のdispatch違反を確定できない。 | 偽陽性または見逃し | 判定不能はProgramBugにせず`InsufficientEvidence`とし、将来のenvelopeへ判定根拠を保存する。 | AC2/T2 | 証拠不足を不具合断定しない | Pending | Resolved in design |
+| C3 | ローカルheartbeatはPC/Codex停止中に実行できない。 | 死活監視の空白 | 本変更は利用者指定どおりローカル主経路とし、60分欠落を次回起動時に通知する。always-on外部監視は除外follow-upとする。 | AC5/T5 | 制約を明示して採用 | Pending | Accepted risk |
+| C4 | 既存35 recordを削除すると監査証跡を失う。 | 過去経緯の消失 | 削除せず、本recordから原因別に参照し、以後の反復追記だけを停止する。 | AC4/T4 | 保存して正本を一本化 | Pending | Resolved in design |
+| C5 | API keyの誤出力は認証情報漏洩になる。 | 本番アクセス侵害 | DPAPI、リポジトリ外、標準出力禁止、redaction test、秘密情報scanを必須化する。 | AC5/T5 | 平文設定は不可 | Pending | Resolved in design |
 | C6 | GitHub Actionsを削除すると、PCまたはCodex停止中に代替probeを実行できない。既存C3と同じ可用性制約が残る。 | ローカル停止中の監視空白 | 利用者の一本化指示を優先し、workflowを削除する。60分欠落通知と14日予定実行率99%未満を外部監視再検討条件として維持する。 | AC8/T7 | 二重経路を残さず削除するが、可用性riskは明示する | Accepted by explicit removal request, 2026-09-19 | Accepted risk |
 
 ## Acceptance criteria
@@ -91,7 +91,7 @@
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
 | AC1 | race entryから作られたowner task IDをowner参照APIが同一ownerとして解決し、既存IDも移行中に参照できる。 | T1 | producer→API integration test、既存ID inventory、migration preview | Verified |
-| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能で、そのdispatch時点に未配送候補だったtask間だけに発生し、判定不能は不具合扱いしない。group上限時もeffective priority上位をroute順より先にenvelopeへ採用する。 | T2 | compatible/incompatible worker、既配送Ready、aging、group上限のcounterexample tests | Verified |
+| AC2 | `DispatchOrderViolation`は同一laneかつ同一worker capabilityで処理可能なtask間だけに発生し、判定不能は不具合扱いしない。 | T2 | compatible/incompatible worker counterexample tests | Verified |
 | AC3 | definition別に到着率、配送率、完了率、最古age、worker capabilityが同一cutoffで確認でき、800件のhorse停滞をstarvation、capacity、intentional waitのいずれかへ根拠付き分類できる。 | T3 | snapshot testと本番read-only report | Verified |
 | AC4 | 49 findingが原因別taskまたは証拠付き除外へ全件対応し、反復観測だけでは新規change recordやPRを作らない。 | T4 | fixture replay、task mapping audit、GitHub writeなしの確認 | Verified |
 | AC5 | heartbeatがGitHub Actionsを起動せず本番APIを直接読み、秘密値を出力せず、同じtask内で状態を継続する。 | T5 | local dry-run、secret scan、2回連続heartbeat、欠落検知 | Not started |
@@ -101,21 +101,17 @@
 
 ## Task plan
 
-| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Verified | Lead — persistence compatibility | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T2 | dispatch findingへworker capability/compatibilityと未配送候補判定を接続し、group上限時のpriority admissionをdispatcher契約と一致させる。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | dispatcher候補の実違反だけfinding、上限時も高effective-priorityを採用 | Verified | Lead implementation + read-only explorer — dispatcher contract/final acceptance retained by lead | none | unavailable; retries 0; corrections 0; reviews 1 |
-| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Verified | Lead — final acceptance of operational classification | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Verified | Lead — integration and final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Externally blocked | Lead + operator — security credential boundary | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Verified | Lead + operator — final acceptance from production evidence | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T7 | `collection-monitoring` GitHub Actions workflowを削除し、契約テストと正本ドキュメントをローカルrunner単独経路へ更新する。AC8 | Main | High capability | 利用者の明示的な削除指示 | workflow、contract test、docs | focused test、literal search | workflow不存在とローカルrunner存続 | Verified | Lead — overlapping writes in shared workflow scope | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T1 | owner ID生成・正規化を共有契約へ統一し、既存ID互換と移行previewを実装する。AC1 | Main | High capability | Approval | Api、ApiClient、Collector、migration/tests | end-to-end owner identity tests | ID inventory、preview、tests | Verified |
+| T2 | dispatch findingへworker capability/compatibility判定を接続し、偽陽性を除去する。AC2 | Main | High capability | Approval | CollectionOperations、dispatcher contracts/tests | counterexample tests | compatible caseのみfinding | Verified |
+| T3 | definition別flow rate、age、capabilityの診断snapshotを追加し、本番read-only分析を行う。AC3 | Main | High capability | T2 | CollectionOperations、API、tests/docs | load/snapshot/production report | backlog原因分類 | Verified |
+| T4 | 既存49 findingをT1-T3/T6へmappingし、原因台帳とmonitor成功条件を実装する。AC4,AC7 | Main | High capability | T1-T3 | monitoring writer、docs/tests | fixture replay、no-PR assertion | 全finding mapping | Verified |
+| T5 | DPAPI資格情報を使うローカルrunnerへheartbeatを切り替え、GitHub定期実行と自動PR作成を外す。AC5,AC7 | Main + operator | High capability | T4、API key provisioning | tooling、automation、docs/tests | local consecutive runs、secret scan | 同一taskのdirect API監視 | Externally blocked |
+| T6 | origin/mainと本番revisionを照合し、既修正項目を配備・再観測する。AC6 | Main + operator | High capability | Approval | deployment evidence、recordのみ | revision and post-deploy snapshot | 解消/継続判定 | Verified |
+| T7 | `collection-monitoring` GitHub Actions workflowを削除し、契約テストと正本ドキュメントをローカルrunner単独経路へ更新する。AC8 | Main | High capability | 利用者の明示的な削除指示 | workflow、contract test、docs | focused test、literal search | workflow不存在とローカルrunner存続 | Verified |
 
 ## Review gates
-
-- **Pre-implementation review — 2026-09-20, T2 reopen:** 最新production read-only snapshotで`horse-profile`/`WeekendSubjects`群（fingerprint `2923d81f0c1f3296`）と`trainer-profile`群（`dde5c066c6730424`）が継続。代表taskはいずれもNormal/priority 50/Ready/attempt 0で、監視はcurrent task状態とhistorical outboxを結合する一方、dispatcher候補である未配送current-generation outboxかを保存していなかった。さらにgroup上限ではroute順をpriorityより先に`Take`するため、選択済み高priority taskを除外できる。T2を再開し、Mainがmonitoring snapshot/model/service、dispatcher、tests、recordを直列所有する。読み取り専用explorerはcall pathと反例だけを担当し、write scopeなし、usage/cost telemetryは利用不能。production変更、resume、履歴削除、データ補正、deployは対象外。CodeGraph CLIはindex不在を返したため、通常のsymbol/literal searchへfallbackした。
-- **Checkpoint review — 2026-09-20, T2:** current-generationかつ未配送・due・未予約のoutboxだけを`IsDispatchCandidate`とし、既配送Ready taskをfinding対象外にした。envelope代表とgroup admissionはdispatcherと同じaging式へ統一し、route順はadmission後の実行順だけに限定した。既配送Ready、aging代表、26件/上限24件の高priority route-last反例を追加し、focused 28/28とAPI回帰270/271（既存skip 1）を確認した。
-- **Final review — 2026-09-20, T2:** AC2を実経路（outbox候補抽出→lane allocator→compatibility group admission→monitor snapshot→finding）で再照合しVerifiedとした。production snapshotの2 fingerprintは旧revisionの観測であり、deployを行わない制約上、配備後の消失確認はoperation blockerとして残す。独立調査で得た追加反例をleadが実装・テストで検証し、scope逸脱、worker patch、秘密情報出力、production writeはない。read-only delegationは1回、retry 0、lead correction 0、review 1 pass、usage/cost unavailable。
 
 - **Design and task-split review — 2026-09-19, reviewer: Main.** 49 findingをID契約、dispatch判定、capacity/backlog、既修正の配備、本体自動化の5系統へ集約した。AC1-AC7はT1-T6と検証に双方向で対応する。ID移行、dispatcher契約、本番認証を含むため主担当が直列に統合する。
 - **Concern and agreement review — 2026-09-19, reviewer: Main.** データ互換性、証拠不足、ローカル死活、監査履歴、秘密情報を確認した。C1-C5の処置を設計に組み込み、未解決の技術的反対はない。C3は利用者指定のローカル運用と可用性制約を明示した受容riskであり、60分欠落通知を再検討条件とする。
@@ -124,9 +120,6 @@
 - **Final review — 2026-09-19, T7:** AC8とT7はfocused test、change-record validator、format gate、literal searchでVerified。履歴change record内の参照は当時の実装証跡として保持し、現行runtime entry pointではない。record全体はAC5/T5の利用者によるDPAPI資格情報入力待ちのためApprovedを維持する。
 
 ## Verification record
-
-- 2026-09-20: production read-only APIで`2923d81f0c1f3296`（horse-profile/WeekendSubjects）と`dde5c066c6730424`（trainer-profile）の2系統を再取得。代表taskはNormal/priority 50/Ready/attempt 0で、同じ互換groupの後続envelopeと比較されていた。
-- 2026-09-20: `DispatchOrderViolation_IgnoresReadyTaskAlreadyAssignedToAnEnvelope`、`MonitoringSnapshot_DistinguishesPendingCandidateFromAlreadyDispatchedReadyTask`、effective-priority envelope代表、group上限priority admissionの反例を追加。focused 28/28、API 270 passed/1 skipped、Release build 0 warning/0 error。solution回帰の非関連browser timing testが5秒上限を0.24秒超過したが、同一test単独再実行は成功。
 
 - 2026-09-19: CodeGraphでowner task producerのUUID v5 IDとowner APIのSHA-256 ID、異なる正規化規則、collectorの直接GET経路を確認した。
 - 2026-09-19: CodeGraphでdispatch findingがlaneだけを比較しworker capabilityを照合しないことを確認した。
