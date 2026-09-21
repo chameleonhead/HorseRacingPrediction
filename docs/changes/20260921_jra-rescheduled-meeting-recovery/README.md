@@ -150,6 +150,7 @@ Approval: 2026-09-21、利用者が提示済みの具体対応とAC1-AC40を確�
 - **Concern and agreement review — 2026-09-21, reviewer: Main.** live E2E、実リンク集合、旧/新Card、handler制御を比較し、単一原因仮説を棄却した。コード修正の4境界は承認可能。target DB inventoryが必要なmigration applyだけを後段gateへ分離する。
 - **Pre-implementation review — 2026-09-21, reviewer: Main.** 利用者の明示承認後、link selectionとlease isolationだけをexclusive write scopeでworkerへ委譲し、identity・persistence・migrationはMainに保持した。
 - **Checkpoint review — 2026-09-21, reviewer: Main.** live Result 2経路、代替fixture、Card/Result due境界、lease競合、domain lineage、EF migrationを個別証拠へ追跡した。production apply以外の承認済みコード項目をVerifiedとした。
+- **CI closure — 2026-09-21.** current modelから`EnsureCreated`された旧table-set fixtureには`ReplacementRaceId`列が既に存在する一方、baseline判定が`AddRaceRescheduleLineage`を履歴登録せず、同migrationを再適用して重複列になっていた。3 read model全ての列存在を反証条件として検査し、存在時だけ同migrationをbaselineへ含めた。`SqliteDbContextProviderTests` 8/8で旧データ保持と全migration履歴を再検証した。
 - **Final review — pending production access.** T5/T7のproduction preview/apply/post-check後に実施する。
 
 ## Verification record

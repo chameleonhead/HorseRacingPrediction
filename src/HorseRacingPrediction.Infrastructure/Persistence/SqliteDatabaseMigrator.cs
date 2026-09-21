@@ -144,7 +144,10 @@ public sealed class SqliteDatabaseMigrator
                     AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='DamName'),
                     EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='DamsireName')
                     AND EXISTS(SELECT 1 FROM pragma_table_info('Horses') WHERE name='CoatColor'),
-                    EXISTS(SELECT 1 FROM pragma_table_info('RacePredictionContexts') WHERE name='OddsSnapshots');
+                    EXISTS(SELECT 1 FROM pragma_table_info('RacePredictionContexts') WHERE name='OddsSnapshots'),
+                    EXISTS(SELECT 1 FROM pragma_table_info('RacePredictionContexts') WHERE name='ReplacementRaceId')
+                    AND EXISTS(SELECT 1 FROM pragma_table_info('RaceResults') WHERE name='ReplacementRaceId')
+                    AND EXISTS(SELECT 1 FROM pragma_table_info('RaceSummaries') WHERE name='ReplacementRaceId');
                 """;
             await using var reader = await columnCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -152,13 +155,15 @@ public sealed class SqliteDatabaseMigrator
             var hasHorsePedigree = reader.GetBoolean(1);
             var hasHorseDamsireAndCoatColor = reader.GetBoolean(2);
             var hasOddsSnapshots = reader.GetBoolean(3);
+            var hasRaceRescheduleLineage = reader.GetBoolean(4);
             baselineMigrations = migrations.Where(m => m.EndsWith("_InitialEventStore", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerAliasAdministration", StringComparison.Ordinal)
                 || m.EndsWith("_AddOwnerDisplayName", StringComparison.Ordinal)
                 || (hasRaceMetadata && m.EndsWith("_AddRaceReacquisitionMetadata", StringComparison.Ordinal))
                 || (hasHorsePedigree && m.EndsWith("_AddHorseBreederAndPedigree", StringComparison.Ordinal))
                 || (hasHorseDamsireAndCoatColor && m.EndsWith("_AddHorseDamsireAndCoatColor", StringComparison.Ordinal))
-                || (hasOddsSnapshots && m.EndsWith("_AddRaceOddsSnapshots", StringComparison.Ordinal))).ToList();
+                || (hasOddsSnapshots && m.EndsWith("_AddRaceOddsSnapshots", StringComparison.Ordinal))
+                || (hasRaceRescheduleLineage && m.EndsWith("_AddRaceRescheduleLineage", StringComparison.Ordinal))).ToList();
         }
         foreach (var migration in baselineMigrations)
         {
