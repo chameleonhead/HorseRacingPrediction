@@ -232,6 +232,45 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_CancelledMeetingWithoutReplacement_WaitsForOfficialDecision()
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var oldUrl = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604070220260921/69");
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new JraCollectionException("DB error 007"),
+                RaceCardFactory = _ => throw new JraNavigationException("not published"),
+            },
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ThrowOnCollect = new JraNavigationException("result unavailable"),
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow
+            {
+                ThrowOnCollect = new JraCollectionException("card unavailable"),
+            },
+            _ => results,
+            requests: new RecordingRequestSink(),
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2", ["startTime"] = "10:20" },
+            [new(1, oldUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("MeetingCancelledAwaitingDecision", completion.ErrorCode);
+        Assert.AreEqual(new DateTimeOffset(2026, 9, 21, 14, 0, 0, TimeSpan.Zero), completion.RetryAt);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_OwnerRepairWithoutOfficialCard_IsTerminallyUnavailable()
     {
         var date = new DateOnly(2026, 9, 19);

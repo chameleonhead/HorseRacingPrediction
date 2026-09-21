@@ -543,10 +543,19 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         }
         catch (JraNavigationException ex)
         {
+            var awaitingMeetingDecision = cardUnavailableAfterResultDue
+                && (task.Locations ?? []).Any(location =>
+                    JraRaceDetailUrl.TryGetSourceIdentity(location.Url, out _));
+            var errorCode = awaitingMeetingDecision
+                ? "MeetingCancelledAwaitingDecision"
+                : "RaceResultNotYetAvailable";
             stageOutcomes.Add(new("ResolveResult", RaceArtifactKind.Result,
-                CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message));
-            return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceResultNotYetAvailable", ex.Message,
-                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl), RetryAt: NextResultRetry(raceId.Date),
+                CollectionAttemptResult.ResourceNotYetAvailable, errorCode, ex.Message));
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, errorCode, ex.Message,
+                RequestedUrl: successfulLocation ?? ToUri(result?.SourceUrl),
+                RetryAt: awaitingMeetingDecision
+                    ? _time.GetUtcNow().AddHours(6)
+                    : NextResultRetry(raceId.Date),
                 PageIdentification: session.Navigate.LastNavigationTrace,
                 LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
         }
@@ -648,7 +657,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 card = await session.Navigate.ToRaceCardAsync(candidateId, cancellationToken).ConfigureAwait(false)
                     as JraRaceCardPage;
             }
-            catch (Exception ex) when (ex is JraCollectionException or JraPageParseException)
+            catch (Exception ex) when (ex is JraCollectionException or JraPageParseException or JraNavigationException)
             {
                 continue;
             }
