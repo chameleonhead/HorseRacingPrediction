@@ -2577,3 +2577,9 @@ Collector(`IDataCollectionWriteService` 経由の Web API 書き込み)へ接続
 この5日はRaceCardを優先するローカルな最適化であり、JRA画面が必ず同じ期間を掲載するという外部契約ではない。期間内でも過去日の開催選択画面が`OutOfDisplayedRange`を示した場合は、未来の未公開・構造不正・通信失敗と混同せず、既存のRaceResult Current/Recent/Historical導線へ切り替える。discovery、個別race-detail、過去日の結果導線に限定した境界処理は[Dynamic race source fallback](changes/20260917_dynamic-race-source-fallback/README.md)を正本とする。同recordが`Proposed`の間は実装を変更しない。
 
 2026-09-20 correction proposal: Card上のRace番号と`レース結果`は別要素になり得るため、合成labelを前提にしない。直接URL候補はraw href、page context、CNAMEのRace identityで選び、`#`等のJavaScript controlはURLとしてnavigateせず要素clickとして扱う。後発のvalidated Result URLは既存taskがあってもresource locationへ冪等mergeする。詳細と承認状態は[堅牢なResult navigation変更記録](changes/20260920_robust-race-result-navigation/README.md)を正本とし、再承認前は追加実装を行わない。
+## 代替開催と結果リンクの同一性
+
+- Result一覧では、同じfragment URLを共有する別DOM要素のラベルを結合しない。対象Rを含む直接`CNAME=pw01sde...` URLを優先し、fragmentしかない場合も選択したR要素そのものをクリックする。
+- CardとResultは独立したartifactである。結果確認時刻後のCard DBエラー、掲載範囲外、page-kind mismatchは診断として保持するが、Result取得を阻止しない。
+- JRA側の開催同一性は年・競馬場・開催回・開催日番号・R番号で確認する。別日に同一identityのCardが存在するときだけ代替開催と認定し、実施日のRaceをcanonical replacementとする。
+- 旧Raceは削除・日付上書きをせず`Rescheduled`とreplacement Race IDを保持する。公式結果済みRaceのrescheduleは拒否する。

@@ -170,3 +170,10 @@ change recordをCIで拒否する。CIは仕様を推測して本書を書き換
 - JRAはRaceCardの公開期間を当アプリの「5日」として保証していない。5日は探索コストを抑える現行方針である。
 - 年代、開催、レース種別、取消・除外・中止等で表示列が変わるため、代表fixtureを継続的に増やす。
 - JRA公式の別媒体に同じ名称の項目があっても、Race時点の意味と収集経路を検証するまで代替元にしない。
+## 開催中止・代替開催の収集契約
+
+- 曜日を開催可否の判定に使用しない。通常平日、祝日、週末を同じ公式ページidentityで扱う。
+- 予定日のCardが取得不能でも、結果確認時刻後はResult段階へ進む。結果確認時刻前は従来どおりCard公開待ちを継続する。
+- Card URLの`CNAME`から年・競馬場・開催回・開催日番号・R番号を取得し、最大7日先で同一identityを探索する。旧URLエラーだけでは代替と断定しない。
+- 代替先発見時は旧taskを`MeetingRescheduled / NotApplicable`で終端し、実施日の`race-detail` Recovery requestを冪等作成する。新Card保存後に旧domain Raceへreplacement lineageを記録する。
+- wake group内の`ActiveElsewhere`は当該taskだけを再配信対象とし、後続taskとbatch completionを継続する。
