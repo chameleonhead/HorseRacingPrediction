@@ -15,6 +15,7 @@ public class RaceResultViewReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, PayoutResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
+    IAmReadModelFor<RaceAggregate, RaceId, RaceRescheduled>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
     public string RaceId { get; private set; } = string.Empty;
@@ -23,6 +24,15 @@ public class RaceResultViewReadModel : IReadModel,
     public int? RaceNumber { get; private set; }
     public string? RaceName { get; private set; }
     public RaceStatus Status { get; private set; } = RaceStatus.Draft;
+    public string? ReplacementRaceId { get; private set; }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, RaceRescheduled> domainEvent, CancellationToken cancellationToken)
+    {
+        Status = RaceStatus.Rescheduled;
+        ReplacementRaceId = domainEvent.AggregateEvent.ReplacementRaceId;
+        return Task.CompletedTask;
+    }
     public int? EntryCount { get; private set; }
     public string? WinningHorseName { get; private set; }
     public string? WinningHorseId { get; private set; }

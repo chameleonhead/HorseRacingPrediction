@@ -1079,6 +1079,17 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         }
     }
 
+    public async Task MarkRaceRescheduledAsync(string raceId, string replacementRaceId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateRequiredText(raceId, nameof(raceId));
+        ValidateRequiredText(replacementRaceId, nameof(replacementRaceId));
+        using var response = await _httpClient.PostAsJsonAsync(
+            $"/api/races/{Uri.EscapeDataString(raceId)}/reschedule",
+            new { ReplacementRaceId = replacementRaceId }, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
     // ------------------------------------------------------------------ //
     // Refresh-only DTOs. Normal subject upserts intentionally avoid existence GETs.
     private sealed class HorseExistenceDto { public string HorseId { get; init; } = string.Empty; }

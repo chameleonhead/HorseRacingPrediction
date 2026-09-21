@@ -15,6 +15,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     IApply<EntryResultDeclared>,
     IApply<PayoutResultDeclared>,
     IApply<RaceDataCorrected>,
+    IApply<RaceRescheduled>,
     IApply<RaceClosed>
 {
     private readonly List<EntryDetails> _entries = new();
@@ -48,6 +49,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     public DateTimeOffset? ResultDeclaredAt { get; private set; }
     public IReadOnlyList<EntryResultDetails> EntryResults => _entryResults.AsReadOnly();
     public PayoutResultDetails? PayoutResult { get; private set; }
+    public string? ReplacementRaceId { get; private set; }
 
     public void Apply(RaceCreated e)
     {
@@ -167,5 +169,11 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     public void Apply(RaceClosed e)
     {
         Status = RaceStatus.Closed;
+    }
+
+    public void Apply(RaceRescheduled e)
+    {
+        ReplacementRaceId = e.ReplacementRaceId;
+        Status = RaceStatus.Rescheduled;
     }
 }

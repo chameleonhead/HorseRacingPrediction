@@ -7,6 +7,7 @@ using HorseRacingPrediction.PredictionScheduling;
 using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Options;
+using HorseRacingPrediction.ApiClient;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -209,7 +210,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     JraRaceCardCollectionWorkflowFactory cardWorkflows,
     JraRaceResultCollectionWorkflowFactory resultWorkflows, IPredictionSchedule? predictionSchedule = null,
     ICollectionRequestSink? requests = null, TimeProvider? timeProvider = null,
-    IOptions<RaceDetailCollectionOptions>? options = null) : ICollectionDefinitionHandler
+    IOptions<RaceDetailCollectionOptions>? options = null,
+    IDataCollectionWriteService? dataWrites = null) : ICollectionDefinitionHandler
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly RaceDetailCollectionOptions _options = options?.Value ?? new();
@@ -428,6 +430,14 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 FinalUrl: replacement.Url,
                 PageIdentification: $"RescheduledFrom={raceId}; RescheduledTo={replacement.RaceId}",
                 LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+        }
+        if (result is { Error: null, RaceId: not null }
+            && dataWrites is not null
+            && task.Attributes.TryGetValue("rescheduledFromDomainRaceId", out var sourceDomainRaceId)
+            && !string.IsNullOrWhiteSpace(sourceDomainRaceId))
+        {
+            await dataWrites.MarkRaceRescheduledAsync(sourceDomainRaceId, result.RaceId, cancellationToken)
+                .ConfigureAwait(false);
         }
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
@@ -657,6 +667,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 ["meetingDay"] = source.MeetingDay.ToString(System.Globalization.CultureInfo.InvariantCulture),
             };
             attributes.Remove("domainRaceId");
+            if (task.Attributes.TryGetValue("domainRaceId", out var sourceDomainRaceId))
+                attributes["rescheduledFromDomainRaceId"] = sourceDomainRaceId;
             if (card.StartTime is { } start) attributes["startTime"] = start.ToString("HH:mm");
             var url = Uri.TryCreate(card.Url, UriKind.Absolute, out var parsed) ? parsed : null;
             await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,

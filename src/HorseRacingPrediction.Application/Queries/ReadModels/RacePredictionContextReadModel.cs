@@ -17,6 +17,7 @@ public class RacePredictionContextReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, PayoutResultDeclared>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceDataCorrected>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceOddsSnapshotRecorded>,
+    IAmReadModelFor<RaceAggregate, RaceId, RaceRescheduled>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceClosed>
 {
     public string RaceId { get; private set; } = string.Empty;
@@ -29,6 +30,15 @@ public class RacePredictionContextReadModel : IReadModel,
     public string? CourseLayout { get; private set; }
     public string? RaceName { get; private set; }
     public RaceStatus Status { get; private set; } = RaceStatus.Draft;
+    public string? ReplacementRaceId { get; private set; }
+
+    public Task ApplyAsync(IReadModelContext context,
+        IDomainEvent<RaceAggregate, RaceId, RaceRescheduled> domainEvent, CancellationToken cancellationToken)
+    {
+        Status = RaceStatus.Rescheduled;
+        ReplacementRaceId = domainEvent.AggregateEvent.ReplacementRaceId;
+        return Task.CompletedTask;
+    }
     public string? GradeCode { get; private set; }
     public string? SurfaceCode { get; private set; }
     public int? DistanceMeters { get; private set; }

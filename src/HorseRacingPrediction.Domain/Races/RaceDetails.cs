@@ -23,4 +23,5 @@ public sealed record RaceDetails(
     DateTimeOffset? ResultDeclaredAt,
     IReadOnlyList<EntryResultDetails> EntryResults,
     PayoutResultDetails? PayoutResult,
-    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null, string? CourseLayout = null);
+    TimeOnly? StartTime = null, string? OverallPaceText = null, string? CornerPassagesText = null,
+    string? CourseLayout = null, string? ReplacementRaceId = null);

@@ -6,6 +6,30 @@ namespace HorseRacingPrediction.Domain.Tests;
 public class RaceAggregateTests
 {
     [TestMethod]
+    public void MarkRescheduled_PreservesSourceAndRecordsReplacement()
+    {
+        var race = new RaceAggregate(RaceId.New);
+        race.Create(new DateOnly(2026, 9, 21), "NAKAYAMA", 2, "source", 4, 7);
+
+        race.MarkRescheduled("replacement-race");
+        race.MarkRescheduled("replacement-race");
+
+        Assert.AreEqual(RaceStatus.Rescheduled, race.GetDetails().Status);
+        Assert.AreEqual("replacement-race", race.GetDetails().ReplacementRaceId);
+    }
+
+    [TestMethod]
+    public void MarkRescheduled_AfterOfficialResult_IsRejected()
+    {
+        var race = new RaceAggregate(RaceId.New);
+        race.Create(new DateOnly(2026, 9, 21), "NAKAYAMA", 2, "source");
+        race.PublishCard(1);
+        race.DeclareResult("winner", DateTimeOffset.UtcNow);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => race.MarkRescheduled("replacement-race"));
+    }
+
+    [TestMethod]
     public void Create_SetsRaceDetailsCorrectly()
     {
         var sut = new RaceAggregate(RaceId.New);

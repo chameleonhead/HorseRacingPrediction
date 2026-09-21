@@ -9,4 +9,5 @@ public enum RaceStatus
     ResultDeclared = 4,
     PayoutDeclared = 5,
     Closed = 6,
+    Rescheduled = 7,
 }

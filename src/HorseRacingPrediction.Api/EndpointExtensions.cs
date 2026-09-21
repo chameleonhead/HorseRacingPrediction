@@ -459,7 +459,8 @@ public static partial class EndpointExtensions
                         (ApiContracts.RaceStatus)(int)x.Status,
                         x.EntryCount,
                         x.WinningHorseName,
-                        x.ResultDeclaredAt))
+                        x.ResultDeclaredAt,
+                        x.ReplacementRaceId))
                     .ToList();
 
                 return Results.Ok(new PagedResponse<RaceSummaryResponse>(
@@ -803,6 +804,28 @@ public static partial class EndpointExtensions
             .WithName("CloseRaceLifecycle")
             .WithTags("Race API")
             .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized);
+
+        writeGroup.MapPost("/races/{raceId}/reschedule",
+            async (string raceId, MarkRaceRescheduledRequest request, ICommandBus commandBus,
+                CancellationToken cancellationToken) =>
+            {
+                try
+                {
+                    var command = new MarkRaceRescheduledCommand(new RaceId(raceId), request.ReplacementRaceId);
+                    var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
+                    return result.IsSuccess ? Results.Ok() : Results.BadRequest(new[] { "Command execution failed." });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.Conflict(new[] { ex.Message });
+                }
+            })
+            .WithName("MarkRaceRescheduled")
+            .WithTags("Race API")
+            .Produces(StatusCodes.Status200OK)
+            .Produces<IEnumerable<string>>(StatusCodes.Status409Conflict)
             .Produces<IEnumerable<string>>(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized);
 
@@ -1193,7 +1216,8 @@ public static partial class EndpointExtensions
                         ResolveHorseNumber(entryHorseNumbersByEntryId, x.EntryId, x.HorseNumber),
                         ResolveHorseName(horseNamesById, ResolveHorseId(entryHorseIdsByEntryId, x.EntryId, x.HorseId)))).ToList() ?? [],
                     resultReadModel?.PayoutResult is null ? null : ToRacePayoutResultResponse(resultReadModel.PayoutResult),
-                    readModel.StartTime, readModel.OverallPaceText, readModel.CornerPassagesText, readModel.CourseLayout);
+                    readModel.StartTime, readModel.OverallPaceText, readModel.CornerPassagesText, readModel.CourseLayout,
+                    readModel.ReplacementRaceId);
 
                 return Results.Ok(response);
             })

@@ -16,6 +16,7 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     IEmit<PayoutResultDeclared>,
     IEmit<RaceDataCorrected>,
     IEmit<RaceOddsSnapshotRecorded>,
+    IEmit<RaceRescheduled>,
     IEmit<RaceClosed>
 {
     private readonly RaceState _state = new();
@@ -226,6 +227,18 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         Emit(new RaceClosed());
     }
 
+    public void MarkRescheduled(string replacementRaceId)
+    {
+        if (!_state.IsCreated) throw new InvalidOperationException("Race is not created.");
+        if (string.IsNullOrWhiteSpace(replacementRaceId)) throw new ArgumentException("Replacement race is required.", nameof(replacementRaceId));
+        if (replacementRaceId == Id.Value) throw new InvalidOperationException("Replacement race must differ from the source race.");
+        if (_state.Status >= RaceStatus.ResultDeclared && _state.Status != RaceStatus.Rescheduled)
+            throw new InvalidOperationException("A race with an official result cannot be rescheduled.");
+        if (_state.ReplacementRaceId is not null && _state.ReplacementRaceId != replacementRaceId)
+            throw new InvalidOperationException("Race already points to another replacement.");
+        if (_state.ReplacementRaceId is null) Emit(new RaceRescheduled(replacementRaceId));
+    }
+
     public void CorrectRaceData(string? raceName = null, string? racecourseCode = null,
         int? raceNumber = null, string? gradeCode = null,
         string? surfaceCode = null, int? distanceMeters = null,
@@ -262,7 +275,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             _state.StewardReportText,
             _state.ResultDeclaredAt,
             _state.EntryResults,
-            _state.PayoutResult, _state.StartTime, _state.OverallPaceText, _state.CornerPassagesText, _state.CourseLayout);
+            _state.PayoutResult, _state.StartTime, _state.OverallPaceText, _state.CornerPassagesText, _state.CourseLayout,
+            _state.ReplacementRaceId);
     }
 
     public void Apply(RaceCreated e) { }
@@ -278,5 +292,6 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
     public void Apply(PayoutResultDeclared e) { }
     public void Apply(RaceDataCorrected e) { }
     public void Apply(RaceOddsSnapshotRecorded e) { }
+    public void Apply(RaceRescheduled e) { }
     public void Apply(RaceClosed e) { }
 }
