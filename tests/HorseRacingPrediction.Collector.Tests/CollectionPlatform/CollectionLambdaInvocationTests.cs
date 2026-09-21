@@ -213,6 +213,46 @@ public sealed class CollectionLambdaInvocationTests
     }
 
     [TestMethod]
+    public async Task Wake_ActiveElsewhereContinuesLaterTasksAndCompletesExecution()
+    {
+        var envelope = Envelope(3);
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), envelope.EnvelopeId, "reservation");
+        var executionBatchId = Guid.NewGuid();
+        var taskAcquireCalls = new List<Guid>();
+        var completeCalls = 0;
+        var worker = Worker(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/acquire-next", StringComparison.Ordinal))
+                return JsonResponse(new CollectionExecutionAcquireResult(
+                    CollectionExecutionAcquireStatus.Acquired, executionBatchId, "lease-token", envelope));
+            if (path.EndsWith("/start", StringComparison.Ordinal)) return new(HttpStatusCode.OK);
+            if (path.EndsWith("/complete", StringComparison.Ordinal))
+            {
+                completeCalls++;
+                return new(HttpStatusCode.OK);
+            }
+            if (path.Contains("/tasks/", StringComparison.Ordinal) && path.EndsWith("/acquire", StringComparison.Ordinal))
+            {
+                var taskId = Guid.Parse(path.Split('/')[^2]);
+                taskAcquireCalls.Add(taskId);
+                var status = taskId == envelope.Tasks[1].TaskId
+                    ? CollectionTaskAcquireStatus.ActiveElsewhere
+                    : CollectionTaskAcquireStatus.AlreadyTerminal;
+                return JsonResponse(new CollectionTaskAcquireResult(status));
+            }
+
+            throw new AssertFailedException($"Unexpected worker request: {path}");
+        });
+
+        var response = await CollectionLambdaInvocation.ExecuteWakeAsync(WakeEvent("wake-active-elsewhere", wake), worker);
+
+        CollectionAssert.AreEqual(envelope.Tasks.Select(x => x.TaskId).ToArray(), taskAcquireCalls);
+        Assert.AreEqual(1, completeCalls);
+        Assert.AreEqual("wake-active-elsewhere", response.BatchItemFailures.Single().ItemIdentifier);
+    }
+
+    [TestMethod]
     public async Task Wake_MalformedBodyIsTheOnlyRecordFailureAndLegacyEnvelopeIsAcknowledged()
     {
         var eventJson = JsonSerializer.Serialize(new
@@ -247,6 +287,11 @@ public sealed class CollectionLambdaInvocationTests
     private static CollectionPlatformWorkerClient Worker(Func<HttpRequestMessage, HttpResponseMessage> response)
         => new(new HttpClient(new StubHandler(response)) { BaseAddress = new("https://api.test/") },
             new CollectionDefinitionHandlerRegistry([]));
+
+    private static HttpResponseMessage JsonResponse<T>(T value) => new(HttpStatusCode.OK)
+    {
+        Content = JsonContent.Create(value),
+    };
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
     {

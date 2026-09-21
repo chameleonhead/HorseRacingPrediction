@@ -23,27 +23,70 @@ internal static class JraRaceLinkSelector
 
     public static string? FindUrl(IEnumerable<(string Url, string Label)> links, int raceNumber,
         IReadOnlyList<string> purposeLabels, string? baseUrl = null, bool allowNumberOnly = false)
+        => FindLink(links, raceNumber, purposeLabels, baseUrl, allowNumberOnly)?.Url;
+
+    public static (string Url, string Label)? FindLink(IEnumerable<(string Url, string Label)> links, int raceNumber,
+        IReadOnlyList<string> purposeLabels, string? baseUrl = null, bool allowNumberOnly = false)
     {
         var candidates = links
-            .Where(link => !string.IsNullOrWhiteSpace(link.Url) && link.Url != "#")
+            .Where(link => !string.IsNullOrWhiteSpace(link.Url))
             .Select(link => new Candidate(link.Url, NormalizeUrl(baseUrl, link.Url), link.Label))
             .Where(candidate => candidate.NormalizedUrl is not null)
             .ToArray();
         var numberPattern = new Regex($@"(^|\D){raceNumber}\s*(?:R|レース)(?!\d)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-        foreach (var group in candidates.GroupBy(link => link.NormalizedUrl!, StringComparer.OrdinalIgnoreCase))
+        // A result URL is authoritative when the caller is navigating to results.  Do
+        // this before any fragment controls: JRA pages often expose several controls
+        // with accessS.html# and URL grouping loses which DOM element was selected.
+        var resultNavigation = purposeLabels.Any(purpose =>
+            purpose.Contains("レース結果", StringComparison.Ordinal));
+        if (resultNavigation)
         {
-            if (!group.Any(link => numberPattern.IsMatch(link.Label))) continue;
-            if (group.Any(link => purposeLabels.Any(purpose =>
-                    link.Label.Contains(purpose, StringComparison.Ordinal))))
-                return group.First(link => numberPattern.IsMatch(link.Label)).RawUrl;
+            var directResult = candidates.FirstOrDefault(candidate =>
+                numberPattern.IsMatch(candidate.Label) && IsDirectResultUrl(candidate.NormalizedUrl!));
+            if (directResult is not null) return (directResult.RawUrl, directResult.Label);
         }
 
-        return allowNumberOnly
-            ? candidates.FirstOrDefault(link => numberPattern.IsMatch(link.Label))?.RawUrl
-            : null;
+        // For result navigation purpose and race number must be present on the same
+        // link. Combining labels from different elements can select Search/menu/odds.
+        // Card navigation retains the established split-label behavior because its
+        // table intentionally renders the race number and 出馬表 as sibling anchors.
+        var sameLink = candidates.FirstOrDefault(candidate =>
+            numberPattern.IsMatch(candidate.Label)
+            && purposeLabels.Any(purpose => candidate.Label.Contains(purpose, StringComparison.Ordinal)));
+        if (sameLink is not null) return (sameLink.RawUrl, sameLink.Label);
+
+        if (!resultNavigation)
+        {
+            foreach (var group in candidates.GroupBy(link => link.NormalizedUrl!, StringComparer.OrdinalIgnoreCase))
+            {
+                if (group.Any(link => numberPattern.IsMatch(link.Label))
+                    && group.Any(link => purposeLabels.Any(purpose =>
+                        link.Label.Contains(purpose, StringComparison.Ordinal))))
+                {
+                    var numbered = group.First(link => numberPattern.IsMatch(link.Label));
+                    return (numbered.RawUrl, numbered.Label);
+                }
+            }
+        }
+
+        // Some JRA tables label the result control only with "11R".  This fallback is
+        // safe because it still returns the exact numbered link, never a URL-group
+        // representative; the navigator then clicks that exact snapshot element.
+        if (allowNumberOnly)
+        {
+            var numberOnly = candidates.FirstOrDefault(candidate => numberPattern.IsMatch(candidate.Label));
+            if (numberOnly is not null) return (numberOnly.RawUrl, numberOnly.Label);
+        }
+
+        return null;
     }
+
+    private static bool IsDirectResultUrl(string url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var resolved)
+            && resolved.AbsolutePath.Equals("/JRADB/accessS.html", StringComparison.OrdinalIgnoreCase)
+            && Uri.UnescapeDataString(resolved.Query).Contains("CNAME=pw01sde", StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeUrl(string? baseUrl, string url)
     {

@@ -44,6 +44,8 @@ public sealed class RaceCardPageParserTests
         snapshot.Headings.AddRange(["JRA 日本中央競馬会", "レース結果2026年9月6日（日曜）4回中山2日 6レース", "中山", "4回中山2日", name, "払戻金", "勝馬の紹介", "エンジャムメント 2024年4月11日生牝2"]);
         var page = (JraRaceCardPage)new RaceCardPageParser().Parse(snapshot);
         Assert.AreEqual(name, page.RaceName);
+        Assert.AreEqual(4, page.MeetingNumber);
+        Assert.AreEqual(2, page.MeetingDay);
     }
 
     [TestMethod]

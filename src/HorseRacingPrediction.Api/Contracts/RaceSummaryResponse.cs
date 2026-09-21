@@ -11,4 +11,5 @@ public sealed record RaceSummaryResponse(
     RaceStatus Status,
     int? EntryCount,
     string? WinningHorseName,
-    DateTimeOffset? ResultDeclaredAt);
+    DateTimeOffset? ResultDeclaredAt,
+    string? ReplacementRaceId = null);

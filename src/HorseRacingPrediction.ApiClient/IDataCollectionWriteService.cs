@@ -190,4 +190,8 @@ public interface IDataCollectionWriteService
         string? title = null,
         CancellationToken cancellationToken = default)
         => Task.CompletedTask;
+
+    Task MarkRaceRescheduledAsync(string raceId, string replacementRaceId,
+        CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }

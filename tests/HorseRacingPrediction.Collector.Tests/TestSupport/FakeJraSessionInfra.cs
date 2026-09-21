@@ -79,6 +79,8 @@ internal sealed class FakeJraNavigator : IJraNavigator
         => Task.FromResult(HistoryResultFactory?.Invoke(subject, race) ?? throw new NotSupportedException());
     public IJraPage? RaceListResult { get; set; }
     public Func<DateOnly, RaceCourse, IJraPage>? RaceCardListFactory { get; set; }
+    public Func<RaceId, IJraPage>? RaceCardFactory { get; set; }
+    public List<RaceId> RaceCardRequests { get; } = [];
     public List<(DateOnly Date, RaceCourse Course)> RaceCardListRequests { get; } = [];
     public List<(DateOnly Date, RaceCourse Course)> RaceResultListRequests { get; } = [];
 
@@ -116,7 +118,10 @@ internal sealed class FakeJraNavigator : IJraNavigator
     }
 
     public Task<IJraPage> ToRaceCardAsync(RaceId race, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        RaceCardRequests.Add(race);
+        return Task.FromResult(RaceCardFactory?.Invoke(race) ?? throw new NotSupportedException());
+    }
 
     public Task<IJraPage> ToRaceResultAsync(RaceId race, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();

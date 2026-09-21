@@ -90,6 +90,27 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
+    public async Task RescheduleRace_PreservesSourceAndExposesReplacementLineage()
+    {
+        var sourceId = $"race-{Guid.NewGuid()}";
+        var replacementId = $"race-{Guid.NewGuid()}";
+        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(
+            new DateOnly(2026, 9, 21), "NAKAYAMA", 2, "source", sourceId), JsonOptions);
+        await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(
+            new DateOnly(2026, 9, 22), "NAKAYAMA", 2, "replacement", replacementId), JsonOptions);
+
+        var response = await _client.PostAsJsonAsync($"/api/races/{sourceId}/reschedule",
+            new MarkRaceRescheduledRequest(replacementId), JsonOptions);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var source = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{sourceId}", JsonOptions);
+        Assert.IsNotNull(source);
+        Assert.AreEqual(RaceStatus.Rescheduled, source.Status);
+        Assert.AreEqual(replacementId, source.ReplacementRaceId);
+        Assert.AreEqual(new DateOnly(2026, 9, 21), source.RaceDate);
+    }
+
+    [TestMethod]
     public async Task CreateRace_WithCollectedMetadata_PersistsMetadata()
     {
         var raceId = $"race-{Guid.NewGuid()}";
