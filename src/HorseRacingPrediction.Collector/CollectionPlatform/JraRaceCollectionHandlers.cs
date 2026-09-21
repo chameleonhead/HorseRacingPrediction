@@ -219,7 +219,6 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     public async Task<CollectionAttemptCompletion> CollectAsync(LeasedCollectionTask task,
         CancellationToken cancellationToken)
     {
-        _ = requests; // Kept temporarily for binary/test constructor compatibility; API now creates subject jobs.
         var raceId = ParseRaceId(task);
         return await JraSessionExecutionScope.ExecuteWithClosedSessionRetryAsync(sessions,
             (session, token) => CollectWithSessionAsync(task, raceId, session, token), cancellationToken)
@@ -246,6 +245,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var attemptedCardLocationIds = new HashSet<long>();
         var stageOutcomes = new List<CollectionStageOutcome>();
         string? cardOwnerError = null;
+        var cardUnavailableAfterResultDue = false;
         RaceSchedulingEvidence? raceEvidence = null;
         if (ownerRepair && !requiresCard)
         {
@@ -324,27 +324,43 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
                     CollectionAttemptResult.UnexpectedPage, ex.GetType().Name, ex.Message,
                     FinalUrl: ToUri(ex.Url)));
-                return new(
-                    CollectionAttemptResult.UnexpectedPage,
-                    ex.GetType().Name,
-                    ex.Message,
-                    FinalUrl: ToUri(ex.Url),
-                    PageIdentification:
-                        $"Expected={ex.ExpectedKind}; Actual={ex.ActualKind}; Resource={ex.ExpectedResourceId ?? task.Resource.Id}",
-                    LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                if (IsResultCheckDue(raceId.Date, task.Attributes))
+                {
+                    requiresCard = false;
+                    cardUnavailableAfterResultDue = true;
+                }
+                else
+                {
+                    return new(
+                        CollectionAttemptResult.UnexpectedPage,
+                        ex.GetType().Name,
+                        ex.Message,
+                        FinalUrl: ToUri(ex.Url),
+                        PageIdentification:
+                            $"Expected={ex.ExpectedKind}; Actual={ex.ActualKind}; Resource={ex.ExpectedResourceId ?? task.Resource.Id}",
+                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                }
             }
             catch (JraPageParseException ex)
             {
                 stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
                     CollectionAttemptResult.UnexpectedPage, ex.GetType().Name, ex.Message,
                     FinalUrl: ToUri(ex.Url)));
-                return new(
-                    CollectionAttemptResult.UnexpectedPage,
-                    ex.GetType().Name,
-                    ex.Message,
-                    FinalUrl: ToUri(ex.Url),
-                    PageIdentification: $"Expected=RaceCard; Actual={ex.PageKind}; Resource={task.Resource.Id}",
-                    LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                if (IsResultCheckDue(raceId.Date, task.Attributes))
+                {
+                    requiresCard = false;
+                    cardUnavailableAfterResultDue = true;
+                }
+                else
+                {
+                    return new(
+                        CollectionAttemptResult.UnexpectedPage,
+                        ex.GetType().Name,
+                        ex.Message,
+                        FinalUrl: ToUri(ex.Url),
+                        PageIdentification: $"Expected=RaceCard; Actual={ex.PageKind}; Resource={task.Resource.Id}",
+                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                }
             }
             catch (JraCollectionException ex)
             {
@@ -356,11 +372,21 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                         "公式出馬表を取得できないため、馬主情報は現行の公式取得元から補正できません。",
                         LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
                 }
-                stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
-                    CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable", ex.Message));
-                return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
-                    ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(30),
-                    LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                if (IsResultCheckDue(raceId.Date, task.Attributes))
+                {
+                    stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                        CollectionAttemptResult.NotApplicable, "OfficialRaceCardUnavailable", ex.Message));
+                    requiresCard = false;
+                    cardUnavailableAfterResultDue = true;
+                }
+                else
+                {
+                    stageOutcomes.Add(new("ResolveCard", RaceArtifactKind.Card,
+                        CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable", ex.Message));
+                    return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceCardNotYetAvailable",
+                        ex.Message, RetryAt: HorseRacingPrediction.Contracts.Time.JstTime.Now().AddMinutes(30),
+                        LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
+                }
             }
         }
         if (raceEvidence is null && result?.StartTime is { } collectedStart)
@@ -388,6 +414,20 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     : new("ValidateCardOwners", RaceArtifactKind.Card, CollectionAttemptResult.ValidationFailure,
                         "RaceCardOwnerIncomplete", cardOwnerError));
             }
+        }
+        if (cardUnavailableAfterResultDue
+            && await TryRequestRescheduledRaceAsync(task, raceId, session, cancellationToken).ConfigureAwait(false)
+                is { } replacement)
+        {
+            stageOutcomes.Add(new("ResolveRescheduledMeeting", RaceArtifactKind.Card,
+                CollectionAttemptResult.NotApplicable, "MeetingRescheduled",
+                $"Official meeting moved to {replacement.Date:yyyy-MM-dd}.",
+                FinalUrl: replacement.Url, Persisted: true));
+            return new(CollectionAttemptResult.NotApplicable, "MeetingRescheduled",
+                $"同一開催は {replacement.Date:yyyy-MM-dd} に代替開催されます。",
+                FinalUrl: replacement.Url,
+                PageIdentification: $"RescheduledFrom={raceId}; RescheduledTo={replacement.RaceId}",
+                LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes);
         }
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
@@ -564,6 +604,73 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
         var jst = TimeZoneInfo.FindSystemTimeZoneById(
             OperatingSystem.IsWindows() ? "Tokyo Standard Time" : "Asia/Tokyo");
         return DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_time.GetUtcNow(), jst).DateTime);
+    }
+
+    private bool IsResultCheckDue(
+        DateOnly date,
+        IReadOnlyDictionary<string, string> attributes)
+    {
+        var dueAt = FirstResultCheck(date, attributes, observedStartTime: null);
+        if (dueAt is not null)
+            return _time.GetUtcNow() >= dueAt.Value;
+
+        return date < TodayJst();
+    }
+
+    private async Task<RescheduledRace?> TryRequestRescheduledRaceAsync(
+        LeasedCollectionTask task,
+        RaceId original,
+        JraSession session,
+        CancellationToken cancellationToken)
+    {
+        if (requests is null || original.Date < TodayJst().AddDays(-7)) return null;
+        var source = (task.Locations ?? [])
+            .Select(location => JraRaceDetailUrl.TryGetSourceIdentity(location.Url, out var identity) ? identity : null)
+            .FirstOrDefault(identity => identity is not null);
+        if (source is null) return null;
+
+        for (var offset = 1; offset <= 7; offset++)
+        {
+            var candidateId = original with { Date = original.Date.AddDays(offset) };
+            JraRaceCardPage? card;
+            try
+            {
+                card = await session.Navigate.ToRaceCardAsync(candidateId, cancellationToken).ConfigureAwait(false)
+                    as JraRaceCardPage;
+            }
+            catch (Exception ex) when (ex is JraCollectionException or JraPageParseException)
+            {
+                continue;
+            }
+
+            if (card is null
+                || card.MeetingNumber != source.MeetingNumber
+                || card.MeetingDay != source.MeetingDay) continue;
+
+            var id = $"{candidateId.Date:yyyyMMdd}:{candidateId.Course}:{candidateId.Number}";
+            var attributes = new Dictionary<string, string>(task.Attributes)
+            {
+                ["course"] = RaceCourseNames.GetJraName(candidateId.Course),
+                ["number"] = candidateId.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["rescheduledFrom"] = original.ToString(),
+                ["meetingNumber"] = source.MeetingNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["meetingDay"] = source.MeetingDay.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+            attributes.Remove("domainRaceId");
+            if (card.StartTime is { } start) attributes["startTime"] = start.ToString("HH:mm");
+            var url = Uri.TryCreate(card.Url, UriKind.Absolute, out var parsed) ? parsed : null;
+            await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,
+                CollectionReason.Recovery, CollectionLane.Realtime, 100, url, candidateId.Date,
+                attributes, cancellationToken).ConfigureAwait(false);
+            return new(candidateId, url);
+        }
+
+        return null;
+    }
+
+    private sealed record RescheduledRace(RaceId RaceId, Uri? Url)
+    {
+        public DateOnly Date => RaceId.Date;
     }
 
     private DateTimeOffset? FirstResultCheck(DateOnly date, IReadOnlyDictionary<string, string> attributes,

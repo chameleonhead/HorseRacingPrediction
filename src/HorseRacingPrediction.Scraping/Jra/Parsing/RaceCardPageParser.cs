@@ -28,6 +28,9 @@ public sealed class RaceCardPageParser
     private static readonly Regex LeadingNumberRegex =
         new(@"(?<num>\d{1,2})", RegexOptions.Compiled);
 
+    private static readonly Regex MeetingRegex =
+        new(@"(?<meeting>\d+)\s*回\s*[^\s\d]+\s*(?<day>\d+)\s*日", RegexOptions.Compiled);
+
     // 実サイト確認（2026-09-06）で判明: 負担重量は馬名セルとは別列（性齢/毛色 負担重量 騎手名の
     // 結合列）にあり、セル本文は「牡4/栗\n60.0kg\n小牧 加矢太」のように年齢の数字を含む。
     // 単純な先頭数字マッチだと年齢（例:"4"）を誤って斤量として拾うため、"kg"直前の数値に限定する。
@@ -102,7 +105,14 @@ public sealed class RaceCardPageParser
             raceId,
             raceName,
             startTime,
-            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot, raceName));
+            entries, RaceResultPageParser.ParseCourseSpec(snapshot, raceName ?? string.Empty), RaceGrade.Parse(snapshot, raceName),
+            ParseMeetingPart(snapshot, "meeting"), ParseMeetingPart(snapshot, "day"));
+    }
+
+    private static int? ParseMeetingPart(JraSnapshotView snapshot, string group)
+    {
+        var match = MeetingRegex.Match($"{snapshot.Title} {string.Join(" ", snapshot.Headings)}");
+        return match.Success ? int.Parse(match.Groups[group].Value) : null;
     }
 
     private static JraTableView? FindEntryTable(

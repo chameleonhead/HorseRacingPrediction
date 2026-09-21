@@ -76,7 +76,18 @@ public static class CollectionLambdaInvocation
                         using var correlation = CollectionAttemptCorrelationScope.Push(new(
                             acquired.ExecutionBatchId.Value, acquired.Envelope.EnvelopeId, messageId,
                             lambdaRequestId, index + 1, acquired.Envelope.Tasks.Count));
-                        await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), token).ConfigureAwait(false);
+                        try
+                        {
+                            await worker.ExecuteAsync(new(task.TaskId, task.DispatchGeneration), token).ConfigureAwait(false);
+                        }
+                        catch (CollectionTaskActiveElsewhereException)
+                        {
+                            // Another worker owns this task lease. Keep the execution batch alive so
+                            // later task references can be processed, while asking SQS to redeliver the
+                            // wake for the unresolved task after the competing lease is released.
+                            if (failures.All(x => x.ItemIdentifier != messageId))
+                                failures.Add(new(messageId));
+                        }
                     }
                 }
                 if (executeGroup is null) await ProcessAsync(cancellationToken).ConfigureAwait(false);

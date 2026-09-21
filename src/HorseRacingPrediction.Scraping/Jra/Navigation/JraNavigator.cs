@@ -1321,14 +1321,16 @@ public sealed partial class JraNavigator
             await _browser.GetLinksAsync(
                 cancellationToken: cancellationToken);
 
-        var targetUrl = JraRaceLinkSelector.FindUrl(
+        var selectedTarget = JraRaceLinkSelector.FindLink(
             links.Select(link => (link.Url, link.Title)), raceNumber, linkTextCandidates,
             _browser.CurrentUrl, allowGenericRaceNumberFallback);
 
-        if (targetUrl is null)
+        if (selectedTarget is null)
         {
             return false;
         }
+
+        var targetUrl = selectedTarget.Value.Url;
 
         var url = ResolveUrl(_browser.CurrentUrl, targetUrl);
 
@@ -1339,8 +1341,11 @@ public sealed partial class JraNavigator
 
         if (IsFragmentOnlyControl(targetUrl, url))
         {
+            // Keep the exact DOM link selected by the selector. Several JRA controls
+            // share accessS.html#; matching by URL alone can click Search/menu/odds.
             var link = links.FirstOrDefault(candidate =>
-                string.Equals(candidate.Url, targetUrl, StringComparison.OrdinalIgnoreCase));
+                string.Equals(candidate.Url, targetUrl, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(candidate.Title, selectedTarget.Value.Label, StringComparison.Ordinal));
             if (link is null) return false;
             LastNavigationTrace = $"Route=RaceControlClick; CandidateLabel={link.Title}; RawUrl={link.Url}; ResolvedUrl={url}";
             await _browser.ClickLinkForSnapshotAsync(link, cancellationToken).ConfigureAwait(false);

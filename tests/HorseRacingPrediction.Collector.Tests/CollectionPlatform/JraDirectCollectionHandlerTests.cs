@@ -125,6 +125,113 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task RaceDetail_ResultDue_CardUnavailable_ContinuesWithResultCollection()
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var race = new RaceId(date, RaceCourse.Tokyo, 11);
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraCollectionException("official card is unavailable"),
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [1], [],
+                "https://example.test/result/11", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => card, _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.HasCount(1, results.Requests);
+        Assert.AreEqual(race, results.Requests.Single());
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "ResolveCard"
+            && x.ErrorCode == "OfficialRaceCardUnavailable"
+            && x.Result == CollectionAttemptResult.NotApplicable));
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_ResultNotDue_CardUnavailable_WaitsWithoutNavigatingToResult()
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraCollectionException("official card is not published"),
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => card, _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 5, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260921:Tokyo:11"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), date,
+            new Dictionary<string, string> { ["course"] = "東京", ["number"] = "11", ["startTime"] = "15:30" }),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceCardNotYetAvailable", completion.ErrorCode);
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_RescheduledMeeting_RequestsReplacementOnceAndEndsOldTask()
+    {
+        var originalDate = new DateOnly(2026, 9, 21);
+        var replacementDate = new DateOnly(2026, 9, 22);
+        var original = new RaceId(originalDate, RaceCourse.Nakayama, 2);
+        var replacement = original with { Date = replacementDate };
+        var oldUrl = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604070220260921/69");
+        var newUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604070220260922/00";
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new JraCollectionException("DB error 007"),
+                RaceCardFactory = id => id == replacement
+                    ? new JraRaceCardPage(newUrl, replacement, "replacement", new(10, 20), [],
+                        MeetingNumber: 4, MeetingDay: 7)
+                    : throw new JraNavigationException("not this date"),
+            },
+        };
+        var card = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraCollectionException("official card is unavailable"),
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var sink = new RecordingRequestSink();
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => card, _ => results,
+            requests: sink,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 21, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260921:Nakayama:2"), new("race-detail"), 2,
+            CollectionReason.Discovery, CollectionLane.Realtime, 100, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), originalDate,
+            new Dictionary<string, string> { ["course"] = "中山", ["number"] = "2", ["startTime"] = "10:20", ["domainRaceId"] = "old-domain" },
+            [new(1, oldUrl, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
+        Assert.AreEqual("MeetingRescheduled", completion.ErrorCode);
+        Assert.HasCount(1, sink.Requests);
+        Assert.AreEqual(new ResourceKey(ResourceType.Race, "JRA", "20260922:Nakayama:2"), sink.Requests[0].Resource);
+        Assert.AreEqual(CollectionReason.Recovery, sink.Requests[0].Reason);
+        Assert.AreEqual(replacementDate, sink.Requests[0].EffectiveDate);
+        Assert.AreEqual(original.ToString(), sink.Requests[0].Attributes["rescheduledFrom"]);
+        Assert.IsFalse(sink.Requests[0].Attributes.ContainsKey("domainRaceId"));
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_OwnerRepairWithoutOfficialCard_IsTerminallyUnavailable()
     {
         var date = new DateOnly(2026, 9, 19);
@@ -690,7 +797,7 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task RaceCard_DiscoveryReachesWrongPage_IsUnexpectedPageWithDiagnostics()
+    public async Task RaceDetail_ResultDue_CardReachesWrongPage_RecordsDiagnosticsAndContinuesResult()
     {
         var date = new DateOnly(2026, 9, 12);
         const string wrongUrl = "https://example.test/odds/11";
@@ -708,17 +815,33 @@ public sealed class JraDirectCollectionHandlerTests
                 timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero)))
             .CollectAsync(CreateTask(ResourceType.RaceCard, "race-card", date), CancellationToken.None);
 
-        Assert.AreEqual(CollectionAttemptResult.UnexpectedPage, result.Result);
-        Assert.AreEqual(nameof(JraPageKindMismatchException), result.ErrorCode);
-        Assert.AreEqual(new Uri(wrongUrl), result.FinalUrl);
-        Assert.AreEqual(
-            "Expected=RaceCard; Actual=RaceOdds; Resource=20260912:Tokyo:11",
-            result.PageIdentification);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        var stageOutcomes = result.StageOutcomes!;
+        Assert.IsTrue(stageOutcomes.Any(x => x.Stage == "ResolveCard"
+            && x.Result == CollectionAttemptResult.UnexpectedPage
+            && x.ErrorCode == nameof(JraPageKindMismatchException)
+            && x.FinalUrl == new Uri(wrongUrl)));
+        Assert.IsTrue(stageOutcomes.Any(x => x.Artifact == RaceArtifactKind.Result && x.Persisted));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class RecordingRequestSink : ICollectionRequestSink
+    {
+        public List<(ResourceKey Resource, CollectionReason Reason, DateOnly EffectiveDate,
+            IReadOnlyDictionary<string, string> Attributes)> Requests
+        { get; } = [];
+
+        public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
+            CollectionReason reason, CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
+            IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
+        {
+            Requests.Add((resource, reason, effectiveDate, attributes));
+            return Task.CompletedTask;
+        }
     }
 
     [TestMethod]

@@ -7,7 +7,8 @@ public sealed record JraRaceCardPage(
     RaceId RaceId,
     string? RaceName,
     TimeOnly? StartTime,
-    IReadOnlyList<RaceEntry> Entries, RaceCourseSpec? CourseSpec = null, string? GradeCode = null)
+    IReadOnlyList<RaceEntry> Entries, RaceCourseSpec? CourseSpec = null, string? GradeCode = null,
+    int? MeetingNumber = null, int? MeetingDay = null)
     : IJraPage
 {
     public JraPageKind Kind =>
