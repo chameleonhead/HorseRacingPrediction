@@ -13,7 +13,8 @@ public sealed record CollectionMonitoringTaskSnapshot(
     DateTimeOffset? StartedAt,
     DateTimeOffset? LeaseExpiresAt,
     int AttemptCount,
-    string? CompatibilityKey = null);
+    string? CompatibilityKey = null,
+    DateTimeOffset? DispatchCandidateSince = null);
 
 public sealed record CollectionMonitoringDispatchSnapshot(
     Guid EnvelopeId,

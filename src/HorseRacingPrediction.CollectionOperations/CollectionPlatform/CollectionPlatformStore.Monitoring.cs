@@ -65,6 +65,29 @@ public sealed partial class CollectionPlatformStore
         var flowResources = await db.Resources.AsNoTracking().Where(x => flowResourcePks.Contains(x.ResourcePk))
             .ToDictionaryAsync(x => x.ResourcePk, cancellationToken).ConfigureAwait(false);
 
+        var activeTaskIds = activeRows.Select(x => x.task.TaskId).ToArray();
+        var cutoffMilliseconds = cutoff.ToUnixTimeMilliseconds();
+        var dispatchCandidateRows = await (from outbox in db.DispatchOutbox.AsNoTracking()
+                                           join task in db.Tasks.AsNoTracking()
+                                               on outbox.TaskId equals task.TaskId
+                                           where activeTaskIds.Contains(outbox.TaskId)
+                                                 && outbox.DispatchGeneration == task.DispatchGeneration
+                                                 && outbox.DispatchedAt == null
+                                                 && outbox.AvailableAt <= cutoff
+                                                 && (outbox.ReservedUntilUnixMilliseconds == null
+                                                     || outbox.ReservedUntilUnixMilliseconds <= cutoffMilliseconds)
+                                           select new
+                                           {
+                                               outbox.TaskId,
+                                               outbox.AvailableAt,
+                                               outbox.ReservedUntilUnixMilliseconds,
+                                           }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dispatchCandidateSinceByTask = dispatchCandidateRows.GroupBy(x => x.TaskId).ToDictionary(
+            group => group.Key,
+            group => group.Min(x => x.ReservedUntilUnixMilliseconds is { } reservedUntil
+                ? Max(x.AvailableAt, DateTimeOffset.FromUnixTimeMilliseconds(reservedUntil))
+                : x.AvailableAt));
+
         var truncated = activeRows.Count > limit || dispatchRows.Count > limit || raceRows.Count > limit;
         var active = activeRows.Take(limit).Select(x => new CollectionMonitoringTaskSnapshot(
             x.task.TaskId,
@@ -79,7 +102,9 @@ public sealed partial class CollectionPlatformStore
             x.task.StartedAt,
             x.task.LeaseExpiresAt,
             x.task.AttemptCount,
-            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane))).ToArray();
+            MonitoringCompatibilityKey(x.resource, x.task.DefinitionId, x.task.Lane),
+            dispatchCandidateSinceByTask.TryGetValue(x.task.TaskId, out var candidateSince)
+                ? candidateSince : null)).ToArray();
         var dispatches = dispatchRows.Take(limit).Select(x => new CollectionMonitoringDispatchSnapshot(
             x.outbox.EnvelopeId ?? Guid.Empty,
             x.task.TaskId,
@@ -136,6 +161,8 @@ public sealed partial class CollectionPlatformStore
 
     private static DateTimeOffset? ParseInstant(string? value) =>
         DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+
+    private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right) => left >= right ? left : right;
 
     private static RaceArtifactStatus ParseArtifactStatus(string? value) =>
         Enum.TryParse<RaceArtifactStatus>(value, true, out var parsed) ? parsed : RaceArtifactStatus.Unknown;

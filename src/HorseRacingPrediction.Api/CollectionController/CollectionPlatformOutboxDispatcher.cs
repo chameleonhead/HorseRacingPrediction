@@ -55,10 +55,14 @@ public sealed class CollectionPlatformOutboxDispatcher(
             var item = remaining.Single(x => x.Notification.TaskId == selected.TaskId);
             var compatibility = CreateCompatibility(item);
             var maxTasks = GetMaxTasks(compatibility, item);
-            var group = remaining.Where(x => IsCompatible(item, x))
+            var admitted = remaining.Where(x => IsCompatible(item, x))
+                .OrderByDescending(x => EffectivePriority(x, now))
+                .ThenBy(x => x.AvailableAt).ThenBy(x => x.CreatedAt).ThenBy(x => x.Notification.TaskId)
+                .Take(maxTasks);
+            var group = admitted
                 .OrderBy(x => RouteCourse(x)).ThenBy(x => RouteRaceNumber(x)).ThenBy(x => RouteType(x))
                 .ThenByDescending(x => x.Priority).ThenBy(x => x.CreatedAt).ThenBy(x => x.Notification.TaskId)
-                .Take(maxTasks).ToList();
+                .ToList();
             var envelopeId = Guid.NewGuid();
             var envelope = CreateEnvelope(envelopeId, compatibility, group);
             while (group.Count > 1 && JsonSerializer.SerializeToUtf8Bytes(envelope).Length
@@ -150,4 +154,7 @@ public sealed class CollectionPlatformOutboxDispatcher(
         ResourceType.RaceResult => 1,
         _ => 2,
     };
+
+    private static int EffectivePriority(PendingCollectionDispatch item, DateTimeOffset now)
+        => item.Priority + Math.Min(30, Math.Max(0, (int)(now - item.CreatedAt).TotalHours / 6));
 }
