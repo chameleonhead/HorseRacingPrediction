@@ -11,6 +11,10 @@ public interface IJraNavigator
 {
     string? LastNavigationTrace => null;
 
+    Task<JraMeetingCancellation?> ReadMeetingCancellationAsync(DateOnly date, RaceCourse course,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<JraMeetingCancellation?>(null);
+
     Task<IJraPage> ToUrlAsync(Uri url, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Direct URL navigation is not supported.");
     Task<JraSubjectPage> ToSubjectProfileAsync(JraSubjectIdentity subject, CancellationToken cancellationToken = default)

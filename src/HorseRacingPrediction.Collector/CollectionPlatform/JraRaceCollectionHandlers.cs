@@ -49,119 +49,150 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
         var lastOffset = isSingleDayDiscovery ? 0 : 7;
         DateOnly? earliestUnpublishedDate = null;
         string? unpublishedMessage = null;
-        for (var offset = firstOffset; offset <= lastOffset; offset++)
+        var cancellations = new List<JraMeetingCancellation>();
+        var collectedMeetings = 0;
+        string Identification() => $"RaceDiscovery:JRA:{task.Resource.Id}; CollectedMeetings={collectedMeetings}; "
+            + $"CancelledMeetings={cancellations.Count}"
+            + string.Concat(cancellations.Select(x =>
+                $"; Cancelled={x.Date:yyyyMMdd}:{x.Course}:{x.MeetingNumber}:{x.MeetingDay}; Source={x.SourceUrl}"));
+        try
         {
-            var date = referenceDate.AddDays(offset);
-            var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
-            foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
+            for (var offset = firstOffset; offset <= lastOffset; offset++)
             {
-                var resultRoute = date < TodayJst().AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
-                IJraPage page;
-                try
+                var date = referenceDate.AddDays(offset);
+                var courses = await schedule.CollectAsync(date, cancellationToken).ConfigureAwait(false);
+                foreach (var course in courses.Where(x => x != RaceCourse.Unknown))
                 {
-                    page = resultRoute
-                        ? await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken).ConfigureAwait(false)
-                        : await session.Navigate.ToRaceListAsync(date, course, cancellationToken).ConfigureAwait(false);
-                }
-                catch (JraNavigationException ex) when (!resultRoute && date < TodayJst()
-                    && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
-                {
-                    page = await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken)
-                        .ConfigureAwait(false);
-                    resultRoute = true;
-                }
-                catch (JraNavigationException ex) when (!resultRoute && IsFutureJst(date)
-                    && ex.Reason == JraNavigationFailureReason.NotYetPublished)
-                {
-                    RecordUnpublished(date, ex.Message);
-                    continue;
-                }
-                if (!resultRoute && page is not JraRaceListPage)
-                {
-                    if (IsFutureJst(date))
+                    var resultRoute = date < TodayJst().AddDays(-JraNavigator.DefaultRaceCardLookupPeriodDays);
+                    IJraPage page;
+                    try
                     {
-                        RecordUnpublished(date, $"Unexpected page: {page.Kind}");
-                        continue;
-                    }
-                    throw new JraCollectionException(
-                        $"レース一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}");
-                }
-                if (resultRoute && page is not JraRaceListPage && page is not JraRaceResultPage)
-                {
-                    return new(
-                        CollectionAttemptResult.UnexpectedPage,
-                        "RaceResultListPageKindMismatch",
-                        $"レース結果一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}",
-                        FinalUrl: ToAbsoluteUri(page.Url),
-                        PageIdentification: $"Expected=RaceListOrRaceResult; Actual={page.Kind}; Resource={task.Resource.Id}");
-                }
-                if (page is JraRaceListPage parsedList
-                    && (parsedList.Date != date || parsedList.Course != course))
-                {
-                    throw new JraRaceIdentityMismatchException(
-                        JraPageKind.RaceList,
-                        parsedList.Url,
-                        $"{date:yyyy-MM-dd}:{course}",
-                        $"{parsedList.Date:yyyy-MM-dd}:{parsedList.Course}");
-                }
-                var races = page switch
-                {
-                    JraRaceListPage list => list.Races,
-                    JraRaceResultPage result => [new RaceSummary(result.RaceId, null, null, null, result.Url)],
-                    _ => [],
-                };
-                foreach (var race in races)
-                {
-                    if (race.Id.Date != date || race.Id.Course != course)
-                    {
-                        throw new JraRaceIdentityMismatchException(
-                            page.Kind,
-                            page.Url,
-                            $"{date:yyyy-MM-dd}:{course}:{race.Number}",
-                            race.Id.ToString());
-                    }
-                    var id = $"{date:yyyyMMdd}:{course}:{race.Number}";
-                    var attributes = new Dictionary<string, string>
-                    {
-                        ["course"] = RaceCourseNames.GetJraName(course),
-                        ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    };
-                    if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
-                    Uri? detailUrl;
-                    if (!resultRoute)
-                    {
-                        if (race.StartTime is { } detailStart)
-                            attributes["startTime"] = detailStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
-                        var cardUrl = JraRaceDetailUrl.Validate(
-                            CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), ResourceType.RaceCard, race.Id);
-                        detailUrl = cardUrl;
-                        if (race.StartTime is { } start)
+                        try
                         {
-                            var oddsAttributes = new Dictionary<string, string>(attributes)
-                            { ["startTime"] = start.ToString("HH:mm") };
-                            await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
-                                CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
-                                oddsAttributes, cancellationToken).ConfigureAwait(false);
+                            page = resultRoute
+                                ? await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken).ConfigureAwait(false)
+                                : await session.Navigate.ToRaceListAsync(date, course, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (JraNavigationException ex) when (!resultRoute && date < TodayJst()
+                            && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+                        {
+                            page = await session.Navigate.ToRaceResultListAsync(date, course, cancellationToken)
+                                .ConfigureAwait(false);
+                            resultRoute = true;
+                        }
+                        catch (JraNavigationException ex) when (!resultRoute && IsFutureJst(date)
+                            && ex.Reason == JraNavigationFailureReason.NotYetPublished)
+                        {
+                            RecordUnpublished(date, ex.Message);
+                            continue;
                         }
                     }
-                    else
+                    catch (JraNavigationException ex) when (date <= TodayJst()
+                        && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
                     {
-                        detailUrl = JraRaceDetailUrl.Validate(
-                            CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
+                        var cancelled = await session.Navigate.ReadMeetingCancellationAsync(date, course, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (cancelled is null || cancelled.Date != date || cancelled.Course != course) throw;
+                        cancellations.Add(cancelled);
+                        continue;
                     }
-                    await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,
-                        task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
-                            ? task.Reason
-                            : CollectionReason.Discovery,
-                        resultRoute ? CollectionLane.Background : CollectionLane.Realtime,
-                        resultRoute ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
+                    if (!resultRoute && page is not JraRaceListPage)
+                    {
+                        if (IsFutureJst(date))
+                        {
+                            RecordUnpublished(date, $"Unexpected page: {page.Kind}");
+                            continue;
+                        }
+                        throw new JraCollectionException(
+                            $"レース一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}");
+                    }
+                    if (resultRoute && page is not JraRaceListPage && page is not JraRaceResultPage)
+                    {
+                        return new(
+                            CollectionAttemptResult.UnexpectedPage,
+                            "RaceResultListPageKindMismatch",
+                            $"レース結果一覧とは異なるページを検出しました。Date={date:yyyy-MM-dd}, Course={course}, Kind={page.Kind}",
+                            FinalUrl: ToAbsoluteUri(page.Url),
+                            PageIdentification: $"Expected=RaceListOrRaceResult; Actual={page.Kind}; {Identification()}");
+                    }
+                    if (page is JraRaceListPage parsedList
+                        && (parsedList.Date != date || parsedList.Course != course))
+                    {
+                        throw new JraRaceIdentityMismatchException(
+                            JraPageKind.RaceList,
+                            parsedList.Url,
+                            $"{date:yyyy-MM-dd}:{course}",
+                            $"{parsedList.Date:yyyy-MM-dd}:{parsedList.Course}");
+                    }
+                    var races = page switch
+                    {
+                        JraRaceListPage list => list.Races,
+                        JraRaceResultPage result => [new RaceSummary(result.RaceId, null, null, null, result.Url)],
+                        _ => [],
+                    };
+                    foreach (var race in races)
+                    {
+                        if (race.Id.Date != date || race.Id.Course != course)
+                        {
+                            throw new JraRaceIdentityMismatchException(
+                                page.Kind,
+                                page.Url,
+                                $"{date:yyyy-MM-dd}:{course}:{race.Number}",
+                                race.Id.ToString());
+                        }
+                        var id = $"{date:yyyyMMdd}:{course}:{race.Number}";
+                        var attributes = new Dictionary<string, string>
+                        {
+                            ["course"] = RaceCourseNames.GetJraName(course),
+                            ["number"] = race.Number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        };
+                        if (task.Attributes.TryGetValue("batchId", out var batchId)) attributes["batchId"] = batchId;
+                        Uri? detailUrl;
+                        if (!resultRoute)
+                        {
+                            if (race.StartTime is { } detailStart)
+                                attributes["startTime"] = detailStart.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                            var cardUrl = JraRaceDetailUrl.Validate(
+                                CollectionHttpUrl.Resolve(race.RaceCardUrl, page.Url), ResourceType.RaceCard, race.Id);
+                            detailUrl = cardUrl;
+                            if (race.StartTime is { } start)
+                            {
+                                var oddsAttributes = new Dictionary<string, string>(attributes)
+                                { ["startTime"] = start.ToString("HH:mm") };
+                                await requests.RequestAsync(new(ResourceType.RaceOdds, "JRA", id), new("race-odds"), 1,
+                                    CollectionReason.Discovery, CollectionLane.Realtime, 90, null, date,
+                                    oddsAttributes, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                        else
+                        {
+                            detailUrl = JraRaceDetailUrl.Validate(
+                                CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
+                        }
+                        await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,
+                            task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
+                                ? task.Reason
+                                : CollectionReason.Discovery,
+                            resultRoute ? CollectionLane.Background : CollectionLane.Realtime,
+                            resultRoute ? 10 : 100, detailUrl, date, attributes, cancellationToken).ConfigureAwait(false);
+                    }
+                    collectedMeetings++;
                 }
             }
         }
+        catch (Exception ex) when (cancellations.Count > 0 && ex is not OperationCanceledException)
+        {
+            // Preserve the executor's existing failure classification, including partial-progress evidence.
+            return CollectionAttemptFailureClassifier.FromException(ex) with { PageIdentification = Identification() };
+        }
+        var identification = Identification();
         if (earliestUnpublishedDate is { } waitingDate)
-            return PublicationWaiting(waitingDate, unpublishedMessage ?? "Race list is not published.");
-        return new(CollectionAttemptResult.Succeeded,
-            PageIdentification: $"RaceDiscovery:JRA:{task.Resource.Id}");
+            return PublicationWaiting(waitingDate, unpublishedMessage ?? "Race list is not published.")
+                with
+            { PageIdentification = identification };
+        return new(cancellations.Count > 0 && collectedMeetings == 0
+                ? CollectionAttemptResult.NotApplicable : CollectionAttemptResult.Succeeded,
+            PageIdentification: identification);
 
         void RecordUnpublished(DateOnly date, string message)
         {
@@ -443,9 +474,9 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         if (resultAlreadyCurrent)
         {
-            stageOutcomes.Add(new("ResolveResult", RaceArtifactKind.Result,
-                CollectionAttemptResult.NotApplicable, "RaceResultAlreadyCurrent",
-                "The current result artifact already satisfies the requested revision."));
+            // No Result operation occurred. Emitting NotApplicable would mark the persisted
+            // facet Unavailable; emitting a persisted success would invent a new save time.
+            // Keep the existing Result evidence unchanged while completing the Card repair.
             if (result?.Error is not null)
                 return new(CollectionAttemptResult.ValidationFailure, "RaceCardWriteRejected", result.Error,
                     RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl), FinalUrl: ToUri(result.SourceUrl),

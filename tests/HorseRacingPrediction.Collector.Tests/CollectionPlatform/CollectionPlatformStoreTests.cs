@@ -1,4 +1,8 @@
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
+using HorseRacingPrediction.Collector.CollectionPlatform;
+using HorseRacingPrediction.Collector.Tests.TestSupport;
+using HorseRacingPrediction.Scraping.Jra.Models;
+using HorseRacingPrediction.Scraping.Jra.Pages;
 using Microsoft.Data.Sqlite;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
@@ -327,6 +331,127 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsNotNull(lease);
         Assert.AreEqual("original", lease.Attributes["name"]);
         Assert.AreEqual("source-1", lease.Attributes["sourceIdentity"]);
+    }
+
+    [TestMethod]
+    public async Task ManualRefresh_WithoutMetadata_InheritsCompletedTaskSnapshot()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "村山 明（栗東）",
+                ["discoveredFromId"] = "horse-source",
+            });
+        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
+
+        var refresh = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh,
+            now.AddSeconds(2));
+        var refreshLease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2),
+            TimeSpan.FromMinutes(5));
+
+        Assert.IsNotNull(refreshLease);
+        Assert.AreEqual("村山 明（栗東）", refreshLease.Attributes["name"]);
+        Assert.AreEqual("horse-source", refreshLease.Attributes["discoveredFromId"]);
+    }
+
+    [TestMethod]
+    public async Task Recovery_WithoutMetadata_SkipsLatestEmptySnapshot()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "村山 明（栗東）",
+                ["discoveredFromId"] = "horse-source",
+            });
+        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
+        var empty = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ScheduledRefresh,
+            now.AddSeconds(2));
+        var emptyLease = await store.AcquireAsync(empty.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(empty.TaskId, emptyLease!.LeaseToken,
+            now.AddSeconds(3), new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
+
+        var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
+            now.AddSeconds(4));
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddSeconds(4),
+            TimeSpan.FromMinutes(5));
+
+        Assert.IsNotNull(recoveryLease);
+        Assert.AreEqual("村山 明（栗東）", recoveryLease.Attributes["name"]);
+        Assert.AreEqual("horse-source", recoveryLease.Attributes["discoveredFromId"]);
+    }
+
+    [TestMethod]
+    public async Task Recovery_MetadataOverridesOnlySpecifiedKeys()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "旧名",
+                ["sourceIdentity"] = "source-1",
+                ["discoveredFromId"] = "horse-source",
+            });
+        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
+
+        var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
+            now.AddSeconds(2), attributes: new Dictionary<string, string> { ["name"] = "補正名" });
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddSeconds(2),
+            TimeSpan.FromMinutes(5));
+
+        Assert.IsNotNull(recoveryLease);
+        Assert.AreEqual("補正名", recoveryLease.Attributes["name"]);
+        Assert.AreEqual("source-1", recoveryLease.Attributes["sourceIdentity"]);
+        Assert.AreEqual("horse-source", recoveryLease.Attributes["discoveredFromId"]);
+    }
+
+    [TestMethod]
+    public async Task Recovery_DoesNotInheritAnotherResourcesSnapshot()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var prior = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "other-resource" });
+        await CompleteAsync(store, prior, now);
+        var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "different-horse"),
+            HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(2));
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.IsFalse(lease.Attributes.ContainsKey("name"));
+    }
+
+    [TestMethod]
+    public async Task Recovery_PriorSnapshotDoesNotMixNewResourceAttributes()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var prior = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "snapshot-name" });
+        await CompleteAsync(store, prior, now);
+        var otherDefinition = new CollectionDefinitionId("other-profile");
+        await store.RegisterDefinitionAsync(otherDefinition, "Other profile", ResourceType.Horse, 1, "initial", false);
+        var other = await store.RequestAsync(Horse, otherDefinition, 1, CollectionReason.Discovery,
+            now.AddMinutes(2), attributes: new Dictionary<string, string>
+            {
+                ["name"] = "resource-name",
+                ["sourceIdentity"] = "other-definition",
+            });
+        await CompleteAsync(store, other, now.AddMinutes(2));
+        var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(4));
+        var lease = await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual("snapshot-name", lease.Attributes["name"]);
+        Assert.IsFalse(lease.Attributes.ContainsKey("sourceIdentity"));
     }
 
     [TestMethod]
@@ -1634,6 +1759,101 @@ public sealed class CollectionPlatformStoreTests
 
         var locations = await store.ResolveLocationsAsync(race, definition);
         Assert.AreEqual(RaceArtifactKind.Card, locations.Single().Artifact);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_CardRepair_PreservesPersistedCurrentResult()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:1");
+        var date = new DateOnly(2026, 9, 19);
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
+        var initial = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now,
+            effectiveDate: date);
+        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes:
+            [new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true)])));
+        var before = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
+            .Single(x => x.Artifact == RaceArtifactKind.Result);
+        var cardUrl = new Uri("https://example.test/card/1");
+        var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.ManualRefresh,
+            now.AddSeconds(2), explicitUrl: cardUrl);
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.AreEqual("Current", lease!.Attributes["resultArtifactStatus"]);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => new JraRaceCardPage(url.AbsoluteUri,
+                    new RaceId(date, RaceCourse.Tokyo, 1), "test", new(10, 0), []),
+            },
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions,
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results,
+            timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(lease, CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken,
+            now.AddSeconds(3), completion));
+        var after = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
+            .Single(x => x.Artifact == RaceArtifactKind.Result);
+        Assert.AreEqual(RaceArtifactStatus.Current, after.Status);
+        Assert.AreEqual(before.LastPersistedAt, after.LastPersistedAt);
+        Assert.AreEqual(before.AppliedRevision, after.AppliedRevision);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsEmpty(results.RefreshPageRequests);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_NewerRevision_DoesNotLeaseStaleFacetsAsCurrent()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260919:Tokyo:1");
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
+        var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2026, 9, 19));
+        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes:
+            [
+                new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true),
+                new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true),
+            ])));
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "new parser", false);
+        var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged,
+            now.AddSeconds(2));
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual("Due", lease.Attributes["cardArtifactStatus"]);
+        Assert.AreEqual("Due", lease.Attributes["resultArtifactStatus"]);
+        var facets = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
+        Assert.IsTrue(facets.All(x => x.AppliedRevision == 1));
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = race => new(race, "created-race", [1], [], "https://example.test/result", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => cards, _ => results, timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(lease, CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.HasCount(1, cards.RefreshRequests);
+        Assert.HasCount(1, results.Requests);
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken,
+            now.AddSeconds(3), completion));
+        var upgraded = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
+        Assert.IsTrue(upgraded.All(x => x.Status == RaceArtifactStatus.Current && x.AppliedRevision == 2));
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

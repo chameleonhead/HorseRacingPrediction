@@ -34,6 +34,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Verify deployment pause and failure guards
+        shell: pwsh
+        run: ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash /bin/bash
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
@@ -164,6 +168,7 @@ jobs:
           key: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
           envs: IMAGE_NAME,IMAGE_TAG,APP_DIRECTORY,DOMAIN_NAME,LIGHTSAIL_HOST,ACME_EMAIL,HORSE_RACING_API_KEY,COLLECTION_QUEUE_ENABLED,AWS_REGION
           script: |
+            set -eu
             mkdir -p "$APP_DIRECTORY/data"
             mkdir -p "$APP_DIRECTORY/data/backups"
             if [ ! -f "$APP_DIRECTORY/.env" ]; then
@@ -202,7 +207,17 @@ jobs:
             chmod 600 "$APP_DIRECTORY/.env"
             cd "$APP_DIRECTORY"
             docker compose --env-file .env pull
-            docker compose --env-file .env stop api || true
+            docker compose --env-file .env stop api
+            if [ -n "$(docker compose --env-file .env ps --status running -q api)" ]; then
+              echo "API must be stopped before database backup" >&2
+              exit 1
+            fi
+            for state_db in eventstore collection-platform prediction-executions; do
+              if [ -s "$APP_DIRECTORY/data/${state_db}.db-wal" ]; then
+                echo "Uncheckpointed SQLite WAL remains; refusing incomplete backup" >&2
+                exit 1
+              fi
+            done
             if [ -f "$APP_DIRECTORY/data/eventstore.db" ]; then
               cp "$APP_DIRECTORY/data/eventstore.db" \
                 "$APP_DIRECTORY/data/backups/eventstore-predeploy-$(date -u +%Y%m%d-%H%M%S).db"
@@ -242,19 +257,18 @@ jobs:
 
       - name: Migrate legacy race collection jobs
         env:
+          ORIGINAL_WAS_PAUSED: ${{ needs.deploy-collector-lambda.outputs.was_paused }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
           LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
           base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
-          resume() {
-            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" "$base/pipeline/resume" >/dev/null || true
-          }
-          trap resume EXIT
-          curl --fail --silent --show-error -X POST \
-            -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
-            --data '{"reason":"deployment race-detail migration"}' \
-            "$base/pipeline/pause" >/dev/null
+          # Preserve an operator/incident pause, and never resume on failed migration.
+          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline")"
+          jq -e '.isPaused == true' <<<"$pipeline" >/dev/null
+          case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
+          running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
+          jq -e 'type == "array" and length == 0' <<<"$running" >/dev/null
           response="$(curl --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
             -w $'\n%{http_code}' "$base/migrations/race-detail/apply")"
           status="${response##*$'\n'}"
@@ -271,11 +285,25 @@ jobs:
             exit 1
           fi
           echo "Legacy race collection migration completed: $body"
+          if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
+            # A task may have failed while draining under our deployment pause.
+            # Conservatively require no actionable failures (including older ones).
+            failures="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/failure-notifications?limit=1")"
+            if ! jq -e 'type == "array" and length == 0' <<<"$failures" >/dev/null; then
+              echo "Actionable failures remain; pipeline stays paused for explicit recovery" >&2
+              exit 1
+            fi
+            curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" "$base/pipeline/resume" >/dev/null
+          else
+            echo "Collection remains paused; recovery requires an explicit operator decision."
+          fi
 
   deploy-collector-lambda:
     needs: build-and-push
     runs-on: ubuntu-24.04
     environment: production
+    outputs:
+      was_paused: ${{ steps.collection-guard.outputs.was_paused }}
     defaults:
       run:
         working-directory: infra/collector-lambda
@@ -299,6 +327,37 @@ jobs:
         run: |
           domain="${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}"
           echo "value=https://${domain}" >> "$GITHUB_OUTPUT"
+
+      - id: collection-guard
+        name: Pause and drain collection before changing deployed versions
+        shell: bash
+        env:
+          API_BASE_URL: ${{ steps.api-url.outputs.value }}
+          API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
+        run: |
+          base="$API_BASE_URL/api/admin/collection"
+          pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline")"
+          was_paused="$(jq -er '.isPaused | if type == "boolean" then tostring else error("Invalid pipeline state") end' <<<"$pipeline")"
+          echo "was_paused=$was_paused" >> "$GITHUB_OUTPUT"
+          if [ "$was_paused" = "false" ]; then
+            curl --fail --silent --show-error -X POST \
+              -H "X-Api-Key: $API_KEY" -H 'Content-Type: application/json' \
+              --data '{"reason":"deployment version transition"}' "$base/pipeline/pause" >/dev/null
+          fi
+          drained=false
+          for attempt in $(seq 1 60); do
+            running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
+            count="$(jq -er 'if type == "array" then length else error("Invalid task list") end' <<<"$running")"
+            if [ "$count" = "0" ]; then
+              drained=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$drained" != "true" ]; then
+            echo "Collection drain timed out; pipeline remains paused" >&2
+            exit 1
+          fi
 
       - name: Initialize collector infrastructure
         run: |

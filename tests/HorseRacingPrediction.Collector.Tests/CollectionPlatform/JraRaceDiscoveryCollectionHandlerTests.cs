@@ -13,6 +13,131 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraRaceDiscoveryCollectionHandlerTests
 {
     [TestMethod]
+    [TestCategory("External")]
+    public async Task OfficialCancelledDay_RealScheduleNavigatorParserAndHandler_ContinueHanshin()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+        var sessions = new JraSessionFactory(new LiveBrowserFactory(), [
+            new HorseRacingPrediction.Scraping.Jra.Parsing.CalendarPageParser(),
+            new HorseRacingPrediction.Scraping.Jra.Parsing.RaceListPageParser(),
+            new HorseRacingPrediction.Scraping.Jra.Parsing.RaceResultPageParser()]);
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions,
+            session => new HorseRacingPrediction.Scraping.Jra.Workflow.JraScheduleCollectionWorkflow(session), sink,
+            timeProvider: new FixedTimeProvider(new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero)));
+        var result = await handler.CollectAsync(CreateDiscoveryTask(new(2026, 9, 21))
+            with
+        { Reason = CollectionReason.Backfill }, cts.Token);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.HasCount(12, sink.Requests);
+        Assert.IsTrue(sink.Requests.All(x => x.Resource.Id.StartsWith("20260921:Hanshin:", StringComparison.Ordinal)));
+        StringAssert.Contains(result.PageIdentification!, "Cancelled=20260921:Nakayama:4:7");
+    }
+
+    private sealed class LiveBrowserFactory : HorseRacingPrediction.Scraping.Browser.IWebBrowserSessionFactory
+    {
+        public async Task<HorseRacingPrediction.Scraping.Browser.IWebBrowser> CreateAsync(CancellationToken cancellationToken = default)
+            => await HorseRacingPrediction.Scraping.Browser.PlaywrightWebBrowser.CreateAsync();
+    }
+
+    [TestMethod]
+    [DataRow(24)]
+    [DataRow(30)]
+    public async Task CancelledMeeting_DoesNotBlockOtherCourseOrReplacementDate(int todayDay)
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (_, _) => throw new JraNavigationException("retired", JraNavigationFailureReason.OutOfDisplayedRange),
+                RaceResultListFactory = (target, course) => target == date && course == RaceCourse.Nakayama
+                    ? throw new JraNavigationException("absent", JraNavigationFailureReason.OutOfDisplayedRange)
+                    : new JraRaceListPage("https://example.test/results", target, course, [new(new(target, course, 1), "race", null, null, null)]),
+                MeetingCancellationFactory = (target, course) => new(target, course, 4, 7,
+                    new("https://www.jra.go.jp/keiba/calendar2026/2026/9/0921.html")),
+            },
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow
+        {
+            CoursesByDate = target => target == date
+            ? [RaceCourse.Nakayama, RaceCourse.Hanshin] : target == date.AddDays(1) ? [RaceCourse.Nakayama] : []
+        };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+            timeProvider: new FixedTimeProvider(new(2026, 9, todayDay, 0, 0, 0, TimeSpan.Zero)));
+        var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        CollectionAssert.AreEquivalent(new[] { "20260921:Hanshin:1", "20260922:Nakayama:1" }, sink.Requests.Select(x => x.Resource.Id).ToArray());
+        StringAssert.Contains(result.PageIdentification!, "Cancelled=20260921:Nakayama:4:7");
+        StringAssert.Contains(result.PageIdentification!, "CancelledMeetings=1");
+    }
+
+    [TestMethod]
+    public async Task CancelledThenUnknownMeeting_PreservesFailureAndEarlierOfficialEvidence()
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (_, _) => throw new JraNavigationException("absent", JraNavigationFailureReason.OutOfDisplayedRange),
+                RaceResultListFactory = (_, _) => throw new JraNavigationException("absent", JraNavigationFailureReason.OutOfDisplayedRange),
+                MeetingCancellationFactory = (target, course) => course == RaceCourse.Nakayama
+                    ? new(target, course, 4, 7, new("https://www.jra.go.jp/keiba/calendar2026/2026/9/0921.html")) : null
+            }
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow { CoursesByDate = target => target == date ? [RaceCourse.Nakayama, RaceCourse.Hanshin] : [] };
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, new RecordingSink(),
+            timeProvider: new FixedTimeProvider(new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero)));
+        var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, result.Result);
+        Assert.AreEqual(nameof(JraNavigationException), result.ErrorCode);
+        StringAssert.Contains(result.PageIdentification!, "Cancelled=20260921:Nakayama:4:7");
+        StringAssert.Contains(result.PageIdentification!, "Source=https://www.jra.go.jp/");
+    }
+
+    [TestMethod]
+    [DataRow("cancelled")]
+    [DataRow("unknown")]
+    [DataRow("wrong-date")]
+    [DataRow("network")]
+    public async Task CancellationEvidence_IsRequired_AndNoRaceSuccessIsInvented(string mode)
+    {
+        var date = new DateOnly(2026, 9, 21);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                RaceCardListFactory = (_, _) => throw new JraNavigationException("missing", JraNavigationFailureReason.OutOfDisplayedRange),
+                RaceResultListFactory = (_, _) => throw new JraNavigationException("missing", JraNavigationFailureReason.OutOfDisplayedRange),
+                MeetingCancellationFactory = (target, course) => mode switch
+                {
+                    "unknown" => null,
+                    "network" => throw new HttpRequestException("unavailable"),
+                    _ => new(target.AddDays(mode == "wrong-date" ? 1 : 0), course, 4, 7,
+                        new("https://www.jra.go.jp/keiba/calendar2026/2026/9/0921.html"))
+                }
+            }
+        };
+        var schedule = new FakeJraScheduleCollectionWorkflow { CoursesByDate = target => target == date ? [RaceCourse.Nakayama] : [] };
+        var sink = new RecordingSink();
+        var handler = new JraRaceDiscoveryCollectionHandler(sessions, _ => schedule, sink,
+            timeProvider: new FixedTimeProvider(new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero)));
+        if (mode == "cancelled")
+        {
+            var result = await handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.NotApplicable, result.Result);
+            StringAssert.Contains(result.PageIdentification!, "CollectedMeetings=0");
+        }
+        else if (mode == "network")
+            await Assert.ThrowsAsync<HttpRequestException>(() => handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+        else
+            await Assert.ThrowsAsync<JraNavigationException>(() => handler.CollectAsync(CreateDiscoveryTask(date), CancellationToken.None));
+        Assert.HasCount(0, sink.Requests);
+    }
+
+    [TestMethod]
     [DataRow("2026-09-21")]
     [DataRow("2026-09-23")]
     public async Task Discovery_UsesOfficialScheduleEvidenceRegardlessOfWeekday(string dateText)

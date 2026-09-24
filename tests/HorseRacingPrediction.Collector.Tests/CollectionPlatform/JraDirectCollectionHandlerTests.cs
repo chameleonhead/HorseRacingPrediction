@@ -584,7 +584,7 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
         Assert.IsEmpty(results.Requests);
         Assert.IsEmpty(results.RefreshPageRequests);
-        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.ErrorCode == "RaceResultAlreadyCurrent"));
+        Assert.IsFalse(completion.StageOutcomes!.Any(x => x.Artifact == RaceArtifactKind.Result));
     }
 
     [TestMethod]

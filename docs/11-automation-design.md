@@ -48,6 +48,13 @@
 
 ## 運用方針
 
+### 既存CI/CDでの配備安全条件
+
+既存`app-deploy`はCollector更新前にpipelineを停止し、実行中taskが0件になるまで上限付きで待つ。元から停止中なら理由と停止状態を保持する。
+API停止成功・非稼働・未checkpointのSQLite WALなしを確認してからDBをbackupする。確認失敗時は配備を中断し、不完全なbackupを正常扱いしない。
+移行前にも停止/実行中0件を確認する。移行と検証が成功し、配備前に稼働中で、再開直前に要対応failureが0件の場合だけ自動再開する。新旧どちらの要対応でも残る場合や不明/失敗時は停止を維持し、明示的な復旧判断へ戻す。新しいWorkflowは追加しない。
+変更・反例・運用結果は [collection error closure](changes/20260924_collection-error-closure/evidence/operations.md) を参照する。
+
 - 自動処理の失敗は再実行可能にする
 - 取り込み時刻とデータソースを必ず保存する
 - 訂正は上書きせず訂正イベントで表現する

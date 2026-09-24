@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260924_collection-error-closure",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "medium",
+  "acceptanceCriteria": [
+    "AC1",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-sol",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Not exposed by runtime"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "Not exposed by runtime"
+  },
+  "scope": ["read-only"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "Not exposed by runtime"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "Not measured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "Active effort not measured"
+  },
+  "startRevision": "ff95b22499312462194a970b038dcc9d959163bd",
+  "endRevisionOrPatch": "read-only findings in evidence/baseline.md",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead live E2E corroborated cancellation cause and monthly notice contamination; final real schedule/navigator/parser/handler test emitted only 12 Hanshin requests. Deployed revision unknown.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
