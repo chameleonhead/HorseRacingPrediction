@@ -1883,7 +1883,15 @@ public sealed class CollectionPlatformStoreTests
         {
             ResultFactory = race => new(race, "created-race", [1], [], "https://example.test/result", true),
         };
-        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = url => new JraRaceResultPage(
+                    url.AbsoluteUri, new(new DateOnly(2026, 9, 1), RaceCourse.Tokyo, 1), "test", []),
+            },
+        };
+        var handler = new JraRaceDetailCollectionHandler(sessions,
             _ => cards, _ => results, timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(lease!, CancellationToken.None);
         var unavailableUpgrade = hasCard && revision > 1;
@@ -1904,6 +1912,157 @@ public sealed class CollectionPlatformStoreTests
         }
         Assert.AreEqual(revision, detail.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Result).AppliedRevision);
         Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+        if (unavailableUpgrade)
+        {
+            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "third parser", false);
+            var next = await store.RequestAsync(resource, definition, 3, CollectionReason.DefinitionChanged, now.AddSeconds(4));
+            var nextLease = await store.AcquireAsync(next.TaskId, 1, now.AddSeconds(4), TimeSpan.FromMinutes(5));
+            var nextCompletion = await handler.CollectAsync(nextLease!, CancellationToken.None);
+            Assert.AreEqual(CollectionAttemptResult.Succeeded, nextCompletion.Result, System.Text.Json.JsonSerializer.Serialize(nextCompletion));
+            Assert.IsTrue(await store.CompleteAttemptAsync(next.TaskId, nextLease!.LeaseToken, now.AddSeconds(5), nextCompletion));
+            var nextCard = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
+                .Single(x => x.Artifact == RaceArtifactKind.Card);
+            Assert.AreEqual(3, nextCard.RequiredRevision);
+            Assert.AreEqual(1, nextCard.AppliedRevision);
+            Assert.AreEqual(now.AddSeconds(1), nextCard.LastPersistedAt);
+            Assert.AreEqual(RaceArtifactStatus.Unavailable, nextCard.Status);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public async Task LegacyRaceMigration_PreservesCardEvidenceForLaterRevision(bool existingFacet)
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var date = new DateOnly(2026, 9, 1);
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(new("race-card"), "Card", ResourceType.RaceCard, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(new("race-result"), "Result", ResourceType.RaceResult, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "unified", false);
+        var attributes = new Dictionary<string, string> { ["course"] = "東京", ["number"] = "1" };
+        await store.InitializeFromDomainDataAsync([
+            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date, attributes),
+            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date, attributes),
+        ], dryRun: false);
+        if (existingFacet)
+        {
+            var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now.AddMinutes(-2), effectiveDate: date);
+            var initialLease = await store.AcquireAsync(initial.TaskId, 1, now.AddMinutes(-2), TimeSpan.FromMinutes(5));
+            Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken, now.AddMinutes(-1),
+                new(CollectionAttemptResult.Succeeded, StageOutcomes:
+                [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)])));
+        }
+        Assert.IsTrue((await store.MergeLegacyRaceDetailsAsync(false, now)).DryRun);
+        Assert.IsEmpty((await store.MergeLegacyRaceDetailsAsync(true, now)).Errors);
+        var migrated = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
+        var card = migrated.Single(x => x.Artifact == RaceArtifactKind.Card);
+        Assert.AreEqual(1, card.AppliedRevision, "Legacy extractor revision 7 maps to unified revision 1.");
+        Assert.AreEqual(existingFacet ? now.AddMinutes(-1) : now.AddDays(-10), card.LastPersistedAt);
+        Assert.AreEqual(0, (await store.MergeLegacyRaceDetailsAsync(true, now.AddSeconds(1))).SourceResources);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "upgrade", false);
+        var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged, now.AddSeconds(2));
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = race => new(race, "created-race", [1], [], "https://example.test/result", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow(), _ => results, timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(lease!, CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease!.LeaseToken, now.AddSeconds(3), completion));
+        var after = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
+        Assert.AreEqual(RaceArtifactStatus.Unavailable, after.Single(x => x.Artifact == RaceArtifactKind.Card).Status);
+        Assert.AreEqual(card.LastPersistedAt, after.Single(x => x.Artifact == RaceArtifactKind.Card).LastPersistedAt);
+        Assert.AreEqual(2, after.Single(x => x.Artifact == RaceArtifactKind.Result).AppliedRevision);
+    }
+
+    [TestMethod]
+    [DataRow(true, true)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    public async Task LegacyRaceMigration_PreservesUnifiedRevisionAndPreview(bool unifiedComplete, bool legacyComplete)
+    {
+        var store = CreateStore();
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var definition = new CollectionDefinitionId("race-detail");
+        await store.RegisterDefinitionAsync(new("race-result"), "Result", ResourceType.RaceResult, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "unified", false);
+        await store.InitializeFromDomainDataAsync([
+            new(new(ResourceType.RaceResult, "JRA", "legacy-result"), new("race-result"), 7, now.AddDays(-10), date,
+                new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" }, IsComplete: legacyComplete),
+            new(resource, definition, 2, now.AddDays(-1), date, new Dictionary<string, string>(), IsComplete: unifiedComplete),
+        ], dryRun: false);
+        var before = (await store.GetStateAsync(resource, definition))!;
+        var preview = await store.MergeLegacyRaceDetailsAsync(false, now);
+        var applied = await store.MergeLegacyRaceDetailsAsync(true, now);
+        Assert.IsEmpty(applied.Errors);
+        Assert.AreEqual(unifiedComplete ? 0 : 1, preview.SupplementRequests);
+        Assert.AreEqual(preview.SupplementRequests, applied.SupplementRequests);
+        var after = (await store.GetStateAsync(resource, definition))!;
+        Assert.AreEqual(before.RequiredRevision, after.RequiredRevision);
+        Assert.AreEqual(before.AppliedRevision, after.AppliedRevision);
+        Assert.AreEqual(before.LastCollectedAt, after.LastCollectedAt);
+        Assert.AreEqual(unifiedComplete ? CollectionStateStatus.Current : CollectionStateStatus.Pending, after.Status);
+        if (!unifiedComplete)
+            Assert.AreEqual(2, (await store.GetTasksAsync()).Single().RequestedRevision);
+    }
+
+    [TestMethod]
+    [DataRow(true, true)]
+    [DataRow(false, true)]
+    [DataRow(false, false)]
+    public async Task LegacyRaceMigration_OnlyImportsKnownPersistenceEvidence(bool knownTimestamp, bool existingFacet)
+    {
+        var store = CreateStore();
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        var date = new DateOnly(2026, 9, 1);
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var definition = new CollectionDefinitionId("race-detail");
+        await store.RegisterDefinitionAsync(new("race-card"), "Card", ResourceType.RaceCard, 7, "legacy", false);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "unified", false);
+        await store.InitializeFromDomainDataAsync([
+            new(new(ResourceType.RaceCard, "JRA", "legacy-card"), new("race-card"), 7, now.AddDays(-10), date,
+                new Dictionary<string, string> { ["course"] = "Tokyo", ["number"] = "1" }),
+            new(resource, definition, 2, now.AddDays(-1), date, new Dictionary<string, string>()),
+        ], dryRun: false);
+        await using (var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options))
+        {
+            var target = await db.Resources.SingleAsync(x => x.Type == ResourceType.Race);
+            if (existingFacet)
+                db.RaceArtifactStates.Add(new RaceArtifactStateEntity
+                {
+                    ResourcePk = target.ResourcePk,
+                    Artifact = RaceArtifactKind.Card,
+                    Status = RaceArtifactStatus.Blocked,
+                    AppliedRevision = 0,
+                    RequiredRevision = 2,
+                    ErrorCode = "KeepError",
+                    UpdatedAt = now.AddDays(-1),
+                });
+            if (!knownTimestamp)
+                (await db.States.SingleAsync(x => x.DefinitionId == "race-card")).LastCollectedAt = null;
+            await db.SaveChangesAsync();
+        }
+        Assert.IsEmpty((await store.MergeLegacyRaceDetailsAsync(true, now)).Errors);
+        var artifacts = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
+        if (!existingFacet)
+        {
+            Assert.IsEmpty(artifacts, "A legacy Current flag without a persistence timestamp is not proof of collection.");
+            return;
+        }
+        var card = artifacts.Single();
+        Assert.AreEqual(knownTimestamp ? 1 : 0, card.AppliedRevision);
+        Assert.AreEqual(knownTimestamp ? now.AddDays(-10) : (DateTimeOffset?)null, card.LastPersistedAt);
+        Assert.AreEqual(2, card.RequiredRevision);
+        Assert.AreEqual(RaceArtifactStatus.Blocked, card.Status);
+        Assert.AreEqual("KeepError", card.ErrorCode);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
