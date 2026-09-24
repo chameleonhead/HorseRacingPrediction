@@ -289,6 +289,16 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 "対象Raceは出馬表の探索対象期間外であり、馬主情報は現行の公式取得元から補正できません。",
                 StageOutcomes: stageOutcomes);
         }
+        if (!requiresCard && !cardAlreadyCurrent
+            && string.Equals(task.Attributes.GetValueOrDefault("cardRevisionUpgradeRequired"), "true",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            // Historical Result-only success is valid, but must not imply that a retained
+            // Card was upgraded. Preserve its old revision/save time and expose the gap.
+            stageOutcomes.Add(new("ResolveCardRevision", RaceArtifactKind.Card,
+                CollectionAttemptResult.NotApplicable, "OfficialRaceCardOutsideLookupPeriod",
+                "保存済み出馬表の版数更新は公式探索期間外のため実行できません。旧版の保存データを保持します。"));
+        }
         foreach (var location in requiresCard
                      ? (task.Locations ?? []).Where(x => IsCandidateForArtifact(
                          x, RaceArtifactKind.Card, ResourceType.RaceCard, raceId))

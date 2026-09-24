@@ -42,7 +42,7 @@
     "reason": "Active effort not measured"
   },
   "startRevision": "ff95b22499312462194a970b038dcc9d959163bd",
-  "endRevisionOrPatch": "read-only review findings in evidence/verification.md",
+  "endRevisionOrPatch": "read-only review findings in evidence/verification.md and evidence/operations.md; deployment guards and historical Card partial-success closure",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
@@ -50,7 +50,7 @@
     "independentChallenge": "Stale revision and deterministic time issues closed. Cancellation continuation review exposed partial-failure evidence loss; Lead added failure-classifier-preserving completion and counterexample, reviewer rechecked closure.",
     "retries": 0,
     "leadCorrections": 0,
-    "reviewPasses": 6,
+    "reviewPasses": 10,
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,

@@ -736,6 +736,7 @@ public sealed partial class CollectionPlatformStore
                 taskAttributes["officialStartAt"] = officialStartAt.ToString("O");
             if (resource.Type == ResourceType.Race)
             {
+                taskAttributes.Remove("cardRevisionUpgradeRequired");
                 var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
                     x.ResourcePk == resource.ResourcePk).ToListAsync(cancellationToken).ConfigureAwait(false);
                 foreach (var facet in facets)
@@ -745,6 +746,9 @@ public sealed partial class CollectionPlatformStore
                     var effectiveStatus = facet.Status == RaceArtifactStatus.Current
                         && facet.AppliedRevision < task.RequestedRevision
                             ? RaceArtifactStatus.Due : facet.Status;
+                    if (facet.Artifact == RaceArtifactKind.Card && facet.AppliedRevision > 0
+                        && facet.AppliedRevision < task.RequestedRevision)
+                        taskAttributes["cardRevisionUpgradeRequired"] = "true";
                     taskAttributes[facet.Artifact == RaceArtifactKind.Card
                         ? "cardArtifactStatus" : "resultArtifactStatus"] = effectiveStatus.ToString();
                 }
@@ -2400,8 +2404,15 @@ public sealed partial class CollectionPlatformStore
                 {
                     var pks = group.Select(x => x.Source.ResourcePk).ToArray();
                     var groupStates = db.States.AsNoTracking().Where(x => pks.Contains(x.ResourcePk)).ToList();
-                    var cardCurrent = groupStates.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current);
-                    var resultCurrent = groupStates.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current);
+                    var unifiedState = db.States.AsNoTracking().Join(db.Resources.Where(x => x.Type == ResourceType.Race
+                            && x.Provider == group.Key.Provider && x.ResourceId == group.Key.Id),
+                        state => state.ResourcePk, resource => resource.ResourcePk, (state, _) => state)
+                        .SingleOrDefault(x => x.DefinitionId == "race-detail");
+                    if (unifiedState is not null)
+                        return unifiedState.Status != CollectionStateStatus.Current
+                            || unifiedState.AppliedRevision < unifiedState.RequiredRevision;
+                    var cardCurrent = groupStates.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current && x.LastCollectedAt != null);
+                    var resultCurrent = groupStates.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current && x.LastCollectedAt != null);
                     var date = group.First().Date;
                     return date > previewToday || (date >= previewToday.AddDays(-5)
                         ? !(cardCurrent && resultCurrent) : !resultCurrent);
@@ -2511,20 +2522,74 @@ public sealed partial class CollectionPlatformStore
                 var states = await db.States.Where(x => sourcePks.Contains(x.ResourcePk)
                     && (x.DefinitionId == "race-card" || x.DefinitionId == "race-result"))
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
-                var cardCurrent = states.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current);
-                var resultCurrent = states.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current);
+                var cardCurrent = states.Any(x => x.DefinitionId == "race-card" && x.Status == CollectionStateStatus.Current && x.LastCollectedAt != null);
+                var resultCurrent = states.Any(x => x.DefinitionId == "race-result" && x.Status == CollectionStateStatus.Current && x.LastCollectedAt != null);
                 var requiresCard = first.Date >= today.AddDays(-5);
                 var complete = first.Date > today ? false : requiresCard ? cardCurrent && resultCurrent : resultCurrent;
                 var targetState = await db.States.SingleOrDefaultAsync(x => x.ResourcePk == target.ResourcePk
                     && x.DefinitionId == "race-detail", cancellationToken).ConfigureAwait(false);
-                targetState ??= new CollectionStateEntity { ResourcePk = target.ResourcePk, DefinitionId = "race-detail" };
-                if (db.Entry(targetState).State == EntityState.Detached) db.States.Add(targetState);
-                targetState.RequiredRevision = 1;
-                targetState.AppliedRevision = complete ? 1 : 0;
-                targetState.Status = complete ? CollectionStateStatus.Current : CollectionStateStatus.Pending;
-                targetState.LastCollectedAt = states.Select(x => x.LastCollectedAt).DefaultIfEmpty().Max();
-                targetState.NextCollectionAt = complete ? null : now;
-                targetState.UpdatedAt = now;
+                if (targetState is null)
+                {
+                    targetState = new CollectionStateEntity
+                    {
+                        ResourcePk = target.ResourcePk,
+                        DefinitionId = "race-detail",
+                        RequiredRevision = 1,
+                        AppliedRevision = complete ? 1 : 0,
+                        Status = complete ? CollectionStateStatus.Current : CollectionStateStatus.Pending,
+                        LastCollectedAt = states.Select(x => x.LastCollectedAt).DefaultIfEmpty().Max(),
+                        NextCollectionAt = complete ? null : now,
+                        UpdatedAt = now,
+                    };
+                    db.States.Add(targetState);
+                }
+                else
+                {
+                    // Unified state is authoritative: legacy evidence cannot satisfy or
+                    // downgrade a newer revision. Replace cancelled work at its required revision.
+                    complete = targetState.Status == CollectionStateStatus.Current
+                        && targetState.AppliedRevision >= targetState.RequiredRevision;
+                    if (!complete)
+                    {
+                        targetState.Status = CollectionStateStatus.Pending;
+                        targetState.NextCollectionAt = now;
+                        targetState.UpdatedAt = now;
+                    }
+                }
+                // Preserve collected artifact evidence before removing legacy states. Legacy
+                // extractor versions map to unified revision 1, just like requests/tasks.
+                // An existing unified facet is authoritative and must not be overwritten.
+                foreach (var sourceGroup in states.Where(x => x.Status == CollectionStateStatus.Current && x.LastCollectedAt != null)
+                             .GroupBy(x => x.DefinitionId))
+                {
+                    var artifact = sourceGroup.Key == "race-card" ? RaceArtifactKind.Card : RaceArtifactKind.Result;
+                    var sourceState = sourceGroup.OrderByDescending(x => x.LastCollectedAt).First();
+                    var existingFacet = await db.RaceArtifactStates.SingleOrDefaultAsync(x => x.ResourcePk == target.ResourcePk
+                        && x.Artifact == artifact, cancellationToken).ConfigureAwait(false);
+                    if (existingFacet is not null)
+                    {
+                        // Retain availability, errors and newer revision requirements; only
+                        // fill absent historical persistence evidence from a known collection.
+                        if (existingFacet.AppliedRevision == 0 && existingFacet.LastPersistedAt is null)
+                        {
+                            existingFacet.AppliedRevision = 1;
+                            existingFacet.LastPersistedAt = sourceState.LastCollectedAt;
+                            existingFacet.UpdatedAt = now;
+                        }
+                        continue;
+                    }
+                    db.RaceArtifactStates.Add(new RaceArtifactStateEntity
+                    {
+                        ResourcePk = target.ResourcePk,
+                        Artifact = artifact,
+                        Status = RaceArtifactStatus.Current,
+                        AppliedRevision = 1,
+                        RequiredRevision = 1,
+                        LastPersistedAt = sourceState.LastCollectedAt,
+                        LastObservedAt = now,
+                        UpdatedAt = now,
+                    });
+                }
                 db.States.RemoveRange(states);
                 stateCount += states.Count;
                 if (!complete)
@@ -2534,7 +2599,7 @@ public sealed partial class CollectionPlatformStore
                         RequestId = Guid.NewGuid(),
                         ResourcePk = target.ResourcePk,
                         DefinitionId = "race-detail",
-                        RequestedRevision = 1,
+                        RequestedRevision = Math.Max(1, targetState.RequiredRevision),
                         Reason = CollectionReason.DefinitionChanged,
                         Lane = CollectionLane.Realtime,
                         Priority = (int)CollectionPriority.High,
@@ -2547,7 +2612,7 @@ public sealed partial class CollectionPlatformStore
                         RequestId = request.RequestId,
                         ResourcePk = target.ResourcePk,
                         DefinitionId = "race-detail",
-                        RequestedRevision = 1,
+                        RequestedRevision = Math.Max(1, targetState.RequiredRevision),
                         Status = CollectionTaskStatus.Ready,
                         Lane = CollectionLane.Realtime,
                         Priority = (int)CollectionPriority.High,

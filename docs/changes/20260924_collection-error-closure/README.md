@@ -28,7 +28,7 @@ Approval: 2026-09-24、利用者が「改修を進めてください。対処を
 | --- | --- | --- |
 | Code | In progress | metadata継承統合、Current Result証拠保持、revision不足再収集を修正済み。追加承認された中止開催sliceを実装・検証中。 |
 | Verification | In progress | 今回sliceは全体1198 passed・既存1skip、追加の実サイト2件成功、独立指摘閉鎖。本番の代表成功・後続進行は未確認。 |
-| Deployment/operation | Externally blocked | AWS認証期限切れ。配備版/操作許可未確定。配備・再開・補正は未実行。 |
+| Deployment/operation | In progress | 既存CI/CDによる配備は明示許可済み。PR66 merge後の配備は追加review対応のため本番変更前にcancel。限定Recovery/resume承認待ち、再開・補正は未実行。 |
 
 ## Context
 
@@ -101,7 +101,7 @@ Approval: 2026-09-24、利用者が「改修を進めてください。対処を
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 停止・revision・patch・原因対応確定 | Main（調査補助: explorer） | Lead + Worker | Design approval | read-only | AC1,AC5 matrix、Mainによる原証拠照合 | 未取得: revision/attempt/patch matrixを提出 | In progress | Lead — 未確定原因・配備契約判断。既存patchの呼出経路探索のみexplorerへ分離 | T1-A1 | unavailable; retries 0; corrections 0; reviews 1 |
+| T1 | 停止・revision・patch・原因対応確定 | Main（調査補助: explorer） | Lead + Worker | Design approval | read-only | AC1,AC5 matrix、Mainによる原証拠照合 | baseline/operations: 停止原因と残存Owner/profileの証拠境界を確認、runtime版未確認 | In progress | Lead — 未確定原因・配備契約判断。既存patchの呼出経路探索のみexplorerへ分離 | T1-A1 | unavailable; retries 0; corrections 0; reviews 2 |
 | T2 | 既存patch統合と必要な原因修正、回帰 | Main（今回coding委譲なし） | Lead | T1、原因別設計承認 | Mainが永続化・共有契約・統合を所有。workerはdispatch前に専用recordへ列挙した実ファイルのみ | AC2,AC4 tests、独立反例、既存regression | 未取得: attributable diff、test結果、独立反例を提出 | In progress | Lead — persistence/concurrency/integration。既知局所sliceは既実装を検証 | none | unavailable; retries 0; corrections 0; reviews 0; 未実行 |
 | T3 | 許可された復旧と本番完了確認 | 原因別解消taskのMain（本番操作owner）、独立review担当 | Lead + Review | T2、明示的operation許可 | 本番writeは指定Main一人。review担当はread-only | AC3-6 read-back、配備/復旧チェックリスト | 未取得: 許可対象・配備revision・観測時刻・保存結果を提出 | Dependent | Lead — 本番権限・データ安全・最終判定。高risk差分は別default agentが独立review | none | unavailable; retries 0; corrections 0; reviews 0; 未実行 |
 | T1a | clean統合基準とpatch包含表を確定 | Main + explorer | Lead | Approval | read-only、Mainだけbaseline記録 | 実行仕様§1/3; SHAとsymbol比較 | baseline.md: ff95b224+metadata差分、配備unknownを明記 | Verified | Lead — integration/配備基準判断。経路探索はexplorer | none | unavailable; retries 0; corrections 0; reviews 0 |
@@ -112,8 +112,8 @@ Approval: 2026-09-24、利用者が「改修を進めてください。対処を
 | T2b | Card/Result・振替の統合整合を確認/修正 | 解消task Main | Lead | T1a,T2a | S2、PR65のdomain/API/schema依存とV2/V5 | V2/V5、identity/write反例 | verification.md: Card/Result実保存・版数反例を閉鎖 | Verified | Lead — public contract/persistence/migration | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T2c | metadata継承patchを欠落なく統合 | 解消task Main | Lead | T1a、Store排他owner確保 | S3とV3 tests | V3、Collector非External | verification.md: Collector300件成功、別Resource/Definition混入なし | Verified | Lead — persistence/overlapping writes | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T2d | wake競合と既知/未知停止境界を閉鎖 | 解消task Main | Lead | T1a,T1b、T2cのStore編集終了 | S4、V4 tests | V4、Collector非External | PR65 wake隔離保持、Collector300件にV4回帰包含。現在停止の追加契約はT2f | Verified | Lead — concurrency/fencing、安全分類判断 | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T2e | 統合CI相当と独立高risk review | Main + default reviewer | Lead + Review | 今回配備sliceのT2a-T2d | read-only | V1-V6、実行仕様§5全gate | verification.md: 現sliceの全体1198件/外部2件とreview閉鎖。operations.md: 配備shell17反例。未確定残存sliceに依存 | Dependent | Lead — integration/final acceptance。reviewerは独立反例 | T2e-A1 | unavailable; retries 0; corrections 0; reviews 6 |
-| T3a | 許可済み配備・限定回復・連続観測 | 解消task Main | Lead | T2e、operation明示許可 | 実行仕様O1-O7の許可対象のみ | 代表最大5件、各原因1件開始、次のtask成功 | AWS再認証と個別操作許可待ち。production writeなし | Externally blocked | Lead — destructive/production safety | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T2e | 統合CI相当と独立高risk review | Main + default reviewer | Lead + Review | 今回配備sliceのT2a-T2d | read-only | V1-V6、実行仕様§5全gate | verification.md: 全体1198件/外部2件。operations.md: shell17反例、Historical Card部分成功と移行13反例の追加review閉鎖。残存sliceは未確定 | In progress | Lead — integration/final acceptance。reviewerは独立反例 | T2e-A1 | unavailable; retries 0; corrections 0; reviews 10 |
+| T3a | 許可済み配備・限定回復・連続観測 | 解消task Main | Lead | T2e、operation明示許可 | 実行仕様O1-O7の許可対象のみ | 代表最大5件、各原因1件開始、次のtask成功 | 既存CI/CD配備許可済み、追加closure後に配備。限定Recovery/resumeは個別承認待ち | In progress | Lead — destructive/production safety | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T3b | Card/Resultの件数・時刻で受入判定 | Main | Lead | T3a、必要checkpoint到来 | read-only、evidenceのみ | 実行仕様§7、既存設定値照合 | 未取得: 分母、成功/Unavailable/unknown、取得時刻 | Dependent | Lead — final acceptance/将来観測の誤認防止 | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T3c | 全対象原因の改修完了と親子recordを照合 | Main | Lead | 全対象のT2e/T3a、T3b | 本recordとclosure evidenceのみ | AC7 closure matrix、AC1-AC6照合 | 未取得: 全対象Verified、改修積み残し0 | Dependent | Lead — final acceptance/子task移管による偽完了防止 | none | unavailable; retries 0; corrections 0; reviews 0 |
 
@@ -187,6 +187,8 @@ T1/T2/T3はAC群の統合責任、末尾英字taskは実行可能なsliceであ�
 ## Execution checkpoint / next action
 
 公開・本番操作の最新gateは [operations](evidence/operations.md)。2026-09-24の追加指示により専用branch/commit/pushを開始。Actions可否・AWS再認証・対象限定本番操作のgateは別管理とする。
+
+最新checkpoint: 利用者は既存CI/CDを許可、新Workflowは禁止。AWSローカル認証待ちはCI/CD配備を阻害しない。PR66はmerge済みだが本番未配備。次はHistorical Card部分成功明示の追加修正を既存CIで検証・review後mergeし、既存app-deployを観測する。未コミット対象はこの追加closureのStore/handler/tests、docs27、専用record/auditのみ。限定Recovery通知はoperations記載の1件で回答待ち。先行する旧checkpointの「Actions未許可/AWS再認証後のみ配備」は本段で更新する。
 
 現在の正規状態は上記Task planと本節。以下の旧review箇条書きは設計時点の履歴であり、未承認を意味しない。
 [baseline](evidence/baseline.md) / [検証](evidence/verification.md) / [追加設計案](decisions/cancelled-meeting-discovery.md) を参照。
