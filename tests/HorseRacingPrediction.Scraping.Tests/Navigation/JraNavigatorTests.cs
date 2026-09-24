@@ -14,6 +14,40 @@ public sealed class JraNavigatorTests
     private const string CalendarUrl = "https://www.jra.go.jp/keiba/calendar/";
 
     [TestMethod]
+    public async Task ToRaceListAsync_AfterCancellationProgramme_ContinuesNormalNavigation()
+    {
+        var browser = new FakeWebBrowser();
+        var date = new DateOnly(2026, 9, 21);
+        var programmeUrl = JraMeetingCancellationParser.ProgrammeUrl(date).AbsoluteUri;
+        browser.SetSnapshot(programmeUrl, SemanticSnapshotFactory.Create(programmeUrl,
+            root: new()
+            {
+                Kind = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentKind.Document,
+                Children = [new()
+                {
+                    Kind = HorseRacingPrediction.Scraping.Browser.Snapshots.PageContentKind.Heading,
+                    HeadingLevel = 1, Text = "2026年9月21日 競馬番組",
+                }],
+            },
+            tables: [
+                new() { Caption = "4回中山7日", Rows = [new() { Cells = [new() { Text = "中山競馬は台風のため中止。", ColumnSpan = 3 }] }] },
+                new() { Caption = "4回阪神7日", Rows = [new() { Cells = [new() { Text = "R", IsHeader = true }, new() { Text = "発走時刻", IsHeader = true }, new() { Text = "レース名", IsHeader = true }] }, new() { Cells = [new() { Text = "1R" }, new() { Text = "10:00" }, new() { Text = "テスト" }] }] },
+            ]));
+        const string listUrl = "https://www.jra.go.jp/JRADB/accessD.html?CNAME=test";
+        browser.SetSnapshot(CalendarUrl, BuildCalendarSnapshot(CalendarUrl, []));
+        browser.SetClickDestination("出馬表", MeetingSelectionUrl);
+        browser.SetSnapshot(MeetingSelectionUrl, BuildMeetingSelectionSnapshot(MeetingSelectionUrl, "9月5日 4回中山1日"));
+        browser.SetClickDestination("4回中山1日", listUrl);
+        browser.SetSnapshot(listUrl, BuildRaceListSnapshot(listUrl));
+        var navigator = new JraNavigator(browser, CreateReader(browser));
+        Assert.IsNotNull(await navigator.ReadMeetingCancellationAsync(date, RaceCourse.Nakayama));
+        var page = (JraRaceListPage)await navigator.ToRaceListAsync(new(2026, 9, 5), RaceCourse.Nakayama);
+        Assert.AreEqual(new DateOnly(2026, 9, 5), page.Date);
+        Assert.AreEqual(RaceCourse.Nakayama, page.Course);
+        Assert.AreEqual(listUrl, browser.CurrentUrl);
+    }
+
+    [TestMethod]
     [DataRow("/datafile/meikan/trainer.html", true)]
     [DataRow("/datafile/meikan/trainer.html?initial=a", true)]
     [DataRow("trainer.html", true)]

@@ -11,6 +11,22 @@ public sealed class RaceListPageParserTests
 {
     private const string Url = "https://www.jra.go.jp/keiba/sample/racelist/";
 
+    [TestMethod]
+    [DataRow("https://www.jra.go.jp/keiba/calendar2026/2026/9/0921.html", false)]
+    [DataRow("https://www.jra.jp/keiba/calendar2026/2026/9/0921.html", false)]
+    [DataRow("https://www.jra.go.jp/JRADB/accessD.html?CNAME=list", true)]
+    public void CanParse_ProgrammeIsNotRaceList_UnknownListFailureRemainsVisible(string url, bool expected)
+    {
+        var snapshot = new TestPageSnapshot(url, "2026年9月21日 競馬番組", [new TestPageSection(
+            title: "競馬番組", mainText: string.Empty, links: [], actions: [],
+            tables: [new TestPageTable(Headers: ["R", "発走時刻", "レース名"], Rows: [["1R", "10:00", "レース"]])],
+            headings: ["2026年9月21日 競馬番組"])]);
+        var parser = new RaceListPageParser();
+        Assert.AreEqual(expected, parser.CanParse(snapshot));
+        if (expected)
+            Assert.ThrowsExactly<JraPageParseException>(() => parser.Parse(snapshot));
+    }
+
     private static TestPageSnapshot BuildSnapshot()
     {
         var table = new TestPageTable(

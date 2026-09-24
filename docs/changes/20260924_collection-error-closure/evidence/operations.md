@@ -1,6 +1,19 @@
 # 公開・配備・安定稼働確認
 
+## 2026-09-24 停止解除の判断権限
+
+利用者「停止状態は任意に判断して解除してください」により、安全確認後のpipeline resumeをMain判断で実行可能とする。既知原因の修正配備13966c9c/all jobs successと、停止理由が同じ中止開催discovery通知であることを再確認した。今回まずresumeのみ1回、失敗通知Recovery・履歴削除・未知データ補正は行わない。既存待機taskの再開を観測し、新たな未知停止や同原因再停止では解除を反復しない。Mainが本番操作・判断・本recordを排他所有し、短い直列操作のため委譲なし（T3a/AC3,4）。事前Running/health確認→POST resume→GET状態→最大10分のtask進行観測を行う。既定dispatchは1秒/5秒だがruntime設定は未取得、周期完了や安定稼働を推測しない。親recordはApprovedを維持する。
+
+実行:21:56:35.1517329 JST resume1回、直後GET paused=false。task32ce5564-43b3-4073-8671-a95e1e6988bf（20260920:Nakayama:3/race-detail）は21:57:16成功、Applied/Required2、LastCollectedAt更新。ただしfacet空のためCard/Result個別保存完了とは断定しない。後続discovery task2c26ac7a-6a46-45bd-bf4a-fe6630b7bc82（discovery:2026092000）が21:58:22にJraPageParseExceptionで失敗し再停止、追加resumeなし。CollectedMeetings7/CancelledMeetings1の証拠を保持、9/21番組URLでRaceListの競馬場解析失敗。
+AC2/4/7の局所closure: 中止確認で残った日別番組ページの通常開催表をRaceList parserが誤認し、次のnavigationのcurrent-page最適化が例外になる。番組全体を単一courseへ推測せず、既知の公式日別番組URLはRaceList分類対象外とする。未知JRADB parse failureの安全停止は維持。Mainがparser/回帰/E2E/本recordを排他所有（page identity判断と統合検証不可分、短いfixtureの分割費用過大）。既存read-only explorerのT1-A1 continuationで経路を独立確認、telemetry不明。CodeGraph exploreはindex不在でfallbackを明示、rg使用。回帰は番組ページの取消確認→同一sessionで正常開催へ移動と、通常一覧/未知解析失敗保持。実サイトでも連続navigationを検証してから既存CI/CDへ進む。
+
 ## 2026-09-24 公開開始
+
+分類修正の公開前gate: Release solution build成功（0 warning/error）、全体非Externalは1213 passed /既存1 skipped、format全体verify成功、audit/DDD各validator成功、diff check成功。次は専用branchへcommit/push→既存app-ciとreview→merge→既存app-deploy→GETとMain判断resume→代表/後続観測。変更10ファイルは全てこのclosure、目的外未コミットなし。親AC3/6/7は未検証のまま。
+
+独立review T2e-A1 continuation11: blockingなし。公式exact host/path除外、JRADBの解析失敗保持、current-page probeから通常遷移を独立照合。fakeは別日正常遷移、同日別場はlive E2Eで検証というcoverage境界を記録。本番観測は別gate。requested gpt-6-sol/high、observed model/usageは取得不能、再指摘・昇格なし。Release buildは警告/エラー0。T1-A1 continuation3の経路仮説はMainのred→greenとliveで反証確認。
+
+直前closure検証: `ToRaceListAsync_AfterCancellationProgramme_ContinuesNormalNavigation` は修正前に本番同形のJraPageParseExceptionで失敗、修正後成功。focused72件、Scraping非External277件、実サイトsame-session1件成功。既知番組URL除外と未知JRADB一覧のparse failure維持を反例で確認。全solutionのCIと同じformat verify成功。Release build、全体regression、独立reviewと配備/本番観測は続行中。外部情報の追加取得元・停止policy・永続化・ID契約は変更しない。JRA site contract impact: Updated（正本27の日別番組と一覧の境界）。
 
 利用者の「変更をプッシュした上で、安定稼働まで面倒を見てもらえますか？」により、承認済み修正のbranch/commit/pushを許可。現在の基準mainはff95b224でfetch後も不変。
 独立worktreeの本変更だけを専用branch `codex/collection-error-closure` へ公開する。元作業ツリーのUI/Program/skill等の変更は含めない。
