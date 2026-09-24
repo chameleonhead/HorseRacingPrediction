@@ -182,7 +182,8 @@ public sealed class CollectionPlatformWorkerClient
             new CompleteRequest(leaseToken, completion.Result, completion.ErrorCode, completion.ErrorMessage,
                 completion.RequestedUrl?.ToString(), completion.FinalUrl?.ToString(), completion.HttpStatusCode,
                 completion.PageIdentification, completion.RetryAt, completion.NextCollectionAt,
-                completion.LocationOutcomes, completion.FailureImpact), cancellationToken)
+                completion.LocationOutcomes, completion.FailureImpact, completion.StageOutcomes,
+                completion.RaceEvidence), cancellationToken)
             .ConfigureAwait(false);
         completeResponse.EnsureSuccessStatusCode();
     }
@@ -191,7 +192,8 @@ public sealed class CollectionPlatformWorkerClient
         string? ErrorCode, string? ErrorMessage, string? RequestedUrl, string? FinalUrl,
         int? HttpStatusCode, string? PageIdentification, DateTimeOffset? RetryAt,
         DateTimeOffset? NextCollectionAt, IReadOnlyList<ResourceLocationOutcome>? LocationOutcomes,
-        CollectionFailureImpact FailureImpact);
+        CollectionFailureImpact FailureImpact, IReadOnlyList<CollectionStageOutcome>? StageOutcomes,
+        RaceSchedulingEvidence? RaceEvidence);
 }
 
 public sealed class CollectionTaskActiveElsewhereException(Guid taskId)

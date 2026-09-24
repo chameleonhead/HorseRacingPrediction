@@ -50,7 +50,7 @@
     "independentChallenge": "Stale revision and deterministic time issues closed. Cancellation continuation review exposed partial-failure evidence loss; Lead added failure-classifier-preserving completion and counterexample, reviewer rechecked closure.",
     "retries": 0,
     "leadCorrections": 0,
-    "reviewPasses": 11,
+    "reviewPasses": 13,
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,

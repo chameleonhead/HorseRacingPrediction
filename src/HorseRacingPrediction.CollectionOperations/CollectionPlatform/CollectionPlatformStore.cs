@@ -818,9 +818,13 @@ public sealed partial class CollectionPlatformStore
                         FinalUrl = stage.FinalUrl?.AbsoluteUri,
                         Persisted = stage.Persisted,
                     });
-                    var facet = await db.RaceArtifactStates.SingleOrDefaultAsync(x =>
-                        x.ResourcePk == task.ResourcePk && x.Artifact == stage.Artifact, cancellationToken)
-                        .ConfigureAwait(false);
+                    // Earlier stages may have added this facet in the same completion.
+                    // Database queries do not return those not-yet-saved tracked rows.
+                    var facet = db.RaceArtifactStates.Local.SingleOrDefault(x =>
+                        x.ResourcePk == task.ResourcePk && x.Artifact == stage.Artifact)
+                        ?? await db.RaceArtifactStates.SingleOrDefaultAsync(x =>
+                            x.ResourcePk == task.ResourcePk && x.Artifact == stage.Artifact, cancellationToken)
+                            .ConfigureAwait(false);
                     if (facet is null)
                     {
                         facet = new RaceArtifactStateEntity
