@@ -80,3 +80,5 @@ if ($workflow.Contains('stop api || true') -or -not $workflow.Contains('Uncheckp
 if ($workflow -notmatch 'script: \|\r?\n            set -eu\r?\n            mkdir -p "\$APP_DIRECTORY/data"') {
     throw 'Remote restart must abort on failed commands'
 }
+# GitHub's pwsh wrapper propagates LASTEXITCODE; expected negative cases must not fail the step.
+exit 0

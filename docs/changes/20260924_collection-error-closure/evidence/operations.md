@@ -32,3 +32,5 @@ Mainが成功/失敗/元paused/応答不正のshell反例を実行し、既存re
 再reviewのdrain中未知障害反例を受け、元稼働の自動resumeにも要対応failure0件のGET検査を追加。新旧問わず残件があれば停止維持する保守的gate。17 shell反例成功。17件はjq/curlのoutcome stubによる実shell検証であり、本番動作の証明ではない。現在の正本docs/11へ同時反映。
 
 最終read-only再reviewで上記反例閉鎖を確認。MainはSSH scriptにset -euを明記し、stop/copy等の失敗後に処理が継続しないことを静的gateへ追加。reviewerの継続3回をT2e-A1へ追記（累計6回、usage不明）。残存するoperator pauseとresume間の競合には条件付きAPIが必要だが、現在の本番は元からpausedで自動resumeを通らない。本sliceで新たな本番再開権限を追加しない。
+
+PR #66、app-ci run35992648221は17反例全件PASS後にpwsh wrapperのLASTEXITCODE伝播で失敗。最後の意図した負ケースの1が残るtest harness局所欠陥で、成功終端exit 0を明示して再検証する。実際のassert/throwは引き続き失敗する。配備は未開始。
