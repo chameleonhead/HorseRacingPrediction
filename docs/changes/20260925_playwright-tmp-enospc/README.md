@@ -77,7 +77,8 @@ Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に�
 ### D4. runtime telemetry の整合
 
 - `lambdaRequestId=local-*` が本当に local queue を示すのか、bootstrap header parsing の欠落なのかを CloudWatch と invocation metadata で確定する。
-- API task/attempt/batch の相関 ID が実行基盤を誤表示する場合、同じ change 内で bootstrap の bounded parsing test と修正を行う。ただし public API schema 変更が必要なら本 record を更新して再承認する。
+- この確認は実装対象を決める事実 gate である。Lambda bootstrap が実行経路と確認できるまで、bootstrap 修正を恒久対策として確定しない。local queue、別 container、または correlation 欠落が確認された場合は、その実経路へ設計を更新して再承認を得る。
+- API task/attempt/batch の相関 ID が実行基盤を誤表示する場合も、原因経路と telemetry defect を分離して扱う。public API schema または実装対象の変更が必要なら本 record を更新して再承認する。
 
 ## Documentation updates
 
@@ -93,10 +94,10 @@ Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に�
 | C2 | `/tmp` には runtime、Chromium、他ライブラリの資源もある。 | 広域削除で実行中 process や診断を破壊。 | 固定 app-owned root、marker、active lease、symlink 非追跡を全て満たす child だけ削除。 | AC2,AC3/T2/V2-V6 | 強く推奨。共有 `/tmp` cleanup には反対。 | Pending | Resolved in design |
 | C3 | abrupt termination では同一 invocation の finally は信用できない。 | warm environment に残留し再発。 | invocation 終了 cleanup と次回起動 stale cleanup の二層化。強制終了後の forward test を必須化。 | AC2/T2/V4 | 推奨 | Pending | Resolved in design |
 | C4 | stale 判定と次 invocation が競合し得る。reserved concurrency 1 も将来変更され得る。 | active directory の誤削除。 | active lease を明示し、並行利用反例を test。concurrency 設定だけには依存しない。 | AC3/T2/V5 | 推奨 | Pending | Resolved in design |
-| C5 | latest `local-*` correlation と Lambda 想定が矛盾する。 | 修正対象 runtime の誤認、CloudWatch 誤相関。 | AWS 再認証後に read-only logs/config と batch 時刻を照合。schema 変更は再承認境界。 | AC1/T1/V1 | 推奨 | Pending | Resolved in design |
+| C5 | latest `local-*` correlation と Lambda 想定が矛盾する。AWS read-only session 期限切れのため実行基盤を確定できていない。 | 修正対象 runtime の誤認、CloudWatch 誤相関。 | AWS 再認証後に read-only logs/config と batch 時刻を照合。実行基盤を確定するまで実装対象を凍結せず、恒久復旧を主張しない。 | AC1/T1/V1 | この事実 gate 未充足で実装承認へ進むことに反対 | Pending | Open decision |
 | C6 | cleanup 配備だけでは既存停止・失敗taskは進まない。 | 配備を復旧完了と誤認。 | 配備と Recovery/resume を分離。親 Main の個別判断後だけ AC5 を観測。 | AC4,AC5/T3,T4/V8-V9 | 推奨 | Pending | Resolved in design |
 
-未解決の設計選択はない。C1/C5 の不足証拠は実装前調査と verification gate で取得する事実であり、推測した答えを設計前提にしていない。証拠が D1–D4 の外部契約または safety disposition を変える場合は `Proposed` のまま設計を更新し再提示する。
+C5 は実装対象を変え得る未充足の事実 gate であり、現時点では approval blocker である。C1 の容量対 inode も未確認だが、共有領域を削除しない観測・所有権設計はどちらにも必要な安全条件として維持する。C5 の証拠取得後、D1–D4 の対象 runtime、AC、task scope を更新し、`Open decision` を解消してから実装承認を依頼する。
 
 ## Acceptance criteria
 
@@ -141,7 +142,7 @@ Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に�
 ## Review gates
 
 - **Design and task-split review — Main, 2026-09-25:** AC1–AC6 を T1–T4 と V1–V10 に対応付けた。T2 だけが設計凍結後に独立委譲可能。T1 は production credential と原因判断、T3 は統合/CI、T4 は本番権限のため Lead が保持する。write scope は直列で重ならない。
-- **Concern and agreement review — Main, 2026-09-25:** 容量対 inode、共有 temp の破壊、abrupt termination、並行 cleanup、correlation 欠落、配備と復旧の混同を C1–C6 で確認した。全て safety-first design で `Resolved in design` とし、利用者 disposition は承認待ち。
+- **Concern and agreement review — Main, 2026-09-25:** 容量対 inode、共有 temp の破壊、abrupt termination、並行 cleanup、correlation 欠落、配備と復旧の混同を C1–C6 で確認した。C1–C4/C6 は safety-first design で `Resolved in design`、C5 は実行基盤を変え得る `Open decision`。C5 解消前の実装承認には進まず、利用者 disposition は全件 Pending。
 - **Pre-implementation review:** 未実施。明示承認後、T1 の不足証拠を取得し、T2 の exact worker contract と test commands を固定するまで production code を変更しない。
 - **Checkpoint review:** 未実施。
 - **Final review:** 未実施。親 AC3/AC4/AC7 への証拠返却と production terminal/後続/2周期確認なしに `Implemented` としない。
@@ -156,13 +157,14 @@ Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に�
 - current source: Playwright 1.62.0 の bundled `coreBundle.js` は OS temp に artifact/profile directory を作り、browser process close で `removeFolders` する。`PlaywrightWebBrowser.DisposeAsync`、`JraSessionExecutionScope.finally`、`Environment.Exit(1)`、bootstrap `/tmp` 利用、Terraform 4096 MiB/concurrency 1を照合した。
 - CodeGraph directory はあるが index は利用不能との tool 応答を得たため、指示どおり index を作らず source/`rg` へ fallback した。
 - AWS read-only check は session expired。再認証を本 task が代行せず、不足証拠として維持した。
-- `python scripts/audit_agent_execution.py docs/changes/20260925_playwright-tmp-enospc/README.md` は valid。DDD が案内する `scripts/validate_change_records.py` はこの revision に存在せず実行不能だったため、validator 成功とは記録しない。
+- `python scripts/audit_agent_execution.py docs/changes/20260925_playwright-tmp-enospc/README.md` は valid。
+- `python .codex/skills/document-driven-development/scripts/validate_change_records.py docs/changes/20260925_playwright-tmp-enospc/README.md` は `issues=0`。初回に repository root の `scripts/validate_change_records.py` を参照して不在だった記録を、skill 配下の正規 path で再検証した。
 - 本番 cleanup、配備、retry、Recovery、resume は実施していない。
 
 ## Approval boundary and next action
 
-親 record は AC7 により原因別 child の設計・必要改修・回帰・配備・本番終端まで要求するが、「専用 temp root、marker/lease、stale cleanup、resource telemetry」という具体的外部運用契約を事前承認していない。よって本 record は `Proposed` とし、親の包括承認をこの具体修正の承認へ読み替えない。
+親 record は AC7 により原因別 child の設計・必要改修・回帰・配備・本番終端まで要求するが、「専用 temp root、marker/lease、stale cleanup、resource telemetry」という具体的外部運用契約を事前承認していない。さらに C5 の実行基盤 gate が未充足である。よって本 record は `Proposed` とし、親の包括承認をこの具体修正の承認へ読み替えない。
 
-承認後の最初の操作は T1 の read-only AWS evidence と isolated ENOSPC reproduction である。設計が維持されれば pre-implementation review を記録して T2 へ進む。設計を変える事実が出た場合は production code を変更せず、本 record を更新して再承認を求める。
+C5 解消前に可能なのは、read-only AWS evidence と isolated local ENOSPC reproduction、および設計補足だけである。AWS evidence を取得できない間は本番原因確定・恒久復旧を主張しない。実行基盤を確定し、設計を更新して明示承認を得た後にだけ pre-implementation review と T2 へ進む。
 
-中断時点の未コミット対象は本 README だけ。次回確認コマンドは `git diff --check`、change-record validator、AWS 再認証後の bounded read-only CloudWatch/config query、V1 fixture である。
+中断時点の意図的な未コミット対象はない。次回操作は AWS 再認証後の bounded read-only CloudWatch/config query と task/batch 時刻の照合で C5 を解消し、必要なら isolated local V1 fixture で補強すること。検証コマンドは `git diff --check`、両 validator、V1 fixture である。
