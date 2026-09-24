@@ -42,11 +42,12 @@ Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に�
 
 2026-09-25 03:46 JST、親Mainが既存利用者承認に基づき一度だけresumeした。read-only観測では同一warm log streamで16 invocation start、15 finishを確認した。最初の14 finishまで、各finishは一貫して`OwnedKiB=4`、`InvocationDirectories=0`、inodeも開始前水準へ概ね回復した一方、filesystem free blocksは`4,194,280 KiB`から`3,830,536 KiB`へ363,744 KiB減少した。特に短時間 invocation の終了ごとに約30 MiB減少し、約2分のinvocation終了では回復も追加減少もなかった。ENOSPC再発はまだ発生していないが、AC6のbounded要件はこの時点で不合格とする。
 
-03:52 JST、親Mainが`Safety hold: post-deploy temp filesystem free blocks continue decreasing after owned cleanup; ENOSPC AC6 verification failed. Preserve evidence; no automatic resume.`を理由にpauseした。03:56 JST時点で`isPaused=true`、Running 12。pauseは新規dispatchを止めるが既にRunningの収束を強制終了しないため、read-only観測を継続する。本taskはpause、resume、Recovery、retry、environment recycle、production cleanupを実行していない。
+03:52 JST、親Mainが`Safety hold: post-deploy temp filesystem free blocks continue decreasing after owned cleanup; ENOSPC AC6 verification failed. Preserve evidence; no automatic resume.`を理由にpauseした。pauseは新規dispatchを止めるが既にRunningの収束を強制終了しない。04:08 JSTにRunning 0へ自然収束し、`isPaused=true`を維持した。本taskはpause、resume、Recovery、retry、environment recycle、production cleanupを実行していない。
 
 Evidence boundary and hypothesis:
 
 - owned directoryが空、inodeが回復、blockだけが減る事象は、削除済みfileを生存processがopenしたまま保持する場合と整合する。
+- 同一streamの15 REPORTは約119–122秒が3件、約0.79–0.85秒が12件。free blocks減少も短時間12 invocationの各finishと一対一に約30 MiBずつ対応し、長時間3 invocationのfinishでは追加減少も回復もなかった。常時増加ではなく特定の早期終了経路に結び付く。
 - collector本体はbootstrapの直接childとして`wait`されるが、Playwright Node/Chromium子孫は同じprocess groupを明示管理していない。14分deadlineの`Environment.Exit(1)`やPlaywright異常終了では子孫がbootstrapへreparentされ、所有directory削除後もopen fileのblocksを保持し得る。
 - ただしproduction `/proc` のprocess tree、process group、deleted fdは取得しておらず、仮説は未確定。free blocks減少だけから特定processやfileを断定しない。
 - WSL isolated fixtureでは、専用session内のgrandchildが30 MiB fileをopen後unlinkして生存すると`du=0`でもfree blocksが30,720 KiB減少し、同PGIDへTERM後に30,720 KiB全量が回復した。これはLinuxのdeleted-open-file機序と提案するPGID回収の有効性を独立再現するが、productionで同じprocessが原因であること自体は証明しない。
