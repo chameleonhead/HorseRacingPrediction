@@ -26,9 +26,9 @@ Approval: 2026-09-24、利用者が「改修を進めてください。対処を
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | metadata継承統合、Current Result証拠保持、revision不足再収集を修正済み。追加承認された中止開催sliceを実装・検証中。 |
-| Verification | In progress | 今回sliceは全体1198 passed・既存1skip、追加の実サイト2件成功、独立指摘閉鎖。本番の代表成功・後続進行は未確認。 |
-| Deployment/operation | In progress | 既存CI/CDによる配備は明示許可済み。PR66 merge後の配備は追加review対応のため本番変更前にcancel。限定Recovery/resume承認待ち、再開・補正は未実行。 |
+| Code | In progress | metadata、Current Result証拠、revision不足、公式中止開催、legacy移行の保存証拠/版数保持を修正・配備済み。Owner/profile同定の残課題は未閉鎖。 |
+| Verification | In progress | 基準全体1198 passed・既存1skip、実サイト2件成功。追加後Collector318件成功、独立指摘閉鎖、PR67 CIと配備verify成功。本番の代表成功・後続進行は未確認。 |
+| Deployment/operation | In progress | PR67 merge13966c9cの既存app-deploy35997116414は全job成功。21:19 JST本番GETはpaused=true/Running0、29 findings/27 actionable。限定Recovery/resume承認待ちで安定稼働は未確認。 |
 
 ## Context
 
@@ -188,7 +188,7 @@ T1/T2/T3はAC群の統合責任、末尾英字taskは実行可能なsliceであ�
 
 公開・本番操作の最新gateは [operations](evidence/operations.md)。2026-09-24の追加指示により専用branch/commit/pushを開始。Actions可否・AWS再認証・対象限定本番操作のgateは別管理とする。
 
-最新checkpoint: 利用者は既存CI/CDを許可、新Workflowは禁止。AWSローカル認証待ちはCI/CD配備を阻害しない。PR66はmerge済みだが本番未配備。次はHistorical Card部分成功明示の追加修正を既存CIで検証・review後mergeし、既存app-deployを観測する。未コミット対象はこの追加closureのStore/handler/tests、docs27、専用record/auditのみ。限定Recovery通知はoperations記載の1件で回答待ち。先行する旧checkpointの「Actions未許可/AWS再認証後のみ配備」は本段で更新する。
+最新checkpoint: 利用者は既存CI/CDを許可、新Workflowは禁止。PR66/67の修正は13966c9cとして本番配備成功（既存app-deploy35997116414全job成功）。21:19 JSTの独立GETで既存pause時刻を保持、Running0、29 findings/27 actionable。次は通知dbca6a70-d70b-4ffe-8a6f-bbc90e643e68一件のRecoveryと一度resumeの個別承認後、安全条件再確認→代表終端→独立後続→2周期→金曜/結果鮮度を確認する。Owner/profileの未知補正は未承認のまま。今回未コミット対象は配備結果のREADME/operationsのみで、記録commit/push後に操作承認待ちとする。先行する旧checkpointの「Actions未許可/AWS再認証後のみ配備」は本段で更新する。
 
 現在の正規状態は上記Task planと本節。以下の旧review箇条書きは設計時点の履歴であり、未承認を意味しない。
 [baseline](evidence/baseline.md) / [検証](evidence/verification.md) / [追加設計案](decisions/cancelled-meeting-discovery.md) を参照。

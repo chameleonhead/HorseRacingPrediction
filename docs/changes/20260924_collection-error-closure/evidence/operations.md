@@ -56,3 +56,11 @@ read-only reviewerの追加2回で、既存unified rev2 aggregateをrev1へ降�
 focused 13件成功（移行、既存rev2完全/不完全、日時不明、既存facet、Card不足rev2→3）。途中失敗はテスト用direct URL navigatorの未設定で修正。独立read-only再reviewで新規blockerなし。全体回帰・build・CIが残るため本番完了ではない。限定Recovery/resumeは引き続き利用者回答待ち。
 
 push前checkpoint: Collector非External 318件成功、solution build警告0/エラー0。format全体検査で今回追加したinitializerの改行のみ指摘され修正、変更2ファイルのwhitespace再検査成功。audit/DDD validator成功、diff check成功。次は同じPR67へpush、最新CIと全review指摘を照合して既存app-deployへ進む。本番の限定回復/2周期/鮮度、profile同定は未完了。意図的な目的外未コミットファイルなし。
+
+PR67の追加commit943f4580はCI35996540844成功、既存inline2指摘は根拠付き返信・解決済みで追加指摘なし。2026-09-24T12:07:40Zに13966c9cとしてmerge。既存app-deploy35997116414で事前検証中。21:02:52 JSTのread-only monitorは29 findings/27 actionableで不変。requiresHuman=falseは分類対応済みの指標で、正常性の証拠ではない。デプロイ成功・本番復旧・安定稼働はまだ未確認。
+
+## 配備結果 / 操作承認gate
+
+2026-09-24 21:18頃JST、既存app-deploy35997116414（13966c9c）はverify / build-and-push / deploy-collector-lambda / deploy / migrate-race-entry-ownersの全job成功。API health、legacy移行apply後のpreview収束検査を通過。owner jobは名称に反して承認待ちpreviewのみで、Ownerデータ補正は行っていない。新Workflowなし。
+21:19:01 JSTの独立runner GETは29 findings/27 actionable、pipeline GETはpaused=true、更新時刻2026-09-23T23:51:34.5602218+09:00を保持、Running0。配備が元pauseを解除しないことを確認。Workflow成功は実際の収集終端の代わりではない。API自体はrevision情報を返さず、runtime SHAはCI/CDの配備証拠に依存する限界を維持。
+限定Recovery通知dbca6a70-d70b-4ffe-8a6f-bbc90e643e68一件＋一度resumeの承認は未回答。MainによるRecovery、resume、履歴削除、failure解決、未知ID補正は未実行。次の許可後に対象残存/停止/Runningを再GET→限定操作→代表終端と独立後続→2周期/鮮度を確認する。Owner/profileの残課題は親recordに残す。親はApprovedのまま、Implemented/安定稼働と報告しない。
