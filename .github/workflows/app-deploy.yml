@@ -38,6 +38,10 @@ jobs:
         shell: pwsh
         run: ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash /bin/bash
 
+      - name: Verify collector temporary storage lifecycle
+        shell: pwsh
+        run: ./tests/scripts/test-collector-temp-lifecycle.ps1 -Bash /bin/bash
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x

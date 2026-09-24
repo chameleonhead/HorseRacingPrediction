@@ -12,6 +12,7 @@ on:
       - .github/workflows/app-ci.yml
       - Dockerfile.collector-lambda
       - deploy/lambda-bootstrap
+      - deploy/collector-temp-lifecycle.sh
       - infra/collector-lambda/**
   push:
     branches:
@@ -24,6 +25,9 @@ on:
       - "*.json"
       - .config/**
       - .github/workflows/app-ci.yml
+      - Dockerfile.collector-lambda
+      - deploy/lambda-bootstrap
+      - deploy/collector-temp-lifecycle.sh
 
 permissions:
   contents: read
@@ -37,6 +41,10 @@ jobs:
       - name: Verify deployment pause and failure guards
         shell: pwsh
         run: ./tests/scripts/test-deploy-pipeline-state.ps1 -Bash /bin/bash
+
+      - name: Verify collector temporary storage lifecycle
+        shell: pwsh
+        run: ./tests/scripts/test-collector-temp-lifecycle.ps1 -Bash /bin/bash
 
       - uses: actions/setup-dotnet@v6
         with:
