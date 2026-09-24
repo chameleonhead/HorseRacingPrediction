@@ -118,7 +118,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 実行基盤、容量/inode、残留 lifetime、correlation を確定し再現fixtureを作る（AC1） | Main | Lead | Approval、AWS read access | record evidence と test fixture。production は read-only | V1 | Lambda/config/log/API fact matrix、ENOSPC fail-closed fixture | Verified | Lead — production credential、runtime/security 判断、根本原因確定 | none | unavailable; retries 0; corrections 0; reviews 1 |
-| T2 | app-owned invocation temp lifecycle と反例 test を実装する（AC2,AC3） | Main | Lead | T1 runtime gate、frozen D1-D4 | `deploy/lambda-bootstrap`、`deploy/collector-temp-lifecycle.sh`、`Dockerfile.collector-lambda`、対応 test の排他範囲。infra/API schema は変更禁止 | V2-V6 | success/failure/signal/stale/active/PID reuse/unowned/symlink/root/header tests green | Verified | Lead — path deletion safety、abrupt lifecycle、統合を同一の小変更で保持。分割review費用が上回る | none | unavailable; retries 1; corrections 2; reviews 1 |
+| T2 | app-owned invocation temp lifecycle と反例 test を実装する（AC2,AC3） | Main | Lead | T1 runtime gate、frozen D1-D4 | `deploy/lambda-bootstrap`、`deploy/collector-temp-lifecycle.sh`、`Dockerfile.collector-lambda`、対応 test の排他範囲。infra/API schema は変更禁止 | V2-V6 | success/failure/signal/stale/active/PID reuse/unowned/symlink/root/header tests green | Verified | Lead — path deletion safety、abrupt lifecycle、統合を同一の小変更で保持。分割review費用が上回る | none | unavailable; retries 2; corrections 3; reviews 2 |
 | T3 | 正本文書と workflow-equivalent regression を統合する（AC4） | Main | Lead | T2 | `docs/11-automation-design.md`、本 record、必要時のみ既存 infra test | V7 | format/build/test成功。Terraform/container/既存CI待ち | In progress | Lead — 統合、CI/CD、最終 scope 判定 | none | unavailable; retries 1; corrections 0; reviews 1 |
 | T4 | 既存 CI/CD 配備と独立 production verification を行う（AC5,AC6） | 親 Main（operation owner）+ 本 task read-only verifier | Lead + Review | T3、既存CI/CD、operation 個別許可 | 既存 CI/CD。production mutation は親 Main のみ | V8-V10 | revision、terminal attempt、後続、2周期、resource telemetry | Dependent | Lead — 本番権限、安全、最終判定。resume は本 task 非所有 | none | unavailable; retries 0; corrections 0; reviews 0 |
 
@@ -175,10 +175,11 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 - 初回`dotnet build --no-restore`はassets未生成で失敗。`dotnet restore HorseRacingPrediction.sln`成功後、同じRelease buildは警告0・error 0で成功。
 - `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"`: 1217 passed、1 skipped、0 failed。
 - local Docker engineは未起動、Terraform CLIは未導入のためlocal container buildとTerraform validationは未実行。既存CIの必須gateとして残す。
+- PR #72 の初回app-ci run `36041077489` はLinuxで非実行属性のbootstrapを直接起動した専用testが失敗。production Dockerfileは実行属性を付与するためruntime defectではなくtest portability defect。testを`sh bootstrap`起動へ修正し、全caseをlocal再実行した。CI再実行結果待ち。
 
 ## Checkpoint review
 
-2026-09-25 Main: AC1はproduction API/AWS相関と不足値、AC2/AC3は独立temp rootの反例群でVerified。実装は固定owned root直下だけを対象とし、marker、direct-child、non-symlink、PID+process start leaseを全て検証する。通常・非zero・signalではcurrent childだけを削除し、hard kill残留は次bootstrapでdead lease確認後に回収する。共有`/tmp`列挙、容量増量、failure policy変更、DB操作はdiffにない。初回test失敗2件（未設定TMPDIR assertion、fake curl URL抽出）とPID reuse review findingを修正し全群を再実行した。AC4はlocal build/testまで接続済み、Terraform/container/既存CIが未完了。T4とAC5/AC6は配備・親operation待ちであり未完了。
+2026-09-25 Main: AC1はproduction API/AWS相関と不足値、AC2/AC3は独立temp rootの反例群でVerified。実装は固定owned root直下だけを対象とし、marker、direct-child、non-symlink、PID+process start leaseを全て検証する。通常・非zero・signalではcurrent childだけを削除し、hard kill残留は次bootstrapでdead lease確認後に回収する。共有`/tmp`列挙、容量増量、failure policy変更、DB操作はdiffにない。初回local test失敗2件（未設定TMPDIR assertion、fake curl URL抽出）、PID reuse review finding、初回Linux CIの非実行属性test defectを修正し全群を再実行した。AC4はlocal build/testまで接続済み、Terraform/container/既存CI再実行が未完了。T4とAC5/AC6は配備・親operation待ちであり未完了。
 
 ## Approval boundary and next action
 

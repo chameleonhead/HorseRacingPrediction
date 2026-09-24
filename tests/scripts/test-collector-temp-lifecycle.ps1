@@ -133,7 +133,7 @@ for code in 0 7; do
   export FAKE_EXIT="`$code"
   unset AWS_LAMBDA_RUNTIME_API
   actual=0
-  '$bootstrapPath' >/dev/null 2>&1 || actual=`$?
+  sh '$bootstrapPath' >/dev/null 2>&1 || actual=`$?
   [ "`$actual" -eq "`$code" ]
   [ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
 done
@@ -183,7 +183,7 @@ export COLLECTOR_EXECUTABLE="`$bin/collector"
 export COLLECTOR_TEST_TRACE='$root/lambda-trace'
 export COLLECTOR_BOOTSTRAP_TEST_ONCE=1
 export AWS_LAMBDA_RUNTIME_API=runtime.test
-'$bootstrapPath' >/dev/null 2>&1
+sh '$bootstrapPath' >/dev/null 2>&1
 grep -qx response "`$COLLECTOR_TEST_TRACE"
 [ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
 "@
@@ -202,7 +202,7 @@ export COLLECTOR_TEMP_HELPER='$helperPath'
 export COLLECTOR_EXECUTABLE="`$fake"
 export COLLECTOR_TEST_READY='$root/signal-ready'
 unset AWS_LAMBDA_RUNTIME_API
-'$bootstrapPath' >/dev/null 2>&1 &
+sh '$bootstrapPath' >/dev/null 2>&1 &
 bootstrap_pid=`$!
 attempt=0
 while [ ! -f "`$COLLECTOR_TEST_READY" ] && [ "`$attempt" -lt 100 ]; do
