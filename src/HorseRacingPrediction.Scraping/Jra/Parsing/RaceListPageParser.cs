@@ -31,6 +31,11 @@ public sealed class RaceListPageParser
     public bool CanParse(
         SemanticPageSnapshot source)
     {
+        // A dated programme contains tables for multiple meetings, not a single
+        // navigable JRADB race list. It can remain open after cancellation lookup.
+        if (source.Url.Host is "jra.jp" or "www.jra.jp" or "jra.go.jp" or "www.jra.go.jp"
+            && Regex.IsMatch(source.Url.AbsolutePath, @"^/keiba/calendar\d{4}/\d{4}/\d{1,2}/\d{4}\.html$"))
+            return false;
         var snapshot = JraSnapshotView.Create(source);
         return FindRaceTable(snapshot) is not null;
     }

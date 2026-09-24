@@ -84,6 +84,26 @@ public sealed class JraSiteE2ETests
     }
 
     [TestMethod]
+    public async Task OfficialMeetingCancellation_AllowsSubsequentSameSessionNavigation()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var date = new DateOnly(2026, 9, 21);
+        Assert.IsNotNull(await _session.Navigate.ReadMeetingCancellationAsync(date, RaceCourse.Nakayama, cts.Token));
+        // Reproduce the current-page probe even after the Card lookup window has elapsed.
+        try
+        {
+            _ = await _session.Navigate.ToRaceListAsync(date, RaceCourse.Hanshin, cts.Token);
+        }
+        catch (JraNavigationException ex) when (ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
+        {
+            // Old cards may be unavailable; parsing the programme as RaceList must not fail.
+        }
+        var page = await _session.Navigate.ToRaceResultListAsync(date, RaceCourse.Hanshin, cts.Token);
+        Assert.IsTrue(page is JraRaceListPage { Course: RaceCourse.Hanshin } list && list.Date == date
+            || page is JraRaceResultPage result && result.RaceId.Date == date && result.RaceId.Course == RaceCourse.Hanshin);
+    }
+
+    [TestMethod]
     public async Task 現在月Calendar取得()
     {
         using var cts = new CancellationTokenSource(TestTimeout);

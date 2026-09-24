@@ -21,6 +21,8 @@
 
 ## 検証
 
+再開後の実障害を受け、同一sessionの中止確認→次対象navigationを追加検証した。日別番組は通常開催のrace表も持つため、headerだけのRaceList判定では競馬場見出し解析へ誤進入する。公式日別番組を分類対象外にする修正後、`OfficialMeetingCancellation_AllowsSubsequentSameSessionNavigation` は9/21中山中止確認→阪神の通常探索→阪神結果で1件成功（2026-09-24、9秒）。Card表示範囲外は明示的なOutOfDisplayedRangeだけ許容し、parse errorは許容しない。公開HTMLの取得のみで、本番保存成功を意味しない。
+
 `JraMeetingCancellationParserTests` は日付・host・曖昧文言・他場・重複・通常race rowsを反証する。
 `OfficialMeetingCancellation_SeparatesCoursesAndReplacementDay` は実サイトの中山中止/阪神通常/翌日中山を確認。
 `OfficialCancelledDay_RealScheduleNavigatorParserAndHandler_ContinueHanshin` は実際のカレンダー→navigator→parser→discoveryを通し、中山旧日requestゼロ、阪神12件を確認した。
