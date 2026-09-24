@@ -34,3 +34,17 @@ Mainが成功/失敗/元paused/応答不正のshell反例を実行し、既存re
 最終read-only再reviewで上記反例閉鎖を確認。MainはSSH scriptにset -euを明記し、stop/copy等の失敗後に処理が継続しないことを静的gateへ追加。reviewerの継続3回をT2e-A1へ追記（累計6回、usage不明）。残存するoperator pauseとresume間の競合には条件付きAPIが必要だが、現在の本番は元からpausedで自動resumeを通らない。本sliceで新たな本番再開権限を追加しない。
 
 PR #66、app-ci run35992648221は17反例全件PASS後にpwsh wrapperのLASTEXITCODE伝播で失敗。最後の意図した負ケースの1が残るtest harness局所欠陥で、成功終端exit 0を明示して再検証する。実際のassert/throwは引き続き失敗する。配備は未開始。
+
+T1c追加read-only探索: `/root/collection_code_map`（既存requested gpt-6-sol/medium、observed/usage不明）へ9da0e2dbの既知preflight/retirementとOwner同定境界を委譲。MainはGit/CI/本番gateを保持。書込・本番API・資格情報・新規testなし、既存symbol/test引用を成果とする。既存T1-A1 continuationとして扱い、結果採用前にMainが安全境界と照合する。
+
+20:24頃JSTのGETで、中止開催groupのcanary通知dbca6a70-d70b-4ffe-8a6f-bbc90e643e68、task8886fd12-8ace-4786-a4ab-1ac6405d96e4、resource discovery:2026092103が残存。配備後この通知1件のRecoveryと一度resumeする限定操作承認を非同期で依頼。回答前には実行しない。
+
+## PR #66 / 配備前追加closure
+
+PR #66はCI35992760489成功後、632d24afでmainへmerge。既存app-deploy35993358449はverify中にcancelし、build-and-push / Collector / API配備は未実行。理由はmerge後に確認したGitHub inline review4093059292のhistorical Card revision指摘。必須checkだけではreview完了を示さないため、次のmerge前はreview本文・全inline指摘・最新headを独立照合する。既存review gateの適用漏れとして本recordにclosureを残し、恒久model/routing変更は行わない。
+
+指摘経路をMainのStore→lease→実handler→Store反例で確認。ただしS2および承認済み20260921 record AC14は過去Card取得不能時のResult-only成功を許容するため、全体をValidationFailureに変える案は契約不適合として不採用。独立reviewerも同境界を確認。局所修正はCard版数不足の取得不能をNotApplicable stageで明示し、Card facetの旧AppliedRevision/LastPersistedAtを保持したUnavailable、ResultはCurrent新版とする。全体Currentを全facet同版数保証へ変更しない。初回反例は3件中1失敗、修正後は既存の近日日付/既存Result保持を含む5件成功。
+
+追加closureの検証: Collector非External310成功、format verify成功、独立read-only再review阻害事項0。新しいtest名は `RaceDetail_HistoricalCardUpgrade_ExposesUnavailableFacetWithoutBlockingResult`。旧Card版数不足、同版数、Cardなし過去Raceの3ケースを実Store/handlerで確認。hintは永続metadataから引き継がずStoreがfacetから再計算する。
+
+T1c探索結果をMainが既存契約と照合: SubjectResourceMissingの候補/retirement内部部品は公開経路に未接続、旧ID参照有無を安全判定に使わない箇所があり一括実行不可。Ownerは名称だけで同一性を断定せずRaceEntry/alias/canonical ID証拠が必要。現在の配備sliceにID補正やretirement公開を追加しない。残課題T1c/T2fは未完了のまま。

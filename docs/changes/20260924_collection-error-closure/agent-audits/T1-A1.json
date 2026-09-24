@@ -41,7 +41,7 @@
     "reason": "Active effort not measured"
   },
   "startRevision": "ff95b22499312462194a970b038dcc9d959163bd",
-  "endRevisionOrPatch": "read-only findings in evidence/baseline.md",
+  "endRevisionOrPatch": "read-only findings in evidence/baseline.md and evidence/operations.md; residual identity boundaries checked at 9da0e2db",
   "outcome": {
     "verificationPassed": true,
     "qualityPassed": true,
@@ -49,7 +49,7 @@
     "independentChallenge": "Lead live E2E corroborated cancellation cause and monthly notice contamination; final real schedule/navigator/parser/handler test emitted only 12 Hanshin requests. Deployed revision unknown.",
     "retries": 0,
     "leadCorrections": 0,
-    "reviewPasses": 1,
+    "reviewPasses": 2,
     "promoted": false,
     "escapedDefects": 0,
     "escalations": 0,

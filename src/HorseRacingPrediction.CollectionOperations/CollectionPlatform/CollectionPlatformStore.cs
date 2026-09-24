@@ -736,6 +736,7 @@ public sealed partial class CollectionPlatformStore
                 taskAttributes["officialStartAt"] = officialStartAt.ToString("O");
             if (resource.Type == ResourceType.Race)
             {
+                taskAttributes.Remove("cardRevisionUpgradeRequired");
                 var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
                     x.ResourcePk == resource.ResourcePk).ToListAsync(cancellationToken).ConfigureAwait(false);
                 foreach (var facet in facets)
@@ -745,6 +746,9 @@ public sealed partial class CollectionPlatformStore
                     var effectiveStatus = facet.Status == RaceArtifactStatus.Current
                         && facet.AppliedRevision < task.RequestedRevision
                             ? RaceArtifactStatus.Due : facet.Status;
+                    if (facet.Artifact == RaceArtifactKind.Card && effectiveStatus == RaceArtifactStatus.Due
+                        && facet.Status == RaceArtifactStatus.Current)
+                        taskAttributes["cardRevisionUpgradeRequired"] = "true";
                     taskAttributes[facet.Artifact == RaceArtifactKind.Card
                         ? "cardArtifactStatus" : "resultArtifactStatus"] = effectiveStatus.ToString();
                 }

@@ -1851,6 +1851,61 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsTrue(upgraded.All(x => x.Status == RaceArtifactStatus.Current && x.AppliedRevision == 2));
     }
 
+    [TestMethod]
+    [DataRow(true, 2)]
+    [DataRow(true, 1)]
+    [DataRow(false, 2)]
+    public async Task RaceDetail_HistoricalCardUpgrade_ExposesUnavailableFacetWithoutBlockingResult(bool hasCard, int revision)
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260901:Tokyo:1");
+        var now = new DateTimeOffset(2026, 9, 20, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
+        var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2026, 9, 1));
+        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var stages = new List<CollectionStageOutcome>
+        {
+            new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true),
+        };
+        if (hasCard)
+            stages.Add(new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+            now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes: stages)));
+        if (revision > 1)
+            await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, revision, "new parser", false);
+        var refresh = await store.RequestAsync(resource, definition, revision, CollectionReason.ManualRefresh,
+            now.AddSeconds(2));
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = race => new(race, "created-race", [1], [], "https://example.test/result", true),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => cards, _ => results, timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(lease!, CancellationToken.None);
+        var unavailableUpgrade = hasCard && revision > 1;
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.IsEmpty(cards.RefreshRequests);
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease!.LeaseToken, now.AddSeconds(3), completion));
+        var detail = (await store.GetResourceDetailAsync(resource, definition))!;
+        Assert.AreEqual(revision, detail.State!.AppliedRevision);
+        var card = detail.RaceArtifacts!.SingleOrDefault(x => x.Artifact == RaceArtifactKind.Card);
+        if (hasCard)
+        {
+            Assert.AreEqual(1, card!.AppliedRevision);
+            Assert.AreEqual(unavailableUpgrade ? RaceArtifactStatus.Unavailable : RaceArtifactStatus.Current, card.Status);
+            Assert.AreEqual(now.AddSeconds(1), card.LastPersistedAt);
+            Assert.AreEqual(revision, card.RequiredRevision);
+            if (unavailableUpgrade)
+                Assert.AreEqual("OfficialRaceCardOutsideLookupPeriod", card.ErrorCode);
+        }
+        Assert.AreEqual(revision, detail.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Result).AppliedRevision);
+        Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
