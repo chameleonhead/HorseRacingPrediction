@@ -14,9 +14,9 @@ Approval: 2026-09-25、利用者が親スレッドで「修正を承認します
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Implemented locally | app-owned invocation root、marker/active lease、終了時/次回起動 cleanup、resource metrics、header相関を実装。配備前review継続。 |
-| Verification | In progress | lifecycle反例、format、build、非External 1217 passed / 1 skipped。Terraform/container/既存CIは未実行。 |
-| Deployment/operation | Not started | 既存 CI/CD だけを使用する。配備、Recovery、retry、resume、本番 cleanup は未承認・未実施。 |
+| Code | Deployed | app-owned invocation root、marker/active lease、終了時/次回起動 cleanup、resource metrics、header相関を実装し、PR #72 / merge `fe8ddf52` を本番Lambdaへ配備した。 |
+| Verification | Verified through deployment gates | lifecycle反例、format、build、非External 1217 passed / 1 skippedに加え、app-ciとapp-deployのLinux、Terraform、container、health gateが成功した。 |
+| Deployment/operation | Deployed; operational verification dependent | app-deploy run `36041894195` は成功。pipelineは停止のまま、Running 0。Recovery、retry、resumeを行っていないためAC5/AC6は未完了。 |
 
 ## Context and incident ledger
 
@@ -30,11 +30,11 @@ Root cause boundary:
 - **実行経路（確認済み）:** attempt 11 は batch `34afaabc-eb03-46c6-b1f9-5658c002e6a9` の ordinal 1 / 4。1件目だけ失敗記録があり、安全停止により後続3件は開始されていない。配備 revision は `f07a190d`、既存 deploy run `36007623965` は成功済み。
 - **資源契約上の欠陥（確認済み）:** Playwright 1.62.0 は OS temp 配下へ artifact directory と browser profile directory を作り、通常は browser process close 後に削除する。現行 bootstrap は `HOME`、XDG、event、headers、response、failure reason、Playwright の temp を共有 `/tmp` 直下へ置き、アプリ所有の invocation 単位境界、上限、残留回収、使用量観測を持たない。Lambda 設定は ephemeral storage 4096 MiB、reserved concurrency 1。
 - **漏えい起点（有力だが未確定）:** 通常の `PlaywrightWebBrowser.DisposeAsync` と `JraSessionExecutionScope.finally` は cleanup を行う。一方、14分打切りの `Environment.Exit(1)`、runtime 強制終了、Playwright cleanup 自体の失敗では managed cleanup または Node 側 cleanup の完了を証明できない。warm execution environment では `/tmp` が後続 invocation に残り得る。
-- **不足証拠:** ENOSPC が block 容量不足か inode 不足か、失敗時の `/tmp` 使用量・inode・所有ディレクトリ一覧、同一 execution environment の過去 invocation、cleanup error は API に保存されていない。latest attempt の `lambdaRequestId` は `local-3c5e...` で、以前の Lambda UUID と異なる。AWS read-only session は期限切れで CloudWatch と function configuration の実値を独立取得できなかった。したがって、残留量や特定の timeout attempt を原因として断定しない。
+- **不足証拠:** ENOSPC が block 容量不足か inode 不足か、失敗時の `/tmp` 使用量・inode・所有ディレクトリ一覧、cleanup error は保存されていない。latest attempt の `lambdaRequestId` は `local-3c5e...` で実Lambda UUIDと異なる。AWS read-only照合で同一warm streamの過去155 invocationと対象156番目、900秒timeoutまでは確認したが、失敗時の残留量や個々の残留起点は断定しない。
 
 Corrective proposal: 共有 `/tmp` を掃除するのではなく、collector が所有する root の下に invocation ごとの一時ディレクトリを作り、Playwright、HOME/XDG、event/response をその中へ閉じ込める。通常、失敗、cancellation の終了時に当該 invocation directory だけを削除し、runtime 再初期化時には ownership marker と固定 root の検証後に stale child だけを回収する。回収前後の容量・inode・件数を秘密情報や生ログを含めず記録する。4 GiB 増量だけで漏えいを隠さない。
 
-Permanent fix: Not started — 本 record の明示承認待ち。
+Permanent fix: Deployed — lifecycle修正は既存CI/CDで本番Lambdaへ反映済み。停止解除後の実invocation観測は未実施。
 
 Remaining risk: 現在の実 `/tmp` 状態が未取得で、停止解除後に同じ ENOSPC が直ちに再発し得る。resume の判断権限は親 Main にあり、本 task にはない。
 
@@ -109,7 +109,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | AC1 | ENOSPC を production-shaped filesystem 制限で再現し、block/inode、owned temp、直前終了形態、実行基盤 correlation の確認値と不足値を区別して記録する。 | T1 | V1: fixture + read-only CloudWatch/config/task/attempt/batch matrix | Verified |
 | AC2 | success、handler exception、cancellation、Playwright launch failure、collector child 強制終了の各経路で、実行中でない app-owned invocation directory だけが最終的に削除される。 | T2 | V2-V4 automated shell/runtime tests | Verified |
 | AC3 | 共有 `/tmp` の unrelated file、marker 不正、symlink、active invocation、並行 invocation は削除されず、path が空・root・範囲外なら cleanup が安全に失敗する。 | T2 | V5-V6 destructive counterexample tests in isolated temp root | Verified |
-| AC4 | 既存 build/test/format、Terraform validation、collector container build、deploy guard tests が通り、安全停止・有限 retry・履歴保持・既存 CI/CD 契約が維持される。 | T3 | V7 workflow-equivalent gates | Connected |
+| AC4 | 既存 build/test/format、Terraform validation、collector container build、deploy guard tests が通り、安全停止・有限 retry・履歴保持・既存 CI/CD 契約が維持される。 | T3 | V7 workflow-equivalent gates | Verified |
 | AC5 | 承認済み既存 CI/CD 配備後、親 Main が別途許可した operation に限り、対象または根拠ある replacement が正常終端し、独立した後続処理が進み、通常周期2回以上で ENOSPC と即時再停止がない。 | T4 | V8 deployment revision GET、V9 bounded task/attempt/batch GET | Not started |
 | AC6 | 配備後観測で app-owned temp 使用量が bounded であることを示し、容量増量なしで余裕を確認する。増量が必要なら実測と別判断を提示し、本 AC を推測で完了しない。 | T4 | V10 sanitized resource telemetry | Not started |
 
@@ -119,7 +119,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 実行基盤、容量/inode、残留 lifetime、correlation を確定し再現fixtureを作る（AC1） | Main | Lead | Approval、AWS read access | record evidence と test fixture。production は read-only | V1 | Lambda/config/log/API fact matrix、ENOSPC fail-closed fixture | Verified | Lead — production credential、runtime/security 判断、根本原因確定 | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T2 | app-owned invocation temp lifecycle と反例 test を実装する（AC2,AC3） | Main | Lead | T1 runtime gate、frozen D1-D4 | `deploy/lambda-bootstrap`、`deploy/collector-temp-lifecycle.sh`、`Dockerfile.collector-lambda`、対応 test の排他範囲。infra/API schema は変更禁止 | V2-V6 | success/failure/signal/stale/active/PID reuse/unowned/symlink/root/header tests green | Verified | Lead — path deletion safety、abrupt lifecycle、統合を同一の小変更で保持。分割review費用が上回る | none | unavailable; retries 2; corrections 3; reviews 2 |
-| T3 | 正本文書と workflow-equivalent regression を統合する（AC4） | Main | Lead | T2 | `docs/11-automation-design.md`、本 record、必要時のみ既存 infra test | V7 | format/build/test成功。Terraform/container/既存CI待ち | In progress | Lead — 統合、CI/CD、最終 scope 判定 | none | unavailable; retries 1; corrections 0; reviews 1 |
+| T3 | 正本文書と workflow-equivalent regression を統合する（AC4） | Main | Lead | T2 | `docs/11-automation-design.md`、本 record、必要時のみ既存 infra test | V7 | local、app-ci、app-deployのformat/build/test/Terraform/container/deploy guard成功 | Verified | Lead — 統合、CI/CD、最終 scope 判定 | none | unavailable; retries 1; corrections 1; reviews 2 |
 | T4 | 既存 CI/CD 配備と独立 production verification を行う（AC5,AC6） | 親 Main（operation owner）+ 本 task read-only verifier | Lead + Review | T3、既存CI/CD、operation 個別許可 | 既存 CI/CD。production mutation は親 Main のみ | V8-V10 | revision、terminal attempt、後続、2周期、resource telemetry | Dependent | Lead — 本番権限、安全、最終判定。resume は本 task 非所有 | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ### Agent ownership and escalation
@@ -148,7 +148,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 - **Concern and agreement review — Main, 2026-09-25:** 容量対 inode、共有 temp の破壊、abrupt termination、並行 cleanup、correlation 欠落、配備と復旧の混同を C1–C6 で確認。利用者は限定修正と全 safety boundary を承認。C5 は承認自体では解消とせず、その後の AWS/API 照合で Lambda と確定して `Resolved in design` とした。
 - **Pre-implementation review — Main, 2026-09-25:** T1 を `In progress`、Lambda runtime gate を満たした T2 を `Runnable`、T3/T4 を `Dependent` とした。T2 の排他 write scope は `deploy/lambda-bootstrap`、新規 lifecycle helper、`Dockerfile.collector-lambda`、専用 script test。共有 `/tmp`、infra size、API schema、親/禁止文書は変更禁止。test は success/failure/cancellation/stale/active/unowned/symlink/root拒否とし、path safety または外部契約変更が必要なら設計へ戻す。削除安全性と bootstrap 統合が不可分な小変更のため Main が保持する。
 - **Checkpoint review — Main, 2026-09-25:** 下記 `Checkpoint review` のとおりAC1–AC3をVerified、AC4をConnectedと判定。local不可のgateは既存CIへ残した。
-- **Final review:** 未実施。親 AC3/AC4/AC7 への証拠返却と production terminal/後続/2周期確認なしに `Implemented` としない。
+- **Final review — Main, 2026-09-25:** AC1–AC4とT1–T3はlocal、Linux CI、Terraform/container build、既存app-deploy、AWS revision、API停止状態の独立証拠へ追跡できる。禁止した共有`/tmp`削除、DB/履歴削除、Recovery、retry、resume、新Workflow、親record編集は実施していない。AC5/AC6とT4は、停止解除後の実invocation、後続進行、2周期、sanitized temp metricsを必要とし、本taskのoperation権限外なので`Dependent`を維持する。よって配備は成功だがrecord全体を`Implemented`にはしない。
 
 ## Verification record
 
@@ -176,15 +176,19 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 - `dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External"`: 1217 passed、1 skipped、0 failed。
 - local Docker engineは未起動、Terraform CLIは未導入のためlocal container buildとTerraform validationは未実行。既存CIの必須gateとして残す。
 - PR #72 の初回app-ci run `36041077489` はLinuxで非実行属性のbootstrapを直接起動した専用testが失敗。production Dockerfileは実行属性を付与するためruntime defectではなくtest portability defect。testを`sh bootstrap`起動へ修正し、全caseをlocal再実行した。CI再実行結果待ち。
+- PR #72 のapp-ci再実行 `36041296970` は全gate成功。PRはmerge commit `fe8ddf527260c57a20cc8375ac67f232c9fb23d8` としてmainへ統合された。
+- 既存app-deploy run `36041894195` は同merge commitを対象に全job成功。verifyでlifecycle Linux test、build/test、Terraform validation、collector Lambda container buildが成功し、`deploy-collector-lambda`、API deploy、health checkも成功した。
+- 2026-09-25 03:43 JSTのAWS read-only確認でLambdaは`Active`、`LastUpdateStatus=Successful`、`LastModified=2026-09-25 03:40:20 JST`、revision `67fee38e-c26d-4980-8460-bbe9e59b8cdd`、resolved image digest `sha256:132769ee12405caa04d7cdc5f545ea5d27b552abbe503bef57919eb3d03b8675`。4096 MiB、2048 MiB、900秒は維持された。
+- 同時刻のproduction API GETで`isPaused=true`、reasonとupdatedAtは元ENOSPC停止のまま、Running 0。mutationは実施していない。停止中のため新bootstrapの実invocationとsanitized temp metricsは存在せず、AC5/AC6を推測で完了していない。
 
 ## Checkpoint review
 
-2026-09-25 Main: AC1はproduction API/AWS相関と不足値、AC2/AC3は独立temp rootの反例群でVerified。実装は固定owned root直下だけを対象とし、marker、direct-child、non-symlink、PID+process start leaseを全て検証する。通常・非zero・signalではcurrent childだけを削除し、hard kill残留は次bootstrapでdead lease確認後に回収する。共有`/tmp`列挙、容量増量、failure policy変更、DB操作はdiffにない。初回local test失敗2件（未設定TMPDIR assertion、fake curl URL抽出）、PID reuse review finding、初回Linux CIの非実行属性test defectを修正し全群を再実行した。AC4はlocal build/testまで接続済み、Terraform/container/既存CI再実行が未完了。T4とAC5/AC6は配備・親operation待ちであり未完了。
+2026-09-25 Main: AC1はproduction API/AWS相関と不足値、AC2/AC3は独立temp rootの反例群でVerified。実装は固定owned root直下だけを対象とし、marker、direct-child、non-symlink、PID+process start leaseを全て検証する。通常・非zero・signalではcurrent childだけを削除し、hard kill残留は次bootstrapでdead lease確認後に回収する。共有`/tmp`列挙、容量増量、failure policy変更、DB操作はdiffにない。初回local test失敗2件（未設定TMPDIR assertion、fake curl URL抽出）、PID reuse review finding、初回Linux CIの非実行属性test defectを修正し全群を再実行した。app-ci再実行とapp-deployでTerraform/containerを含む全gateが成功したためAC4/T3をVerifiedとする。T4とAC5/AC6は配備済みだが、親operation後の実行観測待ちで未完了。
 
 ## Approval boundary and next action
 
-利用者は限定修正を明示承認し、C5はその後のread-only AWS/API照合でLambdaと確定した。承認済み設計を変更せずlocal実装・検証まで完了した。recordは`Approved`を維持し、既存CI、配備、本番観測が未完了のため`Implemented`にはしない。
+利用者は限定修正を明示承認し、C5はその後のread-only AWS/API照合でLambdaと確定した。承認済み設計を変更せず実装、検証、既存CI/CD配備まで完了した。recordは`Approved`を維持し、停止解除後の本番観測が未完了のため`Implemented`にはしない。
 
-次はverified checkpointをcommit/pushし、既存CIのTerraform validation、Linux lifecycle test、collector container buildを確認する。全gate成功後に既存CI/CDで配備し、pipeline pausedを維持したままrevisionとsanitized temp metricsをread-only確認する。Recovery、retry、resumeは行わず、親Mainのoperation判断へ結果を返す。
+次は親Mainへ配備成功、停止維持、Running 0、未完了AC5/AC6を返す。親Mainが別途Recovery/resumeを判断・実行した後に、V9のterminal/後続/2周期とV10のsanitized temp metricsをread-only確認する。本taskはRecovery、retry、resumeを行わない。
 
-中断時点の未コミット対象は本record、正本文書、bootstrap/helper、Dockerfile、専用test、既存CI workflowの承認済みslice。次回検証は`git diff --check`、両validator、format、build、non-External tests、既存CI results。目的外の未コミットファイルはない。
+中断時点の未コミット対象は本recordの配備証拠追記だけ。次回検証は親operation後のV9/V10。目的外の未コミットファイルはない。
