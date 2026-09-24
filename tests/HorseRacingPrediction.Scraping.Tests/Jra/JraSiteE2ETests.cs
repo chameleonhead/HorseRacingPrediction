@@ -71,6 +71,19 @@ public sealed class JraSiteE2ETests
     }
 
     [TestMethod]
+    public async Task OfficialMeetingCancellation_SeparatesCoursesAndReplacementDay()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var date = new DateOnly(2026, 9, 21);
+        var evidence = await _session.Navigate.ReadMeetingCancellationAsync(date, RaceCourse.Nakayama, cts.Token);
+        Assert.IsNotNull(evidence);
+        Assert.AreEqual(4, evidence.MeetingNumber);
+        Assert.AreEqual(7, evidence.MeetingDay);
+        Assert.IsNull(await _session.Navigate.ReadMeetingCancellationAsync(date, RaceCourse.Hanshin, cts.Token));
+        Assert.IsNull(await _session.Navigate.ReadMeetingCancellationAsync(date.AddDays(1), RaceCourse.Nakayama, cts.Token));
+    }
+
+    [TestMethod]
     public async Task 現在月Calendar取得()
     {
         using var cts = new CancellationTokenSource(TestTimeout);
@@ -200,6 +213,32 @@ public sealed class JraSiteE2ETests
 
         Assert.AreEqual(raceId, result.RaceId);
         Assert.IsTrue(result.Results.Count > 0, $"{raceId} のレース結果が空でした。");
+    }
+
+    [TestMethod]
+    [DataRow(21, RaceCourse.Hanshin)]
+    [DataRow(22, RaceCourse.Nakayama)]
+    public async Task September21DiscoveryIncident_ResultListPreservesMeetingIdentity(int day, RaceCourse course)
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        // JRA officially cancelled September 21 Nakayama and held the meeting on September 22.
+        // Its results must never be accepted as September 21 results.
+        var date = new DateOnly(2026, 9, day);
+        var page = await _session.Navigate.ToRaceResultListAsync(date, course, cts.Token);
+        Assert.IsInstanceOfType<JraRaceListPage>(page);
+        var list = (JraRaceListPage)page;
+        Assert.AreEqual(date, list.Date);
+        Assert.AreEqual(course, list.Course);
+        Assert.IsTrue(list.Races.Count > 0);
+    }
+
+    [TestMethod]
+    public async Task September21DiscoveryIncident_CancelledDateDoesNotReturnReplacementResults()
+    {
+        using var cts = new CancellationTokenSource(TestTimeout);
+        var failure = await Assert.ThrowsAsync<JraNavigationException>(() =>
+            _session.Navigate.ToRaceResultListAsync(new DateOnly(2026, 9, 21), RaceCourse.Nakayama, cts.Token));
+        Assert.AreEqual(JraNavigationFailureReason.OutOfDisplayedRange, failure.Reason);
     }
 
     [TestMethod]

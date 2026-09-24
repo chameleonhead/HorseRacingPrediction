@@ -61,6 +61,10 @@ internal class NoOpWebBrowser : IWebBrowser
 /// </summary>
 internal sealed class FakeJraNavigator : IJraNavigator
 {
+    public Func<DateOnly, RaceCourse, JraMeetingCancellation?>? MeetingCancellationFactory { get; set; }
+    public Task<JraMeetingCancellation?> ReadMeetingCancellationAsync(DateOnly date, RaceCourse course,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(MeetingCancellationFactory?.Invoke(date, course));
     public Func<Uri, IJraPage>? DirectUrlFactory { get; set; }
     public List<Uri> DirectUrlRequests { get; } = [];
     public Task<IJraPage> ToUrlAsync(Uri url, CancellationToken cancellationToken = default)

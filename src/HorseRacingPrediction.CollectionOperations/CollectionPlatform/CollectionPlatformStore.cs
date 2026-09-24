@@ -151,7 +151,6 @@ public sealed partial class CollectionPlatformStore
         CancellationToken cancellationToken)
     {
         resource = resource.Normalize();
-        var metadataJson = SerializeTaskMetadata(attributes);
         CollectionRequestEntity? resumableRequest = null;
         if (string.IsNullOrWhiteSpace(resource.Provider) || string.IsNullOrWhiteSpace(resource.Id))
             throw new ArgumentException("Provider and resource id are required.", nameof(resource));
@@ -198,6 +197,8 @@ public sealed partial class CollectionPlatformStore
 
         var resourceEntity = await db.Resources.SingleOrDefaultAsync(x => x.Type == resource.Type
             && x.Provider == resource.Provider && x.ResourceId == resource.Id, cancellationToken);
+        var metadataJson = await ResolveTaskMetadataJsonAsync(db, resourceEntity, definition, reason, attributes,
+            cancellationToken).ConfigureAwait(false);
         if (resourceEntity is null)
         {
             resourceEntity = new CollectionResourceEntity
@@ -215,7 +216,7 @@ public sealed partial class CollectionPlatformStore
         else
         {
             resourceEntity.EffectiveDate ??= effectiveDate;
-            if (attributes is not null) resourceEntity.AttributesJson = JsonSerializer.Serialize(attributes);
+            if (attributes is not null) resourceEntity.AttributesJson = metadataJson;
         }
 
         if (explicitUrl is not null)
@@ -469,6 +470,39 @@ public sealed partial class CollectionPlatformStore
     private static bool IsOrdinaryRegistration(CollectionReason reason)
         => reason is CollectionReason.Initial or CollectionReason.Backfill or CollectionReason.Discovery;
 
+    private static async Task<string> ResolveTaskMetadataJsonAsync(CollectionPlatformDbContext db,
+        CollectionResourceEntity? resource, CollectionDefinitionId definition, CollectionReason reason,
+        IReadOnlyDictionary<string, string>? attributes, CancellationToken cancellationToken)
+    {
+        if (reason is not (CollectionReason.ManualRefresh or CollectionReason.Recovery))
+            return SerializeTaskMetadata(attributes);
+
+        var effective = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (resource is not null)
+        {
+            var priorSnapshot = await db.Tasks.AsNoTracking()
+                .Where(x => x.ResourcePk == resource.ResourcePk && x.DefinitionId == definition.Value
+                    && x.MetadataJson != null && x.MetadataJson != "{}")
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.TaskId)
+                .Select(x => x.MetadataJson!)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (priorSnapshot is not null)
+                foreach (var pair in DeserializeTaskMetadata(priorSnapshot))
+                    effective[pair.Key] = pair.Value;
+
+            if (effective.Count == 0)
+                foreach (var pair in DeserializeTaskMetadata(resource.AttributesJson))
+                    effective[pair.Key] = pair.Value;
+        }
+
+        if (attributes is not null)
+            foreach (var pair in attributes)
+                effective[pair.Key] = pair.Value;
+
+        return SerializeTaskMetadata(effective);
+    }
+
     public async Task<CollectionBulkPreview> PreviewBulkRequestAsync(CollectionDefinitionId definition,
         int requestedRevision, IEnumerable<CollectionBulkTarget> targets,
         CancellationToken cancellationToken = default)
@@ -705,8 +739,15 @@ public sealed partial class CollectionPlatformStore
                 var facets = await db.RaceArtifactStates.AsNoTracking().Where(x =>
                     x.ResourcePk == resource.ResourcePk).ToListAsync(cancellationToken).ConfigureAwait(false);
                 foreach (var facet in facets)
+                {
+                    // Current is relative to the leased task's requested extractor revision.
+                    // Preserve stored evidence while requiring an upgrade to be collected.
+                    var effectiveStatus = facet.Status == RaceArtifactStatus.Current
+                        && facet.AppliedRevision < task.RequestedRevision
+                            ? RaceArtifactStatus.Due : facet.Status;
                     taskAttributes[facet.Artifact == RaceArtifactKind.Card
-                        ? "cardArtifactStatus" : "resultArtifactStatus"] = facet.Status.ToString();
+                        ? "cardArtifactStatus" : "resultArtifactStatus"] = effectiveStatus.ToString();
+                }
             }
             return new LeasedCollectionTask(task.TaskId, task.RequestId,
                 new ResourceKey(resource.Type, resource.Provider, resource.ResourceId),
