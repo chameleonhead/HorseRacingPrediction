@@ -1,5 +1,22 @@
 # 公開・配備・安定稼働確認
 
+## 最新配備と再開（2026-09-24 23:03 JST）
+
+- 独立GETで discovery:2026092106/task162c424b-ea16-43a5-8612-9d6dea32c4e1 が22:59:03.6729634にSucceeded、続く discovery:2026092109/taskb9c949cf-269b-4c2a-a5e3-219334da8a1d が23:00:17.0049667にSucceededを確認。両方CollectedMeetings=10/CancelledMeetings=1、20260921:Nakayama:4:7と公式0921日別番組を根拠に中止処理を通過。番組誤分類の修正は本番の独立後続成功で確認できた。
+- 23:02:49 GETでpaused=false、discovery:2026092115へ進行。horse-profile task69ba8fc2はRunningのため成功とみなさない。約7分の進行は30分監視2周期・全対象・金曜鮮度の検証を代替しない。
+- T1-A1 continuation5のread-only結果: race-detailの振替検出には有効CNAME、開催同一性、7日以内、request sinkが必要。日別中止判定はdiscovery専用で、既存S2は振替未確定時backoff。旧race-detail公開待ちの終端化は新しい判定条件になるため、この解除許可だけで変更しない。
+- 提案（未承認、T2f/T3a/AC7）: 公式日別番組の開催全体中止と旧taskの開催identityが一致した場合だけUnavailable/NotApplicableで待機を終了し、旧ID・履歴を保持する。代替日の収集は独立し、旧IDへ代替結果を書かない。CNAME欠落、開催不一致、他場だけの中止、曖昧な告知、通信失敗では終端化しない。影響は既存backoff契約の変更、代替案は現行待機維持。利用者判断待ちで、実装・データ補正は未実行。受け入れ条件は一致時のみ終端、上記反例の非終端、後続開催の独立収集、履歴保持。設計詳細確定と承認後にMainが状態契約を保持し、局所実装の委譲可否を再評価する。
+
+- PR69（分類修正）merge0e3f74aa、CI36004077096成功。配備36004708127はtransport欠落発見でverify中cancel、本番jobは実行せず。
+- PR70はruntime9d33ac26とskill a7b1310bの別commit。GitHub4094263765の「別commitにする」指摘へcommit/file一覧の反証を返信4094270583、thread解決済み。既存CI36006843145成功、f07a190dへmerge。
+- 既存app-deploy36007623965はverify/build-and-push/deploy-collector-lambda/deploy/migrate-race-entry-owners全成功。Ownerは従来のpreviewのみ、データ補正なし。新Workflowなし。
+- 22:55:10 GET health200、Running0、停止notification f7ffb34f/task2c26ac7aの既知解析失敗を確認。22:55:26.7164129、Mainがresume1回（204）、GET paused=false。初回解除後の無条件反復ではなく、新revisionと同原因解消を確認した再開。Recovery/履歴削除/未知ID補正なし。
+- 22:56:10、旧race-detail task e4f7d3bd（20260921:Nakayama:7、rev1）のattemptがRaceResultNotYetAvailableで待機へ戻り、Result AwaitingPublication facetとResolveResult stageが本番に保存された。HTTP証拠転送は独立観測できたが正常取得成功ではない。後続Nakayama10/12からdiscovery:2026092106 task162c424bへ進み、22:58時点paused=false。
+- 中止日の旧race-detailが公開待ちを反復する問題は未解決。T1-A1 continuation5が既存契約と原因をread-only確認し、MainがT2f/T3a/AC7として保持。通知Recoveryや推測した代替Race IDで解消しない。
+- 22:38の独立domain GETでは20260920:Nakayama:3に出走13/結果13、ResultDeclaredAt9/20 11:21を確認。metadataのdomainRaceId欠落時は既存DeterministicIdGeneratorを使用。既存データの存在証拠であり、21:57taskの新規保存や完全性の証明ではない。
+
+観測継続: 新規成功taskと次の独立成功、元programme誤分類の再発なし、Card/Result保存証拠を確認する。未確認期間・金曜/開催日鮮度は未検証のまま。全体StatusはApproved。
+
 ## 2026-09-24 停止解除の判断権限
 
 transport公開前checkpoint: 最終実payload値に合わせたRelease build0 warning/error、全solution非External1217 passed/既存1skip、全solution format verify、audit/DDD/skill validator、diff check全て成功。次は同じ修正だけをcommit/push→PR既存CI/review→既存app-deploy→本番GET/resume。スキル補強だけは別目的commitに分離する。Owner/profile、旧失敗Recovery、将来鮮度は未完了。証拠欠落/重複facetの元失敗commandも成功した全体試験に含まれ、未解決test失敗なし。

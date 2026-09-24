@@ -26,9 +26,9 @@ Approval: 2026-09-24、利用者が「改修を進めてください。対処を
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 既存修正13966c9c配備済み。再開後の日別番組RaceList誤分類を局所修正、検証・配備中。Owner/profile同定の残課題は未閉鎖。 |
-| Verification | In progress | 基準全体1198 passed・既存1skip、Collector318件成功。新規分類修正は再現red→focused72、Scraping277、実サイト同一session1件成功。全体gate/review続行。 |
-| Deployment/operation | In progress | 利用者がMain判断のresumeを許可。21:56解除→race-detail1件成功→21:58後続discovery解析失敗で再停止。修正配備後に再開・連続観測。Recoveryは未実行、安定稼働は未検証。 |
+| Code | In progress | f07a190dに日別番組分類、HTTP証拠転送、初回複数stage facet重複修正を配備済み。中止日の旧race-detail公開待ち、Owner/profileは未閉鎖。 |
+| Verification | In progress | 最終全体1217 passed/既存1skip、外部同一session1成功、独立review P1閉鎖、PR70 CI成功。本番の新facet/stage保存と開催収集2件の連続成功を独立GET確認。全体安定性・鮮度は未検証。 |
+| Deployment/operation | In progress | 既存app-deploy36007623965全成功。22:55 Main判断でresume、23:02 paused=falseで後続進行。旧中止raceの終端条件変更はoperationsの未承認提案。Recovery未実行。 |
 
 ### 再停止closure checkpoint
 
@@ -105,7 +105,7 @@ T2f/T2e/T3a・AC2/3/4/7: 日別番組の誤分類は既存bugとして承認範�
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T1 | 停止・revision・patch・原因対応確定 | Main（調査補助: explorer） | Lead + Worker | Design approval | read-only | AC1,AC5 matrix、Mainによる原証拠照合 | baseline/operations: 日別番組誤分類、HTTP証拠欠落、残存Owner/profile境界 | In progress | Lead — 未確定原因・配備契約判断。既存patchの呼出経路探索のみexplorerへ分離 | T1-A1 | unavailable; retries 0; corrections 0; reviews 4 |
+| T1 | 停止・revision・patch・原因対応確定 | Main（調査補助: explorer） | Lead + Worker | Design approval | read-only | AC1,AC5 matrix、Mainによる原証拠照合 | baseline/operations: 日別番組誤分類、HTTP証拠欠落、残存Owner/profile境界 | In progress | Lead — 未確定原因・配備契約判断。既存patchの呼出経路探索のみexplorerへ分離 | T1-A1 | unavailable; retries 0; corrections 0; reviews 5 |
 | T2 | 既存patch統合と必要な原因修正、回帰 | Main（今回coding委譲なし） | Lead | T1、原因別設計承認 | Mainが永続化・共有契約・統合を所有。workerはdispatch前に専用recordへ列挙した実ファイルのみ | AC2,AC4 tests、独立反例、既存regression | 未取得: attributable diff、test結果、独立反例を提出 | In progress | Lead — persistence/concurrency/integration。既知局所sliceは既実装を検証 | none | unavailable; retries 0; corrections 0; reviews 0; 未実行 |
 | T3 | 許可された復旧と本番完了確認 | 原因別解消taskのMain（本番操作owner）、独立review担当 | Lead + Review | T2、明示的operation許可 | 本番writeは指定Main一人。review担当はread-only | AC3-6 read-back、配備/復旧チェックリスト | 未取得: 許可対象・配備revision・観測時刻・保存結果を提出 | Dependent | Lead — 本番権限・データ安全・最終判定。高risk差分は別default agentが独立review | none | unavailable; retries 0; corrections 0; reviews 0; 未実行 |
 | T1a | clean統合基準とpatch包含表を確定 | Main + explorer | Lead | Approval | read-only、Mainだけbaseline記録 | 実行仕様§1/3; SHAとsymbol比較 | baseline.md: ff95b224+metadata差分、配備unknownを明記 | Verified | Lead — integration/配備基準判断。経路探索はexplorer | none | unavailable; retries 0; corrections 0; reviews 0 |
