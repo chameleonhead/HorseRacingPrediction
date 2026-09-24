@@ -8,6 +8,8 @@
 
 ## Core concepts
 
+収集完了のHTTP境界は、全体Result/FailureImpactだけでなく`StageOutcomes`と`RaceEvidence`をWorkerからAPI、Storeまで転送する。Card/Resultの保存状態・公式発走時刻はその証拠から記録し、全体task成功だけから生成しない。旧workerの省略payloadは互換受信するが、欠落した過去のfacet/evidenceを推測復元しない。輸送検証はWorker client→実endpoint→DB→詳細GETで行う（[2026-09-24 closure](changes/20260924_collection-error-closure/README.md)）。
+
 - Resource: 何を取得するか。provider と論理 ID で識別し URL を Identity にしない。
 - CollectionDefinition: Resource の何を観測するか。
 - CollectionRevision: どの抽出仕様で観測するか。
