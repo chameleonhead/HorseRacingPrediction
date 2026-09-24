@@ -19,7 +19,9 @@ RUN apt-get update \
 
 COPY --from=build /opt/collector ./
 COPY deploy/lambda-bootstrap /var/runtime/bootstrap
-RUN chmod 0755 /var/runtime/bootstrap /var/task/HorseRacingPrediction.Collector /var/task/.playwright/node/linux-x64/node \
+COPY deploy/collector-temp-lifecycle.sh /var/runtime/collector-temp-lifecycle.sh
+RUN chmod 0755 /var/runtime/bootstrap /var/runtime/collector-temp-lifecycle.sh \
+        /var/task/HorseRacingPrediction.Collector /var/task/.playwright/node/linux-x64/node \
     && test -x /var/task/.playwright/node/linux-x64/node
 
 ENV ASPNETCORE_URLS=http://127.0.0.1:8080

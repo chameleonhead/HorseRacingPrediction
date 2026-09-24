@@ -1,34 +1,76 @@
 #!/bin/sh
 set -eu
 
-# Lambda's home directory and container filesystem are not writable. Chromium
-# writes font, configuration and browser caches during startup, so keep every
-# writable XDG location in Lambda's ephemeral storage.
-export HOME=/tmp
-export XDG_CACHE_HOME=/tmp/.cache
-export XDG_CONFIG_HOME=/tmp/.config
-mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
+. "${COLLECTOR_TEMP_HELPER:-/var/runtime/collector-temp-lifecycle.sh}"
+collector_temp_initialize
+
+current_invocation_dir=''
+collector_pid=''
+cleanup_current_invocation() {
+  if [ -n "$current_invocation_dir" ]; then
+    collector_temp_finish_invocation "$current_invocation_dir"
+    current_invocation_dir=''
+  fi
+}
+terminate_bootstrap() {
+  exit_status="$1"
+  if [ -n "$collector_pid" ]; then
+    kill -TERM "$collector_pid" 2>/dev/null || true
+    wait "$collector_pid" 2>/dev/null || true
+    collector_pid=''
+  fi
+  exit "$exit_status"
+}
+trap cleanup_current_invocation EXIT
+trap 'terminate_bootstrap 129' HUP
+trap 'terminate_bootstrap 130' INT
+trap 'terminate_bootstrap 143' TERM
+
+run_collector() {
+  invocation_dir="$1"
+  shift
+  HOME="$invocation_dir/home" \
+  XDG_CACHE_HOME="$invocation_dir/cache" \
+  XDG_CONFIG_HOME="$invocation_dir/config" \
+  TMPDIR="$invocation_dir/tmp" \
+    "${COLLECTOR_EXECUTABLE:-/var/task/HorseRacingPrediction.Collector}" "$@" &
+  collector_pid=$!
+  collector_status=0
+  wait "$collector_pid" || collector_status=$?
+  collector_pid=''
+  return "$collector_status"
+}
 
 if [ -z "${AWS_LAMBDA_RUNTIME_API:-}" ]; then
-  exec /var/task/HorseRacingPrediction.Collector --once
+  current_invocation_dir="$(collector_temp_begin_invocation)"
+  collector_temp_log_metrics start >&2
+  collector_status=0
+  run_collector "$current_invocation_dir" --once || collector_status=$?
+  cleanup_current_invocation
+  collector_temp_log_metrics finish >&2
+  exit "$collector_status"
 fi
 
 while true; do
-  headers_file="/tmp/lambda-headers"
-  event_file="/tmp/lambda-event.json"
+  current_invocation_dir="$(collector_temp_begin_invocation)"
+  collector_temp_log_metrics start >&2
+  headers_file="$current_invocation_dir/lambda-headers"
+  event_file="$current_invocation_dir/lambda-event.json"
   curl -sS -D "$headers_file" -o "$event_file" \
     "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/next"
-  request_id="$(sed -n 's/^[Ll]ambda-[Rr]untime-[Aa]ws-[Rr]equest-[Ii]d:[[:space:]]*\(.*\)\r$/\1/p' "$headers_file")"
-  deadline_ms="$(sed -n 's/^[Ll]ambda-[Rr]untime-[Dd]eadline-[Mm]s:[[:space:]]*\(.*\)\r$/\1/p' "$headers_file")"
+  request_id="$(sed -n 's/\r$//; s/^[Ll]ambda-[Rr]untime-[Aa]ws-[Rr]equest-[Ii]d:[[:space:]]*//p' "$headers_file")"
+  deadline_ms="$(sed -n 's/\r$//; s/^[Ll]ambda-[Rr]untime-[Dd]eadline-[Mm]s:[[:space:]]*//p' "$headers_file")"
+  if [ -z "$request_id" ] || [ -z "$deadline_ms" ]; then
+    echo 'Lambda invocation headers were incomplete; refusing to run the collector.' >&2
+    exit 1
+  fi
 
-  failure_reason_file="/tmp/collector-failure-reason.txt"
-  response_file="/tmp/collector-response.json"
-  rm -f "$failure_reason_file"
-  rm -f "$response_file"
+  failure_reason_file="$current_invocation_dir/collector-failure-reason.txt"
+  response_file="$current_invocation_dir/collector-response.json"
 
   if COLLECTOR_EVENT_PATH="$event_file" COLLECTOR_RESPONSE_PATH="$response_file" \
       AWS_LAMBDA_REQUEST_ID="$request_id" AWS_LAMBDA_DEADLINE_MS="$deadline_ms" \
-      /var/task/HorseRacingPrediction.Collector --once; then
+      run_collector "$current_invocation_dir" --once; then
     response_json='{"batchItemFailures":[]}'
     if [ -s "$response_file" ]; then
       response_json="$(cat "$response_file")"
@@ -48,5 +90,10 @@ while true; do
     curl -sS -X POST \
       "http://${AWS_LAMBDA_RUNTIME_API}/2018-06-01/runtime/invocation/${request_id}/error" \
       -H 'Content-Type: application/json' -d "{\"errorMessage\":\"${error_message_json}\"}" >/dev/null
+  fi
+  cleanup_current_invocation
+  collector_temp_log_metrics finish >&2
+  if [ "${COLLECTOR_BOOTSTRAP_TEST_ONCE:-}" = "1" ]; then
+    exit 0
   fi
 done

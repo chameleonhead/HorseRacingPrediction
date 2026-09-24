@@ -55,6 +55,12 @@ API停止成功・非稼働・未checkpointのSQLite WALなしを確認してか
 移行前にも停止/実行中0件を確認する。移行と検証が成功し、配備前に稼働中で、再開直前に要対応failureが0件の場合だけ自動再開する。新旧どちらの要対応でも残る場合や不明/失敗時は停止を維持し、明示的な復旧判断へ戻す。新しいWorkflowは追加しない。
 変更・反例・運用結果は [collection error closure](changes/20260924_collection-error-closure/evidence/operations.md) を参照する。
 
+### Collector Lambda の一時資源
+
+Collector Lambda は共有 `/tmp` を直接 cleanup 対象にしない。`/tmp/horse-racing-prediction-collector` をアプリ所有rootとし、invocationごとのchildへPlaywrightのtemp、HOME/XDG cache、runtime event/responseを隔離する。正常終了・報告済み失敗・signal終了では当該childだけを削除し、runtime強制終了で後処理できなかったchildは次のbootstrap初期化時にownership markerと非稼働leaseを検証して回収する。marker不正、symlink、root外、稼働中processのchildは削除しない。
+
+invocation前後には所有rootの使用量、filesystem空き容量、取得可能な場合の空きinode、invocation directory数だけを記録し、directory名、URL、資格情報、ページ内容は記録しない。ephemeral storage増量だけで残留を隠さず、cleanup失敗、ENOSPC、相関ID欠落は安全停止と原因調査へ戻す。実装・反例・本番検証は [Playwright 一時領域 ENOSPC の恒久対策](changes/20260925_playwright-tmp-enospc/README.md) を正本とする。
+
 - 自動処理の失敗は再実行可能にする
 - 取り込み時刻とデータソースを必ず保存する
 - 訂正は上書きせず訂正イベントで表現する
