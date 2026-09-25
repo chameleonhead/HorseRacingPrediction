@@ -1,6 +1,6 @@
 # Playwright 一時領域 ENOSPC の恒久対策
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main（親 owner: `01a0b79f-6ea8-7f61-84e1-cec6652615f4`）
 - Created: 2026-09-25
@@ -11,6 +11,8 @@
 Approval: 2026-09-25、利用者が親スレッドで「修正を承認します。対応をお願いします。」と明示回答。提示済みの所有一時領域、安全な終了時・次回回収、観測、反例試験、既存 CI/CD による配備と独立検証を承認した。共有 `/tmp` 全削除、DB/履歴削除、未知補正、Recovery、強制 retry、resume、新 Workflow は承認対象外。C5 の実行基盤は承認によって事実確定したとは扱わず、read-only AWS 証拠を pre-implementation gate とした。
 
 Amendment approval: 2026-09-25、利用者がC7のinvocation専用process group、当該group限定のTERM/bounded wait/KILL、deleted-open-fileと別group生存の反例、既存CI/CD再配備、停止を維持した再観測を「承認します」と明示回答。名前検索・全process kill、共有`/tmp`削除、Recovery、retry、resume、environment recycleは引き続き承認対象外。
+
+C8 diagnostic approval: 2026-09-25、利用者が親Mainの承認依頼へ「お願いします」と明示回答。削除前後の容量、対象PGID termination前後の安全な生存判定、post-delete blocks/inodesを秘密情報なしで記録し、session離脱・owned-root外writeの隔離Linux/container反例を追加して、関連回帰と既存CI/CDで検証・配備し原因識別証拠と最小修正案を作る範囲を承認した。新Workflow、全`/proc`走査、command/env/secretログ、広範kill、共有`/tmp`cleanup、容量増量、DB/履歴操作、retry、Recovery、recycle、resumeは禁止。本番停止を維持し、診断配備後の実行は親Mainの別途安全判断とする。
 
 ## Completion summary
 
@@ -110,7 +112,7 @@ Proposed amendment（再承認対象）:
 ## Documentation updates
 
 - 本 record を新規作成し、incident evidence、承認境界、lifecycle 設計、反例、検証計画を記録した。
-- `docs/11-automation-design.md` に collector の app-owned temp root、invocation cleanup、stale recovery、観測契約を現在運用の正本として追記した。
+- `docs/11-automation-design.md` に collector の app-owned temp root、invocation cleanup、stale recovery、通常観測とC8 bounded descendant診断の秘密情報非記録契約を現在運用の正本として追記した。
 - `.github/workflows/app-ci.yml` と `.github/workflows/app-deploy.yml` の既存 verify jobへ専用 lifecycle test を追加した。新 Workflow は作成していない。
 - `docs/26-collection-platform-design.md` と `docs/23-jra-scraping-redesign.md` を確認した。今回の runtime ownership は収集データ契約や JRA navigation 契約を変えないため更新しない。
 
@@ -125,7 +127,7 @@ Proposed amendment（再承認対象）:
 | C5 | API attempt の `local-*` correlation と Lambda 想定が矛盾した。AWS read-only 証拠で障害時刻 00:21:55 JST の Lambda request `39ac8b64-...` と ENOSPC、同一 warm log stream、900秒 timeoutを確認した。 | 修正対象 runtime の誤認、CloudWatch 誤相関。 | 実行基盤は Lambda と確定し、承認済み bootstrap 設計を維持する。`local-*` は別の telemetry defect として元 request ID を欠落させない bounded test を含める。 | AC1/T1/V1 | Lambda lifecycle 修正へ進む。API相関だけで runtime を判定しない。 | 2026-09-25 限定修正を承認 | Resolved in design |
 | C6 | cleanup 配備だけでは既存停止・失敗taskは進まない。 | 配備を復旧完了と誤認。 | 配備と Recovery/resume を分離。親 Main の個別判断後だけ AC5 を観測。 | AC4,AC5/T3,T4/V8-V9 | 推奨 | 2026-09-25 限定修正を承認 | Resolved in design |
 | C7 | post-deployでowned directoryとinodeは回復したがfree blocksが14 finishで約355 MiB減少。direct childだけをwaitするbootstrapはPlaywright/Chromium子孫の寿命を所有していない。 | 現修正のままwarm reuseするとENOSPC再発のおそれ。広域killは別processを誤停止する。 | invocation専用PGIDだけをTERM/KILLする設計と、deleted-open-file grandchild・別group生存の反例testを追加する。production `/proc`未取得のため原因processは断定しない。 | AC6,AC7/T4,T5/V10-V12 | process group境界を明示する修正を推奨。名前検索・全process killには反対。 | 2026-09-25 amendmentを承認 | Resolved in design |
-| C8 | process-group amendment配備後も、同一warm streamの短時間finish 9件でfree blocksが`4,194,308 KiB`から`3,921,304 KiB`へ273,004 KiB減少した。owned directoryは各finishで4 KiB、directory 0、inodeは概ね回復した。 | PGID回収だけではAC6を満たさず、再開継続はENOSPC再発riskを持つ。現telemetryではPGID外へ離脱した子孫、owned root外write、削除時点のopen fd、filesystem固有挙動を区別できない。 | safety pauseを維持する。次変更は、削除前owned bytes、group termination前後の安全なPGID生存有無、削除直後free blocksを秘密情報なしで段階観測し、production-shaped containerでsession離脱・outside-root反例を追加してから最小修正を再提案する。全`/proc`走査、名前kill、共有`/tmp`cleanup、容量増量は行わない。 | AC6/T4,T6/V10,V13 | 原因をprocess escapeと断定せず、bounded診断を先行する。再実装・再配備は再承認が必要。 | 未提示 | Open decision |
+| C8 | process-group amendment配備後も、同一warm streamの短時間finish 9件でfree blocksが`4,194,308 KiB`から`3,921,304 KiB`へ273,004 KiB減少した。owned directoryは各finishで4 KiB、directory 0、inodeは概ね回復した。 | PGID回収だけではAC6を満たさず、再開継続はENOSPC再発riskを持つ。現telemetryではPGID外へ離脱した子孫、owned root外write、削除時点のopen fd、filesystem固有挙動を区別できない。 | safety pauseを維持する。次変更は、削除前owned bytes、group termination前後の安全なPGID生存有無、削除直後free blocksを秘密情報なしで段階観測し、production-shaped containerでsession離脱・outside-root反例を追加してから最小修正を再提案する。全`/proc`走査、名前kill、共有`/tmp`cleanup、容量増量は行わない。 | AC6/T4,T6/V10,V13 | 原因をprocess escapeと断定せず、bounded診断を先行する。根本修正への拡張は別途再承認。 | 2026-09-25 bounded診断を承認 | Resolved in design |
 
 C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認済み D1–D4 を変更しない。C1 の容量対 inode は失敗時に未観測だが、共有領域を削除しない観測・所有権設計はどちらにも必要な安全条件であり、production-shaped local fixture と配備後 telemetry で検証を続ける。
 
@@ -150,7 +152,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T3 | 正本文書と workflow-equivalent regression を統合する（AC4） | Main | Lead | T2 | `docs/11-automation-design.md`、本 record、必要時のみ既存 infra test | V7 | local、app-ci、app-deployのformat/build/test/Terraform/container/deploy guard成功 | Verified | Lead — 統合、CI/CD、最終 scope 判定 | none | unavailable; retries 1; corrections 1; reviews 2 |
 | T4 | 既存 CI/CD 配備と独立 production verification を行う（AC5,AC6） | 親 Main（operation owner）+ 本 task read-only verifier | Lead + Review | T3、既存CI/CD、operation 個別許可 | 既存 CI/CD。production mutation は親 Main のみ | V8-V10 | revision、terminal attempt、後続、2周期、resource telemetry | Dependent | Lead — 本番権限、安全、最終判定。resume は本 task 非所有 | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | invocation専用process groupでPlaywright/Chromium子孫を終了し、deleted-open-file block残留を防ぐ（AC6,AC7） | Main | Lead | C7再承認 | `deploy/lambda-bootstrap`、lifecycle helper、専用test、必要なDocker packageだけ。API/DB/queue/policyは変更禁止 | V11-V12 | grandchild block回収、別group生存、signal/nonzero、Linux/container/CI成功 | Verified | Lead — process kill安全性、PID/PGID再利用、production統合は分離不能 | none | unavailable; retries 0; corrections 1; reviews 1 |
-| T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Proposed | Lead — production診断、安全境界、次設計判断。確定後のfixture実装だけ分離可能 | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | In progress | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ### Agent ownership and escalation
 
@@ -247,10 +249,18 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 
 2026-09-25 post-amendment operation checkpoint — Main: 親Mainの一度限りresumeでV10を再実行したが、10 finish時点で短時間経路のfree-block減少が明確に再現したため20 finish/2周期を待たず安全条件に従い再pauseした。AC7のisolated process-group契約はVerifiedのままだが、production AC6を満たすとの仮説は反証された。C8を`Open decision`、T6/V13を追加しStatusを`Proposed`へ戻す。実runtime imageはAWS revision/digestと新bootstrap由来のmetricsで接続済みだが、現観測だけでprocess escape、outside-root write、open fdを断定しない。次の実装・配備はbounded診断設計の再承認前に行わない。
 
+2026-09-25 C8 pre-implementation review — Main: 利用者承認によりC8を`Resolved in design`、T6を`In progress`、Statusを`Approved`とした。write scopeは`deploy/lambda-bootstrap`、`deploy/collector-temp-lifecycle.sh`、既存lifecycle test、必要な正本文書、本recordに限定する。削除前、group termination前後、削除後の段階値は整数・boolean/countだけを出し、path、PID/PGID実値、command line、環境変数、secret、全process一覧を出さない。isolated testは同group残留、session離脱、owned-root外writeを独立させ、値がどの仮説を識別できるかを検証する。既存normal/nonzero/signal/header/unisolated/group安全性を回帰する。診断が全process走査、外部契約、kill範囲、容量、cleanup範囲を変える必要が出た場合は設計へ戻す。安全境界と共有shell/testが密結合した短いsliceのためLeadが保持する。
+
+2026-09-25 C8 local checkpoint — Main: 削除前後とgroup終了前後の`InvocationKiB/OwnedKiB/FreeKiB/FreeInodes/GroupAlive`、collector稼働中に`/proc/{known-parent}/task/{known-parent}/children`だけから取得したbounded descendantの`Captured/Alive/OutsideGroup/DeletedFds` countを実装した。PID/PGID値、path、fd target、command line、環境変数は出力しない。local Git Bashの既存11 caseとshell syntaxは成功。実`setsid`を要する同group、session離脱、outside-root反例はLinux CI待ちであり、T6は`In progress`を維持する。local Docker engineは未起動のためcontainer gateもCIへ残す。
+
+同checkpointの関連回帰はdeploy guard 17件、`dotnet format --verify-no-changes`、Release build警告0/error 0、非External 1217 passed / 1 skipped / 0 failed、脆弱packageなし。`codegraph sync .`はindex未初期化で失敗したためgraph証拠を主張せず、ユーザー判断なしにindexを作成しない。
+
+初回Linux CI run `36098542222` はsession離脱反例で失敗した。追跡file自身のfilesystem blockを考慮せず`InvocationKiB=4`へ固定したtest期待と、collector親がmonitor捕捉前に終了し得るfixture競合が原因候補だった。production telemetry契約は変えず、fixtureへ0.2秒の捕捉窓を追加し、owned sizeを`<1024 KiB`のbounded条件へ修正した。local lifecycleとformatを再実行して成功し、Linux CI再検証待ち。
+
 ## Approval boundary and next action
 
-利用者は初回の限定修正とprocess-group amendmentを承認し、その実装・配備は完了した。しかしpost-amendment V10がAC6を再度反証したため、C8/T6を未承認の`Open decision`/`Proposed`として追加し、recordを`Proposed`へ戻した。C8の診断設計と境界を再承認するまでproduction codeを変更しない。
+利用者は初回の限定修正、process-group amendment、C8 bounded診断を承認した。post-amendment V10はAC6を再度反証したため、T6/V13の診断実装・検証・配備を進める。診断証拠から導く根本修正は本承認に含めず、最小修正案を提示して再承認を得る。
 
-次はpaused drainをread-onlyでRunning 0まで確認し、C8のbounded診断案を利用者へ提示する。再承認後だけV13を実装・検証・配備する。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+次はV13を実装し、隔離Linux/container、関連回帰、既存CI/CDで検証・配備する。本番停止を維持し、診断配備後の実行は親Mainの別途安全判断とする。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
-中断時点の未コミット対象は本recordのpost-amendment反証だけ。次回検証はpaused drain、record validator、C8再承認。目的外の未コミットファイルはない。
+中断時点の未コミット対象はC8承認とpre-implementation gateを反映した本recordだけ。次回検証はV13のlocal/Linux/container/CI/CDと停止状態のread-only確認。目的外の未コミットファイルはない。

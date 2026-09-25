@@ -110,3 +110,23 @@ collector_temp_log_metrics() {
     "$phase" "${owned_kib:-Unavailable}" "${free_kib:-Unavailable}" \
     "${free_inodes:-Unavailable}" "${child_count:-Unavailable}"
 }
+
+collector_temp_log_diagnostic() {
+  phase="$1"
+  invocation_dir="$2"
+  group_alive="$3"
+  invocation_kib=0
+  if [ -n "$invocation_dir" ] && collector_temp_is_owned_child "$invocation_dir"; then
+    invocation_kib="$(du -sk "$invocation_dir" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  fi
+  owned_kib="$(du -sk "$COLLECTOR_TEMP_ROOT" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+  free_kib="$(df -Pk "$COLLECTOR_TEMP_ROOT" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  free_inodes="$(df -Pi "$COLLECTOR_TEMP_ROOT" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  case "$group_alive" in
+    true|false) ;;
+    *) group_alive=unknown ;;
+  esac
+  printf 'Collector temp diagnostic. Phase=%s InvocationKiB=%s OwnedKiB=%s FreeKiB=%s FreeInodes=%s GroupAlive=%s\n' \
+    "$phase" "${invocation_kib:-Unavailable}" "${owned_kib:-Unavailable}" \
+    "${free_kib:-Unavailable}" "${free_inodes:-Unavailable}" "$group_alive"
+}

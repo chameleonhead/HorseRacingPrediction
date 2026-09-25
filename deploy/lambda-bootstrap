@@ -8,11 +8,16 @@ current_invocation_dir=''
 collector_pid=''
 collector_pgid=''
 collector_group_valid='false'
+collector_descendant_file=''
+descendant_monitor_pid=''
 collector_session_command="${COLLECTOR_SESSION_COMMAND:-/usr/bin/setsid}"
 cleanup_current_invocation() {
   if [ -n "$current_invocation_dir" ]; then
+    collector_temp_log_diagnostic pre-delete "$current_invocation_dir" false >&2
+    finished_invocation_dir="$current_invocation_dir"
     collector_temp_finish_invocation "$current_invocation_dir"
     current_invocation_dir=''
+    collector_temp_log_diagnostic post-delete "$finished_invocation_dir" false >&2
   fi
 }
 collector_group_is_safe() {
@@ -25,8 +30,79 @@ collector_group_is_safe() {
   bootstrap_pgid="$(awk '{ print $5 }' "/proc/$$/stat" 2>/dev/null || true)"
   [ -n "$bootstrap_pgid" ] && [ "$collector_pgid" -ne "$bootstrap_pgid" ]
 }
+collector_group_is_alive() {
+  collector_group_is_safe && kill -0 "-$collector_pgid" 2>/dev/null
+}
+record_descendants() {
+  parent_pid="$1"
+  output_file="$2"
+  children_file="/proc/$parent_pid/task/$parent_pid/children"
+  [ -r "$children_file" ] || return 0
+  for descendant_pid in $(cat "$children_file" 2>/dev/null || true); do
+    descendant_start="$(awk '{ print $22 }' "/proc/$descendant_pid/stat" 2>/dev/null || true)"
+    case "$descendant_pid" in ''|*[!0-9]*) continue ;; esac
+    case "$descendant_start" in ''|*[!0-9]*) continue ;; esac
+    if ! grep -q "^$descendant_pid $descendant_start$" "$output_file" 2>/dev/null; then
+      printf '%s %s\n' "$descendant_pid" "$descendant_start" >>"$output_file"
+    fi
+    record_descendants "$descendant_pid" "$output_file"
+  done
+}
+monitor_collector_descendants() {
+  root_pid="$1"
+  output_file="$2"
+  : >"$output_file"
+  while kill -0 "$root_pid" 2>/dev/null; do
+    record_descendants "$root_pid" "$output_file"
+    sleep 0.02
+  done
+  record_descendants "$root_pid" "$output_file"
+}
+stop_descendant_monitor() {
+  if [ -n "$descendant_monitor_pid" ]; then
+    kill -TERM "$descendant_monitor_pid" 2>/dev/null || true
+    wait "$descendant_monitor_pid" 2>/dev/null || true
+    descendant_monitor_pid=''
+  fi
+}
+log_descendant_diagnostic() {
+  phase="$1"
+  captured=0
+  alive=0
+  outside_group=0
+  deleted_fds=0
+  if [ -n "$collector_descendant_file" ] && [ -f "$collector_descendant_file" ]; then
+    while read -r descendant_pid descendant_start; do
+      case "$descendant_pid" in ''|*[!0-9]*) continue ;; esac
+      case "$descendant_start" in ''|*[!0-9]*) continue ;; esac
+      captured=$((captured + 1))
+      current_start="$(awk '{ print $22 }' "/proc/$descendant_pid/stat" 2>/dev/null || true)"
+      [ "$current_start" = "$descendant_start" ] || continue
+      alive=$((alive + 1))
+      descendant_pgid="$(awk '{ print $5 }' "/proc/$descendant_pid/stat" 2>/dev/null || true)"
+      if [ -n "$collector_pgid" ] && [ "$descendant_pgid" != "$collector_pgid" ]; then
+        outside_group=$((outside_group + 1))
+      fi
+      for fd in "/proc/$descendant_pid/fd"/*; do
+        [ -L "$fd" ] || continue
+        fd_target="$(readlink "$fd" 2>/dev/null || true)"
+        case "$fd_target" in
+          *' (deleted)') deleted_fds=$((deleted_fds + 1)) ;;
+        esac
+      done
+    done <"$collector_descendant_file"
+  fi
+  printf 'Collector descendant diagnostic. Phase=%s Captured=%s Alive=%s OutsideGroup=%s DeletedFds=%s\n' \
+    "$phase" "$captured" "$alive" "$outside_group" "$deleted_fds" >&2
+}
 terminate_collector_group() {
   collector_group_is_safe || return 0
+  group_alive=false
+  collector_group_is_alive && group_alive=true
+  if [ -n "$current_invocation_dir" ]; then
+    collector_temp_log_diagnostic pre-group-termination "$current_invocation_dir" "$group_alive" >&2
+  fi
+  log_descendant_diagnostic pre-group-termination
   kill -TERM "-$collector_pgid" 2>/dev/null || true
   attempts=0
   while kill -0 "-$collector_pgid" 2>/dev/null && [ "$attempts" -lt 20 ]; do
@@ -36,11 +112,18 @@ terminate_collector_group() {
   if kill -0 "-$collector_pgid" 2>/dev/null; then
     kill -KILL "-$collector_pgid" 2>/dev/null || true
   fi
+  group_alive=false
+  kill -0 "-$collector_pgid" 2>/dev/null && group_alive=true
+  if [ -n "$current_invocation_dir" ]; then
+    collector_temp_log_diagnostic post-group-termination "$current_invocation_dir" "$group_alive" >&2
+  fi
+  log_descendant_diagnostic post-group-termination
   collector_group_valid='false'
   collector_pgid=''
 }
 terminate_bootstrap() {
   exit_status="$1"
+  stop_descendant_monitor
   if [ -n "$collector_pid" ]; then
     if collector_group_is_safe; then
       terminate_collector_group
@@ -101,11 +184,16 @@ run_collector() {
   fi
   collector_pgid="$collector_pid"
   collector_group_valid='true'
+  collector_descendant_file="$invocation_dir/.descendant-pids"
   : >"$session_go"
+  monitor_collector_descendants "$collector_pid" "$collector_descendant_file" &
+  descendant_monitor_pid=$!
   collector_status=0
   wait "$collector_pid" || collector_status=$?
+  stop_descendant_monitor
   terminate_collector_group
   collector_pid=''
+  collector_descendant_file=''
   return "$collector_status"
 }
 
