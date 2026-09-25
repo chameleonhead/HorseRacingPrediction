@@ -341,6 +341,10 @@ Agent task split — T10 ownerはMain、model tierはLead、write scopeは`Colle
 
 V17 local evidence: 修正前の専用再現はnull ScheduledRefreshと次回継承の2件が失敗し、最小修正後はScheduledRefresh、ManualRefresh/Recovery、handler関連13件が成功した。`dotnet format --verify-no-changes`、Release build（warning 0/error 0）、非External 1224 passed / 1 skipped、deploy safety guard 17件、change-record validator（issues 0）、脆弱packageなし、`git diff --check`が成功した。AC11/T10はlocalで`Connected`/`In progress`を満たすが、既存CI/CD・配備と独立production ScheduledRefresh attempt観測前は`Verified`にしない。
 
+2026-09-25 C12 deployment checkpoint — app-ci run `36136923690`は4分52秒で成功し、PR #94をmainへmerge commit `149d6a0dea0ded617f5817b928a8e601effebad3`として統合した。pushで自動起動したapp-deploy run `36137435077`を正規runとして使用し、誤って追加起動した後発manual run `36137448676`はpending中にcancelして二重適用を防いだ。正規runはverify、Linux lifecycle、build/test、空SQLite migration、脆弱package、Terraform validation、collector container、API image build/push、collector Lambda apply、API restart/healthを全て成功した。最後のlegacy race migration自体もsource 0 / errors 0で収束したが、配備前がunpausedで既存actionable failuresが残っていたため、安全規則がautomatic resumeを拒否してrun全体はfailureとなった。retry、Recovery、failure dismissal、DB補正、手動resumeは行っていない。
+
+AWS read-only確認ではLambdaは`Active` / `Successful`、LastModified `2026-09-25T22:00:25+09:00`、revision `db04fb24-f869-41fd-b29d-a48b417ef66f`、image tag `sha-149d6a0dea0ded617f5817b928a8e601effebad3`、code digest `6e0e7af2484028cb519c73f1066f070f2b1da8948b8bdcf38e691ae0e32c6efb`、10240 MiB / 2048 MiB / 900秒である。production APIはreason `deployment version transition`でpaused、updatedAt `2026-09-25T21:58:55.3011614+09:00`、Running 0。実装・統合・配備は完了したが、新revisionの実ScheduledRefresh attemptはautomatic resume拒否により未観測である。従ってAC11を`Connected`、T10を`Dependent`とし、親Mainの明示operation判断後に同一resourceの次回ScheduledRefresh task metadata、handler outcome、`SubjectIdentification:MissingName`非再発をread-only確認するまで`Verified`にしない。
+
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和、C10のcollector-child限定core抑止を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10/T8/V15は異常終了を成功へ変えず、raw coreによる容量消費だけを抑止する。
