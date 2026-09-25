@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $helper = (Resolve-Path (Join-Path $repositoryRoot 'deploy/collector-temp-lifecycle.sh')).Path
 $bootstrap = (Resolve-Path (Join-Path $repositoryRoot 'deploy/lambda-bootstrap')).Path
+$coreSuppressionTest = (Resolve-Path (Join-Path $repositoryRoot 'tests/scripts/test-collector-core-suppression.sh')).Path
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("hrp-collector-temp-test-" + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $testRoot
 
@@ -27,6 +28,7 @@ try {
     $root = Convert-ToBashPath $testRoot
     $helperPath = Convert-ToBashPath $helper
     $bootstrapPath = Convert-ToBashPath $bootstrap
+    $coreSuppressionTestPath = Convert-ToBashPath $coreSuppressionTest
     $detectedSetsid = [string](& $Bash --noprofile --norc -c 'command -v setsid || true' | Select-Object -First 1)
     $detectedSetsid = "$detectedSetsid".Trim()
     $realSetsid = -not [string]::IsNullOrWhiteSpace($detectedSetsid)
@@ -43,6 +45,12 @@ defined setsid() or die "setsid failed";
 exec @ARGV or die "exec failed";
 EOF
 chmod +x '$sessionCommand'
+"@
+    }
+    else {
+        Invoke-BashCase 'collector-child-core-suppression' @"
+set -eu
+sh '$coreSuppressionTestPath' '$bootstrapPath' '$helperPath'
 "@
     }
 
