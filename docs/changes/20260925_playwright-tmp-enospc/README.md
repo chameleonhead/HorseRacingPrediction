@@ -18,9 +18,9 @@ C8 diagnostic approval: 2026-09-25、利用者が親Mainの承認依頼へ「お
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Corrective amendment deployed | invocation専用PGIDの起動検証、TERM/bounded wait/KILL、signal統合、fail-closedをmainへ統合し、既存CI/CDで配備済み。 |
-| Verification | V11/V12 verified | Linuxで30 MiB deleted-open-file回収、別group生存、unisolated拒否、既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、container/Terraform/CI/CD成功。 |
-| Deployment/operation | Deployed; AC6 failed; safety-paused and draining | Lambda revision `820532fe-0ef1-49a2-aa8f-f24c87927f67`で一度だけresumeしたが、短時間finishごとに約30 MiBのfree-block減少が再現。13:54 JSTに親Mainが再pauseした。Recovery、retry、cleanup、環境recycleは未実施。 |
+| Code | Corrective amendment and bounded diagnostics deployed | invocation専用PGIDの終了制御に加え、C8の段階容量・bounded descendant集約診断をmainへ統合し、既存CI/CDで配備済み。 |
+| Verification | V11/V12 verified; V13 connected | Linuxで同group deleted-open-file回収、session離脱、owned-root外writeを識別し、既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、container/Terraform/CI/CDが成功。production診断値は未取得。 |
+| Deployment/operation | Diagnostics deployed; safety-paused; execution pending parent decision | Lambda revision `107b53fc-bd7d-48d6-bee1-5904fbc59709`、image digest `sha256:97819982db662fec65b0fd0ac0ed5ba8e8b5c633f562a070cba23b20e983ff14`。productionは同じsafety holdでpaused、Running 0。本taskは診断実行、Recovery、retry、cleanup、resume、環境recycleを実施していない。 |
 
 ## Context and incident ledger
 
@@ -152,7 +152,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T3 | 正本文書と workflow-equivalent regression を統合する（AC4） | Main | Lead | T2 | `docs/11-automation-design.md`、本 record、必要時のみ既存 infra test | V7 | local、app-ci、app-deployのformat/build/test/Terraform/container/deploy guard成功 | Verified | Lead — 統合、CI/CD、最終 scope 判定 | none | unavailable; retries 1; corrections 1; reviews 2 |
 | T4 | 既存 CI/CD 配備と独立 production verification を行う（AC5,AC6） | 親 Main（operation owner）+ 本 task read-only verifier | Lead + Review | T3、既存CI/CD、operation 個別許可 | 既存 CI/CD。production mutation は親 Main のみ | V8-V10 | revision、terminal attempt、後続、2周期、resource telemetry | Dependent | Lead — 本番権限、安全、最終判定。resume は本 task 非所有 | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | invocation専用process groupでPlaywright/Chromium子孫を終了し、deleted-open-file block残留を防ぐ（AC6,AC7） | Main | Lead | C7再承認 | `deploy/lambda-bootstrap`、lifecycle helper、専用test、必要なDocker packageだけ。API/DB/queue/policyは変更禁止 | V11-V12 | grandchild block回収、別group生存、signal/nonzero、Linux/container/CI成功 | Verified | Lead — process kill安全性、PID/PGID再利用、production統合は分離不能 | none | unavailable; retries 0; corrections 1; reviews 1 |
-| T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | In progress | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認、親Mainの診断実行判断 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Dependent | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 1; corrections 1; reviews 1 |
 
 ### Agent ownership and escalation
 
@@ -257,10 +257,14 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 
 初回Linux CI run `36098542222` はsession離脱反例で失敗した。追跡file自身のfilesystem blockを考慮せず`InvocationKiB=4`へ固定したtest期待と、collector親がmonitor捕捉前に終了し得るfixture競合が原因候補だった。production telemetry契約は変えず、fixtureへ0.2秒の捕捉窓を追加し、owned sizeを`<1024 KiB`のbounded条件へ修正した。local lifecycleとformatを再実行して成功し、Linux CI再検証待ち。
 
+2026-09-25 C8 deployment checkpoint — Main: 修正後のapp-ci run `36098675722` はLinux実`setsid`反例を含む全gateが成功し、PR #79をmainへmerge commit `308bc605109dd7656ca67169ddce723a06c1e2d6`として統合した。app-deploy run `36099037785` はLinux V13、全build/test、Terraform validation、collector container build/push、collector Lambda、API health、migration queueを含む全jobが成功した。Lambdaは`LastModified=2026-09-25T14:41:58+09:00`、revision `107b53fc-bd7d-48d6-bee1-5904fbc59709`、image digest `sha256:97819982db662fec65b0fd0ac0ed5ba8e8b5c633f562a070cba23b20e983ff14`、Active/Successful、ephemeral storage 4096 MiB、memory 2048 MiB、timeout 900秒である。
+
+V13の隔離Linux反例は、同groupのdeleted-open fileを回収できること、session離脱では`OutsideGroup>0`かつ`DeletedFds>0`となること、owned-root外writeだけでは`Alive=0`、`OutsideGroup=0`、`DeletedFds=0`となることを独立に確認した。診断は既知親のchildren関係だけを辿るbounded集約であり、全`/proc`走査、PID/path/fd target/command/env出力、kill・cleanup範囲拡大はdiffにない。production APIのread-only確認では`isPaused=true`、reasonは`Safety hold: process-group amendment still loses approximately 30 MiB per short invocation; AC6 failed again. Preserve evidence; no automatic resume.`、updatedAt `2026-09-25T13:54:24.3218382+09:00`、Running 0。本taskは診断revisionを実行していないため、production値による原因識別と最小root-cause修正案は親Mainの一度限りの安全判断に依存する。T6を`Dependent`、AC6/V13を`Connected`、recordを`Approved`のまま維持する。
+
 ## Approval boundary and next action
 
-利用者は初回の限定修正、process-group amendment、C8 bounded診断を承認した。post-amendment V10はAC6を再度反証したため、T6/V13の診断実装・検証・配備を進める。診断証拠から導く根本修正は本承認に含めず、最小修正案を提示して再承認を得る。
+利用者は初回の限定修正、process-group amendment、C8 bounded診断を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備は完了した。診断証拠から導く根本修正は本承認に含めず、production診断後に最小修正案を提示して再承認を得る。
 
-次はV13を実装し、隔離Linux/container、関連回帰、既存CI/CDで検証・配備する。本番停止を維持し、診断配備後の実行は親Mainの別途安全判断とする。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+次は親Mainがsafety pauseを維持したまま一度限りの診断実行可否を判断する。実行する場合は段階metricsからsession離脱、owned-root外write、deleted-open fdのどれが実環境で成立するかを識別し、最小修正案へ戻す。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
-中断時点の未コミット対象はC8承認とpre-implementation gateを反映した本recordだけ。次回検証はV13のlocal/Linux/container/CI/CDと停止状態のread-only確認。目的外の未コミットファイルはない。
+中断時点で承認済みdiagnostic code、隔離test、CI/CD、停止状態のread-only確認は完了した。未完了は親Main所有のproduction診断実行、結果判定、最小root-cause修正案だけであり、目的外の未コミットファイルはない。
