@@ -5,7 +5,7 @@ bootstrap="${1:-/var/runtime/bootstrap}"
 helper="${2:-/var/runtime/collector-temp-lifecycle.sh}"
 session_command="${COLLECTOR_SESSION_COMMAND:-/usr/bin/setsid}"
 
-[ -x "$bootstrap" ]
+[ -r "$bootstrap" ]
 [ -r "$helper" ]
 [ -x "$session_command" ]
 
