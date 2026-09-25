@@ -88,7 +88,12 @@ jobs:
           terraform -chdir=infra/collector-lambda validate
 
       - name: Build collector Lambda container
-        run: docker build -f Dockerfile.collector-lambda -t collector-lambda-ci .
+        run: |
+          docker build -f Dockerfile.collector-lambda -t collector-lambda-ci .
+          docker run --rm --entrypoint /bin/sh \
+            -v "$PWD/tests/scripts/test-collector-core-suppression.sh:/tmp/test-collector-core-suppression.sh:ro" \
+            collector-lambda-ci /tmp/test-collector-core-suppression.sh \
+            /var/runtime/bootstrap /var/runtime/collector-temp-lifecycle.sh
 
   build-and-push:
     needs: verify

@@ -161,6 +161,7 @@ run_collector() {
       shift 2
       printf "%s\n" "$$" >"$ready"
       while [ ! -e "$go" ]; do sleep 0.01; done
+      ulimit -c 0
       exec "$@"
     ' sh "$session_ready" "$session_go" \
       "${COLLECTOR_EXECUTABLE:-/var/task/HorseRacingPrediction.Collector}" "$@" &

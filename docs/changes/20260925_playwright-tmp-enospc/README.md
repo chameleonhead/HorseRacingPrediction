@@ -1,6 +1,6 @@
 # Playwright 一時領域 ENOSPC の恒久対策
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main（親 owner: `01a0b79f-6ea8-7f61-84e1-cec6652615f4`）
 - Created: 2026-09-25
@@ -15,6 +15,8 @@ Amendment approval: 2026-09-25、利用者がC7のinvocation専用process group�
 C8 diagnostic approval: 2026-09-25、利用者が親Mainの承認依頼へ「お願いします」と明示回答。削除前後の容量、対象PGID termination前後の安全な生存判定、post-delete blocks/inodesを秘密情報なしで記録し、session離脱・owned-root外writeの隔離Linux/container反例を追加して、関連回帰と既存CI/CDで検証・配備し原因識別証拠と最小修正案を作る範囲を承認した。新Workflow、全`/proc`走査、command/env/secretログ、広範kill、共有`/tmp`cleanup、容量増量、DB/履歴操作、retry、Recovery、recycle、resumeは禁止。本番停止を維持し、診断配備後の実行は親Mainの別途安全判断とする。
 
 C9 temporary capacity approval: 2026-09-25、利用者が「まずはLambdaの一時領域を10GBに変更し、状況を監視」と明示指示した。従来の容量増量禁止を対象collector Lambdaのephemeral storage `10240 MiB`に限り上書きし、既存Terraform、関連contract test、既存CI/CD配備、独立設定確認を承認した。これは原因解消またはAC6達成の判定ではなく、段階診断telemetryを維持した監視余裕の暫定拡大である。memory、timeout、concurrency、他service、DB、共有`/tmp`cleanup、kill、retry、Recovery、recycle、履歴削除、resume、新Workflowは範囲外。resumeは親Main所有とする。
+
+C10 core suppression approval: 2026-09-25、利用者がcore dumpは不要としてC10/T8/V15を明示承認した。collector子processの起動前だけcore sizeを0にし、raw crash dump生成を抑止する。異常終了、元exit status、互換性チェック、例外報告、段階診断は維持し、成功へ偽装しない。unrelated processのcore policy、API/DB/queue、cleanup/kill範囲を変更しない。`CollectionDispatchCompatibilityException`は親record T2/T2fの別原因として未解消のまま保持する。新Workflow、resume、retry、Recovery、recycle、DB/履歴操作は禁止。
 
 ## Completion summary
 
@@ -131,7 +133,7 @@ Proposed amendment（再承認対象）:
 | C7 | post-deployでowned directoryとinodeは回復したがfree blocksが14 finishで約355 MiB減少。direct childだけをwaitするbootstrapはPlaywright/Chromium子孫の寿命を所有していない。 | 現修正のままwarm reuseするとENOSPC再発のおそれ。広域killは別processを誤停止する。 | invocation専用PGIDだけをTERM/KILLする設計と、deleted-open-file grandchild・別group生存の反例testを追加する。production `/proc`未取得のため原因processは断定しない。 | AC6,AC7/T4,T5/V10-V12 | process group境界を明示する修正を推奨。名前検索・全process killには反対。 | 2026-09-25 amendmentを承認 | Resolved in design |
 | C8 | process-group amendment配備後も、同一warm streamの短時間finish 9件でfree blocksが`4,194,308 KiB`から`3,921,304 KiB`へ273,004 KiB減少した。owned directoryは各finishで4 KiB、directory 0、inodeは概ね回復した。 | PGID回収だけではAC6を満たさず、再開継続はENOSPC再発riskを持つ。現telemetryではPGID外へ離脱した子孫、owned root外write、削除時点のopen fd、filesystem固有挙動を区別できない。 | safety pauseを維持する。次変更は、削除前owned bytes、group termination前後の安全なPGID生存有無、削除直後free blocksを秘密情報なしで段階観測し、production-shaped containerでsession離脱・outside-root反例を追加してから最小修正を再提案する。全`/proc`走査、名前kill、共有`/tmp`cleanup、容量増量は行わない。 | AC6/T4,T6/V10,V13 | 原因をprocess escapeと断定せず、bounded診断を先行する。根本修正への拡張は別途再承認。 | 2026-09-25 bounded診断を承認 | Resolved in design |
 | C9 | 4096 MiB環境では短時間finishごとに約30 MiB減少し、恒久原因未確定のまま再開すると再度ENOSPCへ達する。AWSは`/tmp`を512–10240 MiBの1 MiB単位で設定でき、Terraform providerも10240 MiBを許容する。 | 10 GBは監視時間を延ばすが、漏出速度や原因を改善せず、費用増と将来の再枯渇を残す。 | 対象Lambdaだけを10240 MiBへ変更し、診断telemetryを維持する。配備とresumeを分離し、恒久修正・AC6達成とは扱わない。 | AC6,AC8/T4,T6,T7/V10,V13,V14 | 暫定緩和として賛成。容量だけで解決判定することには反対。 | 2026-09-25 10 GB変更と監視を承認 | Resolved in design |
-| C10 | 10 GB配備後の一度限りresumeで、`CollectionDispatchCompatibilityException`直後に`Aborted (core dumped)`が発生し、10 finishでfree blocksが242,268 KiB減少した。各stageはInvocationKiB 44→0、OwnedKiB 48→4、GroupAlive=false、Alive/OutsideGroup/DeletedFds=0だった。Linux隔離probeはcore有効時にfileを生成し、`ulimit -c 0`時は生成しなかった。 | owned-root外core dumpが約30 MiB残る仮説を強く支持し、session離脱/deleted-open fd仮説は今回の経路では支持されない。core抑止は容量漏出を止め得るが、crash dump診断を失う。compatibility例外自体を直さず隠すriskもある。 | collector bootstrapの子process起動前だけcore sizeを0へ制限し、隔離testでabort時のcore不生成、通常exit/signal/元exit code/diagnostic維持、他process非影響を保証する。raw coreは保存しない。compatibility mismatchは親`20260924_collection-error-closure`のT2/T2fへ原因証拠を接続し、別taskを重複起票しない。production実装・配備は再承認後。 | AC6,AC9/T6,T8/V13,V15 | 最小core抑止を推奨。ただし根本例外の修正と分離し、診断損失を明示する。 | 未回答 | Open decision |
+| C10 | 10 GB配備後の一度限りresumeで、`CollectionDispatchCompatibilityException`直後に`Aborted (core dumped)`が発生し、10 finishでfree blocksが242,268 KiB減少した。各stageはInvocationKiB 44→0、OwnedKiB 48→4、GroupAlive=false、Alive/OutsideGroup/DeletedFds=0だった。Linux隔離probeはcore有効時にfileを生成し、`ulimit -c 0`時は生成しなかった。 | owned-root外core dumpが約30 MiB残る仮説を強く支持し、session離脱/deleted-open fd仮説は今回の経路では支持されない。core抑止は容量漏出を止め得るが、crash dump診断を失う。compatibility例外自体を直さず隠すriskもある。 | collector bootstrapの子process起動前だけcore sizeを0へ制限し、隔離testでabort時のcore不生成、通常exit/signal/元exit code/diagnostic維持、他process非影響を保証する。raw coreは保存しない。compatibility mismatchは親`20260924_collection-error-closure`のT2/T2fへ原因証拠を接続し、別taskを重複起票しない。 | AC6,AC9/T6,T8/V13,V15 | 最小core抑止を推奨。ただし根本例外の修正と分離し、診断損失を明示する。 | 2026-09-25 collector-child限定core抑止を承認 | Resolved in design |
 
 C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認済み D1–D4 を変更しない。C1 の容量対 inode は失敗時に未観測だが、共有領域を削除しない観測・所有権設計はどちらにも必要な安全条件であり、production-shaped local fixture と配備後 telemetry で検証を続ける。
 
@@ -147,7 +149,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | AC6 | 配備後観測で app-owned temp 使用量とfilesystem減少速度が bounded であることを示し、暫定容量増量を恒久原因解消と混同せず余裕を確認する。初回V10はfree-block boundに失敗しており、C9後も再検証する。 | T4,T5,T6 | V10,V13 sanitized resource telemetry | Connected |
 | AC7 | direct child終了・bootstrap signal時に当該invocation専用process groupの子孫だけがboundedに終了し、削除済みopen fileのblocksが回収され、unrelated groupは生存する。 | T5 | V11 process-group/grandchild counterexamples、V12 Linux/container regression | Verified |
 | AC8 | 対象collector Lambdaだけがephemeral storage 10240 MiBとなり、memory 2048 MiB、timeout 900秒、reserved concurrency 1、停止状態、診断telemetry、既存CI/CD契約が維持される。 | T7 | V14 contract test、Terraform validation、既存CI/CD、AWS/API read-only GET | Verified |
-| AC9 | collector子processのabortがapp-owned root外へcore fileを残さず、通常・nonzero・signalの終了意味、段階診断、他processのcore policyを変えない。compatibility mismatchは独立した親T2/T2f原因として保持する。 | T8 | V15 production-shaped abort/core-policy反例、既存lifecycle/Linux/container regression | Not started |
+| AC9 | collector子processのabortがapp-owned root外へcore fileを残さず、通常・nonzero・signalの終了意味、段階診断、他processのcore policyを変えない。compatibility mismatchは独立した親T2/T2f原因として保持する。 | T8 | V15 production-shaped abort/core-policy反例、既存lifecycle/Linux/container regression | Connected |
 
 ## Task plan
 
@@ -160,7 +162,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T5 | invocation専用process groupでPlaywright/Chromium子孫を終了し、deleted-open-file block残留を防ぐ（AC6,AC7） | Main | Lead | C7再承認 | `deploy/lambda-bootstrap`、lifecycle helper、専用test、必要なDocker packageだけ。API/DB/queue/policyは変更禁止 | V11-V12 | grandchild block回収、別group生存、signal/nonzero、Linux/container/CI成功 | Verified | Lead — process kill安全性、PID/PGID再利用、production統合は分離不能 | none | unavailable; retries 0; corrections 1; reviews 1 |
 | T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認、親Mainの診断実行判断 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Dependent | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 1; corrections 1; reviews 1 |
 | T7 | collector Lambdaのephemeral storageだけを10240 MiBへ変更し、既存CI/CDで配備・独立確認する（AC8） | Main | Lead | C9承認 | `infra/collector-lambda/main.tf`、対応contract test、本record。memory/timeout/concurrency/API/DB/workflowは変更禁止 | V14 | test、Terraform validation、CI/CD成功、AWS 10240 MiB、停止状態 | Verified | Lead — production Terraform変更と独立設定確認を小さな単一sliceとして保持 | none | unavailable; retries 0; corrections 0; reviews 1 |
-| T8 | collector子processだけのcore dumpを抑止し、compatibility例外と容量漏出を分離する（AC6,AC9） | Main | Lead | C10再承認 | `deploy/lambda-bootstrap`、専用lifecycle test、正本文書、本recordのみ。例外分類/API/DB/queue/cleanup/kill範囲は変更禁止 | V15 | core enabled/disabled abort反例、通常/nonzero/signal/diagnostic回帰、Linux/container/CI/CD | Proposed | Lead — crash policy、診断損失、production bootstrap安全境界の判断を保持 | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T8 | collector子processだけのcore dumpを抑止し、compatibility例外と容量漏出を分離する（AC6,AC9） | Main | Lead | C10再承認 | `deploy/lambda-bootstrap`、専用lifecycle/core test、既存app-deployのcontainer test step、正本文書、本recordのみ。例外分類/API/DB/queue/cleanup/kill範囲は変更禁止 | V15 | core enabled/disabled abort反例、通常/nonzero/signal/diagnostic回帰、Linux/container/CI/CD | In progress | Lead — crash policy、診断損失、production bootstrap安全境界の判断を保持 | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ### Agent ownership and escalation
 
@@ -281,10 +283,16 @@ V13の隔離Linux反例は、同groupのdeleted-open fileを回収できるこ�
 
 同checkpointのWSL隔離probeは`core_pattern=core`で、core有効の`os.abort()`が1 file / 3340 KiB、同一process shellで`ulimit -c 0`後のabortが0 file / 0 KiBだった。これはcore抑止の機構を実証するが、productionの約30 MiB file自体は列挙・取得していないため、core dumpを最終factとはせず強い仮説とする。代表persisted taskはJRA/Horse/`horse-profile`/Realtime、attempt 5、Runningで、runtime envelopeはWeekendSubjects/TaskCount 12だった。`IsCompatible`はWeekendSubjectsでacquired resourceの`weekendPriorityUntil`がenvelope GroupKeyと完全一致することを要求するため、このtaskはその属性が欠落または不一致だったと境界づけられる。dispatch生成時点との差が生じた理由は未確定で、親record T2/T2fの既存dispatch原因へ接続する。
 
+2026-09-25 C10 pre-implementation review — Main: 利用者承認によりC10を`Resolved in design`、T8を`In progress`、AC9を`Connected`、Statusを`Approved`とした。実装はinvocation専用session shellがcollectorを`exec`する直前のcore size 0だけに限定するため、そのcollectorと子孫に継承され、bootstrap親・unrelated processへ影響しない。testはcore有効controlとcollector abortを同じ隔離directoryで比較し、collector側のcore不生成、abort由来exit status、段階診断、cleanup、親shell policy保持を確認する。既存normal/nonzero/signal/header/group/session-escape/outside-root反例を再実行する。互換性チェック、例外分類、error response、cleanup/kill範囲、API/DB/queueは変更せず、新Workflowを作成しない。
+
+2026-09-25 C10 local checkpoint — Main: invocation session shellのcollector `exec`直前へ`ulimit -c 0`を追加し、専用shell testを追加した。WSL Linuxではcollector abortがstatus 134を維持し、子process内core limit 0、core file 0、post-group/post-delete/descendant診断、owned cleanupを確認した。同じ親shellからcore有効controlを実行するとcore fileが生成され、親shellのcore policyは前後不変だった。Git Bashの既存lifecycle 11件、deploy guard 17件、shell syntaxは成功。既存app-deployのcontainer build直後に同じ専用testをimage内bootstrap/helperへ実行するstepを追加し、新Workflowは作成していない。互換性チェック、例外分類、error response、API/DB/queue、cleanup/kill範囲に変更はない。
+
+同checkpointの関連回帰はformat verify、Release build警告0/error 0、非External 1217 passed / 1 skipped / 0 failed。local Docker engineは未起動のためimage内V15は既存app-deployのLinux container gateへ残す。raw coreは隔離probeのcontrol判定直後に削除し、内容を読取・保存・出力していない。
+
 ## Approval boundary and next action
 
-利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10から導くcore抑止実装は既存承認に含めず、最小修正案として再承認を得る。
+利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和、C10のcollector-child限定core抑止を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10/T8/V15は異常終了を成功へ変えず、raw coreによる容量消費だけを抑止する。
 
-T7/V14の10 GB設定配備は完了したが、C10で暫定容量が観測rateに不十分と確認した。次はC10/T8/V15のcollector-only core抑止設計を再承認し、compatibility mismatchは親record T2/T2fで別原因として閉鎖する。再承認前にproduction code・配備を変更しない。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+T7/V14の10 GB設定配備は完了したが、C10で暫定容量が観測rateに不十分と確認した。次は承認済みC10/T8/V15を実装・検証・既存CI/CD配備し、停止を維持して独立確認する。compatibility mismatchは親record T2/T2fで別原因として閉鎖する。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
 中断時点でproductionはsafety pause、Running 0。未コミット対象はC10観測・C10/T8/V15提案を反映した本recordだけ。次はC10再承認、承認後のV15実装であり、目的外の未コミットファイルはない。
