@@ -6,16 +6,47 @@ collector_temp_initialize
 
 current_invocation_dir=''
 collector_pid=''
+collector_pgid=''
+collector_group_valid='false'
+collector_session_command="${COLLECTOR_SESSION_COMMAND:-/usr/bin/setsid}"
 cleanup_current_invocation() {
   if [ -n "$current_invocation_dir" ]; then
     collector_temp_finish_invocation "$current_invocation_dir"
     current_invocation_dir=''
   fi
 }
+collector_group_is_safe() {
+  case "$collector_pgid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$collector_group_valid" = 'true' ] || return 1
+  [ "$collector_pgid" -gt 1 ] || return 1
+  [ "$collector_pgid" -ne "$$" ] || return 1
+  bootstrap_pgid="$(awk '{ print $5 }' "/proc/$$/stat" 2>/dev/null || true)"
+  [ -n "$bootstrap_pgid" ] && [ "$collector_pgid" -ne "$bootstrap_pgid" ]
+}
+terminate_collector_group() {
+  collector_group_is_safe || return 0
+  kill -TERM "-$collector_pgid" 2>/dev/null || true
+  attempts=0
+  while kill -0 "-$collector_pgid" 2>/dev/null && [ "$attempts" -lt 20 ]; do
+    sleep 0.05
+    attempts=$((attempts + 1))
+  done
+  if kill -0 "-$collector_pgid" 2>/dev/null; then
+    kill -KILL "-$collector_pgid" 2>/dev/null || true
+  fi
+  collector_group_valid='false'
+  collector_pgid=''
+}
 terminate_bootstrap() {
   exit_status="$1"
   if [ -n "$collector_pid" ]; then
-    kill -TERM "$collector_pid" 2>/dev/null || true
+    if collector_group_is_safe; then
+      terminate_collector_group
+    else
+      kill -TERM "$collector_pid" 2>/dev/null || true
+    fi
     wait "$collector_pid" 2>/dev/null || true
     collector_pid=''
   fi
@@ -29,14 +60,51 @@ trap 'terminate_bootstrap 143' TERM
 run_collector() {
   invocation_dir="$1"
   shift
+  session_ready="$invocation_dir/.session-ready"
+  session_go="$invocation_dir/.session-go"
+  [ -x "$collector_session_command" ] || {
+    echo 'Collector session command is unavailable; refusing to run without process-group isolation.' >&2
+    return 1
+  }
+  collector_group_valid='false'
+  collector_pgid=''
   HOME="$invocation_dir/home" \
   XDG_CACHE_HOME="$invocation_dir/cache" \
   XDG_CONFIG_HOME="$invocation_dir/config" \
   TMPDIR="$invocation_dir/tmp" \
-    "${COLLECTOR_EXECUTABLE:-/var/task/HorseRacingPrediction.Collector}" "$@" &
+    "$collector_session_command" sh -c '
+      ready="$1"
+      go="$2"
+      shift 2
+      printf "%s\n" "$$" >"$ready"
+      while [ ! -e "$go" ]; do sleep 0.01; done
+      exec "$@"
+    ' sh "$session_ready" "$session_go" \
+      "${COLLECTOR_EXECUTABLE:-/var/task/HorseRacingPrediction.Collector}" "$@" &
   collector_pid=$!
+  attempts=0
+  while [ ! -s "$session_ready" ] && kill -0 "$collector_pid" 2>/dev/null && [ "$attempts" -lt 100 ]; do
+    sleep 0.01
+    attempts=$((attempts + 1))
+  done
+  session_pid=''
+  if [ -s "$session_ready" ]; then
+    session_pid="$(cat "$session_ready")"
+  fi
+  session_pgid="$(awk '{ print $5 }' "/proc/$collector_pid/stat" 2>/dev/null || true)"
+  if [ "$session_pid" != "$collector_pid" ] || [ "$session_pgid" != "$collector_pid" ]; then
+    echo 'Collector process-group isolation could not be verified; refusing to start the collector.' >&2
+    kill -TERM "$collector_pid" 2>/dev/null || true
+    wait "$collector_pid" 2>/dev/null || true
+    collector_pid=''
+    return 1
+  fi
+  collector_pgid="$collector_pid"
+  collector_group_valid='true'
+  : >"$session_go"
   collector_status=0
   wait "$collector_pid" || collector_status=$?
+  terminate_collector_group
   collector_pid=''
   return "$collector_status"
 }

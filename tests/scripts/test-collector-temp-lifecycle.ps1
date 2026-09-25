@@ -27,6 +27,24 @@ try {
     $root = Convert-ToBashPath $testRoot
     $helperPath = Convert-ToBashPath $helper
     $bootstrapPath = Convert-ToBashPath $bootstrap
+    $detectedSetsid = [string](& $Bash --noprofile --norc -c 'command -v setsid || true' | Select-Object -First 1)
+    $detectedSetsid = "$detectedSetsid".Trim()
+    $realSetsid = -not [string]::IsNullOrWhiteSpace($detectedSetsid)
+    $sessionCommand = if ($realSetsid) { $detectedSetsid } else { "$root/test-setsid" }
+    if (-not $realSetsid) {
+        Invoke-BashCase 'session-command-fixture' @"
+set -eu
+cat >'$sessionCommand' <<'EOF'
+#!/usr/bin/perl
+use strict;
+use warnings;
+use POSIX qw(setsid);
+defined setsid() or die "setsid failed";
+exec @ARGV or die "exec failed";
+EOF
+chmod +x '$sessionCommand'
+"@
+    }
 
     Invoke-BashCase 'normal-cleanup-and-isolation' @"
 set -eu
@@ -130,10 +148,11 @@ for code in 0 7; do
   export COLLECTOR_TEMP_ROOT='$root/bootstrap-'"`$code"
   export COLLECTOR_TEMP_HELPER='$helperPath'
   export COLLECTOR_EXECUTABLE="`$fake"
+  export COLLECTOR_SESSION_COMMAND='$sessionCommand'
   export FAKE_EXIT="`$code"
   unset AWS_LAMBDA_RUNTIME_API
   actual=0
-  sh '$bootstrapPath' >/dev/null 2>&1 || actual=`$?
+  sh '$bootstrapPath' >/dev/null || actual=`$?
   [ "`$actual" -eq "`$code" ]
   [ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
 done
@@ -180,6 +199,7 @@ export PATH="`$bin:`$PATH"
 export COLLECTOR_TEMP_ROOT='$root/lambda'
 export COLLECTOR_TEMP_HELPER='$helperPath'
 export COLLECTOR_EXECUTABLE="`$bin/collector"
+export COLLECTOR_SESSION_COMMAND='$sessionCommand'
 export COLLECTOR_TEST_TRACE='$root/lambda-trace'
 export COLLECTOR_BOOTSTRAP_TEST_ONCE=1
 export AWS_LAMBDA_RUNTIME_API=runtime.test
@@ -200,6 +220,7 @@ chmod +x "`$fake"
 export COLLECTOR_TEMP_ROOT='$root/signal'
 export COLLECTOR_TEMP_HELPER='$helperPath'
 export COLLECTOR_EXECUTABLE="`$fake"
+export COLLECTOR_SESSION_COMMAND='$sessionCommand'
 export COLLECTOR_TEST_READY='$root/signal-ready'
 unset AWS_LAMBDA_RUNTIME_API
 sh '$bootstrapPath' >/dev/null 2>&1 &
@@ -216,6 +237,80 @@ wait "`$bootstrap_pid" || status=`$?
 [ "`$status" -eq 143 ]
 [ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
 "@
+
+    Invoke-BashCase 'unisolated-session-command-fails-closed' @"
+set -eu
+bin='$root/unisolated-bin'
+mkdir -p "`$bin"
+cat >"`$bin/not-setsid" <<'EOF'
+#!/bin/sh
+exec "`$@"
+EOF
+cat >"`$bin/collector" <<'EOF'
+#!/bin/sh
+touch "`$COLLECTOR_TEST_UNSAFE_RAN"
+EOF
+chmod +x "`$bin/not-setsid" "`$bin/collector"
+export COLLECTOR_TEMP_ROOT='$root/unisolated'
+export COLLECTOR_TEMP_HELPER='$helperPath'
+export COLLECTOR_EXECUTABLE="`$bin/collector"
+export COLLECTOR_SESSION_COMMAND="`$bin/not-setsid"
+export COLLECTOR_TEST_UNSAFE_RAN='$root/unisolated-ran'
+unset AWS_LAMBDA_RUNTIME_API
+status=0
+sh '$bootstrapPath' >/dev/null 2>&1 || status=`$?
+[ "`$status" -eq 1 ]
+[ ! -e "`$COLLECTOR_TEST_UNSAFE_RAN" ]
+[ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
+"@
+
+    if ($realSetsid) {
+        Invoke-BashCase 'process-group-recovers-deleted-open-file-and-preserves-unrelated-group' @"
+set -eu
+fake='$root/process-group-collector.sh'
+cat >"`$fake" <<'EOF'
+#!/bin/sh
+(
+  exec 3>"`$TMPDIR/held"
+  dd if=/dev/zero bs=1M count=30 >&3 2>/dev/null
+  rm -f "`$TMPDIR/held"
+  touch "`$COLLECTOR_TEST_GRANDCHILD_READY"
+  sleep 30
+) &
+printf '%s\n' "`$!" >"`$COLLECTOR_TEST_GRANDCHILD_PID"
+attempt=0
+while [ ! -f "`$COLLECTOR_TEST_GRANDCHILD_READY" ] && [ "`$attempt" -lt 100 ]; do
+  sleep 0.05
+  attempt=`$((attempt + 1))
+done
+[ -f "`$COLLECTOR_TEST_GRANDCHILD_READY" ]
+exit 0
+EOF
+chmod +x "`$fake"
+'$sessionCommand' sleep 30 &
+unrelated=`$!
+trap 'kill -KILL -"`$unrelated" 2>/dev/null || true' EXIT
+export COLLECTOR_TEMP_ROOT='$root/process-group'
+export COLLECTOR_TEMP_HELPER='$helperPath'
+export COLLECTOR_EXECUTABLE="`$fake"
+export COLLECTOR_SESSION_COMMAND='$sessionCommand'
+export COLLECTOR_TEST_GRANDCHILD_PID='$root/grandchild-pid'
+export COLLECTOR_TEST_GRANDCHILD_READY='$root/grandchild-ready'
+unset AWS_LAMBDA_RUNTIME_API
+before=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+sh '$bootstrapPath' >/dev/null 2>&1
+after=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+grandchild=`$(cat "`$COLLECTOR_TEST_GRANDCHILD_PID")
+if kill -0 "`$grandchild" 2>/dev/null; then exit 84; fi
+kill -0 "`$unrelated"
+loss=`$((before - after))
+[ "`$loss" -lt 2048 ]
+[ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
+kill -TERM -"`$unrelated" 2>/dev/null || true
+wait "`$unrelated" 2>/dev/null || true
+trap - EXIT
+"@
+    }
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {
