@@ -22,9 +22,9 @@ C10 core suppression approval: 2026-09-25、利用者がcore dumpは不要とし
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Core suppression and bounded diagnostics deployed | invocation専用PGID、段階容量・bounded descendant診断に加え、collector子processだけのcore size 0をmainへ統合し、既存CI/CDで配備済み。互換性例外は未変更。 |
-| Verification | V11/V12/V15 verified; V13 connected | Linux/containerでcollector abortのstatus 134、core不生成、unrelated core policy、段階診断を確認。既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、Terraform/container/CI/CDが成功。 |
-| Deployment/operation | Core suppression deployed; safety-paused | Lambda revision `85e4bb5b-4fed-4758-b8ff-5c9b3ab11d8e`、image digest `sha256:24dc6ba711ce0ee26452c887b9e4b5bdb2d2d08bd8554354cfb87ec19c127cb6`。10240 MiB、同じsafety hold、Running 0を維持し、resumeは親Mainの判断とする。 |
+| Code | Core suppression, bounded diagnostics, and compatibility snapshot fix deployed | invocation専用PGID、段階容量・bounded descendant診断、collector子processだけのcore size 0に加え、dispatch/rebuild/acquireのtask metadata snapshotをmainへ統合し、既存CI/CDで配備済み。worker互換性検査は維持。 |
+| Verification | V11/V12/V15/V16 verified; V13 connected | Linux/container core反例と段階診断に加え、resource A→B/A→missing、wake再構築、legacy null fallbackを実SQLite transport/persistenceで確認。既存lifecycle/17 deploy guard、format/build、非External 1220 passed / 1 skipped、Terraform/container/CI/CDが成功。 |
+| Deployment/operation | Compatibility fix deployed; safety-paused | Lambda revision `fd9f0902-b4f8-4a70-bb61-b18de175d842`、image digest `sha256:695fb958c4831ae699b8f78172aa7975fcd5837fbdd2f6e60ad5162544dbb4dd`。10240 MiB、memory 2048 MiB、timeout 900秒、Active/Successful。deploy guardはRunning 0を確認し、既存safety pauseを維持。resumeは親Mainの判断とする。 |
 
 ## Context and incident ledger
 
@@ -152,7 +152,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | AC7 | direct child終了・bootstrap signal時に当該invocation専用process groupの子孫だけがboundedに終了し、削除済みopen fileのblocksが回収され、unrelated groupは生存する。 | T5 | V11 process-group/grandchild counterexamples、V12 Linux/container regression | Verified |
 | AC8 | 対象collector Lambdaだけがephemeral storage 10240 MiBとなり、memory 2048 MiB、timeout 900秒、reserved concurrency 1、停止状態、診断telemetry、既存CI/CD契約が維持される。 | T7 | V14 contract test、Terraform validation、既存CI/CD、AWS/API read-only GET | Verified |
 | AC9 | collector子processのabortがapp-owned root外へcore fileを残さず、通常・nonzero・signalの終了意味、段階診断、他processのcore policyを変えない。compatibility mismatchは独立した親T2/T2f原因として保持する。 | T8 | V15 production-shaped abort/core-policy反例、既存lifecycle/Linux/container regression | Verified |
-| AC10 | dispatch候補とwake envelope再構築がleaseと同じtask metadata snapshotからWeekendSubjects互換性を導出し、task/outbox作成後にresource属性がA→Bまたは欠落へ変わっても同一taskのGroupKeyはAを維持する。task metadataがnullのlegacy rowだけはresource属性へfallbackし、worker互換性検査と異常終了意味は変更しない。 | T9 | V16 store/transport/persistence counterexamples、関連回帰、既存CI/CD | Connected |
+| AC10 | dispatch候補とwake envelope再構築がleaseと同じtask metadata snapshotからWeekendSubjects互換性を導出し、task/outbox作成後にresource属性がA→Bまたは欠落へ変わっても同一taskのGroupKeyはAを維持する。task metadataがnullのlegacy rowだけはresource属性へfallbackし、worker互換性検査と異常終了意味は変更しない。 | T9 | V16 store/transport/persistence counterexamples、関連回帰、既存CI/CD | Verified |
 
 ## Task plan
 
@@ -166,7 +166,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認、親Mainの診断実行判断 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Dependent | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 1; corrections 1; reviews 1 |
 | T7 | collector Lambdaのephemeral storageだけを10240 MiBへ変更し、既存CI/CDで配備・独立確認する（AC8） | Main | Lead | C9承認 | `infra/collector-lambda/main.tf`、対応contract test、本record。memory/timeout/concurrency/API/DB/workflowは変更禁止 | V14 | test、Terraform validation、CI/CD成功、AWS 10240 MiB、停止状態 | Verified | Lead — production Terraform変更と独立設定確認を小さな単一sliceとして保持 | none | unavailable; retries 0; corrections 0; reviews 1 |
 | T8 | collector子processだけのcore dumpを抑止し、compatibility例外と容量漏出を分離する（AC6,AC9） | Main | Lead | C10再承認 | `deploy/lambda-bootstrap`、専用lifecycle/core test、既存app-deployのcontainer test step、正本文書、本recordのみ。例外分類/API/DB/queue/cleanup/kill範囲は変更禁止 | V15 | core enabled/disabled abort反例、通常/nonzero/signal/diagnostic回帰、Linux/container/CI/CD | Verified | Lead — crash policy、診断損失、production bootstrap安全境界の判断を保持 | none | unavailable; retries 2; corrections 2; reviews 1 |
-| T9 | C11のdispatch/rebuild/acquire互換性属性をtask snapshotへ統一する（AC10、親T2/T2f） | Main | Lead | C11、親Approved scope | `CollectionPlatformStore.cs`、`CollectionPlatformStoreTests.cs`、本record、必要な正本文書のみ。worker check、public contract、DB schema/data、workflow、operationは変更禁止 | V16 | A→B、A→missing、wake再構築、null metadata fallbackが実transport/persistence経路で成功 | In progress | Lead — persistence/shared contractと同一DB fixtureの排他write、短い一体sliceで委譲・review費用が上回る | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T9 | C11のdispatch/rebuild/acquire互換性属性をtask snapshotへ統一する（AC10、親T2/T2f） | Main | Lead | C11、親Approved scope | `CollectionPlatformStore.cs`、`CollectionPlatformStoreTests.cs`、本record、必要な正本文書のみ。worker check、public contract、DB schema/data、workflow、operationは変更禁止 | V16 | A→B、A→missing、wake再構築、null metadata fallbackが実transport/persistence経路で成功 | Verified | Lead — persistence/shared contractと同一DB fixtureの排他write、短い一体sliceで委譲・review費用が上回る | none | unavailable; retries 0; corrections 0; reviews 1 |
 
 ### Agent ownership and escalation
 
@@ -303,12 +303,14 @@ app-deploy run `36113974265`はverify、Linux V15、Terraform validation、colle
 
 2026-09-25 C11 local checkpoint — Main: `GetPendingDispatchesAsync`と`BuildExecutionEnvelopeAsync`を`DeserializeTaskMetadata(task.MetadataJson ?? resource.AttributesJson)`へ統一した。実SQLite fixtureでtask/outbox作成後のresource属性A→BとA→missingの双方について、pending属性、初回wake envelope、同じwakeの再構築、task leaseが作成時snapshot Aを維持した。legacy null metadataではcurrent resource属性Bへfallbackした。worker `IsCompatible`、public contract、schema/data、failure semantics、workflow、operationに差分はない。専用3件、format verify、Release build（warning/error 0）、非External 1220 passed / 1 skipped、deploy guard 17件、脆弱packageなし、agent audit validator、`git diff --check`が成功した。`.codegraph` indexは存在せず、ユーザー判断なしに作成していない。AC10/T9のlocal evidenceは満たすが、既存CI/CD統合と配備証拠まで`Connected`/`In progress`を維持する。
 
+2026-09-25 C11 final review — Main: PR #87はapp-ci run `36119188079`（4分55秒）成功後、merge commit `e99e95703e1014752313a9d4082f623d9d9ffbc2`としてmainへ統合した。app-deploy run `36119666506`はLinux lifecycle、build/test、空SQLite migration、Terraform validation、collector container、image build/push、Lambda apply、API health、既存migration queueを含む全jobが成功した。AWS read-only確認はActive/Successful、LastModified `2026-09-25T18:48:03+09:00`、revision `fd9f0902-b4f8-4a70-bb61-b18de175d842`、digest `sha256:695fb958c4831ae699b8f78172aa7975fcd5837fbdd2f6e60ad5162544dbb4dd`、ephemeral storage 10240 MiB、memory 2048 MiB、timeout 900秒。deploy guardはpipeline pausedとRunning 0を確認してから配備し、最後に`Collection remains paused; recovery requires an explicit operator decision.`を記録した。AC10/T9を`Verified`とする。production実処理での例外消失、core漏出停止、容量bound、後続進行はresumeを伴うためAC5/AC6/T4/T6のまま親Main判断へ残し、本taskはresume、retry、Recovery、cleanup、recycle、DB補正を実施していない。focused self-auditはfrozen snapshot規則、null fallback、worker check非変更、実transport/persistence反例、scope、CI/CD、停止維持を再照合し、未解決のAC10 gapまたはskill不足を認めなかった。
+
 同時刻の既存read-only freshness sourceは`GET /api/admin/collection/monitoring/findings`で、内部的に`GetMonitoringSnapshotAsync`のrace artifact snapshotとdomain race read modelを突き合わせる。金曜18:00以降にdiscovery 0なら`WeekendDiscoveryCoverageUnknown`、欠落時は`discovered/cardCurrent/missing`または`due/resultCurrent/missing`をevidenceへ出す。今回のGETはfreshness finding 0件だったが、healthy時のexpected/persisted/officialUnavailable/unknown全件数をresponseへ出さず、ResultのCurrentとUnavailableを合算するため、0件だけでは要求された4区分をVerifiedにできない。正確な4区分は既存store snapshotを使うread-only集約または承認済みDB queryが必要で、推測しない。
 
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和、C10のcollector-child限定core抑止を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10/T8/V15は異常終了を成功へ変えず、raw coreによる容量消費だけを抑止する。
 
-T7/V14とC10/T8/V15の実装・配備・停止状態確認は完了した。次は親Mainが既存T2/T2fとしてC11のtask-snapshot統一と反例を実装・reviewし、その後の別途安全判断でproductionのcore漏出停止、容量bound、処理進行を観測する。金曜freshness 4区分は既存sourceの0 findingだけで完了扱いにしない。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+T7/V14、C10/T8/V15、C11/AC10/T9/V16の実装・配備・停止状態確認は完了した。次は親Mainが別途安全判断した場合だけproductionのcore漏出停止、容量bound、互換性例外消失、処理進行を観測する。金曜freshness 4区分は既存sourceの0 findingだけで完了扱いにせず、既存snapshotのbounded read-only集約を親scopeで扱う。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
-中断時点でproductionはsafety pause、Running 0。未コミット対象はC11 read-only境界とfreshness source不足を反映した本recordだけ。次は親Main所有のC11修正とfreshness 4区分集約、承認後のproduction再観測であり、目的外の未コミットファイルはない。
+完了時点でproductionはsafety pause、Running 0。次は親Main所有の別途安全なproduction再観測とfreshness 4区分のbounded read-only集約であり、目的外の未コミットファイルはない。
