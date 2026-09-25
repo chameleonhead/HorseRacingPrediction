@@ -1548,7 +1548,7 @@ public sealed partial class CollectionPlatformStore
                 new ResourceKey(x.resource.Type, x.resource.Provider, x.resource.ResourceId),
                 new CollectionDefinitionId(x.task.DefinitionId), x.resource.EffectiveDate,
                 x.task.Lane, x.task.Priority, x.outbox.AvailableAt, x.outbox.CreatedAt,
-                JsonSerializer.Deserialize<Dictionary<string, string>>(x.resource.AttributesJson) ?? [])).ToList();
+                DeserializeTaskMetadata(x.task.MetadataJson ?? x.resource.AttributesJson))).ToList();
     }
 
     public async Task<CollectionLaneDispatchState> GetLaneDispatchStateAsync(
@@ -3732,7 +3732,7 @@ public sealed partial class CollectionPlatformStore
                           select new { outbox, task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
         if (rows.Count == 0) return null;
         var first = rows[0];
-        var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(first.resource.AttributesJson) ?? [];
+        var attributes = DeserializeTaskMetadata(first.task.MetadataJson ?? first.resource.AttributesJson);
         CollectionDispatchCompatibilityKey compatibility;
         if (first.resource.EffectiveDate.HasValue
             && first.resource.Type is ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.Race)
