@@ -22,9 +22,9 @@ C10 core suppression approval: 2026-09-25、利用者がcore dumpは不要とし
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Corrective amendment and bounded diagnostics deployed | invocation専用PGIDの終了制御に加え、C8の段階容量・bounded descendant集約診断をmainへ統合し、既存CI/CDで配備済み。 |
-| Verification | V11/V12 verified; V13 connected | Linuxで同group deleted-open-file回収、session離脱、owned-root外writeを識別し、既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、container/Terraform/CI/CDが成功。production診断値は未取得。 |
-| Deployment/operation | 10 GB temporary capacity deployed; safety-paused | collector Lambdaのephemeral storageは10240 MiB。memory 2048 MiB、timeout 900秒、reserved concurrency 1、同じsafety hold、Running 0を維持し、resumeは親Mainの配備後判断とする。 |
+| Code | Core suppression and bounded diagnostics deployed | invocation専用PGID、段階容量・bounded descendant診断に加え、collector子processだけのcore size 0をmainへ統合し、既存CI/CDで配備済み。互換性例外は未変更。 |
+| Verification | V11/V12/V15 verified; V13 connected | Linux/containerでcollector abortのstatus 134、core不生成、unrelated core policy、段階診断を確認。既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、Terraform/container/CI/CDが成功。 |
+| Deployment/operation | Core suppression deployed; safety-paused | Lambda revision `85e4bb5b-4fed-4758-b8ff-5c9b3ab11d8e`、image digest `sha256:24dc6ba711ce0ee26452c887b9e4b5bdb2d2d08bd8554354cfb87ec19c127cb6`。10240 MiB、同じsafety hold、Running 0を維持し、resumeは親Mainの判断とする。 |
 
 ## Context and incident ledger
 
@@ -149,7 +149,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | AC6 | 配備後観測で app-owned temp 使用量とfilesystem減少速度が bounded であることを示し、暫定容量増量を恒久原因解消と混同せず余裕を確認する。初回V10はfree-block boundに失敗しており、C9後も再検証する。 | T4,T5,T6 | V10,V13 sanitized resource telemetry | Connected |
 | AC7 | direct child終了・bootstrap signal時に当該invocation専用process groupの子孫だけがboundedに終了し、削除済みopen fileのblocksが回収され、unrelated groupは生存する。 | T5 | V11 process-group/grandchild counterexamples、V12 Linux/container regression | Verified |
 | AC8 | 対象collector Lambdaだけがephemeral storage 10240 MiBとなり、memory 2048 MiB、timeout 900秒、reserved concurrency 1、停止状態、診断telemetry、既存CI/CD契約が維持される。 | T7 | V14 contract test、Terraform validation、既存CI/CD、AWS/API read-only GET | Verified |
-| AC9 | collector子processのabortがapp-owned root外へcore fileを残さず、通常・nonzero・signalの終了意味、段階診断、他processのcore policyを変えない。compatibility mismatchは独立した親T2/T2f原因として保持する。 | T8 | V15 production-shaped abort/core-policy反例、既存lifecycle/Linux/container regression | Connected |
+| AC9 | collector子processのabortがapp-owned root外へcore fileを残さず、通常・nonzero・signalの終了意味、段階診断、他processのcore policyを変えない。compatibility mismatchは独立した親T2/T2f原因として保持する。 | T8 | V15 production-shaped abort/core-policy反例、既存lifecycle/Linux/container regression | Verified |
 
 ## Task plan
 
@@ -162,7 +162,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T5 | invocation専用process groupでPlaywright/Chromium子孫を終了し、deleted-open-file block残留を防ぐ（AC6,AC7） | Main | Lead | C7再承認 | `deploy/lambda-bootstrap`、lifecycle helper、専用test、必要なDocker packageだけ。API/DB/queue/policyは変更禁止 | V11-V12 | grandchild block回収、別group生存、signal/nonzero、Linux/container/CI成功 | Verified | Lead — process kill安全性、PID/PGID再利用、production統合は分離不能 | none | unavailable; retries 0; corrections 1; reviews 1 |
 | T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認、親Mainの診断実行判断 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Dependent | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 1; corrections 1; reviews 1 |
 | T7 | collector Lambdaのephemeral storageだけを10240 MiBへ変更し、既存CI/CDで配備・独立確認する（AC8） | Main | Lead | C9承認 | `infra/collector-lambda/main.tf`、対応contract test、本record。memory/timeout/concurrency/API/DB/workflowは変更禁止 | V14 | test、Terraform validation、CI/CD成功、AWS 10240 MiB、停止状態 | Verified | Lead — production Terraform変更と独立設定確認を小さな単一sliceとして保持 | none | unavailable; retries 0; corrections 0; reviews 1 |
-| T8 | collector子processだけのcore dumpを抑止し、compatibility例外と容量漏出を分離する（AC6,AC9） | Main | Lead | C10再承認 | `deploy/lambda-bootstrap`、専用lifecycle/core test、既存app-deployのcontainer test step、正本文書、本recordのみ。例外分類/API/DB/queue/cleanup/kill範囲は変更禁止 | V15 | core enabled/disabled abort反例、通常/nonzero/signal/diagnostic回帰、Linux/container/CI/CD | In progress | Lead — crash policy、診断損失、production bootstrap安全境界の判断を保持 | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T8 | collector子processだけのcore dumpを抑止し、compatibility例外と容量漏出を分離する（AC6,AC9） | Main | Lead | C10再承認 | `deploy/lambda-bootstrap`、専用lifecycle/core test、既存app-deployのcontainer test step、正本文書、本recordのみ。例外分類/API/DB/queue/cleanup/kill範囲は変更禁止 | V15 | core enabled/disabled abort反例、通常/nonzero/signal/diagnostic回帰、Linux/container/CI/CD | Verified | Lead — crash policy、診断損失、production bootstrap安全境界の判断を保持 | none | unavailable; retries 2; corrections 2; reviews 1 |
 
 ### Agent ownership and escalation
 
@@ -289,10 +289,14 @@ V13の隔離Linux反例は、同groupのdeleted-open fileを回収できるこ�
 
 同checkpointの関連回帰はformat verify、Release build警告0/error 0、非External 1217 passed / 1 skipped / 0 failed。local Docker engineは未起動のためimage内V15は既存app-deployのLinux container gateへ残す。raw coreは隔離probeのcontrol判定直後に削除し、内容を読取・保存・出力していない。
 
+2026-09-25 C10 final review — Main: 初回app-ci run `36113341708` と再実行`36113442105`は、source checkoutのbootstrapに実行属性を要求したfixture defectで専用test開始前に失敗した。production imageではchmodされ、testは`sh bootstrap`で起動するため、readable contractへ修正して秘密情報なしの判定値を追加した。修正後app-ci run `36113526075`はLinux実abortを含む全gateが4分41秒で成功。PR #84をmainへmerge commit `3aa99b2e0a2e82aa3d9ec6129b26474173c0f418`として統合した。
+
+app-deploy run `36113974265`はverify、Linux V15、Terraform validation、collector container内V15、build/push、collector infrastructure apply、API health、migration queueを含む全jobが成功した。AWS read-only GETはephemeral storage 10240 MiB、memory 2048 MiB、timeout 900秒、Active/Successful、LastModified `2026-09-25T17:46:16+09:00`、revision `85e4bb5b-4fed-4758-b8ff-5c9b3ab11d8e`、image digest `sha256:24dc6ba711ce0ee26452c887b9e4b5bdb2d2d08bd8554354cfb87ec19c127cb6`。production APIは同じsafety holdでpaused、Running 0。本taskはresume、retry、Recovery、cleanup、recycle、DB/履歴操作を実施していない。AC9/T8/V15をVerifiedとするが、productionでcore漏出停止を実測しておらず、compatibility mismatchとAC6/T6は未完了のまま維持する。
+
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和、C10のcollector-child限定core抑止を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10/T8/V15は異常終了を成功へ変えず、raw coreによる容量消費だけを抑止する。
 
-T7/V14の10 GB設定配備は完了したが、C10で暫定容量が観測rateに不十分と確認した。次は承認済みC10/T8/V15を実装・検証・既存CI/CD配備し、停止を維持して独立確認する。compatibility mismatchは親record T2/T2fで別原因として閉鎖する。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+T7/V14とC10/T8/V15の実装・配備・停止状態確認は完了した。次は親Mainの別途安全判断後だけproductionでcore漏出停止と容量boundを観測し、compatibility mismatchは親record T2/T2fで別原因として閉鎖する。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
-中断時点でproductionはsafety pause、Running 0。未コミット対象はC10観測・C10/T8/V15提案を反映した本recordだけ。次はC10再承認、承認後のV15実装であり、目的外の未コミットファイルはない。
+中断時点でproductionはsafety pause、Running 0。未コミット対象はC10配備証拠を反映した本recordだけ。次は親Main所有のproduction再観測とcompatibility mismatch修正であり、目的外の未コミットファイルはない。
