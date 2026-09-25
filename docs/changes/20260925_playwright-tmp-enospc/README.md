@@ -23,7 +23,7 @@ C10 core suppression approval: 2026-09-25、利用者がcore dumpは不要とし
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Core suppression, bounded diagnostics, and compatibility snapshot fix deployed | invocation専用PGID、段階容量・bounded descendant診断、collector子processだけのcore size 0に加え、dispatch/rebuild/acquireのtask metadata snapshotをmainへ統合し、既存CI/CDで配備済み。worker互換性検査は維持。 |
-| Verification | V11/V12/V13/V15/V16 verified | Linux/container core反例と段階診断、resource A→B/A→missing、wake再構築、legacy null fallbackを確認。production 28 finishでblocks/inodesが完全にbounded、互換性例外・abort・ENOSPC 0件。既存lifecycle/17 deploy guard、format/build、非External 1220 passed / 1 skipped、Terraform/container/CI/CDが成功。 |
+| Verification | V11/V12/V13/V15/V16 verified | Linux/container core反例と段階診断、resource A→B/A→missing、wake再構築、legacy null fallbackを確認。production 39 finishでblocks/inodesが完全にbounded、互換性例外・abort・ENOSPC 0件。既存lifecycle/17 deploy guard、format/build、非External 1220 passed / 1 skipped、Terraform/container/CI/CDが成功。 |
 | Deployment/operation | Deployed and production-verified | Lambda revision `fd9f0902-b4f8-4a70-bb61-b18de175d842`、image digest `sha256:695fb958c4831ae699b8f78172aa7975fcd5837fbdd2f6e60ad5162544dbb4dd`。10240 MiB、memory 2048 MiB、timeout 900秒、Active/Successful。親Mainのguarded resume後、39 session/155 taskで互換性例外、core abort、ENOSPC、容量減少、即時再停止なしを確認。 |
 
 ## Context and incident ledger
