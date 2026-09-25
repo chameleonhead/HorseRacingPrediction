@@ -55,10 +55,14 @@ unset AWS_LAMBDA_RUNTIME_API
 
 collector_status=0
 sh "$bootstrap" >/dev/null 2>"$diagnostic" || collector_status=$?
+collector_core_limit=$(cat "$trace" 2>/dev/null || true)
+collector_core_count=$(find . -maxdepth 1 -type f -name 'core*' | wc -l)
+printf 'CollectorStatus=%s CollectorCoreLimit=%s CollectorCoreFiles=%s ParentCoreLimitBefore=%s ParentCoreLimitAfter=%s\n' \
+  "$collector_status" "$collector_core_limit" "$collector_core_count" "$parent_core_limit" "$(ulimit -c)"
 [ "$collector_status" -eq 134 ]
-[ "$(cat "$trace")" = 0 ]
+[ "$collector_core_limit" = 0 ]
 [ "$(ulimit -c)" = "$parent_core_limit" ]
-[ -z "$(find . -maxdepth 1 -type f -name 'core*' -print -quit)" ]
+[ "$collector_core_count" -eq 0 ]
 grep -q 'Phase=post-group-termination .*GroupAlive=false' "$diagnostic"
 grep -q 'Phase=post-delete InvocationKiB=0 ' "$diagnostic"
 grep -Eq 'Collector descendant diagnostic\. Phase=post-group-termination Captured=[0-9]+ Alive=0 OutsideGroup=0 DeletedFds=0' "$diagnostic"
@@ -74,13 +78,16 @@ control_status=0
     *) exec "$abort_runtime" -e 'process.abort()' ;;
   esac
 ) >/dev/null 2>&1 || control_status=$?
+control_core_count=$(find . -maxdepth 1 -type f -name 'core*' | wc -l)
+printf 'ControlStatus=%s ControlCoreFiles=%s ParentCoreLimitAfterControl=%s CorePattern=%s\n' \
+  "$control_status" "$control_core_count" "$(ulimit -c)" "$(cat /proc/sys/kernel/core_pattern)"
 [ "$control_status" -eq 134 ]
 [ "$(ulimit -c)" = "$parent_core_limit" ]
 
 core_pattern=$(cat /proc/sys/kernel/core_pattern)
 case "$core_pattern" in
   core|core.*)
-    [ -n "$(find . -maxdepth 1 -type f -name 'core*' -print -quit)" ]
+    [ "$control_core_count" -gt 0 ]
     ;;
 esac
 
