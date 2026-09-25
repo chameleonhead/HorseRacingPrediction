@@ -22,7 +22,7 @@ C9 temporary capacity approval: 2026-09-25、利用者が「まずはLambdaの�
 | --- | --- | --- |
 | Code | Corrective amendment and bounded diagnostics deployed | invocation専用PGIDの終了制御に加え、C8の段階容量・bounded descendant集約診断をmainへ統合し、既存CI/CDで配備済み。 |
 | Verification | V11/V12 verified; V13 connected | Linuxで同group deleted-open-file回収、session離脱、owned-root外writeを識別し、既存lifecycle/17 deploy guard、format/build、非External 1217 passed / 1 skipped、container/Terraform/CI/CDが成功。production診断値は未取得。 |
-| Deployment/operation | 10 GB temporary capacity change in progress; safety-paused | C9承認によりcollector Lambdaのephemeral storageだけを10240 MiBへ変更する。productionは同じsafety holdでpaused、Running 0を維持し、resumeは親Mainの配備後判断とする。 |
+| Deployment/operation | 10 GB temporary capacity deployed; safety-paused | collector Lambdaのephemeral storageは10240 MiB。memory 2048 MiB、timeout 900秒、reserved concurrency 1、同じsafety hold、Running 0を維持し、resumeは親Mainの配備後判断とする。 |
 
 ## Context and incident ledger
 
@@ -145,7 +145,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | AC5 | 承認済み既存 CI/CD 配備後、親 Main が別途許可した operation に限り、対象または根拠ある replacement が正常終端し、独立した後続処理が進み、通常周期2回以上で ENOSPC と即時再停止がない。 | T4 | V8 deployment revision GET、V9 bounded task/attempt/batch GET | Connected |
 | AC6 | 配備後観測で app-owned temp 使用量とfilesystem減少速度が bounded であることを示し、暫定容量増量を恒久原因解消と混同せず余裕を確認する。初回V10はfree-block boundに失敗しており、C9後も再検証する。 | T4,T5,T6 | V10,V13 sanitized resource telemetry | Connected |
 | AC7 | direct child終了・bootstrap signal時に当該invocation専用process groupの子孫だけがboundedに終了し、削除済みopen fileのblocksが回収され、unrelated groupは生存する。 | T5 | V11 process-group/grandchild counterexamples、V12 Linux/container regression | Verified |
-| AC8 | 対象collector Lambdaだけがephemeral storage 10240 MiBとなり、memory 2048 MiB、timeout 900秒、reserved concurrency 1、停止状態、診断telemetry、既存CI/CD契約が維持される。 | T7 | V14 contract test、Terraform validation、既存CI/CD、AWS/API read-only GET | Connected |
+| AC8 | 対象collector Lambdaだけがephemeral storage 10240 MiBとなり、memory 2048 MiB、timeout 900秒、reserved concurrency 1、停止状態、診断telemetry、既存CI/CD契約が維持される。 | T7 | V14 contract test、Terraform validation、既存CI/CD、AWS/API read-only GET | Verified |
 
 ## Task plan
 
@@ -157,7 +157,7 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 | T4 | 既存 CI/CD 配備と独立 production verification を行う（AC5,AC6） | 親 Main（operation owner）+ 本 task read-only verifier | Lead + Review | T3、既存CI/CD、operation 個別許可 | 既存 CI/CD。production mutation は親 Main のみ | V8-V10 | revision、terminal attempt、後続、2周期、resource telemetry | Dependent | Lead — 本番権限、安全、最終判定。resume は本 task 非所有 | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | invocation専用process groupでPlaywright/Chromium子孫を終了し、deleted-open-file block残留を防ぐ（AC6,AC7） | Main | Lead | C7再承認 | `deploy/lambda-bootstrap`、lifecycle helper、専用test、必要なDocker packageだけ。API/DB/queue/policyは変更禁止 | V11-V12 | grandchild block回収、別group生存、signal/nonzero、Linux/container/CI成功 | Verified | Lead — process kill安全性、PID/PGID再利用、production統合は分離不能 | none | unavailable; retries 0; corrections 1; reviews 1 |
 | T6 | C8の原因境界を段階telemetryとproduction-shaped反例で識別し、最小 corrective designを作る（AC6） | Main | Lead | C8再承認、親Mainの診断実行判断 | 診断設計、専用test、必要最小限のbootstrap/helper telemetry。本番mutationは既存CI/CDのみ | V13 | pre-delete/post-group/post-delete容量、PGID生存、session離脱/outside-root反例、秘密情報なし | Dependent | Lead — production診断、安全境界、bootstrap/helper/testの共有write scopeと次設計判断が密結合し、分割review費用が上回る | none | unavailable; retries 1; corrections 1; reviews 1 |
-| T7 | collector Lambdaのephemeral storageだけを10240 MiBへ変更し、既存CI/CDで配備・独立確認する（AC8） | Main | Lead | C9承認 | `infra/collector-lambda/main.tf`、対応contract test、本record。memory/timeout/concurrency/API/DB/workflowは変更禁止 | V14 | test、Terraform validation、CI/CD成功、AWS 10240 MiB、停止状態 | In progress | Lead — production Terraform変更と独立設定確認を小さな単一sliceとして保持 | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T7 | collector Lambdaのephemeral storageだけを10240 MiBへ変更し、既存CI/CDで配備・独立確認する（AC8） | Main | Lead | C9承認 | `infra/collector-lambda/main.tf`、対応contract test、本record。memory/timeout/concurrency/API/DB/workflowは変更禁止 | V14 | test、Terraform validation、CI/CD成功、AWS 10240 MiB、停止状態 | Verified | Lead — production Terraform変更と独立設定確認を小さな単一sliceとして保持 | none | unavailable; retries 0; corrections 0; reviews 1 |
 
 ### Agent ownership and escalation
 
@@ -271,10 +271,12 @@ V13の隔離Linux反例は、同groupのdeleted-open fileを回収できるこ�
 
 2026-09-25 C9 local checkpoint — Main: collector Lambda resourceのephemeral storageを4096から10240 MiBへ変更し、contract testで10240 MiBの存在と旧4096 MiBの不在を固定した。対象test 11件、format verify、deploy guard、change record validator、agent audit、`git diff --check`は成功。local環境にTerraform CLIがないためfmt/validateは実行不能で、既存app-ci/app-deployのLinux gateへ残す。変更差分にmemory、timeout、reserved concurrency、diagnostic telemetry、workflow、API/DB、operation mutationはない。
 
+2026-09-25 C9 deployment checkpoint — Main: PR #81をmainへmerge commit `f00bcb65b22e8d4acec70aa8a55e3cde16e5d653`として統合した。app-ci run `36100736007` は4分50秒で成功。app-deploy run `36101108202` はverify、Terraform validation、collector container、build/push、collector infrastructure apply、API health、migration queueを含む全jobが成功した。AWS read-only GETではephemeral storage 10240 MiB、memory 2048 MiB、timeout 900秒、reserved concurrency 1、Active/Successful、LastModified `2026-09-25T15:11:13+09:00`、revision `90518f11-f9fb-438b-98c5-07c5954da140`、image digest `sha256:52bb2d599e1e2ef5c51fa69257f7f2c95f46101a123313806e391eef85605520`。production API GETは同じsafety holdで`isPaused=true`、updatedAt `2026-09-25T13:54:24.3218382+09:00`、Running 0。本taskはresume、retry、Recovery、cleanup、recycleを実行していない。AC8/T7/V14をVerifiedとし、恒久原因調査AC6/T6は未完了のまま維持する。
+
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備は完了した。診断証拠から導く根本修正は本承認に含めず、production診断後に最小修正案を提示して再承認を得る。
 
-次はT7/V14で10 GB設定を既存CI/CD配備し、独立設定値と停止状態を確認する。その後、親Mainがsafety pauseを維持したまま一度限りの診断実行可否を判断する。実行する場合は段階metricsからsession離脱、owned-root外write、deleted-open fdのどれが実環境で成立するかを識別し、最小修正案へ戻す。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
+T7/V14の10 GB設定配備と独立確認は完了した。次は親Mainがsafety pauseを維持したまま再開・監視を判断する。実行する場合は絶対残量、減少速度、処理進行と段階metricsからsession離脱、owned-root外write、deleted-open fdのどれが実環境で成立するかを識別し、最小修正案へ戻す。本taskはRecovery、retry、resume、environment recycle、本番cleanupを行わない。
 
 中断時点で承認済みdiagnostic code、隔離test、CI/CD、停止状態のread-only確認は完了した。未完了は親Main所有のproduction診断実行、結果判定、最小root-cause修正案だけであり、目的外の未コミットファイルはない。
