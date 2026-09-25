@@ -1,6 +1,6 @@
 # Playwright 一時領域 ENOSPC の恒久対策
 
-- Status: Implemented
+- Status: Approved
 - Change record schema: 2
 - Owner: Main（親 owner: `01a0b79f-6ea8-7f61-84e1-cec6652615f4`）
 - Created: 2026-09-25
