@@ -436,6 +436,97 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    public async Task ScheduledRefresh_WithoutMetadata_InheritsResourceSnapshotAndKeepsTaskImmutable()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=horse-source");
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            explicitUrl: url, attributes: new Dictionary<string, string>
+            {
+                ["name"] = "定期更新馬",
+                ["sourceIdentity"] = url.AbsoluteUri,
+                ["discoveredFromId"] = "race-source",
+            });
+        await CompleteAsync(store, original, now);
+
+        var refresh = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ScheduledRefresh,
+            now.AddMinutes(2));
+        await UpdatePersistedCompatibilityAttributesAsync(refresh.TaskId,
+            "{\"name\":\"後続resource名\",\"sourceIdentity\":\"changed\"}");
+
+        var pending = (await store.GetPendingDispatchesAsync(now.AddMinutes(3), 10))
+            .Single(x => x.Notification.TaskId == refresh.TaskId);
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddMinutes(3), TimeSpan.FromMinutes(5));
+
+        Assert.AreEqual("定期更新馬", pending.Attributes!["name"]);
+        Assert.AreEqual(url.AbsoluteUri, pending.Attributes["sourceIdentity"]);
+        Assert.AreEqual("定期更新馬", lease!.Attributes["name"]);
+        Assert.AreEqual(url.AbsoluteUri, lease.Attributes["sourceIdentity"]);
+        Assert.AreEqual("race-source", lease.Attributes["discoveredFromId"]);
+        Assert.AreEqual(url, lease.Locations!.Single().Url);
+    }
+
+    [TestMethod]
+    public async Task ScheduledRefresh_ExplicitMetadataReplacesResourceSnapshot()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string>
+            {
+                ["name"] = "旧名",
+                ["sourceIdentity"] = "old-source",
+            });
+        await CompleteAsync(store, original, now);
+
+        var explicitRefresh = await store.RequestAsync(Horse, HorseProfile, 7,
+            CollectionReason.ScheduledRefresh, now.AddMinutes(2),
+            attributes: new Dictionary<string, string> { ["sourceIdentity"] = "new-source" });
+        var explicitLease = await store.AcquireAsync(explicitRefresh.TaskId, 1, now.AddMinutes(2),
+            TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(explicitLease);
+        Assert.AreEqual("new-source", explicitLease.Attributes["sourceIdentity"]);
+        Assert.IsFalse(explicitLease.Attributes.ContainsKey("name"));
+        Assert.IsTrue(await store.CompleteAttemptAsync(explicitRefresh.TaskId, explicitLease.LeaseToken,
+            now.AddMinutes(3), new(CollectionAttemptResult.Succeeded)));
+
+        var inherited = await store.RequestAsync(Horse, HorseProfile, 7,
+            CollectionReason.ScheduledRefresh, now.AddMinutes(4));
+        var inheritedLease = await store.AcquireAsync(inherited.TaskId, 1, now.AddMinutes(4),
+            TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(inheritedLease);
+        Assert.AreEqual("new-source", inheritedLease.Attributes["sourceIdentity"]);
+        Assert.IsFalse(inheritedLease.Attributes.ContainsKey("name"));
+    }
+
+    [TestMethod]
+    public async Task ScheduledRefresh_ExplicitEmptyMetadataRemainsEmpty()
+    {
+        var store = await CreateStoreAsync();
+        var now = DateTimeOffset.UtcNow;
+        var original = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            attributes: new Dictionary<string, string> { ["name"] = "明示消去前" });
+        await CompleteAsync(store, original, now);
+
+        var explicitEmpty = await store.RequestAsync(Horse, HorseProfile, 7,
+            CollectionReason.ScheduledRefresh, now.AddMinutes(2), attributes: new Dictionary<string, string>());
+        var emptyLease = await store.AcquireAsync(explicitEmpty.TaskId, 1, now.AddMinutes(2),
+            TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(emptyLease);
+        Assert.IsEmpty(emptyLease.Attributes);
+        Assert.IsTrue(await store.CompleteAttemptAsync(explicitEmpty.TaskId, emptyLease.LeaseToken,
+            now.AddMinutes(3), new(CollectionAttemptResult.Succeeded)));
+
+        var inheritedEmpty = await store.RequestAsync(Horse, HorseProfile, 7,
+            CollectionReason.ScheduledRefresh, now.AddMinutes(4));
+        var inheritedEmptyLease = await store.AcquireAsync(inheritedEmpty.TaskId, 1, now.AddMinutes(4),
+            TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(inheritedEmptyLease);
+        Assert.IsEmpty(inheritedEmptyLease.Attributes);
+    }
+
+    [TestMethod]
     public async Task Recovery_WithoutMetadata_SkipsLatestEmptySnapshot()
     {
         var store = await CreateStoreAsync();
@@ -450,7 +541,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
         var empty = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ScheduledRefresh,
-            now.AddSeconds(2));
+            now.AddSeconds(2), attributes: new Dictionary<string, string>());
         var emptyLease = await store.AcquireAsync(empty.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsTrue(await store.CompleteAttemptAsync(empty.TaskId, emptyLease!.LeaseToken,
             now.AddSeconds(3), new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
