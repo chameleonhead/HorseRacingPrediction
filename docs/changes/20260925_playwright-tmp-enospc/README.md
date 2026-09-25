@@ -321,6 +321,14 @@ app-deploy run `36113974265`はverify、Linux V15、Terraform validation、colle
 
 同時刻の既存read-only freshness sourceは`GET /api/admin/collection/monitoring/findings`で、内部的に`GetMonitoringSnapshotAsync`のrace artifact snapshotとdomain race read modelを突き合わせる。金曜18:00以降にdiscovery 0なら`WeekendDiscoveryCoverageUnknown`、欠落時は`discovered/cardCurrent/missing`または`due/resultCurrent/missing`をevidenceへ出す。今回のGETはfreshness finding 0件だったが、healthy時のexpected/persisted/officialUnavailable/unknown全件数をresponseへ出さず、ResultのCurrentとUnavailableを合算するため、0件だけでは要求された4区分をVerifiedにできない。正確な4区分は既存store snapshotを使うread-only集約または承認済みDB queryが必要で、推測しない。
 
+2026-09-25 21:27 monitoring bounded diff — 親Mainが実施した独立read-only GETはcutoff `2026-09-25T21:27:19.3088078+09:00`、completedAt `2026-09-25T21:27:20.9515107+09:00`、`truncated=true`で、27 findingsはfailure group 10、`DispatchOrderViolation` 1、stalled 16に全て分解された。runner actionable 25との差2件は`SubjectNotIdentified`のKnownHistoricalJobError群であり、freshness findingではない。従って21時閾値通過後の新規・重大freshness findingはこのsnapshotに存在しないが、truncated snapshotであること、healthy時の4区分集計を返さないこと、`FridayCriticalHour=21`がfreshness判定で参照されていないことから、finding 0をexpected/persisted/officialUnavailable/unknownの検証成功とは扱わない。
+
+1件の`DispatchOrderViolation`はBackground、`JRA|Definition|trainer-profile|2026-09-13|Background`、waiting task `5cc010f3-cc28-449d-9954-629354a53b84`、priority 40、bypass count 4、first bypass `2026-09-24T23:47:52.0519905+09:00`であり、first bypassと4 sample envelopeはいずれもC11配備前である。新しいpost-fix bypassまたはWeekendSubjects compatibility再発とは推定せず、既存T2/T2fのhistorical eligibility不足へ接続する。stalledは20:54比で14から16へ増え、提示された2件はいずれも古いReady/Background trainer task（oldest 9/18および9/20）で、一方は同じwaiting taskであるため、増分だけで新規原因を確定しない。
+
+現在性のある実障害証拠は、horse-profile `SubjectNotIdentified` 315件（last 21:25:08）とtrainer-profile `SubjectResourceMissing` 90件（last 21:24:23）である。前者は既存classifier上KnownHistoricalJobError、後者はUnknownHistoricalJobErrorで、実装上は取得プロフィールをAPI-authoritative subject resourceへ保存した際のHTTP 404をisolated permanent failureへ変換したものだった。これはC11互換性修正とは別系統であり、既存T2/T2fの代表task/attempt、resource ID、取得元identity、API正規resource対応をread-onlyで照合するのが次のbounded investigationである。自動補正、retry、Recovery、DB query、コード・配備・operation mutationは本監査で行わない。
+
+freshness 4区分の最小既存snapshot集計案（未承認・未実装）: 同一cutoffの`GetMonitoringSnapshotAsync` race artifact snapshotとdomain race read modelを用い、公式に期待されるrace集合を母集団として、`expected`、永続化済み`Current`、`officialUnavailable`、それ以外の`unknown/missing`を相互排他的に集計する。Resultの`Current`と`Unavailable`を合算せず、card/result別の件数、cutoff、source completeness、truncated状態を返す。既存read-only monitoring response/reportのbounded extensionまたは承認済みbounded queryとして親T3で扱い、今回のsnapshotから値を推定しない。
+
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断、C9の10 GB暫定緩和、C10のcollector-child限定core抑止を承認した。T6/V13の診断実装・隔離検証・既存CI/CD配備とT7/V14は完了した。C10/T8/V15は異常終了を成功へ変えず、raw coreによる容量消費だけを抑止する。
