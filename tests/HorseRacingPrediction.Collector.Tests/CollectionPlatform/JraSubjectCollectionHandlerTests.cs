@@ -43,6 +43,39 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task ScheduledRefresh_WithPreservedNameAndLocation_CollectsProfile()
+    {
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessU.html?CNAME=scheduled-horse");
+        var sink = new RecordingProfileSink();
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse), new FakeJraSessionFactory
+            {
+                ConfigureNavigator = () => new FakeJraNavigator
+                {
+                    DirectUrlFactory = _ => new JraSubjectPage(
+                        new JraSubjectProfileDto("Horse", "定期更新馬", url.AbsoluteUri, url.AbsoluteUri,
+                            new Dictionary<string, string> { ["生年月日"] = "2020年1月1日" },
+                            DateTimeOffset.UtcNow), [], null),
+                },
+            }, sink);
+        var task = new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Horse, "JRA", "horse-scheduled"), new("horse-profile"), 4,
+            CollectionReason.ScheduledRefresh, CollectionLane.Background, 30, "lease",
+            DateTimeOffset.UtcNow.AddMinutes(5), new DateOnly(2026, 9, 25),
+            new Dictionary<string, string>
+            {
+                ["name"] = "定期更新馬",
+                ["sourceIdentity"] = url.AbsoluteUri,
+            }, [new(1, url, ResourceLocationSource.Explicit, ResourceLocationStatus.Active, null)]);
+
+        var completion = await handler.CollectAsync(task, CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
+        Assert.AreEqual("HorseProfile:JRA:horse-scheduled", completion.PageIdentification);
+        Assert.HasCount(1, sink.Saves);
+    }
+
+    [TestMethod]
     public async Task OwnerIdentity_WithoutLocation_UsesRaceEntryNameWithoutNavigation()
     {
         var handler = new JraSubjectProfileCollectionHandler(

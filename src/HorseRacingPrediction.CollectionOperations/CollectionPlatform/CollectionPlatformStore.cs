@@ -474,6 +474,9 @@ public sealed partial class CollectionPlatformStore
         CollectionResourceEntity? resource, CollectionDefinitionId definition, CollectionReason reason,
         IReadOnlyDictionary<string, string>? attributes, CancellationToken cancellationToken)
     {
+        if (reason == CollectionReason.ScheduledRefresh && attributes is null)
+            return resource?.AttributesJson ?? "{}";
+
         if (reason is not (CollectionReason.ManualRefresh or CollectionReason.Recovery))
             return SerializeTaskMetadata(attributes);
 
