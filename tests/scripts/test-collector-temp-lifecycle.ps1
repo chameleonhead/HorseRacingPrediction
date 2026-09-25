@@ -152,8 +152,16 @@ for code in 0 7; do
   export FAKE_EXIT="`$code"
   unset AWS_LAMBDA_RUNTIME_API
   actual=0
-  sh '$bootstrapPath' >/dev/null || actual=`$?
+  diagnostic='$root/bootstrap-diagnostic-'"`$code"
+  sh '$bootstrapPath' >/dev/null 2>"`$diagnostic" || actual=`$?
   [ "`$actual" -eq "`$code" ]
+  grep -q 'Phase=pre-group-termination .*GroupAlive=' "`$diagnostic"
+  grep -q 'Phase=post-group-termination .*GroupAlive=' "`$diagnostic"
+  grep -q 'Phase=pre-delete .*GroupAlive=false' "`$diagnostic"
+  grep -q 'Phase=post-delete InvocationKiB=0 .*GroupAlive=false' "`$diagnostic"
+  grep -q 'Collector descendant diagnostic. Phase=pre-group-termination ' "`$diagnostic"
+  grep -q 'Collector descendant diagnostic. Phase=post-group-termination ' "`$diagnostic"
+  if grep -F "`$COLLECTOR_TEMP_ROOT" "`$diagnostic"; then exit 92; fi
   [ -z "`$(find "`$COLLECTOR_TEMP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'invocation.*' -print -quit)" ]
 done
 "@
@@ -309,6 +317,78 @@ loss=`$((before - after))
 kill -TERM -"`$unrelated" 2>/dev/null || true
 wait "`$unrelated" 2>/dev/null || true
 trap - EXIT
+"@
+
+        Invoke-BashCase 'diagnostics-distinguish-session-escape' @"
+set -eu
+fake='$root/session-escape-collector.sh'
+cat >"`$fake" <<'EOF'
+#!/bin/sh
+"`$COLLECTOR_SESSION_COMMAND" sh -c '
+  exec 3>"`$TMPDIR/escaped-held"
+  dd if=/dev/zero bs=1M count=30 >&3 2>/dev/null
+  rm -f "`$TMPDIR/escaped-held"
+  touch "`$COLLECTOR_TEST_ESCAPE_READY"
+  sleep 30
+' &
+printf '%s\n' "`$!" >"`$COLLECTOR_TEST_ESCAPE_PID"
+attempt=0
+while [ ! -f "`$COLLECTOR_TEST_ESCAPE_READY" ] && [ "`$attempt" -lt 100 ]; do
+  sleep 0.05
+  attempt=`$((attempt + 1))
+done
+[ -f "`$COLLECTOR_TEST_ESCAPE_READY" ]
+EOF
+chmod +x "`$fake"
+export COLLECTOR_TEMP_ROOT='$root/session-escape'
+export COLLECTOR_TEMP_HELPER='$helperPath'
+export COLLECTOR_EXECUTABLE="`$fake"
+export COLLECTOR_SESSION_COMMAND='$sessionCommand'
+export COLLECTOR_TEST_ESCAPE_PID='$root/session-escape-pid'
+export COLLECTOR_TEST_ESCAPE_READY='$root/session-escape-ready'
+unset AWS_LAMBDA_RUNTIME_API
+before=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+trace='$root/session-escape-diagnostic'
+sh '$bootstrapPath' >/dev/null 2>"`$trace"
+after=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+escaped=`$(cat "`$COLLECTOR_TEST_ESCAPE_PID")
+trap 'kill -KILL -"`$escaped" 2>/dev/null || true' EXIT
+kill -0 "`$escaped"
+loss=`$((before - after))
+[ "`$loss" -gt 20480 ]
+grep -q 'Phase=post-group-termination .*GroupAlive=false' "`$trace"
+grep -q 'Phase=pre-delete InvocationKiB=4 ' "`$trace"
+grep -q 'Phase=post-delete InvocationKiB=0 ' "`$trace"
+grep -Eq 'Collector descendant diagnostic\. Phase=post-group-termination Captured=[1-9][0-9]* Alive=[1-9][0-9]* OutsideGroup=[1-9][0-9]* DeletedFds=[1-9][0-9]*' "`$trace"
+kill -TERM -"`$escaped" 2>/dev/null || true
+wait "`$escaped" 2>/dev/null || true
+trap - EXIT
+"@
+
+        Invoke-BashCase 'diagnostics-distinguish-owned-root-external-write' @"
+set -eu
+fake='$root/outside-root-collector.sh'
+cat >"`$fake" <<'EOF'
+#!/bin/sh
+dd if=/dev/zero of="`$COLLECTOR_TEST_OUTSIDE_FILE" bs=1M count=30 2>/dev/null
+EOF
+chmod +x "`$fake"
+export COLLECTOR_TEMP_ROOT='$root/outside-root'
+export COLLECTOR_TEMP_HELPER='$helperPath'
+export COLLECTOR_EXECUTABLE="`$fake"
+export COLLECTOR_SESSION_COMMAND='$sessionCommand'
+export COLLECTOR_TEST_OUTSIDE_FILE='$root/outside-root-held'
+unset AWS_LAMBDA_RUNTIME_API
+before=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+trace='$root/outside-root-diagnostic'
+sh '$bootstrapPath' >/dev/null 2>"`$trace"
+after=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
+loss=`$((before - after))
+[ "`$loss" -gt 20480 ]
+grep -q 'Phase=pre-delete InvocationKiB=4 ' "`$trace"
+grep -q 'Phase=post-delete InvocationKiB=0 ' "`$trace"
+grep -Eq 'Collector descendant diagnostic\. Phase=post-group-termination Captured=[0-9]+ Alive=0 OutsideGroup=0 DeletedFds=0' "`$trace"
+rm -f "`$COLLECTOR_TEST_OUTSIDE_FILE"
 "@
     }
 }

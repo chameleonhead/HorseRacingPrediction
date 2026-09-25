@@ -112,7 +112,7 @@ Proposed amendment（再承認対象）:
 ## Documentation updates
 
 - 本 record を新規作成し、incident evidence、承認境界、lifecycle 設計、反例、検証計画を記録した。
-- `docs/11-automation-design.md` に collector の app-owned temp root、invocation cleanup、stale recovery、観測契約を現在運用の正本として追記した。
+- `docs/11-automation-design.md` に collector の app-owned temp root、invocation cleanup、stale recovery、通常観測とC8 bounded descendant診断の秘密情報非記録契約を現在運用の正本として追記した。
 - `.github/workflows/app-ci.yml` と `.github/workflows/app-deploy.yml` の既存 verify jobへ専用 lifecycle test を追加した。新 Workflow は作成していない。
 - `docs/26-collection-platform-design.md` と `docs/23-jra-scraping-redesign.md` を確認した。今回の runtime ownership は収集データ契約や JRA navigation 契約を変えないため更新しない。
 
@@ -250,6 +250,10 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 2026-09-25 post-amendment operation checkpoint — Main: 親Mainの一度限りresumeでV10を再実行したが、10 finish時点で短時間経路のfree-block減少が明確に再現したため20 finish/2周期を待たず安全条件に従い再pauseした。AC7のisolated process-group契約はVerifiedのままだが、production AC6を満たすとの仮説は反証された。C8を`Open decision`、T6/V13を追加しStatusを`Proposed`へ戻す。実runtime imageはAWS revision/digestと新bootstrap由来のmetricsで接続済みだが、現観測だけでprocess escape、outside-root write、open fdを断定しない。次の実装・配備はbounded診断設計の再承認前に行わない。
 
 2026-09-25 C8 pre-implementation review — Main: 利用者承認によりC8を`Resolved in design`、T6を`In progress`、Statusを`Approved`とした。write scopeは`deploy/lambda-bootstrap`、`deploy/collector-temp-lifecycle.sh`、既存lifecycle test、必要な正本文書、本recordに限定する。削除前、group termination前後、削除後の段階値は整数・boolean/countだけを出し、path、PID/PGID実値、command line、環境変数、secret、全process一覧を出さない。isolated testは同group残留、session離脱、owned-root外writeを独立させ、値がどの仮説を識別できるかを検証する。既存normal/nonzero/signal/header/unisolated/group安全性を回帰する。診断が全process走査、外部契約、kill範囲、容量、cleanup範囲を変える必要が出た場合は設計へ戻す。安全境界と共有shell/testが密結合した短いsliceのためLeadが保持する。
+
+2026-09-25 C8 local checkpoint — Main: 削除前後とgroup終了前後の`InvocationKiB/OwnedKiB/FreeKiB/FreeInodes/GroupAlive`、collector稼働中に`/proc/{known-parent}/task/{known-parent}/children`だけから取得したbounded descendantの`Captured/Alive/OutsideGroup/DeletedFds` countを実装した。PID/PGID値、path、fd target、command line、環境変数は出力しない。local Git Bashの既存11 caseとshell syntaxは成功。実`setsid`を要する同group、session離脱、outside-root反例はLinux CI待ちであり、T6は`In progress`を維持する。local Docker engineは未起動のためcontainer gateもCIへ残す。
+
+同checkpointの関連回帰はdeploy guard 17件、`dotnet format --verify-no-changes`、Release build警告0/error 0、非External 1217 passed / 1 skipped / 0 failed、脆弱packageなし。`codegraph sync .`はindex未初期化で失敗したためgraph証拠を主張せず、ユーザー判断なしにindexを作成しない。
 
 ## Approval boundary and next action
 
