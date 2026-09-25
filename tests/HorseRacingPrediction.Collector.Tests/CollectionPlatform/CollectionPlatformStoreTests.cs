@@ -334,6 +334,83 @@ public sealed class CollectionPlatformStoreTests
     }
 
     [TestMethod]
+    [DataRow("{\"weekendPriorityUntil\":\"2026-10-04\"}")]
+    [DataRow("{}")]
+    public async Task WeekendDispatchCompatibility_UsesTaskSnapshotWhenResourceAttributesChange(
+        string replacementAttributes)
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 25, 9, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            CollectionLane.Realtime, attributes: new Dictionary<string, string>
+            {
+                ["weekendPriorityUntil"] = "2026-09-27",
+            });
+        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId, replacementAttributes);
+
+        var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        Assert.AreEqual("2026-09-27", pending.Attributes!["weekendPriorityUntil"]);
+        var envelopeId = Guid.NewGuid();
+        var reservation = Guid.NewGuid().ToString("N");
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
+            envelopeId, now, TimeSpan.FromSeconds(45), 1));
+        var wake = new CollectionWakeSignal(Guid.NewGuid(), envelopeId, reservation);
+        var acquiredExecution = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(1),
+            TimeSpan.FromSeconds(45));
+        var rebuiltExecution = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(2),
+            TimeSpan.FromSeconds(45));
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+
+        Assert.AreEqual(CollectionDispatchGroupKind.WeekendSubjects,
+            acquiredExecution.Envelope!.Compatibility.GroupKind);
+        Assert.AreEqual("2026-09-27", acquiredExecution.Envelope.Compatibility.GroupKey);
+        Assert.AreEqual("2026-09-27", rebuiltExecution.Envelope!.Compatibility.GroupKey);
+        Assert.AreEqual("2026-09-27", lease!.Attributes["weekendPriorityUntil"]);
+    }
+
+    [TestMethod]
+    public async Task WeekendDispatchCompatibility_NullTaskMetadataFallsBackToResourceAttributes()
+    {
+        var store = await CreateStoreAsync();
+        var now = new DateTimeOffset(2026, 9, 25, 9, 0, 0, TimeSpan.Zero);
+        var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
+            CollectionLane.Realtime, attributes: new Dictionary<string, string>
+            {
+                ["weekendPriorityUntil"] = "2026-09-27",
+            });
+        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId,
+            "{\"weekendPriorityUntil\":\"2026-10-04\"}", clearTaskMetadata: true);
+
+        var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
+        Assert.AreEqual("2026-10-04", pending.Attributes!["weekendPriorityUntil"]);
+        var envelopeId = Guid.NewGuid();
+        var reservation = Guid.NewGuid().ToString("N");
+        Assert.IsTrue(await store.TryReserveDispatchesWithinCapacityAsync([pending.OutboxId], reservation,
+            envelopeId, now, TimeSpan.FromSeconds(45), 1));
+        var acquiredExecution = await store.AcquireNextExecutionAsync(
+            new(Guid.NewGuid(), envelopeId, reservation), "message-legacy", now.AddSeconds(1),
+            TimeSpan.FromSeconds(45));
+        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+
+        Assert.AreEqual(CollectionDispatchGroupKind.WeekendSubjects,
+            acquiredExecution.Envelope!.Compatibility.GroupKind);
+        Assert.AreEqual("2026-10-04", acquiredExecution.Envelope.Compatibility.GroupKey);
+        Assert.AreEqual("2026-10-04", lease!.Attributes["weekendPriorityUntil"]);
+    }
+
+    private async Task UpdatePersistedCompatibilityAttributesAsync(Guid taskId, string resourceAttributes,
+        bool clearTaskMetadata = false)
+    {
+        await using var db = new CollectionPlatformDbContext(new DbContextOptionsBuilder<CollectionPlatformDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False").Options);
+        var task = await db.Tasks.SingleAsync(x => x.TaskId == taskId);
+        var resource = await db.Resources.SingleAsync(x => x.ResourcePk == task.ResourcePk);
+        resource.AttributesJson = resourceAttributes;
+        if (clearTaskMetadata) task.MetadataJson = null;
+        await db.SaveChangesAsync();
+    }
+
+    [TestMethod]
     public async Task ManualRefresh_WithoutMetadata_InheritsCompletedTaskSnapshot()
     {
         var store = await CreateStoreAsync();
