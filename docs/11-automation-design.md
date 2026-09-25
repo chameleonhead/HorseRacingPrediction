@@ -57,7 +57,7 @@ API停止成功・非稼働・未checkpointのSQLite WALなしを確認してか
 
 ### Collector Lambda の一時資源
 
-Collector Lambda は共有 `/tmp` を直接 cleanup 対象にしない。`/tmp/horse-racing-prediction-collector` をアプリ所有rootとし、invocationごとのchildへPlaywrightのtemp、HOME/XDG cache、runtime event/responseを隔離する。正常終了・報告済み失敗・signal終了では当該childだけを削除し、runtime強制終了で後処理できなかったchildは次のbootstrap初期化時にownership markerと非稼働leaseを検証して回収する。marker不正、symlink、root外、稼働中processのchildは削除しない。
+Collector Lambda は共有 `/tmp` を直接 cleanup 対象にしない。`/tmp/horse-racing-prediction-collector` をアプリ所有rootとし、invocationごとのchildへPlaywrightのtemp、HOME/XDG cache、runtime event/responseを隔離する。collectorとPlaywright/Chromium子孫はinvocation専用process groupで起動し、直接child終了またはbootstrap signal時に当該groupだけをTERM、bounded wait、必要時KILLしてからchildを削除する。正常終了・報告済み失敗・signal終了では当該childだけを削除し、runtime強制終了で後処理できなかったchildは次のbootstrap初期化時にownership markerと非稼働leaseを検証して回収する。空・不正・bootstrap自身と同じPGID、marker不正、symlink、root外、稼働中processのchildは削除・終了対象にせず、process名検索や共有processの一括停止を行わない。
 
 invocation前後には所有rootの使用量、filesystem空き容量、取得可能な場合の空きinode、invocation directory数だけを記録し、directory名、URL、資格情報、ページ内容は記録しない。ephemeral storage増量だけで残留を隠さず、cleanup失敗、ENOSPC、相関ID欠落は安全停止と原因調査へ戻す。実装・反例・本番検証は [Playwright 一時領域 ENOSPC の恒久対策](changes/20260925_playwright-tmp-enospc/README.md) を正本とする。
 
