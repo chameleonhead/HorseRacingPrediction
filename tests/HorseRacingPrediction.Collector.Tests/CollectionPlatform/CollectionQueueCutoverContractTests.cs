@@ -124,6 +124,8 @@ public sealed class CollectionQueueCutoverContractTests
         StringAssert.Contains(queue, "maxReceiveCount = 1");
         StringAssert.Contains(dlq, "message_retention_seconds = 1209600");
         StringAssert.Contains(lambda, "timeout                        = 900");
+        StringAssert.Contains(lambda, "ephemeral_storage { size = 10240 }");
+        Assert.IsFalse(lambda.Contains("ephemeral_storage { size = 4096 }", StringComparison.Ordinal));
         StringAssert.Contains(lambda, "reserved_concurrent_executions = 1");
         StringAssert.Contains(mapping, "batch_size                         = 1");
         StringAssert.Contains(mapping, "function_response_types            = [\"ReportBatchItemFailures\"]");
