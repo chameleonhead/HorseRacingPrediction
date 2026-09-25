@@ -255,6 +255,8 @@ C5 の実行基盤 gate は read-only AWS 証拠で Lambda と確定し、承認
 
 同checkpointの関連回帰はdeploy guard 17件、`dotnet format --verify-no-changes`、Release build警告0/error 0、非External 1217 passed / 1 skipped / 0 failed、脆弱packageなし。`codegraph sync .`はindex未初期化で失敗したためgraph証拠を主張せず、ユーザー判断なしにindexを作成しない。
 
+初回Linux CI run `36098542222` はsession離脱反例で失敗した。追跡file自身のfilesystem blockを考慮せず`InvocationKiB=4`へ固定したtest期待と、collector親がmonitor捕捉前に終了し得るfixture競合が原因候補だった。production telemetry契約は変えず、fixtureへ0.2秒の捕捉窓を追加し、owned sizeを`<1024 KiB`のbounded条件へ修正した。local lifecycleとformatを再実行して成功し、Linux CI再検証待ち。
+
 ## Approval boundary and next action
 
 利用者は初回の限定修正、process-group amendment、C8 bounded診断を承認した。post-amendment V10はAC6を再度反証したため、T6/V13の診断実装・検証・配備を進める。診断証拠から導く根本修正は本承認に含めず、最小修正案を提示して再承認を得る。

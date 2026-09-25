@@ -338,6 +338,7 @@ while [ ! -f "`$COLLECTOR_TEST_ESCAPE_READY" ] && [ "`$attempt" -lt 100 ]; do
   attempt=`$((attempt + 1))
 done
 [ -f "`$COLLECTOR_TEST_ESCAPE_READY" ]
+sleep 0.2
 EOF
 chmod +x "`$fake"
 export COLLECTOR_TEMP_ROOT='$root/session-escape'
@@ -357,7 +358,8 @@ kill -0 "`$escaped"
 loss=`$((before - after))
 [ "`$loss" -gt 20480 ]
 grep -q 'Phase=post-group-termination .*GroupAlive=false' "`$trace"
-grep -q 'Phase=pre-delete InvocationKiB=4 ' "`$trace"
+predelete=`$(sed -n 's/.*Phase=pre-delete InvocationKiB=\([0-9][0-9]*\).*/\1/p' "`$trace" | tail -n 1)
+[ -n "`$predelete" ] && [ "`$predelete" -lt 1024 ]
 grep -q 'Phase=post-delete InvocationKiB=0 ' "`$trace"
 grep -Eq 'Collector descendant diagnostic\. Phase=post-group-termination Captured=[1-9][0-9]* Alive=[1-9][0-9]* OutsideGroup=[1-9][0-9]* DeletedFds=[1-9][0-9]*' "`$trace"
 kill -TERM -"`$escaped" 2>/dev/null || true
@@ -385,7 +387,8 @@ sh '$bootstrapPath' >/dev/null 2>"`$trace"
 after=`$(df -Pk '$root' | awk 'NR == 2 { print `$4 }')
 loss=`$((before - after))
 [ "`$loss" -gt 20480 ]
-grep -q 'Phase=pre-delete InvocationKiB=4 ' "`$trace"
+predelete=`$(sed -n 's/.*Phase=pre-delete InvocationKiB=\([0-9][0-9]*\).*/\1/p' "`$trace" | tail -n 1)
+[ -n "`$predelete" ] && [ "`$predelete" -lt 1024 ]
 grep -q 'Phase=post-delete InvocationKiB=0 ' "`$trace"
 grep -Eq 'Collector descendant diagnostic\. Phase=post-group-termination Captured=[0-9]+ Alive=0 OutsideGroup=0 DeletedFds=0' "`$trace"
 rm -f "`$COLLECTOR_TEST_OUTSIDE_FILE"
