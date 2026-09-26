@@ -11,9 +11,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 9/19の実装は存在するが、9/26の調査で通常bulkの既存entry除外と保存前の同一性検証不足を確認。追加修正は未承認・未着手。 |
-| Verification | Incomplete | 過去のテスト結果は下記に履歴として保持。raw entryと通常bulkの結合検証が不足し、対象Raceの欠損・馬番不一致を未解消。 |
-| Deployment/operation | Unverified | 今回はGETと公式ページ参照のみ。現行配備revision、限定隔離、本番補正とpost-checkは未確認・未実施。 |
+| Code | Incomplete | 承認済み第一段階の専用天候/馬場欄parserと通常/refresh/aggregateのidentity拒否を実装。revision3全入口を統合検証中。馬主補正・確定待ちの全体は後段に残る。 |
+| Verification | Incomplete | 原障害の公式URL、実HTML境界反例、API/domain拒否の副作用不変を検証済み。最新origin全体検証と本番照合は継続中。既存馬番不一致そのものは未修復。 |
+| Deployment/operation | Unverified | 第一段階の修正版配備・限定再取得・再開は承認済み。短時間API停止も明示許容。配備・復旧観測は未実施。 |
 
 > **2026-09-26 reopened:** [対象Raceの証拠・安全な補正設計](decisions/20260926-race-integrity.md)を本recordの追加提案とする。`race-fca5d100-9e2f-5074-a74c-bad8cdb4705f` のraw owner欠損16/16、公式馬番との不一致、G2/GIII不一致が判明した。従前の承認は、この同一性補正や隔離操作を承認したものではない。監視親のT2b/T3a・保存完全性findingへ接続し、親recordは変更しない。以下の9/19のVerifiedは当時の限定試験結果であり、追加基準IAC1–IAC5の完了を意味しない。
 

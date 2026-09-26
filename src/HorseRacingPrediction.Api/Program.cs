@@ -213,7 +213,7 @@ var app = builder.Build();
 
 var collectionPlatform = app.Services.GetRequiredService<CollectionPlatformStore>();
 await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 2,
+await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
     "Race resource artifact state machine", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
 await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 4,

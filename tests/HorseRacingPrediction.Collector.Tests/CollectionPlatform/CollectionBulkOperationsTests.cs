@@ -47,6 +47,50 @@ public sealed class CollectionBulkOperationsTests
     }
 
     [TestMethod]
+    public async Task RegisteredRevisionBulk_QueuesOneFollowUpBehindExistingReadyTask()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = await CreateStoreAsync(directory.Path);
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260404:Nakayama:10");
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "previous", false);
+        var previous = await store.RequestAsync(resource, definition, 2, CollectionReason.Recovery, Now,
+            CollectionLane.Normal, 30, effectiveDate: new(2026, 4, 4));
+        var revision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail;
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, revision, "fix", false);
+        var targets = new[] { new CollectionBulkTarget(resource) };
+        Assert.AreEqual(1, (await store.PreviewBulkRequestAsync(definition, revision, targets)).TargetCount);
+        Assert.AreEqual(2, (await store.GetStateAsync(resource, definition))!.RequiredRevision);
+
+        for (var repeat = 0; repeat < 2; repeat++)
+        {
+            var receipt = await store.ExecuteBulkRequestAsync(definition, revision,
+                CollectionReason.DefinitionChanged, targets, Now.AddSeconds(1), "incident:going:3",
+                CollectionLane.Normal, 30);
+            Assert.AreEqual(0, receipt.TasksCreated);
+        }
+        Assert.HasCount(1, await store.GetTasksAsync());
+        Assert.AreEqual(revision, (await store.GetStateAsync(resource, definition))!.RequiredRevision);
+        var lease = await store.AcquireAsync(previous.TaskId, 1, Now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        Assert.AreEqual(2, lease.RequestedRevision);
+        Assert.IsTrue(await store.CompleteAttemptAsync(previous.TaskId, lease.LeaseToken, Now.AddSeconds(3),
+            new(CollectionAttemptResult.Succeeded, StageOutcomes:
+            [new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true)])));
+        var tasks = await store.GetTasksAsync();
+        Assert.HasCount(2, tasks);
+        var followUp = tasks.Single(x => x.TaskId != previous.TaskId);
+        Assert.AreEqual(revision, followUp.RequestedRevision);
+        Assert.AreEqual(CollectionTaskStatus.Ready, followUp.Status);
+        Assert.AreEqual(CollectionLane.Normal, followUp.Lane);
+        Assert.AreEqual(30, followUp.Priority);
+        var nextLease = await store.AcquireAsync(followUp.TaskId, 1, Now.AddSeconds(4), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(nextLease);
+        Assert.AreEqual(new DateOnly(2026, 4, 4), nextLease.EffectiveDate);
+        Assert.AreEqual("Due", nextLease.Attributes["resultArtifactStatus"]);
+    }
+
+    [TestMethod]
     public async Task StateAndLastCollectedSelectorsReturnOnlyMatchingResources()
     {
         using var directory = new TemporaryDirectory();

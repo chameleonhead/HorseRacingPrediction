@@ -123,7 +123,7 @@ public static class CollectionPlatformEndpointExtensions
             var actionable = candidates.Where(x => x.Eligibility == RaceEntryOwnerRepairEligibility.CardRetrievalCandidate)
                 .ToArray();
             if (actionable.Length > 0)
-                await store.ExecuteBulkRequestAsync(new("race-detail"), 2, CollectionReason.DefinitionChanged,
+                await store.ExecuteBulkRequestAsync(new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail, CollectionReason.DefinitionChanged,
                     actionable.Select(ToRaceEntryOwnerMigrationTarget),
                     HorseRacingPrediction.Contracts.Time.JstTime.Now(), RaceEntryOwnerMigrationBatchId,
                     CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
@@ -419,7 +419,7 @@ public static class CollectionPlatformEndpointExtensions
                     ["ownerRepair"] = "true",
                 })).ToArray();
             var batchId = RaceEntryOwnerMigrationBatchId;
-            var result = await store.ExecuteBulkRequestAsync(new("race-detail"), 2,
+            var result = await store.ExecuteBulkRequestAsync(new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                 CollectionReason.DefinitionChanged, targets, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 batchId, CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
             return Results.Accepted(value: new RaceEntryOwnerRepairReceipt(batchId, result.TargetCount,

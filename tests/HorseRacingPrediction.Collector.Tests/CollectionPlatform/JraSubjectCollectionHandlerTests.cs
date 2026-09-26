@@ -468,7 +468,7 @@ public sealed class JraSubjectCollectionHandlerTests
             .Distinct(StringComparer.Ordinal).ToArray());
         Assert.IsTrue(requests.BatchRequests.Single().Items.All(item => item.Lane == "Background"
             && item.Priority == (int)CollectionPriority.Background
-            && item.RequestedRevision == 2
+            && item.RequestedRevision == HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail
             && item.DefinitionId == "race-detail"
             && item.EffectiveDate.HasValue
             && item.ExplicitUrl is not null

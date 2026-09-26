@@ -87,6 +87,9 @@ public sealed class CollectionPlatformInitializationTests
         var databasePath = Path.Combine(target, "collection-platform.db");
         Assert.AreEqual(4, await ReadScalarAsync(databasePath,
             "SELECT COUNT(*) FROM collection_definitions WHERE DefinitionId IN ('horse-profile','jockey-profile','trainer-profile','owner-identity');"));
+        Assert.AreEqual((long)HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+            await ReadScalarAsync(databasePath,
+                "SELECT CurrentRevision FROM collection_definitions WHERE DefinitionId = 'race-detail';"));
     }
 
     [TestMethod]

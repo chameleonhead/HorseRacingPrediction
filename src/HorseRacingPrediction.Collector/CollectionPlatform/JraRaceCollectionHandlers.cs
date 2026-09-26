@@ -169,7 +169,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                             detailUrl = JraRaceDetailUrl.Validate(
                                 CollectionHttpUrl.Resolve(race.ResultUrl, page.Url), ResourceType.RaceResult, race.Id);
                         }
-                        await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,
+                        await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                             task.Reason is CollectionReason.Backfill or CollectionReason.PeriodRecollection
                                 ? task.Reason
                                 : CollectionReason.Discovery,
@@ -721,7 +721,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 attributes["rescheduledFromDomainRaceId"] = sourceDomainRaceId;
             if (card.StartTime is { } start) attributes["startTime"] = start.ToString("HH:mm");
             var url = Uri.TryCreate(card.Url, UriKind.Absolute, out var parsed) ? parsed : null;
-            await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), 2,
+            await requests.RequestAsync(new(ResourceType.Race, "JRA", id), new("race-detail"), HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                 CollectionReason.Recovery, CollectionLane.Realtime, 100, url, candidateId.Date,
                 attributes, cancellationToken).ConfigureAwait(false);
             return new(candidateId, url);

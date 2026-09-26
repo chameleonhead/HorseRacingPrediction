@@ -3,11 +3,21 @@
 - Status: Approved
 - Owner: Main
 - Updated: 2026-09-26
-- Governing record: [馬主取得・出走割当の修正](../README.md)。この追加は設計依頼に基づくもので、実装・本番操作は未承認。
+- Governing record: [馬主取得・出走割当の修正](../README.md)。実装・限定復旧と配備時の短時間API停止は承認済み。以下の設計時点の未承認記述は履歴。
 
 ## Incident ledger / 証拠
 
 ## Execution checkpoint（承認後）
+
+- 配備前gate: 最新origin統合版で `dotnet test HorseRacingPrediction.sln --configuration Release --no-restore --filter 'TestCategory!=External'` 成功1,242/失敗0/既存skip1。最終編集後のexact `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` 成功。Release build警告0/エラー0、EF pending-modelなし、空DB migration成功、deployment停止保持/collector temp lifecycle script全成功。DDD/audit validator成功。RT1/RT2のコードとローカル検証を完了、RT3配備・限定復旧へ進む（IAC9/10は本番証拠まで未Verified）。
+- 統合checkpoint: 最新origin/mainの隔離branch `codex/track-condition-recovery`へparserとidentity gateを統合。元workspaceのユーザー変更は含めない。実HTML/公式障害URLを含むparser72件、API保存関連39件、元workspace全非External testが成功。最新originではrevision固定のfixture3件を更新し再検証中。新規発見の天候全文fallbackと専用欄の不正子要素はHTML反例を追加して解消した。
+- revision入口inventory: API登録、CLI登録、日程発見、代替開催発見、Horse履歴、owner migration要求、owner個別要求の7か所を共通 `CollectionDefinitionRevisions.RaceDetail = 3` に統一。Domain seedの1は過去取得済み版、migrationの1は互換性の最低版チェックであり、新規要求の旧版固定ではない。
+- 運用手順の具体化: API起動の `RegisterDefinitionAsync` はrevision行も登録するため、その後の `/revisions/preview` / `apply` は「既存revision」で拒否される。既存 `/requests/bulk/preview` → `/requests/bulk` の `SpecificResources`、`ExpectedResources`、固定batch IDを使い、同じ承認対象1件・revision3・Normal/30を要求する。新しいAPI仕様や全件impactは追加しない。対象・安全境界を変えない内部手順の補足である。
+- 12:37 JSTの独立GETではpipeline理由は原障害のまま、対象にrevision2のReady recovery task `ddad3668-6b57-4db0-ad2f-51591200366c` が存在（12:15作成、当方操作ではない）。新版要求がこの既存taskと重複しないことを確認してから実行する。
+- CodeGraph: 隔離worktreeではsync/indexが未初期化で失敗したため `codegraph init -y` 後 `codegraph sync .` 成功。`ValidateCollectedEntryIdentities` は通常bulk/refresh、`ValidateCollectedEntryAssignments` は両aggregate入口の各2 callersを確認。DB model差分なし・空SQLite migration成功。
+- 残作業: 新版入口の最終format/build/test、commit/PR/既存workflow配備、限定要求、resume、本番終端結果と10分観測。現時点で本番mutationなし。
+- 独立運用reviewのclosure: bulkは既存Ready revision2をその場で書き換えず、終端後にrevision3を1件だけmaterializeする。新規 `RegisteredRevisionBulk_QueuesOneFollowUpBehindExistingReadyTask` が同一batch再送・RequiredRevision・旧task維持・新版Normal/30・Result再取得を検証して成功（bulk全4件）。再送receiptの空TaskIdだけを成功証拠にせずGETの要求/状態/履歴で追跡する。
+- bulkのSpecificResourcesではmetadataを引き継がないというreview指摘も確認。対象には元からdomainRaceIdがなく、2026-04-04の10Rをdomain検索した結果は0件。通常経路の決定論的ID `race-7f5feb42-1498-5643-a6e0-6ad48d8d42f5` を本番照合対象とする。既存の異なるIDへrefreshする対象ではない。日付はresourceから保持されることを追加testで検証。別対象への一般化や既存Raceのrefresh代替としてbulkを使わない。
 
 - 追加承認: 利用者は「修正版配備時の短時間API停止を許容する」を選択。既存単一APIの入替に必要な短時間停止を本復旧だけの範囲に含める。既に停止中のpipelineを修正版検証前にresumeしない。本文のAPI停止を承認外とする記述はこの追加承認で置き換える。
 - 利用者の「お願いします。」でIAC7–10、RC1–4、再開前identity gateと限定復旧運用を承認。以下の未承認記述は設計履歴。
@@ -55,9 +65,9 @@
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| IAC7 | 本障害相当のHTMLが実snapshotter経由でダート重として取得され、青芝商事(株)・芝を含む馬名や勝馬情報の有無/配置で値が変わらない | RT1 | HTML→snapshot→parser回帰。芝のみ/ダートのみ/双方/空白/改行/別spanも網羅 | Not started |
-| IAC8 | 専用欄の未知値・矛盾・必須欠落・別Raceを保存前拒否し、安全停止を維持。公式中止等の正当な欠落を壊さない | RT1, RT2 | parser反例、handler/API副作用なし、完了分類・停止policy統合test | Not started |
-| IAC9 | 修正版と旧実行の境界を確認してから次revisionへ進め、明示対象だけを冪等再要求。既知の誤馬番への副作用を防ぎ、他の停止理由を解除しない | RT2, RT3 | IAC3のidentity統合test、全登録入口/再送/低版active/再起動/限定preview、配備証拠 | Not started |
+| IAC7 | 本障害相当のHTMLが実snapshotter経由でダート重として取得され、青芝商事(株)・芝を含む馬名や勝馬情報の有無/配置で値が変わらない | RT1 | HTML→snapshot→parser回帰。芝のみ/ダートのみ/双方/空白/改行/別spanも網羅 | Verified |
+| IAC8 | 専用欄の未知値・矛盾・必須欠落・別Raceを保存前拒否し、安全停止を維持。公式中止等の正当な欠落を壊さない | RT1, RT2 | parser反例、handler/API副作用なし、完了分類・停止policy統合test | Verified |
+| IAC9 | 修正版と旧実行の境界を確認してから次revisionへ進め、明示対象だけを冪等再要求。既知の誤馬番への副作用を防ぎ、他の停止理由を解除しない | RT2, RT3 | IAC3のidentity統合test、全登録入口/再送/低版active/再起動/限定preview、配備証拠 | Connected |
 | IAC10 | 対象Resultが本番で新版成功し保存値・帰属が正しく、他の収集も進み再停止なし。失敗履歴を保持し、復旧と馬主補正全体の完了を分けて報告 | RT3 | 上記観測窓、resource履歴・failure・保存値・pipelineのGET照合 | Not started |
 
 ## Concern and agreement ledger
