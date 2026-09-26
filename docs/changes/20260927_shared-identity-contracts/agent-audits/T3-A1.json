@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_shared-identity-contracts",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "completed",
+  "taskDifficulty": "bounded identity adapter tests",
+  "acceptanceCriteria": [
+    "AC3",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Role configured; observed telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "No runtime usage"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Scraping/Jra/Navigation/JraNavigator.Subjects.cs",
+    "src/HorseRacingPrediction.Scraping/Jra/Parsing/SubjectProfilePageParser.cs",
+    "tests/HorseRacingPrediction.Scraping.Tests/SharedSubjectIdentityTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "No review telemetry"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "No effort telemetry"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "No reliable active elapsed telemetry"
+  },
+  "startRevision": "1d961df5a671af578dd45aadb5fd38281ad77e87",
+  "endRevisionOrPatch": "sha256:5C4047FE2238CE2537372447C7B44485A11D61975759C6F5378F933C8BBD0ABD:CD6A6AFA6D6C0BDA9BD683B86B0BB3F0371E395EB1D1EBE3628AAD058AB68FD4:DCE35D9530105A50AAFF083FB03EE298C43F1ED52CDD6C61512282C8524F5102",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Main profile HTTP equivalent URL/different source/unsafe-host tests and existing parser regressions",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
