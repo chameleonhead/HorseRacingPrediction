@@ -7,6 +7,22 @@
 
 ## Incident ledger / 証拠
 
+## Production execution evidence
+
+- **最終運用判定: 配備済み、復旧未完了。** 13:49:15 JSTに別resource `20260926:Nakayama:5` が `RaceEntryIdentityMismatch` で再停止。新通知 `87854d31-7ff4-42eb-bb0e-1d95428cb44d`、task `5ea23a7a-6bbf-43bb-a6e3-f165de8508aa`、batch `fe4dee59-95fe-4a66-9632-46f59bb2254a` の1/9件目。Card/Result双方のstage `persisted=false`、Running0。新停止を解除していない。
+- 新対象のdomain IDは `race-a8ad225c-0df0-576d-bd1a-24d9e15dce1e`。raw14 entriesのgate/ownerは全null。表示APIはfallbackでgate/ownerを補うため、表示の充足をraw保存の証拠としない。結果宣言日時null、prediction検索0件（全参照不存在の証明ではない）。診断で存在しない `results` propertyをPowerShell `@($null).Count` した1は無効な件数であり、保存結果1件という証拠には採用しない。
+- [公式結果](https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde0106202604080520260926/68)と保存馬名をread-only照合し、14頭中12頭の馬番不一致を確認。フェイマスジャズは保存10→公式4、ジャロロッソ5→12、ヴァイスリッター1→3。既存14頭の保存順は馬名順、初回Card保存は木曜9/24 23:06:37（当時DOM未保存のため仮採番の発生箇所までは推論と区別）。単なる同一馬の識別子形式差ではない。
+- 原障害対象中山10Rは要求revision3/applied0、既存revision2 taskはReady/attempt0のまま。原障害の本番終端成功、別resource成功、10分安定は未達。失敗通知を消去せず、再開成功・IAC10達成と報告しない。
+- 次の承認境界: 既存馬番のオンライン入替は後段設計の別途承認対象。新対象の参照棚卸し・全頭公式identity差分・Race単位排他とversion一致を満たす補正previewを設計してから承認を得る。現行APIの強制refresh・DB直接変更・予想/結果の自動付替え・安全停止の無効化は実施しない。RT3はこの本番補正境界によりExternally blocked（受入阻害のためStatusはApprovedのまま）。
+- Final checkpoint review（Main）: IAC7/8はローカル実経路＋独立反例でVerified、IAC9は配備と限定要求まで確認、IAC10は新停止で未達。worker test成果は既存回帰とMain domain反例で採用、requested modelのみ記録、観測モデル/費用は不明。新停止は設計RC2で明示済みの既存データ境界であり、解除の反復で隠さない。本文の進行中/未実施記述は履歴で、現在状態はこの節を正とする。運用証拠のためだけの新PR/branch/pushは追加せず、この記録は既存worktreeに保持する。
+
+- PR [#96](https://github.com/chameleonhead/HorseRacingPrediction/pull/96)、最新CI [36218117516](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36218117516) success。配備SHA `e2c39a06f7f1be7c8f9e5595bbc013c5dcd14978`、既存workflow [36218341631](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36218341631) の全job success。
+- 13:45:26 JST Collectorのimage更新成功（infra 0 added/1 changed/0 destroyed）。旧Running task 0のgate通過後の更新。13:46:47 API health HTTP200。legacy migrationはsource/target/request/task/attempt/location/state全0、errors空。owner migrationはpreview-only。既存incident pauseを保持。
+- 13:47:50 JST GET: pauseのreason/updatedAtは原障害のまま、Running0。revision3 bulk previewは `Race/JRA/20260404:Nakayama:10` の1件のみ。
+- 13:48:43 JST 固定batch `incident:20260926:track-condition:revision3` で限定要求。request `ff62beb0-8f35-4c11-8a81-256c9e8b41a7`、RequiredRevision3、TasksCreated0、既存task `ddad3668-6b57-4db0-ad2f-51591200366c` と直列化。priority30/Normalを維持。別の失敗消去/owner migration/結果付替えなし。
+- pause reasonとupdatedAtの再一致を確認し、13:48:46.4534901 JSTにresumeを1回実行。原障害とは別の停止に変わった場合は再resumeしない。IAC10は対象終端成功・別resource成功・10分観測まで未Verified。
+- 本番照合用公式結果: [千葉日報杯](https://www.jra.go.jp/JRADB/accessS.html?CNAME=pw01sde1006202603031020260404/0B)、雨/ダート重、15頭。馬番の着順順は3,6,11,13,8,10,7,5,15,12,9,2,4,14,1。原障害時の失敗履歴を保持する。
+
 ## Execution checkpoint（承認後）
 
 - 配備前独立review追加closure: 別Raceの中止告知で天候・馬場の必須検証を迂回できる既存経路を発見。結果表がある場合は中止扱いにせず、表がない場合は対象番号に一致する単独paragraph全文の明示的中止告知だけを許す。同番号の別競馬場/別日付を含む告知・「この競走」等の曖昧な本文はfail closed。実HTMLの6反例を追加し、公式障害URLを含む関連78件成功。独立read-only再reviewで確認対象のblocking findingを解消。未知の中止DOMを成功と推測する契約は追加しない。

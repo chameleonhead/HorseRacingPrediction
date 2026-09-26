@@ -11,9 +11,9 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 承認済み第一段階の専用天候/馬場欄parserと通常/refresh/aggregateのidentity拒否を実装。revision3全入口を統合検証中。馬主補正・確定待ちの全体は後段に残る。 |
-| Verification | Incomplete | 原障害の公式URL、実HTML境界反例、API/domain拒否の副作用不変を検証済み。最新origin全体検証と本番照合は継続中。既存馬番不一致そのものは未修復。 |
-| Deployment/operation | Unverified | 第一段階の修正版配備・限定再取得・再開は承認済み。短時間API停止も明示許容。配備・復旧観測は未実施。 |
+| Code | Incomplete | 第一段階の専用天候/馬場欄、中止判定境界、identity拒否、revision3全入口は実装・検証済み。馬主補正・確定待ちの全体は後段に残る。 |
+| Verification | Incomplete | 関連78件（原障害公式URL含む）、非External計1,248件、最新CI成功。中山5Rの既存馬番12/14不一致で安全停止し、本番復旧IAC10は未達。 |
+| Deployment/operation | Incomplete | PR96/SHA e2c39a06、配備run36218341631成功。原障害対象1件revision3要求・13:48再開後、13:49に別Raceで再停止。補正の承認境界により停止維持。 |
 
 > **2026-09-26 reopened:** [対象Raceの証拠・安全な補正設計](decisions/20260926-race-integrity.md)を本recordの追加提案とする。`race-fca5d100-9e2f-5074-a74c-bad8cdb4705f` のraw owner欠損16/16、公式馬番との不一致、G2/GIII不一致が判明した。従前の承認は、この同一性補正や隔離操作を承認したものではない。監視親のT2b/T3a・保存完全性findingへ接続し、親recordは変更しない。以下の9/19のVerifiedは当時の限定試験結果であり、追加基準IAC1–IAC5の完了を意味しない。
 
@@ -98,10 +98,10 @@
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RT1 | IAC7–8 専用欄取得 | Main | Lead | approval | src/HorseRacingPrediction.Scraping; tests/HorseRacingPrediction.Scraping.Tests | HTML/snapshot/parser regression | 実行記録を追加設計へ追記 | In progress | Lead — public contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | 実行記録を追加設計へ追記 | In progress | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT1 | IAC7–8 専用欄取得 | Main | Lead | approval | src/HorseRacingPrediction.Scraping; tests/HorseRacingPrediction.Scraping.Tests | HTML/snapshot/parser regression | 関連78件・Scraping294件・CI成功、独立review closure | Verified | Lead — public contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | API283/Domain110/Collector326件成功、全7入口revision3 | Verified | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
-| RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 未実施 | Dependent | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 配備・限定要求済み、別Race馬番不一致で再停止。安全補正の別途承認が必要 | Externally blocked | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 
 ## 2026-09-19 設計・実装履歴（本文）
 
