@@ -163,6 +163,8 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
         Assert.IsTrue(sink.Requests.Any(x => x.Resource.Type == ResourceType.Race
             && x.Resource.Id == $"{date:yyyyMMdd}:Nakayama:1"));
+        Assert.IsTrue(sink.Requests.Where(x => x.Definition.Value == "race-detail").All(x => x.RequestedRevision ==
+            HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail));
     }
 
     [TestMethod]
@@ -610,14 +612,14 @@ public sealed class JraRaceDiscoveryCollectionHandlerTests
     {
         public List<(ResourceKey Resource, CollectionDefinitionId Definition, CollectionReason Reason,
             CollectionLane Lane, int Priority, DateOnly EffectiveDate,
-            IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl)> Requests
+            IReadOnlyDictionary<string, string> Attributes, Uri? ExplicitUrl, int RequestedRevision)> Requests
         { get; } = [];
         public Task RequestAsync(ResourceKey resource, CollectionDefinitionId definition, int requestedRevision,
             CollectionReason reason,
             CollectionLane lane, int priority, Uri? explicitUrl, DateOnly effectiveDate,
             IReadOnlyDictionary<string, string> attributes, CancellationToken cancellationToken)
         {
-            Requests.Add((resource, definition, reason, lane, priority, effectiveDate, attributes, explicitUrl));
+            Requests.Add((resource, definition, reason, lane, priority, effectiveDate, attributes, explicitUrl, requestedRevision));
             return Task.CompletedTask;
         }
     }

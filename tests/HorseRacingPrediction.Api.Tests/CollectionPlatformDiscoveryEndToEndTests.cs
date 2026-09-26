@@ -34,7 +34,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             await store.RegisterDefinitionAsync(new("race-discovery"), "Race discovery", ResourceType.Race,
                 1, "initial", false);
             await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
-                2, "artifact state machine", false);
+                HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail, "artifact state machine", false);
             await store.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds,
                 1, "initial", false);
 
@@ -98,6 +98,8 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
             var detail = tasks.Single(x => x.Definition.Value == "race-detail");
             var odds = tasks.Single(x => x.Definition.Value == "race-odds");
             Assert.AreEqual(CollectionTaskStatus.Ready, detail.Status);
+            Assert.AreEqual(HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
+                detail.RequestedRevision);
             Assert.AreEqual(CollectionTaskStatus.Ready, odds.Status);
             Assert.AreEqual($"{date:yyyyMMdd}:Tokyo:11", detail.Resource.Id);
             Assert.AreEqual(detail.Resource.Id, odds.Resource.Id);
@@ -110,7 +112,7 @@ public sealed class CollectionPlatformDiscoveryEndToEndTests
                 Provider = "JRA",
                 ResourceId = detail.Resource.Id,
                 DefinitionId = "race-detail",
-                RequestedRevision = 2,
+                RequestedRevision = HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
                 Reason = CollectionReason.Discovery,
                 Lane = CollectionLane.Realtime,
                 Priority = 80,

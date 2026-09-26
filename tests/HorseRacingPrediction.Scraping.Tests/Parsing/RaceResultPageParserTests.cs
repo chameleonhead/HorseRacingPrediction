@@ -103,7 +103,7 @@ public sealed class RaceResultPageParserTests
     {
         var original = BuildSnapshot();
         var snapshot = new TestPageSnapshot(Url, original.Title, [new TestPageSection("結果",
-            "推定上り 馬体重 調教師名 1 3 テストホース 1:33.4", [], [], original.Tables, original.Headings)]);
+            "天候 晴 芝 良 推定上り 馬体重 調教師名 1 3 テストホース 1:33.4", [], [], original.Tables, original.Headings)]);
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
         Assert.IsNull(page.StartTime);
         Assert.IsNull(page.OverallPaceText);
@@ -118,7 +118,7 @@ public sealed class RaceResultPageParserTests
         var corners = new TestPageTable(["1コーナー", "7(8,12)"],
             [["1コーナー", "7(8,12)"], ["2コーナー", "7-8(10,9,12)"], ["3コーナー", "7,8,12"], ["4コーナー", "7,8=12"]]);
         var snapshot = new TestPageSnapshot(Url, original.Title, [new TestPageSection("結果",
-            "発走時刻：13時00分 推定上り 馬体重 （増減） 調教師名 単勝 人気 1 8 テストホース",
+            "天候 晴 芝 良 発走時刻：13時00分 推定上り 馬体重 （増減） 調教師名 単勝 人気 1 8 テストホース",
             [], [], [..original.Tables, time, corners], original.Headings)]);
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
         Assert.AreEqual(new TimeOnly(13, 0), page.StartTime);
@@ -506,7 +506,7 @@ public sealed class RaceResultPageParserTests
     {
         var original = BuildSnapshot();
         var section = new TestPageSection("レース結果",
-            "第71回京成杯オータムハンデキャップ GⅢ 本賞金（万円） 1着4,100 2着1,600 3着1,000 4着620 5着410 " +
+            "天候 晴 芝 良 第71回京成杯オータムハンデキャップ GⅢ 本賞金（万円） 1着4,100 2着1,600 3着1,000 4着620 5着410 " +
             "付加賞（万円） 1着56.7 2着16.2 3着8.1 競走中の出来事等 " +
             "ダイチマイスター号は、枠内駐立不良。 ノアヴェルテ号の騎手は過怠金10,000円。 開催選択へ戻る",
             [], [], original.Tables,

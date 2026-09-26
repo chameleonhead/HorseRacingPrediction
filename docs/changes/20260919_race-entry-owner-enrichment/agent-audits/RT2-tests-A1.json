@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260919_race-entry-owner-enrichment",
+  "taskId": "RT2-tests",
+  "attemptId": "RT2-tests-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC108", "AC109"],
+  "route": {"tier":"worker","requestedModel":"gpt-5.6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"runtime does not expose observed model"},
+  "usage": {"availability":"unavailable","totalTokens":null,"reason":"runtime does not expose usage"},
+  "scope": ["tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"runtime does not expose review usage"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"not measured"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"active effort not measured"},
+  "startRevision": "d9710e38c05f44562b326540d23902e00be602c5",
+  "endRevisionOrPatch": "new CollectedRaceIdentityGuardTests.cs only; 5 tests",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,"independentChallenge":"Lead reviewed source and ran domain invariant counterexample; related API regression rerun","retries":0,"leadCorrections":0,"reviewPasses":1,"promoted":false,"escapedDefects":0,"escalations":0,"reviewMode":"ac-group","detailReviewReason":null,"decision":"accept"}
+}

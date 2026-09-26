@@ -222,7 +222,10 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
         => new(PageSnapshotDiagnosticSeverity.Warning, dto.Code, dto.Message, ConvertSource(dto.Source));
 
     private static PageSourceReference? ConvertSource(BrowserSource? dto)
-        => dto is null ? null : new PageSourceReference(dto.TagName, EmptyToNull(dto.ElementId), EmptyToNull(dto.LocatorHint));
+        => dto is null ? null : new PageSourceReference(dto.TagName, EmptyToNull(dto.ElementId), EmptyToNull(dto.LocatorHint))
+        {
+            AncestorClassTokens = dto.AncestorClassTokens is { Length: > 0 } ? dto.AncestorClassTokens : null,
+        };
 
     private static Uri ParseRequiredUri(
         string value,
@@ -293,7 +296,8 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
         BrowserNode[] Children);
 
     private sealed record BrowserLocation(double X, double Y, double Width, double Height);
-    private sealed record BrowserSource(string? TagName, string? ElementId, string? LocatorHint);
+    private sealed record BrowserSource(string? TagName, string? ElementId, string? LocatorHint,
+        string[]? AncestorClassTokens);
     private sealed record BrowserMetadata(
         string? Description,
         string? CanonicalUrl,
@@ -376,7 +380,13 @@ public sealed class PlaywrightPageSnapshotter : IPageSnapshotter
                     if (name) locatorHint = `${tagName}[name=${JSON.stringify(name)}]`;
                     else if (type) locatorHint = `${tagName}[type=${JSON.stringify(type)}]`;
                 }
-                return { tagName, elementId, locatorHint };
+                const ancestorClassTokens = [];
+                // Only list provenance is needed here; keep snapshots bounded for dense tables.
+                if (tagName === 'ul' || tagName === 'ol') {
+                    for (let parent = element.parentElement; parent; parent = parent.parentElement)
+                        ancestorClassTokens.push(...parent.classList);
+                }
+                return { tagName, elementId, locatorHint, ancestorClassTokens: [...new Set(ancestorClassTokens)] };
             };
             const ownText = element => normalize(Array.from(element.childNodes)
                 .filter(node => node.nodeType === Node.TEXT_NODE)

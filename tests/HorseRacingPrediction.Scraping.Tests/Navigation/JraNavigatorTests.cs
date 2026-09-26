@@ -132,7 +132,7 @@ public sealed class JraNavigatorTests
 
         var section = new TestPageSection(
             title: "レース結果",
-            mainText: string.Empty,
+            mainText: "天候 晴 芝 良",
             links: [],
             actions: [],
             tables: [table],

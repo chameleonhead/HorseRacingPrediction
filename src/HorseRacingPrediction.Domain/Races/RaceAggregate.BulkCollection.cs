@@ -103,6 +103,7 @@ public partial class RaceAggregate
     {
         ArgumentNullException.ThrowIfNull(data.Entries);
         ArgumentNullException.ThrowIfNull(data.EntryResults);
+        ValidateCollectedEntryAssignments(data.Entries);
         if (data.RaceDate == default) throw new ArgumentException("Race date is required.", nameof(data));
         if (string.IsNullOrWhiteSpace(data.RacecourseCode)) throw new ArgumentException("Racecourse code is required.", nameof(data));
         if (data.RaceNumber <= 0) throw new ArgumentException("Race number must be positive.", nameof(data));

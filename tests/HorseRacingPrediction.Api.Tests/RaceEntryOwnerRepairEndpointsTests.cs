@@ -19,7 +19,7 @@ public sealed class RaceEntryOwnerRepairEndpointsTests
         http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
         await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race,
-            2, "owner repair", false);
+            CollectionDefinitionRevisions.RaceDetail, "owner repair", false);
         var date = new DateOnly(2032, 9, 19);
         var create = new DeclareRaceResultBulkRequest(date, "阪神", 11, "馬主補完検証",
             EntryCount: 1, Entries:

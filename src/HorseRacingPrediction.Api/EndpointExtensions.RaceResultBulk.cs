@@ -40,6 +40,9 @@ public static partial class EndpointExtensions
             new ReadModelByIdQuery<RacePredictionContextReadModel>(raceIdValue), cancellationToken).ConfigureAwait(false);
         if (existing is not null && string.IsNullOrEmpty(existing.RaceId)) existing = null;
 
+        var identityFailure = ValidateCollectedEntryIdentities(request, existing, raceIdValue);
+        if (identityFailure is not null) return identityFailure;
+
         var errors = new List<string>();
         var relatedErrors = new List<string>();
         var outcomes = new List<Shared.DeclareRaceResultBulkItemOutcome>();
@@ -75,9 +78,7 @@ public static partial class EndpointExtensions
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
             var canonicalTrainerName = string.IsNullOrWhiteSpace(item.TrainerName) ? null
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
-            var horseId = isExistingEntry
-                ? existing!.Entries.Single(entry => entry.EntryId == entryId).HorseId
-                : DeterministicIdGenerator.BuildHorseId(canonicalHorseName, item.HorseSourceIdentity);
+            var horseId = DeterministicIdGenerator.BuildHorseId(canonicalHorseName, item.HorseSourceIdentity);
             var jockeyId = string.IsNullOrWhiteSpace(canonicalJockeyName) ? null
                 : DeterministicIdGenerator.BuildEntityId("jockey",
                     DeterministicIdGenerator.NormalizeKey(canonicalJockeyName));
@@ -107,7 +108,7 @@ public static partial class EndpointExtensions
         var data = new BulkRaceResultData(
             request.RaceDate, request.RacecourseCode, request.RaceNumber, request.RaceName,
             request.EntryCount, gradeCode, request.SurfaceCode, request.DistanceMeters, request.DirectionCode,
-            accepted.Where(item => !existingEntryIds.Contains(item.Entry.EntryId)).Select(item => item.Entry).ToArray(),
+            accepted.Select(item => item.Entry).ToArray(),
             request.IsRaceCard ? [] : accepted.Select(item => item.Result).ToArray(), request.WinningHorseName,
             string.IsNullOrWhiteSpace(request.WinningHorseName)
                 ? null

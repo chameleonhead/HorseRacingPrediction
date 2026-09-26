@@ -50,7 +50,12 @@ public enum PageContentKind
 
 public sealed record PageElementLocation(double X, double Y, double Width, double Height);
 
-public sealed record PageSourceReference(string? TagName, string? ElementId, string? LocatorHint);
+public sealed record PageSourceReference(string? TagName, string? ElementId, string? LocatorHint)
+{
+    // Provenance survives pruning of transparent wrappers; consumers need not search flattened text.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? AncestorClassTokens { get; init; }
+}
 
 public sealed record PageMetadataSnapshot
 {

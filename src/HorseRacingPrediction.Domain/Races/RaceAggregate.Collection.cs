@@ -5,6 +5,7 @@ public partial class RaceAggregate
     public void RefreshCollectedData(CollectedRaceData data)
     {
         if (!_state.IsCreated) throw new InvalidOperationException("Race is not created.");
+        ValidateCollectedEntryAssignments(data.Entries);
         if (string.IsNullOrWhiteSpace(data.RaceName)) throw new InvalidOperationException("Race name is required.");
         var metadataChanged = (data.GradeCode is not null && data.GradeCode != _state.GradeCode)
             || (data.SurfaceCode is not null && data.SurfaceCode != _state.SurfaceCode)

@@ -33,6 +33,8 @@ public static partial class EndpointExtensions
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
         if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x => NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
             return Results.Conflict(new[] { "取得元の馬がレースの出走馬に含まれていません。" });
+        var identityFailure = ValidateCollectedEntryIdentities(request, existing, id);
+        if (identityFailure is not null) return identityFailure;
         foreach (var source in request.Entries ?? [])
         {
             if (source.HorseNumber <= 0 || string.IsNullOrWhiteSpace(source.HorseName))
