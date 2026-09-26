@@ -11,8 +11,8 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | 共通identity/既存ID互換/限定owner復旧を実装。Release buildと全体nonExternal回帰成功 |
-| Verification | In progress | ローカル1,373成功/0失敗/1 skip、format/DB/local host成功。Linux CIと本番実結果は未確認 |
-| Deployment/operation | In progress | GitHub PR/CI準備。本番は別件jockeyエラーで停止中、未知障害を理由に再開しない |
+| Verification | Externally blocked | AC1–5 Verified。ローカル/Linux CI成功。本番46件の履歴保持・冪等性を確認。別件停止によりAC6のworker成功/後続進捗は未達 |
+| Deployment/operation | Externally blocked | API/collector同版配備成功、馬主46件の復旧要求Ready/未実行。未知のjockeyエラーを保持し、再開・別原因修正には追加対応の合意が必要 |
 
 ## Context / scope
 
@@ -66,11 +66,11 @@ Pre-implementation: MainがT0完了を確認、T1/T2/T4はRunnable、T5/T6はDep
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 馬主の法人表記/空白/文字幅/英字・登録aliasで、jobと馬主API/出馬表が同一IDへ解決。統合先・元名を保持 | T1,T1D,T5 | 登録→別名統合→bulk request→worker存在確認のHTTP/DB統合test | Connected |
-| AC2 | raw/canonicalの馬名でfallback生成が一致し、既存ID/参照を保持。公式ID優先、同名別馬・複数候補・矛盾拒否 | T2,T5 | direct writer/bulk/profile発見のcross-path反例、既存events/read-back比較 | Connected |
-| AC3 | 馬検索と保存検証が同じ名前/公式identity規則を使う。等価URL表記のみ許容し、異なる馬/誕生日/不正hostを拒否 | T3,T5 | 固定HTML→navigator/parser→profile HTTP保存更新。正常/拒否双方 | Connected |
-| AC4 | 英日/大小文字の競馬場で同一Raceへ解決、既存IDを保持。複数既存Raceは自動結合せず、lease/holdの整合性維持 | T4,T5 | 新規/既存race、補正metadata、lease/odds/手動/履歴経路の統合test | Connected |
-| AC5 | 重複生成・照合の全対象呼出しとbootstrap/revisionを棚卸し、旧処理の残存を分類。既存取消/予想/結果/odds、安全停止を維持 | T1–T5,T1D | literal inventory、exact format/Release build/nonExternal全体、empty DB/pending model、別process smoke、Linux CI | Connected |
+| AC1 | 馬主の法人表記/空白/文字幅/英字・登録aliasで、jobと馬主API/出馬表が同一IDへ解決。統合先・元名を保持 | T1,T1D,T5 | 登録→別名統合→bulk request→worker存在確認のHTTP/DB統合test | Verified |
+| AC2 | raw/canonicalの馬名でfallback生成が一致し、既存ID/参照を保持。公式ID優先、同名別馬・複数候補・矛盾拒否 | T2,T5 | direct writer/bulk/profile発見のcross-path反例、既存events/read-back比較 | Verified |
+| AC3 | 馬検索と保存検証が同じ名前/公式identity規則を使う。等価URL表記のみ許容し、異なる馬/誕生日/不正hostを拒否 | T3,T5 | 固定HTML→navigator/parser→profile HTTP保存更新。正常/拒否双方 | Verified |
+| AC4 | 英日/大小文字の競馬場で同一Raceへ解決、既存IDを保持。複数既存Raceは自動結合せず、lease/holdの整合性維持 | T4,T5 | 新規/既存race、補正metadata、lease/odds/手動/履歴経路の統合test | Verified |
+| AC5 | 重複生成・照合の全対象呼出しとbootstrap/revisionを棚卸し、旧処理の残存を分類。既存取消/予想/結果/odds、安全停止を維持 | T1–T5,T1D | literal inventory、exact format/Release build/nonExternal全体、empty DB/pending model、別process smoke、Linux CI | Verified |
 | AC6 | GitHubでAPI/collector同版配備、previewで一意な馬主対象だけ復旧して成功と後続進捗を確認。曖昧/別原因は証拠付き保留 | T6 | workflow/health、before-after対象一覧、冪等apply、元履歴保持、正常後続batchまたは15分観測 | Connected |
 
 ## Task plan
@@ -83,8 +83,8 @@ Pre-implementation: MainがT0完了を確認、T1/T2/T4はRunnable、T5/T6はDep
 | T2 | 馬fallbackの共通生成・既存解決 | Main | Lead | T0 | ApiClient/Contracts/API/Collector identity関連、tests | AC2、cross-path反例 | legacy/event/source/hash衝突反例と全体回帰成功 | Verified | Lead — 公開契約/既存IDとT1共有境界 | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | T3 | 検索・profile同値判定接続 | identity_parser_worker | Cost efficient coding | T2 | src/HorseRacingPrediction.Scraping/Jra/Navigation/JraNavigator.Subjects.cs; src/HorseRacingPrediction.Scraping/Jra/Parsing/SubjectProfilePageParser.cs; tests/HorseRacingPrediction.Scraping.Tests/SharedSubjectIdentityTests.cs | AC3、focused→Scraping回帰 | focused 3件/Scraping 334件成功、Main profile HTTP反例 | Verified | 契約凍結後low_cost_coding_worker、MainはAPI保存境界所有 | T3-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | T4 | Race/Course共通契約・既存照合 | Main | Lead | T0,T2 | Race resolver/collection lease/hold/API、関連tests | AC4、既存ID/競合反例 | 旧ID/複数候補/lease/hold/discovery反例と全体回帰成功 | Verified | Lead — 参照保持/並行性/セキュリティ | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T5 | revision登録/全caller棚卸し・回帰 | Main | Lead | T1–T4 | definition共通記述/登録/呼出し、統合tests/docs | AC1–5、CI相当gate | [inventory](identity-inventory.md)、全体再検証中 | In progress | Lead — shared bootstrap/統合最終判定 | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| T6 | GitHub配備・限定復旧・観測 | Main | Lead | T5 | GitHub、対象preview/applyと操作記録 | AC6、実結果/後続進捗 | 復旧HTTP反例成功、配備準備中。別件停止は保持 | In progress | Lead — 本番/データ保全 | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T5 | revision登録/全caller棚卸し・回帰 | Main | Lead | T1–T4 | definition共通記述/登録/呼出し、統合tests/docs | AC1–5、CI相当gate | [inventory](identity-inventory.md)、ローカル/Linux CI全gate成功 | Verified | Lead — shared bootstrap/統合最終判定 | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| T6 | GitHub配備・限定復旧・観測 | Main | Lead | T5 | GitHub、対象preview/applyと操作記録 | AC6、実結果/後続進捗 | 同版配備・46件限定apply/冪等/履歴read-back成功。別件停止によりworker成功/後続進捗未達 | Externally blocked | Lead — 本番/データ保全、別原因対応の合意が必要 | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 
 T1Dは馬主のresolver/API契約が凍結し、専用新規testを独立所有できるため追加分割。owner_identity_tests（requested gpt-5.6-luna）が登録→別名→bulk→worker存在確認を独立検証し、Mainが受入を保持する。T3は共通契約凍結後に独立委譲する。テスト候補は馬名の登録記号/全半角、同じCNAMEのURL、別CNAME、複数候補、未知host。最小focused testとScraping回帰の成功をworker完了条件にする。新しい同値規則や保存/移行判断が必要ならMainへ戻す。他タスクは判断と実装の分離を検討したが同じresolver/API境界と既存参照の不変条件を共有するためMainが所有。build/testは共有出力を競合させない。
 
@@ -113,7 +113,7 @@ Concern/agreement: C1–5は上記の境界で設計上解決、利用者がAC1�
 
 Pre-implementation: 上記契約を確定して実装開始。Checkpoint: MainがAC1/3の実経路テストとscopeを確認。Final review: 未実施。
 
-次操作: ローカルgate成功をcheckpoint commitし、GitHub PR/Linux CI/配備へ進む。全体回帰・旧ID反例・残caller棚卸し・復旧実装・local hostは成功。CIと本番preview/apply/実結果が未完了。本番変更なし。source/testsとdocsは本スコープとして分けてコミットする。
+次操作: 運用証拠の文書PRをmainへ反映してbranchを削除後、別原因（騎手の公開リンク不足・馬のNoCandidate）の調査/対応設計の追加合意を求める。合意後も未知障害の停止条件を弱めず、原因検証・設計承認を経て再開し、今回の46件の成功と後続batchまたは15分の進捗を確認してT6/AC6を閉じる。再開後の読取: `/api/admin/collection/resources/Owner/JRA/{targetId}/owner-identity` と `/api/admin/collection/pipeline`。未コミットは本record/canonical docsと3つの運用証拠JSONのみ。プロダクションコードの残作業なし。
 
 ## Verification / closure items
 
@@ -141,3 +141,27 @@ Pre-implementation: 上記契約を確定して実装開始。Checkpoint: Main�
 最終ローカル結果（2026-09-27 07:14 JST）: `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes`成功、`dotnet build HorseRacingPrediction.sln --no-restore --configuration Release`成功（警告0/エラー0）、`dotnet test HorseRacingPrediction.sln --no-build --configuration Release --filter "TestCategory!=External" --logger "trx;LogFileName=shared-identity-final.trx"`成功（Contracts43/Domain126/Application58/Infrastructure16/ML14/Agents106/Scraping337/Collector356/API317、計1,373成功・0失敗・既存skip1）。最後の編集はtest fixtureのみで、本番sourceを変更していないため先のDB/local host証拠も同一実装に対応。AC1–4はローカル実経路の根拠を取得、AC5のLinux CIとAC6の配備・本番検証は未完了で、AC状態をConnectedに維持する。
 
 Checkpoint review: MainがAC1–4のHTTP/DB・worker・parser経路とAC5棚卸しを統合照合。旧events/ID保持、取消全行/予想対象、lease/hold、未知障害停止を維持。独立review P1/P2は修正済み。変更記録validatorとagent audit validator成功。Git diff check成功、生成物/秘密情報/目的外変更なし。ソース/testの一つの目的は識別契約共通化と同不具合の限定復旧。文書を別commitとし、マージ後branchへ追加commitしない。最終完了判定はAC6未達のため行わない。
+
+### GitHub verification / delivery
+
+- [PR #104](https://github.com/chameleonhead/HorseRacingPrediction/pull/104): docs e8f146ef / source+test fdf54a3d、2026-09-27 07:22 JSTに98b5efb8へmerge。
+- [Linux CI 36275708372](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36275708372): 全gate成功（1,373 pass/0 fail/1 skip）。skipは既存`RaceDiscovery_IsRegisteredByNewScheduler`。format/Release/empty DB/model/脆弱性検査/local host/cross-process lockを確認。AC1–5/T1–T5をVerifiedへ照合。
+- ancestor・tree一致・clean worktreeを確認し、元branchをdetach後にlocal/remoteとも削除。マージ後の元branchへのcommit/pushなし。運用記録は別branch/PRで追加する。
+- [本番配備36276076771](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36276076771)は成功（2026-09-27 07:34 JST）。API IMAGE_TAG/collector image_uriとも98b5efb8、health HTTP200、元のjockey停止保持をworkflow logとAPIで確認。main CI 36276076724も成功。
+- 配備前group観測: owner-identity 46件（BA97EBE92E4D55E1）、horse-profile 14件（E56D934CCA551769）、jockey-profile 1件（02D78CBC10B10F67）。名前のみで一括処理せず、配備後previewのproof/fingerprintでowner対象を確定する。
+
+### Production owner recovery (worker completion still pending)
+
+- [実行前preview](owner-recovery-preview.json): 07:35 JST、本番health正常、pipeline paused、Running 0。46件すべて元task/requestの誤ID導出、現在のalias/Owner/参照Raceとの一意照合に成功。対象46/除外0/正しいOwner ID 46をfingerprint付きで保存してからapply。
+- [apply結果](owner-recovery-apply.json): 07:36 JST、対象46件だけ新しい復旧task 46件を登録し、誤ID resourceを監査付き抑止。Race/Horse/Entry/予想/結果/eventの付替え・データ削除なし。
+- 07:38 JST、同じallowlist/fingerprintを再送して新規作成0、返された46 task IDは初回と完全一致。未解決groupは馬14件・騎手1件だけで、馬主groupは残らない。ただし旧失敗を成功にしたのではなく、旧task/attemptは保持し通知をSupersededにしたもの。
+- 停止理由・updatedAtは元の03:08 JSTのjockeyエラーのまま。本番worker成功/後続batchまたは15分進捗というAC6は未達であり、修正配備・復旧要求登録と収集復旧を混同しない。
+- [07:39 JST個別検証](owner-recovery-verification.json): 全46旧taskはFailedのまま、元attemptと通知が存在し、通知だけSuperseded。正しい46 Owner resourceそれぞれrequest 1/task 1、ReadyかつattemptCount 0。汎用tasksの先頭200件では新taskが取得できなかったため、resource別の直接read-backへ切替えて全件確認した。対象・件数・ID・旧履歴・二重applyの照合成功。別原因15件のdismiss/retry/削除・pipeline resumeは実施していない。
+
+## Final review / acceptance blocker
+
+MainはAC1–5の実経路、非回帰、Linux CIと独立reviewのclosureを確認しVerified。T1D/T3のworker成果は独立反証と全体回帰を含め受入済み。observed model/usage/costは非公開で未確認、比較根拠のないrouting改善は行わない。今回のfixture・性能・証拠不足は局所closureと反例で修正し、元gateを再実行した。恒久的skill変更が必要な反復プロセス欠陥は本実装からは確認していない。
+
+T6は配備と安全な限定復旧の準備を終えたが、03:08 JSTからの未知jockey障害でworker実行が停止している。停止解除は「未知障害がない場合だけ」という承認済み条件と両立しないため行わない。Mainがblockerを保持し、追加調査/対応設計の合意を求める。AC6をVerified、recordをImplementedにはしない。残課題を別recordへ移して完了扱いもしない。
+
+Incident ledger: 馬主ID不一致の原因/設計/実装/配備は確認済み。46件の置換要求はReady、旧履歴は保持。temporary recoveryおよび収集全体の復旧は未達。残るリスクは未知騎手リンク障害と馬14件の公開検索不成立であり、次の対応後に本recordのAC6へ結果を還元する。

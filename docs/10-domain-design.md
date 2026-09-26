@@ -1,6 +1,6 @@
 # 競馬予想ドメイン設計
 
-> 2026-09-27 承認済み（実装・検証中）: 馬主の別名/統合先、馬の公式identity/fallback、競馬場とRace identityの生成・照合を共通契約へ接続する。既存ID/events/予想結果は再採番せず、一意な既存対象を保持し、複数候補・矛盾は自動統合しない。承認・互換境界・検証は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を正とする。
+> 2026-09-27 実装済み（本番検証中）: 馬主の別名/統合先、馬の公式identity/fallback、競馬場とRace identityの生成・照合を共通契約へ接続する。既存ID/events/予想結果は再採番せず、一意な既存対象を保持し、複数候補・矛盾は自動統合しない。承認・互換境界・検証は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を正とする。
 
 ## 目的
 
