@@ -1,0 +1,476 @@
+{
+  "deploymentSha": "98b5efb8e65746760c6c906ce2e36bdd2c7790d4",
+  "action": "Queue verified replacement requests, suppress faulty resources, preserve failure history; do not resume",
+  "observedAt": "2026-09-27T07:35:40.3315707+09:00",
+  "health": {
+    "status": "ok"
+  },
+  "pipeline": {
+    "isPaused": true,
+    "reason": "Unexpected collection failure notification 7a10af2c-8b5e-489c-87e7-4b0a248ed859: Task=0192ee02-384f-49c0-9a67-c8b510832154; Error=JraCollectionException; 引退騎手一覧の公開リンクが見つかりません。",
+    "updatedAt": "2026-09-27T03:08:07.2072162+09:00"
+  },
+  "running": [],
+  "candidates": [
+    {
+      "notificationId": "a989ded2-6ab8-440f-b58d-a9ed0f93dbb2",
+      "taskId": "427a2fb7-0357-4738-88ab-941eb2db50f0",
+      "sourceId": "owner-dbe401ae-0c14-5102-beb3-ac5cad1f7ffb",
+      "name": "(株)ノルマンディーサラブレッドレーシング",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-74ff355a-d012-573c-8f22-f2bcfd342d09",
+      "fingerprint": "540417435226E4D054F0873F850ADF69468DDF09B169F845FD80C13F010466BE",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "bae50a3d-71d4-429c-a07e-54e79f99d9a8",
+      "taskId": "b3220ba3-0ebc-4be1-b665-ccea82b5bd9d",
+      "sourceId": "owner-a45f3239-8fad-578a-8aef-8265f5664c55",
+      "name": "(株)社台レースホース",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-e14fdb3e-8b94-55bc-952c-b93e7275d9ba",
+      "fingerprint": "DF9E37492063B78C64426D39F842CF9018E951AE188157A9837CF2D48D2A45E1",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "6956b970-7597-4eb8-b7a2-2dbc3bd2d538",
+      "taskId": "fb949f92-78d6-47f0-9b80-144966d7cfe7",
+      "sourceId": "owner-e7f19be1-923a-502c-81bc-ff4a70d8122d",
+      "name": "(有)ミルファーム",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-eb051b65-6fff-5b16-9c74-9c4f3ccbadd3",
+      "fingerprint": "C03D3FA8A94319C7EBD459F94FBC06E4F4375D5BAD235D596E560D91F306C475",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "364e6451-8d57-42c7-951c-4c59addfad4f",
+      "taskId": "77eb11d4-c5b0-4ba8-87b6-d06567a85046",
+      "sourceId": "owner-c5223b18-1051-596e-9fcf-a8eeb73e26f2",
+      "name": "(株)サラブレッドクラブ・ラフィアン",
+      "raceId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+      "targetId": "owner-9cbdda6c-21bf-5aa4-a0cd-e0878bf8d3eb",
+      "fingerprint": "F33A6F351D6B149C6B56917500BF083B0B352FBE26127B8DA570FC75B1EE831A",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "84a7551d-6517-4b9d-bb6b-e3c10fb24b0e",
+      "taskId": "9b31b94a-bbb5-4f73-985b-54be36bede77",
+      "sourceId": "owner-a6977226-568d-5eac-abf4-902d7a57ccf1",
+      "name": "(株)CHEVAL ATTACHE",
+      "raceId": "race-f0192dd6-f365-506e-8a5e-b136244fed65",
+      "targetId": "owner-4cbadc7d-02b6-5ca1-a2fc-c29da8fc7f25",
+      "fingerprint": "B26A907FC5CB0AAE60177A1E17870FD2DC20AD70DDFF05A5EC18209DEBD18537",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "d8ce6bf7-ba0c-4ff6-b05a-cef18e28805b",
+      "taskId": "49b92ea0-b178-413e-9aca-ffe5f71d548d",
+      "sourceId": "owner-b2d8f059-2ffd-5a77-8b9d-b79b4cf03b53",
+      "name": "(有)ターフ・スポート",
+      "raceId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+      "targetId": "owner-323db7f6-f654-5f47-a86c-c8e9498a6d53",
+      "fingerprint": "AF98B4E0B5B95560CBD8DAE8FCBB995B4E8F4568EA707447A97C3395540441C8",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "bea14f08-fb93-4b66-90bb-e049abf26aa5",
+      "taskId": "120cdf95-8b71-4add-970e-0b432d2631dd",
+      "sourceId": "owner-f0608533-feb7-5387-b12c-fdd064162146",
+      "name": "(株)ローレルレーシング",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-340c0568-d934-5b61-9cb8-0c3de9808ede",
+      "fingerprint": "698E4F47F2CBCD1C8FA875601F7D75227EB66DC2C749E0275BC04CB88F791E5A",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "600ac797-c5e4-448b-8446-a675077d2daf",
+      "taskId": "402a8ce1-d769-4305-a070-1f7674c89b83",
+      "sourceId": "owner-453977ed-47dd-5483-b3b8-36501586acb6",
+      "name": "(同)三度屋",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-2a9b576b-8725-52b5-941b-a4c305038e33",
+      "fingerprint": "CF8D8157C00C4D632F480350BFA390BE924A9650B222BF1999A0CAEA46D87822",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "338b180e-cfce-4f45-8c76-1ead601c0cf6",
+      "taskId": "6cf238d2-051d-46fb-86ba-b767781c12f6",
+      "sourceId": "owner-0a31c195-f3a6-586d-b46d-c572c07ef02d",
+      "name": "石坂茂ラボ(株)",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-646e70da-63f9-50d1-82fd-1c3ec0ab6b84",
+      "fingerprint": "BDD62A2B7328232684D6ABE535A5A6B6BFDF1F7DBB9CAE447F0C1F192AF3498A",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "c4e47a61-3cbe-4e85-ada6-127791387e1e",
+      "taskId": "e3ad997b-0f48-49d1-8e66-ed83792b712a",
+      "sourceId": "owner-57436aa9-eaf6-5687-9177-257841956cad",
+      "name": "(株)加藤ステーブル",
+      "raceId": "race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2",
+      "targetId": "owner-799574b4-fee9-532c-a73e-302eb5c144fe",
+      "fingerprint": "5375641F269B1EA7779B0E2FC423D04684916784DA36D8E1372380FD1F30E0CC",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "aebd6e13-c7b3-4f97-90bd-d332a4b6ad26",
+      "taskId": "a0d7b6c2-1ba4-4099-ac7f-d782e69cfb76",
+      "sourceId": "owner-820a9ad2-e407-5010-a554-b5edc0e6cac0",
+      "name": "(有)キャロットファーム",
+      "raceId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+      "targetId": "owner-1b5fe1e9-033c-5cce-b82f-11460b2fabb6",
+      "fingerprint": "8BE67917CC4DB2E259610A771C9372D27494FDABACD8FA5472B022FFE8DD9CC9",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "efd27520-2967-4e7a-8593-1538490659c4",
+      "taskId": "ff9e414f-1162-4377-91bd-277a59ece2b8",
+      "sourceId": "owner-ae8ecc1a-bc85-5a95-94e2-6903da0014c1",
+      "name": "(株)Gリビエール・レーシング",
+      "raceId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+      "targetId": "owner-75fb0f89-98c2-5d86-9765-81cdbe41d864",
+      "fingerprint": "22EC58080D511F0045FFFD43BD9C4EF8F45A404639D900AD932973588113BD63",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "75ece83a-a08e-4e09-879e-62d0cd96c41d",
+      "taskId": "73bc56f3-89bd-48d6-b8d7-916237d44cf3",
+      "sourceId": "owner-0482afd1-52fb-59d8-9294-9710cfefcb74",
+      "name": "(株)G1レーシング",
+      "raceId": "race-3d4624fd-3318-52e8-a863-1529592e6fd6",
+      "targetId": "owner-d1d53467-d0de-598b-a528-67d962e530ba",
+      "fingerprint": "FC5E02B3EBC72C3759243DDAF7C0A655737F8FE51636B6F31D041836F0C96C6F",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "5458b597-8826-4ca8-9a9f-492368a4a74d",
+      "taskId": "1823602b-5493-4578-a840-cca89f1569cb",
+      "sourceId": "owner-59c447d0-f065-5009-b245-9c539d38cab5",
+      "name": "(有)ビッグレッドファーム",
+      "raceId": "race-a8ad225c-0df0-576d-bd1a-24d9e15dce1e",
+      "targetId": "owner-bdb70704-608f-510d-944e-b339814086e5",
+      "fingerprint": "C293F26A9673B9CC0E216107EB0A0350C742FE42F30B9623BAEB102F8EE6680C",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "3a79e4dc-bef3-42b3-81f3-d5ada7928552",
+      "taskId": "957a640f-2634-498a-a859-d3f38e1187af",
+      "sourceId": "owner-7185f9dd-2c15-5444-b7fa-6df589fc251c",
+      "name": "(株)ブルースターズファーム",
+      "raceId": "race-a8ad225c-0df0-576d-bd1a-24d9e15dce1e",
+      "targetId": "owner-a6e9528b-8833-57e2-b6bd-86a11cd2328c",
+      "fingerprint": "1C959891190FBDF28190EDF22BECECD32174E734F6B44C6264F15E33ED39B396",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "256a28c5-585b-4c22-8274-db66c676b8a2",
+      "taskId": "497ffbdb-c142-45ac-9b5e-cbedb362cb0e",
+      "sourceId": "owner-88e79f48-08c0-5ba3-9767-3e10830a0d4b",
+      "name": "(有)サンデーレーシング",
+      "raceId": "race-3a6fb1a3-2bcc-52ef-87a5-7ebe41b8aa13",
+      "targetId": "owner-e7367194-e4a5-53b0-9d50-49630a540a64",
+      "fingerprint": "599776ABC7EA4505DFFD44B9E515EB59F98A4289F4C7B14ECAF2F60663A7D900",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "6bf0f998-baa2-4288-b498-f7285e573012",
+      "taskId": "69a19a9f-42f1-4960-836b-9c9f04ba3c4c",
+      "sourceId": "owner-a4ae0c67-04ae-5642-a6c9-c16c8c536262",
+      "name": "(株)ダノックス",
+      "raceId": "race-3a6fb1a3-2bcc-52ef-87a5-7ebe41b8aa13",
+      "targetId": "owner-b9179a6c-9be3-5215-9ab4-f2d37c3da5a8",
+      "fingerprint": "C73A859BB3596EE474952F857ABBEE3735085CF87E338E1C4884F899C9B7CE17",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "6f525ccf-54d4-4c1d-9655-e60d9ef4f21a",
+      "taskId": "853d09e9-6812-48f3-b5d2-e5b26a45b054",
+      "sourceId": "owner-d85ecd06-7262-512f-a4c4-d51ca89888dd",
+      "name": "(株)GET NEXT",
+      "raceId": "race-3a6fb1a3-2bcc-52ef-87a5-7ebe41b8aa13",
+      "targetId": "owner-5379ba52-2c84-5a84-964f-ce08631a2033",
+      "fingerprint": "2278A47BFEA581CD7A3FB9022A218599595B9CAD48F32EAD1A1A5B11A8524096",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "2b44698a-ea3f-419f-a2b8-38e4fb6fa796",
+      "taskId": "92675eb6-8f07-49e2-96f7-ceabed2701c6",
+      "sourceId": "owner-c1c9cf72-58ed-5c5b-9b40-1e50e626173a",
+      "name": "了德寺健二ホールディングス(株)",
+      "raceId": "race-3a6fb1a3-2bcc-52ef-87a5-7ebe41b8aa13",
+      "targetId": "owner-8371cd84-713e-5e6b-86dc-5af02536ed92",
+      "fingerprint": "C272EAA3FDD26A625CB74A973E098F26B72AAE94700A5EFAA50209490CB171A5",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "5675d8e3-db2d-48ba-9a19-17bc1f1838a7",
+      "taskId": "b07412f2-8288-40e0-a63b-5f279318175f",
+      "sourceId": "owner-5bfa6fc4-3bc0-5f87-9d59-556d156538dc",
+      "name": "(株)さくらコマース",
+      "raceId": "race-3a6fb1a3-2bcc-52ef-87a5-7ebe41b8aa13",
+      "targetId": "owner-6ea2bb5b-dee8-5b44-8e08-e4ba0d5800d1",
+      "fingerprint": "CDA281A83BC1151A8B85309655E500183893F0FC60733D093B5FB7F93CA8E538",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "0a039e56-9e4a-4549-99d0-1b79d81dd2d1",
+      "taskId": "d75e05b8-db7b-4edf-80b5-e7306762c681",
+      "sourceId": "owner-369a59bf-3368-50d1-ac69-dd97ed148ffc",
+      "name": "(株)ビジュピコ",
+      "raceId": "race-fce7053d-9c67-5a19-a954-567a7eadbf43",
+      "targetId": "owner-0cced1fb-8eab-59fa-9635-b3ea089ae76a",
+      "fingerprint": "468B1DD7C9560E395D5A9CEED4B4BBDA63143D7C9B417C064976E6BADFD0C29D",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "9172577f-b2e5-4650-8fc5-e228deaedf0a",
+      "taskId": "0401f580-4999-42c0-bab3-452aca4b63ea",
+      "sourceId": "owner-92e06ade-8f69-57ef-975c-d49bc45c7af4",
+      "name": "ライオンレースホース(株)",
+      "raceId": "race-f2daff0a-7afc-5b2d-9ca8-a6a9cf32d433",
+      "targetId": "owner-e4297a55-7353-58cc-aee4-b16bdde2868a",
+      "fingerprint": "02AF8D22E5394D92C55CF8BDD19678E33A50A5CAB39A71A2B7746F7AF0A7E8BD",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "157991c1-689a-48c5-99d2-83049bb751ff",
+      "taskId": "21cfc74d-bfb7-4845-bc9f-0fb2bf00c1ac",
+      "sourceId": "owner-6f460243-86c4-5aef-973a-8139e7e97e79",
+      "name": "半沢(有)",
+      "raceId": "race-2321c7d3-f9a6-5e48-86da-0ddf3fc1ae7a",
+      "targetId": "owner-c10cb8b6-5d2d-52e5-aaf3-6f8d1eecda8b",
+      "fingerprint": "5D8D7824A0BF573B1A41F222F28706E7056E0366A3DFF27AD9B6D10431BD668B",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "23466f6c-6a30-4b86-afbf-79e498725f32",
+      "taskId": "468b1a0a-573d-4d70-a2c0-9d9d87d76362",
+      "sourceId": "owner-4dfa4363-c710-51eb-b74a-f771fae64210",
+      "name": "(株)ワイズマン",
+      "raceId": "race-2321c7d3-f9a6-5e48-86da-0ddf3fc1ae7a",
+      "targetId": "owner-759908ac-3f72-5964-aad4-7d6e4f574b6e",
+      "fingerprint": "5FA7B5AE0C4206336C06919E4F676A5A34919E06DE23BABD8C214ACE98A83E28",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "55e08dc4-719e-4a29-92aa-4b6a5cb888db",
+      "taskId": "89ce2f68-c37c-4cf6-9d03-9e9e959dfd51",
+      "sourceId": "owner-1d6134e5-43d0-580c-8d3e-637fdfa1ff8a",
+      "name": "(株)友駿ホースクラブ",
+      "raceId": "race-79c5eb8d-b673-5a73-9043-9a6ba0762c1f",
+      "targetId": "owner-74858667-0db1-5f4b-94a1-d38162169aff",
+      "fingerprint": "7DDAC05E7E16F9491D3B30AB662EBDA2228E3611F9EE0A5704DBE0AF118A6A2E",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "30a47f53-f8e6-4c1a-a65a-36f021a56ab5",
+      "taskId": "ae4f4d3d-ab3d-4657-90af-dd3b342a086c",
+      "sourceId": "owner-bc775ba4-dda4-5466-8e89-269470c93266",
+      "name": "(株)ノースヒルズ",
+      "raceId": "race-79c5eb8d-b673-5a73-9043-9a6ba0762c1f",
+      "targetId": "owner-d60e5608-f416-5b6d-8532-d7a2ab5aaf13",
+      "fingerprint": "AD45DAE83CBDA58600F9B1E4AE5582E56BD80BC0814E4515B7A820433D8F838A",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "d0987000-d2aa-4c00-a930-2d8b3a05100a",
+      "taskId": "80bd6571-9148-4eb3-ba43-0958afe12f26",
+      "sourceId": "owner-4f4ad32f-929a-583e-8610-686d23bc79ab",
+      "name": "(株)ヒダカ・ブリーダーズ・ユニオン",
+      "raceId": "race-eda80aac-06ab-5dc2-ad53-d58e689d7bf6",
+      "targetId": "owner-250d8395-cf8b-5fba-8e1a-ad1c9c58359b",
+      "fingerprint": "D24444B100902EE7BA4A60C70584F95577F8F2E8F86A7B34DB3E085D0B5C7DE3",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "abfc6fb1-5dd5-499a-b7ac-1401802c5ee0",
+      "taskId": "0de91cb0-b680-499a-b9a4-35d2b911aecf",
+      "sourceId": "owner-b2e3e930-c8a9-5acd-b6cc-f366b3c38a82",
+      "name": "(株)東京ホースレーシング",
+      "raceId": "race-2ed3f485-0334-5160-99b9-f4a31a9af2a3",
+      "targetId": "owner-f91f90a8-cc0b-53a8-8dca-177ec0e756e3",
+      "fingerprint": "B76FE05CD55E576A8D6CAC54F99472E562AD2DE518DC468DB55D8BDD5DAE2717",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "1ec9d54f-87e0-4774-bfa9-c1880c01fae0",
+      "taskId": "2f3fb217-029d-4319-b2f9-33e03968e8f1",
+      "sourceId": "owner-0f977e09-9f10-597b-90c3-8e9e1a6971ed",
+      "name": "(有)シルクレーシング",
+      "raceId": "race-2ed3f485-0334-5160-99b9-f4a31a9af2a3",
+      "targetId": "owner-a9627336-4b79-5522-9c4b-019bad07c5f2",
+      "fingerprint": "9310D5B527035738819882A8B54044685AE5DDC6DAAF47C985D7B3F05E8484C0",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "3ef62967-8e81-40cd-a872-6aa3d3b75019",
+      "taskId": "3c0c4c2a-2cae-49b0-93ae-5dd4e4cabd7e",
+      "sourceId": "owner-e2430cb5-c5b7-55ff-bfd5-5a3b5a125f40",
+      "name": "(株)栄進堂",
+      "raceId": "race-de6acb96-7a1d-5fa2-8dce-2656013527c5",
+      "targetId": "owner-c236c049-8c98-5b8b-9d0d-401eeaa80239",
+      "fingerprint": "2B048ACC5EDF8E75547B1ABFD7D051FFEA7720FDB0B2B51249BDC51ADA1F049E",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "458b1a64-c49f-4d8a-8d91-020ea2645dc0",
+      "taskId": "2c5ec9b5-4a05-445e-a4b9-84617e00a565",
+      "sourceId": "owner-a96b5bb0-fae0-5b61-a5e1-84923c8a2a98",
+      "name": "(株)ウイン",
+      "raceId": "race-b0fc72b9-0392-520f-8809-702bb6b684d7",
+      "targetId": "owner-82cce28f-068b-525b-8b60-ff1c235f864e",
+      "fingerprint": "830A5A6BE70A098275FD4447D36F44F5603850C36A93D8EBFE4BA0CAC553C79F",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "39371a25-756c-4aaa-bcb9-b96657a24dc1",
+      "taskId": "64823eeb-83dc-4686-88b9-c96d27088861",
+      "sourceId": "owner-11bcb2e8-111d-55e9-bcd7-932a761e4525",
+      "name": "SNSグループ(株)",
+      "raceId": "race-4d854898-087b-582c-b881-fc788c1d4733",
+      "targetId": "owner-58575864-a920-5dfb-8ac9-834961c1637e",
+      "fingerprint": "A9EE8F8FE853E2AD1E726DC784A68DCA71460AF4FDE4D6BF19DD86C2BA33EC08",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "99b348af-b1c6-4fbd-9642-bf8e38311c26",
+      "taskId": "d193c04a-c822-4201-8277-3c355c2fefe3",
+      "sourceId": "owner-77494f4a-2f30-5594-81e3-8db16fb7c60a",
+      "name": "廣崎利洋HD(株)",
+      "raceId": "race-b0fc72b9-0392-520f-8809-702bb6b684d7",
+      "targetId": "owner-485c3edf-b08a-59da-8a17-ba2d2fd41a9e",
+      "fingerprint": "590C6248BC9B62841602D7738B693D4D70576168AC77117F3BA4F8CDCF3B32F5",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "97c50608-b3b3-476f-8088-3593838ada68",
+      "taskId": "7d0edeba-0ac3-44c7-b9e2-eb2858171d09",
+      "sourceId": "owner-9850905b-904c-55dc-be44-63a720c3b2ef",
+      "name": "(株)モンレーヴ",
+      "raceId": "race-3a5f8964-3b9d-571b-a00c-d81f1adb7374",
+      "targetId": "owner-9254c65d-5f19-56b0-b5dc-5af6bd261db5",
+      "fingerprint": "F9B6958E26B1AB06AC2941E704519CF9133455BC6C38526818E0ADC38A528182",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "cc2334d8-c527-4cbe-90b9-a7abf9057b08",
+      "taskId": "b9f6c521-4815-460e-8398-c10232b3aad4",
+      "sourceId": "owner-6217170e-a247-55a1-b270-a2f13b138073",
+      "name": "DMMドリームクラブ(株)",
+      "raceId": "race-3a5f8964-3b9d-571b-a00c-d81f1adb7374",
+      "targetId": "owner-ee7a76c5-26c5-5614-a81a-6751ca82615b",
+      "fingerprint": "9EA84451A3AE132F943D4C54FE0BD9F3256F9D930F58E5186C98D0E1F3EAF62C",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "8577b6ae-76b8-4f0a-b206-2f9188ca80de",
+      "taskId": "7f89355f-00c2-41f4-a849-a4bd1d4c8b93",
+      "sourceId": "owner-8eb844a3-f836-5451-89b8-0fb81b0f1021",
+      "name": "ウエスト.フォレスト.ステイブル(株)",
+      "raceId": "race-fca5d100-9e2f-5074-a74c-bad8cdb4705f",
+      "targetId": "owner-448c7bba-eb3a-56a4-acf3-ed147a7a3980",
+      "fingerprint": "2F111023E565354724A20008E35500893AA8B06915B661FFAC50A7D6BD8BE2E8",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "fab9cef6-0157-49aa-9fb1-030d450e33a3",
+      "taskId": "b8f15115-0954-4829-ba5d-de3821f92486",
+      "sourceId": "owner-29823651-6688-5cf2-a7a5-08231138080b",
+      "name": "(株)キーファーズ",
+      "raceId": "race-fca5d100-9e2f-5074-a74c-bad8cdb4705f",
+      "targetId": "owner-a751276f-6925-55f4-b9be-8b6120ab6b34",
+      "fingerprint": "DB06849E641EBC6A07D8BD33BCBE582192F5E26812EA0BCE16E5474F2AE9B721",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "bc06b867-e82d-4fb9-9ba6-dff3bb35b489",
+      "taskId": "ba42fa29-6b13-4290-b1a8-e8f4c7d4329a",
+      "sourceId": "owner-0f9321cb-4c73-54ed-ae0f-cfd8172ad754",
+      "name": "(株)インゼルレーシング",
+      "raceId": "race-fca5d100-9e2f-5074-a74c-bad8cdb4705f",
+      "targetId": "owner-9b3e3f5e-255f-5e53-aea2-a774b25848eb",
+      "fingerprint": "838677B0D2A5B50768942AE1688507A977ABD4EDC5A54036807C85A77000C546",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "551435f4-bbce-4ddc-bfa0-b60d9f5371fd",
+      "taskId": "3f908829-3d43-4c94-91f4-9d50c87f2e00",
+      "sourceId": "owner-7649f820-6a57-574b-9537-2b211cbe8b8d",
+      "name": "(株)京都ホースレーシング",
+      "raceId": "race-5c8a1fe7-a24c-5299-a887-09a747f32a10",
+      "targetId": "owner-caa82e37-43bb-5a93-a5d5-ee273b3f910a",
+      "fingerprint": "C2A426CF2C70CC09DDA9CDA768B0344D25A66D428141C8DFBACD6D7C0ED95C62",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "308015fb-a170-49b4-b8c0-3ab049d36c56",
+      "taskId": "542ad182-b92e-4598-8c65-443a22b2e845",
+      "sourceId": "owner-89dca3d7-baa5-5cbb-9e9c-1d450f93c163",
+      "name": "ライフエンタープライズ(株)",
+      "raceId": "race-5c8a1fe7-a24c-5299-a887-09a747f32a10",
+      "targetId": "owner-87af3772-81c8-5984-af06-733ef4e23f8b",
+      "fingerprint": "EF9733C2732779C910E5633909C822F5F1C78B6CC7374F0D72597CC362F20DD4",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "34bf8ae9-d1ca-4b99-86e0-d50254cd4536",
+      "taskId": "b354bb6e-2953-4bbd-86ae-70bed31be1a1",
+      "sourceId": "owner-0d6c3714-898f-579a-8e14-ddc3d748757b",
+      "name": "広尾レース(株)",
+      "raceId": "race-5c8a1fe7-a24c-5299-a887-09a747f32a10",
+      "targetId": "owner-619fde5b-3cfe-5fcf-a7ed-ec9ae2149351",
+      "fingerprint": "9FD7BB672EF0A9D732D708E29759E3F7273F0C05207EDBB63E7B92E7457F40C3",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "097a8619-0371-4d1c-a103-45d60c9b5ec4",
+      "taskId": "2448580b-de22-46cb-9400-ae56b69b03dc",
+      "sourceId": "owner-4174c0b3-6188-5cba-8e8b-58c03ae7dd99",
+      "name": "(株)C2M",
+      "raceId": "race-22535d5a-ab55-50ba-bbb9-7bebaeb9119f",
+      "targetId": "owner-ce65e130-6218-5141-a994-c0a3d97fd872",
+      "fingerprint": "0B7BF55870B54F68D19840AABBE57D6183FE56E514234A01FD6250AD3C5EF3A9",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "0986839d-33d9-4fe7-be4e-51272e6a214c",
+      "taskId": "f8a26907-6d98-44ef-9f4b-23742b187cbc",
+      "sourceId": "owner-633a5df7-cfa2-56e4-a143-a0dcbc7d7a3f",
+      "name": "Mr.ホース",
+      "raceId": "race-22535d5a-ab55-50ba-bbb9-7bebaeb9119f",
+      "targetId": "owner-fab4f576-c015-5d32-ad26-4e69da36530d",
+      "fingerprint": "1665B1584BCED10BFE6D184E8DCAB4A54400B417E362CE46127E1C5EB8318C7B",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "a19d68d4-30c2-447e-a4da-1e857d014c91",
+      "taskId": "90dc68ce-e003-4136-8c23-cebf622f506d",
+      "sourceId": "owner-8896a3d4-0135-55d9-aa64-5e3348daeee8",
+      "name": "(株)Blooming Racing",
+      "raceId": "race-87179e72-9fb6-53cc-827f-3bef315191b3",
+      "targetId": "owner-6f46fbfd-146f-50bc-b7e8-83d1e2ca7c03",
+      "fingerprint": "FF29C237F6A525C131A97238C284B85E17DD32B9B8AD831532F233DE5110E2C3",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "93aad135-8b38-44d5-a53f-2b6f3a8da207",
+      "taskId": "a24c7dfd-f65a-4ae0-98cc-ed9c8878110c",
+      "sourceId": "owner-aa79f5c8-c82f-5a55-801b-e3a0e1cb3c68",
+      "name": "(株)MMC",
+      "raceId": "race-87179e72-9fb6-53cc-827f-3bef315191b3",
+      "targetId": "owner-72f5936e-1caa-51ab-acf3-21aa4252a8bd",
+      "fingerprint": "51C608B020458E5CA379AFA6BF95D5E292CF3D31B0B0F5B29FB0C207060A0F72",
+      "blockingReason": null
+    },
+    {
+      "notificationId": "a18734cc-299b-4ad7-9a68-9ea119fa2472",
+      "taskId": "d6ec41ff-9c9b-4a4c-83bd-325a276eb3fd",
+      "sourceId": "owner-07a3259f-5397-57fe-bf72-10f8b081a4a9",
+      "name": "FAレーシング",
+      "raceId": "race-87179e72-9fb6-53cc-827f-3bef315191b3",
+      "targetId": "owner-4889ffa3-20ea-5e61-9950-a374c3d0b827",
+      "fingerprint": "ED18A49087A948240FC484C155502661D208FA92721ABC6930AB4024CEB5A3AB",
+      "blockingReason": null
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # JRAサイト収集契約
 
-> 2026-09-27 承認済み（実装・検証中）: 馬検索候補・選択・profile保存検証に同じ名前/公式identity同値規則を使い、別馬/誕生日矛盾/不正hostの拒否を保持する。登録記号やURL差の反例はコード契約の検証用であり、全表記を公式サイトで実観測したとは扱わない。詳細は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を参照。
+> 2026-09-27 実装済み（本番検証中）: 馬検索候補・選択・profile保存検証に同じ名前/公式identity同値規則を使い、別馬/誕生日矛盾/不正hostの拒否を保持する。登録記号やURL差の反例はコード契約の検証用であり、全表記を公式サイトで実観測したとは扱わない。詳細は[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)を参照。
 
 - Document owner: Collection platform maintainer
 - Last verified: 2026-09-27（出馬表取消セル。その他節は各節の確認記録による）

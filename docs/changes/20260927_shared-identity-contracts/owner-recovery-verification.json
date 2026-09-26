@@ -1,0 +1,2250 @@
+{
+  "observedAt": "2026-09-27T07:38:06.7425763+09:00",
+  "replay": [
+    {
+      "requestId": "9ce7d7f8-f68a-4efd-bc5d-607d104ad399",
+      "taskId": "ca53933f-4f44-47b7-9c22-7ae6a1e49054",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "0d2f2166-87b3-46e4-a327-8456b3393535",
+      "taskId": "a069358e-698a-44c6-8a39-0e3a7da56b3e",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "3e89bf7f-b0cf-4461-906e-fa698a12e3b5",
+      "taskId": "77306a6c-56fe-476b-b7ea-7b098708753e",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f29e424c-1c54-443c-bc1f-0cece07de5e9",
+      "taskId": "c90dd0da-731f-4c5c-b09b-999c552777aa",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f2619175-20d3-4746-8cfe-8b0223ac0ae9",
+      "taskId": "ff40355e-f466-4a85-b255-9df096631ba2",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "625fcd37-ad63-479b-8586-ffc2a2b65a8b",
+      "taskId": "6b31beab-776d-4b68-adff-6dd4768ecb8f",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b1fa1720-8c03-4b93-aec8-595b5617878e",
+      "taskId": "1f84b851-7a44-49ef-9ebf-10db66ff102c",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b0a15c9f-2fa9-4854-9369-f4eca0746c64",
+      "taskId": "c367e161-e7af-4267-8638-adfb7b112d0a",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "10ca32ce-ec89-445a-8696-c486ea4430cc",
+      "taskId": "55371e37-163c-409b-85d1-997075c86993",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "0c7c20fa-37b3-4a93-94bd-e8ce2a68f7b0",
+      "taskId": "079cb520-efd9-4674-9c7f-fda4d330b549",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "af5cef05-c465-4327-9a06-97aaa362c25f",
+      "taskId": "723c2ad3-16d2-4e24-a9c1-db7491409942",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "290a6fb7-f93c-49da-a61e-5dcfb56a8da0",
+      "taskId": "6f0da131-906e-48df-9955-8b5e58a53732",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b08b4e60-08db-4a1d-a8cc-ac00dc79f3d8",
+      "taskId": "cc122541-94e3-43b1-8d4b-1c51970c8722",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b49d8d43-3d23-4a6c-8c1c-854ade6102f7",
+      "taskId": "b0a1ea9a-fe92-4a13-9841-9b78ae2638ff",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "fa777a73-81cf-4b5b-85be-8300249de7c8",
+      "taskId": "ac46bf69-b044-4145-a8b1-5cc3206de058",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f123779e-68c5-4c1b-9f3f-c0710283fbca",
+      "taskId": "4f44c8c5-9427-48fd-aa30-5a65968ac913",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5495d989-6a28-4d34-8f6a-a79d9b3d4947",
+      "taskId": "1c84559b-0b31-4882-9483-b269e7cdfcf3",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "575461c0-173b-4e6b-970c-c4b997b2ce33",
+      "taskId": "6418d2e9-68a7-46a4-ad9f-fa4d1190d98e",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "c6d33991-e221-489c-a350-582886657e7f",
+      "taskId": "01f79b86-a92f-4df5-9464-6e533c7a8eba",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "8376089b-c222-4410-93fc-d6ea719f7891",
+      "taskId": "0891b7ba-1240-4835-a3e8-776dc80a2953",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5f7e99bf-8440-4401-b833-6aa933931a88",
+      "taskId": "2e3e9cbd-5d19-4891-82b4-f9b74809a61f",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "d7955785-a715-4777-8277-4ec40681f7df",
+      "taskId": "21cd5ac6-2b5b-49c4-a87e-b59f73c21c92",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "a6252295-4e67-4fae-90d8-9bf112240698",
+      "taskId": "52a7dd19-a97b-4236-952c-40906e956d84",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "ab0b7351-f459-49d9-9040-9058aa89c78c",
+      "taskId": "a48a8bf3-f274-4d8f-82aa-4908d1383d75",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "53c945e8-d45e-4647-951d-e851f6b11bd2",
+      "taskId": "d931842e-d6d5-43c6-b790-c5d518174d3c",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "2c194df3-1a98-415e-9712-6a03c845ad4c",
+      "taskId": "fa70f285-a160-4b40-8852-a4436087748a",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "489868d3-08f0-4644-9bf3-50d9902e8d0c",
+      "taskId": "e775a43f-0c67-45c2-820b-b0ac288c2b8a",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "24d946f9-1227-49de-a50f-c14b6ea71c23",
+      "taskId": "0bf12c31-ecec-4c34-b477-7da9683074ac",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "4aeae409-103c-4b13-a5a6-ec051b194f3e",
+      "taskId": "c12d8ff4-72f7-4092-bbdf-f5d94a348d9c",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "33a5ad7d-ee2f-4fa3-8d6c-4650fd9cdc7a",
+      "taskId": "dc7b1d5c-88cb-4725-8663-cd4ccc89d8da",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "64c1ea99-dcf4-47aa-ae6a-f0d3e7e7d9be",
+      "taskId": "bcc36911-c733-4942-8392-b45eb2fe8bf0",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "d034de14-b704-4d10-bb18-b508b19d9a2d",
+      "taskId": "01a47148-7d14-4ec0-9c93-7b9db19cd644",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5c136c5a-1481-4d86-982b-f9063e0a16a3",
+      "taskId": "5c1f2a56-f136-44ed-ad67-9aa24d8ce88e",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "29ac54f6-bd8a-4b83-a63b-e81900d2295c",
+      "taskId": "4f723c87-6b5c-4c36-a84c-0f81a49b0cb8",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "9b74cc1a-adf4-4db7-9394-7bbfd1f85adf",
+      "taskId": "12f63f5b-d1d5-4215-ad0d-cbeb1169b418",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "472ced04-fbae-472b-ae7b-a2cd71390ad5",
+      "taskId": "18eabf66-da59-4967-9204-be695507921d",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "070ee70e-1198-43a0-9437-214e4d8fce47",
+      "taskId": "deb59c9f-4783-416f-a291-8aaac5c1ac32",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "56c66559-fae8-4184-a6f4-fdc5b68967e2",
+      "taskId": "3784c6ab-07d6-4a27-b681-5f7c5e33e9b8",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "487c5b2a-a4b9-44c2-a584-3290b7cc260b",
+      "taskId": "899621fb-3588-468b-a84b-1497fa66bb3d",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "756edccd-20f4-40a9-af7a-d02d83ada55d",
+      "taskId": "ccab4fe4-c119-451a-86e3-9dae46f25787",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "03b962cf-142d-4712-9f3f-8b0653f78d53",
+      "taskId": "d2232627-7443-41fb-8e59-e2ac345d481b",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "573364d9-ef86-4a74-8292-de3172481dcf",
+      "taskId": "dae2fc69-5bdc-4306-be26-672f4334aaa5",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "9baf443f-2b61-4081-be5d-857ffc702a02",
+      "taskId": "c00796e2-16d7-41b1-b97d-6a6ebf9638e3",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "245f944f-b745-4461-b627-c49f4318f5ff",
+      "taskId": "39292594-48d0-46a5-afe2-a2914d1ea9e5",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "2671dd60-cd4e-43dc-aeb3-1d671746ceaa",
+      "taskId": "56f498dc-b9b2-444a-9b63-bc117894d2cf",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "182c080c-8494-47cd-ac80-f484c3bccf58",
+      "taskId": "2f7b9575-0b9e-40e1-8e60-2a9c8a3aa8f6",
+      "createdTask": false,
+      "deferredByRepairHold": false
+    }
+  ],
+  "health": {
+    "status": "ok"
+  },
+  "pipeline": {
+    "isPaused": true,
+    "reason": "Unexpected collection failure notification 7a10af2c-8b5e-489c-87e7-4b0a248ed859: Task=0192ee02-384f-49c0-9a67-c8b510832154; Error=JraCollectionException; 引退騎手一覧の公開リンクが見つかりません。",
+    "updatedAt": "2026-09-27T03:08:07.2072162+09:00"
+  },
+  "remainingGroups": [
+    {
+      "groupKey": "02D78CBC10B10F67",
+      "definition": "jockey-profile",
+      "errorCode": "JraCollectionException",
+      "count": 1
+    },
+    {
+      "groupKey": "E56D934CCA551769",
+      "definition": "horse-profile",
+      "errorCode": "SubjectNotIdentified",
+      "count": 14
+    }
+  ],
+  "historyReadback": {
+    "observedAt": "2026-09-27T07:39:55.4339119+09:00",
+    "items": [
+      {
+        "notificationId": "a989ded2-6ab8-440f-b58d-a9ed0f93dbb2",
+        "sourceId": "owner-dbe401ae-0c14-5102-beb3-ac5cad1f7ffb",
+        "targetId": "owner-74ff355a-d012-573c-8f22-f2bcfd342d09",
+        "oldTask": [
+          {
+            "taskId": "427a2fb7-0357-4738-88ab-941eb2db50f0",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "b24b7fac-c686-4235-aa8c-15f77bc2a0b7",
+            "taskId": "427a2fb7-0357-4738-88ab-941eb2db50f0",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:02.8936321+09:00",
+            "finishedAt": "2026-09-27T02:24:03.7785609+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "a989ded2-6ab8-440f-b58d-a9ed0f93dbb2",
+            "taskId": "427a2fb7-0357-4738-88ab-941eb2db50f0",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "12f63f5b-d1d5-4215-ad0d-cbeb1169b418",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "bae50a3d-71d4-429c-a07e-54e79f99d9a8",
+        "sourceId": "owner-a45f3239-8fad-578a-8aef-8265f5664c55",
+        "targetId": "owner-e14fdb3e-8b94-55bc-952c-b93e7275d9ba",
+        "oldTask": [
+          {
+            "taskId": "b3220ba3-0ebc-4be1-b665-ccea82b5bd9d",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "618d379b-fdaa-43e9-bf05-1146713b3621",
+            "taskId": "b3220ba3-0ebc-4be1-b665-ccea82b5bd9d",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:03.8215214+09:00",
+            "finishedAt": "2026-09-27T02:24:04.2096854+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "bae50a3d-71d4-429c-a07e-54e79f99d9a8",
+            "taskId": "b3220ba3-0ebc-4be1-b665-ccea82b5bd9d",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "3784c6ab-07d6-4a27-b681-5f7c5e33e9b8",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "6956b970-7597-4eb8-b7a2-2dbc3bd2d538",
+        "sourceId": "owner-e7f19be1-923a-502c-81bc-ff4a70d8122d",
+        "targetId": "owner-eb051b65-6fff-5b16-9c74-9c4f3ccbadd3",
+        "oldTask": [
+          {
+            "taskId": "fb949f92-78d6-47f0-9b80-144966d7cfe7",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "ae5a45ef-ad9f-45ab-9b76-eac929ae9411",
+            "taskId": "fb949f92-78d6-47f0-9b80-144966d7cfe7",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:04.2266428+09:00",
+            "finishedAt": "2026-09-27T02:24:04.5828353+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "6956b970-7597-4eb8-b7a2-2dbc3bd2d538",
+            "taskId": "fb949f92-78d6-47f0-9b80-144966d7cfe7",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "52a7dd19-a97b-4236-952c-40906e956d84",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "364e6451-8d57-42c7-951c-4c59addfad4f",
+        "sourceId": "owner-c5223b18-1051-596e-9fcf-a8eeb73e26f2",
+        "targetId": "owner-9cbdda6c-21bf-5aa4-a0cd-e0878bf8d3eb",
+        "oldTask": [
+          {
+            "taskId": "77eb11d4-c5b0-4ba8-87b6-d06567a85046",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "752650fd-e5df-4aa7-bfbf-acf034ed051d",
+            "taskId": "77eb11d4-c5b0-4ba8-87b6-d06567a85046",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:05.9594262+09:00",
+            "finishedAt": "2026-09-27T02:24:06.2803908+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "364e6451-8d57-42c7-951c-4c59addfad4f",
+            "taskId": "77eb11d4-c5b0-4ba8-87b6-d06567a85046",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "cc122541-94e3-43b1-8d4b-1c51970c8722",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "84a7551d-6517-4b9d-bb6b-e3c10fb24b0e",
+        "sourceId": "owner-a6977226-568d-5eac-abf4-902d7a57ccf1",
+        "targetId": "owner-4cbadc7d-02b6-5ca1-a2fc-c29da8fc7f25",
+        "oldTask": [
+          {
+            "taskId": "9b31b94a-bbb5-4f73-985b-54be36bede77",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "0332ab48-43a3-4fa8-b864-3a570a1a6584",
+            "taskId": "9b31b94a-bbb5-4f73-985b-54be36bede77",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:06.2972673+09:00",
+            "finishedAt": "2026-09-27T02:24:06.6205699+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "84a7551d-6517-4b9d-bb6b-e3c10fb24b0e",
+            "taskId": "9b31b94a-bbb5-4f73-985b-54be36bede77",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "e775a43f-0c67-45c2-820b-b0ac288c2b8a",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "d8ce6bf7-ba0c-4ff6-b05a-cef18e28805b",
+        "sourceId": "owner-b2d8f059-2ffd-5a77-8b9d-b79b4cf03b53",
+        "targetId": "owner-323db7f6-f654-5f47-a86c-c8e9498a6d53",
+        "oldTask": [
+          {
+            "taskId": "49b92ea0-b178-413e-9aca-ffe5f71d548d",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "27857572-6843-4f25-8668-03792d6a1853",
+            "taskId": "49b92ea0-b178-413e-9aca-ffe5f71d548d",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:24:07.0228922+09:00",
+            "finishedAt": "2026-09-27T02:24:07.3337053+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "d8ce6bf7-ba0c-4ff6-b05a-cef18e28805b",
+            "taskId": "49b92ea0-b178-413e-9aca-ffe5f71d548d",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "39292594-48d0-46a5-afe2-a2914d1ea9e5",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "bea14f08-fb93-4b66-90bb-e049abf26aa5",
+        "sourceId": "owner-f0608533-feb7-5387-b12c-fdd064162146",
+        "targetId": "owner-340c0568-d934-5b61-9cb8-0c3de9808ede",
+        "oldTask": [
+          {
+            "taskId": "120cdf95-8b71-4add-970e-0b432d2631dd",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "4e44fb77-98dd-40c6-aa07-b2818b7ea1df",
+            "taskId": "120cdf95-8b71-4add-970e-0b432d2631dd",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:28:15.0948145+09:00",
+            "finishedAt": "2026-09-27T02:28:15.4965676+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "bea14f08-fb93-4b66-90bb-e049abf26aa5",
+            "taskId": "120cdf95-8b71-4add-970e-0b432d2631dd",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "ccab4fe4-c119-451a-86e3-9dae46f25787",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "600ac797-c5e4-448b-8446-a675077d2daf",
+        "sourceId": "owner-453977ed-47dd-5483-b3b8-36501586acb6",
+        "targetId": "owner-2a9b576b-8725-52b5-941b-a4c305038e33",
+        "oldTask": [
+          {
+            "taskId": "402a8ce1-d769-4305-a070-1f7674c89b83",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "4e970c75-e0c5-4bc2-a518-24469ee5f473",
+            "taskId": "402a8ce1-d769-4305-a070-1f7674c89b83",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:28:16.2566215+09:00",
+            "finishedAt": "2026-09-27T02:28:16.5817539+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "600ac797-c5e4-448b-8446-a675077d2daf",
+            "taskId": "402a8ce1-d769-4305-a070-1f7674c89b83",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "21cd5ac6-2b5b-49c4-a87e-b59f73c21c92",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "338b180e-cfce-4f45-8c76-1ead601c0cf6",
+        "sourceId": "owner-0a31c195-f3a6-586d-b46d-c572c07ef02d",
+        "targetId": "owner-646e70da-63f9-50d1-82fd-1c3ec0ab6b84",
+        "oldTask": [
+          {
+            "taskId": "6cf238d2-051d-46fb-86ba-b767781c12f6",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "7a0bb5bb-6fe5-4cac-93ee-0c1602904e90",
+            "taskId": "6cf238d2-051d-46fb-86ba-b767781c12f6",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:28:16.5984341+09:00",
+            "finishedAt": "2026-09-27T02:28:16.946587+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "338b180e-cfce-4f45-8c76-1ead601c0cf6",
+            "taskId": "6cf238d2-051d-46fb-86ba-b767781c12f6",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "723c2ad3-16d2-4e24-a9c1-db7491409942",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "c4e47a61-3cbe-4e85-ada6-127791387e1e",
+        "sourceId": "owner-57436aa9-eaf6-5687-9177-257841956cad",
+        "targetId": "owner-799574b4-fee9-532c-a73e-302eb5c144fe",
+        "oldTask": [
+          {
+            "taskId": "e3ad997b-0f48-49d1-8e66-ed83792b712a",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "603c9e7f-1ee0-4232-bd05-2a2d448f6355",
+            "taskId": "e3ad997b-0f48-49d1-8e66-ed83792b712a",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:28:18.0688313+09:00",
+            "finishedAt": "2026-09-27T02:28:18.4002257+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "c4e47a61-3cbe-4e85-ada6-127791387e1e",
+            "taskId": "e3ad997b-0f48-49d1-8e66-ed83792b712a",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "d2232627-7443-41fb-8e59-e2ac345d481b",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "aebd6e13-c7b3-4f97-90bd-d332a4b6ad26",
+        "sourceId": "owner-820a9ad2-e407-5010-a554-b5edc0e6cac0",
+        "targetId": "owner-1b5fe1e9-033c-5cce-b82f-11460b2fabb6",
+        "oldTask": [
+          {
+            "taskId": "a0d7b6c2-1ba4-4099-ac7f-d782e69cfb76",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "3e31789c-0594-410d-af75-4f08544a3bc3",
+            "taskId": "a0d7b6c2-1ba4-4099-ac7f-d782e69cfb76",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:32:20.623622+09:00",
+            "finishedAt": "2026-09-27T02:32:21.0350631+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "aebd6e13-c7b3-4f97-90bd-d332a4b6ad26",
+            "taskId": "a0d7b6c2-1ba4-4099-ac7f-d782e69cfb76",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "deb59c9f-4783-416f-a291-8aaac5c1ac32",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "efd27520-2967-4e7a-8593-1538490659c4",
+        "sourceId": "owner-ae8ecc1a-bc85-5a95-94e2-6903da0014c1",
+        "targetId": "owner-75fb0f89-98c2-5d86-9765-81cdbe41d864",
+        "oldTask": [
+          {
+            "taskId": "ff9e414f-1162-4377-91bd-277a59ece2b8",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "41955a3b-fd1b-46d0-8b50-6ed773470d68",
+            "taskId": "ff9e414f-1162-4377-91bd-277a59ece2b8",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:32:21.4185629+09:00",
+            "finishedAt": "2026-09-27T02:32:21.731255+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "efd27520-2967-4e7a-8593-1538490659c4",
+            "taskId": "ff9e414f-1162-4377-91bd-277a59ece2b8",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "56f498dc-b9b2-444a-9b63-bc117894d2cf",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "75ece83a-a08e-4e09-879e-62d0cd96c41d",
+        "sourceId": "owner-0482afd1-52fb-59d8-9294-9710cfefcb74",
+        "targetId": "owner-d1d53467-d0de-598b-a528-67d962e530ba",
+        "oldTask": [
+          {
+            "taskId": "73bc56f3-89bd-48d6-b8d7-916237d44cf3",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "8750978e-210e-485d-9373-e4aebce09bc0",
+            "taskId": "73bc56f3-89bd-48d6-b8d7-916237d44cf3",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:32:22.494791+09:00",
+            "finishedAt": "2026-09-27T02:32:22.8084373+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "75ece83a-a08e-4e09-879e-62d0cd96c41d",
+            "taskId": "73bc56f3-89bd-48d6-b8d7-916237d44cf3",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "fa70f285-a160-4b40-8852-a4436087748a",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "5458b597-8826-4ca8-9a9f-492368a4a74d",
+        "sourceId": "owner-59c447d0-f065-5009-b245-9c539d38cab5",
+        "targetId": "owner-bdb70704-608f-510d-944e-b339814086e5",
+        "oldTask": [
+          {
+            "taskId": "1823602b-5493-4578-a840-cca89f1569cb",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "a221a6fb-a818-423d-a40b-a935fcbbdbb0",
+            "taskId": "1823602b-5493-4578-a840-cca89f1569cb",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:32:23.5762643+09:00",
+            "finishedAt": "2026-09-27T02:32:23.8884485+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "5458b597-8826-4ca8-9a9f-492368a4a74d",
+            "taskId": "1823602b-5493-4578-a840-cca89f1569cb",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "6418d2e9-68a7-46a4-ad9f-fa4d1190d98e",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "3a79e4dc-bef3-42b3-81f3-d5ada7928552",
+        "sourceId": "owner-7185f9dd-2c15-5444-b7fa-6df589fc251c",
+        "targetId": "owner-a6e9528b-8833-57e2-b6bd-86a11cd2328c",
+        "oldTask": [
+          {
+            "taskId": "957a640f-2634-498a-a859-d3f38e1187af",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "774dbfcd-1021-4ce1-8254-abbe5e5c4275",
+            "taskId": "957a640f-2634-498a-a859-d3f38e1187af",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:32:24.2577914+09:00",
+            "finishedAt": "2026-09-27T02:32:24.6140679+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "3a79e4dc-bef3-42b3-81f3-d5ada7928552",
+            "taskId": "957a640f-2634-498a-a859-d3f38e1187af",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "ac46bf69-b044-4145-a8b1-5cc3206de058",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "256a28c5-585b-4c22-8274-db66c676b8a2",
+        "sourceId": "owner-88e79f48-08c0-5ba3-9767-3e10830a0d4b",
+        "targetId": "owner-e7367194-e4a5-53b0-9d50-49630a540a64",
+        "oldTask": [
+          {
+            "taskId": "497ffbdb-c142-45ac-9b5e-cbedb362cb0e",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "44c828dd-dd21-487f-a1d2-f4519d125434",
+            "taskId": "497ffbdb-c142-45ac-9b5e-cbedb362cb0e",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:06.0924876+09:00",
+            "finishedAt": "2026-09-27T02:38:06.4390355+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "256a28c5-585b-4c22-8274-db66c676b8a2",
+            "taskId": "497ffbdb-c142-45ac-9b5e-cbedb362cb0e",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "1f84b851-7a44-49ef-9ebf-10db66ff102c",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "6bf0f998-baa2-4288-b498-f7285e573012",
+        "sourceId": "owner-a4ae0c67-04ae-5642-a6c9-c16c8c536262",
+        "targetId": "owner-b9179a6c-9be3-5215-9ab4-f2d37c3da5a8",
+        "oldTask": [
+          {
+            "taskId": "69a19a9f-42f1-4960-836b-9c9f04ba3c4c",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "261d6c62-427c-446b-8d30-60b2fcec64eb",
+            "taskId": "69a19a9f-42f1-4960-836b-9c9f04ba3c4c",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:06.4570082+09:00",
+            "finishedAt": "2026-09-27T02:38:06.7806524+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "6bf0f998-baa2-4288-b498-f7285e573012",
+            "taskId": "69a19a9f-42f1-4960-836b-9c9f04ba3c4c",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "a48a8bf3-f274-4d8f-82aa-4908d1383d75",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "6f525ccf-54d4-4c1d-9655-e60d9ef4f21a",
+        "sourceId": "owner-d85ecd06-7262-512f-a4c4-d51ca89888dd",
+        "targetId": "owner-5379ba52-2c84-5a84-964f-ce08631a2033",
+        "oldTask": [
+          {
+            "taskId": "853d09e9-6812-48f3-b5d2-e5b26a45b054",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "363f39fb-1f68-458e-876f-63418a31355e",
+            "taskId": "853d09e9-6812-48f3-b5d2-e5b26a45b054",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:06.7974572+09:00",
+            "finishedAt": "2026-09-27T02:38:07.1523237+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "6f525ccf-54d4-4c1d-9655-e60d9ef4f21a",
+            "taskId": "853d09e9-6812-48f3-b5d2-e5b26a45b054",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "d931842e-d6d5-43c6-b790-c5d518174d3c",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "2b44698a-ea3f-419f-a2b8-38e4fb6fa796",
+        "sourceId": "owner-c1c9cf72-58ed-5c5b-9b40-1e50e626173a",
+        "targetId": "owner-8371cd84-713e-5e6b-86dc-5af02536ed92",
+        "oldTask": [
+          {
+            "taskId": "92675eb6-8f07-49e2-96f7-ceabed2701c6",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "d2d86be6-43ae-4083-89e4-b6696da42656",
+            "taskId": "92675eb6-8f07-49e2-96f7-ceabed2701c6",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:07.1704943+09:00",
+            "finishedAt": "2026-09-27T02:38:07.5416714+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "2b44698a-ea3f-419f-a2b8-38e4fb6fa796",
+            "taskId": "92675eb6-8f07-49e2-96f7-ceabed2701c6",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "c367e161-e7af-4267-8638-adfb7b112d0a",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "5675d8e3-db2d-48ba-9a19-17bc1f1838a7",
+        "sourceId": "owner-5bfa6fc4-3bc0-5f87-9d59-556d156538dc",
+        "targetId": "owner-6ea2bb5b-dee8-5b44-8e08-e4ba0d5800d1",
+        "oldTask": [
+          {
+            "taskId": "b07412f2-8288-40e0-a63b-5f279318175f",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "4127ae6a-47f7-4b27-915b-c142ac2da7b9",
+            "taskId": "b07412f2-8288-40e0-a63b-5f279318175f",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:07.5595079+09:00",
+            "finishedAt": "2026-09-27T02:38:07.871526+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "5675d8e3-db2d-48ba-9a19-17bc1f1838a7",
+            "taskId": "b07412f2-8288-40e0-a63b-5f279318175f",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "2e3e9cbd-5d19-4891-82b4-f9b74809a61f",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "0a039e56-9e4a-4549-99d0-1b79d81dd2d1",
+        "sourceId": "owner-369a59bf-3368-50d1-ac69-dd97ed148ffc",
+        "targetId": "owner-0cced1fb-8eab-59fa-9635-b3ea089ae76a",
+        "oldTask": [
+          {
+            "taskId": "d75e05b8-db7b-4edf-80b5-e7306762c681",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "df828449-64b2-44e7-8635-959c29d38cb5",
+            "taskId": "d75e05b8-db7b-4edf-80b5-e7306762c681",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:09.0634076+09:00",
+            "finishedAt": "2026-09-27T02:38:09.4332466+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "0a039e56-9e4a-4549-99d0-1b79d81dd2d1",
+            "taskId": "d75e05b8-db7b-4edf-80b5-e7306762c681",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "77306a6c-56fe-476b-b7ea-7b098708753e",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "9172577f-b2e5-4650-8fc5-e228deaedf0a",
+        "sourceId": "owner-92e06ade-8f69-57ef-975c-d49bc45c7af4",
+        "targetId": "owner-e4297a55-7353-58cc-aee4-b16bdde2868a",
+        "oldTask": [
+          {
+            "taskId": "0401f580-4999-42c0-bab3-452aca4b63ea",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "1ab10842-1149-426a-a5cd-3f8dc9cbb289",
+            "taskId": "0401f580-4999-42c0-bab3-452aca4b63ea",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:38:09.8179086+09:00",
+            "finishedAt": "2026-09-27T02:38:10.1370003+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "9172577f-b2e5-4650-8fc5-e228deaedf0a",
+            "taskId": "0401f580-4999-42c0-bab3-452aca4b63ea",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "c12d8ff4-72f7-4092-bbdf-f5d94a348d9c",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "157991c1-689a-48c5-99d2-83049bb751ff",
+        "sourceId": "owner-6f460243-86c4-5aef-973a-8139e7e97e79",
+        "targetId": "owner-c10cb8b6-5d2d-52e5-aaf3-6f8d1eecda8b",
+        "oldTask": [
+          {
+            "taskId": "21cfc74d-bfb7-4845-bc9f-0fb2bf00c1ac",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "26c7921c-77e0-4e47-a764-be5f849b9a99",
+            "taskId": "21cfc74d-bfb7-4845-bc9f-0fb2bf00c1ac",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:44:34.9376628+09:00",
+            "finishedAt": "2026-09-27T02:44:35.2998677+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "157991c1-689a-48c5-99d2-83049bb751ff",
+            "taskId": "21cfc74d-bfb7-4845-bc9f-0fb2bf00c1ac",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "c90dd0da-731f-4c5c-b09b-999c552777aa",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "23466f6c-6a30-4b86-afbf-79e498725f32",
+        "sourceId": "owner-4dfa4363-c710-51eb-b74a-f771fae64210",
+        "targetId": "owner-759908ac-3f72-5964-aad4-7d6e4f574b6e",
+        "oldTask": [
+          {
+            "taskId": "468b1a0a-573d-4d70-a2c0-9d9d87d76362",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "f234094b-818e-4b29-9b48-f6c5d8b92b0e",
+            "taskId": "468b1a0a-573d-4d70-a2c0-9d9d87d76362",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:44:35.6735445+09:00",
+            "finishedAt": "2026-09-27T02:44:36.0102928+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "23466f6c-6a30-4b86-afbf-79e498725f32",
+            "taskId": "468b1a0a-573d-4d70-a2c0-9d9d87d76362",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "6b31beab-776d-4b68-adff-6dd4768ecb8f",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "55e08dc4-719e-4a29-92aa-4b6a5cb888db",
+        "sourceId": "owner-1d6134e5-43d0-580c-8d3e-637fdfa1ff8a",
+        "targetId": "owner-74858667-0db1-5f4b-94a1-d38162169aff",
+        "oldTask": [
+          {
+            "taskId": "89ce2f68-c37c-4cf6-9d03-9e9e959dfd51",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "8a9943ea-a66f-4064-9f16-c9f528061289",
+            "taskId": "89ce2f68-c37c-4cf6-9d03-9e9e959dfd51",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:44:37.1443439+09:00",
+            "finishedAt": "2026-09-27T02:44:37.5263927+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "55e08dc4-719e-4a29-92aa-4b6a5cb888db",
+            "taskId": "89ce2f68-c37c-4cf6-9d03-9e9e959dfd51",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "0891b7ba-1240-4835-a3e8-776dc80a2953",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "30a47f53-f8e6-4c1a-a65a-36f021a56ab5",
+        "sourceId": "owner-bc775ba4-dda4-5466-8e89-269470c93266",
+        "targetId": "owner-d60e5608-f416-5b6d-8532-d7a2ab5aaf13",
+        "oldTask": [
+          {
+            "taskId": "ae4f4d3d-ab3d-4657-90af-dd3b342a086c",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "d2a9178f-bd46-437a-8db5-90bf975211fb",
+            "taskId": "ae4f4d3d-ab3d-4657-90af-dd3b342a086c",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:44:37.5437277+09:00",
+            "finishedAt": "2026-09-27T02:44:37.9031597+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "30a47f53-f8e6-4c1a-a65a-36f021a56ab5",
+            "taskId": "ae4f4d3d-ab3d-4657-90af-dd3b342a086c",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "079cb520-efd9-4674-9c7f-fda4d330b549",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "d0987000-d2aa-4c00-a930-2d8b3a05100a",
+        "sourceId": "owner-4f4ad32f-929a-583e-8610-686d23bc79ab",
+        "targetId": "owner-250d8395-cf8b-5fba-8e1a-ad1c9c58359b",
+        "oldTask": [
+          {
+            "taskId": "80bd6571-9148-4eb3-ba43-0958afe12f26",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "aa722147-53cc-4f2b-b974-6e6c6c976e08",
+            "taskId": "80bd6571-9148-4eb3-ba43-0958afe12f26",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:53:03.4850899+09:00",
+            "finishedAt": "2026-09-27T02:53:03.8290522+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "d0987000-d2aa-4c00-a930-2d8b3a05100a",
+            "taskId": "80bd6571-9148-4eb3-ba43-0958afe12f26",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "c00796e2-16d7-41b1-b97d-6a6ebf9638e3",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "abfc6fb1-5dd5-499a-b7ac-1401802c5ee0",
+        "sourceId": "owner-b2e3e930-c8a9-5acd-b6cc-f366b3c38a82",
+        "targetId": "owner-f91f90a8-cc0b-53a8-8dca-177ec0e756e3",
+        "oldTask": [
+          {
+            "taskId": "0de91cb0-b680-499a-b9a4-35d2b911aecf",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "42bc3336-5856-4bb8-b06f-c196c216148d",
+            "taskId": "0de91cb0-b680-499a-b9a4-35d2b911aecf",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:53:04.2592647+09:00",
+            "finishedAt": "2026-09-27T02:53:04.6472983+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "abfc6fb1-5dd5-499a-b7ac-1401802c5ee0",
+            "taskId": "0de91cb0-b680-499a-b9a4-35d2b911aecf",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "18eabf66-da59-4967-9204-be695507921d",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "1ec9d54f-87e0-4774-bfa9-c1880c01fae0",
+        "sourceId": "owner-0f977e09-9f10-597b-90c3-8e9e1a6971ed",
+        "targetId": "owner-a9627336-4b79-5522-9c4b-019bad07c5f2",
+        "oldTask": [
+          {
+            "taskId": "2f3fb217-029d-4319-b2f9-33e03968e8f1",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "92e441a0-b922-42a5-8d04-4699d41dd2b4",
+            "taskId": "2f3fb217-029d-4319-b2f9-33e03968e8f1",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:53:04.6657871+09:00",
+            "finishedAt": "2026-09-27T02:53:04.9973362+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "1ec9d54f-87e0-4774-bfa9-c1880c01fae0",
+            "taskId": "2f3fb217-029d-4319-b2f9-33e03968e8f1",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "ff40355e-f466-4a85-b255-9df096631ba2",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "3ef62967-8e81-40cd-a872-6aa3d3b75019",
+        "sourceId": "owner-e2430cb5-c5b7-55ff-bfd5-5a3b5a125f40",
+        "targetId": "owner-c236c049-8c98-5b8b-9d0d-401eeaa80239",
+        "oldTask": [
+          {
+            "taskId": "3c0c4c2a-2cae-49b0-93ae-5dd4e4cabd7e",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "5e6f6abd-321f-4c59-adc9-44c9f508500f",
+            "taskId": "3c0c4c2a-2cae-49b0-93ae-5dd4e4cabd7e",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:53:05.4137562+09:00",
+            "finishedAt": "2026-09-27T02:53:05.7849816+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "3ef62967-8e81-40cd-a872-6aa3d3b75019",
+            "taskId": "3c0c4c2a-2cae-49b0-93ae-5dd4e4cabd7e",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "4f44c8c5-9427-48fd-aa30-5a65968ac913",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "458b1a64-c49f-4d8a-8d91-020ea2645dc0",
+        "sourceId": "owner-a96b5bb0-fae0-5b61-a5e1-84923c8a2a98",
+        "targetId": "owner-82cce28f-068b-525b-8b60-ff1c235f864e",
+        "oldTask": [
+          {
+            "taskId": "2c5ec9b5-4a05-445e-a4b9-84617e00a565",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "8d6b5062-ccb7-4ae8-a31f-23bf6155f0b1",
+            "taskId": "2c5ec9b5-4a05-445e-a4b9-84617e00a565",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:53:06.9821959+09:00",
+            "finishedAt": "2026-09-27T02:53:07.3283416+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "458b1a64-c49f-4d8a-8d91-020ea2645dc0",
+            "taskId": "2c5ec9b5-4a05-445e-a4b9-84617e00a565",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "1c84559b-0b31-4882-9483-b269e7cdfcf3",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "39371a25-756c-4aaa-bcb9-b96657a24dc1",
+        "sourceId": "owner-11bcb2e8-111d-55e9-bcd7-932a761e4525",
+        "targetId": "owner-58575864-a920-5dfb-8ac9-834961c1637e",
+        "oldTask": [
+          {
+            "taskId": "64823eeb-83dc-4686-88b9-c96d27088861",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "cb129ec9-f8d4-4373-b078-43a73b7e8bfe",
+            "taskId": "64823eeb-83dc-4686-88b9-c96d27088861",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:58:14.1420012+09:00",
+            "finishedAt": "2026-09-27T02:58:14.471648+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "39371a25-756c-4aaa-bcb9-b96657a24dc1",
+            "taskId": "64823eeb-83dc-4686-88b9-c96d27088861",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "b0a1ea9a-fe92-4a13-9841-9b78ae2638ff",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "99b348af-b1c6-4fbd-9642-bf8e38311c26",
+        "sourceId": "owner-77494f4a-2f30-5594-81e3-8db16fb7c60a",
+        "targetId": "owner-485c3edf-b08a-59da-8a17-ba2d2fd41a9e",
+        "oldTask": [
+          {
+            "taskId": "d193c04a-c822-4201-8277-3c355c2fefe3",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "a5754c25-a589-467c-811a-7bc5b2ec9a92",
+            "taskId": "d193c04a-c822-4201-8277-3c355c2fefe3",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T02:59:59.6839404+09:00",
+            "finishedAt": "2026-09-27T03:00:00.1366727+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "99b348af-b1c6-4fbd-9642-bf8e38311c26",
+            "taskId": "d193c04a-c822-4201-8277-3c355c2fefe3",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "01a47148-7d14-4ec0-9c93-7b9db19cd644",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "97c50608-b3b3-476f-8088-3593838ada68",
+        "sourceId": "owner-9850905b-904c-55dc-be44-63a720c3b2ef",
+        "targetId": "owner-9254c65d-5f19-56b0-b5dc-5af6bd261db5",
+        "oldTask": [
+          {
+            "taskId": "7d0edeba-0ac3-44c7-b9e2-eb2858171d09",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "d5df6800-dd03-4666-a3bd-4137d75b4754",
+            "taskId": "7d0edeba-0ac3-44c7-b9e2-eb2858171d09",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:00:00.1804071+09:00",
+            "finishedAt": "2026-09-27T03:00:00.7959198+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "97c50608-b3b3-476f-8088-3593838ada68",
+            "taskId": "7d0edeba-0ac3-44c7-b9e2-eb2858171d09",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "bcc36911-c733-4942-8392-b45eb2fe8bf0",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "cc2334d8-c527-4cbe-90b9-a7abf9057b08",
+        "sourceId": "owner-6217170e-a247-55a1-b270-a2f13b138073",
+        "targetId": "owner-ee7a76c5-26c5-5614-a81a-6751ca82615b",
+        "oldTask": [
+          {
+            "taskId": "b9f6c521-4815-460e-8398-c10232b3aad4",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "c4c7f127-a516-41c4-85db-c78db45cbd97",
+            "taskId": "b9f6c521-4815-460e-8398-c10232b3aad4",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:00:00.8243094+09:00",
+            "finishedAt": "2026-09-27T03:00:01.4675651+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "cc2334d8-c527-4cbe-90b9-a7abf9057b08",
+            "taskId": "b9f6c521-4815-460e-8398-c10232b3aad4",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "dae2fc69-5bdc-4306-be26-672f4334aaa5",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "8577b6ae-76b8-4f0a-b206-2f9188ca80de",
+        "sourceId": "owner-8eb844a3-f836-5451-89b8-0fb81b0f1021",
+        "targetId": "owner-448c7bba-eb3a-56a4-acf3-ed147a7a3980",
+        "oldTask": [
+          {
+            "taskId": "7f89355f-00c2-41f4-a849-a4bd1d4c8b93",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "a0271b27-778c-4090-bbff-e2f71feeac4b",
+            "taskId": "7f89355f-00c2-41f4-a849-a4bd1d4c8b93",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:00:05.1470202+09:00",
+            "finishedAt": "2026-09-27T03:00:05.540262+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "8577b6ae-76b8-4f0a-b206-2f9188ca80de",
+            "taskId": "7f89355f-00c2-41f4-a849-a4bd1d4c8b93",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "0bf12c31-ecec-4c34-b477-7da9683074ac",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "fab9cef6-0157-49aa-9fb1-030d450e33a3",
+        "sourceId": "owner-29823651-6688-5cf2-a7a5-08231138080b",
+        "targetId": "owner-a751276f-6925-55f4-b9be-8b6120ab6b34",
+        "oldTask": [
+          {
+            "taskId": "b8f15115-0954-4829-ba5d-de3821f92486",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "ede6ec46-532f-402d-8ea1-7e8a22ab8edc",
+            "taskId": "b8f15115-0954-4829-ba5d-de3821f92486",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:00:06.0009082+09:00",
+            "finishedAt": "2026-09-27T03:00:06.3982711+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "fab9cef6-0157-49aa-9fb1-030d450e33a3",
+            "taskId": "b8f15115-0954-4829-ba5d-de3821f92486",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "2f7b9575-0b9e-40e1-8e60-2a9c8a3aa8f6",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "bc06b867-e82d-4fb9-9ba6-dff3bb35b489",
+        "sourceId": "owner-0f9321cb-4c73-54ed-ae0f-cfd8172ad754",
+        "targetId": "owner-9b3e3f5e-255f-5e53-aea2-a774b25848eb",
+        "oldTask": [
+          {
+            "taskId": "ba42fa29-6b13-4290-b1a8-e8f4c7d4329a",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "30b38701-0fcf-4a9b-aa15-adb82e2747e2",
+            "taskId": "ba42fa29-6b13-4290-b1a8-e8f4c7d4329a",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:00:06.4159862+09:00",
+            "finishedAt": "2026-09-27T03:00:06.7956532+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "bc06b867-e82d-4fb9-9ba6-dff3bb35b489",
+            "taskId": "ba42fa29-6b13-4290-b1a8-e8f4c7d4329a",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "899621fb-3588-468b-a84b-1497fa66bb3d",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "551435f4-bbce-4ddc-bfa0-b60d9f5371fd",
+        "sourceId": "owner-7649f820-6a57-574b-9537-2b211cbe8b8d",
+        "targetId": "owner-caa82e37-43bb-5a93-a5d5-ee273b3f910a",
+        "oldTask": [
+          {
+            "taskId": "3f908829-3d43-4c94-91f4-9d50c87f2e00",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "872c398b-dd03-4c3c-ae82-6f6812f28546",
+            "taskId": "3f908829-3d43-4c94-91f4-9d50c87f2e00",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:04:53.1038581+09:00",
+            "finishedAt": "2026-09-27T03:04:53.5359397+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "551435f4-bbce-4ddc-bfa0-b60d9f5371fd",
+            "taskId": "3f908829-3d43-4c94-91f4-9d50c87f2e00",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "01f79b86-a92f-4df5-9464-6e533c7a8eba",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "308015fb-a170-49b4-b8c0-3ab049d36c56",
+        "sourceId": "owner-89dca3d7-baa5-5cbb-9e9c-1d450f93c163",
+        "targetId": "owner-87af3772-81c8-5984-af06-733ef4e23f8b",
+        "oldTask": [
+          {
+            "taskId": "542ad182-b92e-4598-8c65-443a22b2e845",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "7b6a283e-d989-455e-82fc-17e7d796972c",
+            "taskId": "542ad182-b92e-4598-8c65-443a22b2e845",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:04:53.5573389+09:00",
+            "finishedAt": "2026-09-27T03:04:53.9064195+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "308015fb-a170-49b4-b8c0-3ab049d36c56",
+            "taskId": "542ad182-b92e-4598-8c65-443a22b2e845",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "55371e37-163c-409b-85d1-997075c86993",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "34bf8ae9-d1ca-4b99-86e0-d50254cd4536",
+        "sourceId": "owner-0d6c3714-898f-579a-8e14-ddc3d748757b",
+        "targetId": "owner-619fde5b-3cfe-5fcf-a7ed-ec9ae2149351",
+        "oldTask": [
+          {
+            "taskId": "b354bb6e-2953-4bbd-86ae-70bed31be1a1",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "be755f7c-994d-4d0b-bf86-c23534dee2f6",
+            "taskId": "b354bb6e-2953-4bbd-86ae-70bed31be1a1",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:04:54.2945948+09:00",
+            "finishedAt": "2026-09-27T03:04:54.6387526+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "34bf8ae9-d1ca-4b99-86e0-d50254cd4536",
+            "taskId": "b354bb6e-2953-4bbd-86ae-70bed31be1a1",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "6f0da131-906e-48df-9955-8b5e58a53732",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "097a8619-0371-4d1c-a103-45d60c9b5ec4",
+        "sourceId": "owner-4174c0b3-6188-5cba-8e8b-58c03ae7dd99",
+        "targetId": "owner-ce65e130-6218-5141-a994-c0a3d97fd872",
+        "oldTask": [
+          {
+            "taskId": "2448580b-de22-46cb-9400-ae56b69b03dc",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "58b68c8a-d6d2-4b17-b9b2-f77cc918f1b1",
+            "taskId": "2448580b-de22-46cb-9400-ae56b69b03dc",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:05:16.6927977+09:00",
+            "finishedAt": "2026-09-27T03:05:17.0249671+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "097a8619-0371-4d1c-a103-45d60c9b5ec4",
+            "taskId": "2448580b-de22-46cb-9400-ae56b69b03dc",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "ca53933f-4f44-47b7-9c22-7ae6a1e49054",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "0986839d-33d9-4fe7-be4e-51272e6a214c",
+        "sourceId": "owner-633a5df7-cfa2-56e4-a143-a0dcbc7d7a3f",
+        "targetId": "owner-fab4f576-c015-5d32-ad26-4e69da36530d",
+        "oldTask": [
+          {
+            "taskId": "f8a26907-6d98-44ef-9f4b-23742b187cbc",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "71e9f0ab-b9fc-42ea-abba-ef2213dd21c2",
+            "taskId": "f8a26907-6d98-44ef-9f4b-23742b187cbc",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:05:17.4066105+09:00",
+            "finishedAt": "2026-09-27T03:05:17.7851713+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "0986839d-33d9-4fe7-be4e-51272e6a214c",
+            "taskId": "f8a26907-6d98-44ef-9f4b-23742b187cbc",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "a069358e-698a-44c6-8a39-0e3a7da56b3e",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "a19d68d4-30c2-447e-a4da-1e857d014c91",
+        "sourceId": "owner-8896a3d4-0135-55d9-aa64-5e3348daeee8",
+        "targetId": "owner-6f46fbfd-146f-50bc-b7e8-83d1e2ca7c03",
+        "oldTask": [
+          {
+            "taskId": "90dc68ce-e003-4136-8c23-cebf622f506d",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "d8669423-7f9e-4d08-b6a5-88398a05cc9e",
+            "taskId": "90dc68ce-e003-4136-8c23-cebf622f506d",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:05:18.5391139+09:00",
+            "finishedAt": "2026-09-27T03:05:18.9342606+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "a19d68d4-30c2-447e-a4da-1e857d014c91",
+            "taskId": "90dc68ce-e003-4136-8c23-cebf622f506d",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "4f723c87-6b5c-4c36-a84c-0f81a49b0cb8",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "93aad135-8b38-44d5-a53f-2b6f3a8da207",
+        "sourceId": "owner-aa79f5c8-c82f-5a55-801b-e3a0e1cb3c68",
+        "targetId": "owner-72f5936e-1caa-51ab-acf3-21aa4252a8bd",
+        "oldTask": [
+          {
+            "taskId": "a24c7dfd-f65a-4ae0-98cc-ed9c8878110c",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "22a78a17-e40c-4fca-bca2-1b5d89dc925d",
+            "taskId": "a24c7dfd-f65a-4ae0-98cc-ed9c8878110c",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:05:18.9507553+09:00",
+            "finishedAt": "2026-09-27T03:05:19.2921223+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "93aad135-8b38-44d5-a53f-2b6f3a8da207",
+            "taskId": "a24c7dfd-f65a-4ae0-98cc-ed9c8878110c",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "dc7b1d5c-88cb-4725-8663-cd4ccc89d8da",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      },
+      {
+        "notificationId": "a18734cc-299b-4ad7-9a68-9ea119fa2472",
+        "sourceId": "owner-07a3259f-5397-57fe-bf72-10f8b081a4a9",
+        "targetId": "owner-4889ffa3-20ea-5e61-9950-a374c3d0b827",
+        "oldTask": [
+          {
+            "taskId": "d6ec41ff-9c9b-4a4c-83bd-325a276eb3fd",
+            "status": 6,
+            "attemptCount": 1
+          }
+        ],
+        "originalAttempts": [
+          {
+            "attemptId": "2932f0a7-673a-446b-9694-9d1515713ff6",
+            "taskId": "d6ec41ff-9c9b-4a4c-83bd-325a276eb3fd",
+            "attemptNumber": 1,
+            "result": 4,
+            "errorCode": "SubjectNotIdentified",
+            "startedAt": "2026-09-27T03:05:19.6851416+09:00",
+            "finishedAt": "2026-09-27T03:05:20.1612744+09:00"
+          }
+        ],
+        "failure": [
+          {
+            "notificationId": "a18734cc-299b-4ad7-9a68-9ea119fa2472",
+            "taskId": "d6ec41ff-9c9b-4a4c-83bd-325a276eb3fd",
+            "status": 6,
+            "errorCode": "SubjectNotIdentified",
+            "resolutionStatus": 3
+          }
+        ],
+        "targetTasks": [
+          {
+            "taskId": "5c1f2a56-f136-44ed-ad67-9aa24d8ce88e",
+            "status": 1,
+            "attemptCount": 0,
+            "requestedRevision": 1
+          }
+        ],
+        "targetRequestTotal": 1,
+        "targetTaskTotal": 1
+      }
+    ],
+    "pipeline": {
+      "isPaused": true,
+      "reason": "Unexpected collection failure notification 7a10af2c-8b5e-489c-87e7-4b0a248ed859: Task=0192ee02-384f-49c0-9a67-c8b510832154; Error=JraCollectionException; 引退騎手一覧の公開リンクが見つかりません。",
+      "updatedAt": "2026-09-27T03:08:07.2072162+09:00"
+    }
+  },
+  "statusLegend": {
+    "taskReady": 1,
+    "taskFailed": 6,
+    "failureSuperseded": 3
+  }
+}

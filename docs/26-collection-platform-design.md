@@ -1,6 +1,6 @@
 # Resource 中心の競馬情報収集基盤
 
-> 2026-09-27 承認済み（実装・検証中）: 主体job生成とAPI存在確認は同じidentity resolverを使用し、API/Collector/発見・修復のdefinition/revision登録を共通記述元へ接続する。馬主の誤ID要求はpreviewで一意な対応先を証明した対象だけ監査付き復旧し、未知障害の一括retryやデータ削除は行わない。[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)に互換・配備・復旧条件を記録する。
+> 2026-09-27 実装済み（本番検証中）: 主体job生成とAPI存在確認は同じidentity resolverを使用し、API/Collector/発見・修復のdefinition/revision登録を共通記述元へ接続する。馬主の誤ID要求はpreviewで一意な対応先を証明した対象だけ監査付き復旧し、未知障害の一括retryやデータ削除は行わない。[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)に互換・配備・復旧条件を記録する。
 
 ## 位置づけ
 

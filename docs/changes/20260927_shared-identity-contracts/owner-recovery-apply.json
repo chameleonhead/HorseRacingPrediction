@@ -1,0 +1,281 @@
+{
+  "observedAt": "2026-09-27T07:36:56.3859174+09:00",
+  "receipts": [
+    {
+      "requestId": "9ce7d7f8-f68a-4efd-bc5d-607d104ad399",
+      "taskId": "ca53933f-4f44-47b7-9c22-7ae6a1e49054",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "0d2f2166-87b3-46e4-a327-8456b3393535",
+      "taskId": "a069358e-698a-44c6-8a39-0e3a7da56b3e",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "3e89bf7f-b0cf-4461-906e-fa698a12e3b5",
+      "taskId": "77306a6c-56fe-476b-b7ea-7b098708753e",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f29e424c-1c54-443c-bc1f-0cece07de5e9",
+      "taskId": "c90dd0da-731f-4c5c-b09b-999c552777aa",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f2619175-20d3-4746-8cfe-8b0223ac0ae9",
+      "taskId": "ff40355e-f466-4a85-b255-9df096631ba2",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "625fcd37-ad63-479b-8586-ffc2a2b65a8b",
+      "taskId": "6b31beab-776d-4b68-adff-6dd4768ecb8f",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b1fa1720-8c03-4b93-aec8-595b5617878e",
+      "taskId": "1f84b851-7a44-49ef-9ebf-10db66ff102c",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b0a15c9f-2fa9-4854-9369-f4eca0746c64",
+      "taskId": "c367e161-e7af-4267-8638-adfb7b112d0a",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "10ca32ce-ec89-445a-8696-c486ea4430cc",
+      "taskId": "55371e37-163c-409b-85d1-997075c86993",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "0c7c20fa-37b3-4a93-94bd-e8ce2a68f7b0",
+      "taskId": "079cb520-efd9-4674-9c7f-fda4d330b549",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "af5cef05-c465-4327-9a06-97aaa362c25f",
+      "taskId": "723c2ad3-16d2-4e24-a9c1-db7491409942",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "290a6fb7-f93c-49da-a61e-5dcfb56a8da0",
+      "taskId": "6f0da131-906e-48df-9955-8b5e58a53732",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b08b4e60-08db-4a1d-a8cc-ac00dc79f3d8",
+      "taskId": "cc122541-94e3-43b1-8d4b-1c51970c8722",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "b49d8d43-3d23-4a6c-8c1c-854ade6102f7",
+      "taskId": "b0a1ea9a-fe92-4a13-9841-9b78ae2638ff",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "fa777a73-81cf-4b5b-85be-8300249de7c8",
+      "taskId": "ac46bf69-b044-4145-a8b1-5cc3206de058",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "f123779e-68c5-4c1b-9f3f-c0710283fbca",
+      "taskId": "4f44c8c5-9427-48fd-aa30-5a65968ac913",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5495d989-6a28-4d34-8f6a-a79d9b3d4947",
+      "taskId": "1c84559b-0b31-4882-9483-b269e7cdfcf3",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "575461c0-173b-4e6b-970c-c4b997b2ce33",
+      "taskId": "6418d2e9-68a7-46a4-ad9f-fa4d1190d98e",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "c6d33991-e221-489c-a350-582886657e7f",
+      "taskId": "01f79b86-a92f-4df5-9464-6e533c7a8eba",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "8376089b-c222-4410-93fc-d6ea719f7891",
+      "taskId": "0891b7ba-1240-4835-a3e8-776dc80a2953",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5f7e99bf-8440-4401-b833-6aa933931a88",
+      "taskId": "2e3e9cbd-5d19-4891-82b4-f9b74809a61f",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "d7955785-a715-4777-8277-4ec40681f7df",
+      "taskId": "21cd5ac6-2b5b-49c4-a87e-b59f73c21c92",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "a6252295-4e67-4fae-90d8-9bf112240698",
+      "taskId": "52a7dd19-a97b-4236-952c-40906e956d84",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "ab0b7351-f459-49d9-9040-9058aa89c78c",
+      "taskId": "a48a8bf3-f274-4d8f-82aa-4908d1383d75",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "53c945e8-d45e-4647-951d-e851f6b11bd2",
+      "taskId": "d931842e-d6d5-43c6-b790-c5d518174d3c",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "2c194df3-1a98-415e-9712-6a03c845ad4c",
+      "taskId": "fa70f285-a160-4b40-8852-a4436087748a",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "489868d3-08f0-4644-9bf3-50d9902e8d0c",
+      "taskId": "e775a43f-0c67-45c2-820b-b0ac288c2b8a",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "24d946f9-1227-49de-a50f-c14b6ea71c23",
+      "taskId": "0bf12c31-ecec-4c34-b477-7da9683074ac",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "4aeae409-103c-4b13-a5a6-ec051b194f3e",
+      "taskId": "c12d8ff4-72f7-4092-bbdf-f5d94a348d9c",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "33a5ad7d-ee2f-4fa3-8d6c-4650fd9cdc7a",
+      "taskId": "dc7b1d5c-88cb-4725-8663-cd4ccc89d8da",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "64c1ea99-dcf4-47aa-ae6a-f0d3e7e7d9be",
+      "taskId": "bcc36911-c733-4942-8392-b45eb2fe8bf0",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "d034de14-b704-4d10-bb18-b508b19d9a2d",
+      "taskId": "01a47148-7d14-4ec0-9c93-7b9db19cd644",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "5c136c5a-1481-4d86-982b-f9063e0a16a3",
+      "taskId": "5c1f2a56-f136-44ed-ad67-9aa24d8ce88e",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "29ac54f6-bd8a-4b83-a63b-e81900d2295c",
+      "taskId": "4f723c87-6b5c-4c36-a84c-0f81a49b0cb8",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "9b74cc1a-adf4-4db7-9394-7bbfd1f85adf",
+      "taskId": "12f63f5b-d1d5-4215-ad0d-cbeb1169b418",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "472ced04-fbae-472b-ae7b-a2cd71390ad5",
+      "taskId": "18eabf66-da59-4967-9204-be695507921d",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "070ee70e-1198-43a0-9437-214e4d8fce47",
+      "taskId": "deb59c9f-4783-416f-a291-8aaac5c1ac32",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "56c66559-fae8-4184-a6f4-fdc5b68967e2",
+      "taskId": "3784c6ab-07d6-4a27-b681-5f7c5e33e9b8",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "487c5b2a-a4b9-44c2-a584-3290b7cc260b",
+      "taskId": "899621fb-3588-468b-a84b-1497fa66bb3d",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "756edccd-20f4-40a9-af7a-d02d83ada55d",
+      "taskId": "ccab4fe4-c119-451a-86e3-9dae46f25787",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "03b962cf-142d-4712-9f3f-8b0653f78d53",
+      "taskId": "d2232627-7443-41fb-8e59-e2ac345d481b",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "573364d9-ef86-4a74-8292-de3172481dcf",
+      "taskId": "dae2fc69-5bdc-4306-be26-672f4334aaa5",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "9baf443f-2b61-4081-be5d-857ffc702a02",
+      "taskId": "c00796e2-16d7-41b1-b97d-6a6ebf9638e3",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "245f944f-b745-4461-b627-c49f4318f5ff",
+      "taskId": "39292594-48d0-46a5-afe2-a2914d1ea9e5",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "2671dd60-cd4e-43dc-aeb3-1d671746ceaa",
+      "taskId": "56f498dc-b9b2-444a-9b63-bc117894d2cf",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    },
+    {
+      "requestId": "182c080c-8494-47cd-ac80-f484c3bccf58",
+      "taskId": "2f7b9575-0b9e-40e1-8e60-2a9c8a3aa8f6",
+      "createdTask": true,
+      "deferredByRepairHold": false
+    }
+  ]
+}
