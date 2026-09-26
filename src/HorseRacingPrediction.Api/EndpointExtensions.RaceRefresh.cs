@@ -90,7 +90,7 @@ public static partial class EndpointExtensions
                     damsireName: source.DamsireName, coatColor: source.CoatColor), token);
             entries.Add(new(entryId, horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight,
-                source.BodyWeightChange, null, source.OwnerName));
+                source.BodyWeightChange, null, source.OwnerName, (RaceEntryParticipationStatus?)source.ParticipationStatus));
             results.Add(new(entryId, source.FinishPosition, source.OfficialTime, source.MarginText,
                 source.LastThreeFurlongTime, source.AbnormalResultCode, source.PrizeMoney, source.CornerPositions,
                 source.Popularity, source.OriginalFinishPosition, source.IsDeadHeat, source.Average1F,

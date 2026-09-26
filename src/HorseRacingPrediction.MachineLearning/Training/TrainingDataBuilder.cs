@@ -27,7 +27,8 @@ public static class TrainingDataBuilder
             var context = await getRaceContext(race.RaceId, cancellationToken).ConfigureAwait(false);
             if (context is null) continue;
 
-            var entries = context.Entries;
+            var entries = context.Entries.Where(entry => entry.ParticipationStatus ==
+                HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active).ToList();
             var fieldSize = entries.Count;
             var raceDate = race.RaceDate ?? HorseRacingPrediction.Contracts.Time.JstTime.Today();
 

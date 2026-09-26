@@ -97,7 +97,7 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
             e.JockeyId, e.TrainerId, e.GateNumber,
             e.AssignedWeight, e.SexCode, e.Age,
             e.DeclaredWeight, e.DeclaredWeightDiff,
-            e.RunningStyleCode, e.OwnerName));
+            e.RunningStyleCode, e.OwnerName, e.ParticipationStatus));
     }
 
     public void Apply(EntryCollectedDataUpdated e)

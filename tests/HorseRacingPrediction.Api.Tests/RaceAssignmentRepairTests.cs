@@ -236,7 +236,8 @@ public sealed class RaceAssignmentRepairTests
         var entries = context.GetProperty("entries").EnumerateArray().ToArray();
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId("", HorseB), entries.Single(x => x.GetProperty("horseNumber").GetInt32() == 1).GetProperty("horseId").GetString());
         Assert.AreEqual("馬主B", entries.Single(x => x.GetProperty("horseNumber").GetInt32() == 1).GetProperty("ownerName").GetString());
-        Assert.AreEqual(request.Fingerprint, context.GetProperty("entryAssignmentFingerprint").GetString());
+        Assert.AreEqual(await app.Services.GetRequiredService<RaceWriteCoordinator>().AssignmentFingerprintAsync(raceId, CancellationToken.None),
+            context.GetProperty("entryAssignmentFingerprint").GetString());
         var stalePrediction = await http.PostAsJsonAsync("/api/predictions", new
         { raceId, predictorType = "Human", predictorId = "local-test", confidenceScore = 0.5m, summaryComment = "old context" });
         Assert.AreEqual(HttpStatusCode.Conflict, stalePrediction.StatusCode);
@@ -397,14 +398,14 @@ public sealed class RaceAssignmentRepairTests
         var task = await store.AcquireAsync(dispatch.Notification.TaskId, dispatch.Notification.DispatchGeneration,
             DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
         Assert.IsNotNull(task);
-        Assert.IsTrue(task.RequestedRevision >= 4);
+        Assert.IsTrue(task.RequestedRevision >= CollectionDefinitionRevisions.RaceDetail);
         Assert.IsTrue(await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, DateTimeOffset.UtcNow, new(CollectionAttemptResult.Succeeded)));
     }
 
     private static async Task<string> SeedAsync(WebApplication app, HttpClient http, int raceNumber = 5)
     {
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 4, "repair test", true);
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, CollectionDefinitionRevisions.RaceDetail, "repair test", true);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "repair test", true);
         await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3, "repair test", true);
         if (!http.DefaultRequestHeaders.Contains("X-Api-Key")) http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);

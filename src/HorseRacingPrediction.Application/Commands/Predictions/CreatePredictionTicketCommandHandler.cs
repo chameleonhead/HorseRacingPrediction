@@ -8,7 +8,7 @@ public sealed class CreatePredictionTicketCommandHandler : CommandHandler<Predic
     public override Task ExecuteAsync(PredictionTicketAggregate aggregate, CreatePredictionTicketCommand command, CancellationToken cancellationToken)
     {
         aggregate.Create(command.RaceId, command.PredictorType, command.PredictorId,
-            command.ConfidenceScore, command.SummaryComment);
+            command.ConfidenceScore, command.SummaryComment, command.EntryAssignmentFingerprint);
         return Task.CompletedTask;
     }
 }

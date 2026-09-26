@@ -13,4 +13,5 @@ public sealed record RacePredictionContextEntry(
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
     string? RunningStyleCode,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    RaceEntryParticipationStatus ParticipationStatus = RaceEntryParticipationStatus.Active);

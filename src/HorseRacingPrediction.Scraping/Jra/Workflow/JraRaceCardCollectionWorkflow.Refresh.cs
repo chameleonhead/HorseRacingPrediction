@@ -30,7 +30,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             BreederName: x.BreederName, SireName: x.SireName, DamName: x.DamName,
             DamsireName: x.DamsireName, CoatColor: x.CoatColor,
             HorseSourceIdentity: x.HorseSourceIdentity, JockeyProfileUrl: x.JockeyProfileUrl,
-            TrainerProfileUrl: x.TrainerProfileUrl)).ToArray();
+            TrainerProfileUrl: x.TrainerProfileUrl, ParticipationStatus: x.ParticipationStatus)).ToArray();
         var saved = await _writeService.DeclareRaceResultBulkAsync(new(raceId.Date,
             RaceCourseNames.GetJraName(raceId.Course), raceId.Number, card.RaceName, EntryCount: entries.Length,
             GradeCode: card.GradeCode, DistanceMeters: card.CourseSpec?.DistanceMeters,
@@ -55,6 +55,11 @@ public sealed partial class JraRaceCardCollectionWorkflow
 
     private static void ValidateCardEntriesForPersistence(JraRaceCardPage card)
     {
+        if (card.Entries.Any(entry => !Enum.IsDefined(entry.ParticipationStatus)))
+            throw new JraValueParseException(JraPageKind.RaceCard, card.Url, "ParticipationStatus", "Unknown status.");
+        if (card.Entries.Any(entry => entry.ParticipationStatus != RaceEntryParticipationStatus.Active
+            && !JraSourceIdentity.TryNormalizeHorse(entry.HorseSourceIdentity, out _)))
+            throw new JraHorseSourceIdentityUnavailableException(card.Url, card.RaceId);
         if (card.Entries.Any(entry => entry.HorseNumber is <= 0 or > 18))
             throw new JraValueParseException(JraPageKind.RaceCard, card.Url, "HorseNumber",
                 "Official horse number is outside 1-18.");

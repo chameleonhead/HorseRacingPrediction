@@ -11,7 +11,8 @@ public sealed class CreatePredictionTicketCommand : Command<PredictionTicketAggr
         string predictorType,
         string predictorId,
         decimal confidenceScore,
-        string? summaryComment)
+        string? summaryComment,
+        string? entryAssignmentFingerprint = null)
         : base(aggregateId)
     {
         RaceId = raceId;
@@ -19,6 +20,7 @@ public sealed class CreatePredictionTicketCommand : Command<PredictionTicketAggr
         PredictorId = predictorId;
         ConfidenceScore = confidenceScore;
         SummaryComment = summaryComment;
+        EntryAssignmentFingerprint = entryAssignmentFingerprint;
     }
 
     public string RaceId { get; }
@@ -26,4 +28,5 @@ public sealed class CreatePredictionTicketCommand : Command<PredictionTicketAggr
     public string PredictorId { get; }
     public decimal ConfidenceScore { get; }
     public string? SummaryComment { get; }
+    public string? EntryAssignmentFingerprint { get; }
 }

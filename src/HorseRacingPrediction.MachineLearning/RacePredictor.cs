@@ -83,7 +83,8 @@ public sealed class RacePredictor : IRacePredictor
         Func<string, CancellationToken, Task<JockeyRaceHistoryReadModel?>> getJockeyHistory,
         CancellationToken cancellationToken = default)
     {
-        var entries = raceContext.Entries;
+        var entries = raceContext.Entries.Where(entry => entry.ParticipationStatus ==
+            HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active).ToList();
         var fieldSize = entries.Count;
 
         var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");

@@ -92,15 +92,16 @@ public class PredictionEndpointsTests
     [TestMethod]
     public async Task AddMark_AfterCreate_ReturnsOk()
     {
+        var (raceId, entries) = await CreateActiveEntriesAsync();
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.85m, null, ticketId),
+            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.85m, null, ticketId),
             JsonOptions);
 
         var response = await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest("entry-1", "◎", 1, 90.5m, "本命"),
+            new AddPredictionMarkRequest(entries[0], "◎", 1, 90.5m, "本命"),
             JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -109,28 +110,46 @@ public class PredictionEndpointsTests
     [TestMethod]
     public async Task FullLifecycle_ProducesCorrectState()
     {
+        var (raceId, entries) = await CreateActiveEntriesAsync();
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
 
         await _client.PostAsJsonAsync(
             "/api/predictions",
-            new CreatePredictionTicketRequest("race-abc", "AI", "model-v1", 0.92m, "精密予測", ticketId),
+            new CreatePredictionTicketRequest(raceId, "AI", "model-v1", 0.92m, "精密予測", ticketId),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest("entry-1", "◎", 1, 95.0m, "本命"),
+            new AddPredictionMarkRequest(entries[0], "◎", 1, 95.0m, "本命"),
             JsonOptions);
         await _client.PostAsJsonAsync(
             $"/api/predictions/{ticketId}/marks",
-            new AddPredictionMarkRequest("entry-2", "○", 2, 80.0m, "対抗"),
+            new AddPredictionMarkRequest(entries[1], "○", 2, 80.0m, "対抗"),
             JsonOptions);
 
         var response = await _client.GetAsync($"/api/predictions/{ticketId}");
         var ticket = await response.Content.ReadFromJsonAsync<PredictionTicketResponse>(JsonOptions);
 
         Assert.IsNotNull(ticket);
-        Assert.AreEqual("race-abc", ticket.RaceId);
+        Assert.AreEqual(raceId, ticket.RaceId);
         Assert.AreEqual(0.92m, ticket.ConfidenceScore);
         Assert.AreEqual(2, ticket.Marks.Count);
+    }
+
+    private static async Task<(string RaceId, string[] Entries)> CreateActiveEntriesAsync()
+    {
+        var raceId = $"race-{Guid.NewGuid()}";
+        (await _client.PostAsJsonAsync("/api/races", new CreateRaceRequest(new(2026, 9, 27), "中山", 1, "予想検証", raceId))).EnsureSuccessStatusCode();
+        (await _client.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new PublishRaceCardRequest(2))).EnsureSuccessStatusCode();
+        var ids = new List<string>();
+        for (var number = 1; number <= 2; number++)
+        {
+            var response = await _client.PostAsJsonAsync($"/api/races/{raceId}/entries", new RegisterEntryRequest(
+                $"horse-{Guid.NewGuid()}", number, null, null, 1, 55, null, null, null, null, HorseName: $"検証馬{number}"));
+            response.EnsureSuccessStatusCode();
+            var saved = await response.Content.ReadFromJsonAsync<JsonElement>();
+            ids.Add(saved.GetProperty("entryId").GetString()!);
+        }
+        return (raceId, ids.ToArray());
     }
 
     [TestMethod]

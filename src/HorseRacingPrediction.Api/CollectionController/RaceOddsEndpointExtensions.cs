@@ -22,11 +22,12 @@ public static class RaceOddsEndpointExtensions
             if (errors.Count > 0) return Results.ValidationProblem(errors);
             var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
             if (race is null) return Results.NotFound();
-            if (race.Entries.Count == 0 || race.Entries.Any(entry => entry.HorseNumber is null or <= 0))
+            var activeEntries = race.Entries.Where(entry => entry.ParticipationStatus == RaceEntryParticipationStatus.Active).ToArray();
+            if (activeEntries.Length == 0 || activeEntries.Any(entry => entry.HorseNumber is null or <= 0))
                 return Results.Conflict(new { ErrorCode = "RaceAssignmentNotConfirmed", Message = "Confirmed horse assignments are required for odds." });
-            if (entries.Any(entry => !race.Entries.Any(assignment => assignment.HorseNumber == entry.HorseNumber)))
+            if (entries.Any(entry => !activeEntries.Any(assignment => assignment.HorseNumber == entry.HorseNumber)))
                 return Results.BadRequest(new { ErrorCode = "UnknownHorseNumber", Message = "Odds reference an unknown horse number." });
-            var assignments = race.Entries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
+            var assignments = activeEntries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
                 entry.HorseId, entry.EntryId, entry.GateNumber)).ToArray();
             if (observations?.Any(item => !RaceOddsSelection.CanResolve(
                     new RaceOddsObservation(item.Market, item.Selection, item.Value), assignments)) == true)

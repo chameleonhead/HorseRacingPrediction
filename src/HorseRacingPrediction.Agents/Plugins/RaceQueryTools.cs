@@ -255,7 +255,8 @@ public sealed class RaceQueryTools
         if (model is null || string.IsNullOrEmpty(model.RaceId))
             return $"レース ID '{raceId}' は見つかりませんでした。";
 
-        var entries = model.Entries;
+        var entries = model.Entries.Where(entry => entry.ParticipationStatus ==
+            HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active).ToList();
         var fieldSize = entries.Count;
 
         var leaderCount = entries.Count(e => e.RunningStyleCode == "逃");
@@ -403,8 +404,8 @@ public sealed class RaceQueryTools
         if (model.Entries.Count > 0)
         {
             sb.AppendLine("### 出走馬一覧");
-            sb.AppendLine("| 馬番 | 枠番 | 馬ID | 騎手ID | 調教師ID | 斤量 | 性齢 | 申告体重 | 脚質 |");
-            sb.AppendLine("|------|------|------|--------|----------|------|------|----------|------|");
+            sb.AppendLine("| 馬番 | 枠番 | 馬ID | 騎手ID | 調教師ID | 斤量 | 性齢 | 申告体重 | 脚質 | 出走状態 |");
+            sb.AppendLine("|------|------|------|--------|----------|------|------|----------|------|----------|");
             foreach (var e in model.Entries.OrderBy(x => x.HorseNumber))
             {
                 sb.AppendLine(
@@ -413,7 +414,7 @@ public sealed class RaceQueryTools
                     $"| {e.AssignedWeight?.ToString("F1") ?? "-"} " +
                     $"| {e.SexCode ?? "-"}{e.Age?.ToString() ?? "-"} " +
                     $"| {e.DeclaredWeight?.ToString("F1") ?? "-"} " +
-                    $"| {e.RunningStyleCode ?? "-"} |");
+                    $"| {e.RunningStyleCode ?? "-"} | {e.ParticipationStatus} |");
             }
         }
 

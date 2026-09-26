@@ -51,7 +51,7 @@ public static class RaceEntryRepairEndpointExtensions
             {
                 var state = await collection.HoldRaceForRepairAsync(raceId, request.OperationId, request.ExpectedGeneration,
                     request.Reason, DateTimeOffset.UtcNow, token, await coordinator.AssignmentFingerprintAsync(raceId, token));
-                // A race with no collection state still needs a durable, deferred revision-4 intent.
+                // A race with no collection state still needs a durable intent at the registered revision.
                 if (state.IsActive && !state.Definitions.Contains("race-detail"))
                 {
                     var race = (await inspector.InspectAsync(raceId, token)).Race;
@@ -61,7 +61,8 @@ public static class RaceEntryRepairEndpointExtensions
                     if (course < 0 || race.RaceDate is null || race.RaceNumber is null)
                         return Results.Conflict(new { code = "RepairHoldNeedsCollectionIdentity", hold = state });
                     await collection.RequestAsync(new(ResourceType.Race, "JRA", $"{race.RaceDate:yyyyMMdd}:{english[course]}:{race.RaceNumber}"),
-                        new("race-detail"), 4, CollectionReason.Recovery, DateTimeOffset.UtcNow,
+                        new("race-detail"), await collection.GetCurrentRevisionAsync(new("race-detail"), token),
+                        CollectionReason.Recovery, DateTimeOffset.UtcNow,
                         batchId: "repair-hold:" + request.OperationId, attributes: new Dictionary<string, string> { ["domainRaceId"] = raceId },
                         cancellationToken: token);
                 }

@@ -26,12 +26,13 @@ public class PredictionTicketAggregate : AggregateRoot<PredictionTicketAggregate
         string predictorType,
         string predictorId,
         decimal confidenceScore,
-        string? summaryComment)
+        string? summaryComment,
+        string? entryAssignmentFingerprint = null)
     {
         if (_state.IsCreated)
             throw new InvalidOperationException("Prediction ticket is already created.");
 
-        Emit(new PredictionTicketCreated(raceId, predictorType, predictorId, confidenceScore, summaryComment));
+        Emit(new PredictionTicketCreated(raceId, predictorType, predictorId, confidenceScore, summaryComment, entryAssignmentFingerprint));
     }
 
     public void AddMark(string entryId, string markCode, int predictedRank, decimal score, string? comment)

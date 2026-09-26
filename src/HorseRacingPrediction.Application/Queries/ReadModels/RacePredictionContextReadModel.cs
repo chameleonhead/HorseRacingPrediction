@@ -86,7 +86,7 @@ public partial class RacePredictionContextReadModel : IReadModel,
             e.EntryId, e.HorseId, e.HorseNumber,
             e.JockeyId, e.TrainerId, e.GateNumber, e.AssignedWeight,
             e.SexCode, e.Age, e.DeclaredWeight, e.DeclaredWeightDiff,
-            e.RunningStyleCode, e.OwnerName));
+            e.RunningStyleCode, e.OwnerName, e.ParticipationStatus));
         return Task.CompletedTask;
     }
 

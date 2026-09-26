@@ -17,4 +17,5 @@ public sealed record RaceEntryResponse(
     decimal? DeclaredWeightDiff,
     string? RunningStyleCode,
     string? OwnerName = null,
-    string? OwnerId = null);
+    string? OwnerId = null,
+    HorseRacingPrediction.Contracts.RaceEntryParticipationStatus ParticipationStatus = HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active);

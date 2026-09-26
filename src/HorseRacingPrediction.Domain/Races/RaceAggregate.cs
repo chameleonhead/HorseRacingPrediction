@@ -62,16 +62,18 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
         decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
-        string? runningStyleCode = null, string? ownerName = null)
+        string? runningStyleCode = null, string? ownerName = null,
+        RaceEntryParticipationStatus? participationStatus = null)
     {
         var previous = _state.Entries.FirstOrDefault(entry => entry.EntryId == entryId);
         horseNumber ??= previous?.HorseNumber;
         gateNumber ??= previous?.GateNumber;
+        participationStatus ??= previous?.ParticipationStatus ?? RaceEntryParticipationStatus.Active;
         ValidateCollectedEntryAssignments([new EntryDetails(entryId, horseId, horseNumber,
             jockeyId, trainerId, gateNumber, assignedWeight, sexCode, age,
-            declaredWeight, declaredWeightDiff, runningStyleCode, ownerName)]);
+            declaredWeight, declaredWeightDiff, runningStyleCode, ownerName, participationStatus)]);
         RegisterValidatedEntry(entryId, horseId, horseNumber, jockeyId, trainerId, gateNumber,
-            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, runningStyleCode, ownerName);
+            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, runningStyleCode, ownerName, participationStatus);
     }
 
     // Bulk callers validate the final assignment set before emitting individual events.
@@ -80,7 +82,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
         decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
-        string? runningStyleCode = null, string? ownerName = null)
+        string? runningStyleCode = null, string? ownerName = null,
+        RaceEntryParticipationStatus? participationStatus = null)
     {
         if (!_state.IsCreated)
             throw new InvalidOperationException("Race is not created.");
@@ -97,7 +100,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             runningStyleCode,
             _state.RaceDate, _state.RacecourseCode, _state.SurfaceCode,
             _state.DistanceMeters, _state.DirectionCode, _state.GradeCode,
-            ownerName, previous?.HorseId, previous?.JockeyId));
+            ownerName, previous?.HorseId, previous?.JockeyId,
+            participationStatus ?? previous?.ParticipationStatus ?? RaceEntryParticipationStatus.Active));
     }
 
     public void RecordWeatherObservation(DateTimeOffset observationTime,
@@ -239,9 +243,10 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         if (observations.Select(x => $"{x.Market.Trim().ToUpperInvariant()}\u001f{x.Selection.Trim().ToUpperInvariant()}")
             .Distinct(StringComparer.Ordinal).Count() != observations.Count)
             throw new ArgumentException("Market and selection must be unique in an odds snapshot.", nameof(observations));
-        if (_state.Entries.Count == 0 || _state.Entries.Any(entry => entry.HorseNumber is null or <= 0))
+        var activeEntries = _state.Entries.Where(entry => (entry.ParticipationStatus ?? RaceEntryParticipationStatus.Active) == RaceEntryParticipationStatus.Active).ToArray();
+        if (activeEntries.Length == 0 || activeEntries.Any(entry => entry.HorseNumber is null or <= 0))
             throw new InvalidOperationException("Confirmed horse assignments are required for odds.");
-        var assignments = _state.Entries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
+        var assignments = activeEntries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
             entry.HorseId, entry.EntryId, entry.GateNumber)).ToArray();
         if (assignments.Select(entry => entry.HorseNumber).Distinct().Count() != assignments.Length
             || entries.Any(entry => !assignments.Any(assignment => assignment.HorseNumber == entry.HorseNumber))

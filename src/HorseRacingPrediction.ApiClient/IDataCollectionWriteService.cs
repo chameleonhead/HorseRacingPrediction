@@ -110,6 +110,18 @@ public interface IDataCollectionWriteService
         => UpsertRaceEntryAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
             assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName, cancellationToken);
 
+    Task<string> UpsertRaceEntryWithHorseIdentityAsync(
+        string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
+        int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
+        decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
+        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus participationStatus,
+        CancellationToken cancellationToken = default)
+        => participationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active
+            ? UpsertRaceEntryWithHorseIdentityAsync(raceId, horseNumber, horseName, jockeyName, trainerName,
+                gateNumber, assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
+                jraHorseSourceIdentity, cancellationToken)
+            : throw new NotSupportedException("This writer cannot preserve non-active race entries.");
+
     /// <summary>レース全体の確定結果（勝ち馬）を宣言し、確認メッセージを返す。</summary>
     Task<string> DeclareRaceResultAsync(
         string raceId,

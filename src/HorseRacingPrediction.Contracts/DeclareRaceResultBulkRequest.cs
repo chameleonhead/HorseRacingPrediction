@@ -64,4 +64,5 @@ public sealed record RaceResultEntryBulkDto(
     string? DamsireName = null, string? CoatColor = null, decimal? AdditionalPrizeMoney = null,
     string? HorseSourceIdentity = null,
     string? JockeyProfileUrl = null,
-    string? TrainerProfileUrl = null);
+    string? TrainerProfileUrl = null,
+    RaceEntryParticipationStatus? ParticipationStatus = null);

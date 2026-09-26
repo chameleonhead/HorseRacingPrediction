@@ -9,13 +9,15 @@ public sealed class PredictionTicketCreated : AggregateEvent<PredictionTicketAgg
         string predictorType,
         string predictorId,
         decimal confidenceScore,
-        string? summaryComment)
+        string? summaryComment,
+        string? entryAssignmentFingerprint = null)
     {
         RaceId = raceId;
         PredictorType = predictorType;
         PredictorId = predictorId;
         ConfidenceScore = confidenceScore;
         SummaryComment = summaryComment;
+        EntryAssignmentFingerprint = entryAssignmentFingerprint;
         PredictedAt = HorseRacingPrediction.Domain.Time.JstClock.Now;
     }
 
@@ -24,5 +26,6 @@ public sealed class PredictionTicketCreated : AggregateEvent<PredictionTicketAgg
     public string PredictorId { get; }
     public decimal ConfidenceScore { get; }
     public string? SummaryComment { get; }
+    public string? EntryAssignmentFingerprint { get; }
     public DateTimeOffset PredictedAt { get; }
 }

@@ -215,6 +215,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
                 declaredWeightDiff: entry.BodyWeightChange,
                 ownerName: entry.OwnerName,
                 jraHorseSourceIdentity: entry.HorseSourceIdentity,
+                participationStatus: entry.ParticipationStatus,
                 cancellationToken: cancellationToken);
         }
 
