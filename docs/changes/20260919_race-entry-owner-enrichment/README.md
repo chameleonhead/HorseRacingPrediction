@@ -1,18 +1,109 @@
 # Race出走馬の後着データ補完
 
 - Status: Approved
+- Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
-- Updated: 2026-09-19
+- Updated: 2026-09-26
 - JRA site contract impact: Updated — 後続の`20260919_jra-site-collection-contract`でCard限定の取得元制約を正本化した。
 
 ## Completion summary
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Completed | 要求revisionの全terminal経路での後続実体化、request実行条件の永続化、migration preview/apply/progress、設定画面、deploy後migration jobを接続した。 |
-| Verification | Completed | Collector 269件、API 247件（既存skip 1件）、solution build、format、change-record validator、CodeGraphを完了した。 |
-| Deployment/operation | Not started | push/deployとproduction migration preview/apply、本番データ補正は未実施。既存error jobは変更していない。 |
+| Code | Incomplete | 9/19の実装は存在するが、9/26の調査で通常bulkの既存entry除外と保存前の同一性検証不足を確認。追加修正は未承認・未着手。 |
+| Verification | Incomplete | 過去のテスト結果は下記に履歴として保持。raw entryと通常bulkの結合検証が不足し、対象Raceの欠損・馬番不一致を未解消。 |
+| Deployment/operation | Unverified | 今回はGETと公式ページ参照のみ。現行配備revision、限定隔離、本番補正とpost-checkは未確認・未実施。 |
+
+> **2026-09-26 reopened:** [対象Raceの証拠・安全な補正設計](decisions/20260926-race-integrity.md)を本recordの追加提案とする。`race-fca5d100-9e2f-5074-a74c-bad8cdb4705f` のraw owner欠損16/16、公式馬番との不一致、G2/GIII不一致が判明した。従前の承認は、この同一性補正や隔離操作を承認したものではない。監視親のT2b/T3a・保存完全性findingへ接続し、親recordは変更しない。以下の9/19のVerifiedは当時の限定試験結果であり、追加基準IAC1–IAC5の完了を意味しない。
+
+## 2026-09-26 変更提案（今回のレビュー対象）
+
+> **承認記録:** 利用者の「お願いします。」により、停止復旧の追加範囲IAC7–IAC10、RC1–RC4、再開前のIAC3 identity gate、実装・配備・限定再取得・再開が承認された。既存馬主補正IAC1–IAC6の残りは別段階のまま、既存予想・結果の付替えを承認に含めない。以下の未承認表記は承認前の履歴。
+
+> **停止調査を受けた追加設計:** [馬場状態の誤認修正・収集復旧](decisions/20260926-track-condition-recovery.md)をスコープへ追加した。会社名「青芝商事(株)」を芝の馬場状態と誤認する欠陥を修正し、新版配備・対象限定再取得・既存自動停止からの再開・本番観測までをIAC7–IAC10で扱う。新たなメンテナンス停止、全件再試行、安全装置の無効化は含まない。再開前に既知の誤馬番への副作用防止を先行する。今回は設計のみで実装・本番操作は未実施。
+
+> **最新の利用者判断:** 全体停止は採用せず、[取得revision更新による再取得](decisions/20260926-revision-recollection.md)へ方針変更する。以下のoffline補正案・停止容認待ちは履歴であり、実行対象ではない。revision更新だけではCurrent Cardが再取得されないことと、誤馬番の保存境界が未解決のため、StatusはProposedを維持する。停止の承認を再度求めない。
+
+> **馬番未確定への対応:** 利用者より木曜日時点では馬番が未確定との指摘を受け、[一括設計の公開段階](decisions/20260926-full-repair-plan.md)とIAC6を追加した。未確定は障害ではなく正常な確定待ち。仮entryを保存せず、Cardを完了扱いにせず、確定後の最新Cardを発走前に取得する。曜日で決め打ちせず公式の公開状態を判定する。今回も文書のみの更新であり、停止・補正の承認は未取得。
+
+> **対応方針の具体化:** 利用者は「本番補正まで含めた一括の設計を先に確認する」を選択した。[一括設計案](decisions/20260926-full-repair-plan.md)に、取得修正・保存検証・停止中の限定補正・backup/復旧・配備後検証まで記載した。IC2–IC4は同書の処置で設計上具体化し、IC1の全体メンテナンス容認と時間帯は未決。実装・本番操作はまだ開始しない。
+
+利用者の「まずは変更記録を作成」の依頼に基づく設計文書であり、実装承認ではない。既存recordを継続し、重複する変更記録は作成しない。今回の基準・作業・懸念の正本は[追加設計のIAC1–IAC5、IT1–IT5、IC1–IC4](decisions/20260926-race-integrity.md)。下記より後の9/19の承認・完了判定は履歴として保持し、今回への承認として流用しない。
+
+### 背景と目的
+
+対象は2026年9月26日阪神11R（シリウスステークス）。調査時点では出走データの馬主が0/16件であり、画面の15件は馬プロフィールによる表示補完だった。公式出馬表では16件すべて取得可能。加えて全16頭の馬番とレース格付けが公式と不一致だった。公式馬識別子からのIDは保存済み16頭すべてと一致するため、馬番と馬の対応を正してから補正する必要がある。
+
+目的は、公式出馬表の馬主を正しい出走馬へ保存し、再取得・再送でも欠落や別馬への誤帰属を生じさせないこと。初回の欠落原因は未確定であり、後着値を保存しない通常取得経路の欠陥とは区別する。
+
+### 提案範囲と承認境界
+
+1. 当時の入力・実行版を調査し、取得不能な証拠はその限界を明示する。
+2. 公式馬番・馬識別子・レース識別情報を、副作用が発生する前に検証する。馬番未公表の一覧を仮の連番で保存しない。
+3. 通常取得と明示的な再取得の双方で、同じ馬への後着値を非破壊・冪等に保存する。保存後の出走データを直接確認し、画面の補完表示を成功根拠にしない。
+4. 対象レースに限定した補正前確認を設計する。旧新の馬番対応、馬主、格付け、予想・結果・履歴への影響を提示する。
+5. 隔離・補正方法の確定と明示承認後にのみ配備・本番補正を行い、再取得後の整合性まで確認する。
+
+今回は文書作成のみ。コード変更、配備、収集停止・取消、再収集要求、データ補正は行わない。他レースの一括補正、新しい取得元、Horse profileからの馬主コピー、画面刷新は対象外。予想・結果等の既存参照をどう移行するかは未決であり、既存entryの単純上書きを採用しない。
+
+### 受け入れ条件と未決事項の要約
+
+- IAC1: 初回原因の事実・仮説・証拠不足を分離し、再現可能範囲を確定する。
+- IAC2: 再要求、実行中処理、適用経路を含め、不整合書込みを防ぐ隔離方法を検証する。
+- IAC3: 不完全・不一致の入力を副作用前に拒否し、同一馬の馬主補完と再送時の冪等性を実経路で検証する。
+- IAC4: 公式識別子に基づく補正前確認で旧新対応と参照先を示し、氏名だけの照合や未解決識別子を拒否する。
+- IAC5: 別途承認された本番操作後、馬主16/16、公式馬番・格付けとの一致、関連履歴等の誤帰属がないことを確認する。
+- IAC6: 木曜日等の馬番未確定を正常待機とし、確定後の再取得・並び順/頭数変更・遅着入力・再起動を通じて、仮採番なしで発走前の確定Card保存に到達する。
+- IAC7–IAC8: 馬場状態を専用欄だけから取得し、会社名・馬名を誤認しない。本当の未知値や構造異常は保存前に拒否し、安全停止を維持する。
+- IAC9–IAC10: 修正版配備・旧実行境界・identity gateを確認後、次revisionで失敗対象のみ再取得し、既存停止から再開する。本番の正しい保存・対象成功・他収集の進行・10分以上の再停止なしを確認する。
+
+## Concern and agreement ledger
+
+| ID | Concern and evidence | Proposed disposition | AC/task | Agent position | User disposition | State |
+| --- | --- | --- | --- | --- | --- | --- |
+| C1 | IC1: 誤馬番のまま結果を取得すると誤帰属し得る。取消・pause単独では書込みを遮断しない | 最新revision案のRace単位排他・副作用前identity gate。参照があれば入替拒否。再開前にidentity gateを先行 | IAC2/IT2、IAC9/RT2 | 未検証の排他での補正に反対、検証必須の設計に同意 | 全体停止は不採用。新保存境界は承認待ち | Resolved in design |
+| C2 | IC2: 初回入力と本番実行版が未取得 | 当時証拠を調査し、取得不能なら再現限界と代替fixtureを明記。実証済み欠陥と初回原因を分離する | IAC1/IT1 | 現在DOMだけによる原因断定に反対、処置に同意 | 今回承認は停止復旧のみ。馬主初回原因の判断は別段階 | Resolved in design |
+| C3 | IC3: 馬番の補正でEntryIdを参照する予想・結果・履歴に影響 | 最新revision案のRace単位排他・参照gate・監査eventを採用。予想/結果/オッズ等があれば書込前拒否。停止中復元は不採用 | IAC4/IT4 | 自動付替えに反対、参照ゼロの場合だけの補正に同意 | 今回は付替え拒否を承認。オンライン入替は別段階 | Resolved in design |
+| C4 | IC4: 表示補完と限定試験では保存欠損を見逃す | raw保存値、通常/refresh経路、再送event数を検証。表示確認だけを代替にしない | IAC3/IT3 | 検証方針に同意 | 停止復旧の保存安全性検証を承認 | Resolved in design |
+
+調査時点の詳細は[追加設計](decisions/20260926-race-integrity.md)を履歴として保持する。最新処置は[revision再取得設計](decisions/20260926-revision-recollection.md)と[停止復旧設計のRC1–RC4](decisions/20260926-track-condition-recovery.md)。旧offline案と全体停止の承認待ちは撤回済み。設計上の処置と実装検証は区別し、今回追加した復旧範囲を含めて確認を求めるため`Proposed`を維持する。
+
+### Documentation updates（今回）
+
+- 本README: 今回の提案範囲、受け入れ条件、承認境界を先頭で読める形に整理した。
+- [馬場状態・停止復旧設計](decisions/20260926-track-condition-recovery.md): 障害証拠、専用欄抽出、安全停止維持、段階配備、限定再取得・再開、本番観測、IAC7–IAC10/RT1–RT3/RC1–RC4を追加した。
+- [詳細設計・証拠](decisions/20260926-race-integrity.md): 調査結果、懸念台帳、AC/task対応、検証方法と次の操作を保持する。
+- [一括設計案](decisions/20260926-full-repair-plan.md): 今回の依頼に基づく本番補正までの具体案。懸念の最新処置、実行停止条件、タスク分担を定義する。
+- `docs/27-jra-site-collection-contract.md`: 既存のCard限定・プロフィール代用禁止は維持し、新しい馬番・identity・格付け検証は未承認提案として一括設計へのリンクを追加。現行実装が適合済みとは記載しない。
+
+### 文書作成チェックポイント
+
+> 最新checkpoint: Mainが停止対応設計を統合。今回も文書のみ。旧「IC1停止承認待ち」は履歴であり次操作ではない。次は追加AC/懸念台帳と既存の非停止方式を提示して承認を得る。承認後、RT1–RT2の検証、配備版確認、RT3の運用へ進む。既存の無関係な変更は保持し、本README、decisions配下、サイト契約の提案リンクだけを未コミットで残す。
+
+- 停止復旧の設計検証: `python .codex/skills/document-driven-development/scripts/validate_change_records.py docs/changes/20260919_race-entry-owner-enrichment/README.md` はissues=0、`git diff --check`成功。文書のみのためbuild/test・CodeGraph syncは対象外。IAC7–IAC10はNot startedのまま、復旧済みとは報告しない。
+
+- Mainが担当。短い単独文書整理であり、分割・委譲による効果がないためsubagentなし。実装タスクは追加設計のIT1–IT5を参照し、未確定判断をworkerへ渡さない。
+- Design review: AC/task/検証の対応は追加設計に記載済み。IC1–IC3未解決のため承認gateは未通過。
+- Pre-implementation / implementation final review: 未実施。今回の依頼では実装へ進まない。
+- Next action: IC1の隔離方式とIC3の参照移行方式を具体化し、当時証拠の取得可否を確定してから設計承認を求める。
+- 文書検証: change-record validatorはschema 2の懸念台帳見出しを要求したため正本へのリンクを明示し、再検証でissues=0。`git diff --check`成功。コード変更がないためbuild/testとCodeGraph同期は不要。
+
+## 2026-09-19 設計・実装履歴
+
+## Task plan
+
+承認済み停止復旧の実行台帳。IAC7–10の基準・詳細は停止復旧設計を正本とし、既存IT1–IT5の馬主補正は別段階として保持する。
+監査validatorはAC数字のみを受理するため、監査ID AC108=IAC8、AC109=IAC9と対応させる（基準の追加・変更ではない）。
+
+| ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RT1 | IAC7–8 専用欄取得 | Main | Lead | approval | src/HorseRacingPrediction.Scraping; tests/HorseRacingPrediction.Scraping.Tests | HTML/snapshot/parser regression | 実行記録を追加設計へ追記 | In progress | Lead — public contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | 実行記録を追加設計へ追記 | In progress | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
+| RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 未実施 | Dependent | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+
+## 2026-09-19 設計・実装履歴（本文）
 
 > **2026-09-19 design correction:** ownerはRaceCardを取得できた場合だけ取得でき、過去RaceResultや
 > 現在のHorse profileからは復元できない。全owner欠損Raceへ補正要求を作る現行migrationは、

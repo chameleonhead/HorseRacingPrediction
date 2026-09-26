@@ -33,7 +33,13 @@ JRAサイトの実装詳細を推測して依存する文書ではない。利�
 
 ## 2. 最重要の取得元制約
 
+> 2026-09-26 未承認提案: 馬番未確定時の仮採番禁止、保存前の公式Horse identity照合、対象レース領域だけからの格付け取得、raw保存値による完全性検証を[馬主取得・出走割当の一括修正設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-full-repair-plan.md)で検討中。現行実装がこれらを満たすとの宣言ではない。承認後に本書へ確定契約を反映する。
+> 同提案は、馬番未確定を正常な公開段階として区別し、Card確定待ちと発走後のResult待ちを別に扱う。木曜日・金曜日の固定判定ではなく公式ページを確認し、確定前の取得だけでCardを完了にしない。
+> 運用方式は利用者の判断で[停止せず取得revisionを更新する方式](changes/20260919_race-entry-owner-enrichment/decisions/20260926-revision-recollection.md)へ変更した。旧revisionのCurrent Cardを新版で再取得することを設計条件とし、全体停止・offline補正は採用しない。
+
 ### 2.1 馬主
+
+> 2026-09-26 未承認提案: 馬場状態は対象Raceの専用欄だけから取得し、本文の馬主・馬名・勝馬情報を検索しない。[馬場状態誤認と停止復旧設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-track-condition-recovery.md)を参照。Resultの勝馬紹介にowner文字列が存在する事実と、全出走馬のowner取得元として採用することは別であり、下記Card限定契約は変更しない。
 
 - レース時点の馬主名は **RaceCard（出馬表）を取得できた場合だけ** 取得する。
 - RaceResult（レース結果・過去レース結果）から馬主名は取得できない。
