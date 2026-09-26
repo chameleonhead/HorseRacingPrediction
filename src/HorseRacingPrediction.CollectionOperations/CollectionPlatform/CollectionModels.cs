@@ -103,7 +103,7 @@ public sealed record CollectionStateSnapshot(ResourceKey Resource, CollectionDef
     DateTimeOffset? NextCollectionAt, CollectionStateStatus Status,
     IReadOnlyList<RaceArtifactSnapshot>? RaceArtifacts = null);
 
-public sealed record CollectionRequestReceipt(Guid RequestId, Guid TaskId, bool CreatedTask);
+public sealed record CollectionRequestReceipt(Guid RequestId, Guid? TaskId, bool CreatedTask, bool DeferredByRepairHold = false);
 public sealed record CollectionRequestBatchItem(string ItemKey, ResourceKey Resource,
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, Uri? ExplicitUrl, DateOnly? EffectiveDate,
@@ -147,6 +147,7 @@ public enum CollectionTaskAcquireStatus
     AlreadyTerminal,
     SupersededGeneration,
     ActiveElsewhere,
+    RepairHeld,
 }
 
 public sealed record CollectionTaskAcquireResult(CollectionTaskAcquireStatus Status, LeasedCollectionTask? Task = null);
@@ -166,7 +167,8 @@ public sealed record LeasedCollectionTask(Guid TaskId, Guid RequestId, ResourceK
     CollectionDefinitionId Definition, int RequestedRevision, CollectionReason Reason,
     CollectionLane Lane, int Priority, string LeaseToken, DateTimeOffset LeaseExpiresAt,
     DateOnly? EffectiveDate, IReadOnlyDictionary<string, string> Attributes,
-    IReadOnlyList<ResourceLocationCandidate>? Locations = null);
+    IReadOnlyList<ResourceLocationCandidate>? Locations = null,
+    long RaceHoldGeneration = 0, string? EntryAssignmentFingerprint = null);
 
 public enum CollectionFailureImpact { StopPipeline, Isolated }
 

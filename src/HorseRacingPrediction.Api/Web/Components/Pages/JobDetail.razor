@@ -135,7 +135,37 @@ else if (detail is not null)
     private async Task NextAttemptHistoryAsync(){if(attemptHistoryPage>=AttemptHistoryPages)return;attemptHistoryPage++;await LoadAsync();}
     private Task RequestAsync()=>SubmitRequestAsync(null);
     private Task RequestWithExplicitUrlAsync()=>SubmitRequestAsync(explicitUrl?.Trim());
-    private async Task SubmitRequestAsync(string? requestedUrl){if(Type is null||detail is null)return;requestErrors=[];operationErrors=[];operationMessage=null;busy=true;try{var task=LatestTask;var revision=Math.Max(task?.RequestedRevision??1,detail.State?.RequiredRevision??1);var result=await Api.RequestCollectionAsync(new(Type.Value,Provider,ResourceId,DefinitionId,revision,CollectionReason.ManualRefresh,task?.Lane??CollectionLane.Normal,task?.Priority??50,string.IsNullOrWhiteSpace(requestedUrl)?null:requestedUrl));if(result.Success&&result.Value is not null){explicitUrl=null;operationMessage=result.Value.CreatedTask?$"収集依頼を受け付けました。タスク {ShortId(result.Value.TaskId)} を作成しました。":$"収集依頼を受け付けました。実行中のタスク {ShortId(result.Value.TaskId)} にまとめました。";await LoadAsync();}else requestErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){requestErrors=["管理APIに接続できません。入力内容を保持しています。しばらくしてからもう一度お試しください。"]; }finally{busy=false;}}
+    private async Task SubmitRequestAsync(string? requestedUrl)
+    {
+        if (Type is null || detail is null) return;
+        requestErrors = []; operationErrors = []; operationMessage = null; busy = true;
+        try
+        {
+            var task = LatestTask;
+            var revision = Math.Max(task?.RequestedRevision ?? 1, detail.State?.RequiredRevision ?? 1);
+            var result = await Api.RequestCollectionAsync(new(Type.Value, Provider, ResourceId, DefinitionId, revision,
+                CollectionReason.ManualRefresh, task?.Lane ?? CollectionLane.Normal, task?.Priority ?? 50,
+                string.IsNullOrWhiteSpace(requestedUrl) ? null : requestedUrl));
+            if (result.Success && result.Value is not null)
+            {
+                explicitUrl = null;
+                operationMessage = result.Value.DeferredByRepairHold
+                    ? "収集依頼を保存しました。馬番補正のため保留中です。保留解除後に再取得します。"
+                    : result.Value.TaskId is { } taskId
+                        ? result.Value.CreatedTask
+                            ? $"収集依頼を受け付けました。タスク {ShortId(taskId)} を作成しました。"
+                            : $"収集依頼を受け付けました。実行中のタスク {ShortId(taskId)} にまとめました。"
+                        : "収集依頼を保存しました。";
+                await LoadAsync();
+            }
+            else requestErrors = result.Errors;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            requestErrors = ["管理APIに接続できません。入力内容を保持しています。しばらくしてからもう一度お試しください。"];
+        }
+        finally { busy = false; }
+    }
     private async Task CancelAsync(CollectionTaskSummary task){operationErrors=[];operationMessage=null;busy=true;try{var result=await Api.CancelCollectionTaskAsync(task.TaskId);if(result.Success){operationMessage=$"タスク {ShortId(task.TaskId)} を取り消しました。";await LoadAsync();}else operationErrors=result.Errors;}catch(Exception ex)when(ex is HttpRequestException or TaskCanceledException){operationErrors=["管理APIに接続できないため、タスクを取り消せませんでした。もう一度お試しください。"]; }finally{busy=false;}}
     private static bool IsActive(CollectionTaskStatus value)=>value is CollectionTaskStatus.Pending or CollectionTaskStatus.Ready or CollectionTaskStatus.Running or CollectionTaskStatus.RetryWaiting or CollectionTaskStatus.WaitingDiscovery;
     private static string ActiveTaskTitle(CollectionTaskStatus value)=>value==CollectionTaskStatus.Running?"再取得を実行しています":"再取得を待っています";

@@ -230,7 +230,7 @@ public static class CollectionPlatformEndpointExtensions
                     new(request.DefinitionId), request.RequestedRevision, request.Reason, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                     request.Lane, request.Priority, explicitUrl, request.BatchId, request.EffectiveDate,
                     request.Attributes, token);
-                return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", receipt);
+                return Results.Accepted(receipt.TaskId is { } id ? $"/api/admin/collection/tasks/{id}" : null, receipt);
             }
             catch (CollectionResourceSuppressedException)
             {
@@ -261,7 +261,7 @@ public static class CollectionPlatformEndpointExtensions
                 var receipt = await store.RequestAsync(resource, definition, currentRevision, CollectionReason.ManualRefresh,
                     HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority, explicitUrl, effectiveDate: identified.EffectiveDate,
                     attributes: identified.Attributes, cancellationToken: token);
-                return Results.Accepted($"/api/admin/collection/tasks/{receipt.TaskId}", identified with { Receipt = receipt });
+                return Results.Accepted(receipt.TaskId is { } id ? $"/api/admin/collection/tasks/{id}" : null, identified with { Receipt = receipt });
             }
             catch (CollectionResourceSuppressedException)
             {
@@ -423,7 +423,7 @@ public static class CollectionPlatformEndpointExtensions
                 CollectionReason.DefinitionChanged, targets, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 batchId, CollectionLane.Normal, (int)CollectionPriority.Normal, token).ConfigureAwait(false);
             return Results.Accepted(value: new RaceEntryOwnerRepairReceipt(batchId, result.TargetCount,
-                result.TasksCreated, result.Requests.Select(x => x.TaskId).ToArray()));
+                result.TasksCreated, result.Requests.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray()));
         });
         admin.MapGet("/backfills", async (CollectionPlatformStore store, CancellationToken token) =>
             Results.Ok(await store.GetBackfillBatchesAsync(token)));
@@ -465,12 +465,22 @@ public static class CollectionPlatformEndpointExtensions
                 HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)
                 ? Results.NoContent() : Results.Conflict());
         worker.MapPost("/tasks/{taskId:guid}/acquire", async (Guid taskId, AcquireCollectionTaskRequest request,
-            CollectionPlatformStore store, CancellationToken token) =>
+            CollectionPlatformStore store, IServiceProvider services, CancellationToken token) =>
         {
             if (request.Correlation is not null && !request.Correlation.IsSupported())
                 return Results.BadRequest(new { Error = "The collection attempt correlation is invalid." });
             var lease = await store.AcquireAsync(taskId, request.DispatchGeneration, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), request.Correlation, token);
+            if (lease is { RaceHoldGeneration: > 0 })
+            {
+                var coordinator = services.GetRequiredService<HorseRacingPrediction.Infrastructure.Persistence.RaceWriteCoordinator>();
+                var raceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(lease.Resource.Id)
+                    ?? lease.Attributes.GetValueOrDefault("domainRaceId") ?? lease.Resource.Id;
+                await using var raceLock = await coordinator.AcquireAsync([raceId], token);
+                if (!await store.IsValidActiveRaceLeaseAsync(lease.TaskId, lease.LeaseToken, raceId, token))
+                    return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld));
+                lease = lease with { EntryAssignmentFingerprint = await coordinator.AssignmentFingerprintAsync(raceId, token) };
+            }
             if (lease is not null)
                 return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.Acquired, lease));
             var status = await store.ClassifyAcquireFailureAsync(taskId, request.DispatchGeneration, token);
@@ -754,7 +764,7 @@ public static class CollectionPlatformEndpointExtensions
                 revision, CollectionReason.Recovery, HorseRacingPrediction.Contracts.Time.JstTime.Now(), lane, priority,
                 cancellationToken: token);
             if (receipt.CreatedTask) created++;
-            taskIds.Add(receipt.TaskId);
+            if (receipt.TaskId is { } taskId) taskIds.Add(taskId);
         }
         return Results.Accepted(value: new CollectionFailureRecoveryResult(failures.Count, created,
             failures.Count - created, taskIds.Distinct().ToList()));

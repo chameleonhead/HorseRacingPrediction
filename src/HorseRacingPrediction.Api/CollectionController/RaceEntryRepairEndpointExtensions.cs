@@ -15,13 +15,89 @@ namespace HorseRacingPrediction.Api.CollectionController;
 
 public sealed record RaceEntryRepairHorse(string SourceUrl, int HorseNumber, int GateNumber, string OwnerName);
 public sealed record RaceEntryRepairManifest(int ExpectedVersion, string SourceUrl, DateTimeOffset ObservedAt,
-    string? GradeCode, IReadOnlyList<RaceEntryRepairHorse> Horses, string SourceSnapshotSha256);
+    string? GradeCode, IReadOnlyList<RaceEntryRepairHorse> Horses, string SourceSnapshotSha256,
+    string? HoldOperationId = null, long HoldGeneration = 0);
 public sealed record ApplyRaceEntryRepairRequest(string OperationId, string Fingerprint, RaceEntryRepairManifest Manifest);
+public sealed record HoldRaceEntryRepairRequest(string OperationId, long ExpectedGeneration, string Reason);
+public sealed record ReleaseRaceEntryRepairRequest(string OperationId, string HoldOperationId, long HoldGeneration,
+    int ExpectedVersion, string AssignmentFingerprint, string? RepairOperationId = null,
+    string? RepairFingerprint = null, bool CancelRepair = false);
 
 public static class RaceEntryRepairEndpointExtensions
 {
     public static IEndpointRouteBuilder MapRaceEntryRepairEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/admin/races/{raceId}/entry-repair/hold", async (string raceId,
+            CollectionPlatformStore collection, CancellationToken token) => Results.Ok(await collection.GetRaceRepairHoldAsync(raceId, token)));
+        endpoints.MapGet("/api/admin/races/{raceId}/entry-repair/assignment-fence", async (string raceId,
+            RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CollectionPlatformStore collection, CancellationToken token) =>
+        {
+            await using var held = await LockAsync(raceId, inspector, coordinator, token);
+            var hold = await collection.GetRaceRepairHoldAsync(raceId, token);
+            if (hold is { IsActive: true } || await coordinator.ReadBarrierAsync(raceId, token) is { Verified: false })
+                return Results.Conflict(new { code = "RaceRepairHeld" });
+            return Results.Ok(new
+            {
+                generation = hold?.Generation ?? 0,
+                assignmentFingerprint = await coordinator.AssignmentFingerprintAsync(raceId, token)
+            });
+        });
+        endpoints.MapPost("/api/admin/races/{raceId}/entry-repair/hold", async (string raceId,
+            HoldRaceEntryRepairRequest request, RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator,
+            CollectionPlatformStore collection, CancellationToken token) =>
+        {
+            await using var held = await LockAsync(raceId, inspector, coordinator, token);
+            try
+            {
+                var state = await collection.HoldRaceForRepairAsync(raceId, request.OperationId, request.ExpectedGeneration,
+                    request.Reason, DateTimeOffset.UtcNow, token, await coordinator.AssignmentFingerprintAsync(raceId, token));
+                // A race with no collection state still needs a durable, deferred revision-4 intent.
+                if (state.IsActive && !state.Definitions.Contains("race-detail"))
+                {
+                    var race = (await inspector.InspectAsync(raceId, token)).Race;
+                    string[] japanese = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"];
+                    string[] english = ["Sapporo", "Hakodate", "Fukushima", "Niigata", "Tokyo", "Nakayama", "Chukyo", "Kyoto", "Hanshin", "Kokura"];
+                    var course = Array.IndexOf(japanese, race.RacecourseCode);
+                    if (course < 0 || race.RaceDate is null || race.RaceNumber is null)
+                        return Results.Conflict(new { code = "RepairHoldNeedsCollectionIdentity", hold = state });
+                    await collection.RequestAsync(new(ResourceType.Race, "JRA", $"{race.RaceDate:yyyyMMdd}:{english[course]}:{race.RaceNumber}"),
+                        new("race-detail"), 4, CollectionReason.Recovery, DateTimeOffset.UtcNow,
+                        batchId: "repair-hold:" + request.OperationId, attributes: new Dictionary<string, string> { ["domainRaceId"] = raceId },
+                        cancellationToken: token);
+                }
+                return Results.Ok(await collection.GetRaceRepairHoldAsync(raceId, token));
+            }
+            catch (ArgumentException ex) { return Results.BadRequest(new { code = "InvalidRepairHold", message = ex.Message }); }
+            catch (InvalidOperationException) { return Results.Conflict(new { code = "RepairHoldConflict" }); }
+        });
+        endpoints.MapPost("/api/admin/races/{raceId}/entry-repair/release", async (string raceId,
+            ReleaseRaceEntryRepairRequest request, RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator,
+            CollectionPlatformStore collection, CancellationToken token) =>
+        {
+            await using var held = await LockAsync(raceId, inspector, coordinator, token);
+            var hold = await collection.GetRaceRepairHoldAsync(raceId, token);
+            if (hold is null || hold.OperationId != request.HoldOperationId || hold.Generation != request.HoldGeneration)
+                return Results.Conflict(new { code = "StaleRepairHold" });
+            if (hold.IsActive)
+            {
+                var inspection = await inspector.InspectAsync(raceId, token);
+                var barrier = await coordinator.ReadBarrierAsync(raceId, token);
+                if (!hold.IsQuiescent || inspection.Blockers.Count != 0 || inspection.Version != request.ExpectedVersion
+                    || await coordinator.AssignmentFingerprintAsync(raceId, token) != request.AssignmentFingerprint)
+                    return Results.Conflict(new { code = "RepairReleaseNotVerified" });
+                if (request.CancelRepair ? inspection.PreviousRepair is not null || barrier is not null
+                    : barrier is not { Verified: true } || barrier.OperationId != request.RepairOperationId
+                        || barrier.Fingerprint != request.RepairFingerprint || inspection.PreviousRepair?.OperationId != request.RepairOperationId)
+                    return Results.Conflict(new { code = "RepairReleaseNotVerified" });
+            }
+            try
+            {
+                return Results.Ok(await collection.ReleaseRaceRepairHoldAsync(raceId, request.HoldOperationId, request.HoldGeneration,
+                    request.OperationId, request.AssignmentFingerprint, DateTimeOffset.UtcNow, token));
+            }
+            catch (ArgumentException) { return Results.BadRequest(new { code = "InvalidRepairRelease" }); }
+            catch (InvalidOperationException) { return Results.Conflict(new { code = "RepairReleaseConflict" }); }
+        });
         endpoints.MapGet("/api/admin/races/{raceId}/entry-repair", async (string raceId,
             RaceEntryRepairInspector inspector, RaceWriteCoordinator coordinator, CancellationToken token) =>
         {
@@ -40,7 +116,9 @@ public static class RaceEntryRepairEndpointExtensions
                 var blockers = inspection.Blockers.ToList();
                 if (inspection.PreviousRepair is not null) blockers.Add("AlreadyRepaired");
                 if (await coordinator.ReadBarrierAsync(raceId, token) is not null) blockers.Add("RepairBarrierExists");
-                if (await collection.HasActiveRaceMutationAsync(raceId, token)) blockers.Add("ActiveCollection");
+                var hold = await collection.GetRaceRepairHoldAsync(raceId, token);
+                if (!MatchesHold(hold, manifest)) blockers.Add("RepairHoldRequired");
+                else if (!hold!.IsQuiescent) blockers.Add("RepairHoldNotQuiescent");
                 return Results.Ok(new
                 {
                     eligible = blockers.Count == 0,
@@ -51,6 +129,7 @@ public static class RaceEntryRepairEndpointExtensions
                     manifest.GradeCode,
                     inspection.ReferenceCounts,
                     blockers,
+                    hold,
                     sourceEvidence = manifest,
                     sourceAssurance = "OperatorProvidedSnapshotRequiresIndependentReview"
                 });
@@ -76,10 +155,20 @@ public static class RaceEntryRepairEndpointExtensions
                 return Results.Conflict(new { code = "DifferentRepairPending" });
             if (previous is not null && (previous.OperationId != request.OperationId || previous.Fingerprint != request.Fingerprint))
                 return Results.Conflict(new { code = "AlreadyRepaired" });
-            if (await collection.HasActiveRaceMutationAsync(raceId, token)) return Results.Conflict(new { code = "ActiveCollection" });
+            var hold = await collection.GetRaceRepairHoldAsync(raceId, token);
+            if (!MatchesHold(hold, request.Manifest)) return Results.Conflict(new { code = "RepairHoldRequired" });
+            if (!hold!.IsQuiescent) return Results.Conflict(new { code = "RepairHoldNotQuiescent" });
             // A retry may finish this event's projections, but may never disregard independent references.
             var blockers = inspection.Blockers.Where(x => previous is null || !x.StartsWith("ProjectionMismatch:", StringComparison.Ordinal)).ToArray();
             if (blockers.Length != 0) return Results.Conflict(new { code = "RepairBlocked", blockers });
+            string backupHash;
+            try
+            {
+                backupHash = await coordinator.BackupRepairAsync(raceId, request.OperationId, JsonSerializer.Serialize(request),
+                    path => collection.BackupForRaceRepairAsync(path, token), token, requireExisting: previous is not null);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+            { return Results.Conflict(new { code = "RepairBackupNotVerified" }); }
             coordinator.WriteBarrier(raceId, new(request.OperationId, request.Fingerprint, false));
             if (previous is null)
             {
@@ -100,10 +189,21 @@ public static class RaceEntryRepairEndpointExtensions
                 return Results.Conflict(new { code = "RepairEventNotVerified" });
             if (verified.Blockers.Count != 0) return Results.Conflict(new { code = "RepairProjectionPending", blockers = verified.Blockers });
             coordinator.WriteBarrier(raceId, new(request.OperationId, request.Fingerprint, true));
-            return Results.Ok(new { request.OperationId, request.Fingerprint, verified.Version, verified = true });
+            return Results.Ok(new
+            {
+                request.OperationId,
+                request.Fingerprint,
+                verified.Version,
+                verified = true,
+                backupHash,
+                assignmentFingerprint = await coordinator.AssignmentFingerprintAsync(raceId, token)
+            });
         });
         return endpoints;
     }
+
+    private static bool MatchesHold(RaceRepairHoldSnapshot? hold, RaceEntryRepairManifest manifest) =>
+        hold is { IsActive: true } && hold.OperationId == manifest.HoldOperationId && hold.Generation == manifest.HoldGeneration;
 
     private static async Task<IAsyncDisposable> LockAsync(string raceId, RaceEntryRepairInspector inspector,
         RaceWriteCoordinator coordinator, CancellationToken token)
@@ -176,6 +276,8 @@ public static class RaceEntryRepairEndpointExtensions
             manifest.ObservedAt,
             manifest.GradeCode,
             manifest.SourceSnapshotSha256,
+            manifest.HoldOperationId,
+            manifest.HoldGeneration,
             sources = manifest.Horses.OrderBy(x => x.HorseNumber),
             previous = race.Entries.OrderBy(x => x.HorseNumber),
             entries = ordered

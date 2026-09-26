@@ -1,6 +1,6 @@
 # 中山5R再停止後の補正前確認・限定補正設計
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Updated: 2026-09-26
 - JRA site contract impact: Updated — docs/27-jra-site-collection-contract.mdに確定待ち・revision4・限定補正境界を反映済み。今回の配備後調査では取得元契約を変更しない。

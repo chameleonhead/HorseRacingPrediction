@@ -70,6 +70,24 @@ public sealed class JobDetailComponentTests
     }
 
     [TestMethod]
+    public async Task HeldReceiptWithoutTask_ExplainsSavedIntentWithoutInventingTaskId()
+    {
+        var (app, original) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var ignored = original;
+        var handler = new JobDetailHandler { DeferredByRepairHold = true, CreatedTask = false };
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
+        await using var context = CreateContext(app.Services, http);
+        var cut = RenderDetail(context);
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "通常の方法で再取得"));
+        await cut.InvokeAsync(() => cut.FindComponents<FluentButton>()
+            .Single(x => x.Markup.Contains("通常の方法で再取得</")).Instance.OnClick.InvokeAsync());
+        cut.WaitForAssertion(() => StringAssert.Contains(cut.Markup, "馬番補正のため保留中です"));
+        Assert.IsFalse(cut.Markup.Contains("タスク 00000000"));
+        Assert.AreEqual(1, handler.ManualRequests);
+    }
+
+    [TestMethod]
     public async Task Retry_ShowsReceipt_AndExplainsReusedActiveTask()
     {
         var (app, original) = await TestApplicationFactory.CreateAsync();
@@ -272,6 +290,7 @@ public sealed class JobDetailComponentTests
         private static readonly Guid ReceiptTaskId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         private static readonly Guid ExecutionBatchId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         public bool CreatedTask { get; init; } = true;
+        public bool DeferredByRepairHold { get; init; }
         public bool FailManualRequest { get; init; }
         public CollectionFailureResolutionStatus? ActiveFailureStatus { get; init; } =
             CollectionFailureResolutionStatus.RecoveryInProgress;
@@ -291,7 +310,7 @@ public sealed class JobDetailComponentTests
             {
                 ManualRequests++;
                 if (FailManualRequest) throw new HttpRequestException("offline");
-                return await Ok(new CollectionRequestReceipt(Guid.NewGuid(), ReceiptTaskId, CreatedTask));
+                return await Ok(new CollectionRequestReceipt(Guid.NewGuid(), DeferredByRepairHold ? null : ReceiptTaskId, CreatedTask, DeferredByRepairHold));
             }
             if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/cancel"))
             {

@@ -135,8 +135,9 @@ public sealed class CollectionOperationsEndpointTests
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "published"),
                 new("horse-profile"), 1, CollectionReason.Initial, now);
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.PermanentFailure, "Broken"));
             var failure = (await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10)).Single();
             await using var app = await CreateApplicationAsync(store);
@@ -222,7 +223,8 @@ public sealed class CollectionOperationsEndpointTests
                 var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
                     new("horse-profile"), 1, CollectionReason.Initial, now,
                     explicitUrl: new Uri($"https://explicit.example.test/{id}"));
-                Assert.IsTrue(await store.ReconcileDeadLetterAsync(receipt.TaskId, 1, now.AddSeconds(1), "same failure"));
+                var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+                Assert.IsTrue(await store.ReconcileDeadLetterAsync(taskId, 1, now.AddSeconds(1), "same failure"));
             }
             await using var app = await CreateApplicationAsync(store);
             using var client = app.GetTestClient();
@@ -259,8 +261,9 @@ public sealed class CollectionOperationsEndpointTests
                 var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", id),
                     new("horse-profile"), 1, CollectionReason.Initial, now,
                     explicitUrl: new Uri($"https://explicit.example.test/{id}"));
-                var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-                await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+                var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+                var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+                await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                     new(CollectionAttemptResult.PermanentFailure, "PlaywrightException", "resource exhausted",
                         id == "H002" ? null : new Uri($"https://example.test/{id}"),
                         new Uri($"https://example.test/{id}/final"), 200,

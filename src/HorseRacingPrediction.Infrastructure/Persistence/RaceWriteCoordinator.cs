@@ -14,6 +14,82 @@ public sealed class RaceWriteCoordinator(IDbContextProvider<EventStoreDbContext>
 {
     private readonly string _memoryDirectory = Path.Combine(Path.GetTempPath(), "hrp-race-locks", Guid.NewGuid().ToString("N"));
 
+    // The caller holds race/subject locks. Each database is online-backed-up independently;
+    // this package is not a whole-application point-in-time restore authorization.
+    public async Task<string> BackupRepairAsync(string raceId, string operationId, string manifestJson,
+        Func<string, Task> backupCollection, CancellationToken token, bool requireExisting = false)
+    {
+        if (!Guid.TryParse(operationId, out var operation)) throw new ArgumentException("Invalid operation id.");
+        var directory = Path.Combine(DirectoryPath, "backups", operation.ToString("D"));
+        var manifestPath = Path.Combine(directory, "manifest.json");
+        if (requireExisting && !File.Exists(manifestPath)) throw new InvalidOperationException("RepairBackupMissing");
+        if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+        if (File.Exists(manifestPath))
+        {
+            var saved = JsonSerializer.Deserialize<RepairBackupManifest>(await File.ReadAllTextAsync(manifestPath, token))
+                ?? throw new InvalidOperationException("RepairBackupInvalid");
+            if (saved.RaceId != raceId || saved.SourceManifest != manifestJson) throw new InvalidOperationException("RepairBackupMismatch");
+            await VerifyBackupAsync(directory, saved, token);
+            return Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(manifestPath, token)));
+        }
+        // Incomplete packages are never overwritten or accepted after a crash.
+        if (Directory.EnumerateFileSystemEntries(directory).Any()) throw new InvalidOperationException("RepairBackupIncomplete");
+        using (var db = provider.CreateContext())
+        {
+            await db.Database.OpenConnectionAsync(token);
+            using var destination = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            { DataSource = Path.Combine(directory, "events.db"), Pooling = false }.ToString());
+            await destination.OpenAsync(token);
+            ((Microsoft.Data.Sqlite.SqliteConnection)db.Database.GetDbConnection()).BackupDatabase(destination);
+        }
+        await backupCollection(Path.Combine(directory, "collection.db"));
+        var sidecar = PathFor(raceId, ".repair");
+        if (File.Exists(sidecar)) File.Copy(sidecar, Path.Combine(directory, "race.repair"), overwrite: false);
+        var hashes = new Dictionary<string, string>();
+        foreach (var file in Directory.EnumerateFiles(directory))
+            hashes.Add(Path.GetFileName(file), Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(file, token))));
+        var manifest = new RepairBackupManifest(raceId, manifestJson, hashes);
+        await VerifyBackupAsync(directory, manifest, token);
+        using (var stream = new FileStream(manifestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+        {
+            JsonSerializer.Serialize(stream, manifest);
+            stream.Flush(flushToDisk: true);
+        }
+        return Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(manifestPath, token)));
+    }
+
+    private static async Task VerifyBackupAsync(string directory, RepairBackupManifest manifest, CancellationToken token)
+    {
+        if (!manifest.Hashes.ContainsKey("events.db") || !manifest.Hashes.ContainsKey("collection.db")
+            || manifest.Hashes.Keys.Any(x => x is not ("events.db" or "collection.db" or "race.repair")))
+            throw new InvalidOperationException("RepairBackupInvalid");
+        foreach (var pair in manifest.Hashes)
+        {
+            var path = Path.Combine(directory, pair.Key);
+            if (Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path, token))) != pair.Value)
+                throw new InvalidOperationException("RepairBackupHashMismatch");
+            if (!pair.Key.EndsWith(".db", StringComparison.Ordinal)) continue;
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            { DataSource = path, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+            await connection.OpenAsync(token);
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check";
+            if (await command.ExecuteScalarAsync(token) is not string result || result != "ok")
+                throw new InvalidOperationException("RepairBackupIntegrityFailed");
+        }
+    }
+
+    private sealed record RepairBackupManifest(string RaceId, string SourceManifest, Dictionary<string, string> Hashes);
+
+    public async Task<string> AssignmentFingerprintAsync(string raceId, CancellationToken token)
+    {
+        using var db = provider.CreateContext();
+        var race = await db.RacePredictionContexts.AsNoTracking().SingleOrDefaultAsync(x => x.RaceId == raceId, token);
+        var assignments = race?.Entries.OrderBy(x => x.HorseNumber)
+            .Select(x => new { x.HorseNumber, x.HorseId }).ToArray();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { raceId, assignments }))));
+    }
+
     private string DirectoryPath
     {
         get

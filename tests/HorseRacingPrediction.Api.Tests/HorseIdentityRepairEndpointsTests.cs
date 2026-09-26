@@ -205,8 +205,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("owner-identity"), 1,
             CollectionReason.Discovery, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
                 PageIdentification: "SubjectIdentification:MissingName"));
 
@@ -237,8 +238,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var resource = new ResourceKey(ResourceType.Trainer, "JRA", $"old-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "主体名がありません。",
                 PageIdentification: "SubjectIdentification:MissingName"));
         var candidate = (await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
@@ -253,7 +255,7 @@ public sealed class HorseIdentityRepairEndpointsTests
         Assert.IsEmpty((await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
             "/api/admin/repairs/subject-identification"))!.Candidates.Where(x => x.SubjectId == resource.Id));
         Assert.AreEqual(CollectionTaskStatus.Failed,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
         var detail = await store.GetResourceDetailAsync(resource, definition);
         Assert.AreEqual(CollectionFailureResolutionStatus.Superseded,
             detail!.Failures!.Single().ResolutionStatus);
@@ -281,8 +283,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var resource = new ResourceKey(ResourceType.Horse, "JRA", $"obsolete-{Guid.NewGuid():N}");
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, definition, 3, CollectionReason.Discovery, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified",
                 "同定不能: 公開検索に一致候補がありません。期待=Horse:トイムム 産駒"));
 
@@ -317,8 +320,9 @@ public sealed class HorseIdentityRepairEndpointsTests
                  })
         {
             var receipt = await store.RequestAsync(item.Item1, item.Item2, 1, CollectionReason.Discovery, now);
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "not found",
                     FailureImpact: CollectionFailureImpact.Isolated));
         }
@@ -363,8 +367,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", sourceId),
             new("horse-profile"), 1, CollectionReason.Discovery, now, explicitUrl: new Uri(sourceUrl));
-        var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var failedTaskId = failed.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(failedTaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failedTaskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "識別失敗",
                 new Uri(sourceUrl), new Uri(sourceUrl)));
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
@@ -402,16 +407,18 @@ public sealed class HorseIdentityRepairEndpointsTests
             await store.RegisterDefinitionAsync(definition, type.ToString(), type, 1, "test", false);
             var receipt = await store.RequestAsync(new(type, "JRA", $"{type}-id"), definition, 1,
                 CollectionReason.Discovery, now);
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
             var url = new Uri($"https://www.jra.go.jp/JRADB/accessU.html?CNAME={type}-identity");
-            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件", url, url));
         }
         await store.RegisterDefinitionAsync(new("race-test"), "Race", ResourceType.Race, 1, "test", false);
         var excluded = await store.RequestAsync(new(ResourceType.Race, "JRA", "race-id"), new("race-test"), 1,
             CollectionReason.Discovery, now);
-        var excludedLease = await store.AcquireAsync(excluded.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(excluded.TaskId, excludedLease!.LeaseToken, now.AddSeconds(1),
+        var excludedTaskId = excluded.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var excludedLease = await store.AcquireAsync(excludedTaskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(excludedTaskId, excludedLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "race"));
 
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
@@ -436,8 +443,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("horse-profile"), 1,
             CollectionReason.Discovery, now, explicitUrl: url);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", url, url));
 
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
@@ -472,11 +480,12 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("horse-profile"), 2,
             CollectionReason.Discovery, now, explicitUrl: url);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         const string error = "同定不能: 取得プロフィールの名前が一致しません。" +
             "期待=Horse::アジアエクスプレス; 取得名=マルガイ   アジアエクスプレス; " +
             "候補=アジアエクスプレス [/JRADB/accessU.html?CNAME=pw01dud002011110091/B0]";
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", error, null, url));
 
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
@@ -529,8 +538,9 @@ public sealed class HorseIdentityRepairEndpointsTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-1);
         var receipt = await store.RequestAsync(resource, new("trainer-profile"), 1,
             CollectionReason.Discovery, now, explicitUrl: invalid);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "0件でした", invalid, invalid));
         var failure = (await store.GetActionableFailureNotificationsAsync(DateTimeOffset.UtcNow, 10)).Single();
 

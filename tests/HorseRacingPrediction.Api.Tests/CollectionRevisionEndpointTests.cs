@@ -64,9 +64,10 @@ public sealed class CollectionRevisionEndpointTests
     {
         var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
         var receipt = await store.RequestAsync(resource, definition, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now,
+        Assert.IsTrue(await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now,
             new(CollectionAttemptResult.Succeeded)));
     }
 }

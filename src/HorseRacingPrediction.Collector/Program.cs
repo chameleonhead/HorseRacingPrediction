@@ -83,6 +83,7 @@ builder.Services.AddHttpClient<RaceOddsSnapshotApiClient>((services, client) =>
         client.BaseAddress = new Uri(options.BaseUrl);
         client.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
     }).AddHttpMessageHandler<CollectionRuntimeTimingHandler>()
+      .AddHttpMessageHandler<CollectionWorkerLeaseHandler>()
       .AddHttpMessageHandler<TransientBadGatewayRetryHandler>();
 builder.Services.AddSingleton<IRaceOddsSnapshotSink>(services => services.GetRequiredService<RaceOddsSnapshotApiClient>());
 builder.Services.AddHttpClient<IPredictionSchedule, HttpPredictionSchedule>((services, client) =>

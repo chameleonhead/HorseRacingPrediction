@@ -24,8 +24,9 @@ public sealed class CollectionPipelineAlertDispatchServiceTests
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "horse-a"), definition, 1,
                 CollectionReason.Initial, now, attributes: new Dictionary<string, string> { ["name"] = "A" });
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.UnexpectedPage, "WrongPage", "unexpected page"));
             var publisher = new RecordingPublisher();
             var service = new CollectionPipelineAlertDispatchService(store, publisher,
@@ -35,7 +36,7 @@ public sealed class CollectionPipelineAlertDispatchServiceTests
             Assert.IsTrue(await service.RunOnceAsync(CancellationToken.None));
             Assert.IsFalse(await service.RunOnceAsync(CancellationToken.None));
             Assert.HasCount(1, publisher.Messages);
-            StringAssert.Contains(publisher.Messages[0], receipt.TaskId.ToString("D"));
+            StringAssert.Contains(publisher.Messages[0], taskId.ToString("D"));
             StringAssert.Contains(publisher.Messages[0], "TaskStatus=Failed");
             Assert.IsEmpty(await store.GetUnpublishedFailureNotificationsAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10));
         }
@@ -59,8 +60,9 @@ public sealed class CollectionPipelineAlertDispatchServiceTests
             var now = DateTimeOffset.UtcNow.AddMinutes(-1);
             var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "horse-a"), definition, 1,
                 CollectionReason.Initial, now, attributes: new Dictionary<string, string> { ["name"] = "A" });
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.UnexpectedPage, "WrongPage", "unexpected page"));
             var publisher = new RecordingPublisher { Failure = new InvalidOperationException("SNS unavailable") };
             var firstService = new CollectionPipelineAlertDispatchService(store, publisher,

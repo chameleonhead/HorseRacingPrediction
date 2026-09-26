@@ -35,7 +35,7 @@ public sealed class CollectionPlatformOutboxDispatcherTests
             Assert.AreNotEqual(Guid.Empty, wake.WakeId);
             Assert.AreNotEqual(Guid.Empty, wake.DispatchEnvelopeId);
             Assert.IsFalse(System.Text.Json.JsonSerializer.Serialize(wake).Contains(
-                receipt.TaskId.ToString(), StringComparison.OrdinalIgnoreCase));
+                receipt.TaskId!.Value.ToString(), StringComparison.OrdinalIgnoreCase));
         }
         finally { Directory.Delete(directory, true); }
     }

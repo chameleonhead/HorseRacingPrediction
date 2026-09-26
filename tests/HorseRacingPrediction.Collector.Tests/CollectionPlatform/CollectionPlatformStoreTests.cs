@@ -23,12 +23,12 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "old", false);
         var initial = await store.RequestAsync(resource, definition, 3, CollectionReason.Initial, now, effectiveDate: new DateOnly(2026, 9, 26));
-        var oldLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, oldLease!.LeaseToken, now.AddSeconds(1),
+        var oldLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, oldLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, StageOutcomes: [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)])));
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 4, "confirmed numbers", false);
         var refresh = await store.RequestAsync(resource, definition, 4, CollectionReason.DefinitionChanged, now.AddSeconds(2));
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         var cards = new FakeJraRaceCardCollectionWorkflow
         {
@@ -41,15 +41,15 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual("RaceHorseNumbersUnconfirmed", waiting.ErrorCode);
         Assert.IsEmpty(results.Requests);
         Assert.IsTrue(waiting.StageOutcomes!.All(x => !x.Persisted));
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken, now.AddSeconds(3), waiting));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, lease.LeaseToken, now.AddSeconds(3), waiting));
         var card = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Card);
         Assert.AreEqual(3, card.AppliedRevision);
         cards.ThrowOnCollect = null;
-        var confirmedLease = await store.AcquireAsync(refresh.TaskId, 2, now.AddMinutes(16), TimeSpan.FromMinutes(5));
+        var confirmedLease = await store.AcquireAsync(refresh.TaskId!.Value, 2, now.AddMinutes(16), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(confirmedLease);
         var confirmed = await handler.CollectAsync(confirmedLease, CancellationToken.None);
         Assert.IsTrue(confirmed.StageOutcomes!.Any(x => x.Artifact == RaceArtifactKind.Card && x.Persisted));
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, confirmedLease.LeaseToken, now.AddMinutes(17), confirmed));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, confirmedLease.LeaseToken, now.AddMinutes(17), confirmed));
         Assert.AreEqual(4, (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Card).AppliedRevision);
     }
 
@@ -64,24 +64,24 @@ public sealed class CollectionPlatformStoreTests
                 ["name"] = "obsolete",
                 ["requestedByRaceId"] = "race-authoritative",
             });
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady", "missing",
                 RetryAt: now.AddHours(1))));
 
         var preview = await store.GetObsoleteSubjectProfileTasksAsync();
         Assert.HasCount(1, preview);
-        Assert.AreEqual(receipt.TaskId, preview[0].TaskId);
+        Assert.AreEqual(receipt.TaskId!.Value, preview[0].TaskId);
 
-        var result = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId], now.AddSeconds(2));
+        var result = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId!.Value], now.AddSeconds(2));
 
         Assert.AreEqual(1, result.CancelledCount);
         Assert.AreEqual(0, result.RunningCancellationRequests);
         Assert.IsEmpty(await store.GetObsoleteSubjectProfileTasksAsync());
-        var task = (await store.GetTasksAsync(limit: 10)).Single(item => item.TaskId == receipt.TaskId);
+        var task = (await store.GetTasksAsync(limit: 10)).Single(item => item.TaskId == receipt.TaskId!.Value);
         Assert.AreEqual(CollectionTaskStatus.Cancelled, task.Status);
-        Assert.HasCount(1, await store.GetAttemptsAsync(receipt.TaskId));
+        Assert.HasCount(1, await store.GetAttemptsAsync(receipt.TaskId!.Value));
     }
 
     [TestMethod]
@@ -101,16 +101,16 @@ public sealed class CollectionPlatformStoreTests
                 ["sourceUrl"] = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=legacy",
                 ["requestedByRaceId"] = "race-1",
             });
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "SubjectResourceMissing", "target missing",
                 FailureImpact: CollectionFailureImpact.Isolated)));
 
         var candidates = await store.GetObsoleteSubjectProfileTasksAsync();
 
         var candidate = candidates.Single();
-        Assert.AreEqual(receipt.TaskId, candidate.TaskId);
+        Assert.AreEqual(receipt.TaskId!.Value, candidate.TaskId);
         Assert.AreEqual(CollectionTaskStatus.Failed, candidate.Status);
         Assert.AreEqual("Legacy Horse", candidate.Name);
         Assert.AreEqual("jra:legacy", candidate.SourceIdentity);
@@ -142,9 +142,9 @@ public sealed class CollectionPlatformStoreTests
                 attributes: raceId is null
                     ? new Dictionary<string, string> { ["name"] = id }
                     : new Dictionary<string, string> { ["name"] = id, ["requestedByRaceId"] = raceId });
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+            var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
             Assert.IsNotNull(lease);
-            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.PermanentFailure, errorCode, "failure",
                     FailureImpact: CollectionFailureImpact.Isolated)));
         }
@@ -161,23 +161,23 @@ public sealed class CollectionPlatformStoreTests
                 ["name"] = "Running Legacy",
                 ["requestedByRaceId"] = "race-running",
             });
-        var firstLease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var firstLease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(firstLease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, firstLease.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, firstLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotYetAvailable, "SubjectProjectionNotReady", "missing",
                 RetryAt: now.AddSeconds(2))));
-        var runningLease = await store.AcquireAsync(receipt.TaskId, 2, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var runningLease = await store.AcquireAsync(receipt.TaskId!.Value, 2, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(runningLease);
 
         var candidate = (await store.GetObsoleteSubjectProfileTasksAsync()).Single();
         Assert.AreEqual(CollectionTaskStatus.Running, candidate.Status);
         Assert.AreEqual("SubjectProjectionNotReady", candidate.ErrorCode);
-        var retirement = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId], now.AddSeconds(3));
+        var retirement = await store.RetireObsoleteSubjectProfileTasksAsync([receipt.TaskId!.Value], now.AddSeconds(3));
         Assert.AreEqual(1, retirement.RunningCancellationRequests);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, runningLease.LeaseToken, now.AddSeconds(4),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, runningLease.LeaseToken, now.AddSeconds(4),
             new(CollectionAttemptResult.Succeeded)));
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
-            (await store.GetTasksAsync(limit: 1000)).Single(item => item.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync(limit: 1000)).Single(item => item.TaskId == receipt.TaskId!.Value).Status);
     }
 
     [TestMethod]
@@ -222,7 +222,7 @@ public sealed class CollectionPlatformStoreTests
         var outcome = (await store.RequestManyAsync("race-subjects:race-1", [item], now)).Single();
 
         Assert.AreEqual("Created", outcome.Status);
-        var lease = await store.AcquireAsync(outcome.Receipt!.TaskId, 1, now.AddSeconds(1), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(outcome.Receipt!.TaskId!.Value, 1, now.AddSeconds(1), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual("2026-09-19", lease.Attributes["referenceRaceDate"]);
         Assert.AreEqual("Nakayama", lease.Attributes["referenceRaceCourse"]);
@@ -365,8 +365,8 @@ public sealed class CollectionPlatformStoreTests
         var reused = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddMinutes(1),
             attributes: new Dictionary<string, string> { ["name"] = "updated", ["sourceIdentity"] = "source-2" });
 
-        Assert.AreEqual(first.TaskId, reused.TaskId);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
+        Assert.AreEqual(first.TaskId!.Value, reused.TaskId!.Value);
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual("original", lease.Attributes["name"]);
         Assert.AreEqual("source-1", lease.Attributes["sourceIdentity"]);
@@ -385,7 +385,7 @@ public sealed class CollectionPlatformStoreTests
             {
                 ["weekendPriorityUntil"] = "2026-09-27",
             });
-        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId, replacementAttributes);
+        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId!.Value, replacementAttributes);
 
         var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
         Assert.AreEqual("2026-09-27", pending.Attributes!["weekendPriorityUntil"]);
@@ -398,7 +398,7 @@ public sealed class CollectionPlatformStoreTests
             TimeSpan.FromSeconds(45));
         var rebuiltExecution = await store.AcquireNextExecutionAsync(wake, "message-1", now.AddSeconds(2),
             TimeSpan.FromSeconds(45));
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
 
         Assert.AreEqual(CollectionDispatchGroupKind.WeekendSubjects,
             acquiredExecution.Envelope!.Compatibility.GroupKind);
@@ -417,7 +417,7 @@ public sealed class CollectionPlatformStoreTests
             {
                 ["weekendPriorityUntil"] = "2026-09-27",
             });
-        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId,
+        await UpdatePersistedCompatibilityAttributesAsync(receipt.TaskId!.Value,
             "{\"weekendPriorityUntil\":\"2026-10-04\"}", clearTaskMetadata: true);
 
         var pending = (await store.GetPendingDispatchesAsync(now.AddSeconds(1), 10)).Single();
@@ -429,7 +429,7 @@ public sealed class CollectionPlatformStoreTests
         var acquiredExecution = await store.AcquireNextExecutionAsync(
             new(Guid.NewGuid(), envelopeId, reservation), "message-legacy", now.AddSeconds(1),
             TimeSpan.FromSeconds(45));
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
 
         Assert.AreEqual(CollectionDispatchGroupKind.WeekendSubjects,
             acquiredExecution.Envelope!.Compatibility.GroupKind);
@@ -460,13 +460,13 @@ public sealed class CollectionPlatformStoreTests
                 ["name"] = "村山 明（栗東）",
                 ["discoveredFromId"] = "horse-source",
             });
-        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+        var originalLease = await store.AcquireAsync(original.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId!.Value, originalLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
 
         var refresh = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh,
             now.AddSeconds(2));
-        var refreshLease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2),
+        var refreshLease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2),
             TimeSpan.FromMinutes(5));
 
         Assert.IsNotNull(refreshLease);
@@ -491,12 +491,12 @@ public sealed class CollectionPlatformStoreTests
 
         var refresh = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ScheduledRefresh,
             now.AddMinutes(2));
-        await UpdatePersistedCompatibilityAttributesAsync(refresh.TaskId,
+        await UpdatePersistedCompatibilityAttributesAsync(refresh.TaskId!.Value,
             "{\"name\":\"後続resource名\",\"sourceIdentity\":\"changed\"}");
 
         var pending = (await store.GetPendingDispatchesAsync(now.AddMinutes(3), 10))
-            .Single(x => x.Notification.TaskId == refresh.TaskId);
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddMinutes(3), TimeSpan.FromMinutes(5));
+            .Single(x => x.Notification.TaskId == refresh.TaskId!.Value);
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddMinutes(3), TimeSpan.FromMinutes(5));
 
         Assert.AreEqual("定期更新馬", pending.Attributes!["name"]);
         Assert.AreEqual(url.AbsoluteUri, pending.Attributes["sourceIdentity"]);
@@ -522,17 +522,17 @@ public sealed class CollectionPlatformStoreTests
         var explicitRefresh = await store.RequestAsync(Horse, HorseProfile, 7,
             CollectionReason.ScheduledRefresh, now.AddMinutes(2),
             attributes: new Dictionary<string, string> { ["sourceIdentity"] = "new-source" });
-        var explicitLease = await store.AcquireAsync(explicitRefresh.TaskId, 1, now.AddMinutes(2),
+        var explicitLease = await store.AcquireAsync(explicitRefresh.TaskId!.Value, 1, now.AddMinutes(2),
             TimeSpan.FromMinutes(5));
         Assert.IsNotNull(explicitLease);
         Assert.AreEqual("new-source", explicitLease.Attributes["sourceIdentity"]);
         Assert.IsFalse(explicitLease.Attributes.ContainsKey("name"));
-        Assert.IsTrue(await store.CompleteAttemptAsync(explicitRefresh.TaskId, explicitLease.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(explicitRefresh.TaskId!.Value, explicitLease.LeaseToken,
             now.AddMinutes(3), new(CollectionAttemptResult.Succeeded)));
 
         var inherited = await store.RequestAsync(Horse, HorseProfile, 7,
             CollectionReason.ScheduledRefresh, now.AddMinutes(4));
-        var inheritedLease = await store.AcquireAsync(inherited.TaskId, 1, now.AddMinutes(4),
+        var inheritedLease = await store.AcquireAsync(inherited.TaskId!.Value, 1, now.AddMinutes(4),
             TimeSpan.FromMinutes(5));
         Assert.IsNotNull(inheritedLease);
         Assert.AreEqual("new-source", inheritedLease.Attributes["sourceIdentity"]);
@@ -550,16 +550,16 @@ public sealed class CollectionPlatformStoreTests
 
         var explicitEmpty = await store.RequestAsync(Horse, HorseProfile, 7,
             CollectionReason.ScheduledRefresh, now.AddMinutes(2), attributes: new Dictionary<string, string>());
-        var emptyLease = await store.AcquireAsync(explicitEmpty.TaskId, 1, now.AddMinutes(2),
+        var emptyLease = await store.AcquireAsync(explicitEmpty.TaskId!.Value, 1, now.AddMinutes(2),
             TimeSpan.FromMinutes(5));
         Assert.IsNotNull(emptyLease);
         Assert.IsEmpty(emptyLease.Attributes);
-        Assert.IsTrue(await store.CompleteAttemptAsync(explicitEmpty.TaskId, emptyLease.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(explicitEmpty.TaskId!.Value, emptyLease.LeaseToken,
             now.AddMinutes(3), new(CollectionAttemptResult.Succeeded)));
 
         var inheritedEmpty = await store.RequestAsync(Horse, HorseProfile, 7,
             CollectionReason.ScheduledRefresh, now.AddMinutes(4));
-        var inheritedEmptyLease = await store.AcquireAsync(inheritedEmpty.TaskId, 1, now.AddMinutes(4),
+        var inheritedEmptyLease = await store.AcquireAsync(inheritedEmpty.TaskId!.Value, 1, now.AddMinutes(4),
             TimeSpan.FromMinutes(5));
         Assert.IsNotNull(inheritedEmptyLease);
         Assert.IsEmpty(inheritedEmptyLease.Attributes);
@@ -576,18 +576,18 @@ public sealed class CollectionPlatformStoreTests
                 ["name"] = "村山 明（栗東）",
                 ["discoveredFromId"] = "horse-source",
             });
-        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+        var originalLease = await store.AcquireAsync(original.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId!.Value, originalLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded)));
         var empty = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ScheduledRefresh,
             now.AddSeconds(2), attributes: new Dictionary<string, string>());
-        var emptyLease = await store.AcquireAsync(empty.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(empty.TaskId, emptyLease!.LeaseToken,
+        var emptyLease = await store.AcquireAsync(empty.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(empty.TaskId!.Value, emptyLease!.LeaseToken,
             now.AddSeconds(3), new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
 
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
             now.AddSeconds(4));
-        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddSeconds(4),
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddSeconds(4),
             TimeSpan.FromMinutes(5));
 
         Assert.IsNotNull(recoveryLease);
@@ -607,13 +607,13 @@ public sealed class CollectionPlatformStoreTests
                 ["sourceIdentity"] = "source-1",
                 ["discoveredFromId"] = "horse-source",
             });
-        var originalLease = await store.AcquireAsync(original.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId, originalLease!.LeaseToken,
+        var originalLease = await store.AcquireAsync(original.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(original.TaskId!.Value, originalLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
 
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
             now.AddSeconds(2), attributes: new Dictionary<string, string> { ["name"] = "補正名" });
-        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddSeconds(2),
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddSeconds(2),
             TimeSpan.FromMinutes(5));
 
         Assert.IsNotNull(recoveryLease);
@@ -632,7 +632,7 @@ public sealed class CollectionPlatformStoreTests
         await CompleteAsync(store, prior, now);
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", "different-horse"),
             HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(2));
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.IsFalse(lease.Attributes.ContainsKey("name"));
     }
@@ -655,7 +655,7 @@ public sealed class CollectionPlatformStoreTests
             });
         await CompleteAsync(store, other, now.AddMinutes(2));
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(4));
-        var lease = await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual("snapshot-name", lease.Attributes["name"]);
         Assert.IsFalse(lease.Attributes.ContainsKey("sourceIdentity"));
@@ -669,21 +669,21 @@ public sealed class CollectionPlatformStoreTests
         var active = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now);
         var keyed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
             now.AddSeconds(1), batchId: "repair:one", payloadFingerprint: "target-one");
-        Assert.AreEqual(active.TaskId, keyed.TaskId);
-        var lease = await store.AcquireAsync(active.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.AreEqual(active.TaskId!.Value, keyed.TaskId!.Value);
+        var lease = await store.AcquireAsync(active.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(active.TaskId, lease.LeaseToken, now.AddSeconds(3),
+        Assert.IsTrue(await store.CompleteAttemptAsync(active.TaskId!.Value, lease.LeaseToken, now.AddSeconds(3),
             new(CollectionAttemptResult.Succeeded)));
 
         var replay = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery,
             now.AddSeconds(4), batchId: "repair:one", payloadFingerprint: "target-one");
 
-        Assert.AreNotEqual(Guid.Empty, replay.TaskId);
-        Assert.AreNotEqual(active.TaskId, replay.TaskId);
+        Assert.AreNotEqual(Guid.Empty, replay.TaskId!.Value);
+        Assert.AreNotEqual(active.TaskId!.Value, replay.TaskId!.Value);
         Assert.IsTrue(replay.CreatedTask);
         Assert.AreEqual(keyed.RequestId, replay.RequestId);
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync(limit: 10)).Single(x => x.TaskId == replay.TaskId).Status);
+            (await store.GetTasksAsync(limit: 10)).Single(x => x.TaskId == replay.TaskId!.Value).Status);
     }
 
     [TestMethod]
@@ -712,39 +712,39 @@ public sealed class CollectionPlatformStoreTests
             "Initial revision", false);
         var now = new DateTimeOffset(2026, 9, 19, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 1, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 2,
             "Revision materialization", true);
         var higher = await store.RequestAsync(Horse, HorseProfile, 2, CollectionReason.DefinitionChanged,
             now.AddSeconds(1), CollectionLane.Background, (int)CollectionPriority.Background,
             attributes: new Dictionary<string, string> { ["name"] = "new-revision" });
-        Assert.AreEqual(first.TaskId, higher.TaskId);
+        Assert.AreEqual(first.TaskId!.Value, higher.TaskId!.Value);
 
         switch (terminal)
         {
             case "Succeeded":
-                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken,
                     now.AddSeconds(2), new(CollectionAttemptResult.Succeeded)));
                 break;
             case "Failed":
-                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken,
                     now.AddSeconds(2), new(CollectionAttemptResult.PermanentFailure,
                         FailureImpact: CollectionFailureImpact.Isolated)));
                 break;
             case "Cancelled":
-                Assert.IsTrue(await store.CancelTaskAsync(first.TaskId, now.AddSeconds(2)));
-                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken,
+                Assert.IsTrue(await store.CancelTaskAsync(first.TaskId!.Value, now.AddSeconds(2)));
+                Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken,
                     now.AddSeconds(3), new(CollectionAttemptResult.Cancelled)));
                 break;
             case "DeadLetter":
-                Assert.IsTrue(await store.ReconcileDeadLetterAsync(first.TaskId, 1, now.AddSeconds(2)));
+                Assert.IsTrue(await store.ReconcileDeadLetterAsync(first.TaskId!.Value, 1, now.AddSeconds(2)));
                 break;
         }
 
         var tasks = await store.GetTasksAsync(limit: 10);
         Assert.HasCount(2, tasks);
-        var followUp = tasks.Single(x => x.TaskId != first.TaskId);
+        var followUp = tasks.Single(x => x.TaskId != first.TaskId!.Value);
         Assert.AreEqual(2, followUp.RequestedRevision);
         Assert.AreEqual(CollectionTaskStatus.Ready, followUp.Status);
         Assert.AreEqual(CollectionLane.Background, followUp.Lane);
@@ -773,14 +773,14 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
         var second = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddDays(1));
 
         Assert.IsTrue(second.CreatedTask);
-        Assert.AreNotEqual(first.TaskId, second.TaskId);
+        Assert.AreNotEqual(first.TaskId!.Value, second.TaskId!.Value);
         var state = await store.GetStateAsync(Horse, HorseProfile);
         Assert.IsNotNull(state);
         Assert.AreEqual(7, state.AppliedRevision);
@@ -797,9 +797,9 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
         var dispatchCountBeforeDuplicate = (await store.GetPendingDispatchesAsync(now.AddDays(1), 10)).Count;
 
@@ -808,7 +808,7 @@ public sealed class CollectionPlatformStoreTests
 
         Assert.IsFalse(duplicate.CreatedTask);
         Assert.AreEqual(first.RequestId, duplicate.RequestId);
-        Assert.AreEqual(first.TaskId, duplicate.TaskId);
+        Assert.AreEqual(first.TaskId!.Value, duplicate.TaskId!.Value);
         Assert.HasCount(1, await store.GetTasksAsync());
         var detail = await store.GetResourceDetailAsync(Horse, HorseProfile);
         Assert.IsNotNull(detail);
@@ -834,7 +834,7 @@ public sealed class CollectionPlatformStoreTests
             now.AddMinutes(1), explicitUrl: resultUrl);
 
         Assert.IsFalse(reused.CreatedTask);
-        Assert.AreEqual(first.TaskId, reused.TaskId);
+        Assert.AreEqual(first.TaskId!.Value, reused.TaskId!.Value);
         var locations = await store.ResolveLocationsAsync(resource, definition);
         Assert.HasCount(2, locations);
         Assert.AreEqual(RaceArtifactKind.Card, locations.Single(x => x.Url == cardUrl).Artifact);
@@ -847,9 +847,9 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
         await store.RegisterDefinitionAsync(HorseProfile, "Horse profile", ResourceType.Horse, 8,
             "Updated profile extractor", true);
@@ -857,7 +857,7 @@ public sealed class CollectionPlatformStoreTests
         var updated = await store.RequestAsync(Horse, HorseProfile, 8, CollectionReason.Discovery, now.AddDays(1));
 
         Assert.IsTrue(updated.CreatedTask);
-        Assert.AreNotEqual(first.TaskId, updated.TaskId);
+        Assert.AreNotEqual(first.TaskId!.Value, updated.TaskId!.Value);
         Assert.HasCount(2, await store.GetTasksAsync());
     }
 
@@ -871,15 +871,15 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 13, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
 
         var refresh = await store.RequestAsync(Horse, HorseProfile, 7, reason, now.AddDays(1));
 
         Assert.IsTrue(refresh.CreatedTask);
-        Assert.AreNotEqual(first.TaskId, refresh.TaskId);
+        Assert.AreNotEqual(first.TaskId!.Value, refresh.TaskId!.Value);
         Assert.HasCount(2, await store.GetTasksAsync());
     }
 
@@ -910,7 +910,7 @@ public sealed class CollectionPlatformStoreTests
 
         Assert.IsTrue(initial.CreatedTask);
         Assert.IsFalse(manual.CreatedTask);
-        Assert.AreEqual(initial.TaskId, manual.TaskId);
+        Assert.AreEqual(initial.TaskId!.Value, manual.TaskId!.Value);
         Assert.AreNotEqual(initial.RequestId, manual.RequestId);
     }
 
@@ -953,7 +953,7 @@ public sealed class CollectionPlatformStoreTests
             Assert.AreEqual(1, await command.ExecuteNonQueryAsync());
         }
 
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
 
         Assert.IsNotNull(lease);
         Assert.IsEmpty(lease.Locations ?? []);
@@ -1001,8 +1001,8 @@ public sealed class CollectionPlatformStoreTests
             now.AddMinutes(2), CollectionLane.Background, (int)CollectionPriority.Low);
 
         Assert.IsFalse(promoted.CreatedTask);
-        Assert.AreEqual(first.TaskId, promoted.TaskId);
-        Assert.AreEqual(first.TaskId, lower.TaskId);
+        Assert.AreEqual(first.TaskId!.Value, promoted.TaskId!.Value);
+        Assert.AreEqual(first.TaskId!.Value, lower.TaskId!.Value);
         var task = (await store.GetTasksAsync()).Single();
         Assert.AreEqual(CollectionLane.Normal, task.Lane);
         Assert.AreEqual((int)CollectionPriority.High, task.Priority);
@@ -1015,13 +1015,13 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now,
             CollectionLane.Background, (int)CollectionPriority.Background);
-        var lease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
         var promoted = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery,
             now.AddMinutes(1), CollectionLane.Realtime, (int)CollectionPriority.Critical);
 
-        Assert.AreEqual(first.TaskId, promoted.TaskId);
+        Assert.AreEqual(first.TaskId!.Value, promoted.TaskId!.Value);
         var task = (await store.GetTasksAsync()).Single();
         Assert.AreEqual(CollectionTaskStatus.Running, task.Status);
         Assert.AreEqual(CollectionLane.Realtime, task.Lane);
@@ -1035,10 +1035,10 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Discovery, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken,
             now.AddMinutes(1), new(CollectionAttemptResult.NotApplicable,
                 "SubjectNotInProviderDirectory", "提供元の公開名簿対象外です。")));
 
@@ -1056,9 +1056,9 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.Zero);
         var failed = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
             CollectionReason.Initial, now);
-        var failedLease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var failedLease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(failedLease);
-        await store.CompleteAttemptAsync(failed.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(failed.TaskId!.Value, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "OldFailure", "old failure only"));
         var latest = await store.RequestAsync(new(ResourceType.Horse, "JRA", "H001"), HorseProfile, 7,
             CollectionReason.ManualRefresh, now.AddMinutes(1));
@@ -1071,7 +1071,7 @@ public sealed class CollectionPlatformStoreTests
         var counts = await store.GetTaskViewCountsAsync();
 
         Assert.AreEqual(1, allLatest.TotalCount);
-        Assert.AreEqual(latest.TaskId, allLatest.Items.Single().TaskId);
+        Assert.AreEqual(latest.TaskId!.Value, allLatest.Items.Single().TaskId);
         Assert.AreEqual(CollectionTaskStatus.Ready, allLatest.Items.Single().Status);
         Assert.AreEqual(0, failedLatest.TotalCount);
         Assert.AreEqual(0, oldErrorLatest.TotalCount);
@@ -1090,16 +1090,16 @@ public sealed class CollectionPlatformStoreTests
             HorseProfile, 7, CollectionReason.Initial, now.AddMinutes(-10));
         var active = await store.RequestAsync(new(ResourceType.Horse, "JRA", "ACTIVE"),
             HorseProfile, 7, CollectionReason.Initial, now);
-        Assert.IsNotNull(await store.AcquireAsync(active.TaskId, 1, now, TimeSpan.FromMinutes(5)));
-        Assert.IsNotNull(await store.AcquireAsync(expired.TaskId, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(1)));
+        Assert.IsNotNull(await store.AcquireAsync(active.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5)));
+        Assert.IsNotNull(await store.AcquireAsync(expired.TaskId!.Value, 1, now.AddMinutes(-10), TimeSpan.FromMinutes(1)));
 
         var counts = await store.GetTaskViewCountsAsync();
         await using var db = new CollectionPlatformDbContext(
             new DbContextOptionsBuilder<CollectionPlatformDbContext>()
                 .UseSqlite($"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False")
                 .Options);
-        var expiredTask = await db.Tasks.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId);
-        var expiredAttempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId);
+        var expiredTask = await db.Tasks.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId!.Value);
+        var expiredAttempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.TaskId == expired.TaskId!.Value);
 
         Assert.AreEqual(1, counts.Counts["running"]);
         Assert.AreEqual(CollectionTaskStatus.Running, expiredTask.Status);
@@ -1158,20 +1158,20 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var first = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var first = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(first);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, first.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, first.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.TransientFailure, "Http503", HttpStatusCode: 503,
                 RetryAt: now.AddMinutes(2))));
 
         var restarted = CreateStore();
-        var second = await restarted.AcquireAsync(receipt.TaskId, 2, now.AddMinutes(2), TimeSpan.FromMinutes(5));
+        var second = await restarted.AcquireAsync(receipt.TaskId!.Value, 2, now.AddMinutes(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(second);
-        Assert.IsTrue(await restarted.CompleteAttemptAsync(receipt.TaskId, second.LeaseToken, now.AddMinutes(3),
+        Assert.IsTrue(await restarted.CompleteAttemptAsync(receipt.TaskId!.Value, second.LeaseToken, now.AddMinutes(3),
             new(CollectionAttemptResult.Succeeded, RequestedUrl: new("https://example.test/horse/H123"),
                 PageIdentification: "Horse:JRA:H123")));
 
-        var attempts = await restarted.GetAttemptsAsync(receipt.TaskId);
+        var attempts = await restarted.GetAttemptsAsync(receipt.TaskId!.Value);
         Assert.HasCount(2, attempts);
         Assert.AreEqual(CollectionAttemptResult.TransientFailure, attempts[0].Result);
         Assert.AreEqual(503, attempts[0].HttpStatusCode);
@@ -1185,14 +1185,14 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now);
-        Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(1)));
+        Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(1)));
 
         var restarted = CreateStore();
         Assert.AreEqual(1, await restarted.ReclaimExpiredLeasesAsync(now.AddMinutes(2)));
-        var recovered = await restarted.AcquireAsync(receipt.TaskId, 2, now.AddMinutes(2), TimeSpan.FromMinutes(1));
+        var recovered = await restarted.AcquireAsync(receipt.TaskId!.Value, 2, now.AddMinutes(2), TimeSpan.FromMinutes(1));
 
         Assert.IsNotNull(recovered);
-        var attempts = await store.GetAttemptsAsync(receipt.TaskId);
+        var attempts = await store.GetAttemptsAsync(receipt.TaskId!.Value);
         Assert.HasCount(2, attempts);
         Assert.AreEqual("LeaseExpired", attempts[0].ErrorCode);
     }
@@ -1255,10 +1255,10 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         var next = now.AddMinutes(10);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded, NextCollectionAt: next)));
 
         Assert.IsEmpty(await store.GetDueStatesAsync(next.AddTicks(-1)));
@@ -1275,11 +1275,11 @@ public sealed class CollectionPlatformStoreTests
         var url = new Uri("https://example.test/horse/H123");
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now,
             explicitUrl: url);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual(url, lease.Locations![0].Url);
         Assert.AreEqual(0, lease.Locations[0].LocationId);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, RequestedUrl: url, FinalUrl: url,
                 LocationOutcomes: [new(lease.Locations[0].LocationId, CollectionAttemptResult.Succeeded)])));
 
@@ -1324,9 +1324,9 @@ public sealed class CollectionPlatformStoreTests
             new Uri("https://example.test/rate-limited"), ResourceLocationSource.Discovered, now);
         var missing = await store.UpsertLocationAsync(resource, new("race-card"),
             new Uri("https://example.test/missing"), ResourceLocationSource.Discovered, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [
                 new(first, CollectionAttemptResult.UnexpectedPage, "RaceIdMismatch"),
@@ -1360,19 +1360,19 @@ public sealed class CollectionPlatformStoreTests
             ResourceLocationSource.Discovered, now);
         var foreign = await store.UpsertLocationAsync(foreignResource, definition, new("https://example.test/r2"),
             ResourceLocationSource.Discovered, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [new(own, CollectionAttemptResult.Succeeded), new(foreign, CollectionAttemptResult.UnexpectedPage)])));
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(2),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [new(own, CollectionAttemptResult.Succeeded), new(long.MaxValue, CollectionAttemptResult.UnexpectedPage)])));
 
         Assert.AreEqual(ResourceLocationStatus.Unknown,
             (await store.ResolveLocationsAsync(resource, definition)).Single().Status);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(3),
             new(CollectionAttemptResult.Succeeded,
                 LocationOutcomes: [new(own, CollectionAttemptResult.Succeeded)])));
     }
@@ -1385,20 +1385,20 @@ public sealed class CollectionPlatformStoreTests
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
         var location = await store.UpsertLocationAsync(Horse, HorseProfile,
             new("https://example.test/horse/H123"), ResourceLocationSource.Discovered, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [
                 new(location, CollectionAttemptResult.Succeeded),
                 new(location, CollectionAttemptResult.UnexpectedPage, "RaceIdMismatch"),
             ])));
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(2),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes: Enumerable.Range(0, 101)
                 .Select(_ => new ResourceLocationOutcome(location, CollectionAttemptResult.Succeeded)).ToList())));
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(3),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [
                 new(location, CollectionAttemptResult.Succeeded),
@@ -1416,16 +1416,17 @@ public sealed class CollectionPlatformStoreTests
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
         var location = await store.UpsertLocationAsync(Horse, HorseProfile,
             new("https://example.test/horse/H123"), ResourceLocationSource.Discovered, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, "wrong-lease", now.AddSeconds(1),
+        Assert.IsFalse(await store.CompleteAttemptAsync(taskId, "wrong-lease", now.AddSeconds(1),
             new(CollectionAttemptResult.UnexpectedPage,
                 LocationOutcomes: [new(location, CollectionAttemptResult.UnexpectedPage)])));
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(2),
+        Assert.IsTrue(await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(2),
             new(CollectionAttemptResult.Succeeded,
                 LocationOutcomes: [new(location, CollectionAttemptResult.Succeeded)])));
-        Assert.IsFalse(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(3),
+        Assert.IsFalse(await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(3),
             new(CollectionAttemptResult.UnexpectedPage,
                 LocationOutcomes: [new(location, CollectionAttemptResult.UnexpectedPage)])));
 
@@ -1468,7 +1469,7 @@ public sealed class CollectionPlatformStoreTests
         await connection.OpenAsync();
         await using var history = connection.CreateCommand();
         history.CommandText = "SELECT MAX(version) FROM collection_schema_history;";
-        Assert.AreEqual(17L, (long)(await history.ExecuteScalarAsync())!);
+        Assert.AreEqual(18L, (long)(await history.ExecuteScalarAsync())!);
         await using var existing = connection.CreateCommand();
         existing.CommandText = "SELECT Name FROM collection_definitions WHERE DefinitionId = 'horse-profile';";
         Assert.AreEqual("Existing definition", await existing.ExecuteScalarAsync());
@@ -1496,13 +1497,14 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now,
+        Assert.IsTrue(await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now,
             new(CollectionAttemptResult.TransientFailure, "Http503")));
 
-        var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+        var task = (await store.GetTasksAsync()).Single(x => x.TaskId == taskId);
         Assert.AreEqual(CollectionTaskStatus.Ready, task.Status);
         Assert.IsTrue(task.AvailableAt > now);
     }
@@ -1513,14 +1515,15 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         await store.SetPausedAsync(true, "maintenance", now);
 
         var restarted = CreateStore();
         Assert.IsTrue((await restarted.GetPipelineStateAsync()).IsPaused);
-        Assert.IsNull(await restarted.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5)));
+        Assert.IsNull(await restarted.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5)));
 
         await restarted.SetPausedAsync(false, null, now.AddMinutes(1));
-        Assert.IsNotNull(await restarted.AcquireAsync(receipt.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
+        Assert.IsNotNull(await restarted.AcquireAsync(taskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
     }
 
     [TestMethod]
@@ -1530,10 +1533,10 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
 
-        Assert.IsTrue(await store.CancelTaskAsync(receipt.TaskId, now.AddSeconds(1)));
+        Assert.IsTrue(await store.CancelTaskAsync(receipt.TaskId!.Value, now.AddSeconds(1)));
 
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
         Assert.IsFalse(await store.HasActiveTaskAsync(Horse, HorseProfile));
         Assert.IsEmpty(await store.GetPendingDispatchesAsync(now.AddMinutes(1), 10));
     }
@@ -1545,11 +1548,11 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
 
-        Assert.IsFalse(await store.ReconcileDeadLetterAsync(receipt.TaskId, 0, now));
-        Assert.IsTrue(await store.ReconcileDeadLetterAsync(receipt.TaskId, 1, now, "lambda failed"));
+        Assert.IsFalse(await store.ReconcileDeadLetterAsync(receipt.TaskId!.Value, 0, now));
+        Assert.IsTrue(await store.ReconcileDeadLetterAsync(receipt.TaskId!.Value, 1, now, "lambda failed"));
 
         Assert.AreEqual(CollectionTaskStatus.DeadLetter,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
         var notifications = await store.GetPendingFailureNotificationsAsync(now.AddSeconds(1), 10);
         Assert.HasCount(1, notifications);
         Assert.AreEqual("DeadLetterQueue", notifications[0].ErrorCode);
@@ -1564,9 +1567,9 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")));
 
         Assert.IsFalse((await store.GetPipelineStateAsync()).IsPaused);
@@ -1580,8 +1583,8 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now,
             attributes: new Dictionary<string, string> { ["name"] = "A" });
-        var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var lease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Broken"));
         await store.SetPausedAsync(false, null, now.AddSeconds(2));
         await using (var connection = new SqliteConnection(
@@ -1593,7 +1596,7 @@ public sealed class CollectionPlatformStoreTests
                 INSERT INTO collection_active_tasks (ResourcePk, DefinitionId, TaskId)
                 SELECT ResourcePk, DefinitionId, TaskId FROM collection_tasks WHERE TaskId = $taskId;
                 """;
-            command.Parameters.AddWithValue("$taskId", failed.TaskId.ToString("D"));
+            command.Parameters.AddWithValue("$taskId", failed.TaskId!.Value.ToString("D"));
             await command.ExecuteNonQueryAsync();
         }
 
@@ -1601,8 +1604,8 @@ public sealed class CollectionPlatformStoreTests
             now.AddMinutes(1));
 
         Assert.IsTrue(recovery.CreatedTask);
-        Assert.AreNotEqual(failed.TaskId, recovery.TaskId);
-        Assert.IsNotNull(await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
+        Assert.AreNotEqual(failed.TaskId!.Value, recovery.TaskId!.Value);
+        Assert.IsNotNull(await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5)));
     }
 
     [TestMethod]
@@ -1620,7 +1623,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(0, recovered.DeadLetteredTasks);
         Assert.IsEmpty(await store.GetPendingDispatchesAsync(now.AddHours(2), 10));
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
     }
 
     [TestMethod]
@@ -1713,9 +1716,9 @@ public sealed class CollectionPlatformStoreTests
         var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
             now, CollectionLane.Background, (int)CollectionPriority.Background,
             batchId: "recovery:jra:same-time:1");
-        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(recoveryLease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease.LeaseToken, now,
+        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId!.Value, recoveryLease.LeaseToken, now,
             new(CollectionAttemptResult.Succeeded)));
 
         Assert.IsEmpty((await store.GetBackfillBatchAsync("jra:same-time"))!.Holes);
@@ -1741,9 +1744,9 @@ public sealed class CollectionPlatformStoreTests
         var recovery = await store.RequestAsync(failedTask.Resource, discovery, 1, CollectionReason.Recovery,
             now.AddMinutes(-1), CollectionLane.Background, (int)CollectionPriority.Background,
             batchId: "recovery:jra:ordered:old");
-        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(recoveryLease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease.LeaseToken, now,
+        Assert.IsTrue(await store.CompleteAttemptAsync(recovery.TaskId!.Value, recoveryLease.LeaseToken, now,
             new(CollectionAttemptResult.Succeeded)));
 
         Assert.HasCount(1, (await store.GetBackfillBatchAsync("jra:ordered"))!.Holes);
@@ -1776,7 +1779,7 @@ public sealed class CollectionPlatformStoreTests
             $"Data Source={Path.Combine(_directory, "collection-platform.db")};Pooling=False");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 17;";
+        command.CommandText = "SELECT COUNT(*) FROM collection_schema_history WHERE version = 18;";
         Assert.AreEqual(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 
@@ -1818,9 +1821,9 @@ public sealed class CollectionPlatformStoreTests
             explicitUrl: new Uri("https://example.test/horse/H123"));
         await store.UpsertLocationAsync(Horse, HorseProfile, new Uri("https://example.test/horse/H123"),
             ResourceLocationSource.Manual, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded, RequestedUrl: new("https://example.test/horse/H123"),
                 PageIdentification: "Horse:JRA:H123")));
 
@@ -1847,15 +1850,15 @@ public sealed class CollectionPlatformStoreTests
         var executionBatchId = Guid.NewGuid();
         var envelopeId = Guid.NewGuid();
 
-        var firstLease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5),
+        var firstLease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5),
             new CollectionAttemptCorrelation(executionBatchId, envelopeId, "sqs-123", "lambda-456", 1, 2));
-        var secondLease = await store.AcquireAsync(second.TaskId, 1, now.AddSeconds(1), TimeSpan.FromMinutes(5),
+        var secondLease = await store.AcquireAsync(second.TaskId!.Value, 1, now.AddSeconds(1), TimeSpan.FromMinutes(5),
             new CollectionAttemptCorrelation(executionBatchId, envelopeId, "sqs-123", "lambda-456", 2, 2));
         Assert.IsNotNull(firstLease);
         Assert.IsNotNull(secondLease);
-        await store.CompleteAttemptAsync(first.TaskId, firstLease.LeaseToken, now.AddSeconds(2),
+        await store.CompleteAttemptAsync(first.TaskId!.Value, firstLease.LeaseToken, now.AddSeconds(2),
             new(CollectionAttemptResult.Succeeded));
-        await store.CompleteAttemptAsync(second.TaskId, secondLease.LeaseToken, now.AddSeconds(3),
+        await store.CompleteAttemptAsync(second.TaskId!.Value, secondLease.LeaseToken, now.AddSeconds(3),
             new(CollectionAttemptResult.ParseFailure, "Parser"));
 
         var detail = await store.GetResourceDetailAsync(Horse, HorseProfile);
@@ -1887,9 +1890,9 @@ public sealed class CollectionPlatformStoreTests
             var receipt = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Initial, now);
             if (index == 55)
             {
-                var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+                var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
                 Assert.IsNotNull(lease);
-                await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+                await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
                     new(CollectionAttemptResult.ParseFailure, "DistinctParserError", "grade parse failed"));
             }
         }
@@ -1913,10 +1916,10 @@ public sealed class CollectionPlatformStoreTests
         var now = new DateTimeOffset(2026, 9, 19, 1, 0, 0, TimeSpan.Zero);
         var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 19));
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         var start = now.AddHours(5);
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotYetAvailable, "ResultNotConfirmed", RetryAt: start,
                 StageOutcomes:
                 [
@@ -1941,7 +1944,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(RaceArtifactStatus.AwaitingPublication, monitoringRace.ResultStatus);
         Assert.AreEqual(start, monitoringRace.OfficialStartAt);
         Assert.IsTrue(await store.HasActiveTaskAsync(race, definition));
-        var resumed = await store.AcquireAsync(receipt.TaskId, 2, start, TimeSpan.FromMinutes(5));
+        var resumed = await store.AcquireAsync(receipt.TaskId!.Value, 2, start, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(resumed);
         Assert.AreEqual(RaceArtifactStatus.Current.ToString(), resumed.Attributes["cardArtifactStatus"]);
         Assert.AreEqual(start, DateTimeOffset.Parse(resumed.Attributes["officialStartAt"]));
@@ -1958,9 +1961,9 @@ public sealed class CollectionPlatformStoreTests
         var receipt = await store.RequestAsync(race, definition, 2, CollectionReason.Initial, now);
         var locationId = await store.UpsertLocationAsync(race, definition,
             new Uri("https://example.test/card/10"), ResourceLocationSource.Discovered, DateTimeOffset.UtcNow);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
 
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.Succeeded, LocationOutcomes:
             [new(locationId, CollectionAttemptResult.Succeeded, Artifact: RaceArtifactKind.Card)]));
 
@@ -1979,8 +1982,8 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
         var initial = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now,
             effectiveDate: date);
-        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+        var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, initialLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes:
             [new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true)])));
         var before = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
@@ -1988,7 +1991,7 @@ public sealed class CollectionPlatformStoreTests
         var cardUrl = new Uri("https://example.test/card/1");
         var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.ManualRefresh,
             now.AddSeconds(2), explicitUrl: cardUrl);
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.AreEqual("Current", lease!.Attributes["resultArtifactStatus"]);
         var sessions = new FakeJraSessionFactory
         {
@@ -2004,7 +2007,7 @@ public sealed class CollectionPlatformStoreTests
             timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(lease, CancellationToken.None);
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, lease.LeaseToken,
             now.AddSeconds(3), completion));
         var after = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
             .Single(x => x.Artifact == RaceArtifactKind.Result);
@@ -2025,8 +2028,8 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
         var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 19));
-        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+        var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, initialLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes:
             [
                 new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true),
@@ -2035,7 +2038,7 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "new parser", false);
         var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged,
             now.AddSeconds(2));
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual("Due", lease.Attributes["cardArtifactStatus"]);
         Assert.AreEqual("Due", lease.Attributes["resultArtifactStatus"]);
@@ -2052,7 +2055,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
         Assert.HasCount(1, cards.RefreshRequests);
         Assert.HasCount(1, results.Requests);
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, lease.LeaseToken,
             now.AddSeconds(3), completion));
         var upgraded = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
         Assert.IsTrue(upgraded.All(x => x.Status == RaceArtifactStatus.Current && x.AppliedRevision == 2));
@@ -2071,20 +2074,20 @@ public sealed class CollectionPlatformStoreTests
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 1, "first", false);
         var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now,
             effectiveDate: new DateOnly(2026, 9, 1));
-        var initialLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         var stages = new List<CollectionStageOutcome>
         {
             new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true),
         };
         if (hasCard)
             stages.Add(new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true));
-        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken,
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, initialLease!.LeaseToken,
             now.AddSeconds(1), new(CollectionAttemptResult.Succeeded, StageOutcomes: stages)));
         if (revision > 1)
             await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, revision, "new parser", false);
         var refresh = await store.RequestAsync(resource, definition, revision, CollectionReason.ManualRefresh,
             now.AddSeconds(2));
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         var cards = new FakeJraRaceCardCollectionWorkflow();
         var results = new FakeJraRaceResultCollectionWorkflow
         {
@@ -2104,7 +2107,7 @@ public sealed class CollectionPlatformStoreTests
         var unavailableUpgrade = hasCard && revision > 1;
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
         Assert.IsEmpty(cards.RefreshRequests);
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease!.LeaseToken, now.AddSeconds(3), completion));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(3), completion));
         var detail = (await store.GetResourceDetailAsync(resource, definition))!;
         Assert.AreEqual(revision, detail.State!.AppliedRevision);
         var card = detail.RaceArtifacts!.SingleOrDefault(x => x.Artifact == RaceArtifactKind.Card);
@@ -2123,10 +2126,10 @@ public sealed class CollectionPlatformStoreTests
         {
             await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "third parser", false);
             var next = await store.RequestAsync(resource, definition, 3, CollectionReason.DefinitionChanged, now.AddSeconds(4));
-            var nextLease = await store.AcquireAsync(next.TaskId, 1, now.AddSeconds(4), TimeSpan.FromMinutes(5));
+            var nextLease = await store.AcquireAsync(next.TaskId!.Value, 1, now.AddSeconds(4), TimeSpan.FromMinutes(5));
             var nextCompletion = await handler.CollectAsync(nextLease!, CancellationToken.None);
             Assert.AreEqual(CollectionAttemptResult.Succeeded, nextCompletion.Result, System.Text.Json.JsonSerializer.Serialize(nextCompletion));
-            Assert.IsTrue(await store.CompleteAttemptAsync(next.TaskId, nextLease!.LeaseToken, now.AddSeconds(5), nextCompletion));
+            Assert.IsTrue(await store.CompleteAttemptAsync(next.TaskId!.Value, nextLease!.LeaseToken, now.AddSeconds(5), nextCompletion));
             var nextCard = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
                 .Single(x => x.Artifact == RaceArtifactKind.Card);
             Assert.AreEqual(3, nextCard.RequiredRevision);
@@ -2157,8 +2160,8 @@ public sealed class CollectionPlatformStoreTests
         if (existingFacet)
         {
             var initial = await store.RequestAsync(resource, definition, 1, CollectionReason.Initial, now.AddMinutes(-2), effectiveDate: date);
-            var initialLease = await store.AcquireAsync(initial.TaskId, 1, now.AddMinutes(-2), TimeSpan.FromMinutes(5));
-            Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, initialLease!.LeaseToken, now.AddMinutes(-1),
+            var initialLease = await store.AcquireAsync(initial.TaskId!.Value, 1, now.AddMinutes(-2), TimeSpan.FromMinutes(5));
+            Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId!.Value, initialLease!.LeaseToken, now.AddMinutes(-1),
                 new(CollectionAttemptResult.Succeeded, StageOutcomes:
                 [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)])));
         }
@@ -2171,7 +2174,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(0, (await store.MergeLegacyRaceDetailsAsync(true, now.AddSeconds(1))).SourceResources);
         await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "upgrade", false);
         var refresh = await store.RequestAsync(resource, definition, 2, CollectionReason.DefinitionChanged, now.AddSeconds(2));
-        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(refresh.TaskId!.Value, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
         var results = new FakeJraRaceResultCollectionWorkflow
         {
             ResultFactory = race => new(race, "created-race", [1], [], "https://example.test/result", true),
@@ -2180,7 +2183,7 @@ public sealed class CollectionPlatformStoreTests
             _ => new FakeJraRaceCardCollectionWorkflow(), _ => results, timeProvider: new FixedTimeProvider(now));
         var completion = await handler.CollectAsync(lease!, CancellationToken.None);
         Assert.AreEqual(CollectionAttemptResult.Succeeded, completion.Result);
-        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease!.LeaseToken, now.AddSeconds(3), completion));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(3), completion));
         var after = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!;
         Assert.AreEqual(RaceArtifactStatus.Unavailable, after.Single(x => x.Artifact == RaceArtifactKind.Card).Status);
         Assert.AreEqual(card.LastPersistedAt, after.Single(x => x.Artifact == RaceArtifactKind.Card).LastPersistedAt);
@@ -2340,8 +2343,8 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsEmpty(applied.Errors);
         Assert.AreEqual(1, applied.SupplementRequests);
         var tasks = await store.GetTasksAsync();
-        Assert.AreEqual(CollectionTaskStatus.Cancelled, tasks.Single(x => x.TaskId == legacy.TaskId).Status);
-        Assert.IsTrue(tasks.Any(x => x.TaskId != legacy.TaskId && x.Definition.Value == "race-detail"
+        Assert.AreEqual(CollectionTaskStatus.Cancelled, tasks.Single(x => x.TaskId == legacy.TaskId!.Value).Status);
+        Assert.IsTrue(tasks.Any(x => x.TaskId != legacy.TaskId!.Value && x.Definition.Value == "race-detail"
             && x.Status == CollectionTaskStatus.Ready));
     }
 
@@ -2457,7 +2460,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.IsEmpty(extreme.Requests);
         Assert.IsEmpty(extreme.Tasks);
         Assert.IsEmpty(extreme.Attempts);
-        Assert.AreEqual(receipt.TaskId, extreme.LatestTask?.TaskId);
+        Assert.AreEqual(receipt.TaskId!.Value, extreme.LatestTask?.TaskId);
     }
 
     [TestMethod]
@@ -2489,9 +2492,9 @@ public sealed class CollectionPlatformStoreTests
     private static async Task CompleteAsync(CollectionPlatformStore store, CollectionRequestReceipt receipt,
         DateTimeOffset now)
     {
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
     }
 
@@ -2507,9 +2510,9 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var failedLease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var failedLease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(failedLease);
-        await store.CompleteAttemptAsync(failed.TaskId, failedLease.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(failed.TaskId!.Value, failedLease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Broken"));
         await store.SetPausedAsync(false, null, now.AddSeconds(2));
         var open = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
@@ -2534,11 +2537,11 @@ public sealed class CollectionPlatformStoreTests
         var duringFailure = during!.Failures!.Single();
         Assert.AreEqual(CollectionFailureResolutionStatus.RecoveryInProgress,
             duringFailure.ResolutionStatus);
-        Assert.AreEqual(recovery.TaskId, duringFailure.RecoveryTaskId);
+        Assert.AreEqual(recovery.TaskId!.Value, duringFailure.RecoveryTaskId);
 
-        var lease = await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddMinutes(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        await store.CompleteAttemptAsync(recovery.TaskId, lease.LeaseToken, now.AddMinutes(3),
+        await store.CompleteAttemptAsync(recovery.TaskId!.Value, lease.LeaseToken, now.AddMinutes(3),
             new(CollectionAttemptResult.Succeeded));
         var resolved = await store.GetResourceDetailAsync(Horse, HorseProfile);
         var resolvedFailure = resolved!.Failures!.Single();
@@ -2552,8 +2555,8 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var failedLease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(failed.TaskId, failedLease!.LeaseToken, now.AddSeconds(1),
+        var failedLease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId!.Value, failedLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "OldFailure",
                 FailureImpact: CollectionFailureImpact.Isolated));
         var notification = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10)).Single();
@@ -2567,7 +2570,7 @@ public sealed class CollectionPlatformStoreTests
         Assert.AreEqual(1, repeated.AlreadyClosedCount);
         Assert.IsEmpty(await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10));
         Assert.AreEqual(CollectionTaskStatus.Failed,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == failed.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == failed.TaskId!.Value).Status);
         Assert.AreEqual(CollectionStateStatus.Failed, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
         var oldFailure = (await store.GetResourceDetailAsync(Horse, HorseProfile))!.Failures!.Single();
         Assert.AreEqual(CollectionFailureResolutionStatus.Superseded, oldFailure.ResolutionStatus);
@@ -2575,8 +2578,8 @@ public sealed class CollectionPlatformStoreTests
 
         var next = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh,
             now.AddMinutes(4));
-        var nextLease = await store.AcquireAsync(next.TaskId, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(next.TaskId, nextLease!.LeaseToken, now.AddMinutes(5),
+        var nextLease = await store.AcquireAsync(next.TaskId!.Value, 1, now.AddMinutes(4), TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(next.TaskId!.Value, nextLease!.LeaseToken, now.AddMinutes(5),
             new(CollectionAttemptResult.PermanentFailure, "NewFailure",
                 FailureImpact: CollectionFailureImpact.Isolated));
         var newNotification = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(6), 10)).Single();
@@ -2595,8 +2598,8 @@ public sealed class CollectionPlatformStoreTests
         foreach (var resource in new[] { firstResource, secondResource })
         {
             var failed = await store.RequestAsync(resource, HorseProfile, 7, CollectionReason.Initial, now);
-            var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var lease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+            await store.CompleteAttemptAsync(failed.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.PermanentFailure, "Broken",
                     FailureImpact: CollectionFailureImpact.Isolated));
         }
@@ -2619,13 +2622,13 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var first = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var firstLease = await store.AcquireAsync(first.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(first.TaskId, firstLease!.LeaseToken, now.AddSeconds(1),
+        var firstLease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(first.TaskId!.Value, firstLease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Old"));
         await store.SetPausedAsync(false, null, now.AddSeconds(2));
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(1));
-        var recoveryLease = await store.AcquireAsync(recovery.TaskId, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(recovery.TaskId, recoveryLease!.LeaseToken, now.AddMinutes(2),
+        var recoveryLease = await store.AcquireAsync(recovery.TaskId!.Value, 1, now.AddMinutes(1), TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(recovery.TaskId!.Value, recoveryLease!.LeaseToken, now.AddMinutes(2),
             new(CollectionAttemptResult.PermanentFailure, "New"));
 
         var actionable = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10)).Single();
@@ -2642,12 +2645,12 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var failed = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(failed.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(failed.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var lease = await store.AcquireAsync(failed.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(failed.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Broken"));
         var recovery = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Recovery, now.AddMinutes(1));
 
-        Assert.IsTrue(await store.CancelTaskAsync(recovery.TaskId, now.AddMinutes(2)));
+        Assert.IsTrue(await store.CancelTaskAsync(recovery.TaskId!.Value, now.AddMinutes(2)));
 
         var actionable = (await store.GetActionableFailureNotificationsAsync(now.AddMinutes(3), 10)).Single();
         Assert.AreEqual(CollectionFailureResolutionStatus.Open, actionable.ResolutionStatus);
@@ -2680,7 +2683,7 @@ public sealed class CollectionPlatformStoreTests
 
         Assert.AreEqual(1, result.CancelledTasks);
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
         Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
         await Assert.ThrowsExactlyAsync<CollectionResourceSuppressedException>(() =>
             store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.ManualRefresh, now.AddMinutes(2)));
@@ -2695,7 +2698,7 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
 
         var first = await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1",
@@ -2705,12 +2708,12 @@ public sealed class CollectionPlatformStoreTests
 
         Assert.AreEqual(1, first.RunningCancellationRequests);
         Assert.AreEqual(0, second.RunningCancellationRequests);
-        Assert.IsFalse(await store.HeartbeatAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(2),
+        Assert.IsFalse(await store.HeartbeatAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(2),
             TimeSpan.FromMinutes(5)));
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddMinutes(3),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddMinutes(3),
             new(CollectionAttemptResult.Cancelled)));
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
         Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
     }
 
@@ -2720,9 +2723,9 @@ public sealed class CollectionPlatformStoreTests
         var now = DateTimeOffset.UtcNow;
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
 
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "StructuralPageFailure", "missing heading",
                 FailureImpact: CollectionFailureImpact.Isolated)));
 
@@ -2749,15 +2752,15 @@ public sealed class CollectionPlatformStoreTests
         {
             var receipt = await store.RequestAsync(new(ResourceType.Horse, "JRA", $"CLOSED-{index}"),
                 HorseProfile, 7, CollectionReason.Initial, now.AddSeconds(index));
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddSeconds(index),
+            var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now.AddSeconds(index),
                 TimeSpan.FromMinutes(5));
             Assert.IsNotNull(lease);
-            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken,
+            Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken,
                 now.AddSeconds(index * 10),
                 new(CollectionAttemptResult.TransientFailure, "TargetClosedException",
                     "Target page, context or browser has been closed")));
 
-            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value);
             Assert.AreEqual(index < 3 ? CollectionTaskStatus.Ready : CollectionTaskStatus.Failed, task.Status);
             Assert.AreEqual(index >= 3, (await store.GetPipelineStateAsync()).IsPaused);
         }
@@ -2773,9 +2776,9 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "Deleted source horse"));
         Assert.HasCount(1, await store.GetActionableFailureNotificationsAsync(now.AddMinutes(1), 10));
 
@@ -2790,13 +2793,13 @@ public sealed class CollectionPlatformStoreTests
         var store = await CreateStoreAsync();
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(Horse, HorseProfile, 7, CollectionReason.Initial, now);
-        Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(1)));
+        Assert.IsNotNull(await store.AcquireAsync(receipt.TaskId!.Value, 1, now, TimeSpan.FromMinutes(1)));
         await store.SuppressResourceAsync(Horse, "Merged horse was deleted", "repair-1", now.AddSeconds(10));
 
         Assert.AreEqual(1, await store.ReclaimExpiredLeasesAsync(now.AddMinutes(2)));
 
         Assert.AreEqual(CollectionTaskStatus.Cancelled,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId!.Value).Status);
         Assert.AreEqual(CollectionStateStatus.Unavailable, (await store.GetStateAsync(Horse, HorseProfile))!.Status);
     }
 

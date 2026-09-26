@@ -81,13 +81,13 @@ public sealed class CollectionRevisionOperationsTests
         var store = await CreateStoreAsync(directory.Path);
         var resource = new ResourceKey(ResourceType.Horse, "JRA", "running-old-revision");
         var old = await store.RequestAsync(resource, Definition, 7, CollectionReason.Initial, Now);
-        var oldLease = await store.AcquireAsync(old.TaskId, 1, Now, TimeSpan.FromMinutes(5));
+        var oldLease = await store.AcquireAsync(old.TaskId!.Value, 1, Now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(oldLease);
         await store.AddRevisionAndApplyImpactAsync(Definition, 8, "all", new(RevisionImpactScopeType.All, ""), [], Now);
 
         var expansion = await store.ExpandRevisionRecollectionAsync(Definition, 8, [], Now);
         Assert.AreEqual(0, expansion.RequestsCreated, "The revision request must not create a concurrent active task.");
-        Assert.IsTrue(await store.CompleteAttemptAsync(old.TaskId, oldLease.LeaseToken, Now.AddMinutes(1),
+        Assert.IsTrue(await store.CompleteAttemptAsync(old.TaskId!.Value, oldLease.LeaseToken, Now.AddMinutes(1),
             new(CollectionAttemptResult.Succeeded)));
 
         var tasks = await store.GetTasksAsync();
@@ -111,7 +111,7 @@ public sealed class CollectionRevisionOperationsTests
     {
         var receipt = await store.RequestAsync(resource, Definition, 7, CollectionReason.Initial, Now,
             effectiveDate: date, attributes: new Dictionary<string, string> { ["layout"] = layout });
-        await CompleteAsync(store, receipt.TaskId, CollectionAttemptResult.Succeeded);
+        await CompleteAsync(store, receipt.TaskId!.Value, CollectionAttemptResult.Succeeded);
     }
 
     private static async Task CompleteAsync(CollectionPlatformStore store, Guid taskId, CollectionAttemptResult result)

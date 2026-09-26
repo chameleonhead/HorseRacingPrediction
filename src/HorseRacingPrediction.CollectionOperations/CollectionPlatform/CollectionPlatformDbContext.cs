@@ -23,6 +23,7 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
     public DbSet<CollectionDispatchOutboxEntity> DispatchOutbox => Set<CollectionDispatchOutboxEntity>();
     public DbSet<CollectionExecutionLeaseEntity> ExecutionLeases => Set<CollectionExecutionLeaseEntity>();
     public DbSet<CollectionPlatformControlEntity> Controls => Set<CollectionPlatformControlEntity>();
+    public DbSet<RaceRepairHoldEntity> RaceRepairHolds => Set<RaceRepairHoldEntity>();
     public DbSet<CollectionFailureNotificationEntity> FailureNotifications => Set<CollectionFailureNotificationEntity>();
     public DbSet<BackfillBatchEntity> BackfillBatches => Set<BackfillBatchEntity>();
 
@@ -34,6 +35,12 @@ public sealed class CollectionPlatformDbContext(DbContextOptions<CollectionPlatf
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<RaceRepairHoldEntity>(e =>
+        {
+            e.ToTable("race_repair_holds"); e.HasKey(x => new { x.RaceId, x.Generation });
+            e.HasIndex(x => x.OperationId).IsUnique();
+            e.HasIndex(x => x.RaceId).IsUnique().HasFilter("ReleasedAt IS NULL");
+        });
         modelBuilder.Entity<CollectionResourceEntity>(e =>
         {
             e.ToTable("collection_resources"); e.HasKey(x => x.ResourcePk);

@@ -1,6 +1,6 @@
 # Race出走馬の後着データ補完
 
-- Status: Proposed
+- Status: Approved
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
@@ -17,7 +17,7 @@
 
 ## 2026-09-26 実装・ローカル確認（最新）
 
-**利用者の追加説明を反映:** 停止解除は利用者が手動実行した。解除経路不明を理由としたAWS再認証/ログ提供依頼は取り消す。[対象レースの保留・補正・再取得案](decisions/20260926-scoped-repair-hold.md)を作成した。旧設計の実装/配備承認は履歴として維持し、新たな保留方式の承認待ちのため親StatusもProposedへ揃える。今回の作業は文書のみで、本番操作や追加実装は行っていない。
+**最新checkpoint:** 停止解除は利用者が手動実行したため、解除経路調査のAWS再認証依頼は取り消した。[対象レースの保留・補正・再取得](decisions/20260926-scoped-repair-hold.md)は利用者承認後に実装し、実SQLite、実HTTP、2プロセス、backup復元と異常系をローカル検証中。親StatusはApprovedを維持する。Linux CI/配備と未解明の過去test失敗の処置は未完了。本番hold/apply/release/resumeは未実行で、対象・previewへの別承認を要する。
 
 配備後のread-only確認で運用上の設計不足を検出した。中山5R/阪神11Rの全頭公式source一致と参照分類は確認できたが、Ready taskが補正を阻止する。キャンセルしても高revision実体化/停止中のschedulerで再生成され得るため、取消しを繰り返す運用は採らない。追加設計のC206/C207、RP-T5に詳細を記録した。対象限定保留の設計判断が必要であり、本番補正・再開は未実行。実装済み範囲の成功を全課題解消とは扱わない。
 
@@ -121,6 +121,7 @@
 | RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 配備・限定要求済み、別Race馬番不一致で再停止。安全補正の別途承認が必要 | Externally blocked | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | RP-fixture | AC201 未確定Card反例test | identity_guard_tests | Worker | frozen parser contract | tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs | 11件（HTML 4件）、関連71件＋skip1、Main全Scraping305件 | agent-audits/RP-fixture-A1.json | Verified | Worker — frozen local fixture | RP-fixture-A1 | unavailable; retries 1; corrections 0; reviews 2 |
+| H3N | AC216 nullable receipt caller | receipt_test_worker | Worker | frozen nullable receipt | tests/HorseRacingPrediction.Api.Tests existing collection receipt callers excluding RaceAssignmentRepairTests.cs and TestApplicationFactory.cs; tests/HorseRacingPrediction.Collector.Tests existing collection receipt callers | API/Collector build and affected class regression | API76/Collector139 pass; H3N-A1 | Verified | Worker — frozen local type adaptation | H3N-A1 | unavailable; retries 1; corrections 0; reviews 1 |
 
 ## 2026-09-19 設計・実装履歴（本文）
 

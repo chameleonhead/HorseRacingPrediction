@@ -83,7 +83,7 @@ public sealed class CollectionRequestBatchBindingEntity
     public string BatchItemId { get; set; } = string.Empty;
     public string PayloadFingerprint { get; set; } = string.Empty;
     public Guid RequestId { get; set; }
-    public Guid TaskId { get; set; }
+    public Guid? TaskId { get; set; }
 }
 
 public sealed class CollectionTaskEntity
@@ -104,6 +104,7 @@ public sealed class CollectionTaskEntity
     public string? LeaseToken { get; set; }
     public DateTimeOffset? LeaseExpiresAt { get; set; }
     public long DispatchGeneration { get; set; }
+    public long RaceHoldGeneration { get; set; }
     public int AttemptCount { get; set; }
     public DateTimeOffset? CancellationRequestedAt { get; set; }
     public string? OriginDefinitionId { get; set; }
@@ -117,6 +118,18 @@ public sealed class CollectionPlatformControlEntity
     public bool IsPaused { get; set; }
     public string? Reason { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class RaceRepairHoldEntity
+{
+    public string RaceId { get; set; } = string.Empty;
+    public long Generation { get; set; }
+    public string OperationId { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ReleasedAt { get; set; }
+    public string? AssignmentFingerprint { get; set; }
+    public string? ReleaseOperationId { get; set; }
 }
 
 public sealed class CollectionFailureNotificationEntity

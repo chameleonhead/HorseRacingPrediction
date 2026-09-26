@@ -174,8 +174,8 @@ public sealed partial class CollectionPlatformStore
                     x.ResourcePk == keyedRequest.ResourcePk && x.DefinitionId == keyedRequest.DefinitionId,
                     cancellationToken).ConfigureAwait(false);
                 if (keyedTask is not null || keyedActive is not null)
-                    return new(keyedRequest.RequestId,
-                        keyedTask?.TaskId ?? keyedActive!.TaskId, false);
+                    return await ExistingReceiptAsync(db, keyedRequest.RequestId,
+                        keyedTask?.TaskId ?? keyedActive!.TaskId, cancellationToken);
                 resumableRequest = keyedRequest;
             }
         }
@@ -263,14 +263,15 @@ public sealed partial class CollectionPlatformStore
                 if (existingTask is not null || existingActive is not null)
                 {
                     await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    return new(existingRequest.RequestId,
-                        existingTask?.TaskId ?? existingActive!.TaskId, false);
+                    return await ExistingReceiptAsync(db, existingRequest.RequestId,
+                        existingTask?.TaskId ?? existingActive!.TaskId, cancellationToken);
                 }
                 resumableRequest ??= existingRequest;
             }
         }
 
-        if (IsOrdinaryRegistration(reason))
+        var repairHeld = await IsRepairHeldAsync(db, resourceEntity.ResourcePk, cancellationToken);
+        if (IsOrdinaryRegistration(reason) && !repairHeld)
         {
             var activeTask = await (from activeRow in db.ActiveTasks
                                     join taskRow in db.Tasks on activeRow.TaskId equals taskRow.TaskId
@@ -317,6 +318,7 @@ public sealed partial class CollectionPlatformStore
             PayloadFingerprint = payloadFingerprint,
         };
         if (resumableRequest is null) db.Requests.Add(request);
+        if (repairHeld) return await DeferRequestAsync(db, request, requestedAt, cancellationToken);
 
         var active = await db.ActiveTasks.SingleOrDefaultAsync(x => x.ResourcePk == resourceEntity.ResourcePk
             && x.DefinitionId == definition.Value, cancellationToken);
@@ -421,6 +423,7 @@ public sealed partial class CollectionPlatformStore
         CollectionTaskEntity completedTask, CollectionStateEntity state, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        if (await IsRepairHeldAsync(db, completedTask.ResourcePk, cancellationToken)) return false;
         if (state.RequiredRevision <= completedTask.RequestedRevision
             || await db.ActiveTasks.AnyAsync(x => x.ResourcePk == completedTask.ResourcePk
                 && x.DefinitionId == completedTask.DefinitionId && x.TaskId != completedTask.TaskId,
@@ -569,7 +572,7 @@ public sealed partial class CollectionPlatformStore
                 {
                     var duplicateTask = await db.Tasks.FirstOrDefaultAsync(x => x.RequestId == duplicate.RequestId,
                         cancellationToken);
-                    receipts.Add(new(duplicate.RequestId, duplicateTask?.TaskId ?? Guid.Empty, false));
+                    receipts.Add(await ExistingReceiptAsync(db, duplicate.RequestId, duplicateTask?.TaskId, cancellationToken));
                     continue;
                 }
                 var request = new CollectionRequestEntity
@@ -586,6 +589,11 @@ public sealed partial class CollectionPlatformStore
                     BatchId = batchId,
                 };
                 db.Requests.Add(request);
+                if (await IsRepairHeldAsync(db, resource.ResourcePk, cancellationToken))
+                {
+                    receipts.Add(await DeferRequestAsync(db, request, requestedAt, cancellationToken));
+                    continue;
+                }
                 var active = await db.ActiveTasks.FirstOrDefaultAsync(x => x.ResourcePk == resource.ResourcePk
                     && x.DefinitionId == definition.Value, cancellationToken);
                 Guid taskId;
@@ -691,6 +699,10 @@ public sealed partial class CollectionPlatformStore
                 || task.DispatchGeneration != dispatchGeneration) return null;
             var request = await db.Requests.SingleAsync(x => x.RequestId == task.RequestId, cancellationToken);
             var resource = await db.Resources.SingleAsync(x => x.ResourcePk == task.ResourcePk, cancellationToken);
+            if (await IsRepairHeldAsync(db, task.ResourcePk, cancellationToken)) return null;
+            var raceId = CanonicalRace(resource);
+            task.RaceHoldGeneration = raceId is null ? 0 : await db.RaceRepairHolds
+                .Where(x => x.RaceId == raceId).Select(x => (long?)x.Generation).MaxAsync(cancellationToken) ?? 0;
             var locations = await db.Locations.AsNoTracking().Where(x => x.ResourcePk == task.ResourcePk
                 && x.DefinitionId == task.DefinitionId && x.Status != ResourceLocationStatus.Invalid)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -761,7 +773,7 @@ public sealed partial class CollectionPlatformStore
                 new CollectionDefinitionId(task.DefinitionId), task.RequestedRevision, request.Reason,
                 task.Lane, task.Priority, task.LeaseToken, task.LeaseExpiresAt.Value,
                 resource.EffectiveDate,
-                taskAttributes, candidates);
+                taskAttributes, candidates, task.RaceHoldGeneration);
         }
         finally { _gate.Release(); }
     }
@@ -773,6 +785,7 @@ public sealed partial class CollectionPlatformStore
         var task = await db.Tasks.AsNoTracking().SingleOrDefaultAsync(x => x.TaskId == taskId, cancellationToken)
             .ConfigureAwait(false);
         if (task is null) return CollectionTaskAcquireStatus.ActiveElsewhere;
+        if (await IsRepairHeldAsync(db, task.ResourcePk, cancellationToken)) return CollectionTaskAcquireStatus.RepairHeld;
         if (task.DispatchGeneration != dispatchGeneration) return CollectionTaskAcquireStatus.SupersededGeneration;
         if (task.Status is CollectionTaskStatus.Succeeded or CollectionTaskStatus.Failed
             or CollectionTaskStatus.Cancelled or CollectionTaskStatus.DeadLetter)
@@ -1012,7 +1025,7 @@ public sealed partial class CollectionPlatformStore
                 task.DispatchGeneration++;
                 state.NextCollectionAt = task.AvailableAt;
                 state.Status = CollectionStateStatus.Pending;
-                db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+                if (!await IsRepairHeldAsync(db, task.ResourcePk, cancellationToken)) db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
                 {
                     OutboxId = Guid.NewGuid(),
                     TaskId = task.TaskId,
@@ -1122,9 +1135,11 @@ public sealed partial class CollectionPlatformStore
                          join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
                          where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
                              && task.LeaseToken == leaseToken
-                         select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
+                         select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt, task.RaceHoldGeneration }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
+        var hold = await db.RaceRepairHolds.Where(x => x.RaceId == raceId).OrderByDescending(x => x.Generation).FirstOrDefaultAsync(cancellationToken);
+        if (hold is not null && (hold.ReleasedAt is null || row.RaceHoldGeneration != hold.Generation)) return false;
         return RaceResourceMatches(row.ResourceId, row.AttributesJson, raceId);
     }
 
@@ -1547,7 +1562,8 @@ public sealed partial class CollectionPlatformStore
                                    && (outbox.ReservedUntilUnixMilliseconds == null
                                        || outbox.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds())
                              select new { outbox, task, resource }).ToListAsync(cancellationToken);
-        return pending.Where(x => x.outbox.AvailableAt <= now).OrderBy(x => x.outbox.AvailableAt)
+        var heldIds = await ActiveHoldIdsAsync(db, cancellationToken);
+        return pending.Where(x => x.outbox.AvailableAt <= now && !MatchesHold(x.resource, heldIds)).OrderBy(x => x.outbox.AvailableAt)
             .Take(Math.Max(1, maxCount))
             .Select(x => new PendingCollectionDispatch(x.outbox.OutboxId,
                 new CollectionTaskNotification(x.outbox.TaskId, x.outbox.DispatchGeneration),
@@ -1600,9 +1616,11 @@ public sealed partial class CollectionPlatformStore
                 (x.Status == "StartPending" || x.Status == "Running") && x.LeaseExpiresAt > now,
                 cancellationToken).ConfigureAwait(false);
             var executionEnvelopeIds = db.ExecutionLeases.Select(x => x.DispatchEnvelopeId);
+            var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken);
             var legacyInFlight = await (from outbox in db.DispatchOutbox
                                         join task in db.Tasks on outbox.TaskId equals task.TaskId
                                         where outbox.EnvelopeId != null && outbox.DispatchedAt != null
+                                              && !heldTaskIds.Contains(task.TaskId)
                                               && outbox.DispatchGeneration == task.DispatchGeneration
                                               && (task.Status == CollectionTaskStatus.Ready
                                                   || task.Status == CollectionTaskStatus.Running)
@@ -1620,6 +1638,7 @@ public sealed partial class CollectionPlatformStore
                         || x.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds()))
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
             if (rows.Count != ids.Length) return false;
+            if (rows.Any(x => heldTaskIds.Contains(x.TaskId))) return false;
             foreach (var row in rows)
             {
                 row.ReservationToken = reservationToken;
@@ -1750,9 +1769,12 @@ public sealed partial class CollectionPlatformStore
         try
         {
             await using var db = CreateDbContext();
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             var lease = await db.ExecutionLeases.SingleOrDefaultAsync(x => x.ExecutionBatchId == executionBatchId,
                 cancellationToken).ConfigureAwait(false);
             if (lease is null || lease.LeaseToken != request.LeaseToken || lease.LeaseExpiresAt <= now) return false;
+            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken)
+                || await BuildExecutionEnvelopeAsync(db, lease.DispatchEnvelopeId, cancellationToken) is null) return false;
             if (lease.Status == "Running") return true;
             if (lease.Status != "StartPending") return false;
             lease.Status = "Running";
@@ -1760,6 +1782,7 @@ public sealed partial class CollectionPlatformStore
             lease.LambdaRequestId = request.LambdaRequestId;
             lease.LeaseExpiresAt = now.AddSeconds(Math.Clamp(request.LeaseSeconds, 60, 1200));
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken);
             return true;
         }
         finally { _gate.Release(); }
@@ -1801,6 +1824,9 @@ public sealed partial class CollectionPlatformStore
                         || x.ReservedUntilUnixMilliseconds <= now.ToUnixTimeMilliseconds()))
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
             if (rows.Count != ids.Length) return false;
+            if (await db.Controls.AnyAsync(x => x.ControlId == "pipeline" && x.IsPaused, cancellationToken)) return false;
+            var heldTaskIds = await HeldTaskIdsAsync(db, cancellationToken);
+            if (rows.Any(x => heldTaskIds.Contains(x.TaskId))) return false;
             foreach (var row in rows)
             {
                 row.ReservationToken = reservationToken;
@@ -2633,6 +2659,11 @@ public sealed partial class CollectionPlatformStore
                         MetadataJson = target.AttributesJson,
                     };
                     db.Requests.Add(request);
+                    if (await IsRepairHeldAsync(db, target.ResourcePk, cancellationToken))
+                    {
+                        supplementCount++;
+                        continue;
+                    }
                     db.Tasks.Add(task);
                     db.ActiveTasks.Add(new CollectionActiveTaskEntity
                     { ResourcePk = target.ResourcePk, DefinitionId = "race-detail", TaskId = task.TaskId });
@@ -2691,8 +2722,8 @@ public sealed partial class CollectionPlatformStore
                                 Message: "The item key was already used with different request content."));
                             continue;
                         }
-                        outcomes.Add(new(item.ItemKey, "Reused",
-                            new(binding.RequestId, binding.TaskId, false)));
+                        var boundReceipt = await ExistingReceiptAsync(db, binding.RequestId, binding.TaskId, cancellationToken);
+                        outcomes.Add(new(item.ItemKey, boundReceipt.DeferredByRepairHold ? "Held" : "Reused", boundReceipt));
                         continue;
                     }
                     var receipt = await RequestCoreAsync(db, item.Resource, item.Definition, item.RequestedRevision,
@@ -2707,7 +2738,7 @@ public sealed partial class CollectionPlatformStore
                         RequestId = receipt.RequestId,
                         TaskId = receipt.TaskId,
                     });
-                    outcomes.Add(new(item.ItemKey, receipt.CreatedTask ? "Created" : "Reused", receipt));
+                    outcomes.Add(new(item.ItemKey, receipt.DeferredByRepairHold ? "Held" : receipt.CreatedTask ? "Created" : "Reused", receipt));
                 }
                 catch (CollectionResourceSuppressedException)
                 {
@@ -3736,6 +3767,8 @@ public sealed partial class CollectionPlatformStore
                           where outbox.EnvelopeId == envelopeId && outbox.DispatchGeneration == task.DispatchGeneration
                           orderby task.Priority descending, task.CreatedAt, task.TaskId
                           select new { outbox, task, resource }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var heldRaceIds = await ActiveHoldIdsAsync(db, cancellationToken);
+        rows = rows.Where(x => !MatchesHold(x.resource, heldRaceIds)).ToList();
         if (rows.Count == 0) return null;
         var first = rows[0];
         var attributes = DeserializeTaskMetadata(first.task.MetadataJson ?? first.resource.AttributesJson);
@@ -3756,10 +3789,11 @@ public sealed partial class CollectionPlatformStore
     }
 
     private async Task ReclaimExpiredAsync(CollectionPlatformDbContext db, DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, IReadOnlyCollection<Guid>? onlyTaskIds = null)
     {
-        var running = await db.Tasks.Where(x => x.Status == CollectionTaskStatus.Running
-            && x.LeaseExpiresAt != null).ToListAsync(cancellationToken);
+        var runningQuery = db.Tasks.Where(x => x.Status == CollectionTaskStatus.Running && x.LeaseExpiresAt != null);
+        if (onlyTaskIds is not null) runningQuery = runningQuery.Where(x => onlyTaskIds.Contains(x.TaskId));
+        var running = await runningQuery.ToListAsync(cancellationToken);
         var expired = running.Where(x => x.LeaseExpiresAt <= now).ToList();
         foreach (var task in expired)
         {
@@ -3796,7 +3830,7 @@ public sealed partial class CollectionPlatformStore
             task.LeaseExpiresAt = null;
             task.DispatchGeneration++;
             task.UpdatedAt = now;
-            db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
+            if (!await IsRepairHeldAsync(db, task.ResourcePk, cancellationToken)) db.DispatchOutbox.Add(new CollectionDispatchOutboxEntity
             {
                 OutboxId = Guid.NewGuid(),
                 TaskId = task.TaskId,

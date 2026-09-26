@@ -1,6 +1,6 @@
 # 対象レースの収集保留による補正・再取得案
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Updated: 2026-09-26
 - JRA site contract impact: Updated — 取得元は変更せず、補正の保留・再取得境界をdocs/27へ接続する。
@@ -9,7 +9,11 @@
 
 ## 結論・承認境界
 
-**対象レースだけを永続的に保留し、待機要求を失わず補正、整合検証後に取得revision4以上で再取得する。** 全体停止を新設せず、既存の同一性チェックを緩めない。今回作成したのは対応案のみ。実装・配備の承認と、本番の対象一覧/保留/補正/解除/再開の承認は分離する。
+承認記録: 利用者の「修正方法が正しいと考えられるのであれば、じっそうをお願いします」によりAC211–216/C211–216の実装・検証・配備を承認。Mainは公式identityに基づく割当補正と対象限定holdの方針を妥当と判定した。本番hold/apply/release/resume/restoreは既定どおり対象・差分への別承認を要する。
+
+Pre-implementation review: H1=Runnable、H2/H3=Dependent、H4=Externally blocked（本番承認待ち）。Mainがschema/store/API/DTO/coordinator/clientと統合testsを直列で所有する。既存read-only explorerへ実装入口の反例確認と未解明testの証拠調査だけを分離する。共有transaction/公開契約のためこの時点でcoding委譲はしない。最小testはCollectionPlatformStoreのhold/lease/dispatch、続いてRaceAssignmentRepairTestsとtransport試験。最終はexact formatter→Release build→非External全suite(TRX)→Windows/Linux実Kestrel smoke。既存未解明Scraping失敗の処置もH3から除外しない。意図的に保留した前turnのskill1行は別目的として保持する。
+
+**対象レースだけを永続的に保留し、待機要求を失わず補正、整合検証後に取得revision4以上で再取得する。** 全体停止を新設せず、既存の同一性チェックを緩めない。実装・ローカル検証へ進んだが、実装・配備の承認と、本番の対象一覧/保留/補正/解除/再開の承認は分離する。
 
 利用者は本turnで「停止解除は私が手動で実行しました」と説明した。前記C207の「解除経路不明」はこの説明により解消し、AWS再認証・アクセスログ提供を設計の前提から外す。自動解除の不具合を確認したわけではない。15:55の中山7R保存拒否は、手動再開後にも既存の不正割当が残っていたことを示す。操作への非難ではなく、未補正対象を実行から分離する仕組みが必要という設計上の課題である。
 
@@ -17,8 +21,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Not started | hold/世代/解除APIは未実装。既存の補正eventと排他は配備済み |
-| Verification | Not started | sourceに基づく設計確認のみ。実SQLite/HTTP/配信/再起動試験が必要 |
+| Code | In progress | schema18、durable hold、取得/保存fence、backup/解除を実装。最終gateを実行中 |
+| Verification | In progress | Release全suite1283成功/1既存skip、2実API・14頭補正成功。追加異常系を含む最終suite/CI待ち |
 | Deployment/operation | Not started | 今回本番API操作なし。hold/apply/release/resumeは別途承認 |
 
 ## 根拠・反証した仮説
@@ -74,7 +78,7 @@
 - 他の収集定義の保留要求も失わず、旧envelope/leaseでは書けない新世代で必要分を再実体化する。解除の再送は同じ結果を返す。失敗通知の解決は収集の実成功時のみ。**保留解除とpipeline resumeは別操作**。
 - 補正を取りやめる場合も自動解除しない。現状の保存整合・参照を再previewし、明示された中止/解除承認だけで待機要求を戻す。不整合や補正途中なら解除拒否。
 
-### 4. 管理契約（新設予定）
+### 4. 管理契約
 
 - 既存entry-repair配下にhold取得/状態GET/解除を追加する。全mutationは既存APIキー認証、操作ID、期待世代が必須。
 - Collector/ApiClientと対応DTOを同時に更新し、数値馬番を使う保存の入力取得時fingerprint/lease世代を実HTTPで転送する。保留履歴のある対象に旧clientの書込み互換を残すことはしない。無関係Raceの既存契約は維持する。APIとworkerの対応版を配備・確認してから最初のholdを作成する。
@@ -110,25 +114,28 @@
 | AC213 | 中断/再起動/二重操作/backup復元差分で誤解除や二重eventなし。backup検査失敗ならapplyなし | H2,H3 | event前後・投影途中・解除transaction前後のfault injection、隔離復元検証 | Not started |
 | AC214 | 解除は最新revision>=4を1回だけ要求し旧task履歴/failureを保持、古いmessageは副作用なし。pipelineは自動再開しない | H2,H3 | release再送/並行新要求/高revision/手動resume/旧envelope試験 | Not started |
 | AC215 | 別承認の個別対象で公式全頭/raw owner/番号/grade/関連履歴が一致し、対象と原障害が成功。他収集が進み10分再停止なし。未解決は明示 | H3,H4 | 本番一覧・preview・承認・要求/attempt・raw・観測時刻 | Not started |
-| AC216 | 実transport/DB/配信を通るローカルとLinux CIが成功、既存の未解明test失敗を処置。秘密情報/不要な本番mutationなし | H3 | workflow同等format/build/TRX全suite、hold smoke、元failure gate、diff/status | Not started |
+| AC216 | 実transport/DB/配信を通るローカルとLinux CIが成功、既存の未解明test失敗を処置。秘密情報/不要な本番mutationなし | H3,H3N | workflow同等format/build/TRX全suite、hold smoke、元failure gate、diff/status | Not started |
 
 ## Task plan / review gates
 
 | ID | Task | Owner / tier | Depends on | Write scope | Verification / completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- |
 | H0 | 根拠確認・運用設計・独立review | Main/Lead、既存readonly explorer | 利用者の案作成依頼 | docsのみ、explorer read-only | source照合・concern/AC/入口対応、validator成功、独立review反映 | Verified |
-| H1 | durable hold/取得・生成境界/世代 | Main/Lead | 設計承認 | CollectionOperations/API writer/Collector/ApiClient/DTO/tests | AC211–212の実DB競合反例と実HTTP輸送 | Proposed |
-| H2 | preview/apply/backup/解除の結合 | Main/Lead | H1契約 | repair API/coordinator/tests | AC212–214の再送・中断・復元 | Proposed |
-| H3 | 統合検証・棚卸し・配備・文書 | Main/Lead | H1–2 | tests/scripts/workflows/docs | AC211–216、Windows/Linux/実HTTP・公式source | Proposed |
-| H4 | 別承認後の本番保留/補正/再取得/観測 | Main/Lead | H3、対象・差分・操作承認 | 承認対象だけ | AC215、親AC204/IAC10へ反映 | Proposed |
+| H1 | durable hold/取得・生成境界/世代 | Main/Lead | 設計承認 | CollectionOperations/API writer/Collector/ApiClient/DTO/tests | AC211–212実DB/実HTTP成功、最終suite/CI待ち | In progress |
+| H2 | preview/apply/backup/解除の結合 | Main/Lead | H1契約 | repair API/coordinator/tests | repair9件成功、復元/backup破損/解除rollback成功、最終CI待ち | In progress |
+| H3 | 統合検証・棚卸し・配備・文書 | Main/Lead | H1–2 | tests/scripts/workflows/docs | AC211–216、Windows/Linux/実HTTP・公式source | In progress |
+| H3N | nullable受付TaskIdの既存test caller適合 | low_cost_coding_worker/Worker | receipt契約凍結 | Api.Tests/Collector.Testsの既存receipt callerのみ（RaceAssignmentRepairTests/TestApplicationFactory除外） | API76/Collector139成功、H3N-A1、Main差分確認 | Verified |
+| H4 | 別承認後の本番保留/補正/再取得/観測 | Main/Lead | H3、対象・差分・操作承認 | 承認対象だけ | AC215、親AC204/IAC10へ反映。現turnの実装承認に本番補正は含まない | Dependent |
 
 Routing: Mainは永続化・並行性・本番権限を保持する。独立して分離できる入口棚卸しを既存explorerへread-only委譲し、設計判断・writeは委譲しない。H1–2は共有transaction/lockで結合が強いため並列codingしない。契約凍結後の局所test切出しは別途判断する。Audit: coding委譲なし。reviewer requested gpt-6-sol（既存agent）、observed/usage unavailable、費用推定なし。
 
 - Design/task-split: Main。補正済コードを作り直さず不足する静止境界へ限定。保留/解除/再開の権限を分離し、検証が通るまで本番操作しない。
-- Pre-implementation: 未実施、設計承認後にH1をRunnable、H2–4をDependentへ分類する。
-- Checkpoint/Final implementation review: 未実施。H0完成は実装/復旧完成を意味しない。
+- Pre-implementation: 冒頭の承認/ownership/検証計画に従い実施済み。
+- Checkpoint: 下記2026-09-26実装checkpoint参照。Final implementation reviewは全gate後に実施し、H0やローカル成功を復旧完了と扱わない。
 
 ## Documentation updates / verification
+
+H3N Routing: Worker — frozen nullable receiptの局所caller修正、実装判断なし。Audit: [H3N-A1](../agent-audits/H3N-A1.json)。Result metrics: usage unavailable; retries 1; lead corrections 0; reviews 1。schema18の既存migration期待値2箇所のみMain承認で適合。requested model=gpt-5.6-luna、observed model/token unavailable、費用効果は未判定。Mainは新規hold/repair testsとTestApplicationFactoryを専有しworkerと非重複。
 
 - `docs/26-collection-platform-design.md`: 現行pause/Readyの限界と未実装hold案への正本リンク。既存機能として記載しない。
 - `docs/27-jra-site-collection-contract.md`: 補正本体の配備状況と追加保留案を区別。Card限定の取得契約は変更しない。
@@ -136,3 +143,16 @@ Routing: Mainは永続化・並行性・本番権限を保持する。独立し�
 - 今回はdocsのみ。実装test/buildや本番APIは実行していない。親/前設計/本書のDDD validator issues=0、agent audit valid、git diff --check成功。CodeGraphはsource未変更のためsync対象外。
 - 独立reviewは入口の重複実装、StartPending replay/混在envelope、遅延oddsを指摘。Mainはodds endpoint/filterを独立に照合し、取得時fingerprint/世代と旧client拒否を反映した。再reviewで設計上の阻害懸念なし。reviewer書込0、モデル/usage観測不能、coding成果なし。AC211–216は実装未検証のまま維持。
 - Design final review: Main。C211–216に未決の設計選択や未解決objectionなし。残るのは本案への利用者承認、実装/元test失敗の処置、対象別の本番承認。次操作は承認後のH1事前reviewとテスト計画具体化。前turnからのskill改善1行は今回の設計文書commitには混ぜず意図的に未コミットで保持する。進捗専用PR/pushは行わない。
+
+## Implementation checkpoint — 2026-09-26
+
+この節は上記Design段階の未実装/承認待ち表記を更新する。C211–216のUser dispositionは実装・検証・配備を承認、本番操作は別承認。AC211–214/216はIn progress、AC215はDependent。未完了gateを緑の再実行だけで削除しない。
+
+- H1: Collection schema17→18移行、taskless受付、全request/terminal/bulk/legacy入口、outbox予約/再送/混在execution/Acquire、最終domain保存を同一hold世代で保護。日単位discoveryをRace holdに誤分類した実host反例を修正し、`backfill:yyyyMMdd`と`discovery:yyyyMMddHH`を回帰に追加した。未知Race alias/definitionはfail-closed。
+- H2: 同一hold/世代にpreviewを束縛し、実行中taskとexecution leaseが排出されるまで拒否。SQLite online backup＋manifest/hash＋quick_checkをapply前に必須化。投影途中再起動、隔離backup復元、backup破損/不完全package、解除transaction失敗を検証。解除は要求の最大revision/lane/priorityを維持し、旧Readyを履歴付きで一意置換する。全体pauseは変更しない。
+- writer棚卸し: API race/admin-race/history数値入力にgeneration/fingerprint、予想に既存assignment fingerprintを適用。Collector typed odds clientにもlease handlerを登録し、Result workflowが運用保留例外を一般DomainWriteRejectedへ変換する漏れを修正。`RaceRepairHeld`/`StaleRaceAssignmentFence`はisolated、`RaceRepairPending`は投影不整合の安全停止を維持する。
+- ローカル: Release build警告0/error0、exact formatter成功、全suite1283成功/1既存skip（追加異常系前）。最終追加分はCollector47成功、repair API9成功。2実API process＋共有DBで14頭の馬番/owner/grade、外部process lock、冪等性、世代輸送、遅延odds拒否と新lease保存が成功。evidenceはTRX `scoped-hold-full`/`scoped-hold-final-store`/`scoped-hold-backup-final` と一時隔離host `hrp-repair-host-99897680386b4d228b88a6c0f53a284c`。秘密情報は記録しない。
+- C216証拠: ローカルrolloutのcommand `exec-1c9a638f-82fd-4d89-9bb2-3609e89a00c1`、15:28–15:30 JSTのRelease/no-build/quiet全suiteはScraping305成功/1失敗、exit1を確認。stdout/stderrにテスト名・stackなし、当該runのTRXなし。14:40の別runのG3 fixture失敗と混同しない。15:30のScraping306成功、15:31の全TRX成功は再現なしの証拠であり原因確定ではない。詳細記録付き最終suite/CIを実行し、未解明findingを保持する。
+- 次操作: 最終Release全suite(TRX)、2host smoke、EF model/空DB移行、CodeGraph/validator/diff/status→実装checkpoint commit→Linux CI。残件は過去failureの処置、CI/配備、最新read-only棚卸し、別承認の本番操作。前turnのskill1行はこの実装commitに混ぜず意図的に保持する。
+- 最終ローカルgate: Release全suite **1286成功/1既存skip/0失敗**、全9projectの`scoped-hold-final.trx`保存。2host smoke再成功（`hrp-repair-host-aae4957cb45145a5986595f981058f98`）。EF pending-modelなし、空SQLiteへの全migration成功（既存EF tool8/runtime10のversion警告のみ）。CodeGraph sync、DDD issues0、agent audit valid、diff check成功。CIもTRXを14日artifact保存するよう変更し、今後の失敗名/stack欠落を防ぐ。これらはC216の過去原因特定を代替しない。
+- 本番GET 17:29 JST: pipelineは15:55:27の同一identity mismatch停止、Running0、当日race-detail state24件。mutation0。raw/独立参照の全候補棚卸しは次チェックで継続する。

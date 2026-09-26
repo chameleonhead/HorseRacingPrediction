@@ -366,9 +366,9 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
         var expectedKeys = items.Select(item => item.ItemKey).Order(StringComparer.Ordinal).ToArray();
         var actualKeys = response.Outcomes.Select(outcome => outcome.ItemKey).Order(StringComparer.Ordinal).ToArray();
         if (!expectedKeys.SequenceEqual(actualKeys, StringComparer.Ordinal)
-            || response.Outcomes.Any(outcome => outcome.Status is not ("Created" or "Reused")
+            || response.Outcomes.Any(outcome => outcome.Status is not ("Created" or "Reused" or "Held")
                 || outcome.RequestId is null || outcome.RequestId == Guid.Empty
-                || outcome.TaskId is null || outcome.TaskId == Guid.Empty))
+                || (outcome.Status != "Held" && (outcome.TaskId is null || outcome.TaskId == Guid.Empty))))
             throw new InvalidOperationException("Horse history batch response was incomplete or rejected.");
     }
 

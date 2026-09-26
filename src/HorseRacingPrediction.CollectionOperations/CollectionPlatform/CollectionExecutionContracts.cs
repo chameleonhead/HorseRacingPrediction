@@ -96,6 +96,9 @@ public static class CollectionAttemptFailureClassifier
 {
     public static CollectionAttemptCompletion FromException(Exception exception)
     {
+        if (exception is HorseRacingPrediction.Contracts.CollectionRepairHeldException)
+            return new(CollectionAttemptResult.TransientFailure, "RaceRepairHeld", exception.Message,
+                FailureImpact: CollectionFailureImpact.Isolated);
         if (IsClosedBrowserSession(exception))
             return new(CollectionAttemptResult.TransientFailure, "TargetClosedException", exception.Message);
         var result = exception switch

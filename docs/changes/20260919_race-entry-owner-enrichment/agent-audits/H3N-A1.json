@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260919_race-entry-owner-enrichment",
+  "taskId": "H3N",
+  "attemptId": "H3N-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC216"],
+  "route": { "tier": "worker", "requestedModel": "gpt-5.6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Runtime telemetry unavailable" },
+  "usage": { "availability": "unavailable", "totalTokens": null, "reason": "Runtime telemetry unavailable" },
+  "scope": ["tests/HorseRacingPrediction.Api.Tests existing collection receipt callers excluding RaceAssignmentRepairTests.cs and TestApplicationFactory.cs", "tests/HorseRacingPrediction.Collector.Tests existing collection receipt callers"],
+  "review": { "usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "Telemetry unavailable" },
+  "overhead": { "availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "Telemetry unavailable" },
+  "elapsed": { "availability": "unavailable", "minutes": null, "reason": "Telemetry unavailable" },
+  "startRevision": "a83eb1f1",
+  "endRevisionOrPatch": "13 existing receipt caller test files; nullable fail-fast adaptation and schema18 expectations",
+  "outcome": { "verificationPassed": true, "qualityPassed": true, "scopePassed": true,
+    "independentChallenge": "Lead new hold tests prove taskless receipt; existing regressions API76 Collector139 pass after startup and schema correction",
+    "retries": 1, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0,
+    "escalations": 1, "reviewMode": "detailed", "detailReviewReason": "Initial API19 and Collector2 failures; lead DI fix and approved schema18 assertions closed original gates", "decision": "accept" }
+}
