@@ -1,10 +1,15 @@
 # 中山5R再停止後の補正前確認・限定補正設計
 
-- Status: Approved
+- Status: Proposed
 - Owner: Main
 - Updated: 2026-09-26
+- JRA site contract impact: Updated — docs/27-jra-site-collection-contract.mdに確定待ち・revision4・限定補正境界を反映済み。今回の配備後調査では取得元契約を変更しない。
 - Governing record: [馬主取得・出走割当](../README.md)
 - Scope: 利用者の「お願いします。ローカルでの動作確認もお願いします。」によりAC201–204/C201–205の設計・実装・ローカル検証・配備を承認。本番データ補正・再開は本番preview提示後の別途承認を維持。
+
+> 配備済みAC201–203の承認履歴は維持する。配備後にC206/C207のmaterial concernを確認したため、運用手順の追加設計をProposedへ戻す。本番apply/resumeの承認依頼ではない。
+
+> 最新: 利用者が停止解除を手動実行したと説明したためC207を解消。AWS再認証/ログ提供は不要。[対象限定hold案](20260926-scoped-repair-hold.md)でC206を具体化した。下記の解除経路調査・アクセス待ちは当時の履歴であり、現在のblockerではない。親AC204は同案H4の本番証拠まで未完了を維持する。
 
 ## 実装開始時review
 
@@ -94,14 +99,16 @@ event storeとすべての関連projectionの双方を検査する。削除済�
 | C203 | RP-C3: pipeline pauseはAPI writerを止めず、preview直後にも参照が増える | Race単位共通排他・version・永続的な未整合gate・複数process試験。排他不能構成は補正拒否。未検証のfile lockを安全保証としない | RP3/RP-T3 | Agree | 新規全体停止は不要という判断を維持 | Resolved in design |
 | C204 | RP-C4: Cardの公開期間を過ぎるとownerを公式から再取得できない | 取得可能対象だけ。Result/profile代用禁止。期間切れは未補正を明示し完了扱いにしない。公開終了前の成功は保証しない | RP1/RP4/RP-T1/RP-T4 | Agree | 提示中 | Resolved in design |
 | C205 | RP-C5: 配備成功後も既存不整合で再停止した | 対象の終端成功＋raw整合＋他収集の進行＋10分以上再停止なしで復旧判定。無条件resume/guard解除は不採用。新たな不明障害時は停止維持 | RP4/RP-T4 | Agree | 提示中、再開未承認 | Resolved in design |
+| C206 | 本番2RaceのpreviewがReady taskでActiveCollection拒否。取消しは後続revision/毎分schedulerで再生成され得る | 対象限定hold案C211–215へ具体化。履歴を保持して生成/取得/旧leaseをfence、確認後に新版へ一意置換。guard単純緩和/cancel連打/failure削除は不採用 | AC203–204/RP-T5、H1–4 | hold案を推奨 | 新案承認待ち | Resolved in design |
+| C207 | deployは停止維持分岐だが15:55に新attempt/新pause | 利用者が手動解除を説明。継続停止という仮定を訂正し自動解除欠陥の仮説を採用しない。AWS/ログ追加依頼は取り消す | AC204/RP-T5 | 手動再開後の既存不整合へ調査を戻す | 手動実行と明示 | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC201 (RP1) | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | 木曜型HTML→確定Card→保存の統合試験、並び/頭数変更・再起動・既存値保持反例 | Connected |
-| AC202 (RP2) | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 実14頭反例、oddsのみ/未反映event/削除ticket/memo/修復候補/集合違い/別Race、DB前後同一 | Connected |
-| AC203 (RP3) | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | 複数process/共有volume、projection障害・再起動、馬番循環入替、同一騎手、独立参照割込、旧版互換とbackup復元試験 | Connected |
+| AC201 (RP1) | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | HTML12件/全Scraping306、cached/discovery待機、revision3→4保存、予想実client経路、CI36224378550 | Verified |
+| AC202 (RP2) | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 14/16頭API反例、odds/撤回ticket/削除memo/未知table/集合/別Race拒否、version無変更、CI36224378550 | Verified |
+| AC203 (RP3) | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | Windows/Linux実Kestrel＋別process排他、projection障害・再起動/SQLite backup復元、14/16循環・同一騎手・旧lease反例、CI36224378550 | Verified |
 | AC204 (RP4) | 別途承認後の限定補正・次revision再取得・再開を経て、中山5Rと阪神11Rのraw番号/owner/grade/関連履歴整合、原障害対象の成功、他収集進行、10分以上再停止なし | RP-T4 | 本番preview承認記録、対象要求/終端、raw検証、観測時刻。owner14/14・16/16、説明できない参照差分0 | Not started |
 
 RP1は親IAC3/IAC6、RP2–3はIAC2/IAC4、RP4はIAC5/IAC9/IAC10へ接続する。親の未完了範囲を調査文書の完成で除外しない。
@@ -110,10 +117,11 @@ RP1は親IAC3/IAC6、RP2–3はIAC2/IAC4、RP4はIAC5/IAC9/IAC10へ接続する�
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RP-T1 | 未確定/後着保存/revision再取得 | Main、RP-fixture worker | Lead＋cost-sensitive fixture worker | 設計承認 | Main: parser/collector/contractsと対応test、worker: RaceCardPublicationTests.csのみ | worker最小/関連回帰、Main統合・実HTML反証 | HTML11件、Scraping305件、revision3→4待機/確定、API予想client経路 | In progress |
-| RP-T2 | authoritative read-only preview/参照分類 | Main、read-only explorer | Lead | 設計承認 | application/API previewと対応test、explorer read-only | event/projection完全性・無変更・未知参照拒否 | HTTP preview/集合/別Race/撤回予想/削除memo/odds拒否 | In progress |
-| RP-T3 | Race排他/単一event/派生更新/未整合gate | Main | Lead | RP-T2 contract | domain/application/infrastructure/API writerと対応test | cross-process、失敗再開、全writer、replay、snapshot、独立反例 | 一時SQLite再起動/backup復元、14/16頭循環・同一騎手、実Kestrel＋別process排他 | In progress |
-| RP-T4 | 統合review・配備・preview提示・承認後補正/再開 | Main、read-only independent reviewer | Lead＋review tier | RP-T1–3、適用は別途承認 | production指定対象とdocs、reviewer read-only | 全CI、対象本番終端/raw/10分観測 | ローカル検証中。本番apply/resume未承認、親RT3未完了 | Dependent |
+| RP-T1 | 未確定/後着保存/revision再取得 | Main、RP-fixture worker | Lead＋cost-sensitive fixture worker | 設計承認 | Main: parser/collector/contractsと対応test、worker: RaceCardPublicationTests.csのみ | worker最小/関連回帰、Main統合・実HTML反証 | HTML12件（worker11/Main1）、Scraping306、revision3→4待機/確定、API予想client経路 | Verified |
+| RP-T2 | authoritative read-only preview/参照分類 | Main、read-only explorer | Lead | 設計承認 | application/API previewと対応test、explorer read-only | event/projection完全性・無変更・未知参照拒否 | HTTP preview/集合/別Race/撤回予想/削除memo/odds/未知table拒否、CI成功 | Verified |
+| RP-T3 | Race排他/単一event/派生更新/未整合gate | Main | Lead | RP-T2 contract | domain/application/infrastructure/API writerと対応test | cross-process、失敗再開、全writer、replay、snapshot、独立反例 | SQLite再起動/backup復元、14/16頭循環・同一騎手、Windows/Linux実Kestrel＋別process排他 | Verified |
+| RP-T4 | 統合review・配備・preview提示・承認後補正/再開 | Main、read-only independent reviewer | Lead＋review tier | RP-T1–3、RP-T5、適用は別途承認 | production指定対象とdocs、reviewer read-only | 全CI、対象本番終端/raw/10分観測 | CI36224378550成功、PR97 merge0d0366fc、配備36224620354成功。preview拒否、本番apply/resume未承認 | Dependent |
+| RP-T5 | Ready保留の追加設計・新停止の経緯確認 | Main、read-only explorer | Lead | 利用者説明/案作成依頼 | docsのみ | scheduler/revision/配信/旧leaseのsource反例 | 手動再開の説明、対象限定hold案。実装/本番操作はH1–4へ接続 | Verified |
 
 Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ完全性、RP-T3の永続化/並行性/共有write、RP-T4の本番権限/最終受入。凍結後のHTML fixtureだけを低コストworker候補に分離し、exact file ownershipをdispatch前に固定。判断変更・未知永続化・範囲拡大はLeadへ戻す。全test結果はMainが独立に受入れ、worker自己申告だけで完了にしない。
 
@@ -128,6 +136,25 @@ Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ�
 - Final implementation review: 未実施。次は本設計の承認、実装・関連回帰・配備、authoritative本番preview、具体差分に対する別途apply承認の順。未承認apply/resumeは行わない。
 
 ## Documentation updates / verification
+
+### 2026-09-26 配備後review — 復旧未完了
+
+- 配備`36224620354`成功、API/collectorともmerge SHA `0d0366fcf1b7e2097ef72459d901b5f8a7b2c3ab`。15:54:38.065 JST health200。workflowは`ORIGINAL_WAS_PAUSED=true`、15:54:38.700に停止維持分岐。Mainによるapply/resume/cancel/restoreは0回。owner migrationはpreviewのみ。
+- 中山5R version16: 14頭全source一致、番号差12、owner0/14→公式14/14、grade null。阪神11R version18: 16頭全source一致、番号差16、owner0/16→公式16/16、grade G2→G3。両者とも独立参照blockerなし（許容した未変更JRA出典のみ3/1）、preview前後version不変。ただし両者`eligible=false`、`ActiveCollection`。fingerprintは順に`BD5437766A141016DA1E549B9ECFFC663B87C94B59C88760A2C720D2888FADAC`、`3B605514F61A984A2B55DFA8DC2155C733757CF0583BC2DD095EB475A94B64F5`。適用承認を得る際は再previewが必要。
+- Readyは中山5R `95204f7e-5d01-4ada-bb22-9bcdb0090c58`、阪神11R `2bd306b4-6715-4422-a19e-efed5eb4aa60`、ともにrequestedRevision2。Running0は安定した補正可能性を意味しない。`CancelTaskAsync`→`MaterializeUnsatisfiedRevisionAsync`、停止を見ずに動く`CollectionScheduleService`→due再登録をMain/readonly explorerで確認。取り消して間隙に補正する手順は拒否する。
+- 新停止は中山7R `Race/JRA/20260926:Nakayama:7/race-detail`、task `6a0a083e-3489-464a-9c58-42003bd2f5e1`、attempt2。15:55:11.982開始、15:55:27.512終了、Card/Resultともidentity mismatchでpersisted=false。batch `ebe56f6f-f380-4ae9-b6cd-dcd9beca417f`、envelope `9c78d39d-c792-4bef-8caa-54999b924f8e`、Lambda request `c314ae40-4af9-561b-b610-cd71248813ba`。batchTaskCount17だがAPIに保存されたattemptは1件で、残16件の結果は推測しない。
+- CodeGraph/source独立確認: normal Acquire/AcquireNext/outboxは停止を検査。failureが新pause理由/時刻を設定するのは未停止時のみ。legacy migration/monitoring recovery/schema initializationに停止解除はない。composeは永続`/data`設定。従って途中resume/別DB/backend差をログで識別する必要があるが原因は未確定。`aws lightsail get-instances`はsession expiredで読取不能。認証の更新または該当15:54–15:56のAPI/proxyログ提供が必要。
+- 診断helperはPowerShell補間`$escapedGroupKey?page`で失敗したため、既存contract通りのGET resource/batchで代替した。helper修正は本番復旧の証拠と混同せずMainの別closure候補とする。
+- Process finding: task-freeローカル補正試験だけでは、停止中のReadyと自動再生成を含む本番運用が成立するかを証明できていなかった。Mainの運用設計/最終review不足でありfixture workerへ帰属しない。`learn-from-implementation-failures`に従い`production-incident-recovery`へ「Running/Ready区別＋cancel後続revision＋scheduler tickを検証する」一項だけ追加した。適用範囲は補正前の静止条件が必要な場合に限定し、通常read-only診断には追加停止を要求しない。
+- 過去quiet全suiteのScraping1件失敗は原因未採取。後のTRX全体/CI成功は事実だが原因確定ではないため、未解明の検証findingとして残す。全failureを閉じたとの先行表現は採用しない。
+- Skill validator=valid、親/本書DDD validator issues=0、agent audit=valid、diff check=passed。read-only explorerによる独立forward checkは、Ready再生成シナリオを補正不可と判定し、GET診断だけのシナリオには保留/再開操作を要求しなかった。狭い適用範囲と承認境界を維持する改善として受入れた。production-readyという主張の撤回とRP-T5への接続が本件のgate再検証であり、未実装の保留方式が成功したという意味ではない。
+- 最終状態: 配備済みコードのWindows/Linux検証は成功、本番の限定補正・再開・AC204は未達。次操作はC206の保留方式設計とC207のログ照合。追加の保留/隔離実装と本番操作は再承認前に行わない。意図的な未コミットは本記録/親README/限定skill改善のみ。進捗専用PRや本番DB直接変更は行わない。
+
+### 2026-09-26 15:43 JST 最終実装review / 配備開始
+
+- MainがAC201–203の統合diff/入口接続/反例/運用境界を受入。WindowsとUbuntu CI `36224378550` で1,271成功/1skip。Linux実Kestrel smokeもowner14/14、previewReadOnly/crossProcessLock/idempotent=true、repairEventsAdded=1。UTC/JST比較とprofile依存の元failure gateは成功で閉じた。worker自己申告ではなくMain実行とLinux独立環境を証拠とする。
+- PR97を15:43:37 JST merge、SHA `0d0366fcf1b7e2097ef72459d901b5f8a7b2c3ab`。app-deploy `36224620354`開始。Code=Complete、ローカル/CI Verification=Complete、Deployment/operation=In progress。本番AC204が未完了なので全体StatusはApproved。本番apply/resume/restore未実行。
+- 既存branchへ実装を集約し、進捗だけの別PRは作らない。配備後の証拠追記はまずローカル記録とする。次は配備health/paused状態、2Raceのauthoritative GET＋read-only preview、全頭公式HTML/SHAとの突合を行い、適用承認境界で結果を提示する。
 
 ### 2026-09-26 配備前checkpoint
 

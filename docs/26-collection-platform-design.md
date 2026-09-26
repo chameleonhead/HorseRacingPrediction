@@ -8,6 +8,8 @@
 
 ## Core concepts
 
+> 2026-09-26 運用上の注意: 現行pipeline pauseは配信/取得を止めるが、待機taskの作成やcancel時の高revision実体化をすべて止める機能ではない。Running=0だけでデータ補正可能とは判定しない。[対象Raceの永続保留案](changes/20260919_race-entry-owner-enrichment/decisions/20260926-scoped-repair-hold.md)は、要求履歴を保持し生成/取得/旧leaseを遮断した後、補正・新版への一意再要求へ接続する追加提案であり、未実装。保留解除はpipeline再開を含まない。
+
 収集完了のHTTP境界は、全体Result/FailureImpactだけでなく`StageOutcomes`と`RaceEvidence`をWorkerからAPI、Storeまで転送する。Card/Resultの保存状態・公式発走時刻はその証拠から記録し、全体task成功だけから生成しない。旧workerの省略payloadは互換受信するが、欠落した過去のfacet/evidenceを推測復元しない。輸送検証はWorker client→実endpoint→DB→詳細GETで行う（[2026-09-24 closure](changes/20260924_collection-error-closure/README.md)）。
 
 - Resource: 何を取得するか。provider と論理 ID で識別し URL を Identity にしない。

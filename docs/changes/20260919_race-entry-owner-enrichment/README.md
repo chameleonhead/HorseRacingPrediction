@@ -1,6 +1,6 @@
 # Race出走馬の後着データ補完
 
-- Status: Approved
+- Status: Proposed
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-19
@@ -11,11 +11,15 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97へ実装。最終CI検証中。 |
-| Verification | Incomplete | Release/ローカルKestrel/SQLite・別process排他成功。Linux CIで同一instantのUTC/JST表記比較の欠陥を検出し修正、元gate再検証中。本番復旧IAC10/AC204は未達。 |
-| Deployment/operation | Incomplete | PR96/SHA e2c39a06、配備run36218341631成功。原障害対象1件revision3要求・13:48再開後、13:49に別Raceで再停止。補正の承認境界により停止維持。 |
+| Code | Complete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97で実装。0d0366fcへmerge済み。 |
+| Verification | Incomplete | Windows/Linuxとも1,271成功/1skip、実Kestrel/SQLite・別process排他成功。UTC/JST比較とAWS設定依存の失敗を修正し元CI gate36224378550成功。本番復旧IAC10/AC204は未達。 |
+| Deployment/operation | Incomplete | PR97/SHA0d0366fc、配備36224620354成功、15:54:38 JST health200。本番previewは2RaceともReady taskによるActiveCollectionで拒否。15:55に中山7Rで新停止。apply/resume未実施、復旧未完了。 |
 
 ## 2026-09-26 実装・ローカル確認（最新）
+
+**利用者の追加説明を反映:** 停止解除は利用者が手動実行した。解除経路不明を理由としたAWS再認証/ログ提供依頼は取り消す。[対象レースの保留・補正・再取得案](decisions/20260926-scoped-repair-hold.md)を作成した。旧設計の実装/配備承認は履歴として維持し、新たな保留方式の承認待ちのため親StatusもProposedへ揃える。今回の作業は文書のみで、本番操作や追加実装は行っていない。
+
+配備後のread-only確認で運用上の設計不足を検出した。中山5R/阪神11Rの全頭公式source一致と参照分類は確認できたが、Ready taskが補正を阻止する。キャンセルしても高revision実体化/停止中のschedulerで再生成され得るため、取消しを繰り返す運用は採らない。追加設計のC206/C207、RP-T5に詳細を記録した。対象限定保留の設計判断が必要であり、本番補正・再開は未実行。実装済み範囲の成功を全課題解消とは扱わない。
 
 利用者の「お願いします。ローカルでの動作確認もお願いします。」により、[追加設計](decisions/20260926-number-repair-impact.md)の実装・検証・配備はApprovedへ進んだ。RP-T1–3を実装しPR97へ集約。別processの実Kestrel/SQLiteで全頭補正・重複防止・競合排他を検証済み。本番apply/resume/restoreは未承認のまま、authoritative previewと公式HTML全頭照合を提示して別途承認を得る。以下の14:02時点の記述は設計調査履歴であり現在の実装状況ではない。
 
