@@ -61,9 +61,9 @@ live URLは時間経過で変わるので実装時に専用セル/馬リンク/�
 | T1 | 初回fixture期待値/16行・除外成功case不足 | fixtureを訂正し両状態16行へ拡充。focused39 passed | Verified |
 | T4 | API fixtureで関連収集definition未登録、Owner名はowner-profileでなくowner-identity | 実定義名で初期化。API3 passed | Verified |
 | T3 | context fingerprintがrepair barrierのあるRaceだけで返り、通常Raceでnull | 現在の割当から常時計算。API stale receipt反例成功 | Verified |
-| T4 | future RaceのCard成功をTask全体Succeededと期待 | Result公開待ちは維持する契約に合わせ、PersistCard成功かつAwaitHorseNumbersなしを確認 | In progress |
-| T4 | 新規API testのwith initializer空白format | formatter後にexact format gateを再実行予定 | In progress |
-| T4 | 既存予想API fixtureが未登録entryを参照、補正testが現在割当ではなくmanifest fingerprintを期待（全体API3件失敗） | fixtureにActive出走を登録、現在割当の独立計算値を期待。focusedと全体gateで再検証 | In progress |
+| T4 | future RaceのCard成功をTask全体Succeededと期待 | Result公開待ちは維持する契約に合わせ、PersistCard成功かつAwaitHorseNumbersなしを確認。Collector356成功 | Verified |
+| T4 | 新規API testのwith initializer空白format | formatter後にexact format gate再成功 | Verified |
+| T4 | 既存予想API fixtureが未登録entryを参照、補正testが現在割当ではなくmanifest fingerprintを期待（全体API3件失敗） | fixtureにActive出走を登録、現在割当の独立計算値を期待。最終API310成功 | Verified |
 
 AC4 closure: 作成時のcontextだけでなく、下書き作成後の状態変更も旧情報の再利用となる。作成eventへoptional fingerprintを保存し、mark/finalize時に現在割当と照合する。旧eventはnull既定で互換を維持し、現役entry検証は行う。read table列追加・過去event書換えは不要。確定済み履歴は読取可能のままとする。
 
@@ -76,3 +76,7 @@ Pre-deployment read-only: pipelineは同じ取消notificationによるpauseの�
 Local checkpoint: 全体非External Release suiteは1360 passed / 1 skipped / 0 failed。formatのexact CI gate成功。EF pending-model差分なし、空SQLiteへの全migration適用成功。補正holdのrevision固定値修正後はAPI全体とisolated hostを再実行中であり、最終gateは未完了。文書checkpoint後にsource/testsを検証してcommitし、CIと配備へ進む。
 
 CodeGraph: `.codegraph/` にはgitignore stubのみでindexは未初期化。`codegraph sync .` は `CodeGraph not initialized`。新規index作成は利用者判断のため行わず、source追跡と実経路testsを証拠とする。graph-basedな検証成功は主張しない。
+
+Final local gates: 修正後API全体310 passed / 1 skipped、isolated host smoke成功（14entries/14owners、crossProcessLock、durableHold、backupVerified、delayedOddsRejected、currentWorkerWriteすべてTrue）。exact format gate再実行成功。上記のfuture Result待機、format、API fixtureの失敗は元gate再成功により閉鎖。revision固定値もcurrent-only DBの別プロセスsmokeで閉鎖。ローカル検証の未解決失敗なし。Linux CI/CDと条件付き対象復旧・観測は未完了。
+
+AC-group review (Main): AC1 live HTML＋固定fixtureの独立証拠、AC2/3 API/event/projection/full-card16とML/API-only15・全取消skip、AC4旧event/未指定維持・旧receipt/下書き拒否・unknown拒否・既存回帰と別process境界を照合。T1のcoverage correction1回（加えてMainがdeprecated test属性を現行表記へ変更）、T2Dは追加修正なし。両workerのモデル実行・tokens/費用は独立telemetryがなく未確認。成功標本不足のため永続routing変更なし。単発のfixture/接続欠陥は既存gate内で修正し、新しいskill規則は追加しない。

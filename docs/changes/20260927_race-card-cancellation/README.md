@@ -10,8 +10,8 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | In progress | 2026-09-27利用者「お願いします」で提示済み設計を承認。契約凍結から実装開始 |
-| Verification | In progress | 本番GET、公式HTML、実snapshotter→parserで取消例外を再現。修正後回帰は未実施 |
+| Code | Verified | 取消/除外の全行保存、Activeのみ予想・odds、状態未指定保持、revision5、旧下書き拒否を実装 |
+| Verification | In progress | ローカル1360 passed / 1 skipped、最終API310 passed / 1 skipped、format/empty DB/local host成功。Linux CIは未実行 |
 | Deployment/operation | Not started | GitHub経由の配備・対象失敗の復旧・進捗確認を本提案に含む。未承認の操作はしない |
 
 ## Context / incident
@@ -64,19 +64,19 @@ Pre-implementation契約凍結: transportの `Contracts.RaceEntryParticipationSt
 
 | ID | Concern and evidence | Impact | Proposed disposition | AC/task/test | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| C1 | 公式馬番欄に数字がなく過去成績欄には11番がある | 誤採番/別馬付替え | 公式Horse identityと明示状態、番号は推測せずnull/同馬既知値保持 | AC1/AC2/T1–T3、過去11番混入反例 | 推奨 | 承認待ち | Resolved in design |
+| C1 | 公式馬番欄に数字がなく過去成績欄には11番がある | 誤採番/別馬付替え | 公式Horse identityと明示状態、番号は推測せずnull/同馬既知値保持 | AC1/AC2/T1–T3、過去11番混入反例 | 推奨 | 2026-09-27設計全体を明示承認 | Resolved in design |
 | C2 | nullだけ/行削除だけでは待機や旧entry残留、予想混入 | 収集停止を避けても誤予想/出馬表欠落 | 全行を出馬表として保存・読出し、予想選別だけ別処理。Result取消コード流用を却下 | AC2/AC3/T2–T4 | 推奨 | 取消馬も出馬表として記録し予想だけ対象外とする方針を明示確認 | Resolved in design |
-| C3 | DTO/event追加で旧データ/別writerが既知状態を消す可能性 | 取消復活/参照破損 | 旧event読取互換、未指定は保持、明示更新のみ変更、stable ID維持 | AC2/AC4/T2–T4 | 推奨 | 承認待ち | Resolved in design |
-| C4 | 未知値を正常扱いに広げると構造不整合を隠す | 誤保存 | 専用セルの既知値のみ、未知/identity欠落/重複拒否を保持 | AC1/AC4/T1–T4 | 推奨 | 承認待ち | Resolved in design |
-| C5 | 全体resumeは別失敗にも影響する | 未修正障害再発 | 配備前pause維持、対象限定retry、他の未解明失敗があればresumeしない。再停止時は原因採取し反復resumeしない | AC5/T5 | 条件付き復旧を推奨 | 承認待ち | Resolved in design |
+| C3 | DTO/event追加で旧データ/別writerが既知状態を消す可能性 | 取消復活/参照破損 | 旧event読取互換、未指定は保持、明示更新のみ変更、stable ID維持 | AC2/AC4/T2–T4 | 推奨 | 2026-09-27設計全体を明示承認 | Resolved in design |
+| C4 | 未知値を正常扱いに広げると構造不整合を隠す | 誤保存 | 専用セルの既知値のみ、未知/identity欠落/重複拒否を保持 | AC1/AC4/T1–T4 | 推奨 | 2026-09-27設計全体を明示承認 | Resolved in design |
+| C5 | 全体resumeは別失敗にも影響する | 未修正障害再発 | 配備前pause維持、対象限定retry、他の未解明失敗があればresumeしない。再停止時は原因採取し反復resumeしない | AC5/T5 | 条件付き復旧を推奨 | 2026-09-27設計全体を明示承認 | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC1 | 実ページ相当HTMLの取消/除外を認識し、通常馬・公式馬identityを保持。現在番号を過去成績/行順から生成しない | T0,T1,T4 | live再現、固定HTML→snapshot→parser、未知値/誤scope反例 | Not started |
-| AC2 | 初回取消/通常→取消でも全行を出馬表として保存・再読出しし、取消馬の取得済み属性・stable ID・同馬既知番号を保持。旧event/旧入力互換も維持 | T2,T2D,T3,T4 | serialization→API→event→projection/read-back。今回相当16頭は取消1頭込み16頭として残り、馬主等も保持 | Connected |
-| AC3 | 取消のnullでは未確定待ちにならず、通常馬のnullでは待機を維持。16頭中取消1頭なら予想候補だけ15頭。全非出走でも出馬表は残し予想のみ対象なし、通常レース中止を推定しない | T3,T4 | collector orchestration、API-only/ML/手動検証、出馬表全件と予想候補の独立比較 | Not started |
+| AC1 | 実ページ相当HTMLの取消/除外を認識し、通常馬・公式馬identityを保持。現在番号を過去成績/行順から生成しない | T0,T1,T4 | live再現、固定HTML→snapshot→parser、未知値/誤scope反例 | Verified |
+| AC2 | 初回取消/通常→取消でも全行を出馬表として保存・再読出しし、取消馬の取得済み属性・stable ID・同馬既知番号を保持。旧event/旧入力互換も維持 | T2,T2D,T3,T4 | serialization→API→event→projection/read-back。今回相当16頭は取消1頭込み16頭として残り、馬主等も保持 | Verified |
+| AC3 | 取消のnullでは未確定待ちにならず、通常馬のnullでは待機を維持。16頭中取消1頭なら予想候補だけ15頭。全非出走でも出馬表は残し予想のみ対象なし、通常レース中止を推定しない | T3,T4 | collector orchestration、API-only/ML/手動検証、出馬表全件と予想候補の独立比較 | Verified |
 | AC4 | 通常カード/結果/oddsの既存動作、状態未指定保持、古いreceipt拒否、未知障害の停止を維持 | T2,T2D,T3,T4 | 関連regression、Release build、format、全体非External suite、Linux CI | Connected |
 | AC5 | GitHub経由で同版API/collectorを配備しhealth確認。対象限定再取得で取消例外が消えCard保存と継続進捗を確認する | T5 | workflow、GET失敗履歴/対象attempt、pipeline状態、15分観測または正常後続batch完了（先に得た証拠） | Not started |
 
@@ -87,10 +87,10 @@ Pre-implementation契約凍結: transportの `Contracts.RaceEntryParticipationSt
 | T0 | 本番証拠・再現・設計 | Main | Lead | - | 本record/probes、canonical docs | 実parser例外再現 | evidence.md、利用者明示承認 | Verified | Lead — data integrity / architecture | none | unavailable; retries 0; corrections 1; reviews 1 |
 | T0R | downstream inventory | entry_reference_inventory | Review | - | read-only | AC2/AC3/AC4のsource経路照合 | evidence.mdのsource trace、Mainの実HTML再現との整合 | Verified | 独立read-only、変更権限なし | T0R-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | T1 | 取消の狭いparser認識/fixture | cancellation_parser | Cost efficient | T2 | src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs; tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardCancellationTests.cs | 実HTML相当snapshot、未知値/過去数値反例 | focused39 passed、Main live16/15反証 | Verified | Worker — frozen contract / exclusive parser scope | T1-A1 | unavailable; retries 1; corrections 1; reviews 2 |
-| T2 | 状態contract/domain/persistence | Main | Lead | T0 | Contracts/ApiClient/Domain/API/Application/ReadModelsの状態経路と関連tests | 旧event読取・未指定保持・状態遷移の実保存 | Domain126、API3成功、全体回帰中 | In progress | Lead — public contract / persistence | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T2 | 状態contract/domain/persistence | Main | Lead | T0 | Contracts/ApiClient/Domain/API/Application/ReadModelsの状態経路と関連tests | 旧event読取・未指定保持・状態遷移の実保存 | Domain126 / API310成功、実保存read-back | Verified | Lead — public contract / persistence | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T2D | domain固定契約の反例tests | cancellation_domain_tests | Cost efficient | T2 | tests/HorseRacingPrediction.Domain.Tests/RaceParticipationStatusTests.cs | focused tests→Domain regression | focused8、Domain126 passed | Verified | Worker — frozen invariants / exclusive test file | T2D-A1 | unavailable; retries 0; corrections 0; reviews 1 |
-| T3 | collector/予想/odds接続 | Main | Lead | T1,T2 | Scraping workflow/Collector/Agents/ML/odds関連とtests | AC2–4の統合反例とrevision | 実装済み、全体回帰中 | In progress | Lead — integration / overlapping writes | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T4 | 統合回帰・最終レビュー | Main | Lead | T1,T2,T3 | 必要な統合tests、docs | 全ACの経路確認、format/build/test/CI | ローカル全体回帰中 | In progress | Lead — final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T3 | collector/予想/odds接続 | Main | Lead | T1,T2 | Scraping workflow/Collector/Agents/ML/odds関連とtests | AC2–4の統合反例とrevision | 全体1360、collector356、live16/15成功 | Verified | Lead — integration / overlapping writes | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T4 | 統合回帰・最終レビュー | Main | Lead | T1,T2,T3 | 必要な統合tests、docs | 全ACの経路確認、format/build/test/CI | ローカル1360成功、最終API310成功、CI待ち | In progress | Lead — final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T5 | 配備・限定復旧・観測 | Main | Lead | T4 | GitHub PR/CI/CD、承認された対象retry/resume | AC5、本番GET/実行ログ/PRコメント | 未着手 | Dependent | Lead — security / integration | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ## Delivery / recovery / rollback
@@ -116,6 +116,8 @@ Design/task-split: Mainが実データと独立inventoryを照合。T1だけはT
 Concern/agreement: C1–C5を技術的に解決した設計として提示し、2026-09-27利用者「お願いします」で明示承認。未解決のOpen decisionなし。
 Pre-implementation: 契約を凍結しT1をgpt-5.6-luna指定のcoding workerへ委譲。専有範囲はparserと専用tests。取消/除外、過去馬番混入禁止、属性保持、未知値拒否を反例とし、RaceCardCancellationTests / RaceCardPublicationTests / RaceCardPageParserTestsのRelease実行を必須とした。Mainがbuild slotを直列調整する。
 Checkpoint: 状態contract/domain/writer/readモデルと予想・odds・collectorを接続し、revision5へ更新。共有buildは直列で実施。独立Domain testsは契約凍結後に専有新規fileへ分離できたためT2Dとして追加委譲した。Mainがpublic contractとpersistence判断、統合検証を保持。実サイトprobe16/15とAPI保存/予想3件成功。最終レビューと配備は未完了。
-次操作: `dotnet test HorseRacingPrediction.sln --configuration Release --no-restore --filter "TestCategory!=External" -m:1`、exact format gate、migration check、DDD validator、差分レビュー→目的別commit→PR/CI→merge/CD→対象限定retry/条件付きresume→進捗観測。未コミットは本変更に属するsource/tests/docsのみ。APIキー・本番レスポンス全文は保存しない。最終受入まで継続する。
+Local checkpoint: source/testsは2f41da6fへcommit。全体1360 passed / 1 skipped、最終API310 passed / 1 skipped、exact format、empty DB migration、pending-model、isolated host smokeは成功。ローカル未解決失敗なし。
+
+次操作: DDD validator、差分レビュー→検証文書commit→PR/Linux CI→merge/CD→対象限定retry/条件付きresume→進捗観測。未コミットは本recordとevidenceの検証結果更新のみ。APIキー・本番レスポンス全文は保存しない。最終受入まで継続する。
 
 付随事項: 既存diagnostics helperのPowerShell変数補間 `$escapedGroupKey?page` が失敗したため、同じGETを暗号化資格情報からメモリ内で実行して調査した。これは今回の収集原因ではなく、helper自体の修正は本変更のAC外（owner Main、必要なら別変更）とする。
