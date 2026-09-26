@@ -33,6 +33,10 @@ JRAサイトの実装詳細を推測して依存する文書ではない。利�
 
 ## 2. 最重要の取得元制約
 
+> 2026-09-26 新規・空データ環境向けの承認済み契約: [馬を基準とする出走識別](changes/20260926_horse-based-race-entry/README.md)では出走をRaceId＋HorseIdで識別し、馬番・枠番はnullableの更新可能属性とする。公式Horse source identityを確認できる未確定Cardは、番号を推測せず保存し、取得完了にはせず15分後の再取得を待つ。一部未確定も許可するが、既知番号の重複・不正値は拒否する。以下の「未確定Cardは保存しない」旧契約より本契約を優先する。既存データ移行・削除・本番配備はこの変更に含まない。
+>
+> 結果・予想・履歴は安定EntryIdを使用する。数値オッズは取得時の割当fingerprintを全Raceで照合し、snapshotに当時の馬番・HorseId・EntryId・枠番を保存する。馬番変更で古いsnapshotを別馬へ再解釈しない。番号のnull再取得で確定済み値を消さない。別馬へのEntryId流用、重複馬、変更後の確定馬番重複は引き続き拒否する。
+
 > 2026-09-26: 保存前identity不一致拒否と[限定補正API](changes/20260919_race-entry-owner-enrichment/decisions/20260926-number-repair-impact.md)は配備済み。本番previewで待機taskとの競合が判明したため、[対象Raceの保留・新版再取得](changes/20260919_race-entry-owner-enrichment/decisions/20260926-scoped-repair-hold.md)を追加実装しローカル検証中（配備状況は変更記録参照）。本番の保留・補正・解除・再開は対象一覧/previewに対する別途承認が必要。旧offline補正は採用しない。
 > 全馬の馬番・枠番が未公表のCardは正常な確定待ちとし、仮採番・推測枠・保存完了を禁止する。一部欠損や重複は待機で隠さず構造不整合として拒否する。木曜・金曜の固定判定はしない。格付けは選択レース見出し（画像altを含む）だけから取得し、他レース画像・過去成績の格付けを流用しない。取得revision4は旧版Current Cardの再取得を要求する。
 > 限定補正は、公式Card HTMLの保存/hashと全頭source URLを含むoperator manifestを独立照合し、旧新全頭差分・event/projection整合・独立参照なしをpreviewしてから承認する。APIは入力の構造と保存済みidentityを検証するもので、入力値をJRAから自動取得・真正性認証したとは扱わない。hash・全manifestはfingerprintと単一補正eventへ結び付ける。未知参照・成績・予想（撤回済みを含む）・オッズ・手動memo・別修復候補は拒否する。

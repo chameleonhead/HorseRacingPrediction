@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "identity": {
+    "changeId": "20260926_horse-based-race-entry",
+    "taskId": "T6",
+    "attemptId": "T6-A1",
+    "taskClass": "counterexample-tests",
+    "risk": "medium",
+    "startedAt": "2026-09-26 (exact time not recorded)",
+    "completedAt": "2026-09-26 (exact time not recorded)"
+  },
+  "difficulty": {
+    "ambiguity": "Frozen contract; lead owns design",
+    "executionPaths": null,
+    "publicContract": false,
+    "persistenceOrMigration": false,
+    "concurrency": false,
+    "securityOrPrivacy": false,
+    "externalDependency": false,
+    "existingTestCoverage": "Regression suites and counterexamples",
+    "expectedWriteScope": [
+      "CollectedRaceIdentityGuardTests.cs",
+      "RaceOddsSnapshotApiTests.cs",
+      "RaceEndpointsTests.cs",
+      "HorseEndpointsTests.cs",
+      "WeekendRacePredictionScenarioTests.cs",
+      "RaceAssignmentRepairTests.cs"
+    ]
+  },
+  "routing": {
+    "expectedTier": "worker",
+    "requestedModel": "gpt-6-sol",
+    "requestedReasoningEffort": "inherited (exact setting unavailable)",
+    "observedModel": null,
+    "observationSource": null,
+    "verificationState": "unavailable",
+    "unavailableReason": "Dispatch configuration known; no runtime observation"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "truncated": false,
+    "unavailableReason": "No per-task telemetry"
+  },
+  "instruction": {
+    "contractFingerprint": "README.md#task-plan:T6",
+    "objective": true,
+    "scope": true,
+    "dependencies": true,
+    "acceptance": true,
+    "evidence": true,
+    "escalation": true,
+    "outputFormat": true
+  },
+  "reproducibility": {
+    "startRevision": "8bbee4b06a54717c4c67744e5af8bb38c1203c61",
+    "endRevisionOrPatch": "Exclusive uncommitted files listed in expectedWriteScope",
+    "toolConfigProfile": "Windows PowerShell dotnet10 serialized build/test",
+    "skills": [
+      "document-driven-development",
+      "agent-task-orchestration"
+    ]
+  },
+  "attribution": {
+    "startStatusCaptured": true,
+    "workerPatchIdentified": true,
+    "parallelOwnersRecorded": true,
+    "unattributedChanges": false,
+    "note": "Worker owns original six test-file patches; Main added history source conflict test and strengthened odds market fixtures after handoff. No cost comparison asserted."
+  },
+  "quality": {
+    "acceptancePassed": true,
+    "verificationPassed": true,
+    "scopePassed": true,
+    "regressionPassed": true,
+    "promoted": false,
+    "blockingFindings": 0,
+    "nonBlockingFindings": 0,
+    "workerRetries": 1,
+    "leadCorrectionFiles": 2,
+    "leadCorrectionLines": null,
+    "independentChallenge": "Main fullsuite API298 passed; inspected null/confirmed/swap/stale-odds assertions and 53 fixture regressions. Main subsequently added official-source conflict and known-market selection counterexamples; odds focused11 green."
+  },
+  "reviewEffort": {
+    "availability": "unavailable",
+    "source": "Main review; no duration/token breakdown measured",
+    "reviewPasses": null,
+    "totalActiveMinutes": null
+  },
+  "cost": {
+    "worker": null,
+    "automatedReview": null,
+    "humanReview": null,
+    "rework": null,
+    "auditOverhead": null,
+    "totalSuccessfulOutcome": null
+  },
+  "baseline": {
+    "comparable": false,
+    "auditIds": [],
+    "reason": "Different task scopes and no comparable telemetry"
+  },
+  "escapedDefects": [],
+  "outcome": {
+    "verdict": "pass-with-telemetry-gap",
+    "leadDecision": "Accept verified worker changes and integrated evidence",
+    "recommendation": "Retain routing; no measured comparable cost evidence for persistent policy change"
+  }
+}
