@@ -387,7 +387,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         decimal? declaredWeightDiff,
         string? ownerName,
         string? jraHorseSourceIdentity,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus? participationStatus = null)
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
@@ -435,7 +436,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
                 DeclaredWeight = declaredWeight ?? existingEntry.DeclaredWeight,
                 DeclaredWeightDiff = declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
                 RunningStyleCode = existingEntry.RunningStyleCode,
-                OwnerName = ownerName ?? existingEntry.OwnerName
+                OwnerName = ownerName ?? existingEntry.OwnerName,
+                ParticipationStatus = participationStatus
             };
             var updateResponse = await _httpClient
                 .PostAsJsonAsync(
@@ -478,7 +480,8 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             Age = age,
             DeclaredWeight = declaredWeight,
             DeclaredWeightDiff = declaredWeightDiff,
-            HorseSourceIdentity = jraHorseSourceIdentity
+            HorseSourceIdentity = jraHorseSourceIdentity,
+            ParticipationStatus = participationStatus
         };
 
         var response = await _httpClient
@@ -498,6 +501,16 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         UpsertRaceEntryCoreAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
             assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
             jraHorseSourceIdentity, cancellationToken);
+
+    public Task<string> UpsertRaceEntryWithHorseIdentityAsync(
+        string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
+        int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
+        decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
+        HorseRacingPrediction.Contracts.RaceEntryParticipationStatus participationStatus,
+        CancellationToken cancellationToken = default) =>
+        UpsertRaceEntryCoreAsync(raceId, horseNumber, horseName, jockeyName, trainerName, gateNumber,
+            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, ownerName,
+            jraHorseSourceIdentity, cancellationToken, participationStatus);
 
     public async Task<string> DeclareRaceResultAsync(
         string raceId,

@@ -86,7 +86,7 @@ public static partial class EndpointExtensions
                     DeterministicIdGenerator.NormalizeKey(canonicalTrainerName));
             var entry = new EntryDetails(entryId, horseId, item.HorseNumber, jockeyId, trainerId,
                 item.GateNumber, item.AssignedWeight, item.SexCode, item.Age, item.BodyWeight,
-                item.BodyWeightChange, null, item.OwnerName);
+                item.BodyWeightChange, null, item.OwnerName, (RaceEntryParticipationStatus?)item.ParticipationStatus);
             var result = new EntryResultDetails(entryId, item.FinishPosition, item.OfficialTime,
                 item.MarginText, item.LastThreeFurlongTime, item.AbnormalResultCode, item.PrizeMoney,
                 item.CornerPositions, item.Popularity, item.OriginalFinishPosition, item.IsDeadHeat,

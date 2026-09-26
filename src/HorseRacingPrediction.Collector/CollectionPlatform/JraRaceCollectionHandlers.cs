@@ -498,7 +498,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 .ConfigureAwait(false);
         }
         if (requiresCard && result is { Error: null, Entries: not null }
-            && result.Entries.Any(entry => entry.HorseNumber is null))
+            && result.Entries.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active
+                && entry.HorseNumber is null))
         {
             // The provisional card and its stable horse identities are persisted, but
             // the Card facet must remain due so the next attempt can fetch official numbers.
@@ -512,7 +513,8 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence,
                 FailureImpact: CollectionFailureImpact.Isolated);
         }
-        if (requiresCard && result?.Error is null && predictionSchedule is not null)
+        if (requiresCard && result?.Error is null && predictionSchedule is not null
+            && result?.Entries?.Any(entry => entry.ParticipationStatus == HorseRacingPrediction.Contracts.RaceEntryParticipationStatus.Active) == true)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         if (resultAlreadyCurrent)
         {

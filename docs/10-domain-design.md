@@ -59,6 +59,8 @@
 
 ## 設計原則
 
+> 2026-09-27 出馬表契約: `RaceEntryParticipationStatus`（Active=0 / Cancelled=1 / Excluded=2）は結果異常コードと分離する。取消・除外も全行を保存・読出しし、RaceId＋HorseIdと既存参照を維持する。入力の状態未指定は既知状態を保持し、旧eventの状態欠落はActiveとして読む。番号は推測せずnullまたは同馬の既知値を保持する。予想候補とオッズ割当はActiveのみとし、状態変更はassignment fingerprintへ反映する。設計・検証・配備状態は[出馬表取消対応](changes/20260927_race-card-cancellation/README.md)を参照。破壊的移行は行わない。
+
 1. 正規化データと原文データを分離する
 2. 外部キーと正準 ID を分離する
 3. 時点依存値は観測・スナップショットとして保持する

@@ -9,6 +9,8 @@ public partial class RaceAggregate
         var entryIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in entries)
         {
+            if (entry.ParticipationStatus is { } participation && !Enum.IsDefined(participation))
+                throw new ArgumentException("Unknown race entry participation status.");
             if (string.IsNullOrWhiteSpace(entry.HorseId) || string.IsNullOrWhiteSpace(entry.EntryId)
                 || entry.HorseNumber is <= 0 || entry.GateNumber is < 1 or > 8
                 || (entry.HorseNumber is { } number && !numbers.Add(number)) || !horses.Add(entry.HorseId)

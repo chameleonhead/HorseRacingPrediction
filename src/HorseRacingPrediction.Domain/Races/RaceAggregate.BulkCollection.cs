@@ -41,7 +41,7 @@ public partial class RaceAggregate
                 RegisterValidatedEntry(entry.EntryId, entry.HorseId, entry.HorseNumber,
                     entry.JockeyId, entry.TrainerId, entry.GateNumber, entry.AssignedWeight,
                     entry.SexCode, entry.Age, entry.DeclaredWeight, entry.DeclaredWeightDiff,
-                    entry.RunningStyleCode, entry.OwnerName);
+                    entry.RunningStyleCode, entry.OwnerName, entry.ParticipationStatus);
                 continue;
             }
 
@@ -57,7 +57,8 @@ public partial class RaceAggregate
                 DeclaredWeight = entry.DeclaredWeight ?? current.DeclaredWeight,
                 DeclaredWeightDiff = entry.DeclaredWeightDiff ?? current.DeclaredWeightDiff,
                 RunningStyleCode = entry.RunningStyleCode ?? current.RunningStyleCode,
-                OwnerName = string.IsNullOrWhiteSpace(entry.OwnerName) ? current.OwnerName : entry.OwnerName
+                OwnerName = string.IsNullOrWhiteSpace(entry.OwnerName) ? current.OwnerName : entry.OwnerName,
+                ParticipationStatus = entry.ParticipationStatus ?? current.ParticipationStatus ?? RaceEntryParticipationStatus.Active
             };
             if (merged == current)
                 continue;
@@ -65,7 +66,7 @@ public partial class RaceAggregate
             RegisterValidatedEntry(merged.EntryId, merged.HorseId, merged.HorseNumber,
                 merged.JockeyId, merged.TrainerId, merged.GateNumber, merged.AssignedWeight,
                 merged.SexCode, merged.Age, merged.DeclaredWeight, merged.DeclaredWeightDiff,
-                merged.RunningStyleCode, merged.OwnerName);
+                merged.RunningStyleCode, merged.OwnerName, merged.ParticipationStatus);
         }
 
         if (!string.IsNullOrWhiteSpace(data.WinningHorseName)

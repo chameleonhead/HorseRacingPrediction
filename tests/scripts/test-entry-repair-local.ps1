@@ -28,7 +28,7 @@ $before = Invoke-RestMethod -Uri ($BaseUrl + $repairPath) -Headers $headers
 $holdRequest = @{ operationId = [Guid]::NewGuid().ToString(); expectedGeneration = 0; reason = 'isolated cross-process smoke' }
 $hold = Invoke-RestMethod -Method Post -Uri ($AlternateBaseUrl + $repairPath + '/hold') -Headers $headers -ContentType 'application/json' -Body ($holdRequest | ConvertTo-Json)
 if (-not $hold.isQuiescent) { throw ($hold | ConvertTo-Json -Depth 10) }
-$request = @{ resourceType = 0; provider = 'JRA'; resourceId = '20260926:Nakayama:5'; definitionId = 'race-detail'; requestedRevision = 4; reason = 5 }
+$request = @{ resourceType = 0; provider = 'JRA'; resourceId = '20260926:Nakayama:5'; definitionId = 'race-detail'; requestedRevision = $hold.requiredRevision; reason = 5 }
 $deferred = Post-LocalJson '/api/admin/collection/requests' $request
 if (-not $deferred.deferredByRepairHold -or $deferred.createdTask) { throw 'Cross-process hold did not defer the request.' }
 $heldRead = Invoke-WebRequest -Uri ($BaseUrl + "/api/races/$raceId/context") -Headers $headers -SkipHttpErrorCheck

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_race-card-cancellation",
+  "taskId": "T0R",
+  "attemptId": "T0R-A1",
+  "state": "completed",
+  "taskDifficulty": "bounded read-only cross-layer inventory",
+  "acceptanceCriteria": ["AC2", "AC3", "AC4"],
+  "route": {
+    "tier": "review",
+    "requestedModel": "unavailable: reused existing agent without a model override",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Existing agent configuration and list_agents expose no concrete model; do not use for model-cost comparisons."
+  },
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "No per-agent usage exposed"},
+  "scope": ["read-only"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "No attributed review telemetry"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "No active effort telemetry"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "No reliable active effort telemetry"},
+  "startRevision": "332e38adeeefeb462152e4f2bc43464180685bb2",
+  "endRevisionOrPatch": "read-only; no patch; source trace in evidence.md",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Lead reproduced actual HTML through snapshotter/parser; source inventory shows null/row omission/result-status reuse do not safely solve this incident.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

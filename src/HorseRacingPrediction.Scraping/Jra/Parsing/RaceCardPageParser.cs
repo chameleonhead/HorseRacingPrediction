@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -391,13 +392,25 @@ public sealed class RaceCardPageParser
             // after the entire card has been inspected, before any entry can be saved.
             var numberText = table.GetCell(rowIndex, horseNumberIndex)?.Text.Trim() ?? string.Empty;
             int? horseNumber = null;
+            var participationStatus = RaceEntryParticipationStatus.Active;
             if (numberText.Length > 0)
             {
-                if (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
+                if (numberText is "取消" or "除外")
+                {
+                    participationStatus = numberText == "取消"
+                        ? RaceEntryParticipationStatus.Cancelled
+                        : RaceEntryParticipationStatus.Excluded;
+                }
+                else if (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
                     || !int.TryParse(Regex.Match(numberText, @"[0-9]+$").Value, out var parsedNumber)
                     || parsedNumber is < 1 or > 18)
+                {
                     throw new JraValueParseException(JraPageKind.RaceCard, url, "HorseNumber", numberText);
-                horseNumber = parsedNumber;
+                }
+                else
+                {
+                    horseNumber = parsedNumber;
+                }
             }
 
             int? frameNumber = null;
@@ -452,7 +465,8 @@ public sealed class RaceCardPageParser
                 FindHorseSourceIdentity(table.GetCell(rowIndex, horseNameIndex), url),
                 FindSubjectProfileUrl(jockeyIndex >= 0 ? table.GetCell(rowIndex, jockeyIndex) : null,
                     url, "/JRADB/accessK.html"),
-                FindSubjectProfileUrl(table.GetCell(rowIndex, horseNameIndex), url, "/JRADB/accessC.html")));
+                FindSubjectProfileUrl(table.GetCell(rowIndex, horseNameIndex), url, "/JRADB/accessC.html"),
+                participationStatus));
         }
 
         if (entries.Count == 0)
@@ -460,8 +474,9 @@ public sealed class RaceCardPageParser
         if (entries.Where(x => x.HorseNumber is not null).GroupBy(x => x.HorseNumber).Any(x => x.Count() > 1))
             throw new JraResultConsistencyException(JraPageKind.RaceCard, url,
                 "馬番が重複しています。", "HorseNumber");
-        if (entries.Any(x => x.HorseNumber is null)
-            && entries.Any(x => string.IsNullOrWhiteSpace(x.HorseSourceIdentity)))
+        if (entries.Any(x =>
+                (x.HorseNumber is null || x.ParticipationStatus != RaceEntryParticipationStatus.Active)
+                && string.IsNullOrWhiteSpace(x.HorseSourceIdentity)))
             throw new JraHorseSourceIdentityUnavailableException(url, raceId);
         return entries;
     }

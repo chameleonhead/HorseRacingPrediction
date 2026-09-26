@@ -19,4 +19,5 @@ public sealed record RegisterEntryRequest(
     string? JockeyName = null,
     string? TrainerName = null,
     string? OwnerName = null,
-    string? HorseSourceIdentity = null);
+    string? HorseSourceIdentity = null,
+    HorseRacingPrediction.Contracts.RaceEntryParticipationStatus? ParticipationStatus = null);

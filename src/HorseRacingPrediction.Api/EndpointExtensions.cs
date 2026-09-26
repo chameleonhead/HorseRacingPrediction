@@ -534,7 +534,8 @@ public static partial class EndpointExtensions
         async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
                 if (string.IsNullOrWhiteSpace(request.HorseId) || request.HorseNumber is <= 0
-                    || request.GateNumber is < 1 or > 8)
+                    || request.GateNumber is < 1 or > 8
+                    || (request.ParticipationStatus is { } participation && !Enum.IsDefined(participation)))
                     return Results.BadRequest(new[] { "A HorseId and valid known horse/frame numbers are required." });
                 var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, request.HorseId);
                 if (!string.IsNullOrWhiteSpace(request.EntryId) && request.EntryId != entryId)
@@ -564,7 +565,7 @@ public static partial class EndpointExtensions
                     request.DeclaredWeight,
                     request.DeclaredWeightDiff,
                     request.RunningStyleCode,
-                    request.OwnerName);
+                    request.OwnerName, (RaceEntryParticipationStatus?)request.ParticipationStatus);
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 if (!result.IsSuccess) return Results.BadRequest(new[] { "Command execution failed." });
@@ -854,7 +855,7 @@ public static partial class EndpointExtensions
 
         writeGroup.MapPost("/predictions",
             [SwaggerOperation(Summary = "Create prediction ticket", Description = "Creates one prediction ticket for a race")]
-        async (CreatePredictionTicketRequest request, ICommandBus commandBus, CancellationToken cancellationToken) =>
+        async (CreatePredictionTicketRequest request, ICommandBus commandBus, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
             {
                 var predictionTicketId = string.IsNullOrWhiteSpace(request.PredictionTicketId)
                     ? PredictionTicketId.New : new PredictionTicketId(request.PredictionTicketId);
@@ -864,7 +865,8 @@ public static partial class EndpointExtensions
                     request.PredictorType,
                     request.PredictorId,
                     request.ConfidenceScore,
-                    request.SummaryComment);
+                    request.SummaryComment,
+                    await coordinator.AssignmentFingerprintAsync(request.RaceId, cancellationToken));
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 return result.IsSuccess
@@ -1221,7 +1223,7 @@ public static partial class EndpointExtensions
                     return Results.NotFound();
 
                 var result = ToAgentRacePredictionContext(readModel);
-                result.EntryAssignmentFingerprint = barrier?.Fingerprint;
+                result.EntryAssignmentFingerprint = await coordinator.AssignmentFingerprintAsync(raceId, cancellationToken);
                 return Results.Ok(result);
             })
             .AddEndpointFilter<RacePredictionReadEndpointFilter>()
@@ -2368,7 +2370,7 @@ public static partial class EndpointExtensions
             SurfaceCode = model.SurfaceCode,
             DistanceMeters = model.DistanceMeters,
             DirectionCode = model.DirectionCode,
-            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName)).ToList(),
+            Entries = model.Entries.Select(x => new ApiContracts.RacePredictionContextEntry(x.EntryId, x.HorseId, x.HorseNumber, x.JockeyId, x.TrainerId, x.GateNumber, x.AssignedWeight, x.SexCode, x.Age, x.DeclaredWeight, x.DeclaredWeightDiff, x.RunningStyleCode, x.OwnerName, (ApiContracts.RaceEntryParticipationStatus)x.ParticipationStatus)).ToList(),
             WeatherObservations = model.WeatherObservations.Select(x => new ApiContracts.WeatherObservationSnapshot(x.ObservationTime, x.WeatherCode, x.WeatherText, x.TemperatureCelsius, x.HumidityPercent, x.WindDirectionCode, x.WindSpeedMeterPerSecond)).ToList(),
             TrackConditionObservations = model.TrackConditionObservations.Select(x => new ApiContracts.TrackConditionSnapshot(x.ObservationTime, x.TurfConditionCode, x.DirtConditionCode, x.GoingDescriptionText)).ToList()
         };
@@ -2398,7 +2400,8 @@ public static partial class EndpointExtensions
             entry.DeclaredWeightDiff,
             entry.RunningStyleCode,
             ownerName,
-            ownerId);
+            ownerId,
+            (ApiContracts.RaceEntryParticipationStatus)entry.ParticipationStatus);
 
     private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
         => new(

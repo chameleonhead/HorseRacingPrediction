@@ -29,7 +29,11 @@ public sealed class ApiOnlyPredictionWorkflow
             throw new InvalidOperationException($"Race context was not found via API. RaceId={raceId}");
         }
 
-        if (context.Entries.Count == 0 || context.Entries.Any(x => x.HorseNumber is null or <= 0 || x.GateNumber is null))
+        var activeEntries = context.Entries.Where(x => x.ParticipationStatus == RaceEntryParticipationStatus.Active).ToArray();
+        if (context.Entries.Count > 0 && activeEntries.Length == 0)
+            return new ApiOnlyPredictionResult(string.Empty, "取消・除外のため予想対象馬がありません。出馬表は保持しています。", Skipped: true);
+
+        if (activeEntries.Length == 0 || activeEntries.Any(x => x.HorseNumber is null or <= 0 || x.GateNumber is null))
         {
             throw new InvalidOperationException($"Race context has no entries. RaceId={raceId}");
         }
@@ -90,7 +94,7 @@ public sealed class ApiOnlyPredictionWorkflow
         MlPredictionResponse? mlPrediction)
     {
         var entriesById = context.Entries
-            .Where(x => !string.IsNullOrWhiteSpace(x.EntryId))
+            .Where(x => x.ParticipationStatus == RaceEntryParticipationStatus.Active && !string.IsNullOrWhiteSpace(x.EntryId))
             .ToDictionary(x => x.EntryId, x => x, StringComparer.Ordinal);
 
         if (mlPrediction is not null && mlPrediction.Rankings.Count > 0)
@@ -108,6 +112,7 @@ public sealed class ApiOnlyPredictionWorkflow
         }
 
         return context.Entries
+            .Where(x => x.ParticipationStatus == RaceEntryParticipationStatus.Active)
             .OrderBy(x => x.HorseNumber)
             .Select((x, index) => new ApiOnlyPredictionRanking(
                 x.EntryId,
@@ -144,7 +149,7 @@ public sealed class ApiOnlyPredictionWorkflow
     }
 }
 
-public sealed record ApiOnlyPredictionResult(string PredictionTicketId, string PredictionSummary);
+public sealed record ApiOnlyPredictionResult(string PredictionTicketId, string PredictionSummary, bool Skipped = false);
 
 internal sealed record ApiOnlyPredictionRanking(
     string EntryId,

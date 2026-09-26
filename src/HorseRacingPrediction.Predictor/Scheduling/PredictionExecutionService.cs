@@ -127,6 +127,8 @@ public sealed class PredictionExecutionService : BackgroundService
                 if (!await _schedule.CompleteAsync(raceId, candidate.LeaseToken, cancellationToken).ConfigureAwait(false))
                     throw new InvalidOperationException($"Prediction lease is no longer active: {raceId}");
 
+                if (result.Skipped) continue;
+
                 await _postGenerationStep
                     .RunAsync(result.PredictionTicketId, raceId, cancellationToken)
                     .ConfigureAwait(false);

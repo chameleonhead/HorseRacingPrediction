@@ -1,6 +1,9 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using EventFlow.EntityFramework;
+using EventFlow.Aggregates;
+using EventFlow.EventStores;
+using HorseRacingPrediction.Domain.Predictions;
 using HorseRacingPrediction.Api.Contracts;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Infrastructure.Persistence;
@@ -11,7 +14,8 @@ namespace HorseRacingPrediction.Api.Security;
 /// <summary>Shared lock boundary for race, prediction, memo, and subject-derived history writers.</summary>
 public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
     IDbContextProvider<EventStoreDbContext> provider,
-    HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection) : IEndpointFilter
+    HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection,
+    IEventStore events) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
@@ -39,13 +43,38 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 var barrier = await coordinator.ReadBarrierAsync(raceId, token);
                 if (barrier is { Verified: false })
                     return Results.Conflict(new { code = "RaceRepairPending", raceId });
-                if (barrier is { Verified: true } && context.Arguments.OfType<CreatePredictionTicketRequest>().FirstOrDefault() is { } create
-                    && create.EntryAssignmentFingerprint != barrier.Fingerprint)
+                if (context.Arguments.OfType<CreatePredictionTicketRequest>().FirstOrDefault() is { } create
+                    && (barrier is { Verified: true } || !string.IsNullOrWhiteSpace(create.EntryAssignmentFingerprint))
+                    && create.EntryAssignmentFingerprint != await coordinator.AssignmentFingerprintAsync(raceId, token))
                     return Results.Conflict(new { code = "StalePredictionAssignment", raceId });
             }
+            if (await ValidatePredictionParticipationAsync(context, token) is { } participationError)
+                return participationError;
             return await next(context);
         }
         return Results.Conflict(new { code = "RaceWriteScopeChanged" });
+    }
+
+    private async Task<IResult?> ValidatePredictionParticipationAsync(EndpointFilterInvocationContext context, CancellationToken token)
+    {
+        var mark = context.Arguments.OfType<AddPredictionMarkRequest>().FirstOrDefault();
+        var finalize = context.HttpContext.Request.Path.Value?.EndsWith("/finalize", StringComparison.Ordinal) == true;
+        if (mark is null && !finalize) return null;
+        if (context.HttpContext.Request.RouteValues["predictionTicketId"]?.ToString() is not { } ticketId) return null;
+        using var db = provider.CreateContext();
+        var ticket = await db.PredictionTickets.AsNoTracking().SingleOrDefaultAsync(x => x.PredictionTicketId == ticketId, token);
+        if (ticket is null) return null;
+        var history = await events.LoadEventsAsync<PredictionTicketAggregate, PredictionTicketId>(new(ticketId), token);
+        var fingerprint = history.Select(x => x.GetAggregateEvent()).OfType<PredictionTicketCreated>()
+            .SingleOrDefault()?.EntryAssignmentFingerprint;
+        if (fingerprint is not null && fingerprint != await coordinator.AssignmentFingerprintAsync(ticket.RaceId!, token))
+            return Results.Conflict(new { code = "StalePredictionAssignment", raceId = ticket.RaceId });
+        var race = await db.RacePredictionContexts.AsNoTracking().SingleOrDefaultAsync(x => x.RaceId == ticket.RaceId, token);
+        var selectedIds = mark is null ? ticket.Marks.Select(x => x.EntryId) : [mark.EntryId];
+        if (selectedIds.Any(id => race?.Entries.Any(entry => entry.EntryId == id
+                && entry.ParticipationStatus == HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active) != true))
+            return Results.Conflict(new { code = "PredictionEntryNotActive", raceId = ticket.RaceId });
+        return null;
     }
 
     private static bool RequiresAssignmentFence(EndpointFilterInvocationContext context) =>

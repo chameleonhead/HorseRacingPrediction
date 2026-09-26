@@ -32,12 +32,13 @@ public partial class RaceAggregate
                 DeclaredWeight = incoming.DeclaredWeight ?? old?.DeclaredWeight,
                 DeclaredWeightDiff = incoming.DeclaredWeightDiff ?? old?.DeclaredWeightDiff,
                 RunningStyleCode = incoming.RunningStyleCode ?? old?.RunningStyleCode,
-                OwnerName = incoming.OwnerName ?? old?.OwnerName
+                OwnerName = incoming.OwnerName ?? old?.OwnerName,
+                ParticipationStatus = incoming.ParticipationStatus ?? old?.ParticipationStatus ?? RaceEntryParticipationStatus.Active
             };
             if (entry == old && !metadataChanged) continue;
             RegisterValidatedEntry(entry.EntryId, entry.HorseId, entry.HorseNumber, entry.JockeyId, entry.TrainerId,
                 entry.GateNumber, entry.AssignedWeight, entry.SexCode, entry.Age,
-                entry.DeclaredWeight, entry.DeclaredWeightDiff, entry.RunningStyleCode, entry.OwnerName);
+                entry.DeclaredWeight, entry.DeclaredWeightDiff, entry.RunningStyleCode, entry.OwnerName, entry.ParticipationStatus);
         }
 
         if (data.WinningHorseName is not null && (_state.WinningHorseName != data.WinningHorseName

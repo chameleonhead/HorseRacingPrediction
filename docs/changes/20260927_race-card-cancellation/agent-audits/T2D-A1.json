@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_race-card-cancellation",
+  "taskId": "T2D",
+  "attemptId": "T2D-A1",
+  "state": "completed",
+  "taskDifficulty": "bounded domain counterexample tests",
+  "acceptanceCriteria": ["AC2", "AC4"],
+  "route": {"tier": "worker", "requestedModel": "gpt-5.6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Role configuration specifies requested model; runtime model telemetry unavailable."},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "No per-agent usage exposed"},
+  "scope": ["tests/HorseRacingPrediction.Domain.Tests/RaceParticipationStatusTests.cs"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "No attributed review telemetry"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "No active effort telemetry"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "No active effort telemetry"},
+  "startRevision": "67da0af2a07078277d26c6911ddc3602c685734b",
+  "endRevisionOrPatch": "RaceParticipationStatusTests.cs working patch; focused8 and Domain regression126 passed",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead read counterexample tests against public aggregate paths and legacy JSON; Main API integration independently verifies persistence/receipt paths.", "retries": 0, "leadCorrections": 0, "reviewPasses": 1, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "ac-group", "detailReviewReason": null, "decision": "accept"}
+}

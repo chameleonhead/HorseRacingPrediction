@@ -17,6 +17,11 @@ public static partial class EndpointExtensions
         {
             var key = $"HorseNumber={item.HorseNumber}";
             void Reject(string code, string message) => failures.Add(new("Entry", key, "Rejected", code, message));
+            if (item.ParticipationStatus is { } status && !Enum.IsDefined(status))
+            {
+                Reject("InvalidParticipationStatus", "ParticipationStatus must be a known value.");
+                continue;
+            }
             if (item.HorseNumber is <= 0 || item.GateNumber is < 1 or > 8 || (!request.IsRaceCard && item.HorseNumber is null)
                 || (item.HorseNumber is { } number && !seenNumbers.Add(number)))
             {
@@ -28,7 +33,8 @@ public static partial class EndpointExtensions
                 Reject("MissingHorseName", "Horse identity is required before applying collected data.");
                 continue;
             }
-            if ((item.HorseNumber is null && string.IsNullOrWhiteSpace(item.HorseSourceIdentity))
+            if (((item.HorseNumber is null || item.ParticipationStatus is Shared.RaceEntryParticipationStatus.Cancelled or Shared.RaceEntryParticipationStatus.Excluded)
+                    && string.IsNullOrWhiteSpace(item.HorseSourceIdentity))
                 || !string.IsNullOrWhiteSpace(item.HorseSourceIdentity)
                 && !JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out _))
             {

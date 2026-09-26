@@ -117,6 +117,66 @@ public sealed class JraDirectCollectionHandlerTests
     }
 
     [TestMethod]
+    [DataRow(RaceEntryParticipationStatus.Cancelled, true)]
+    [DataRow(RaceEntryParticipationStatus.Excluded, true)]
+    [DataRow(RaceEntryParticipationStatus.Cancelled, false)]
+    public async Task RaceDetail_NonactiveNullNumber_PersistsWithoutWaiting(RaceEntryParticipationStatus status, bool hasActiveHorse)
+    {
+        var date = new DateOnly(2026, 9, 26);
+        var race = new RaceId(date, RaceCourse.Nakayama, 5);
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        var entries = new[]
+        {
+            new RaceEntry(null, "取消馬", 1, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000101/00",
+                ParticipationStatus: status),
+            new RaceEntry(2, "通常馬", 1, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000102/00",
+                ParticipationStatus: hasActiveHorse ? RaceEntryParticipationStatus.Active : status)
+        };
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(url.AbsoluteUri, race, "取消検証", new(15, 30), entries)
+            }
+        };
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var schedule = new CancellationPredictionSchedule();
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
+            predictionSchedule: schedule,
+            timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), CollectionDefinitionRevisions.RaceDetail,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
+            new Dictionary<string, string>(),
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result, completion.ErrorMessage);
+        Assert.AreNotEqual("RaceHorseNumbersUnconfirmed", completion.ErrorCode);
+        Assert.HasCount(1, cards.RefreshRequests);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "PersistCard" && x.Persisted));
+        Assert.IsFalse(completion.StageOutcomes!.Any(x => x.Stage == "AwaitHorseNumbers"));
+        Assert.AreEqual(hasActiveHorse ? 1 : 0, schedule.Enqueued.Count);
+    }
+
+    private sealed class CancellationPredictionSchedule : HorseRacingPrediction.PredictionScheduling.IPredictionSchedule
+    {
+        public List<string> Enqueued { get; } = [];
+        public Task EnqueueAsync(IEnumerable<string> raceIds, DateTimeOffset now, CancellationToken cancellationToken = default)
+        {
+            Enqueued.AddRange(raceIds);
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<HorseRacingPrediction.PredictionScheduling.PredictionCandidateLease>> AcquireAsync(
+            DateTimeOffset now, TimeSpan minAge, int maxCount, TimeSpan leaseDuration, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> CompleteAsync(string raceId, string leaseToken, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RequeueAsync(string raceId, string leaseToken, DateTimeOffset availableAt, string? error, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    [TestMethod]
     public async Task RaceDetail_ProvisionalCardMissingHorseIdentity_WaitsLocallyWithoutSaving()
     {
         var date = new DateOnly(2026, 9, 26);

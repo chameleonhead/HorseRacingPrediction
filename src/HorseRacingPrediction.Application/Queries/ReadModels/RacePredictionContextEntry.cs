@@ -13,4 +13,5 @@ public sealed record RacePredictionContextEntry(
     decimal? DeclaredWeight,
     decimal? DeclaredWeightDiff,
     string? RunningStyleCode,
-    string? OwnerName = null);
+    string? OwnerName = null,
+    HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus ParticipationStatus = HorseRacingPrediction.Domain.Races.RaceEntryParticipationStatus.Active);
