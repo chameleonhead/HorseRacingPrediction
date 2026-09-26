@@ -1,6 +1,6 @@
 # 馬を基準とする出走識別
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-26
@@ -39,7 +39,7 @@
 | AC2 | 未確定番号nullを複数頭保存でき、確定後同じ出走を更新。仮連番/枠番推測なし | T1,T2,T3,T4,T5,T6 | 木曜→確定出馬表→再取得試験 | Verified |
 | AC3 | 重複馬/番号や別馬へのID流用、古い番号依存入力を拒否し、不正保存なし | T1,T2,T3,T4,T5,T6 | 反例・API実DB・既存fence回帰 | Verified |
 | AC4 | 収集/手動/履歴/予想/オッズの入口が新識別に整合。局所不整合で他収集が停止しない | T2,T3,T4,T6 | 入口棚卸し、対象回帰・全suite | Verified |
-| AC5 | ローカル空DBでビルド・test・formatter成功、文書反映済み。本番・既存データ変更なし | T4 | CI相当コマンド、diff/status | Not started |
+| AC5 | ローカル空DBでビルド・test・formatter成功、文書反映済み。本番・既存データ変更なし | T4 | CI相当コマンド、diff/status | Verified |
 
 ## Task plan
 
@@ -48,7 +48,7 @@
 | T1 | Domain/nullable型/永続モデル | Main/Lead | - | Domain,Application,Contracts,Infrastructure | domain/build/model試験 | Domain118成功、投影58成功、EF差分なし | Verified | 永続化と不変条件はLead保持 | none | unavailable |
 | T2 | API/安定ID/参照接続 | Main/Lead | T1契約 | Api,ApiClient,ML/Agents | API・全入口回帰 | API298成功、個別Http5成功 | Verified | 公開契約・統合判断はLead保持 | none | unavailable |
 | T3 | 未確定収集経路 | revision_reacquisition/Worker | T1 nullable契約凍結済み | Scraping,Collector（HttpDataCollectionWriteService除外）と関連tests | parser/collector回帰 | Scraping317/Collector353・T3-A1 | Verified | 契約判断はMain固定、独立adapter経路を分離 | [T3-A1](agent-audits/T3-A1.json) | unavailable; retries0; corrections0; reviews0 |
-| T4 | 統合・独立review・文書 | Main/Lead | T1–3 | tests,docs | format/build/full tests/空DB | 文書反映、fullsuite反例確認 | In progress | 最終適合・本番境界はLead保持 | none | unavailable |
+| T4 | 統合・独立review・文書 | Main/Lead | T1–3 | tests,docs | format/build/full tests/空DB | 文書反映・最終直列suite1323成功/1skip・空DB/host検証 | Verified | 最終適合・本番境界はLead保持 | none | unavailable |
 | T5 | Domain反例test | horse_entry_domain_tests/Worker | T1契約 | HorseBasedEntryIdentityTests.csのみ | Domain118成功（追加反例含む） | T5-A1 | Verified | 凍結された局所testをcost-sensitive workerへ分離 | [T5-A1](agent-audits/T5-A1.json) | unavailable; retries1; corrections0; reviews2 |
 | T6 | API/odds反例test・既存fixture | entry_reference_inventory/Worker | T2契約 | CollectedRaceIdentityGuardTests.cs, RaceOddsSnapshotApiTests.cs, RaceEndpointsTests.cs, HorseEndpointsTests.cs, WeekendRacePredictionScenarioTests.cs, RaceAssignmentRepairTests.cs | focused17・closure53・API298成功 | T6-A1 | Verified | 凍結API契約への独立counterexample | [T6-A1](agent-audits/T6-A1.json) | unavailable; retries0; corrections0; reviews1 |
 
@@ -67,11 +67,11 @@ Design/task-split: 主担当が永続化・公開契約を保持。番号依存�
 - 未確定Cardは保存stageの後にAwaitingPublication stageを記録して15分再取得を維持。Resultは進めず予想も発火しない。確認済み馬番に対するnullは既知値保持。
 - 単独結果登録のtool契約も馬番ではなくHorseIdへ変更。数値オッズは全Raceで取得時fingerprintを照合し、snapshotに観測時の番号/HorseId/EntryId/枠対応を保存する。新旧API互換は対象外。
 - Final-review closure: 個別Http登録でrunning styleを保持し、結果登録の409を成功扱いしない。手動APIの範囲検査は関連主体作成より前に実施する。履歴のSourceHorseIdで矛盾する公式Horse identityを上書きしない。既知市場のオッズ選択を確定馬番/枠へ照合する（未知市場の選択原文を推測して解釈しない）。
-- `horse-key-final.trx`は1319成功/1skip、追加反例後の`horse-key-verified.trx`は1323成功/1skip。既知市場検査追加後のodds focused11成功。さらに行った`horse-key-complete.trx`では既存Playwright時間条件2件が5秒上限を超過（CalendarWaitsForVisibleRacecourseBeyondThreeSeconds:6.273秒、CalendarTimeoutDoesNotCaptureIncompletePage:6.457秒）。ブラウザー実装/testの時間上限は変更せず、直列回帰で再確認する。負荷競合は推測であり、未確認の原因を断定しない。
+- `horse-key-final.trx`は1319成功/1skip、追加反例後の`horse-key-verified.trx`は1323成功/1skip。既知市場検査追加後のodds focused11成功。さらに行った`horse-key-complete.trx`では既存Playwright時間条件2件が5秒上限を超過（CalendarWaitsForVisibleRacecourseBeyondThreeSeconds:6.273秒、CalendarTimeoutDoesNotCaptureIncompletePage:6.457秒）。ブラウザー実装/testの時間上限は変更せず、直列回帰で2件を含む全suiteが成功（1323成功/1skip、上限/test実装を変更していない）。負荷競合は推測であり、未確認の原因を断定しない。
 
 Checkpoint: 初回fullsuiteはDomain1/Application1/API12失敗。Domainは例外型期待、Applicationは未登録出走への結果fixture、APIは旧任意/番号EntryId・新gate範囲・旧エラーcode・odds fence未指定という契約追従を修正済み。従来の自動Horse付替え候補生成は新契約では到達不能なので除去し、既存補正APIのテストは保存済み証拠fixtureを明示投入する。補正機能の新規追加や本番実行はしない。
 
-次操作: T6 fixture回帰後、Mainが `dotnet format HorseRacingPrediction.sln --no-restore`、Release build、CI同等非External fullsuite、EF pending-model/空DB migration、isolated localhost smokeを実行。未コミットは本変更のsrc/tests/docs一式を意図的に保持し、検証後に目的単位でcommitする。新branchはcodex/horse-based-race-entry、base8bbee4b0。旧branchのpolicy commitと未コミットskill変更は別worktreeに保全し、本変更に混ぜない。PRマージ後コミット禁止・両branch削除規則は本作業にも適用する。
+Checkpoint完了: 全検証後に実装+回帰を167c318aとしてcommitした。設計checkpointはa65d3b25。未完了の承認済みタスク・意図的に残す未コミットcodeはない。新branchはcodex/horse-based-race-entry、base8bbee4b0。旧branchのpolicy commitと未コミットskill変更は別worktreeに保全し、本変更に混ぜていない。PR未作成・未pushのため本branchは成果保管として維持する。将来のPRマージ後に追加commitせずlocal/remote branchを削除する。
 
 ## Implementation / final review
 
@@ -95,6 +95,8 @@ Checkpoint: 初回fullsuiteはDomain1/Application1/API12失敗。Domainは例外
 | `tests/scripts/test-entry-repair-local-host.ps1 -Configuration Release` | isolated2 processes; 14entries/owners, preview read-only, stable repair/retry, cross-process lock, backup, stale odds rejection/current worker write passed |
 | vulnerable dependencies scan | no vulnerable packages reported by configured NuGet sources |
 | DDD / agent-audit validators | pass |
-| Final non-External suite | serial verification in progress; prior1323 pass/1skip and odds closure11 pass |
+| Final non-External suite | 1323 pass / 0 fail / 1 intentional skip; horse-key-serial.trx |
 
 EF tool8.0.11/runtime10.0.11の既存版差warningはあるが、model検査/空DB適用はexit0。版更新は本変更に混ぜない。スキップは既存の `RaceDiscovery_IsRegisteredByNewScheduler`（RUN_15_MINUTE_CADENCE_TEST=1 の明示実時間検証用）。External/live本番検証・Linux CI・配備は今回の完了条件外。本番データ削除、旧データ移行、停止解除、deploy、PR作成/mergeは行っていない。
+
+Final review: AC1–AC5とT1–T6を上記test/commandへ照合し、すべてVerified。公式番号未確定、番号交換、別馬へのEntryId流用、重複番号、古いodds fence、未知市場の原文保持、既知/未知HTTP障害の区別を確認した。残る本番削除・移行・deploy・resumeは明示的対象外であり、障害復旧済みとは報告しない。ブラウザー時間条件の一時超過は記録を保持し、Linux CIの成功を代弁しない。

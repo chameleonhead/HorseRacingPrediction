@@ -54,7 +54,7 @@
   },
   "reproducibility": {
     "startRevision": "8bbee4b06a54717c4c67744e5af8bb38c1203c61",
-    "endRevisionOrPatch": "Exclusive uncommitted files listed in expectedWriteScope",
+    "endRevisionOrPatch": "167c318a (worker-exclusive paths; Main closure attribution documented)",
     "toolConfigProfile": "Windows PowerShell dotnet10 serialized build/test",
     "skills": [
       "document-driven-development",
@@ -79,7 +79,7 @@
     "workerRetries": 1,
     "leadCorrectionFiles": 2,
     "leadCorrectionLines": null,
-    "independentChallenge": "Main fullsuite API298 passed; inspected null/confirmed/swap/stale-odds assertions and 53 fixture regressions. Main subsequently added official-source conflict and known-market selection counterexamples; odds focused11 green."
+    "independentChallenge": "Main fullsuite API298 passed; inspected null/confirmed/swap/stale-odds assertions and 53 fixture regressions. Main subsequently added official-source conflict and known-market selection counterexamples; odds focused11 green. Final integrated serial suite:1323 passed,1 intentional skip."
   },
   "reviewEffort": {
     "availability": "unavailable",

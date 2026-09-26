@@ -49,7 +49,7 @@
   },
   "reproducibility": {
     "startRevision": "8bbee4b06a54717c4c67744e5af8bb38c1203c61",
-    "endRevisionOrPatch": "Exclusive uncommitted files listed in expectedWriteScope",
+    "endRevisionOrPatch": "167c318a (worker-exclusive paths; Main closure attribution documented)",
     "toolConfigProfile": "Windows PowerShell dotnet10 serialized build/test",
     "skills": [
       "document-driven-development",
@@ -73,7 +73,7 @@
     "workerRetries": 1,
     "leadCorrectionFiles": 0,
     "leadCorrectionLines": 0,
-    "independentChallenge": "Main fullsuite Collector353/Scraping317 passed; inspected exact typed isolation, unknown-error propagation, provisional retry state."
+    "independentChallenge": "Main fullsuite Collector353/Scraping317 passed; inspected exact typed isolation, unknown-error propagation, provisional retry state. Final integrated serial suite:1323 passed,1 intentional skip."
   },
   "reviewEffort": {
     "availability": "unavailable",
