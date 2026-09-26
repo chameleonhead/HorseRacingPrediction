@@ -31,14 +31,14 @@ public static partial class EndpointExtensions
         var results = new List<EntryResultDetails>();
         var originHorse = request.SourceHorseId is null ? null
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
-        if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x => NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
-            return Results.Conflict(new[] { "取得元の馬がレースの出走馬に含まれていません。" });
-        if (originHorse is not null && (request.Entries ?? []).Any(source =>
-                NormalizeDisplayName(source.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName)
-                && !string.IsNullOrWhiteSpace(source.HorseSourceIdentity)
-                && DeterministicIdGenerator.BuildHorseId(source.HorseName!, source.HorseSourceIdentity) != originHorse.HorseId))
-            return Results.Conflict(new[] { "取得元の馬IDと公式の馬識別情報が一致しません。" });
-        var identityFailure = ValidateCollectedEntryIdentities(request, existing, id);
+        using var identityDb = dbProvider.CreateContext();
+        Dictionary<Shared.RaceResultEntryBulkDto, string> horseIdentities;
+        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, token); }
+        catch (InvalidOperationException ex) { return CollectedIdentityRejection(id, ex.Message); }
+        if (request.SourceHorseId is not null && (originHorse is null
+            || !horseIdentities.Values.Contains(originHorse.HorseId, StringComparer.Ordinal)))
+            return Results.Conflict(new[] { "取得元の馬IDと取得ページの馬識別情報が一致しません。" });
+        var identityFailure = ValidateCollectedEntryIdentities(request, existing, id, horseIdentities);
         if (identityFailure is not null) return identityFailure;
         foreach (var source in request.Entries ?? [])
         {
@@ -49,18 +49,13 @@ public static partial class EndpointExtensions
                     DeterministicIdGenerator.NormalizeKey(
                         Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, name)));
             var horseName = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", source.HorseName);
-            var horseId = DeterministicIdGenerator.BuildHorseId(horseName, source.HorseSourceIdentity);
+            var horseId = horseIdentities[source];
             var old = existing.Entries.FirstOrDefault(x => x.HorseId == horseId);
             var jockeyId = SubjectId("jockey", "Jockey", source.JockeyName);
             var trainerId = SubjectId("trainer", "Trainer", source.TrainerName);
             // 既存の出走登録では手入力IDや別の正規化規則も使われる。同じ名前なら関連IDを維持する。
             if (old is not null)
             {
-                var horse = await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(old.HorseId), token);
-                if (string.IsNullOrWhiteSpace(source.HorseSourceIdentity)
-                    && horse is not null
-                    && NormalizeDisplayName(horse.RegisteredName) == NormalizeDisplayName(source.HorseName))
-                    horseId = old.HorseId;
                 if (old.JockeyId is not null && source.JockeyName is not null)
                 {
                     var jockey = await queries.ProcessAsync(new ReadModelByIdQuery<JockeyReadModel>(old.JockeyId), token);
@@ -72,8 +67,7 @@ public static partial class EndpointExtensions
                     if (trainer is not null && NormalizeDisplayName(trainer.DisplayName) == NormalizeDisplayName(source.TrainerName)) trainerId = old.TrainerId;
                 }
             }
-            if (originHorse is not null && NormalizeDisplayName(source.HorseName) == NormalizeDisplayName(originHorse.RegisteredName)) horseId = originHorse.HorseId;
-            var entryId = DeterministicIdGenerator.BuildRaceEntryId(id, horseId);
+            var entryId = old?.EntryId ?? DeterministicIdGenerator.BuildRaceEntryId(id, horseId);
             var registration = new RegisterEntryRequest(horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight, source.BodyWeightChange,
                 EntryId: entryId, HorseName: source.HorseName, JockeyName: source.JockeyName,

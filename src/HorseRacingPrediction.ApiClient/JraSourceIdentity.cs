@@ -6,6 +6,11 @@ public static class JraSourceIdentity
 {
     private const string HorsePath = "/JRADB/accessU.html";
 
+    public static bool MatchesHorse(string? left, string? right) =>
+        TryNormalizeHorse(left, out var leftIdentity)
+        && TryNormalizeHorse(right, out var rightIdentity)
+        && string.Equals(leftIdentity, rightIdentity, StringComparison.Ordinal);
+
     public static bool TryNormalizeHorse(string? value, out string identity)
     {
         identity = string.Empty;
@@ -23,7 +28,9 @@ public static class JraSourceIdentity
         }
         else return false;
 
-        if (!string.Equals(uri.AbsolutePath, HorsePath, StringComparison.OrdinalIgnoreCase)) return false;
+        if (uri.Scheme is not ("http" or "https")
+            || !string.Equals(uri.Host, "www.jra.go.jp", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(uri.AbsolutePath, HorsePath, StringComparison.OrdinalIgnoreCase)) return false;
         var values = HttpUtility.ParseQueryString(uri.Query).GetValues("CNAME");
         if (values is not { Length: 1 } || string.IsNullOrWhiteSpace(values[0])) return false;
         identity = values[0]!.Trim();

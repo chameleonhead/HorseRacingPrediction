@@ -47,6 +47,8 @@ public static partial class EndpointExtensions
             .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
         MapHorseIdentityRepairEndpoints(writeGroup);
         MapSubjectNameNormalizationEndpoints(writeGroup);
+        MapIdentityResolutionEndpoints(writeGroup);
+        MapOwnerIdentityRecoveryEndpoints(writeGroup);
 
         writeGroup.MapPost("/horses",
             [SwaggerOperation(Summary = "Register horse", Description = "Registers a new horse")]
@@ -2489,11 +2491,7 @@ public static partial class EndpointExtensions
             : null;
 
     private static string? ResolveOwnerId(string? ownerName, IReadOnlyDictionary<string, string> mappings)
-    {
-        if (string.IsNullOrWhiteSpace(ownerName)) return null;
-        var normalized = NormalizeOwnerName(ownerName);
-        return mappings.GetValueOrDefault(normalized, CreateOwnerId(normalized));
-    }
+        => OwnerIdentityContract.ResolveId(ownerName, mappings);
 
 
     private static string? ResolveJockeyName(IReadOnlyDictionary<string, string> jockeyNamesById, string? jockeyId)
@@ -2597,10 +2595,7 @@ public static partial class EndpointExtensions
         var mappings = mappingRows.ToDictionary(x => x.NormalizedAlias, x => x.OwnerId, StringComparer.Ordinal);
         var displayNames = mappingRows.Where(x => x.IsDisplayName).GroupBy(x => x.OwnerId).ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.CreatedAt).First().AliasName, StringComparer.Ordinal);
         string OwnerGroupKey(string name)
-        {
-            var normalized = NormalizeOwnerName(name);
-            return mappings.GetValueOrDefault(normalized, CreateOwnerId(normalized));
-        }
+            => OwnerIdentityContract.ResolveId(name, mappings)!;
         return currentNames.Concat(participations.Select(x => x.OwnerName!))
             .GroupBy(OwnerGroupKey, StringComparer.Ordinal)
             .Where(x => x.Key.Length > 0)

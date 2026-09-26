@@ -21,7 +21,7 @@ public static class DeterministicIdGenerator
     /// <summary>レース日・競馬場コード・レース番号から決定論的なレース ID を生成する。</summary>
     public static string BuildRaceId(DateOnly raceDate, string racecourseCode, int raceNumber)
     {
-        var normalizedRacecourse = NormalizeKey(racecourseCode);
+        var normalizedRacecourse = NormalizeKey(HorseRacingPrediction.Contracts.RaceCourseIdentity.Canonicalize(racecourseCode) ?? racecourseCode);
         var guid = CreateDeterministicGuid(RaceNamespaceId, $"{raceDate:yyyy-MM-dd}|{normalizedRacecourse}|{raceNumber:D2}");
         return $"race-{guid:D}";
     }
@@ -39,20 +39,7 @@ public static class DeterministicIdGenerator
         var parts = resourceId.Split(':');
         if (parts.Length != 3 || !DateOnly.TryParseExact(parts[0], "yyyyMMdd", out var date)
             || !int.TryParse(parts[2], out var number) || number is < 1 or > 12) return null;
-        var course = parts[1] switch
-        {
-            "Sapporo" => "札幌",
-            "Hakodate" => "函館",
-            "Fukushima" => "福島",
-            "Niigata" => "新潟",
-            "Tokyo" => "東京",
-            "Nakayama" => "中山",
-            "Chukyo" => "中京",
-            "Kyoto" => "京都",
-            "Hanshin" => "阪神",
-            "Kokura" => "小倉",
-            _ => null
-        };
+        var course = HorseRacingPrediction.Contracts.RaceCourseIdentity.Canonicalize(parts[1]);
         return course is null ? null : BuildRaceId(date, course, number);
     }
 
@@ -77,7 +64,7 @@ public static class DeterministicIdGenerator
     {
         var key = JraSourceIdentity.TryNormalizeHorse(jraSourceIdentity, out var identity)
             ? $"JRA|{identity}"
-            : NormalizeKey(registeredName);
+            : NormalizeKey(HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", registeredName));
         return BuildEntityId("horse", key);
     }
 

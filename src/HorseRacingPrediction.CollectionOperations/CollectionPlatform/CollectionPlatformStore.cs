@@ -26,9 +26,11 @@ public sealed partial class CollectionPlatformStore
     private readonly TimeSpan _closedSessionFailureWindow;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _gate;
+    private readonly IRaceResourceIdentityResolver? _raceIdentityResolver;
 
-    public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options)
+    public CollectionPlatformStore(IOptions<CollectionPlatformOptions> options, IRaceResourceIdentityResolver? raceIdentityResolver = null)
     {
+        _raceIdentityResolver = raceIdentityResolver;
         var value = options.Value;
         var directory = Path.GetFullPath(string.IsNullOrWhiteSpace(value.StateDirectory)
             ? "collection-platform-state" : value.StateDirectory);
@@ -144,7 +146,7 @@ public sealed partial class CollectionPlatformStore
         finally { _gate.Release(); }
     }
 
-    private static async Task<CollectionRequestReceipt> RequestCoreAsync(CollectionPlatformDbContext db,
+    private async Task<CollectionRequestReceipt> RequestCoreAsync(CollectionPlatformDbContext db,
         ResourceKey resource, CollectionDefinitionId definition, int requestedRevision, CollectionReason reason,
         DateTimeOffset requestedAt, CollectionLane lane, int priority, Uri? explicitUrl, string? batchId,
         DateOnly? effectiveDate, IReadOnlyDictionary<string, string>? attributes, string? payloadFingerprint,
@@ -419,7 +421,7 @@ public sealed partial class CollectionPlatformStore
         return null;
     }
 
-    private static async Task<bool> MaterializeUnsatisfiedRevisionAsync(CollectionPlatformDbContext db,
+    private async Task<bool> MaterializeUnsatisfiedRevisionAsync(CollectionPlatformDbContext db,
         CollectionTaskEntity completedTask, CollectionStateEntity state, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -1119,9 +1121,11 @@ public sealed partial class CollectionPlatformStore
         await using var db = CreateDbContext();
         var resources = await (from active in db.ActiveTasks.AsNoTracking()
                                join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
-                               select new { resource.ResourceId, resource.AttributesJson }).ToListAsync(cancellationToken)
+                               where resource.Type == ResourceType.Race || resource.Type == ResourceType.RaceCard
+                                   || resource.Type == ResourceType.RaceResult || resource.Type == ResourceType.RaceOdds
+                               select resource).ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return resources.Any(x => RaceResourceMatches(x.ResourceId, x.AttributesJson, raceId, conservative: true));
+        return resources.Where(IsRaceResource).Any(x => RaceResourceMatches(x.ResourceId, x.AttributesJson, raceId, conservative: true));
     }
 
     public async Task<bool> IsValidActiveRaceLeaseAsync(Guid taskId, string leaseToken, string raceId,
@@ -1135,6 +1139,8 @@ public sealed partial class CollectionPlatformStore
                          join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
                          where task.TaskId == taskId && task.Status == CollectionTaskStatus.Running
                              && task.LeaseToken == leaseToken
+                             && (resource.Type == ResourceType.Race || resource.Type == ResourceType.RaceCard
+                                 || resource.Type == ResourceType.RaceResult || resource.Type == ResourceType.RaceOdds)
                          select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt, task.RaceHoldGeneration }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
@@ -1143,8 +1149,17 @@ public sealed partial class CollectionPlatformStore
         return RaceResourceMatches(row.ResourceId, row.AttributesJson, raceId);
     }
 
-    private static bool RaceResourceMatches(string resourceId, string attributesJson, string raceId, bool conservative = false)
+    private bool RaceResourceMatches(string resourceId, string attributesJson, string raceId, bool conservative = false)
     {
+        if (_raceIdentityResolver is not null)
+        {
+            Dictionary<string, string>? attributes;
+            try { attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson); }
+            catch (JsonException) { return conservative; }
+            var resolved = _raceIdentityResolver.Resolve(resourceId, attributes ?? []);
+            return resolved == raceId || conservative && (resolved is null
+                || attributes?.GetValueOrDefault("domainRaceId") == raceId);
+        }
         var normalized = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.TryBuildRaceIdFromResource(resourceId);
         var explicitId = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson)?.GetValueOrDefault("domainRaceId");
         if (conservative) return normalized == raceId || explicitId == raceId || resourceId == raceId;
@@ -3758,7 +3773,7 @@ public sealed partial class CollectionPlatformStore
     private static RaceArtifactKind? ArtifactForUrl(IReadOnlyList<CollectionStageOutcome>? stages, Uri url)
         => stages?.LastOrDefault(x => x.RequestedUrl == url || x.FinalUrl == url)?.Artifact;
 
-    private static async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
+    private async Task<CollectionDispatchEnvelope?> BuildExecutionEnvelopeAsync(CollectionPlatformDbContext db,
         Guid envelopeId, CancellationToken cancellationToken)
     {
         var rows = await (from outbox in db.DispatchOutbox.AsNoTracking()
@@ -3844,20 +3859,7 @@ public sealed partial class CollectionPlatformStore
 
     private static bool TryCanonicalCourse(string value, out string canonical)
     {
-        canonical = value.Trim() switch
-        {
-            "札幌" or "Sapporo" => "Sapporo",
-            "函館" or "Hakodate" => "Hakodate",
-            "福島" or "Fukushima" => "Fukushima",
-            "新潟" or "Niigata" => "Niigata",
-            "東京" or "Tokyo" => "Tokyo",
-            "中山" or "Nakayama" => "Nakayama",
-            "中京" or "Chukyo" => "Chukyo",
-            "京都" or "Kyoto" => "Kyoto",
-            "阪神" or "Hanshin" => "Hanshin",
-            "小倉" or "Kokura" => "Kokura",
-            _ => string.Empty,
-        };
+        canonical = HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(value) ?? string.Empty;
         return canonical.Length > 0;
     }
 

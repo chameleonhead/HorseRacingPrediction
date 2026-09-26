@@ -6,6 +6,15 @@ namespace HorseRacingPrediction.Scraping.Tests.Jra;
 public sealed class JraSourceIdentityTests
 {
     [TestMethod]
+    [DataRow("//example.com/JRADB/accessU.html?CNAME=one")]
+    [DataRow("file:///JRADB/accessU.html?CNAME=one")]
+    [DataRow("about:/JRADB/accessU.html?CNAME=one")]
+    public void HorseIdentity_RejectsNonJraOriginsAfterRelativeResolution(string url)
+    {
+        Assert.IsFalse(JraSourceIdentity.TryNormalizeHorse(url, out _));
+    }
+
+    [TestMethod]
     public void HorseIdentity_NormalizesRelativeAndAbsoluteUrlsToTheSameId()
     {
         const string relative = "/JRADB/accessU.html?CNAME=pw01dud002023106188/45";

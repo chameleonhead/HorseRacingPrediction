@@ -32,7 +32,7 @@ public sealed class RaceBulkPersistenceCounterTests
     }
 
     [TestMethod]
-    public async Task EighteenExistingSubjects_UsesThreeSetQueriesAndOneWriteTransaction()
+    public async Task EighteenExistingSubjects_UsesBoundedIdentityAndSubjectQueriesAndOneWriteTransaction()
     {
         var counter = new PersistenceCounters();
         var (app, client) = await TestApplicationFactory.CreateAsync(
@@ -64,7 +64,8 @@ public sealed class RaceBulkPersistenceCounterTests
                 WinningHorseName: entries[0].HorseName, DeclaredAt: DateTimeOffset.UtcNow, Entries: entries));
 
         response.EnsureSuccessStatusCode();
-        Assert.AreEqual(3, counter.SubjectSelects);
+        // Three subject set queries plus identity snapshots before/after locking and during preflight.
+        Assert.AreEqual(6, counter.SubjectSelects);
         Assert.AreEqual(1, counter.TransactionCommits);
     }
 

@@ -280,7 +280,7 @@ public class RaceEndpointsTests
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsTrue(body!.Errors.Any(x => x.Contains("InvalidHorseNumber", StringComparison.Ordinal)), string.Join(" | ", body.Errors));
+        Assert.IsTrue(body!.Errors.Any(x => x.Contains("HorseIdentityEvidenceRequired", StringComparison.Ordinal)), string.Join(" | ", body.Errors));
         Assert.IsFalse(body.CorePersisted);
         Assert.AreEqual(eventsBefore, CountStoredEvents());
         using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
@@ -320,7 +320,7 @@ public class RaceEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
         Assert.IsFalse(refreshBody!.CorePersisted);
-        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("InvalidHorseNumber")), string.Join(" | ", refreshBody.Errors));
+        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("HorseIdentityEvidenceRequired")), string.Join(" | ", refreshBody.Errors));
         Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(horseName),
             race.Entries.Single().HorseId);
     }

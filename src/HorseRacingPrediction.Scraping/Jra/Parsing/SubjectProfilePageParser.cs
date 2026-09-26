@@ -90,10 +90,7 @@ public static class SubjectProfilePageParser
 
     private static bool SourceIdentityMatches(string subjectType, string expected, string? actual) =>
         string.Equals(expected, actual, StringComparison.Ordinal)
-        || (subjectType == "Horse"
-            && JraSourceIdentity.TryNormalizeHorse(expected, out var expectedIdentity)
-            && JraSourceIdentity.TryNormalizeHorse(actual, out var actualIdentity)
-            && string.Equals(expectedIdentity, actualIdentity, StringComparison.Ordinal));
+        || (subjectType == "Horse" && JraSourceIdentity.MatchesHorse(expected, actual));
 
     public static bool TryDate(string value, out DateOnly date) => DateOnly.TryParseExact(value.Trim(),
         new[] { "yyyy年M月d日", "yyyy/MM/dd", "yyyy/M/d" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out date);

@@ -46,10 +46,14 @@ public static class SubjectCollectionEndpointExtensions
                 || JraSubjectNameNormalizer.NormalizeIdentityName(request.SubjectType, request.Name)
                 != JraSubjectNameNormalizer.NormalizeIdentityName(subject.SubjectType, subject.Name)
                 || !Uri.TryCreate(request.SourceUrl, UriKind.Absolute, out var source) || source.Scheme != "https" || source.Host != "www.jra.go.jp"
-                || string.IsNullOrWhiteSpace(request.SourceIdentity)) return Results.BadRequest(new[] { "プロフィールの識別情報が不正です。" });
+                || string.IsNullOrWhiteSpace(request.SourceIdentity)
+                || kind == "Horse" && !JraSourceIdentity.MatchesHorse(request.SourceIdentity, request.SourceUrl))
+                return Results.BadRequest(new[] { "プロフィールの識別情報が不正です。" });
             if (!DateOnly.TryParseExact(request.Fields.GetValueOrDefault("生年月日"), "yyyy年M月d日", CultureInfo.InvariantCulture, DateTimeStyles.None, out var birth)
                 || (subject.BirthDate is not null && birth != subject.BirthDate)
-                || (subject.SourceIdentity is not null && subject.SourceIdentity != request.SourceIdentity))
+                || (subject.SourceIdentity is not null && (kind == "Horse"
+                    ? !JraSourceIdentity.MatchesHorse(subject.SourceIdentity, request.SourceIdentity)
+                    : subject.SourceIdentity != request.SourceIdentity)))
                 return Results.Conflict(new[] { "同定不能: 保存済みの対象とプロフィールが一致しません。" });
             var data = new CollectedSubjectProfile(request.Name, request.SourceIdentity, request.SourceUrl, request.Fields, request.AcquiredAt);
             if (kind == "Horse")
@@ -81,11 +85,10 @@ public static class SubjectCollectionEndpointExtensions
             var course = ResolveCourse(request.Course);
             if (course is null || request.RaceNumber is < 1 or > 12 || string.IsNullOrWhiteSpace(request.RaceName)) return Results.BadRequest();
             using var db = provider.CreateContext();
-            var candidates = await db.RacePredictionContexts.AsNoTracking().Where(x => x.RaceDate == request.RaceDate && x.RaceNumber == request.RaceNumber).ToListAsync(token);
-            var matches = candidates.Where(x => ResolveCourse(x.RacecourseCode) == course).ToArray();
-            if (matches.Length > 1) return Results.Conflict(new[] { "同一日・競馬場・レース番号の登録が複数あります。" });
-            var id = matches.FirstOrDefault()?.RaceId ?? DeterministicIdGenerator.BuildRaceId(request.RaceDate, course, request.RaceNumber);
-            if (matches.Length == 0)
+            string id;
+            try { id = await CollectionIdentityResolver.RaceAsync(db, request.RaceDate, course, request.RaceNumber, token); }
+            catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
+            if (!await db.RacePredictionContexts.AnyAsync(x => x.RaceId == id, token))
             {
                 try { await commands.PublishAsync(new CreateRaceCommand(new RaceId(id), request.RaceDate, course, request.RaceNumber, request.RaceName), token); }
                 catch (InvalidOperationException ex) when (ex.Message == "Race is already created.") { }
@@ -95,20 +98,7 @@ public static class SubjectCollectionEndpointExtensions
         return endpoints;
     }
     private static string Normalize(string value) => Regex.Replace(value.Normalize(NormalizationForm.FormKC), @"\s+", "");
-    private static string? ResolveCourse(string? value) => value?.ToUpperInvariant() switch
-    {
-        "SAPPORO" or "札幌" => "札幌",
-        "HAKODATE" or "函館" => "函館",
-        "FUKUSHIMA" or "福島" => "福島",
-        "NIIGATA" or "新潟" => "新潟",
-        "TOKYO" or "東京" => "東京",
-        "NAKAYAMA" or "中山" => "中山",
-        "CHUKYO" or "中京" => "中京",
-        "KYOTO" or "京都" => "京都",
-        "HANSHIN" or "阪神" => "阪神",
-        "KOKURA" or "小倉" => "小倉",
-        _ => null
-    };
+    private static string? ResolveCourse(string? value) => RaceCourseIdentity.Canonicalize(value);
     private static async Task<SubjectCollectionPayload?> ResolveAsync(string kind, string id, IQueryProcessor queries, CancellationToken token)
     {
         var profile = await queries.ProcessAsync(new ReadModelByIdQuery<JraSubjectProfileReadModel>(id), token);

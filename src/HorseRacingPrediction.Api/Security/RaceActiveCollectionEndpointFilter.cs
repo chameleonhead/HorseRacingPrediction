@@ -2,12 +2,15 @@ using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 namespace HorseRacingPrediction.Api.Security;
 
-public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore store) : IEndpointFilter
+public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore store,
+    EventFlow.EntityFramework.IDbContextProvider<HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext> provider) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context,
         EndpointFilterDelegate next)
     {
-        var raceId = ResolveRaceId(context);
+        string? raceId;
+        try { raceId = await ResolveRaceIdAsync(context); }
+        catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
         if (raceId is null) return await next(context).ConfigureAwait(false);
         var hasLease = context.HttpContext.Request.Headers.ContainsKey("X-Collection-Task-Id")
             || context.HttpContext.Request.Headers.ContainsKey("X-Collection-Lease-Token");
@@ -26,7 +29,7 @@ public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore s
         return await next(context).ConfigureAwait(false);
     }
 
-    private static string? ResolveRaceId(EndpointFilterInvocationContext context)
+    private async Task<string?> ResolveRaceIdAsync(EndpointFilterInvocationContext context)
     {
         var routeId = context.HttpContext.Request.RouteValues["raceId"]?.ToString();
         if (!string.IsNullOrWhiteSpace(routeId)) return routeId;
@@ -40,7 +43,10 @@ public sealed class RaceActiveCollectionEndpointFilter(CollectionPlatformStore s
             if (type.GetProperty("RaceDate")?.GetValue(argument) is DateOnly date
                 && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
                 && type.GetProperty("RaceNumber")?.GetValue(argument) is int number)
-                return HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(date, course, number);
+            {
+                using var db = provider.CreateContext();
+                return await CollectionIdentityResolver.RaceAsync(db, date, course, number, context.HttpContext.RequestAborted);
+            }
         }
         return null;
     }

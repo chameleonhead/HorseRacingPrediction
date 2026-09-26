@@ -95,8 +95,8 @@ public sealed class JraRaceResultCollectionWorkflow
         }
 
         var racecourseName = RaceCourseNames.GetJraName(raceId.Course);
-        var dataCollectionRaceId = targetRaceId ?? DeterministicIdGenerator.BuildRaceId(
-            raceId.Date, racecourseName, raceId.Number);
+        var dataCollectionRaceId = targetRaceId ?? await _writeService.ResolveRaceIdentityAsync(
+            raceId.Date, racecourseName, raceId.Number, cancellationToken);
 
         // 引用元（取得元URL）は、後段の登録が部分的に失敗した場合でも「このURLから
         // 取得を試みた」という事実自体に調査上の価値があるため、結果ページの取得に
@@ -245,6 +245,7 @@ public sealed class JraRaceResultCollectionWorkflow
         try
         {
             outcome = await _writeService.DeclareRaceResultBulkAsync(request, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(outcome.RaceId)) dataCollectionRaceId = outcome.RaceId;
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or TimeoutException or CollectionRepairHeldException)
             && !ApiFailureClassifier.IsFatalServerError(ex))

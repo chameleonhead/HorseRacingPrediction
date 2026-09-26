@@ -128,6 +128,7 @@ builder.Services.PostConfigure<CollectionPlatformOptions>(options =>
     var configured = string.IsNullOrWhiteSpace(options.StateDirectory) ? "collection-platform-state" : options.StateDirectory;
     if (!Path.IsPathRooted(configured)) options.StateDirectory = Path.GetFullPath(configured, builder.Environment.ContentRootPath);
 });
+builder.Services.AddSingleton<IRaceResourceIdentityResolver, HorseRacingPrediction.Api.DomainRaceResourceIdentityResolver>();
 builder.Services.AddSingleton<CollectionPlatformStore>();
 builder.Services.Configure<CollectionMonitoringOptions>(
     builder.Configuration.GetSection(CollectionMonitoringOptions.SectionName));
@@ -220,13 +221,7 @@ await collectionPlatform.RegisterDefinitionAsync(new("race-discovery"), "Race di
 await collectionPlatform.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, HorseRacingPrediction.Contracts.CollectionDefinitionRevisions.RaceDetail,
     "Race resource artifact state machine", false);
 await collectionPlatform.RegisterDefinitionAsync(new("race-odds"), "Race odds", ResourceType.RaceOdds, 1, "Initial", false);
-await collectionPlatform.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 4,
-    "Wait for the semantic profile view and isolate structural failures", true);
-await collectionPlatform.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3,
-    "Wait for the semantic profile view and isolate structural failures", true);
-await collectionPlatform.RegisterDefinitionAsync(new("trainer-profile"), "Trainer profile", ResourceType.Trainer, 3,
-    "Wait for the semantic profile view and isolate structural failures", true);
-await collectionPlatform.RegisterDefinitionAsync(new("owner-identity"), "Owner identity", ResourceType.Owner, 1, "Initial", false);
+await SubjectCollectionDefinitions.RegisterAsync(collectionPlatform);
 
 await app.Services.GetRequiredService<SqliteDatabaseMigrator>().MigrateAsync();
 var subjectRecovery = await SubjectIdentificationAutoRecovery.RunOnceAsync(collectionPlatform, app.Logger);

@@ -89,7 +89,7 @@ public static class CollectionPlatformEndpointExtensions
         {
             await store.SetPausedAsync(false, null, HorseRacingPrediction.Contracts.Time.JstTime.Now(), token);
             return Results.NoContent();
-        });
+        }).AddEndpointFilter<HorseRacingPrediction.Api.Security.RaceWriteEndpointFilter>();
         admin.MapPost("/migrations/race-detail/preview", async (CollectionPlatformStore store,
             CancellationToken token) => Results.Ok(await store.MergeLegacyRaceDetailsAsync(false,
                 HorseRacingPrediction.Contracts.Time.JstTime.Now(), token)));
@@ -474,8 +474,8 @@ public static class CollectionPlatformEndpointExtensions
             if (lease is not null && (lease.RaceHoldGeneration > 0 || lease.Definition.Value == "race-odds"))
             {
                 var coordinator = services.GetRequiredService<HorseRacingPrediction.Infrastructure.Persistence.RaceWriteCoordinator>();
-                var raceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(lease.Resource.Id)
-                    ?? lease.Attributes.GetValueOrDefault("domainRaceId") ?? lease.Resource.Id;
+                var raceId = services.GetRequiredService<IRaceResourceIdentityResolver>().Resolve(lease.Resource.Id, lease.Attributes);
+                if (raceId is null) return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld));
                 await using var raceLock = await coordinator.AcquireAsync([raceId], token);
                 if (!await store.IsValidActiveRaceLeaseAsync(lease.TaskId, lease.LeaseToken, raceId, token))
                     return Results.Ok(new CollectionTaskAcquireResult(CollectionTaskAcquireStatus.RepairHeld));
@@ -720,20 +720,8 @@ public static class CollectionPlatformEndpointExtensions
             missing.Count, classified, actionable, outsideWindow);
     }
 
-    private static string CanonicalRaceCourse(string? value) => value?.Trim() switch
-    {
-        "札幌" or "Sapporo" => "Sapporo",
-        "函館" or "Hakodate" => "Hakodate",
-        "福島" or "Fukushima" => "Fukushima",
-        "新潟" or "Niigata" => "Niigata",
-        "東京" or "Tokyo" => "Tokyo",
-        "中山" or "Nakayama" => "Nakayama",
-        "中京" or "Chukyo" => "Chukyo",
-        "京都" or "Kyoto" => "Kyoto",
-        "阪神" or "Hanshin" => "Hanshin",
-        "小倉" or "Kokura" => "Kokura",
-        _ => throw new InvalidOperationException($"Unsupported JRA racecourse '{value}'.")
-    };
+    private static string CanonicalRaceCourse(string? value) => HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(value)
+        ?? throw new InvalidOperationException($"Unsupported JRA racecourse '{value}'.");
 
     private static RevisionImpact BuildImpact(RevisionImpactRequest request) => request.ScopeType switch
     {

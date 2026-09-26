@@ -113,7 +113,8 @@ public sealed partial class JraNavigator
             var signature = string.Join("|", view.Tables.SelectMany(t => t.Rows).Select(r => string.Join(" ", r)));
             if (!pages.Add(signature)) throw new JraCollectionException("競走馬検索のページ送りが進みません。");
             var links = view.Links.Select(l => new PageLinkSnapshot(l.Url, l.Title)).ToArray();
-            var candidates = links.Where(l => SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
+            var candidates = links.Where(l => SubjectProfilePageParser.NormalizeIdentityName("Horse", l.Title)
+                    == SubjectProfilePageParser.NormalizeIdentityName("Horse", subject.Name))
                 .DistinctBy(l => l.Url).ToArray();
             foreach (var candidateLink in candidates)
             {
@@ -212,7 +213,9 @@ public sealed partial class JraNavigator
         }
         var currentSnapshot = JraSnapshotView.Create(await _browser.GetDataPageSnapshotAsync(token));
         var currentLinks = currentSnapshot.Links.Select(l => new PageLinkSnapshot(l.Url, l.Title)).ToArray();
-        var selected = currentLinks.FirstOrDefault(l => l.Url == found[0].Link.Url && SubjectProfilePageParser.Normalize(l.Title) == SubjectProfilePageParser.Normalize(subject.Name))
+        var selected = currentLinks.FirstOrDefault(l => l.Url == found[0].Link.Url
+            && SubjectProfilePageParser.NormalizeIdentityName("Horse", l.Title)
+                == SubjectProfilePageParser.NormalizeIdentityName("Horse", subject.Name))
             ?? throw new JraCollectionException("対象馬の検索結果が変化しました。");
         await _browser.ClickLinkForSnapshotAsync(selected, token);
         await _browser.WaitForContentAsync(["競走馬情報", subject.Name], token);
@@ -238,10 +241,7 @@ public sealed partial class JraNavigator
 
     private static bool SourceIdentityMatches(string subjectType, string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal)
-        || (subjectType == "Horse"
-            && JraSourceIdentity.TryNormalizeHorse(left, out var leftIdentity)
-            && JraSourceIdentity.TryNormalizeHorse(right, out var rightIdentity)
-            && string.Equals(leftIdentity, rightIdentity, StringComparison.Ordinal));
+        || (subjectType == "Horse" && JraSourceIdentity.MatchesHorse(left, right));
 
     private static bool HistoryHasPassedReferenceDate(JraSubjectPage page, DateOnly referenceDate)
     {
