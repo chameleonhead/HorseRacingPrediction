@@ -9,6 +9,9 @@
 
 ## Execution checkpoint（承認後）
 
+- 配備前独立review追加closure: 別Raceの中止告知で天候・馬場の必須検証を迂回できる既存経路を発見。結果表がある場合は中止扱いにせず、表がない場合は対象番号に一致する単独paragraph全文の明示的中止告知だけを許す。同番号の別競馬場/別日付を含む告知・「この競走」等の曖昧な本文はfail closed。実HTMLの6反例を追加し、公式障害URLを含む関連78件成功。独立read-only再reviewで確認対象のblocking findingを解消。未知の中止DOMを成功と推測する契約は追加しない。
+- 再検証中の中間runでbrowser時間上限test2件が超過（同時format/test実行下）。assertionは緩和せず、最終コードの全面再実行で元gateの成功を確認する。PRは既存#96に集約し、別PR/branchを追加しない。
+- 最終closure検証: 最終コードのRelease solution build/testでScrapingのwall-clock上限2件だけ超過。他8project計954件成功/既存skip1。formatと他project終了後にScraping全非External294件を単独実行し失敗0（計1,248件、assertion変更なし）。関連78件（External原障害ページ含む）とexact formatも成功。CodeGraph同期・中止判定のCanParse/Parse両caller確認済み。独立reviewは残る根拠付きblockerなし。GitHub側は先行版CI成功、同PRへclosureを追加し最新SHAで再検証する。
 - 配備前gate: 最新origin統合版で `dotnet test HorseRacingPrediction.sln --configuration Release --no-restore --filter 'TestCategory!=External'` 成功1,242/失敗0/既存skip1。最終編集後のexact `dotnet format HorseRacingPrediction.sln --no-restore --verify-no-changes` 成功。Release build警告0/エラー0、EF pending-modelなし、空DB migration成功、deployment停止保持/collector temp lifecycle script全成功。DDD/audit validator成功。RT1/RT2のコードとローカル検証を完了、RT3配備・限定復旧へ進む（IAC9/10は本番証拠まで未Verified）。
 - 統合checkpoint: 最新origin/mainの隔離branch `codex/track-condition-recovery`へparserとidentity gateを統合。元workspaceのユーザー変更は含めない。実HTML/公式障害URLを含むparser72件、API保存関連39件、元workspace全非External testが成功。最新originではrevision固定のfixture3件を更新し再検証中。新規発見の天候全文fallbackと専用欄の不正子要素はHTML反例を追加して解消した。
 - revision入口inventory: API登録、CLI登録、日程発見、代替開催発見、Horse履歴、owner migration要求、owner個別要求の7か所を共通 `CollectionDefinitionRevisions.RaceDetail = 3` に統一。Domain seedの1は過去取得済み版、migrationの1は互換性の最低版チェックであり、新規要求の旧版固定ではない。

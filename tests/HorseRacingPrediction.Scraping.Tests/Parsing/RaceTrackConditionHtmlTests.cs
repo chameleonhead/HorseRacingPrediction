@@ -76,13 +76,56 @@ public sealed class RaceTrackConditionHtmlTests
         Assert.AreEqual("Weather", error.FieldName);
     }
 
-    private async Task<PageSnapshot> Capture(string tracks, string headerClass = "race_header", string weather = "雨")
+    [TestMethod]
+    public async Task OtherRaceCancellationNotice_DoesNotSuppressRequiredOverview()
+    {
+        var snapshot = await Capture("<li>ダート 重</li>", notice: "第11競走は取り止めとなりました");
+        var parsed = (JraRaceResultPage)new RaceResultPageParser().Parse(snapshot);
+        Assert.IsFalse(parsed.IsOfficiallyCancelled);
+        Assert.AreEqual("雨", parsed.WeatherText);
+        Assert.AreEqual("ダート:重", parsed.TrackConditionText);
+        var missing = await Capture("", notice: "第11競走は取り止めとなりました");
+        Assert.ThrowsExactly<JraPageStructureException>(() => new RaceResultPageParser().Parse(missing));
+    }
+
+    [TestMethod]
+    [DataRow(10, true)]
+    [DataRow(11, false)]
+    public async Task CancellationWithoutResultTable_MustNameTargetRace(int cancelledRace, bool expected)
+    {
+        var page = await _browser.NewPageAsync();
+        await page.SetContentAsync($"<main><h1>2026年4月4日 中山 10レース 結果</h1><p>第{cancelledRace}競走は取り止めとなりました</p></main>");
+        var snapshot = await new PlaywrightPageSnapshotter().CaptureAsync(page);
+        var parser = new RaceResultPageParser();
+        Assert.AreEqual(expected, parser.CanParse(snapshot));
+        if (expected)
+            Assert.IsTrue(((JraRaceResultPage)parser.Parse(snapshot)).IsOfficiallyCancelled);
+        else
+            Assert.ThrowsExactly<JraPageParseException>(() => parser.Parse(snapshot));
+    }
+
+    [TestMethod]
+    [DataRow("阪神第10競走は取り止めとなりました")]
+    [DataRow("2026年4月3日 中山第10競走は取り止めとなりました")]
+    [DataRow("この競走は取り止めとなりました")]
+    public async Task UnscopedCancellationAnnouncement_IsNotEvidence(string announcement)
+    {
+        var page = await _browser.NewPageAsync();
+        await page.SetContentAsync($"<main><h1>2026年4月4日 中山 10レース 結果</h1><p>{announcement}</p></main>");
+        var snapshot = await new PlaywrightPageSnapshotter().CaptureAsync(page);
+        var parser = new RaceResultPageParser();
+        Assert.IsFalse(parser.CanParse(snapshot));
+        Assert.ThrowsExactly<JraPageParseException>(() => parser.Parse(snapshot));
+    }
+
+    private async Task<PageSnapshot> Capture(string tracks, string headerClass = "race_header", string weather = "雨", string notice = "")
     {
         var page = await _browser.NewPageAsync();
         await page.SetContentAsync($$"""
             <main>
               <h1>レース結果2026年4月4日（土曜）3回中山3日 10レース</h1>
               <p>馬主：青芝商事(株) 芝良商会 ダート良牧場</p>
+              <p>{{notice}}</p>
               <ul><li>天候 晴</li><li>芝 良</li></ul>
               <div class="{{headerClass}}"><h2>千葉日報杯</h2><div class="cell baba">
                 <ul><li class="weather"><span class="cap">天候</span><span class="txt">{{weather}}</span></li>{{tracks}}</ul>

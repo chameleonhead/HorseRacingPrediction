@@ -192,10 +192,19 @@ public sealed class RaceResultPageParser
 
     private static bool IsOfficiallyCancelled(JraSnapshotView snapshot)
     {
-        var text = string.Join(' ', new[] { snapshot.Title, snapshot.MainText }.Concat(snapshot.Headings));
-        return Regex.IsMatch(text,
-            @"(?:第?\s*\d{1,2}\s*競走|この競走|本競走)\s*(?:は|を)?\s*(?:取り止め|取止め|取りやめ|中止)(?:ました|とします|となりました)?",
-            RegexOptions.CultureInvariant);
+        // A notice about another race cannot suppress this page's result or its required fields.
+        if (FindResultTable(snapshot) is not null) return false;
+        var target = RaceNumberRegex.Match($"{snapshot.Title} {string.Join(" ", snapshot.Headings)}");
+        if (!target.Success) return false;
+        var number = int.Parse(target.Groups["num"].Value);
+        // Only a complete race-local notice is evidence. A substring of a dated or other-course
+        // announcement, or an unqualified "this race", cannot waive required result fields.
+        var notices = snapshot.Source.FindByKind(PageContentKind.Paragraph)
+            .Select(node => Regex.Match(node.GetEffectiveText() ?? string.Empty,
+                @"^\s*第?\s*(?<number>\d{1,2})\s*競走\s*(?:は|を)?\s*(?:取り止め|取止め|取りやめ|中止)(?:ました|とします|となりました)?[。．.]?\s*$",
+                RegexOptions.CultureInvariant))
+            .Where(match => match.Success).ToArray();
+        return notices.Length == 1 && int.Parse(notices[0].Groups["number"].Value) == number;
     }
 
     private static readonly Regex MeetingRegex = new(
