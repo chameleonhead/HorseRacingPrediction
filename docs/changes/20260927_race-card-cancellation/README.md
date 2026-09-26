@@ -1,6 +1,6 @@
 # 出馬表の取消表示に対応し、馬の識別を維持して収集を復旧する
 
-- Status: Approved
+- Status: Implemented
 - Change record schema: 2
 - Owner: Main
 - Created: 2026-09-27
@@ -11,8 +11,8 @@
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
 | Code | Verified | 取消/除外の全行保存、Activeのみ予想・odds、状態未指定保持、revision5、旧下書き拒否を実装 |
-| Verification | In progress | ローカル1360 passed / 1 skipped、最終API310 passed / 1 skipped、format/empty DB/local host成功。Linux CIは未実行 |
-| Deployment/operation | Not started | GitHub経由の配備・対象失敗の復旧・進捗確認を本提案に含む。未承認の操作はしない |
+| Verification | Verified | ローカル1360 passed / 1 skipped、最終API310 passed / 1 skipped、format/empty DB/local host成功。Linux CI 36257452800成功 |
+| Deployment/operation | Verified | GitHub配備36257902413成功。対象Card revision5保存、16頭read-back/15Active、後続batch4件成功、pipeline稼働を確認 |
 
 ## Context / incident
 
@@ -77,8 +77,8 @@ Pre-implementation契約凍結: transportの `Contracts.RaceEntryParticipationSt
 | AC1 | 実ページ相当HTMLの取消/除外を認識し、通常馬・公式馬identityを保持。現在番号を過去成績/行順から生成しない | T0,T1,T4 | live再現、固定HTML→snapshot→parser、未知値/誤scope反例 | Verified |
 | AC2 | 初回取消/通常→取消でも全行を出馬表として保存・再読出しし、取消馬の取得済み属性・stable ID・同馬既知番号を保持。旧event/旧入力互換も維持 | T2,T2D,T3,T4 | serialization→API→event→projection/read-back。今回相当16頭は取消1頭込み16頭として残り、馬主等も保持 | Verified |
 | AC3 | 取消のnullでは未確定待ちにならず、通常馬のnullでは待機を維持。16頭中取消1頭なら予想候補だけ15頭。全非出走でも出馬表は残し予想のみ対象なし、通常レース中止を推定しない | T3,T4 | collector orchestration、API-only/ML/手動検証、出馬表全件と予想候補の独立比較 | Verified |
-| AC4 | 通常カード/結果/oddsの既存動作、状態未指定保持、古いreceipt拒否、未知障害の停止を維持 | T2,T2D,T3,T4 | 関連regression、Release build、format、全体非External suite、Linux CI | Connected |
-| AC5 | GitHub経由で同版API/collectorを配備しhealth確認。対象限定再取得で取消例外が消えCard保存と継続進捗を確認する | T5 | workflow、GET失敗履歴/対象attempt、pipeline状態、15分観測または正常後続batch完了（先に得た証拠） | Not started |
+| AC4 | 通常カード/結果/oddsの既存動作、状態未指定保持、古いreceipt拒否、未知障害の停止を維持 | T2,T2D,T3,T4 | 関連regression、Release build、format、全体非External suite、Linux CI | Verified |
+| AC5 | GitHub経由で同版API/collectorを配備しhealth確認。対象限定再取得で取消例外が消えCard保存と継続進捗を確認する | T5 | workflow成功、02:23:25 Card保存、後続batch4件02:24:43完了、02:25以降もpipeline稼働 | Verified |
 
 ## Task plan
 
@@ -90,8 +90,8 @@ Pre-implementation契約凍結: transportの `Contracts.RaceEntryParticipationSt
 | T2 | 状態contract/domain/persistence | Main | Lead | T0 | Contracts/ApiClient/Domain/API/Application/ReadModelsの状態経路と関連tests | 旧event読取・未指定保持・状態遷移の実保存 | Domain126 / API310成功、実保存read-back | Verified | Lead — public contract / persistence | none | unavailable; retries 0; corrections 0; reviews 0 |
 | T2D | domain固定契約の反例tests | cancellation_domain_tests | Cost efficient | T2 | tests/HorseRacingPrediction.Domain.Tests/RaceParticipationStatusTests.cs | focused tests→Domain regression | focused8、Domain126 passed | Verified | Worker — frozen invariants / exclusive test file | T2D-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | T3 | collector/予想/odds接続 | Main | Lead | T1,T2 | Scraping workflow/Collector/Agents/ML/odds関連とtests | AC2–4の統合反例とrevision | 全体1360、collector356、live16/15成功 | Verified | Lead — integration / overlapping writes | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T4 | 統合回帰・最終レビュー | Main | Lead | T1,T2,T3 | 必要な統合tests、docs | 全ACの経路確認、format/build/test/CI | ローカル1360成功、最終API310成功、CI待ち | In progress | Lead — final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
-| T5 | 配備・限定復旧・観測 | Main | Lead | T4 | GitHub PR/CI/CD、承認された対象retry/resume | AC5、本番GET/実行ログ/PRコメント | 未着手 | Dependent | Lead — security / integration | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T4 | 統合回帰・最終レビュー | Main | Lead | T1,T2,T3 | 必要な統合tests、docs | 全ACの経路確認、format/build/test/CI | ローカル1360成功、最終API310成功、Linux CI成功 | Verified | Lead — final acceptance | none | unavailable; retries 0; corrections 0; reviews 0 |
+| T5 | 配備・限定復旧・観測 | Main | Lead | T4 | GitHub PR/CI/CD、承認された対象retry/resume | AC5、本番GET/実行ログ/PRコメント | PR #102/CD成功、target read-back、後続batch全4件成功 | Verified | Lead — security / integration | none | unavailable; retries 0; corrections 0; reviews 0 |
 
 ## Delivery / recovery / rollback
 
@@ -105,9 +105,9 @@ GitHub PRの最終headでCI成功後にmergeし、既存pause/drain→collector�
 
 - JRA site contract impact: Updated
 
-- `docs/27-jra-site-collection-contract.md`: §2.3に取消セルと行に残る属性の実観測を恒常的なサイト知識として記録し、出馬表保存と予想選別の分離・過去馬番流用禁止を明記。観測事実と未実装の対応を区別する取得元の正本。
-- `docs/10-domain-design.md`: 出走状態と結果異常コードを分離する提案、未指定/明示更新の互換境界へのリンク。domain正本。
-- `docs/26-collection-platform-design.md`: 取消と未確定待ちの区別、対象限定復旧方針への提案リンク。collection正本。
+- `docs/27-jra-site-collection-contract.md`: §2.3に取消セルと行に残る属性の実観測を恒常的なサイト知識として記録し、出馬表保存と予想選別の分離・過去馬番流用禁止を明記。観測事実と対応範囲を区別する取得元の正本。
+- `docs/10-domain-design.md`: 出走状態と結果異常コードの分離、未指定/明示更新の互換境界を反映。domain正本。
+- `docs/26-collection-platform-design.md`: 取消と未確定待ちの区別、revision5と対象限定復旧方針を反映。collection正本。
 - UIの新画面/フォーム/一覧変更は提案しない。実装中に必要な外部仕様変更が生じたら本書へ戻す。
 
 ## Review gates / next action
@@ -118,6 +118,8 @@ Pre-implementation: 契約を凍結しT1をgpt-5.6-luna指定のcoding workerへ
 Checkpoint: 状態contract/domain/writer/readモデルと予想・odds・collectorを接続し、revision5へ更新。共有buildは直列で実施。独立Domain testsは契約凍結後に専有新規fileへ分離できたためT2Dとして追加委譲した。Mainがpublic contractとpersistence判断、統合検証を保持。実サイトprobe16/15とAPI保存/予想3件成功。最終レビューと配備は未完了。
 Local checkpoint: source/testsは2f41da6fへcommit。全体1360 passed / 1 skipped、最終API310 passed / 1 skipped、exact format、empty DB migration、pending-model、isolated host smokeは成功。ローカル未解決失敗なし。
 
-次操作: DDD validator、差分レビュー→検証文書commit→PR/Linux CI→merge/CD→対象限定retry/条件付きresume→進捗観測。未コミットは本recordとevidenceの検証結果更新のみ。APIキー・本番レスポンス全文は保存しない。最終受入まで継続する。
+Final review: MainがAC1–AC5とT0–T5の完了証拠を照合。対象Card保存と16頭/15Activeの本番read-back、再開後の正常後続batch完了を確認し、承認済みの取消対応・配備・対象復旧に未完了なし。取得時点で結果未公開のためtask全体のSucceededは要求せず、10:05の正常結果待機を維持する。worker auditとDDD validatorを再確認して、最終記録は別branch/PRから統合する。
+
+別件の非阻害follow-up（owner Main、Excluded follow-up）: 再開後、配備前作成のowner-identityジョブでSubjectNotIdentifiedが発生。代表例は2026-09-26中山1Rで、要求IDと保存済み同名馬主IDが相違する。今回の取消馬の馬主は正常保存済み、対象のCard回復・後続進捗・安全停止境界を阻害しない。別対象の識別契約変更・補正・一括retryは承認範囲外であり未実施。全収集エラーの解消とは主張せず、別設計の要否を利用者へ提示する。証拠はevidence.md参照。
 
 付随事項: 既存diagnostics helperのPowerShell変数補間 `$escapedGroupKey?page` が失敗したため、同じGETを暗号化資格情報からメモリ内で実行して調査した。これは今回の収集原因ではなく、helper自体の修正は本変更のAC外（owner Main、必要なら別変更）とする。
