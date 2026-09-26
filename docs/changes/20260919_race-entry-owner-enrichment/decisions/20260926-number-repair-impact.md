@@ -82,20 +82,20 @@ event storeとすべての関連projectionの双方を検査する。削除済�
 
 | ID | Evidence / impact | Recommended disposition / alternative / residual risk | AC/task | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- |
-| RP-C1 | 公開GETにevent版・全履歴がない。0件だけで誤補正し得る | authoritative previewとapply時再走査。不明は拒否。API件数のみの即時補正は不採用。残riskは新未知参照を拒否して顕在化 | RP2/RP-T2 | Agree | 提示中 | Resolved in design |
-| RP-C2 | EntryIdが番号由来。入替で派生履歴や独立参照が別馬を指す | 単一event＋純粋な派生情報だけ再構成、独立参照は拒否。全参照自動移行は不採用。実データで非zeroが出れば別設計 | RP2–3/RP-T2–3 | Agree | 提示中、apply未承認 | Resolved in design |
-| RP-C3 | pipeline pauseはAPI writerを止めず、preview直後にも参照が増える | Race単位共通排他・version・永続的な未整合gate・複数process試験。排他不能構成は補正拒否。未検証のfile lockを安全保証としない | RP3/RP-T3 | Agree | 新規全体停止は不要という判断を維持 | Resolved in design |
-| RP-C4 | Cardの公開期間を過ぎるとownerを公式から再取得できない | 取得可能対象だけ。Result/profile代用禁止。期間切れは未補正を明示し完了扱いにしない。公開終了前の成功は保証しない | RP1/RP4/RP-T1/RP-T4 | Agree | 提示中 | Resolved in design |
-| RP-C5 | 配備成功後も既存不整合で再停止した | 対象の終端成功＋raw整合＋他収集の進行＋10分以上再停止なしで復旧判定。無条件resume/guard解除は不採用。新たな不明障害時は停止維持 | RP4/RP-T4 | Agree | 提示中、再開未承認 | Resolved in design |
+| C201 | RP-C1: 公開GETにevent版・全履歴がない。0件だけで誤補正し得る | authoritative previewとapply時再走査。不明は拒否。API件数のみの即時補正は不採用。残riskは新未知参照を拒否して顕在化 | RP2/RP-T2 | Agree | 提示中 | Resolved in design |
+| C202 | RP-C2: EntryIdが番号由来。入替で派生履歴や独立参照が別馬を指す | 単一event＋純粋な派生情報だけ再構成、独立参照は拒否。全参照自動移行は不採用。実データで非zeroが出れば別設計 | RP2–3/RP-T2–3 | Agree | 提示中、apply未承認 | Resolved in design |
+| C203 | RP-C3: pipeline pauseはAPI writerを止めず、preview直後にも参照が増える | Race単位共通排他・version・永続的な未整合gate・複数process試験。排他不能構成は補正拒否。未検証のfile lockを安全保証としない | RP3/RP-T3 | Agree | 新規全体停止は不要という判断を維持 | Resolved in design |
+| C204 | RP-C4: Cardの公開期間を過ぎるとownerを公式から再取得できない | 取得可能対象だけ。Result/profile代用禁止。期間切れは未補正を明示し完了扱いにしない。公開終了前の成功は保証しない | RP1/RP4/RP-T1/RP-T4 | Agree | 提示中 | Resolved in design |
+| C205 | RP-C5: 配備成功後も既存不整合で再停止した | 対象の終端成功＋raw整合＋他収集の進行＋10分以上再停止なしで復旧判定。無条件resume/guard解除は不採用。新たな不明障害時は停止維持 | RP4/RP-T4 | Agree | 提示中、再開未承認 | Resolved in design |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| RP1 | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | 木曜型HTML→確定Card→保存の統合試験、並び/頭数変更・再起動・既存値保持反例 | Not started |
-| RP2 | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 実14頭反例、oddsのみ/未反映event/削除ticket/memo/修復候補/集合違い/別Race、DB前後同一 | Not started |
-| RP3 | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | 複数process/共有volume、projection障害・再起動、馬番循環入替、同一騎手、独立参照割込、旧版互換とbackup復元試験 | Not started |
-| RP4 | 別途承認後の限定補正・次revision再取得・再開を経て、中山5Rと阪神11Rのraw番号/owner/grade/関連履歴整合、原障害対象の成功、他収集進行、10分以上再停止なし | RP-T4 | 本番preview承認記録、対象要求/終端、raw検証、観測時刻。owner14/14・16/16、説明できない参照差分0 | Not started |
+| AC201 (RP1) | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | 木曜型HTML→確定Card→保存の統合試験、並び/頭数変更・再起動・既存値保持反例 | Not started |
+| AC202 (RP2) | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 実14頭反例、oddsのみ/未反映event/削除ticket/memo/修復候補/集合違い/別Race、DB前後同一 | Not started |
+| AC203 (RP3) | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | 複数process/共有volume、projection障害・再起動、馬番循環入替、同一騎手、独立参照割込、旧版互換とbackup復元試験 | Not started |
+| AC204 (RP4) | 別途承認後の限定補正・次revision再取得・再開を経て、中山5Rと阪神11Rのraw番号/owner/grade/関連履歴整合、原障害対象の成功、他収集進行、10分以上再停止なし | RP-T4 | 本番preview承認記録、対象要求/終端、raw検証、観測時刻。owner14/14・16/16、説明できない参照差分0 | Not started |
 
 RP1は親IAC3/IAC6、RP2–3はIAC2/IAC4、RP4はIAC5/IAC9/IAC10へ接続する。親の未完了範囲を調査文書の完成で除外しない。
 
@@ -128,3 +128,4 @@ Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ�
 - `python .codex/skills/document-driven-development/scripts/validate_change_records.py docs/changes/20260919_race-entry-owner-enrichment/README.md`: issues=0。
 - `python scripts/audit_agent_execution.py docs/changes/20260919_race-entry-owner-enrichment`: valid。`git diff --check`: passed。
 - Main最終調査review: official source ID照合、admin odds、投影履歴の参照保持という独立証拠を照合。設計調査の成果を受入れ、実装RP1–4と親復旧は未完了のまま保持。実装承認待ちが次のgateであり、文書commitは復旧完了を意味しない。
+- 補足文書単体のvalidatorは独自RP IDを認識せず2件の診断を返した。基準の意味を変えずAC201–204/C201–205の機械可読IDを併記し、親・本書の再検証はissues=0、audit valid。親validator成功だけで単体成功とは扱わない。
