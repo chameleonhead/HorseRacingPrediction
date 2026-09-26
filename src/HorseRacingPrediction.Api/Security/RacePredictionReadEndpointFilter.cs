@@ -6,7 +6,8 @@ namespace HorseRacingPrediction.Api.Security;
 
 /// <summary>Prevent shared histories from exposing a partially projected assignment repair.</summary>
 public sealed class RacePredictionReadEndpointFilter(RaceWriteCoordinator coordinator,
-    IDbContextProvider<EventStoreDbContext> provider) : IEndpointFilter
+    IDbContextProvider<EventStoreDbContext> provider,
+    HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
@@ -33,8 +34,12 @@ public sealed class RacePredictionReadEndpointFilter(RaceWriteCoordinator coordi
                     .Where(x => x.Data.Contains(subject) && x.Data.ToLower().Contains("\"fingerprint\""))
                     .Select(x => x.AggregateId).Distinct().ToListAsync(token));
             foreach (var id in related)
+            {
+                if (await collection.GetRaceRepairHoldAsync(id, token) is { IsActive: true })
+                    return Results.Conflict(new { code = "RaceRepairHeld", raceId = id });
                 if (await coordinator.ReadBarrierAsync(id, token) is { Verified: false })
                     return Results.Conflict(new { code = "RaceRepairPending", raceId = id });
+            }
             return await next(context);
         }
         return Results.Conflict(new { code = "RaceReadScopeChanged" });

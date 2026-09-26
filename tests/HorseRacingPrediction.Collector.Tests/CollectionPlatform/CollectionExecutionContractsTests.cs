@@ -215,13 +215,13 @@ public sealed class CollectionExecutionContractsTests
             var executor = new CollectionTaskExecutor(store,
                 new CollectionDefinitionHandlerRegistry([new CancellingHandler(cancellation)]));
 
-            Assert.IsTrue(await executor.ExecuteAsync(new(request.TaskId, 1), DateTimeOffset.UtcNow,
+            Assert.IsTrue(await executor.ExecuteAsync(new(request.TaskId!.Value, 1), DateTimeOffset.UtcNow,
                 TimeSpan.FromMinutes(5), cancellation.Token));
 
-            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == request.TaskId);
+            var task = (await store.GetTasksAsync()).Single(x => x.TaskId == request.TaskId!.Value);
             Assert.AreEqual(CollectionTaskStatus.Ready, task.Status);
             Assert.IsTrue(task.AvailableAt > DateTimeOffset.UtcNow);
-            var attempts = await store.GetAttemptsAsync(request.TaskId);
+            var attempts = await store.GetAttemptsAsync(request.TaskId!.Value);
             Assert.AreEqual(CollectionAttemptResult.TransientFailure, attempts.Single().Result);
             Assert.AreEqual("Definition=horse-profile; Resource=Horse:JRA:H-CANCEL",
                 attempts.Single().PageIdentification);

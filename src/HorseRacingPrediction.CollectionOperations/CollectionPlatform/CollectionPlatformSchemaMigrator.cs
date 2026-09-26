@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 
 internal static class CollectionPlatformSchemaMigrator
 {
-    internal const int CurrentVersion = 17;
+    internal const int CurrentVersion = 18;
     private const string HistoryTable = "collection_schema_history";
 
     private static readonly string[] ModelTables =
@@ -447,6 +447,34 @@ internal static class CollectionPlatformSchemaMigrator
                 cancellationToken, transaction,
                 ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())))
                 .ConfigureAwait(false);
+        }
+
+        if (version < 18)
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE collection_request_batch_bindings_v18 (
+                    BatchItemId TEXT NOT NULL PRIMARY KEY, PayloadFingerprint TEXT NOT NULL,
+                    RequestId TEXT NOT NULL, TaskId TEXT NULL
+                );
+                INSERT INTO collection_request_batch_bindings_v18 SELECT BatchItemId, PayloadFingerprint, RequestId, TaskId FROM collection_request_batch_bindings;
+                DROP TABLE collection_request_batch_bindings;
+                ALTER TABLE collection_request_batch_bindings_v18 RENAME TO collection_request_batch_bindings;
+                CREATE INDEX IX_collection_request_batch_bindings_RequestId ON collection_request_batch_bindings (RequestId);
+                """, cancellationToken, transaction);
+            if (!await HasColumnAsync(connection, transaction, "collection_tasks", "RaceHoldGeneration", cancellationToken))
+                await ExecuteAsync(connection, "ALTER TABLE collection_tasks ADD COLUMN RaceHoldGeneration INTEGER NOT NULL DEFAULT 0;", cancellationToken, transaction);
+            await ExecuteAsync(connection, """
+                CREATE TABLE IF NOT EXISTS race_repair_holds (
+                    RaceId TEXT NOT NULL, Generation INTEGER NOT NULL,
+                    OperationId TEXT NOT NULL, Reason TEXT NOT NULL, CreatedAt TEXT NOT NULL,
+                    ReleasedAt TEXT NULL, AssignmentFingerprint TEXT NULL, ReleaseOperationId TEXT NULL,
+                    PRIMARY KEY (RaceId, Generation)
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_race_repair_holds_OperationId ON race_repair_holds (OperationId);
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_race_repair_holds_RaceId ON race_repair_holds (RaceId) WHERE ReleasedAt IS NULL;
+                INSERT INTO collection_schema_history (version, applied_at) VALUES (18, $appliedAt);
+                """, cancellationToken, transaction,
+                ("$appliedAt", (object)HorseRacingPrediction.Contracts.Time.JstTime.ToDatabaseString(HorseRacingPrediction.Contracts.Time.JstTime.Now())));
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

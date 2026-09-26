@@ -25,6 +25,7 @@ public sealed class CollectionCompletionTransportTests
             var definition = new CollectionDefinitionId("race-detail");
             await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
             var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now);
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
             var evidence = new RaceSchedulingEvidence(now.AddHours(-2), "JRA-RaceCard", now);
             var completion = new CollectionAttemptCompletion(ownerValidationFails
                     ? CollectionAttemptResult.ValidationFailure : CollectionAttemptResult.Succeeded,
@@ -45,7 +46,7 @@ public sealed class CollectionCompletionTransportTests
             var worker = new CollectionPlatformWorkerClient(client,
                 new CollectionDefinitionHandlerRegistry([new EvidenceHandler(completion)]));
 
-            await worker.ExecuteAsync(new(receipt.TaskId, 1), CancellationToken.None);
+            await worker.ExecuteAsync(new(taskId, 1), CancellationToken.None);
 
             var detail = await client.GetFromJsonAsync<CollectionResourceDetail>(
                 "api/admin/collection/resources/Race/JRA/20260920%3ANakayama%3A3/race-detail");
@@ -82,8 +83,9 @@ public sealed class CollectionCompletionTransportTests
             var definition = new CollectionDefinitionId("race-detail");
             await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 2, "facets", false);
             var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Initial, now);
-            var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            using var response = await client.PostAsJsonAsync($"api/internal/collection/tasks/{receipt.TaskId}/complete",
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            using var response = await client.PostAsJsonAsync($"api/internal/collection/tasks/{taskId}/complete",
                 new { lease!.LeaseToken, Result = CollectionAttemptResult.Succeeded });
             response.EnsureSuccessStatusCode();
             var detail = await store.GetResourceDetailAsync(resource, definition);

@@ -45,7 +45,10 @@ internal static class TestApplicationFactory
             options.SerializerOptions.Converters.Add(new JstDateTimeOffsetJsonConverter()));
         builder.Services.Configure<CollectionPlatformOptions>(options =>
         {
-            options.StateDirectory = Path.Combine(Path.GetTempPath(), "horse-racing-api-tests", Guid.NewGuid().ToString("N"));
+            var source = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
+            options.StateDirectory = source == ":memory:"
+                ? Path.Combine(Path.GetTempPath(), "horse-racing-api-tests", Guid.NewGuid().ToString("N"))
+                : Path.GetFullPath(source) + ".collection";
             options.DatabaseFileName = "collection-platform.db";
         });
         builder.Services.AddSingleton<CollectionPlatformStore>();

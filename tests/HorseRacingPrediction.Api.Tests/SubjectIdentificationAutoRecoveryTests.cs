@@ -20,9 +20,10 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = "アジアエクスプレス" });
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "登録区分付き見出しです。",
                 PageIdentification: "SubjectIdentification:ProfileNameMismatch"));
         await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
@@ -36,7 +37,7 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         Assert.AreEqual(0, second.Examined);
         var tasks = await store.GetTasksAsync();
         Assert.HasCount(2, tasks);
-        Assert.AreEqual(2, tasks.Single(x => x.TaskId != receipt.TaskId).RequestedRevision);
+        Assert.AreEqual(2, tasks.Single(x => x.TaskId != taskId).RequestedRevision);
     }
 
     [TestMethod]
@@ -53,9 +54,10 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         var now = DateTimeOffset.UtcNow.AddMinutes(-2);
         var receipt = await store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
             attributes: new Dictionary<string, string> { ["name"] = "パネットーネ 産駒" });
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
-        await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, now.AddSeconds(1),
+        await store.CompleteAttemptAsync(taskId, lease.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "候補なし",
                 PageIdentification: "SubjectIdentification:NoCandidate"));
         await store.RegisterDefinitionAsync(definition, "Horse profile", ResourceType.Horse,
@@ -85,8 +87,9 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         var receipt = await store.RequestAsync(resource, definition, 2, CollectionReason.Discovery, now,
             CollectionLane.Background, 40,
             attributes: new Dictionary<string, string> { ["name"] = "テスト調教師" });
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
             new(CollectionAttemptResult.PermanentFailure, "JraCollectionException",
                 "調教師情報の見出しを確認できません。"));
         await store.SetPausedAsync(false, null, now.AddSeconds(2));
@@ -96,7 +99,7 @@ public sealed class SubjectIdentificationAutoRecoveryTests
         var result = await SubjectIdentificationAutoRecovery.RunOnceAsync(store);
 
         Assert.AreEqual(1, result.Recovered);
-        var recovered = (await store.GetTasksAsync()).Single(x => x.TaskId != receipt.TaskId);
+        var recovered = (await store.GetTasksAsync()).Single(x => x.TaskId != taskId);
         Assert.AreEqual(3, recovered.RequestedRevision);
         Assert.AreEqual(CollectionLane.Background, recovered.Lane);
         Assert.AreEqual(40, recovered.Priority);

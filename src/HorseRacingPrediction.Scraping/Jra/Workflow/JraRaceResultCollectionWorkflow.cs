@@ -246,7 +246,8 @@ public sealed class JraRaceResultCollectionWorkflow
         {
             outcome = await _writeService.DeclareRaceResultBulkAsync(request, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException && ex is not TimeoutException && !ApiFailureClassifier.IsFatalServerError(ex))
+        catch (Exception ex) when (ex is not (OperationCanceledException or TimeoutException or CollectionRepairHeldException)
+            && !ApiFailureClassifier.IsFatalServerError(ex))
         {
             // レース自体が作成・カード公開できていなければ、結果・天候等の登録は
             // すべて同じ原因（"Race is not created." / "カード公開前"）で失敗するだけなので、

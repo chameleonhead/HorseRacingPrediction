@@ -35,6 +35,19 @@ public sealed class JraRaceResultCollectionWorkflowTests
             entries);
 
     [TestMethod]
+    public async Task CollectAsync_RepairHoldPropagatesWithoutBecomingDomainValidationFailure()
+    {
+        var page = CreateResultPage(TestRaceId, new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
+        var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
+        await using var scope = session;
+        writer.BulkWriteException = new HorseRacingPrediction.Contracts.CollectionRepairHeldException();
+        await Assert.ThrowsExactlyAsync<HorseRacingPrediction.Contracts.CollectionRepairHeldException>(() =>
+            new JraRaceResultCollectionWorkflow(session, writer).CollectAsync(TestRaceId));
+        Assert.HasCount(1, writer.DeclareRaceResultBulkCalls);
+        Assert.IsEmpty(writer.DeclareRaceEntryResultCalls);
+    }
+
+    [TestMethod]
     public async Task CollectAsync_OfficialCancellation_IsTerminalWithoutDomainResultWrite()
     {
         var page = CreateResultPage(TestRaceId) with { IsOfficiallyCancelled = true };

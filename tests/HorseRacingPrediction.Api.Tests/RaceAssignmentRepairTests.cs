@@ -12,6 +12,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using RacePredictionContextReadModel = HorseRacingPrediction.Application.Queries.ReadModels.RacePredictionContextReadModel;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
+using HorseRacingPrediction.Collector.Http;
 
 namespace HorseRacingPrediction.Api.Tests;
 
@@ -41,6 +43,7 @@ public sealed class RaceAssignmentRepairTests
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
         var manifest = Manifest(inspection.GetProperty("version").GetInt32()) with
         { GradeCode = "G3", Horses = Enumerable.Range(1, count).Select(n => new RaceEntryRepairHorse(Source(n), n % count + 1, (n % count) / 2 + 1, $"所有者{n}")).ToArray() };
+        manifest = await WithHoldAsync(http, raceId, manifest);
         var preview = await (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest)).Content.ReadFromJsonAsync<JsonElement>();
         Assert.IsTrue(preview.GetProperty("eligible").GetBoolean(), preview.ToString());
         var request = new ApplyRaceEntryRepairRequest(Guid.NewGuid().ToString(), preview.GetProperty("fingerprint").GetString()!, manifest);
@@ -67,15 +70,21 @@ public sealed class RaceAssignmentRepairTests
         var raceId = await SeedAsync(app, http);
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
         var manifest = Manifest(inspection.GetProperty("version").GetInt32());
+        manifest = await WithHoldAsync(http, raceId, manifest);
         foreach (var invalid in new[] { manifest with { ExpectedVersion = 0 }, manifest with { Horses = [manifest.Horses[0]] },
             manifest with { Horses = [manifest.Horses[0], manifest.Horses[0]] },
             manifest with { SourceUrl = manifest.SourceUrl.Replace("0106", "0109") } })
             Assert.AreEqual(HttpStatusCode.BadRequest, (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", invalid)).StatusCode);
         var preview = await (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest)).Content.ReadFromJsonAsync<JsonElement>();
         var ticketId = "predictionticket-" + Guid.NewGuid();
-        (await http.PostAsJsonAsync("/api/predictions", new HorseRacingPrediction.Api.Contracts.CreatePredictionTicketRequest(
-            raceId, "AI", "local", 0.5m, null, ticketId))).EnsureSuccessStatusCode();
-        (await http.PostAsJsonAsync($"/api/predictions/{ticketId}/withdraw", new { reason = "withdrawn" })).EnsureSuccessStatusCode();
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync("/api/predictions",
+            new HorseRacingPrediction.Api.Contracts.CreatePredictionTicketRequest(raceId, "AI", "local", 0.5m, null, ticketId))).StatusCode);
+        // Simulate an independent legacy writer bypassing HTTP after the preview.
+        var bus = app.Services.GetRequiredService<EventFlow.ICommandBus>();
+        await bus.PublishAsync(new HorseRacingPrediction.Application.Commands.Predictions.CreatePredictionTicketCommand(
+            new HorseRacingPrediction.Domain.Predictions.PredictionTicketId(ticketId), raceId, "AI", "local", 0.5m, null), CancellationToken.None);
+        await bus.PublishAsync(new HorseRacingPrediction.Application.Commands.Predictions.WithdrawPredictionTicketCommand(
+            new HorseRacingPrediction.Domain.Predictions.PredictionTicketId(ticketId), "withdrawn"), CancellationToken.None);
         var applied = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply",
             new ApplyRaceEntryRepairRequest(Guid.NewGuid().ToString(), preview.GetProperty("fingerprint").GetString()!, manifest));
         Assert.AreEqual(HttpStatusCode.Conflict, applied.StatusCode);
@@ -123,6 +132,7 @@ public sealed class RaceAssignmentRepairTests
         Backup(connection, oldBackup);
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
         var manifest = Manifest(inspection.GetProperty("version").GetInt32());
+        manifest = await WithHoldAsync(http, raceId, manifest);
         var previewResponse = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest);
         var preview = await previewResponse.Content.ReadFromJsonAsync<JsonElement>();
         var request = new ApplyRaceEntryRepairRequest(Guid.NewGuid().ToString(), preview.GetProperty("fingerprint").GetString()!, manifest);
@@ -146,6 +156,8 @@ public sealed class RaceAssignmentRepairTests
         resumed.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         var response = await resumed.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", request);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, await response.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.Conflict, (await resumed.GetAsync($"/api/races/{raceId}/context")).StatusCode);
+        await ReleaseAndFinishAsync(restarted, resumed, raceId, request, response);
         Assert.AreEqual(HttpStatusCode.OK, (await resumed.GetAsync($"/api/races/{raceId}/context")).StatusCode);
         using var db = restarted.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
         Assert.AreEqual(1, await db.Set<EventEntity>().CountAsync(x => x.AggregateId == raceId && x.Data.Contains(request.OperationId)));
@@ -157,7 +169,8 @@ public sealed class RaceAssignmentRepairTests
         restoredClient.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
         Assert.AreEqual(HttpStatusCode.Conflict, (await restoredClient.GetAsync($"/api/races/{raceId}/context")).StatusCode);
         var recovered = await restoredClient.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", request);
-        Assert.AreEqual(HttpStatusCode.OK, recovered.StatusCode, await recovered.Content.ReadAsStringAsync());
+        // Event DB alone does not restore the hold generation and original backup package.
+        Assert.AreEqual(HttpStatusCode.Conflict, recovered.StatusCode, await recovered.Content.ReadAsStringAsync());
         var (oldRestored, oldHttp) = await TestApplicationFactory.CreateAsync("Data Source=" + oldBackup);
         await using var oldApp = oldRestored;
         using var oldClient = oldHttp;
@@ -205,6 +218,7 @@ public sealed class RaceAssignmentRepairTests
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
         Assert.AreEqual(0, inspection.GetProperty("blockers").GetArrayLength(), inspection.ToString());
         var manifest = Manifest(inspection.GetProperty("version").GetInt32());
+        manifest = await WithHoldAsync(http, raceId, manifest);
         var previewResponse = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest);
         var preview = await previewResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.AreEqual(HttpStatusCode.OK, previewResponse.StatusCode, preview.ToString());
@@ -216,6 +230,8 @@ public sealed class RaceAssignmentRepairTests
         var repeated = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", request);
         Assert.AreEqual(HttpStatusCode.OK, repeated.StatusCode, await repeated.Content.ReadAsStringAsync());
         Assert.AreEqual(before + 1, await db.Set<EventEntity>().CountAsync());
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.GetAsync($"/api/races/{raceId}/context")).StatusCode);
+        await ReleaseAndFinishAsync(app, http, raceId, request, applied);
         var context = await http.GetFromJsonAsync<JsonElement>($"/api/races/{raceId}/context");
         var entries = context.GetProperty("entries").EnumerateArray().ToArray();
         Assert.AreEqual(DeterministicIdGenerator.BuildHorseId("", HorseB), entries.Single(x => x.GetProperty("horseNumber").GetInt32() == 1).GetProperty("horseId").GetString());
@@ -226,6 +242,102 @@ public sealed class RaceAssignmentRepairTests
         Assert.AreEqual(HttpStatusCode.Conflict, stalePrediction.StatusCode);
         var predicted = await predictor.RunAsync(raceId);
         Assert.IsFalse(string.IsNullOrWhiteSpace(predicted.PredictionTicketId));
+    }
+
+    [TestMethod]
+    public async Task OnlineBackupRestoresIntoIsolation_AndCorruptionBlocksRetry()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "hrp-hold-backup", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var sourcePath = Path.Combine(directory, "source.db");
+        var (app, client) = await TestApplicationFactory.CreateAsync("Data Source=" + sourcePath);
+        await using var application = app;
+        using var http = client;
+        var raceId = await SeedAsync(app, http);
+        var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
+        var manifest = await WithHoldAsync(http, raceId, Manifest(inspection.GetProperty("version").GetInt32()));
+        var preview = await (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest)).Content.ReadFromJsonAsync<JsonElement>();
+        var repair = new ApplyRaceEntryRepairRequest(Guid.NewGuid().ToString(), preview.GetProperty("fingerprint").GetString()!, manifest);
+        var incomplete = Path.Combine(sourcePath + ".race-locks", "backups", repair.OperationId);
+        Directory.CreateDirectory(incomplete);
+        await File.WriteAllTextAsync(Path.Combine(incomplete, "events.db"), "interrupted backup");
+        var rejected = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", repair);
+        Assert.AreEqual(HttpStatusCode.Conflict, rejected.StatusCode);
+        var unchanged = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
+        Assert.AreEqual(manifest.ExpectedVersion, unchanged.GetProperty("version").GetInt32());
+        repair = repair with { OperationId = Guid.NewGuid().ToString() };
+        var applied = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", repair);
+        Assert.AreEqual(HttpStatusCode.OK, applied.StatusCode, await applied.Content.ReadAsStringAsync());
+        var package = Path.Combine(sourcePath + ".race-locks", "backups", repair.OperationId);
+        Assert.IsTrue(File.Exists(Path.Combine(package, "manifest.json")));
+        var restoredPath = Path.Combine(directory, "isolated-restored.db");
+        File.Copy(Path.Combine(package, "events.db"), restoredPath);
+        Directory.CreateDirectory(restoredPath + ".collection");
+        File.Copy(Path.Combine(package, "collection.db"), Path.Combine(restoredPath + ".collection", "collection-platform.db"));
+        var (restored, restoredHttp) = await TestApplicationFactory.CreateAsync("Data Source=" + restoredPath);
+        await using var restoredApp = restored;
+        using var isolated = restoredHttp;
+        isolated.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        var restoredHold = await isolated.GetFromJsonAsync<RaceRepairHoldSnapshot>($"/api/admin/races/{raceId}/entry-repair/hold");
+        Assert.IsTrue(restoredHold!.IsActive);
+        Assert.AreEqual(manifest.HoldGeneration, restoredHold.Generation);
+        var restoredInspection = await isolated.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
+        Assert.AreEqual(manifest.ExpectedVersion, restoredInspection.GetProperty("version").GetInt32());
+        var replay = await isolated.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", repair);
+        Assert.AreEqual(HttpStatusCode.OK, replay.StatusCode, await replay.Content.ReadAsStringAsync());
+        await ReleaseAndFinishAsync(restored, isolated, raceId, repair, replay);
+        // Corruption of the original package must not be ignored merely because its event exists.
+        await File.AppendAllTextAsync(Path.Combine(package, "events.db"), "corrupt");
+        var retry = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", repair);
+        Assert.AreEqual(HttpStatusCode.Conflict, retry.StatusCode);
+        StringAssert.Contains(await retry.Content.ReadAsStringAsync(), "RepairBackupNotVerified");
+        Assert.IsTrue((await http.GetFromJsonAsync<RaceRepairHoldSnapshot>($"/api/admin/races/{raceId}/entry-repair/hold"))!.IsActive);
+        using var db = app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
+        Assert.AreEqual(1, await db.Set<EventEntity>().CountAsync(x => x.AggregateId == raceId && x.Data.Contains(repair.OperationId)));
+    }
+
+    [TestMethod]
+    public async Task ReleasedRepairRejectsDelayedOdds_AndAcquiredWorkerCarriesVerifiedFence()
+    {
+        var (app, client) = await TestApplicationFactory.CreateAsync();
+        await using var application = app;
+        using var http = client;
+        var raceId = await SeedAsync(app, http);
+        var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
+        var manifest = await WithHoldAsync(http, raceId, Manifest(inspection.GetProperty("version").GetInt32()));
+        var preview = await (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", manifest)).Content.ReadFromJsonAsync<JsonElement>();
+        var repair = new ApplyRaceEntryRepairRequest(Guid.NewGuid().ToString(), preview.GetProperty("fingerprint").GetString()!, manifest);
+        var applied = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/apply", repair);
+        Assert.AreEqual(HttpStatusCode.OK, applied.StatusCode, await applied.Content.ReadAsStringAsync());
+        var result = await applied.Content.ReadFromJsonAsync<JsonElement>();
+        var release = new ReleaseRaceEntryRepairRequest(Guid.NewGuid().ToString(), manifest.HoldOperationId!, manifest.HoldGeneration,
+            result.GetProperty("version").GetInt32(), result.GetProperty("assignmentFingerprint").GetString()!, repair.OperationId, repair.Fingerprint);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/release",
+            release with { HoldGeneration = manifest.HoldGeneration + 1 })).StatusCode);
+        (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/release", release)).EnsureSuccessStatusCode();
+        var oddsPath = $"/api/admin/races/{raceId}/odds-snapshots";
+        var odds = new { observedAt = DateTimeOffset.UtcNow, entries = new[] { new { horseNumber = 1, winOdds = 2.5m, popularity = 1 } } };
+        var oldClient = await http.PostAsJsonAsync(oddsPath, odds);
+        Assert.AreEqual(HttpStatusCode.Conflict, oldClient.StatusCode);
+        StringAssert.Contains(await oldClient.Content.ReadAsStringAsync(), "StaleRaceAssignmentFence");
+        using var transport = new HttpClient(new CollectionWorkerLeaseHandler { InnerHandler = app.GetTestServer().CreateHandler() })
+        { BaseAddress = http.BaseAddress };
+        transport.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
+        using (CollectionWorkerLeaseContext.Push(Guid.NewGuid(), "delayed-old-lease", 0, "old-assignment"))
+            await Assert.ThrowsExactlyAsync<CollectionRepairHeldException>(() => transport.PostAsJsonAsync(oddsPath, odds));
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var dispatch = (await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow, 100)).Single(x =>
+            DeterministicIdGenerator.TryBuildRaceIdFromResource(x.Resource.Id) == raceId);
+        var acquired = await (await http.PostAsJsonAsync($"/api/internal/collection/tasks/{dispatch.Notification.TaskId}/acquire",
+            new { dispatchGeneration = dispatch.Notification.DispatchGeneration, leaseSeconds = 60 })).Content.ReadFromJsonAsync<CollectionTaskAcquireResult>();
+        Assert.IsNotNull(acquired?.Task);
+        Assert.AreEqual(release.AssignmentFingerprint, acquired.Task.EntryAssignmentFingerprint);
+        Assert.AreEqual(manifest.HoldGeneration, acquired.Task.RaceHoldGeneration);
+        using (CollectionWorkerLeaseContext.Push(acquired.Task.TaskId, acquired.Task.LeaseToken,
+            acquired.Task.RaceHoldGeneration, acquired.Task.EntryAssignmentFingerprint))
+            (await transport.PostAsJsonAsync(oddsPath, odds)).EnsureSuccessStatusCode();
+        var saved = await http.GetFromJsonAsync<JsonElement>(oddsPath);
+        Assert.AreEqual(1, saved.GetArrayLength());
     }
 
     [TestMethod]
@@ -249,9 +361,41 @@ public sealed class RaceAssignmentRepairTests
         "https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC",
         DateTimeOffset.UtcNow, null, [new(HorseA, 2, 2, "馬主A"), new(HorseB, 1, 1, "馬主B")], new string('A', 64));
 
+    private static async Task<RaceEntryRepairManifest> WithHoldAsync(HttpClient http, string raceId, RaceEntryRepairManifest manifest)
+    {
+        var hold = new HoldRaceEntryRepairRequest(Guid.NewGuid().ToString(), 0, "isolated repair test");
+        var response = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/hold", hold);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, await response.Content.ReadAsStringAsync());
+        var state = await response.Content.ReadFromJsonAsync<RaceRepairHoldSnapshot>();
+        Assert.IsNotNull(state);
+        Assert.IsTrue(state.IsQuiescent, JsonSerializer.Serialize(state));
+        return manifest with { HoldOperationId = state.OperationId, HoldGeneration = state.Generation };
+    }
+
+    private static async Task ReleaseAndFinishAsync(WebApplication app, HttpClient http, string raceId,
+        ApplyRaceEntryRepairRequest repair, HttpResponseMessage applied)
+    {
+        var result = await applied.Content.ReadFromJsonAsync<JsonElement>();
+        var release = new ReleaseRaceEntryRepairRequest(Guid.NewGuid().ToString(), repair.Manifest.HoldOperationId!,
+            repair.Manifest.HoldGeneration, result.GetProperty("version").GetInt32(),
+            result.GetProperty("assignmentFingerprint").GetString()!, repair.OperationId, repair.Fingerprint);
+        var response = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/release", release);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, await response.Content.ReadAsStringAsync());
+        Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/release", release)).StatusCode);
+        var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        var dispatch = (await store.GetPendingDispatchesAsync(DateTimeOffset.UtcNow, 100)).Single(x =>
+            DeterministicIdGenerator.TryBuildRaceIdFromResource(x.Resource.Id) == raceId);
+        var task = await store.AcquireAsync(dispatch.Notification.TaskId, dispatch.Notification.DispatchGeneration,
+            DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+        Assert.IsNotNull(task);
+        Assert.IsTrue(task.RequestedRevision >= 4);
+        Assert.IsTrue(await store.CompleteAttemptAsync(task.TaskId, task.LeaseToken, DateTimeOffset.UtcNow, new(CollectionAttemptResult.Succeeded)));
+    }
+
     private static async Task<string> SeedAsync(WebApplication app, HttpClient http, int raceNumber = 5)
     {
         var store = app.Services.GetRequiredService<CollectionPlatformStore>();
+        await store.RegisterDefinitionAsync(new("race-detail"), "Race detail", ResourceType.Race, 4, "repair test", true);
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "repair test", true);
         await store.RegisterDefinitionAsync(new("jockey-profile"), "Jockey profile", ResourceType.Jockey, 3, "repair test", true);
         if (!http.DefaultRequestHeaders.Contains("X-Api-Key")) http.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);

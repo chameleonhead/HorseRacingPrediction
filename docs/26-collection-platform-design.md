@@ -8,6 +8,12 @@
 
 ## Core concepts
 
+> 2026-09-26 運用上の注意: pipeline pauseは配信/取得を止めるが、待機taskの作成やcancel時の高revision実体化をすべて止める機能ではない。Running=0だけでデータ補正可能とは判定しない。[対象Raceの永続保留](changes/20260919_race-entry-owner-enrichment/decisions/20260926-scoped-repair-hold.md)を実装しローカル検証中（配備状況は変更記録を参照）。保留は要求履歴を保持して生成/取得/旧leaseを遮断し、補正・新版への一意再要求へ接続する。保留解除はpipeline再開を含まない。
+
+`/api/admin/races/{raceId}/entry-repair/hold` のGETは状態参照、POSTは操作ID・期待世代・理由を持つ保留/排出確認。同じPOSTの再送で対象の期限切れleaseを整理する。`preview`/`apply`のmanifestには`holdOperationId`と`holdGeneration`が必要。保留中の収集受付は`DeferredByRepairHold=true`、新しいtaskがなければ`TaskId=null`を返し、batch結果は`Held`となる。正常な日単位discovery（`discovery:yyyyMMddHH`/`backfill:yyyyMMdd`/`recollection:yyyyMMdd`）は継続し、子Race要求だけを保留する。
+
+`release`は解除操作ID、hold ID/世代、期待event版、割当fingerprint、補正operation/fingerprintを再検証し、解除と新版要求をCollection DB内で一括確定する。補正中止は`cancelRepair=true`を明示し、補正event/barrierがなく現在の整合が確認できる場合だけ可能。補正後の馬番依存入力には取得時点の`X-Race-Hold-Generation`/`X-Race-Assignment-Fingerprint`が必要。workerはacquire応答をそのまま送信する。手動clientは入力作成前に`assignment-fence`をGETする。保存直前の新fingerprint後付けは古い入力の正当化に使用しない。
+
 収集完了のHTTP境界は、全体Result/FailureImpactだけでなく`StageOutcomes`と`RaceEvidence`をWorkerからAPI、Storeまで転送する。Card/Resultの保存状態・公式発走時刻はその証拠から記録し、全体task成功だけから生成しない。旧workerの省略payloadは互換受信するが、欠落した過去のfacet/evidenceを推測復元しない。輸送検証はWorker client→実endpoint→DB→詳細GETで行う（[2026-09-24 closure](changes/20260924_collection-error-closure/README.md)）。
 
 - Resource: 何を取得するか。provider と論理 ID で識別し URL を Identity にしない。

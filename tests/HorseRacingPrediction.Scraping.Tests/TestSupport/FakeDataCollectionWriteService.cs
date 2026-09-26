@@ -8,6 +8,7 @@ namespace HorseRacingPrediction.Scraping.Tests.TestSupport;
 /// </summary>
 internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteService
 {
+    public Exception? BulkWriteException { get; set; }
     public sealed record UpsertRaceCall(
         string RaceDate,
         string RacecourseCode,
@@ -270,6 +271,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         CancellationToken cancellationToken = default)
     {
         DeclareRaceResultBulkCalls.Add(request);
+        if (BulkWriteException is not null) throw BulkWriteException;
 
         var raceId = DeterministicIdGenerator.BuildRaceId(
             request.RaceDate, request.RacecourseCode, request.RaceNumber);

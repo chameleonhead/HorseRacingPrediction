@@ -102,7 +102,7 @@ public static partial class EndpointExtensions
                     await db.SaveChangesAsync(token).ConfigureAwait(false);
                     return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(
                         request.Items.Count, issueReceipts.Count(x => x.CreatedTask),
-                        issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Select(x => x.TaskId).ToArray()));
+                        issueReceipts.Count(x => !x.CreatedTask), issueReceipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).ToArray()));
                 }
 
                 var horsePreview = await BuildHorseIdentityRepairPreviewAsync(db, collectionStore, token)
@@ -201,7 +201,7 @@ public static partial class EndpointExtensions
 
                 return Results.Accepted(value: new ExecuteSubjectIdentificationRepairResponse(
                     request.Items.Count, receipts.Count(x => x.CreatedTask), receipts.Count(x => !x.CreatedTask),
-                    receipts.Select(x => x.TaskId).Distinct().ToArray(), merged, disabled, running));
+                    receipts.Where(x => x.TaskId.HasValue).Select(x => x.TaskId!.Value).Distinct().ToArray(), merged, disabled, running));
             });
 
         group.MapPost("/admin/repairs/subject-identification/dismiss",

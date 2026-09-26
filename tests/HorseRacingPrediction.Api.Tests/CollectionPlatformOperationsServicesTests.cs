@@ -30,6 +30,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("receipt-1", JsonSerializer.Serialize(
             new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease"),
             new JsonSerializerOptions(JsonSerializerDefaults.Web))));
@@ -40,7 +41,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         Assert.AreEqual(1, await service.RunOnceAsync(CancellationToken.None));
         CollectionAssert.AreEqual(new[] { "receipt-1" }, queue.Deleted);
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
     }
 
     [TestMethod]
@@ -62,7 +63,8 @@ public sealed class CollectionPlatformOperationsServicesTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
-        var notification = new CollectionTaskNotification(receipt.TaskId, 1);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var notification = new CollectionTaskNotification(taskId, 1);
         var queue = new RecordingQueue(new CollectionPlatformDeadLetterMessage("legacy-v1",
             JsonSerializer.Serialize(notification, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = CreateReconciler(store, queue);
@@ -70,7 +72,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         Assert.AreEqual(0, await service.RunOnceAsync(CancellationToken.None));
         Assert.HasCount(0, queue.Deleted);
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
         Assert.HasCount(0, await store.GetActionableFailureNotificationsAsync(
             DateTimeOffset.UtcNow.AddMinutes(1), 10));
     }
@@ -97,6 +99,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var body = JsonSerializer.Serialize(new CollectionWakeSignal(Guid.NewGuid(), Guid.NewGuid(), "lease"),
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
@@ -110,7 +113,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         Assert.HasCount(0, await store.GetActionableFailureNotificationsAsync(
             DateTimeOffset.UtcNow.AddMinutes(1), 10));
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
     }
 
     [TestMethod]
@@ -119,8 +122,9 @@ public sealed class CollectionPlatformOperationsServicesTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(
-            new CollectionPlatformDeadLetterMessage("legacy", $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1}"""),
+            new CollectionPlatformDeadLetterMessage("legacy", $$"""{"taskId":"{{taskId}}","dispatchGeneration":1}"""),
             new CollectionPlatformDeadLetterMessage("invalid", JsonSerializer.Serialize(
                 CreateEnvelope(Guid.Empty, 0), new JsonSerializerOptions(JsonSerializerDefaults.Web))));
         var service = new CollectionPlatformDeadLetterReconciler(store, queue,
@@ -130,7 +134,7 @@ public sealed class CollectionPlatformOperationsServicesTests
         Assert.AreEqual(0, await service.RunOnceAsync(CancellationToken.None));
         Assert.HasCount(0, queue.Deleted);
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
     }
 
     [TestMethod]
@@ -139,16 +143,17 @@ public sealed class CollectionPlatformOperationsServicesTests
         var store = await CreateStoreAsync();
         var receipt = await store.RequestAsync(new(ResourceType.Horse, "jra", "H1"), new("horse-profile"),
             1, CollectionReason.Initial, DateTimeOffset.UtcNow);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var queue = new RecordingQueue(
             new CollectionPlatformDeadLetterMessage("unknown-version",
-                $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1,"contractVersion":2}"""),
+                $$"""{"taskId":"{{taskId}}","dispatchGeneration":1,"contractVersion":2}"""),
             new CollectionPlatformDeadLetterMessage("ambiguous",
-                $$"""{"taskId":"{{receipt.TaskId}}","dispatchGeneration":1,"contractVersion":1,"extra":true}"""));
+                $$"""{"taskId":"{{taskId}}","dispatchGeneration":1,"contractVersion":1,"extra":true}"""));
 
         Assert.AreEqual(0, await CreateReconciler(store, queue).RunOnceAsync(CancellationToken.None));
         Assert.HasCount(0, queue.Deleted);
         Assert.AreEqual(CollectionTaskStatus.Ready,
-            (await store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId).Status);
+            (await store.GetTasksAsync()).Single(x => x.TaskId == taskId).Status);
     }
 
     private async Task<CollectionPlatformStore> CreateStoreAsync()

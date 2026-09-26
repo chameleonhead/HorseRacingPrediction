@@ -11,11 +11,15 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97へ実装。最終CI検証中。 |
-| Verification | Incomplete | Release/ローカルKestrel/SQLite・別process排他成功。Linux CIで同一instantのUTC/JST表記比較の欠陥を検出し修正、元gate再検証中。本番復旧IAC10/AC204は未達。 |
-| Deployment/operation | Incomplete | PR96/SHA e2c39a06、配備run36218341631成功。原障害対象1件revision3要求・13:48再開後、13:49に別Raceで再停止。補正の承認境界により停止維持。 |
+| Code | Complete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97で実装。0d0366fcへmerge済み。 |
+| Verification | Incomplete | Windows/Linuxとも1,271成功/1skip、実Kestrel/SQLite・別process排他成功。UTC/JST比較とAWS設定依存の失敗を修正し元CI gate36224378550成功。本番復旧IAC10/AC204は未達。 |
+| Deployment/operation | Incomplete | PR97/SHA0d0366fc、配備36224620354成功、15:54:38 JST health200。本番previewは2RaceともReady taskによるActiveCollectionで拒否。15:55に中山7Rで新停止。apply/resume未実施、復旧未完了。 |
 
 ## 2026-09-26 実装・ローカル確認（最新）
+
+**最新checkpoint:** 停止解除は利用者が手動実行したため、解除経路調査のAWS再認証依頼は取り消した。[対象レースの保留・補正・再取得](decisions/20260926-scoped-repair-hold.md)は利用者承認後に実装し、実SQLite、実HTTP、2プロセス、backup復元と異常系をローカル検証中。親StatusはApprovedを維持する。Linux CI/配備と未解明の過去test失敗の処置は未完了。本番hold/apply/release/resumeは未実行で、対象・previewへの別承認を要する。
+
+配備後のread-only確認で運用上の設計不足を検出した。中山5R/阪神11Rの全頭公式source一致と参照分類は確認できたが、Ready taskが補正を阻止する。キャンセルしても高revision実体化/停止中のschedulerで再生成され得るため、取消しを繰り返す運用は採らない。追加設計のC206/C207、RP-T5に詳細を記録した。対象限定保留の設計判断が必要であり、本番補正・再開は未実行。実装済み範囲の成功を全課題解消とは扱わない。
 
 利用者の「お願いします。ローカルでの動作確認もお願いします。」により、[追加設計](decisions/20260926-number-repair-impact.md)の実装・検証・配備はApprovedへ進んだ。RP-T1–3を実装しPR97へ集約。別processの実Kestrel/SQLiteで全頭補正・重複防止・競合排他を検証済み。本番apply/resume/restoreは未承認のまま、authoritative previewと公式HTML全頭照合を提示して別途承認を得る。以下の14:02時点の記述は設計調査履歴であり現在の実装状況ではない。
 
@@ -117,6 +121,7 @@
 | RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 配備・限定要求済み、別Race馬番不一致で再停止。安全補正の別途承認が必要 | Externally blocked | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | RP-fixture | AC201 未確定Card反例test | identity_guard_tests | Worker | frozen parser contract | tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs | 11件（HTML 4件）、関連71件＋skip1、Main全Scraping305件 | agent-audits/RP-fixture-A1.json | Verified | Worker — frozen local fixture | RP-fixture-A1 | unavailable; retries 1; corrections 0; reviews 2 |
+| H3N | AC216 nullable receipt caller | receipt_test_worker | Worker | frozen nullable receipt | tests/HorseRacingPrediction.Api.Tests existing collection receipt callers excluding RaceAssignmentRepairTests.cs and TestApplicationFactory.cs; tests/HorseRacingPrediction.Collector.Tests existing collection receipt callers | API/Collector build and affected class regression | API76/Collector139 pass; H3N-A1 | Verified | Worker — frozen local type adaptation | H3N-A1 | unavailable; retries 1; corrections 0; reviews 1 |
 
 ## 2026-09-19 設計・実装履歴（本文）
 

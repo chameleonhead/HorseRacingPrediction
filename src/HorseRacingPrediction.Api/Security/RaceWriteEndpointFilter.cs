@@ -10,7 +10,8 @@ namespace HorseRacingPrediction.Api.Security;
 
 /// <summary>Shared lock boundary for race, prediction, memo, and subject-derived history writers.</summary>
 public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
-    IDbContextProvider<EventStoreDbContext> provider) : IEndpointFilter
+    IDbContextProvider<EventStoreDbContext> provider,
+    HorseRacingPrediction.CollectionOperations.CollectionPlatform.CollectionPlatformStore collection) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
@@ -24,6 +25,16 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
             if (!keys.SetEquals(checkedKeys)) continue;
             foreach (var raceId in keys.Where(x => x.StartsWith("race-", StringComparison.Ordinal)))
             {
+                var repairHold = await collection.GetRaceRepairHoldAsync(raceId, token);
+                if (repairHold is { IsActive: true }) return Results.Conflict(new { code = "RaceRepairHeld", raceId });
+                if (repairHold is not null && RequiresAssignmentFence(context))
+                {
+                    var fingerprint = context.HttpContext.Request.Headers["X-Race-Assignment-Fingerprint"].ToString();
+                    var generation = context.HttpContext.Request.Headers["X-Race-Hold-Generation"].ToString();
+                    if (fingerprint != await coordinator.AssignmentFingerprintAsync(raceId, token)
+                        || !long.TryParse(generation, out var receivedGeneration) || receivedGeneration != repairHold.Generation)
+                        return Results.Conflict(new { code = "StaleRaceAssignmentFence", raceId });
+                }
                 var barrier = await coordinator.ReadBarrierAsync(raceId, token);
                 if (barrier is { Verified: false })
                     return Results.Conflict(new { code = "RaceRepairPending", raceId });
@@ -35,6 +46,11 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         }
         return Results.Conflict(new { code = "RaceWriteScopeChanged" });
     }
+
+    private static bool RequiresAssignmentFence(EndpointFilterInvocationContext context) =>
+        context.HttpContext.Request.Path.StartsWithSegments("/api/races")
+        || context.HttpContext.Request.Path.StartsWithSegments("/api/admin/races")
+        || context.Arguments.Any(x => x is HorseRacingPrediction.Contracts.PrepareHorseHistoryRaceRequest);
 
     private async Task<HashSet<string>> ResolveKeysAsync(EndpointFilterInvocationContext context, CancellationToken token)
     {

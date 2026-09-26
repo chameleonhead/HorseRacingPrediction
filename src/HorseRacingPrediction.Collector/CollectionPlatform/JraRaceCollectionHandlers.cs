@@ -8,6 +8,7 @@ using HorseRacingPrediction.Scraping.Jra.Navigation;
 using HorseRacingPrediction.Scraping.Jra.Parsing;
 using Microsoft.Extensions.Options;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
@@ -180,7 +181,7 @@ public sealed class JraRaceDiscoveryCollectionHandler(IJraSessionFactory session
                 }
             }
         }
-        catch (Exception ex) when (cancellations.Count > 0 && ex is not OperationCanceledException)
+        catch (Exception ex) when (cancellations.Count > 0 && ex is not (OperationCanceledException or CollectionRepairHeldException))
         {
             // Preserve the executor's existing failure classification, including partial-progress evidence.
             return CollectionAttemptFailureClassifier.FromException(ex) with { PageIdentification = Identification() };
@@ -325,7 +326,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             {
                 return NumbersUnconfirmed(ex, locationOutcomes, stageOutcomes);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
                 locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Card));
                 continue;
@@ -335,7 +336,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 result = await workflow.RefreshPageAsync(card, domainRaceId, cancellationToken).ConfigureAwait(false);
                 break;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
                 stageOutcomes.Add(new("PersistCard", RaceArtifactKind.Card,
                     CollectionAttemptResult.ValidationFailure, "RaceCardWriteFailed", ex.Message,
@@ -555,7 +556,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 successfulLocation = location.Url;
                 locationOutcomes.Add(ResourceLocationOutcomeClassifier.Succeeded(location, RaceArtifactKind.Result));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
                 var outcome = ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Result);
                 locationOutcomes.Add(outcome);
@@ -575,7 +576,7 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     cancellationToken).ConfigureAwait(false);
                 break;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
                 stageOutcomes.Add(new("PersistResult", RaceArtifactKind.Result,
                     CollectionAttemptResult.ValidationFailure, "RaceResultWriteFailed", ex.Message,

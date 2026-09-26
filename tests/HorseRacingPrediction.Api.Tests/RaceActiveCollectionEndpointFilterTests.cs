@@ -25,9 +25,10 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         var now = DateTimeOffset.UtcNow;
         var receipt = await store.RequestAsync(new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), definition, 4,
             CollectionReason.Initial, now, effectiveDate: date);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
         var weather = new { observedAt = now, conditionCode = "SUNNY" };
         Assert.AreEqual(HttpStatusCode.Conflict, (await http.PostAsJsonAsync($"/api/races/{raceId}/weather", weather)).StatusCode);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         http.DefaultRequestHeaders.Add("X-Collection-Task-Id", lease.TaskId.ToString());
         http.DefaultRequestHeaders.Add("X-Collection-Lease-Token", lease.LeaseToken);
@@ -108,7 +109,8 @@ public sealed class RaceActiveCollectionEndpointFilterTests
         await store.RegisterDefinitionAsync(definition, "Race card", ResourceType.RaceCard, 1, "Initial", false);
         var receipt = await store.RequestAsync(new(ResourceType.RaceCard, "jra", raceId),
             definition, 1, CollectionReason.Initial, DateTimeOffset.UtcNow);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.IsTrue(await store.IsValidActiveRaceLeaseAsync(lease.TaskId, lease.LeaseToken, raceId));
         Assert.IsFalse(await store.IsValidActiveRaceLeaseAsync(lease.TaskId, "spoofed", raceId));

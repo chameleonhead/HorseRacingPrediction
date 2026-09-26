@@ -71,15 +71,15 @@ public sealed class CollectionBulkOperationsTests
         }
         Assert.HasCount(1, await store.GetTasksAsync());
         Assert.AreEqual(revision, (await store.GetStateAsync(resource, definition))!.RequiredRevision);
-        var lease = await store.AcquireAsync(previous.TaskId, 1, Now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        var lease = await store.AcquireAsync(previous.TaskId!.Value, 1, Now.AddSeconds(2), TimeSpan.FromMinutes(5));
         Assert.IsNotNull(lease);
         Assert.AreEqual(2, lease.RequestedRevision);
-        Assert.IsTrue(await store.CompleteAttemptAsync(previous.TaskId, lease.LeaseToken, Now.AddSeconds(3),
+        Assert.IsTrue(await store.CompleteAttemptAsync(previous.TaskId!.Value, lease.LeaseToken, Now.AddSeconds(3),
             new(CollectionAttemptResult.Succeeded, StageOutcomes:
             [new("PersistResult", RaceArtifactKind.Result, CollectionAttemptResult.Succeeded, Persisted: true)])));
         var tasks = await store.GetTasksAsync();
         Assert.HasCount(2, tasks);
-        var followUp = tasks.Single(x => x.TaskId != previous.TaskId);
+        var followUp = tasks.Single(x => x.TaskId != previous.TaskId!.Value);
         Assert.AreEqual(revision, followUp.RequestedRevision);
         Assert.AreEqual(CollectionTaskStatus.Ready, followUp.Status);
         Assert.AreEqual(CollectionLane.Normal, followUp.Lane);
@@ -123,9 +123,9 @@ public sealed class CollectionBulkOperationsTests
         CollectionAttemptResult result, DateTimeOffset finishedAt)
     {
         var receipt = await store.RequestAsync(resource, Definition, 1, CollectionReason.Initial, Now);
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, Now, TimeSpan.FromDays(5));
+        var lease = await store.AcquireAsync(receipt.TaskId!.Value, 1, Now, TimeSpan.FromDays(5));
         Assert.IsNotNull(lease);
-        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId, lease.LeaseToken, finishedAt, new(result)));
+        Assert.IsTrue(await store.CompleteAttemptAsync(receipt.TaskId!.Value, lease.LeaseToken, finishedAt, new(result)));
         if (result != CollectionAttemptResult.Succeeded)
             await store.SetPausedAsync(false, null, finishedAt.AddTicks(1));
     }

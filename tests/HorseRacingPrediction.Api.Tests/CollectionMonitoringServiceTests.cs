@@ -85,7 +85,8 @@ public sealed class CollectionMonitoringServiceTests
         var receipt = await scope.Store.RequestAsync(
             new(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}"), definition, 1,
             CollectionReason.Backfill, now.AddHours(-3), CollectionLane.Background, 10);
-        var before = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var before = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == taskId);
         var service = scope.CreateService(new() { DueStallMinutes = 60 });
 
         var report = await service.InspectAsync(now);
@@ -97,7 +98,7 @@ public sealed class CollectionMonitoringServiceTests
         var flow = report.DefinitionFlows!.Single(x => x.Definition == "horse-history");
         Assert.AreEqual(1, flow.Arrived);
         Assert.AreEqual(1, flow.Active);
-        var task = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == receipt.TaskId);
+        var task = (await scope.Store.GetTasksAsync()).Single(x => x.TaskId == taskId);
         Assert.AreEqual(before.Status, task.Status);
     }
 
@@ -256,8 +257,9 @@ public sealed class CollectionMonitoringServiceTests
             var resource = new ResourceKey(ResourceType.Horse, "JRA", $"horse-{Guid.NewGuid():N}");
             var receipt = await scope.Store.RequestAsync(resource, definition, 1, CollectionReason.Discovery, now,
                 attributes: new Dictionary<string, string> { ["name"] = $"テスト馬{index}" });
-            var lease = await scope.Store.AcquireAsync(receipt.TaskId, 1, now, TimeSpan.FromMinutes(5));
-            await scope.Store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddSeconds(1),
+            var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+            var lease = await scope.Store.AcquireAsync(taskId, 1, now, TimeSpan.FromMinutes(5));
+            await scope.Store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddSeconds(1),
                 new(CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified", "登録区分付き見出しです。",
                     PageIdentification: "SubjectIdentification:ProfileNameMismatch"));
         }
@@ -428,8 +430,9 @@ public sealed class CollectionMonitoringServiceTests
         await store.RegisterDefinitionAsync(definition, definitionId, type, 1, "initial", false);
         var receipt = await store.RequestAsync(new(type, "JRA", $"resource-{Guid.NewGuid():N}"),
             definition, 1, CollectionReason.Discovery, now.AddMinutes(-2));
-        var lease = await store.AcquireAsync(receipt.TaskId, 1, now.AddMinutes(-2), TimeSpan.FromMinutes(5));
-        await store.CompleteAttemptAsync(receipt.TaskId, lease!.LeaseToken, now.AddMinutes(-1),
+        var taskId = receipt.TaskId ?? throw new InvalidOperationException("No-hold request must produce a task id.");
+        var lease = await store.AcquireAsync(taskId, 1, now.AddMinutes(-2), TimeSpan.FromMinutes(5));
+        await store.CompleteAttemptAsync(taskId, lease!.LeaseToken, now.AddMinutes(-1),
             new(CollectionAttemptResult.ValidationFailure, errorCode, message));
         await store.SetPausedAsync(false, null, now);
     }

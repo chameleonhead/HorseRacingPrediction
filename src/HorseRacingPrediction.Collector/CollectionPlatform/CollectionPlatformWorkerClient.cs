@@ -74,7 +74,7 @@ public sealed class CollectionPlatformWorkerClient
             .ConfigureAwait(false) ?? throw new InvalidOperationException("Collection task acquire response was empty.");
         var acquireElapsed = _clock.GetElapsedTime(acquireStarted, _clock.GetTimestamp());
         if (acquire.Status is CollectionTaskAcquireStatus.AlreadyTerminal
-            or CollectionTaskAcquireStatus.SupersededGeneration) return;
+            or CollectionTaskAcquireStatus.SupersededGeneration or CollectionTaskAcquireStatus.RepairHeld) return;
         if (acquire.Status == CollectionTaskAcquireStatus.ActiveElsewhere)
             throw new CollectionTaskActiveElsewhereException(notification.TaskId);
         var task = acquire.Task ?? throw new InvalidOperationException("Acquired task lease was empty.");
@@ -94,7 +94,8 @@ public sealed class CollectionPlatformWorkerClient
             var handlerStarted = _clock.GetTimestamp();
             try
             {
-                using var leaseScope = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken);
+                using var leaseScope = CollectionWorkerLeaseContext.Push(task.TaskId, task.LeaseToken,
+                    task.RaceHoldGeneration, task.EntryAssignmentFingerprint);
                 completion = await _handlers.Resolve(task.Definition, task.Resource.Type)
                     .CollectAsync(task, cancellationToken).ConfigureAwait(false);
             }

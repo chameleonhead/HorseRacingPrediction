@@ -610,6 +610,22 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
+    public async Task HorseHistory_HeldRaceReceiptKeepsDiscoverySuccessfulWithoutTaskId()
+    {
+        var page = SubjectPage("A", [HistoryRace(0)]);
+        var requests = new RecordingRequestSink
+        {
+            BatchResponseFactory = request => new([new(request.Items.Single().ItemKey, "Held", Guid.NewGuid(), null)]),
+        };
+        var handler = new JraSubjectProfileCollectionHandler(JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            new FakeJraSessionFactory { ConfigureNavigator = () => new FakeJraNavigator { SubjectFactory = _ => page } },
+            new RecordingProfileSink(), requests);
+        var result = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.Succeeded, result.Result);
+        Assert.HasCount(1, requests.BatchRequests);
+    }
+
+    [TestMethod]
     public async Task HorseHistory_RejectedOrIdentityLessOutcomeFailsTheAttempt()
     {
         var page = SubjectPage("A", [HistoryRace(0)]);
@@ -642,6 +658,7 @@ public sealed class JraSubjectCollectionHandlerTests
             ]),
             _ => new([SuccessfulOutcome("unknown-race")]),
             request => new([new(request.Items.Single().ItemKey, "Created")]),
+            request => new([new(request.Items.Single().ItemKey, "Held")]),
         };
 
         foreach (var responseFactory in responseFactories)

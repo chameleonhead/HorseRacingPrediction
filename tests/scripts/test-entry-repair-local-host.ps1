@@ -31,6 +31,7 @@ $settings = @{
 }
 $oldSettings = @{}
 $process = $null
+$secondProcess = $null
 try {
     foreach ($key in $settings.Keys) {
         $oldSettings[$key] = [Environment]::GetEnvironmentVariable($key)
@@ -51,8 +52,25 @@ try {
         Start-Sleep -Milliseconds 200
     }
     if (-not $ready) { throw "Local API did not become ready; inspect $directory" }
-    & (Join-Path $PSScriptRoot 'test-entry-repair-local.ps1') -DatabasePath (Join-Path $directory 'eventstore.db') -BaseUrl $baseUrl
+    $secondListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+    $secondListener.Start()
+    $secondUrl = "http://127.0.0.1:$($secondListener.LocalEndpoint.Port)"
+    $secondListener.Stop()
+    $secondStart = @{ FilePath = 'dotnet'; ArgumentList = @($dll, '--urls', $secondUrl, '--contentRoot', $apiRoot);
+        PassThru = $true; RedirectStandardOutput = Join-Path $directory 'api-second.log'; RedirectStandardError = Join-Path $directory 'api-second-error.log' }
+    if ($IsWindows) { $secondStart.WindowStyle = 'Hidden' }
+    $secondProcess = Start-Process @secondStart
+    $secondReady = $false
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
+        if ($secondProcess.HasExited) { throw "Second API exited; inspect $directory" }
+        try { $secondReady = (Invoke-RestMethod "$secondUrl/health" -TimeoutSec 1).status -eq 'ok' } catch { }
+        if ($secondReady) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if (-not $secondReady) { throw "Second API did not become ready; inspect $directory" }
+    & (Join-Path $PSScriptRoot 'test-entry-repair-local.ps1') -DatabasePath (Join-Path $directory 'eventstore.db') -BaseUrl $baseUrl -AlternateBaseUrl $secondUrl
 } finally {
+    if ($secondProcess -and -not $secondProcess.HasExited) { Stop-Process -Id $secondProcess.Id }
     if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id }
     foreach ($key in $oldSettings.Keys) { [Environment]::SetEnvironmentVariable($key, $oldSettings[$key]) }
 }
