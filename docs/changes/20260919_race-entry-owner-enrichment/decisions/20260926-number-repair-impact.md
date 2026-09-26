@@ -141,6 +141,7 @@ Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ�
 - 次操作: 最終format/Collector回帰結果を確認、validator/diff/status/秘密情報検査、checkpoint commit、同じ目的のbranchをPR/CIへ進める。配備後はpipeline pause維持を確認してauthoritative GET/previewと公式HTMLを照合し、具体的な補正対象とfingerprintについて別途承認を求める。元workspaceの利用者変更は対象外。
 - checkpoint確定: 最終exact formatter成功、追加後Collector328件成功（合計1,269成功/1skip相当）、DDD issues=0、agent audit valid、diff checkと秘密情報pattern検査成功。未完了はLinux CI/配備/本番previewおよび別途承認後のAC204。checkpoint commit後もCI/配備へ継続する。
 - PR97のCI中にMainが公式阪神11R HTMLを再取得して追加反証。馬番3/7/9/13/14/15のブリンカー画像付きセルを模したPlaywright試験は既存実装で成功（code修正不要）。Main追加test1件はworker成果へ帰属させない。Scraping306件とexact format再検証成功、合計1,270成功/1skip相当。画像付き馬番を誤拒否する仮説は棄却。公式全頭source manifestの作成はAPI previewとは独立して進め、補正承認の証拠にする。
+- Linux CI `36223406644` はAPI補正4件でWeightHistory比較が失敗。配備せず原因を追跡。DB JSON converterはJSTへ正規化するが、Linux event replayのTimestampはUTC offsetであり、既定JSON文字列比較が同一instantを不一致とした。比較に既存の保存用DateTimeOffset converterを適用し、offsetだけ正規化する（timestampを無視/丸めない）。独立反例はUTC/JST同一instantを許容、1tick差/体重差を拒否。Infrastructure16件、補正API7件、Release build警告0で再検証成功。Mainの局所欠陥でありworker patchへ帰属せず、元のLinux gateが成功するまで未完了扱いとする。
 
 ### 2026-09-26 実装checkpoint（上記調査時reviewを更新）
 

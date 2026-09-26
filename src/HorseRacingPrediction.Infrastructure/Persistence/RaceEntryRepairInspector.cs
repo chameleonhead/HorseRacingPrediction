@@ -17,6 +17,10 @@ namespace HorseRacingPrediction.Infrastructure.Persistence;
 public sealed class RaceEntryRepairInspector(IDbContextProvider<EventStoreDbContext> provider, IEventStore events,
     IAggregateStore aggregates)
 {
+    private static readonly JsonSerializerOptions ComparisonOptions = new()
+    {
+        Converters = { new HorseRacingPrediction.Contracts.Time.JstStoredDateTimeOffsetJsonConverter() }
+    };
     private static readonly string MemoAggregateName = new MemoAggregate(MemoId.New).Name.Value;
     private static readonly HashSet<string> KnownTables =
     [
@@ -155,7 +159,10 @@ public sealed class RaceEntryRepairInspector(IDbContextProvider<EventStoreDbCont
 
     private static void Compare<T>(string name, T expected, T actual, List<string> blockers)
     {
-        if (JsonSerializer.Serialize(expected) != JsonSerializer.Serialize(actual)) blockers.Add("ProjectionMismatch:" + name);
+        // Stored projections normalize timestamps to JST; event replay can retain UTC on Linux.
+        // Compare the same instant in the persistence representation without discarding time precision.
+        if (JsonSerializer.Serialize(expected, ComparisonOptions) != JsonSerializer.Serialize(actual, ComparisonOptions))
+            blockers.Add("ProjectionMismatch:" + name);
     }
 
     private static async Task<T> ReplayAsync<T>(T model, IEnumerable<IDomainEvent> stream, CancellationToken token) where T : IReadModel
