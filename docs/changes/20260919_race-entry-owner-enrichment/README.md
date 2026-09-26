@@ -11,19 +11,23 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 第一段階の専用天候/馬場欄、中止判定境界、identity拒否、revision3全入口は実装・検証済み。馬主補正・確定待ちの全体は後段に残る。 |
-| Verification | Incomplete | 関連78件（原障害公式URL含む）、非External計1,248件、最新CI成功。中山5Rの既存馬番12/14不一致で安全停止し、本番復旧IAC10は未達。 |
+| Code | Incomplete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97へ実装。最終CI検証中。 |
+| Verification | Incomplete | Release/ローカルKestrel/SQLite・別process排他成功。Linux CIで同一instantのUTC/JST表記比較の欠陥を検出し修正、元gate再検証中。本番復旧IAC10/AC204は未達。 |
 | Deployment/operation | Incomplete | PR96/SHA e2c39a06、配備run36218341631成功。原障害対象1件revision3要求・13:48再開後、13:49に別Raceで再停止。補正の承認境界により停止維持。 |
 
-## 2026-09-26 14:02 JST 補正前確認（最新）
+## 2026-09-26 実装・ローカル確認（最新）
 
-[中山5Rの差分・参照影響・限定補正設計](decisions/20260926-number-repair-impact.md)を追加した。利用者の直近の「お願いします」は補正案・影響確認の承認であり、本番補正・再開の承認ではない。親のStatusは承認済み第一段階を示す`Approved`のまま、新しいRP1–RP4/RP-T1–4の実装設計は`Proposed`。以下の旧提案・旧完了判定は日付付き履歴であり、この最新境界を上書きしない。
+利用者の「お願いします。ローカルでの動作確認もお願いします。」により、[追加設計](decisions/20260926-number-repair-impact.md)の実装・検証・配備はApprovedへ進んだ。RP-T1–3を実装しPR97へ集約。別processの実Kestrel/SQLiteで全頭補正・重複防止・競合排他を検証済み。本番apply/resume/restoreは未承認のまま、authoritative previewと公式HTML全頭照合を提示して別途承認を得る。以下の14:02時点の記述は設計調査履歴であり現在の実装状況ではない。
+
+## 2026-09-26 14:02 JST 補正前確認（設計調査履歴）
+
+[中山5Rの差分・参照影響・限定補正設計](decisions/20260926-number-repair-impact.md)を追加した時点の記録。この時点では新しいRP1–RP4/RP-T1–4の実装設計は`Proposed`だった。その後の実装承認は上の最新節と追加設計を正とする。本番補正・再開は別途承認という境界を維持する。
 
 - 中山5Rは公式Card/Resultのsource identityから生成したHorseIdが14/14一致、馬番12/14不一致。公式Card owner14/14、raw owner0/14。
 - 中山5Rと阪神11Rの結果・払戻・予想・admin保存オッズはAPI上0件。ただしevent版、全派生履歴、別修復・自由記述参照は未検証であり、即時applyの安全根拠にはしない。
 - 提案: 未確定の仮採番を防止し、全参照preview→Race単位の共通排他/再検証→独立参照がない対象のみ単一eventで補正→次revision再取得。実装/配備後の具体previewを提示し、実データ補正と再開には別途承認を得る。
 - 新規停止、直接DB修正、既存予想・結果・オッズの付替え、failure消去は対象外。既存停止は維持。RT3/IAC5/IAC6/IAC10は未完了。
-- 現turnの変更は設計文書のみ。元workspaceの利用者変更は触らず、既存worktreeを継続する。新しいbranch/PR/pushは作成しない。
+- 設計調査turnでは文書のみを変更した。元workspaceの利用者変更は触らず、既存worktreeを継続した。実装turnでは同じ目的のPR97へ集約し、進捗報告だけの別PRは作らない。
 
 > **2026-09-26 reopened:** [対象Raceの証拠・安全な補正設計](decisions/20260926-race-integrity.md)を本recordの追加提案とする。`race-fca5d100-9e2f-5074-a74c-bad8cdb4705f` のraw owner欠損16/16、公式馬番との不一致、G2/GIII不一致が判明した。従前の承認は、この同一性補正や隔離操作を承認したものではない。監視親のT2b/T3a・保存完全性findingへ接続し、親recordは変更しない。以下の9/19のVerifiedは当時の限定試験結果であり、追加基準IAC1–IAC5の完了を意味しない。
 

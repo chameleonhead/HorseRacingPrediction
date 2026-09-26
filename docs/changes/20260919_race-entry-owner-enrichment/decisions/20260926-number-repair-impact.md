@@ -142,6 +142,8 @@ Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ�
 - checkpoint確定: 最終exact formatter成功、追加後Collector328件成功（合計1,269成功/1skip相当）、DDD issues=0、agent audit valid、diff checkと秘密情報pattern検査成功。未完了はLinux CI/配備/本番previewおよび別途承認後のAC204。checkpoint commit後もCI/配備へ継続する。
 - PR97のCI中にMainが公式阪神11R HTMLを再取得して追加反証。馬番3/7/9/13/14/15のブリンカー画像付きセルを模したPlaywright試験は既存実装で成功（code修正不要）。Main追加test1件はworker成果へ帰属させない。Scraping306件とexact format再検証成功、合計1,270成功/1skip相当。画像付き馬番を誤拒否する仮説は棄却。公式全頭source manifestの作成はAPI previewとは独立して進め、補正承認の証拠にする。
 - Linux CI `36223406644` はAPI補正4件でWeightHistory比較が失敗。配備せず原因を追跡。DB JSON converterはJSTへ正規化するが、Linux event replayのTimestampはUTC offsetであり、既定JSON文字列比較が同一instantを不一致とした。比較に既存の保存用DateTimeOffset converterを適用し、offsetだけ正規化する（timestampを無視/丸めない）。独立反例はUTC/JST同一instantを許容、1tick差/体重差を拒否。Infrastructure16件、補正API7件、Release build警告0で再検証成功。Mainの局所欠陥でありworker patchへ帰属せず、元のLinux gateが成功するまで未完了扱いとする。
+- `36223853291`ではLinux全testが成功して上記比較欠陥の元gateを閉じた。一方、実Kestrel smokeが起動時に失敗。AWS profileを存在しない名前にしたローカル反証で同じ起動失敗を再現し、stderrのSNS client `No RegionEndpoint or ServiceURL configured`を確認。scriptが開発機の保存regionへ暗黙依存していた。検証専用region/ダミーcredentialと空TopicArnを明示し、実credentialを継承せず通知先も与えない。失敗時stderrも出力する。profileなし条件の同scriptは成功。CI smokeが成功するまで配備gateは未完了。
+- 修正後ローカル全体回帰（TRX付き、15:31–15:33 JST）は1,271成功/1skip。一つ前のquiet全体実行でScraping1件失敗したが個別名/原因は採取できておらず推測しない。Scraping単独306件および元の全体gate再実行で成功。記録付き再実行とLinux全体成功を完了証拠にし、失敗を隠さない。
 
 ### 2026-09-26 実装checkpoint（上記調査時reviewを更新）
 

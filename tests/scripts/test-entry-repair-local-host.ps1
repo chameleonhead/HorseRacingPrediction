@@ -14,9 +14,20 @@ $baseUrl = "http://127.0.0.1:$port"
 $settings = @{
     'ConnectionStrings__EventStore' = 'Data Source=' + (Join-Path $directory 'eventstore.db')
     'CollectionPlatform__StateDirectory' = Join-Path $directory 'collection'
+    'PredictionScheduling__StateDirectory' = Join-Path $directory 'prediction'
+    'DataProtection__KeysDirectory' = Join-Path $directory 'keys'
     'ApiKey__Key' = 'local-repair-verification-only'
     'ASPNETCORE_ENVIRONMENT' = 'Production'
     'CollectionQueue__Enabled' = 'false'
+    # The production host constructs its SNS client even when there are no alerts.
+    # Never inherit a developer's AWS credentials or depend on their saved region.
+    'AWS_REGION' = 'ap-northeast-1'
+    'AWS_DEFAULT_REGION' = 'ap-northeast-1'
+    'AWS_ACCESS_KEY_ID' = 'local-smoke-only'
+    'AWS_SECRET_ACCESS_KEY' = 'local-smoke-only'
+    'AWS_SESSION_TOKEN' = ''
+    'AWS_EC2_METADATA_DISABLED' = 'true'
+    'JobFailureNotifications__TopicArn' = ''
 }
 $oldSettings = @{}
 $process = $null
@@ -31,7 +42,10 @@ try {
     $process = Start-Process @start
     $ready = $false
     for ($attempt = 0; $attempt -lt 100; $attempt++) {
-        if ($process.HasExited) { throw "Local API exited; inspect $directory" }
+        if ($process.HasExited) {
+            Get-Content -LiteralPath (Join-Path $directory 'api-error.log') -Tail 50
+            throw "Local API exited; inspect $directory"
+        }
         try { $ready = (Invoke-RestMethod "$baseUrl/health" -TimeoutSec 1).status -eq 'ok' } catch { }
         if ($ready) { break }
         Start-Sleep -Milliseconds 200
