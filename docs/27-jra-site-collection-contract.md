@@ -33,7 +33,7 @@ JRAサイトの実装詳細を推測して依存する文書ではない。利�
 
 ## 2. 最重要の取得元制約
 
-> 2026-09-26 未承認提案: 馬番未確定時の仮採番禁止、保存前の公式Horse identity照合、対象レース領域だけからの格付け取得、raw保存値による完全性検証を[馬主取得・出走割当の一括修正設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-full-repair-plan.md)で検討中。現行実装がこれらを満たすとの宣言ではない。承認後に本書へ確定契約を反映する。
+> 2026-09-26: 第一段階の保存前identity不一致拒否は配備済み。馬番未確定時の仮採番禁止、対象レース領域だけからの格付け取得、後着馬主保存、全参照previewと限定補正は[最新の差分・安全補正設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-number-repair-impact.md)で検討中。これら追加範囲は未承認提案であり、現行実装が適合済みとの宣言ではない。旧offline補正は採用しない。承認後に本書へ確定契約を反映する。
 > 同提案は、馬番未確定を正常な公開段階として区別し、Card確定待ちと発走後のResult待ちを別に扱う。木曜日・金曜日の固定判定ではなく公式ページを確認し、確定前の取得だけでCardを完了にしない。
 > 運用方式は利用者の判断で[停止せず取得revisionを更新する方式](changes/20260919_race-entry-owner-enrichment/decisions/20260926-revision-recollection.md)へ変更した。旧revisionのCurrent Cardを新版で再取得することを設計条件とし、全体停止・offline補正は採用しない。
 
