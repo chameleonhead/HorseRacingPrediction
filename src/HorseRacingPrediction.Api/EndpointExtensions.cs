@@ -532,16 +532,23 @@ public static partial class EndpointExtensions
             [SwaggerOperation(Summary = "Register entry", Description = "Registers a horse entry for a race after card publication")]
         async (string raceId, RegisterEntryRequest request, ICommandBus commandBus, IDbContextProvider<EventStoreDbContext> dbContextProvider, CancellationToken cancellationToken) =>
             {
-                string? previousHorseId;
+                if (string.IsNullOrWhiteSpace(request.HorseId) || request.HorseNumber is <= 0
+                    || request.GateNumber is < 1 or > 8)
+                    return Results.BadRequest(new[] { "A HorseId and valid known horse/frame numbers are required." });
+                var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, request.HorseId);
+                if (!string.IsNullOrWhiteSpace(request.EntryId) && request.EntryId != entryId)
+                    return Results.BadRequest(new[] { "EntryId must identify the race and horse, not the horse number." });
                 using (var readContext = dbContextProvider.CreateContext())
                 {
-                    previousHorseId = (await readContext.RacePredictionContexts.AsNoTracking()
-                        .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken).ConfigureAwait(false))?
-                        .Entries.FirstOrDefault(x => x.EntryId == request.EntryId)?.HorseId;
+                    var currentRace = await readContext.RacePredictionContexts.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.RaceId == raceId, cancellationToken).ConfigureAwait(false);
+                    if (request.HorseNumber is { } number && currentRace?.Entries.Any(x => x.HorseNumber == number && x.HorseId != request.HorseId) == true)
+                        return Results.Conflict(new[] { "HorseNumber is already assigned to another horse; submit the complete card for reassignment." });
+                    var old = currentRace?.Entries.FirstOrDefault(x => x.HorseId == request.HorseId);
+                    request = request with { HorseNumber = request.HorseNumber ?? old?.HorseNumber, GateNumber = request.GateNumber ?? old?.GateNumber };
                 }
                 await EnsureRelatedSubjectsAsync(request, commandBus, dbContextProvider, cancellationToken).ConfigureAwait(false);
 
-                var entryId = string.IsNullOrWhiteSpace(request.EntryId) ? $"entry-{Guid.NewGuid()}" : request.EntryId;
                 var command = new RegisterEntryCommand(
                     new RaceId(raceId),
                     entryId,
@@ -560,33 +567,6 @@ public static partial class EndpointExtensions
 
                 var result = await commandBus.PublishAsync(command, cancellationToken).ConfigureAwait(false);
                 if (!result.IsSuccess) return Results.BadRequest(new[] { "Command execution failed." });
-                if (!string.IsNullOrWhiteSpace(previousHorseId)
-                    && !string.Equals(previousHorseId, request.HorseId, StringComparison.Ordinal)
-                    && JraSourceIdentity.TryNormalizeHorse(request.HorseSourceIdentity, out var jraIdentity)
-                    && string.Equals(request.HorseId,
-                        DeterministicIdGenerator.BuildHorseId(request.HorseName ?? request.HorseId, request.HorseSourceIdentity),
-                        StringComparison.Ordinal))
-                {
-                    using var repairContext = dbContextProvider.CreateContext();
-                    var candidateId = $"20260913-jra-horse-identity-repair:{raceId}:{entryId}";
-                    var candidate = await repairContext.HorseIdentityRepairCandidates
-                        .SingleOrDefaultAsync(x => x.CandidateId == candidateId, cancellationToken).ConfigureAwait(false);
-                    if (candidate is null)
-                    {
-                        repairContext.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
-                        {
-                            CandidateId = candidateId,
-                            RepairId = "20260913-jra-horse-identity-repair",
-                            SourceHorseId = previousHorseId,
-                            TargetHorseId = request.HorseId,
-                            JraIdentity = jraIdentity,
-                            RaceId = raceId,
-                            EntryId = entryId,
-                            DetectedAt = HorseRacingPrediction.Contracts.Time.JstTime.Now(),
-                        });
-                        await repairContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                    }
-                }
                 return Results.Created($"/api/races/{raceId}/entries/{entryId}", new { RaceId = raceId, EntryId = entryId });
             })
             .WithName("RegisterEntry")
@@ -2419,7 +2399,7 @@ public static partial class EndpointExtensions
             ownerName,
             ownerId);
 
-    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
+    private static RaceEntryResponse ToRaceEntryResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, int? gateNumber, string? horseName, string? ownerName, string? ownerId)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2458,7 +2438,7 @@ public static partial class EndpointExtensions
             condition.DirtConditionCode,
             condition.GoingDescriptionText);
 
-    private static RaceEntryResultResponse ToRaceEntryResultResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int horseNumber, string? horseName)
+    private static RaceEntryResultResponse ToRaceEntryResultResponse(AppReadModels.EntryResultSnapshot entryResult, string? horseId, int? horseNumber, string? horseName)
         => new(
             entryResult.EntryId,
             horseId ?? string.Empty,
@@ -2480,28 +2460,19 @@ public static partial class EndpointExtensions
                 ? fallbackHorseId
                 : null;
 
-    private static int ResolveHorseNumber(IReadOnlyDictionary<string, int> entryHorseNumbersByEntryId, string entryId, int horseNumber)
-        => horseNumber > 0
-            ? horseNumber
-            : entryHorseNumbersByEntryId.TryGetValue(entryId, out var fallbackHorseNumber)
-                ? fallbackHorseNumber
-                : 0;
+    private static int? ResolveHorseNumber(IReadOnlyDictionary<string, int?> entryHorseNumbersByEntryId, string entryId, int? horseNumber)
+        => entryHorseNumbersByEntryId.TryGetValue(entryId, out var currentHorseNumber) ? currentHorseNumber : horseNumber;
 
     private static int? ResolveGateNumber(
         IReadOnlyDictionary<string, int> entryGateNumbersByEntryId,
         IReadOnlyDictionary<string, int> resultEntryGateNumbersByEntryId,
         string entryId,
-        int horseNumber)
+        int? horseNumber)
         => entryGateNumbersByEntryId.TryGetValue(entryId, out var gateNumber)
             ? gateNumber
             : resultEntryGateNumbersByEntryId.TryGetValue(entryId, out var fallbackGateNumber)
                 ? fallbackGateNumber
-                : ResolveGateNumberFromHorseNumber(horseNumber);
-
-    private static int? ResolveGateNumberFromHorseNumber(int horseNumber)
-        => horseNumber > 0
-            ? (horseNumber + 1) / 2
-            : null;
+                : null;
 
     private static string? ResolveHorseName(IReadOnlyDictionary<string, string> horseNamesById, string? horseId)
         => !string.IsNullOrWhiteSpace(horseId) && horseNamesById.TryGetValue(horseId, out var horseName)

@@ -22,7 +22,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
 
     public sealed record UpsertRaceEntryCall(
         string RaceId,
-        int HorseNumber,
+        int? HorseNumber,
         string HorseName,
         string? JockeyName,
         string? TrainerName,
@@ -38,9 +38,10 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
 
     public sealed record DeclareRaceEntryResultCall(
         string RaceId,
-        int HorseNumber,
+        int? HorseNumber,
         int? FinishPosition,
-        string? OfficialTime);
+        string? OfficialTime,
+        string? HorseId = null);
 
     public sealed record DeclareRaceResultCall(
         string RaceId,
@@ -129,7 +130,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
 
     public Task<string> UpsertRaceEntryAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -148,7 +149,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     }
 
     public Task<string> UpsertRaceEntryAsync(
-        string raceId, int horseNumber, string horseName, string? jockeyName,
+        string raceId, int? horseNumber, string horseName, string? jockeyName,
         string? trainerName, int? gateNumber, decimal? assignedWeight,
         string? sexCode, int? age, decimal? declaredWeight,
         decimal? declaredWeightDiff, string? ownerName,
@@ -178,7 +179,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
 
     public Task<string> DeclareRaceEntryResultAsync(
         string raceId,
-        int horseNumber,
+        string horseId,
         int? finishPosition,
         string? officialTime,
         string? marginText,
@@ -187,13 +188,8 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
         decimal? prizeMoney,
         CancellationToken cancellationToken = default)
     {
-        if (FailForHorseNumber == horseNumber)
-        {
-            throw new InvalidOperationException($"テスト用の失敗: HorseNumber={horseNumber}");
-        }
-
         DeclareRaceEntryResultCalls.Add(new DeclareRaceEntryResultCall(
-            raceId, horseNumber, finishPosition, officialTime));
+            raceId, null, finishPosition, officialTime, horseId));
         return Task.FromResult("declared");
     }
 
@@ -257,6 +253,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     }
 
     public List<DeclareRaceResultBulkRequest> DeclareRaceResultBulkCalls { get; } = [];
+    public DeclareRaceResultBulkResponse? BulkWriteResponse { get; set; }
 
     /// <summary>
     /// 実際の /api/races/result-bulk エンドポイントと同様、レース確定宣言・各馬の成績・
@@ -272,6 +269,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
     {
         DeclareRaceResultBulkCalls.Add(request);
         if (BulkWriteException is not null) throw BulkWriteException;
+        if (BulkWriteResponse is not null) return Task.FromResult(BulkWriteResponse);
 
         var raceId = DeterministicIdGenerator.BuildRaceId(
             request.RaceDate, request.RacecourseCode, request.RaceNumber);
@@ -302,7 +300,7 @@ internal sealed class FakeDataCollectionWriteService : IDataCollectionWriteServi
                 }
 
                 DeclareRaceEntryResultCalls.Add(new DeclareRaceEntryResultCall(
-                    raceId, entry.HorseNumber, entry.FinishPosition, entry.OfficialTime));
+                    raceId, entry.HorseNumber!.Value, entry.FinishPosition, entry.OfficialTime));
             }
         }
 

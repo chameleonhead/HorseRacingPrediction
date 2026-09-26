@@ -508,4 +508,31 @@ public class ReadModelProjectionTests
         Assert.IsNotNull(result);
         Assert.AreEqual("2-2-1-1", result.CornerPositions);
     }
+
+    [TestMethod]
+    public async Task NumberChange_PreservesResultHorseAndUpdatesProjectedNumber()
+    {
+        var raceId = RaceId.New;
+        var horseId = HorseId.New.Value;
+        var entryId = $"{raceId.Value}-entry-{horseId}";
+        await _commandBus.PublishAsync(new CreateRaceCommand(raceId,
+            new DateOnly(2026, 9, 26), "TOKYO", 1, "番号変更"), CancellationToken.None);
+        await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 1), CancellationToken.None);
+        await _commandBus.PublishAsync(new RegisterEntryCommand(raceId, entryId, horseId, 1), CancellationToken.None);
+        await _commandBus.PublishAsync(new DeclareRaceResultCommand(raceId, "同じ馬", DateTimeOffset.UtcNow), CancellationToken.None);
+        await _commandBus.PublishAsync(new DeclareEntryResultCommand(raceId, entryId, finishPosition: 1), CancellationToken.None);
+        await _commandBus.PublishAsync(new RegisterEntryCommand(raceId, entryId, horseId, 2), CancellationToken.None);
+
+        var resultView = await _queryProcessor.ProcessAsync(new ReadModelByIdQuery<RaceResultViewReadModel>(raceId.Value), CancellationToken.None);
+        var comparison = await _queryProcessor.ProcessAsync(new ReadModelByIdQuery<PredictionComparisonViewReadModel>(raceId.Value), CancellationToken.None);
+        Assert.IsNotNull(resultView);
+        Assert.IsNotNull(comparison);
+        foreach (var result in new[] { resultView.EntryResults.Single(), comparison.EntryResults.Single() })
+        {
+            Assert.AreEqual(entryId, result.EntryId);
+            Assert.AreEqual(horseId, result.HorseId);
+            Assert.AreEqual(2, result.HorseNumber);
+            Assert.AreEqual(1, result.FinishPosition);
+        }
+    }
 }

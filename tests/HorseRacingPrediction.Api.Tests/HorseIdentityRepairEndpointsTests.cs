@@ -353,13 +353,26 @@ public sealed class HorseIdentityRepairEndpointsTests
         await http.PostAsJsonAsync("/api/races",
             new CreateRaceRequest(new DateOnly(2026, 9, 14), "TOKYO", 2, "統合再収集", raceId));
         await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish", new { EntryCount = 1 });
-        const string entryId = "merge-recovery-entry";
-        await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(sourceId, 1, null, null, 1, 55, "M", 3, null, null,
-                EntryId: entryId, HorseName: name));
-        await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, targetId);
+        (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
             new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
-                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl));
+                EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).EnsureSuccessStatusCode();
+        // The identity repair endpoint consumes persisted evidence, not a new entry rebind.
+        using (var repairDb = application.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
+        {
+            repairDb.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
+            {
+                CandidateId = $"20260913-jra-horse-identity-repair:{raceId}:{entryId}",
+                RepairId = "20260913-jra-horse-identity-repair",
+                SourceHorseId = sourceId,
+                TargetHorseId = targetId,
+                JraIdentity = $"pw01dud00{suffix}/45",
+                RaceId = raceId,
+                EntryId = entryId,
+                DetectedAt = DateTimeOffset.UtcNow,
+            });
+            await repairDb.SaveChangesAsync();
+        }
 
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
         await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse,
@@ -558,7 +571,7 @@ public sealed class HorseIdentityRepairEndpointsTests
     }
 
     [TestMethod]
-    public async Task RecordedRaceEntryReplacement_CanBePreviewedAndAppliedIdempotently()
+    public async Task StoredHorseIdentityEvidence_CanBePreviewedAndAppliedIdempotently()
     {
         var (app, client) = await TestApplicationFactory.CreateAsync();
         await using var application = app;
@@ -579,16 +592,24 @@ public sealed class HorseIdentityRepairEndpointsTests
             new CreateRaceRequest(new DateOnly(2026, 9, 13), "TOKYO", 1, "修復テスト", raceId))).StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, (await http.PostAsJsonAsync($"/api/races/{raceId}/card/publish",
             new { EntryCount = 1 })).StatusCode);
-        const string entryId = "repair-entry-01";
-        Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
-            new RegisterEntryRequest(sourceId, 1, null, null, 1, 55, "M", 3, null, null,
-                EntryId: entryId, HorseName: name))).StatusCode);
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, targetId);
         Assert.AreEqual(HttpStatusCode.Created, (await http.PostAsJsonAsync($"/api/races/{raceId}/entries",
             new RegisterEntryRequest(targetId, 1, null, null, 1, 55, "M", 3, null, null,
                 EntryId: entryId, HorseName: name, HorseSourceIdentity: sourceUrl))).StatusCode);
         using (var repairDb = application.Services
                    .GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext())
         {
+            repairDb.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
+            {
+                CandidateId = $"20260913-jra-horse-identity-repair:{raceId}:{entryId}",
+                RepairId = "20260913-jra-horse-identity-repair",
+                SourceHorseId = sourceId,
+                TargetHorseId = targetId,
+                JraIdentity = $"pw01dud00{suffix}/45",
+                RaceId = raceId,
+                EntryId = entryId,
+                DetectedAt = DateTimeOffset.UtcNow,
+            });
             repairDb.HorseIdentityRepairCandidates.Add(new HorseIdentityRepairCandidateReadModel
             {
                 CandidateId = $"20260913-jra-horse-identity-repair:{raceId}:duplicate-evidence",

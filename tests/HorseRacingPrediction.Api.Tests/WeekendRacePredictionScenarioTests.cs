@@ -56,9 +56,9 @@ public class WeekendRacePredictionScenarioTests
         var jockey2Id = $"jockey-{Guid.NewGuid()}";
         var jockey3Id = $"jockey-{Guid.NewGuid()}";
         var trainerId = $"trainer-{Guid.NewGuid()}";
-        var entry1Id = $"entry-{Guid.NewGuid()}";
-        var entry2Id = $"entry-{Guid.NewGuid()}";
-        var entry3Id = $"entry-{Guid.NewGuid()}";
+        var entry1Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse1Id);
+        var entry2Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse2Id);
+        var entry3Id = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horse3Id);
         var ticketId = $"predictionticket-{Guid.NewGuid()}";
         var memo1Id = $"memo-{Guid.NewGuid()}";
         var memo2Id = $"memo-{Guid.NewGuid()}";
@@ -185,11 +185,10 @@ public class WeekendRacePredictionScenarioTests
         // 【金曜日】枠順発表・予想作成
         // ═══════════════════════════════════════════════════
 
-        // --- 枠番付きエントリーを追加登録する ---
-        // 枠順発表後、実際の枠番・ゲート番号を含めた情報を新たに登録する。
-        var entry1WithGate = $"entry-{Guid.NewGuid()}";
-        var entry2WithGate = $"entry-{Guid.NewGuid()}";
-        var entry3WithGate = $"entry-{Guid.NewGuid()}";
+        // --- 同じ出走 ID の枠番・馬番を更新する ---
+        var entry1WithGate = entry1Id;
+        var entry2WithGate = entry2Id;
+        var entry3WithGate = entry3Id;
 
         var gateEntry1Response = await _client.PostAsJsonAsync(
             $"/api/races/{raceId}/entries",

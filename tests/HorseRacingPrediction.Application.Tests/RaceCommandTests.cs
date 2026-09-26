@@ -184,6 +184,7 @@ public class RaceCommandTests
         var raceId = RaceId.New;
         await _commandBus.PublishAsync(new CreateRaceCommand(raceId, new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞"), CancellationToken.None);
         await _commandBus.PublishAsync(new PublishRaceCardCommand(raceId, 18), CancellationToken.None);
+        await _commandBus.PublishAsync(new RegisterEntryCommand(raceId, "entry-1", "horse-1", 1), CancellationToken.None);
         await _commandBus.PublishAsync(new DeclareRaceResultCommand(raceId, "ディープインパクト", DateTimeOffset.UtcNow), CancellationToken.None);
 
         var result = await _commandBus.PublishAsync(

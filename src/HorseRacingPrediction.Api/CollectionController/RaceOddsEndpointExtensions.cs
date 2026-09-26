@@ -14,12 +14,23 @@ public static class RaceOddsEndpointExtensions
     public static IEndpointRouteBuilder MapRaceOddsEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/admin/races/{raceId}/odds-snapshots", async (string raceId,
-            RecordRaceOddsSnapshotRequest request, ICommandBus commands, CancellationToken token) =>
+            RecordRaceOddsSnapshotRequest request, ICommandBus commands, IQueryProcessor queries, CancellationToken token) =>
         {
             var entries = request.Entries ?? [];
             var observations = request.Observations;
             var errors = Validate(request.ObservedAt, entries, observations);
             if (errors.Count > 0) return Results.ValidationProblem(errors);
+            var race = await queries.ProcessAsync(new ReadModelByIdQuery<RacePredictionContextReadModel>(raceId), token);
+            if (race is null) return Results.NotFound();
+            if (race.Entries.Count == 0 || race.Entries.Any(entry => entry.HorseNumber is null or <= 0))
+                return Results.Conflict(new { ErrorCode = "RaceAssignmentNotConfirmed", Message = "Confirmed horse assignments are required for odds." });
+            if (entries.Any(entry => !race.Entries.Any(assignment => assignment.HorseNumber == entry.HorseNumber)))
+                return Results.BadRequest(new { ErrorCode = "UnknownHorseNumber", Message = "Odds reference an unknown horse number." });
+            var assignments = race.Entries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
+                entry.HorseId, entry.EntryId, entry.GateNumber)).ToArray();
+            if (observations?.Any(item => !RaceOddsSelection.CanResolve(
+                    new RaceOddsObservation(item.Market, item.Selection, item.Value), assignments)) == true)
+                return Results.BadRequest(new { ErrorCode = "UnknownHorseNumber", Message = "Odds selections must resolve to confirmed horse or frame assignments." });
             await commands.PublishAsync(new RecordRaceOddsSnapshotCommand(new RaceId(raceId), request.ObservedAt,
                 entries.Select(x => new RaceOddsEntry(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
                 observations?.Select(x => new RaceOddsObservation(x.Market, x.Selection, x.Value,

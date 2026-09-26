@@ -140,6 +140,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             throw new JraCollectionException(
                 $"出馬表ページを取得できませんでした。 Kind={cardPageResult.Kind}, Url={cardPageResult.Url}");
         }
+        ValidateCardEntriesForPersistence(card);
 
         var raceName = string.IsNullOrWhiteSpace(card.RaceName)
             ? race.Name ?? $"R{race.Number}"

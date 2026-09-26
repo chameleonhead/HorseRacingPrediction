@@ -27,12 +27,13 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
             {
                 var repairHold = await collection.GetRaceRepairHoldAsync(raceId, token);
                 if (repairHold is { IsActive: true }) return Results.Conflict(new { code = "RaceRepairHeld", raceId });
-                if (repairHold is not null && RequiresAssignmentFence(context))
+                if ((repairHold is not null && RequiresAssignmentFence(context))
+                    || context.HttpContext.Request.Path.Value?.EndsWith("/odds-snapshots", StringComparison.Ordinal) == true)
                 {
                     var fingerprint = context.HttpContext.Request.Headers["X-Race-Assignment-Fingerprint"].ToString();
                     var generation = context.HttpContext.Request.Headers["X-Race-Hold-Generation"].ToString();
                     if (fingerprint != await coordinator.AssignmentFingerprintAsync(raceId, token)
-                        || !long.TryParse(generation, out var receivedGeneration) || receivedGeneration != repairHold.Generation)
+                        || !long.TryParse(generation, out var receivedGeneration) || receivedGeneration != (repairHold?.Generation ?? 0))
                         return Results.Conflict(new { code = "StaleRaceAssignmentFence", raceId });
                 }
                 var barrier = await coordinator.ReadBarrierAsync(raceId, token);

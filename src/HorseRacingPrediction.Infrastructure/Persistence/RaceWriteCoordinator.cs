@@ -85,8 +85,8 @@ public sealed class RaceWriteCoordinator(IDbContextProvider<EventStoreDbContext>
     {
         using var db = provider.CreateContext();
         var race = await db.RacePredictionContexts.AsNoTracking().SingleOrDefaultAsync(x => x.RaceId == raceId, token);
-        var assignments = race?.Entries.OrderBy(x => x.HorseNumber)
-            .Select(x => new { x.HorseNumber, x.HorseId }).ToArray();
+        var assignments = race?.Entries.OrderBy(x => x.HorseId, StringComparer.Ordinal)
+            .Select(x => new { x.HorseNumber, x.HorseId, x.GateNumber }).ToArray();
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { raceId, assignments }))));
     }
 

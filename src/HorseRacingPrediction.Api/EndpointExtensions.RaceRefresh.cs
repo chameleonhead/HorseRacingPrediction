@@ -33,20 +33,24 @@ public static partial class EndpointExtensions
             : await queries.ProcessAsync(new ReadModelByIdQuery<HorseReadModel>(request.SourceHorseId), token);
         if (request.SourceHorseId is not null && (originHorse is null || !(request.Entries ?? []).Any(x => NormalizeDisplayName(x.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName))))
             return Results.Conflict(new[] { "取得元の馬がレースの出走馬に含まれていません。" });
+        if (originHorse is not null && (request.Entries ?? []).Any(source =>
+                NormalizeDisplayName(source.HorseName ?? "") == NormalizeDisplayName(originHorse.RegisteredName)
+                && !string.IsNullOrWhiteSpace(source.HorseSourceIdentity)
+                && DeterministicIdGenerator.BuildHorseId(source.HorseName!, source.HorseSourceIdentity) != originHorse.HorseId))
+            return Results.Conflict(new[] { "取得元の馬IDと公式の馬識別情報が一致しません。" });
         var identityFailure = ValidateCollectedEntryIdentities(request, existing, id);
         if (identityFailure is not null) return identityFailure;
         foreach (var source in request.Entries ?? [])
         {
-            if (source.HorseNumber <= 0 || string.IsNullOrWhiteSpace(source.HorseName))
+            if (source.HorseNumber is <= 0 || string.IsNullOrWhiteSpace(source.HorseName))
                 return Results.BadRequest(new[] { "出走馬の識別情報が不足しています。" });
-            var old = existing.Entries.FirstOrDefault(x => x.HorseNumber == source.HorseNumber);
-            var entryId = old?.EntryId ?? DeterministicIdGenerator.BuildRaceEntryId(id, source.HorseNumber);
             static string? SubjectId(string prefix, string subjectType, string? name) => string.IsNullOrWhiteSpace(name) ? null
                 : DeterministicIdGenerator.BuildEntityId(prefix,
                     DeterministicIdGenerator.NormalizeKey(
                         Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName(subjectType, name)));
             var horseName = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", source.HorseName);
             var horseId = DeterministicIdGenerator.BuildHorseId(horseName, source.HorseSourceIdentity);
+            var old = existing.Entries.FirstOrDefault(x => x.HorseId == horseId);
             var jockeyId = SubjectId("jockey", "Jockey", source.JockeyName);
             var trainerId = SubjectId("trainer", "Trainer", source.TrainerName);
             // 既存の出走登録では手入力IDや別の正規化規則も使われる。同じ名前なら関連IDを維持する。
@@ -69,6 +73,7 @@ public static partial class EndpointExtensions
                 }
             }
             if (originHorse is not null && NormalizeDisplayName(source.HorseName) == NormalizeDisplayName(originHorse.RegisteredName)) horseId = originHorse.HorseId;
+            var entryId = DeterministicIdGenerator.BuildRaceEntryId(id, horseId);
             var registration = new RegisterEntryRequest(horseId, source.HorseNumber, jockeyId, trainerId,
                 source.GateNumber, source.AssignedWeight, source.SexCode, source.Age, source.BodyWeight, source.BodyWeightChange,
                 EntryId: entryId, HorseName: source.HorseName, JockeyName: source.JockeyName,
@@ -111,7 +116,7 @@ public static partial class EndpointExtensions
             request.StartTime, request.OverallPaceText, request.CornerPassagesText, request.CourseLayout,
             request.StewardReportText);
         var outcome = await commands.PublishAsync(new RefreshCollectedRaceCommand(new RaceId(id), data), token);
-        return outcome.IsSuccess ? Results.Ok(new Shared.DeclareRaceResultBulkResponse(id, []))
+        return outcome.IsSuccess ? Results.Ok(new Shared.DeclareRaceResultBulkResponse(id, [], CorePersisted: true))
             : Results.BadRequest(new[] { "再取得情報の保存に失敗しました。" });
     }
 

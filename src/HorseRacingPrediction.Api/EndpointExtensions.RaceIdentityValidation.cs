@@ -17,9 +17,10 @@ public static partial class EndpointExtensions
         {
             var key = $"HorseNumber={item.HorseNumber}";
             void Reject(string code, string message) => failures.Add(new("Entry", key, "Rejected", code, message));
-            if (item.HorseNumber <= 0 || !seenNumbers.Add(item.HorseNumber))
+            if (item.HorseNumber is <= 0 || item.GateNumber is < 1 or > 8 || (!request.IsRaceCard && item.HorseNumber is null)
+                || (item.HorseNumber is { } number && !seenNumbers.Add(number)))
             {
-                Reject("InvalidHorseNumber", "HorseNumber must be positive and unique.");
+                Reject("InvalidHorseNumber", "HorseNumber must be positive and unique, and GateNumber must be within 1–8 when supplied.");
                 continue;
             }
             if (string.IsNullOrWhiteSpace(item.HorseName))
@@ -27,7 +28,8 @@ public static partial class EndpointExtensions
                 Reject("MissingHorseName", "Horse identity is required before applying collected data.");
                 continue;
             }
-            if (!string.IsNullOrWhiteSpace(item.HorseSourceIdentity)
+            if ((item.HorseNumber is null && string.IsNullOrWhiteSpace(item.HorseSourceIdentity))
+                || !string.IsNullOrWhiteSpace(item.HorseSourceIdentity)
                 && !JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out _))
             {
                 Reject("InvalidHorseSourceIdentity", "The supplied Horse source identity is invalid.");
@@ -35,13 +37,22 @@ public static partial class EndpointExtensions
             }
             var name = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName);
             var horseId = DeterministicIdGenerator.BuildHorseId(name, item.HorseSourceIdentity);
-            var old = existing?.Entries.FirstOrDefault(entry => entry.HorseNumber == item.HorseNumber);
-            if (!seenHorses.Add(horseId)
-                || (old is not null && old.HorseId != horseId)
-                || (existing?.Entries.Any(entry => entry.HorseId == horseId
-                    && entry.HorseNumber != item.HorseNumber) ?? false))
-                Reject("RaceEntryIdentityMismatch", "Collected Horse identity does not match the saved horse-number assignment; no data was written.");
+            if (!seenHorses.Add(horseId))
+                Reject("RaceEntryIdentityMismatch", "Collected Horse identity must be unique within the race; no data was written.");
         }
+        var incoming = (request.Entries ?? []).Where(item => !string.IsNullOrWhiteSpace(item.HorseName))
+            .Select(item => new
+            {
+                HorseId = DeterministicIdGenerator.BuildHorseId(
+                Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName!), item.HorseSourceIdentity),
+                item.HorseNumber
+            }).ToArray();
+        var effectiveNumbers = (existing?.Entries ?? []).Where(entry => !incoming.Any(item => item.HorseId == entry.HorseId))
+            .Select(entry => entry.HorseNumber).Concat(incoming.Select(item => item.HorseNumber
+                ?? existing?.Entries.FirstOrDefault(entry => entry.HorseId == item.HorseId)?.HorseNumber))
+            .Where(number => number.HasValue).ToArray();
+        if (effectiveNumbers.Distinct().Count() != effectiveNumbers.Length)
+            failures.Add(new("Entry", "HorseNumber", "Rejected", "InvalidHorseNumber", "Effective horse numbers must be unique; no data was written."));
         return failures.Count == 0 ? null : Results.Ok(new Shared.DeclareRaceResultBulkResponse(
             raceId, failures.Select(item => $"{item.ErrorCode}: {item.Key} — {item.Message}").ToArray(),
             failures, CorePersisted: false));

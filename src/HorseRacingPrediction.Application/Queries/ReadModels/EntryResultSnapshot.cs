@@ -3,7 +3,7 @@ namespace HorseRacingPrediction.Application.Queries.ReadModels;
 public sealed record EntryResultSnapshot(
     string EntryId,
     string HorseId,
-    int HorseNumber,
+    int? HorseNumber,
     int? FinishPosition,
     string? OfficialTime,
     string? MarginText,

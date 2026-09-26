@@ -256,6 +256,16 @@ public sealed class JraRaceResultCollectionWorkflow
             return new RaceResultCollectionResult(raceId, dataCollectionRaceId, [], errors, resultPage.Url, false);
         }
 
+        var hasOnlyEntryIdentityValidationFailures = errors.Count == 0
+            && !outcome.CorePersisted
+            && (outcome.RelatedErrors?.Count ?? 0) == 0
+            && outcome.Errors.Count > 0
+            && outcome.Outcomes is { Count: > 0 } itemOutcomes
+            && itemOutcomes.Count == outcome.Errors.Count
+            && itemOutcomes.All(item => item.Scope == "Entry"
+                && item.Status == "Rejected"
+                && item.ErrorCode is "InvalidHorseNumber" or "InvalidHorseSourceIdentity"
+                    or "MissingHorseName" or "RaceEntryIdentityMismatch");
         errors.AddRange(outcome.Errors);
 
         // レース自体の作成/更新がAPI側で失敗した場合、それ以降の項目はAPI側でも
@@ -272,8 +282,8 @@ public sealed class JraRaceResultCollectionWorkflow
             .ToHashSet();
 
         var savedHorseNumbers = entries
-            .Where(e => e.HorseNumber > 0 && !failedHorseNumbers.Contains(e.HorseNumber))
-            .Select(e => e.HorseNumber)
+            .Where(e => e.HorseNumber is > 0 && !failedHorseNumbers.Contains(e.HorseNumber.Value))
+            .Select(e => e.HorseNumber!.Value)
             .ToList();
 
         var savedEntries = validResults
@@ -299,7 +309,8 @@ public sealed class JraRaceResultCollectionWorkflow
             errors,
             resultPage.Url,
             winningEntry is not null && payouts is not null,
-            Entries: savedEntries);
+            Entries: savedEntries,
+            HasOnlyEntryIdentityValidationFailures: hasOnlyEntryIdentityValidationFailures);
     }
 
     private static IReadOnlyList<PayoutEntryDto>? ToPayoutEntries(IReadOnlyList<PayoutLine> payouts)

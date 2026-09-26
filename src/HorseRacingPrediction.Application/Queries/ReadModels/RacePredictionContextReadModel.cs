@@ -200,14 +200,15 @@ public partial class RacePredictionContextReadModel : IReadModel,
         OddsSnapshots.Add(new RaceOddsSnapshot(e.ObservedAt,
             e.Entries.Select(x => new RaceOddsEntrySnapshot(x.HorseNumber, x.WinOdds, x.Popularity)).ToArray(),
             observations.Select(x => new RaceOddsObservationSnapshot(x.Market, x.Selection, x.Value,
-                x.Popularity)).ToArray()));
+                x.Popularity)).ToArray(), e.Assignments));
         return Task.CompletedTask;
     }
 }
 
 [System.ComponentModel.DataAnnotations.Schema.NotMapped]
 public sealed record RaceOddsSnapshot(DateTimeOffset ObservedAt, IReadOnlyList<RaceOddsEntrySnapshot> Entries,
-    IReadOnlyList<RaceOddsObservationSnapshot>? Observations = null);
+    IReadOnlyList<RaceOddsObservationSnapshot>? Observations = null,
+    IReadOnlyList<RaceOddsAssignment>? Assignments = null);
 [System.ComponentModel.DataAnnotations.Schema.NotMapped]
 public sealed record RaceOddsEntrySnapshot(int HorseNumber, decimal WinOdds, int? Popularity);
 [System.ComponentModel.DataAnnotations.Schema.NotMapped]

@@ -49,12 +49,12 @@ public static partial class EndpointExtensions
         var accepted = new List<(Shared.RaceResultEntryBulkDto Source, EntryDetails Entry, EntryResultDetails Result,
             string HorseName, string? JockeyName, string? TrainerName)>();
         var seenNumbers = new HashSet<int>();
-        var existingEntryIds = (existing?.Entries ?? []).Select(item => item.EntryId).ToHashSet(StringComparer.Ordinal);
 
         foreach (var item in request.Entries ?? [])
         {
             var key = $"HorseNumber={item.HorseNumber}";
-            if (item.HorseNumber <= 0 || !seenNumbers.Add(item.HorseNumber))
+            if (item.HorseNumber is <= 0 || (!request.IsRaceCard && item.HorseNumber is null)
+                || (item.HorseNumber is { } number && !seenNumbers.Add(number)))
             {
                 const string message = "HorseNumber must be positive and unique.";
                 errors.Add($"着順記録エラー: {key} — {message}");
@@ -62,9 +62,7 @@ public static partial class EndpointExtensions
                 continue;
             }
 
-            var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, item.HorseNumber);
-            var isExistingEntry = existingEntryIds.Contains(entryId);
-            if (!isExistingEntry && string.IsNullOrWhiteSpace(item.HorseName))
+            if (string.IsNullOrWhiteSpace(item.HorseName))
             {
                 const string message = "HorseName is required when the race entry does not exist.";
                 errors.Add($"出馬表登録エラー: {key} — {message}");
@@ -72,13 +70,14 @@ public static partial class EndpointExtensions
                 continue;
             }
 
-            var horseName = item.HorseName?.Trim() ?? entryId;
+            var horseName = item.HorseName!.Trim();
             var canonicalHorseName = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", horseName);
             var canonicalJockeyName = string.IsNullOrWhiteSpace(item.JockeyName) ? null
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
             var canonicalTrainerName = string.IsNullOrWhiteSpace(item.TrainerName) ? null
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
             var horseId = DeterministicIdGenerator.BuildHorseId(canonicalHorseName, item.HorseSourceIdentity);
+            var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, horseId);
             var jockeyId = string.IsNullOrWhiteSpace(canonicalJockeyName) ? null
                 : DeterministicIdGenerator.BuildEntityId("jockey",
                     DeterministicIdGenerator.NormalizeKey(canonicalJockeyName));
@@ -441,7 +440,8 @@ public static partial class EndpointExtensions
         if (!string.IsNullOrWhiteSpace(data.WinningHorseName) && data.DeclaredAt is null)
             throw new ArgumentException("Declared time is required with a winning horse.");
         if (data.Entries.Select(item => item.EntryId).Distinct(StringComparer.Ordinal).Count() != data.Entries.Count
-            || data.Entries.Select(item => item.HorseNumber).Distinct().Count() != data.Entries.Count)
+            || data.Entries.Where(item => item.HorseNumber.HasValue).Select(item => item.HorseNumber).Distinct().Count()
+                != data.Entries.Count(item => item.HorseNumber.HasValue))
             throw new ArgumentException("Incoming race entries must be unique.");
         if (data.EntryResults.Select(item => item.EntryId).Distinct(StringComparer.Ordinal).Count()
             != data.EntryResults.Count)

@@ -4,7 +4,7 @@ namespace HorseRacingPrediction.Domain.Races;
 
 public sealed class EntryRegistered : AggregateEvent<RaceAggregate, RaceId>
 {
-    public EntryRegistered(string entryId, string horseId, int horseNumber,
+    public EntryRegistered(string entryId, string horseId, int? horseNumber,
         string? jockeyId = null, string? trainerId = null,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
@@ -41,7 +41,7 @@ public sealed class EntryRegistered : AggregateEvent<RaceAggregate, RaceId>
     public string? PreviousJockeyId { get; }
     public string EntryId { get; }
     public string HorseId { get; }
-    public int HorseNumber { get; }
+    public int? HorseNumber { get; }
     public string? JockeyId { get; }
     public string? TrainerId { get; }
     public int? GateNumber { get; }

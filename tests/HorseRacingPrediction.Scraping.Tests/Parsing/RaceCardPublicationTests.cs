@@ -29,15 +29,16 @@ public sealed class RaceCardPublicationTests
     }
 
     [TestMethod]
-    public async Task ParseHtml_AllHorseAndFrameCellsBlank_ThrowsUnconfirmedWithRaceId()
+    public async Task ParseHtml_AllHorseAndFrameCellsBlank_RetainsIdentifiedEntries()
     {
         var snapshot = await CaptureHtmlAsync(HtmlRow("", "", "HTML確定待ち馬A", "000101")
             + HtmlRow("", "", "HTML確定待ち馬B", "000102"));
 
-        var exception = Assert.ThrowsExactly<JraHorseNumbersUnconfirmedException>(
-            () => Parse(snapshot));
-
-        Assert.AreEqual(new RaceId(Date, RaceCourse.Nakayama, 3), exception.RaceId);
+        var page = Parse(snapshot);
+        Assert.AreEqual(new RaceId(Date, RaceCourse.Nakayama, 3), page.RaceId);
+        Assert.HasCount(2, page.Entries);
+        Assert.IsTrue(page.Entries.All(entry => entry.HorseNumber is null && entry.FrameNumber is null));
+        Assert.IsTrue(page.Entries.All(entry => entry.HorseSourceIdentity is not null));
     }
 
     [TestMethod]
@@ -56,16 +57,15 @@ public sealed class RaceCardPublicationTests
     }
 
     [TestMethod]
-    public async Task ParseHtml_MixedBlankAndConfirmedNumber_ThrowsConsistencyException()
+    public async Task ParseHtml_MixedBlankAndConfirmedNumber_RetainsKnownAndUnknown()
     {
         var snapshot = await CaptureHtmlAsync(
             HtmlRow("1", "1", "HTML部分馬A", "000105")
             + HtmlRow("", "", "HTML部分馬B", "000106"));
 
-        var exception = Assert.ThrowsExactly<JraResultConsistencyException>(
-            () => Parse(snapshot));
-
-        Assert.AreEqual("HorseNumber", exception.FieldName);
+        var page = Parse(snapshot);
+        Assert.AreEqual(1, page.Entries[0].HorseNumber);
+        Assert.IsNull(page.Entries[1].HorseNumber);
     }
 
     [TestMethod]
@@ -83,13 +83,13 @@ public sealed class RaceCardPublicationTests
     }
 
     [TestMethod]
-    public void Parse_AllHorseAndFrameNumbersBlank_ThrowsUnconfirmedWithRaceId()
+    public void Parse_AllHorseAndFrameNumbersBlank_RetainsIdentifiedEntries()
     {
-        var exception = Assert.ThrowsExactly<JraHorseNumbersUnconfirmedException>(
-            () => Parse(Card(("", "", "確定待ち馬A", null), ("", "", "確定待ち馬B", null))));
-
-        Assert.AreEqual(new RaceId(Date, RaceCourse.Nakayama, 3), exception.RaceId);
-        Assert.AreEqual(Url, exception.Url);
+        var page = Parse(Card(("", "", "確定待ち馬A", null), ("", "", "確定待ち馬B", null)));
+        Assert.AreEqual(new RaceId(Date, RaceCourse.Nakayama, 3), page.RaceId);
+        Assert.HasCount(2, page.Entries);
+        Assert.IsTrue(page.Entries.All(entry => entry.HorseNumber is null && entry.FrameNumber is null));
+        Assert.IsTrue(page.Entries.All(entry => entry.HorseSourceIdentity is not null));
     }
 
     [TestMethod]
@@ -105,12 +105,19 @@ public sealed class RaceCardPublicationTests
     }
 
     [TestMethod]
-    public void Parse_MixedBlankAndConfirmedNumber_ThrowsConsistencyException()
+    public void Parse_MixedBlankAndConfirmedNumber_RetainsKnownAndUnknown()
     {
-        var exception = Assert.ThrowsExactly<JraResultConsistencyException>(
-            () => Parse(Card(("1", "1", "部分確定馬A", null), ("", "", "部分確定馬B", null))));
+        var page = Parse(Card(("1", "1", "部分確定馬A", null), ("", "", "部分確定馬B", null)));
+        Assert.AreEqual(1, page.Entries[0].HorseNumber);
+        Assert.IsNull(page.Entries[1].HorseNumber);
+    }
 
-        Assert.AreEqual("HorseNumber", exception.FieldName);
+    [TestMethod]
+    public void Parse_UnconfirmedNumberWithoutSourceIdentity_WaitsWithoutSaving()
+    {
+        var exception = Assert.ThrowsExactly<JraHorseSourceIdentityUnavailableException>(
+            () => Parse(Card(("", "", "識別不能馬A", ""), ("", "", "識別可能馬B", null))));
+        Assert.AreEqual(new RaceId(Date, RaceCourse.Nakayama, 3), exception.RaceId);
     }
 
     [TestMethod]

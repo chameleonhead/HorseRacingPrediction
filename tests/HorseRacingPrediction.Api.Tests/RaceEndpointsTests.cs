@@ -162,7 +162,7 @@ public class RaceEndpointsTests
         var entries = Enumerable.Range(1, 18).Select(number => new RaceResultEntryBulkDto(
             number, number, $"1:{30 + number:00}.0", null, $"3{number % 10}.0", null,
             1_000_000m - number, $"一括馬{number}", $"一括騎手{number}", $"一括調教師{number}",
-            number, 55m, number % 2 == 0 ? "F" : "M", 3, number,
+            Math.Min(8, (number + 1) / 2), 55m, number % 2 == 0 ? "F" : "M", 3, number,
             450 + number, number % 3, number, false, $"馬主{number}", $"{number}", 12.3m,
             AdditionalPrizeMoney: 10_000m)).ToArray();
         var request = new DeclareRaceResultBulkRequest(date, course, raceNumber, "一括登録検証",
@@ -174,6 +174,9 @@ public class RaceEndpointsTests
         var first = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
         var firstBody = await first.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         var raceId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceId(date, course, raceNumber);
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode, await first.Content.ReadAsStringAsync());
+        Assert.IsNotNull(firstBody);
+        Assert.IsEmpty(firstBody.Errors, string.Join(" | ", firstBody.Errors));
         var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}", JsonOptions);
         var eventsAfterFirst = CountStoredEvents();
         var replay = await _client.PostAsJsonAsync("/api/races/result-bulk", request, JsonOptions);
@@ -277,7 +280,7 @@ public class RaceEndpointsTests
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsTrue(body!.Errors.Any(x => x.Contains("RaceEntryIdentityMismatch", StringComparison.Ordinal)));
+        Assert.IsTrue(body!.Errors.Any(x => x.Contains("InvalidHorseNumber", StringComparison.Ordinal)), string.Join(" | ", body.Errors));
         Assert.IsFalse(body.CorePersisted);
         Assert.AreEqual(eventsBefore, CountStoredEvents());
         using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
@@ -317,7 +320,7 @@ public class RaceEndpointsTests
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
         Assert.IsFalse(refreshBody!.CorePersisted);
-        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("RaceEntryIdentityMismatch")));
+        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("InvalidHorseNumber")), string.Join(" | ", refreshBody.Errors));
         Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(horseName),
             race.Entries.Single().HorseId);
     }
@@ -579,8 +582,8 @@ public class RaceEndpointsTests
     public async Task FullLifecycle_WithEntryAndPayout_ProducesCorrectState()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
         var declaredAt = DateTimeOffset.UtcNow;
 
         await _client.PostAsJsonAsync(
@@ -636,8 +639,8 @@ public class RaceEndpointsTests
     public async Task DeclareEntryResult_WhenAlreadyDeclared_ReturnsOk()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
 
         await _client.PostAsJsonAsync(
             "/api/races",
@@ -677,8 +680,8 @@ public class RaceEndpointsTests
     public async Task DeclarePayout_WhenAlreadyDeclared_ReturnsConflict()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
         var declaredAt = DateTimeOffset.UtcNow;
 
         await _client.PostAsJsonAsync(
@@ -731,8 +734,8 @@ public class RaceEndpointsTests
     public async Task RegisterEntry_WhenRelatedSubjectsAreMissing_AutoCreatesHorseJockeyTrainer()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
         var jockeyId = $"jockey-{Guid.NewGuid()}";
         var trainerId = $"trainer-{Guid.NewGuid()}";
 
@@ -781,8 +784,8 @@ public class RaceEndpointsTests
     public async Task GetRace_AfterFullLifecycle_ReturnsCardWeatherTrackAndResultDetails()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
         var observedAt = DateTimeOffset.UtcNow;
 
         await _client.PostAsJsonAsync(

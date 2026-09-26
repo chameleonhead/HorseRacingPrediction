@@ -390,11 +390,15 @@ public sealed class RaceCardPageParser
             // A row position is never a horse number. Empty cells are classified only
             // after the entire card has been inspected, before any entry can be saved.
             var numberText = table.GetCell(rowIndex, horseNumberIndex)?.Text.Trim() ?? string.Empty;
-            var horseNumber = 0;
-            if (numberText.Length > 0 && (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
-                || !int.TryParse(Regex.Match(numberText, @"[0-9]+$").Value, out horseNumber)
-                || horseNumber is < 1 or > 18))
-                throw new JraValueParseException(JraPageKind.RaceCard, url, "HorseNumber", numberText);
+            int? horseNumber = null;
+            if (numberText.Length > 0)
+            {
+                if (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
+                    || !int.TryParse(Regex.Match(numberText, @"[0-9]+$").Value, out var parsedNumber)
+                    || parsedNumber is < 1 or > 18)
+                    throw new JraValueParseException(JraPageKind.RaceCard, url, "HorseNumber", numberText);
+                horseNumber = parsedNumber;
+            }
 
             int? frameNumber = null;
 
@@ -453,12 +457,12 @@ public sealed class RaceCardPageParser
 
         if (entries.Count == 0)
             throw new JraPageStructureException(JraPageKind.RaceCard, url, "出走馬がありません。", "Entries");
-        if (entries.All(x => x.HorseNumber == 0 && x.FrameNumber is null))
-            throw new JraHorseNumbersUnconfirmedException(url, raceId);
-        if (entries.Any(x => x.HorseNumber == 0)
-            || entries.Select(x => x.HorseNumber).Distinct().Count() != entries.Count)
+        if (entries.Where(x => x.HorseNumber is not null).GroupBy(x => x.HorseNumber).Any(x => x.Count() > 1))
             throw new JraResultConsistencyException(JraPageKind.RaceCard, url,
-                "馬番の一部欠損または重複があります。", "HorseNumber");
+                "馬番が重複しています。", "HorseNumber");
+        if (entries.Any(x => x.HorseNumber is null)
+            && entries.Any(x => string.IsNullOrWhiteSpace(x.HorseSourceIdentity)))
+            throw new JraHorseSourceIdentityUnavailableException(url, raceId);
         return entries;
     }
 

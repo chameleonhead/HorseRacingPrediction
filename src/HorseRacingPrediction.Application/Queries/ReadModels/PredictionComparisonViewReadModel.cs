@@ -62,6 +62,9 @@ public partial class PredictionComparisonViewReadModel : IReadModel,
             EntryIndexes[index] = snapshot;
         else
             EntryIndexes.Add(snapshot);
+        for (var resultIndex = 0; resultIndex < EntryResults.Count; resultIndex++)
+            if (EntryResults[resultIndex].EntryId == e.EntryId)
+                EntryResults[resultIndex] = EntryResults[resultIndex] with { HorseNumber = e.HorseNumber };
         return Task.CompletedTask;
     }
 
@@ -84,7 +87,7 @@ public partial class PredictionComparisonViewReadModel : IReadModel,
         EntryResults.Add(new EntryResultSnapshot(
             e.EntryId,
             entryInfo?.HorseId ?? string.Empty,
-            entryInfo?.HorseNumber ?? 0,
+            entryInfo?.HorseNumber,
             e.FinishPosition, e.OfficialTime,
             e.MarginText, e.LastThreeFurlongTime,
             e.AbnormalResultCode, e.PrizeMoney, e.CornerPositions, e.Popularity, e.OriginalFinishPosition, e.IsDeadHeat, e.Average1F,

@@ -71,7 +71,7 @@ public interface IDataCollectionWriteService
     /// <summary>レースの出走エントリーを作成し、確認メッセージを返す。</summary>
     Task<string> UpsertRaceEntryAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -85,7 +85,7 @@ public interface IDataCollectionWriteService
 
     Task<string> UpsertRaceEntryAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -103,7 +103,7 @@ public interface IDataCollectionWriteService
             declaredWeightDiff, cancellationToken);
 
     Task<string> UpsertRaceEntryWithHorseIdentityAsync(
-        string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName,
+        string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
         int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
         decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
         CancellationToken cancellationToken = default)
@@ -121,7 +121,7 @@ public interface IDataCollectionWriteService
     /// <summary>出走馬 1 頭分の着順・タイムなどの成績を記録し、確認メッセージを返す。</summary>
     Task<string> DeclareRaceEntryResultAsync(
         string raceId,
-        int horseNumber,
+        string horseId,
         int? finishPosition,
         string? officialTime,
         string? marginText,

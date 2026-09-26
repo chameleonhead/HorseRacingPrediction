@@ -15,6 +15,54 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class CollectionPlatformStoreTests
 {
     [TestMethod]
+    public async Task RaceDetail_ProvisionalCardIsSavedButDueUntilNumbersArrive()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260926:Nakayama:5");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 5, "horse-key entries", false);
+        var first = await store.RequestAsync(resource, definition, 5, CollectionReason.Initial, now,
+            effectiveDate: new DateOnly(2026, 9, 26));
+        var a = new RaceEntry(null, "木曜馬A", null, null, null, OwnerName: "馬主A",
+            HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000101/00");
+        var b = new RaceEntry(2, "木曜馬B", 1, null, null, OwnerName: "馬主B",
+            HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000102/00");
+        var cards = new FakeJraRaceCardCollectionWorkflow { OutcomeEntries = [a, b] };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(), _ => cards, _ => results,
+            timeProvider: new FixedTimeProvider(now));
+
+        var firstLease = await store.AcquireAsync(first.TaskId!.Value, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(firstLease);
+        var waiting = await handler.CollectAsync(firstLease, CancellationToken.None);
+        Assert.AreEqual("RaceHorseNumbersUnconfirmed", waiting.ErrorCode);
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId.Value, firstLease.LeaseToken,
+            now.AddSeconds(1), waiting));
+        var provisional = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
+            .Single(x => x.Artifact == RaceArtifactKind.Card);
+        Assert.AreEqual(RaceArtifactStatus.AwaitingPublication, provisional.Status);
+        Assert.IsNotNull(provisional.LastPersistedAt);
+        Assert.AreEqual(5, provisional.AppliedRevision);
+        Assert.IsEmpty(results.Requests);
+
+        cards.OutcomeEntries = [a with { HorseNumber = 1, FrameNumber = 1 }, b];
+        var secondLease = await store.AcquireAsync(first.TaskId.Value, 2, now.AddMinutes(16), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(secondLease);
+        Assert.AreEqual("AwaitingPublication", secondLease.Attributes["cardArtifactStatus"]);
+        var afterNumbers = await handler.CollectAsync(secondLease, CancellationToken.None);
+        Assert.HasCount(2, cards.RefreshRequests);
+        Assert.IsTrue(afterNumbers.StageOutcomes!.Any(x => x.Stage == "PersistCard" && x.Persisted));
+        Assert.IsFalse(afterNumbers.StageOutcomes!.Any(x => x.Stage == "AwaitHorseNumbers"));
+        Assert.IsTrue(await store.CompleteAttemptAsync(first.TaskId.Value, secondLease.LeaseToken,
+            now.AddMinutes(17), afterNumbers));
+        var confirmed = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!
+            .Single(x => x.Artifact == RaceArtifactKind.Card);
+        Assert.AreEqual(RaceArtifactStatus.Current, confirmed.Status);
+        Assert.IsEmpty(results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_RevisionFour_UnconfirmedNumbersWaitWithoutSaving_ThenConfirmedCardUpgrades()
     {
         var store = CreateStore();

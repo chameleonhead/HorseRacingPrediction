@@ -22,6 +22,7 @@ public partial class RaceAggregate
             var old = _state.Entries.FirstOrDefault(x => x.EntryId == incoming.EntryId);
             var entry = incoming with
             {
+                HorseNumber = incoming.HorseNumber ?? old?.HorseNumber,
                 JockeyId = incoming.JockeyId ?? old?.JockeyId,
                 TrainerId = incoming.TrainerId ?? old?.TrainerId,
                 GateNumber = incoming.GateNumber ?? old?.GateNumber,
@@ -34,7 +35,7 @@ public partial class RaceAggregate
                 OwnerName = incoming.OwnerName ?? old?.OwnerName
             };
             if (entry == old && !metadataChanged) continue;
-            RegisterEntry(entry.EntryId, entry.HorseId, entry.HorseNumber, entry.JockeyId, entry.TrainerId,
+            RegisterValidatedEntry(entry.EntryId, entry.HorseId, entry.HorseNumber, entry.JockeyId, entry.TrainerId,
                 entry.GateNumber, entry.AssignedWeight, entry.SexCode, entry.Age,
                 entry.DeclaredWeight, entry.DeclaredWeightDiff, entry.RunningStyleCode, entry.OwnerName);
         }

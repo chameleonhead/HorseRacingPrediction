@@ -38,7 +38,7 @@ public partial class RaceAggregate
             var current = _state.Entries.LastOrDefault(x => x.EntryId == entry.EntryId);
             if (current is null)
             {
-                RegisterEntry(entry.EntryId, entry.HorseId, entry.HorseNumber,
+                RegisterValidatedEntry(entry.EntryId, entry.HorseId, entry.HorseNumber,
                     entry.JockeyId, entry.TrainerId, entry.GateNumber, entry.AssignedWeight,
                     entry.SexCode, entry.Age, entry.DeclaredWeight, entry.DeclaredWeightDiff,
                     entry.RunningStyleCode, entry.OwnerName);
@@ -47,6 +47,7 @@ public partial class RaceAggregate
 
             var merged = current with
             {
+                HorseNumber = entry.HorseNumber ?? current.HorseNumber,
                 JockeyId = entry.JockeyId ?? current.JockeyId,
                 TrainerId = entry.TrainerId ?? current.TrainerId,
                 GateNumber = entry.GateNumber ?? current.GateNumber,
@@ -61,7 +62,7 @@ public partial class RaceAggregate
             if (merged == current)
                 continue;
 
-            RegisterEntry(merged.EntryId, merged.HorseId, merged.HorseNumber,
+            RegisterValidatedEntry(merged.EntryId, merged.HorseId, merged.HorseNumber,
                 merged.JockeyId, merged.TrainerId, merged.GateNumber, merged.AssignedWeight,
                 merged.SexCode, merged.Age, merged.DeclaredWeight, merged.DeclaredWeightDiff,
                 merged.RunningStyleCode, merged.OwnerName);
@@ -114,11 +115,11 @@ public partial class RaceAggregate
 
         if (data.Entries.Any(x => string.IsNullOrWhiteSpace(x.EntryId)
                                   || string.IsNullOrWhiteSpace(x.HorseId)
-                                  || x.HorseNumber <= 0))
-            throw new ArgumentException("Every entry requires an entry ID, horse ID, and positive horse number.", nameof(data));
+                                  || x.HorseNumber is <= 0))
+            throw new ArgumentException("Every entry requires an entry ID and horse ID; known horse numbers must be positive.", nameof(data));
         if (data.Entries.Select(x => x.EntryId).Distinct(StringComparer.Ordinal).Count() != data.Entries.Count)
             throw new ArgumentException("Entry IDs must be unique.", nameof(data));
-        if (data.Entries.Select(x => x.HorseNumber).Distinct().Count() != data.Entries.Count)
+        if (data.Entries.Where(x => x.HorseNumber.HasValue).Select(x => x.HorseNumber).Distinct().Count() != data.Entries.Count(x => x.HorseNumber.HasValue))
             throw new ArgumentException("Horse numbers must be unique.", nameof(data));
         if (data.EntryResults.Any(x => string.IsNullOrWhiteSpace(x.EntryId)))
             throw new ArgumentException("Every entry result requires an entry ID.", nameof(data));

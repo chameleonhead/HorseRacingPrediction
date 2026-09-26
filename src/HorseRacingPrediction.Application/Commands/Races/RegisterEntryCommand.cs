@@ -5,7 +5,7 @@ namespace HorseRacingPrediction.Application.Commands.Races;
 
 public sealed class RegisterEntryCommand : Command<RaceAggregate, RaceId>
 {
-    public RegisterEntryCommand(RaceId aggregateId, string entryId, string horseId, int horseNumber,
+    public RegisterEntryCommand(RaceId aggregateId, string entryId, string horseId, int? horseNumber,
         string? jockeyId = null, string? trainerId = null,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
@@ -30,7 +30,7 @@ public sealed class RegisterEntryCommand : Command<RaceAggregate, RaceId>
 
     public string EntryId { get; }
     public string HorseId { get; }
-    public int HorseNumber { get; }
+    public int? HorseNumber { get; }
     public string? JockeyId { get; }
     public string? TrainerId { get; }
     public int? GateNumber { get; }

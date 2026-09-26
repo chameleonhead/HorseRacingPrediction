@@ -471,7 +471,7 @@ public static class CollectionPlatformEndpointExtensions
                 return Results.BadRequest(new { Error = "The collection attempt correlation is invalid." });
             var lease = await store.AcquireAsync(taskId, request.DispatchGeneration, HorseRacingPrediction.Contracts.Time.JstTime.Now(),
                 TimeSpan.FromSeconds(Math.Clamp(request.LeaseSeconds, 30, 3600)), request.Correlation, token);
-            if (lease is { RaceHoldGeneration: > 0 })
+            if (lease is not null && (lease.RaceHoldGeneration > 0 || lease.Definition.Value == "race-odds"))
             {
                 var coordinator = services.GetRequiredService<HorseRacingPrediction.Infrastructure.Persistence.RaceWriteCoordinator>();
                 var raceId = DeterministicIdGenerator.TryBuildRaceIdFromResource(lease.Resource.Id)
