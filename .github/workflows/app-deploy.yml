@@ -268,7 +268,7 @@ jobs:
           echo "API did not become healthy after deploy" >&2
           exit 1
 
-      - name: Migrate legacy race collection jobs
+      - name: Restore collection pipeline state after deployment
         env:
           ORIGINAL_WAS_PAUSED: ${{ needs.deploy-collector-lambda.outputs.was_paused }}
           DOMAIN_NAME: ${{ secrets.LIGHTSAIL_DOMAIN_NAME }}
@@ -276,28 +276,12 @@ jobs:
           API_KEY: ${{ secrets.LIGHTSAIL_API_KEY }}
         run: |
           base="https://${DOMAIN_NAME:-$(echo "$LIGHTSAIL_HOST" | tr '.' '-').sslip.io}/api/admin/collection"
-          # Preserve an operator/incident pause, and never resume on failed migration.
+          # Preserve an operator/incident pause; resume only after successful deployment checks.
           pipeline="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/pipeline")"
           jq -e '.isPaused == true' <<<"$pipeline" >/dev/null
           case "$ORIGINAL_WAS_PAUSED" in true|false) ;; *) exit 1 ;; esac
           running="$(curl --fail --silent --show-error -H "X-Api-Key: $API_KEY" "$base/tasks?status=Running&limit=1")"
           jq -e 'type == "array" and length == 0' <<<"$running" >/dev/null
-          response="$(curl --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-            -w $'\n%{http_code}' "$base/migrations/race-detail/apply")"
-          status="${response##*$'\n'}"
-          body="${response%$'\n'*}"
-          if [ "$status" != "200" ]; then
-            echo "Legacy race collection migration failed (HTTP $status): $body" >&2
-            exit 1
-          fi
-          preview="$(curl --fail --silent --show-error -X POST -H "X-Api-Key: $API_KEY" \
-            "$base/migrations/race-detail/preview")"
-          if [ "$(jq '.sourceResources' <<<"$preview")" != "0" ] || \
-             [ "$(jq '.errors | length' <<<"$preview")" != "0" ]; then
-            echo "Legacy race collection migration did not converge: $preview" >&2
-            exit 1
-          fi
-          echo "Legacy race collection migration completed: $body"
           if [ "$ORIGINAL_WAS_PAUSED" = "false" ]; then
             # A task may have failed while draining under our deployment pause.
             # Conservatively require no actionable failures (including older ones).
