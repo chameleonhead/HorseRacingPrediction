@@ -2,6 +2,8 @@
 
 ## 位置づけ
 
+> 2026-09-27 出馬表取消契約: 取消/除外の番号欠落は通常馬の未確定待ちと区別する。全行を保存し、Activeの番号未確定だけがCard待機条件となる。全非出走なら予想を投入せず、既存予想ジョブも対象なしとして終了する。race-detail revision5で既存Cardの再取得を促す。配備・復旧の証拠は[出馬表取消対応](changes/20260927_race-card-cancellation/README.md)を正とする。復旧は対象限定とし、他の未解明失敗があれば停止を維持する。未知解析・整合性障害の停止境界を弱めない。
+
 本書は、収集対象・状態・再取得・抽出 revision・URL 候補・scheduling を統一する Collector 制御設計の正本である。配置境界は [01-lambda-collector-architecture.md](01-lambda-collector-architecture.md)、現行動作は [22-collector-design.md](22-collector-design.md)、JRA Page/Parser/Navigator は [23-jra-scraping-redesign.md](23-jra-scraping-redesign.md) を参照する。
 
 設計変更の承認と実装進捗は [change record](changes/20260911_unified-collection-platform/README.md) を正とする。既存収集ジョブは compatibility layer として残さず、新基盤へ controlled cutover 後に production code から削除する。完全置換の論点は [decision record](changes/20260911_unified-collection-platform/decisions/full-job-replacement.md) に定義する。2026-09-11 に承認され、実装中である。

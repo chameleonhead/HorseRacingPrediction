@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_race-card-cancellation",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "bounded parser and fixture",
+  "acceptanceCriteria": ["AC1"],
+  "route": {"tier": "worker", "requestedModel": "gpt-5.6-luna", "observedModel": null, "observationSource": null, "modelTelemetryReason": "Role configuration specifies requested model; runtime model telemetry unavailable."},
+  "usage": {"availability": "unavailable", "totalTokens": null, "reason": "No per-agent usage exposed"},
+  "scope": ["src/HorseRacingPrediction.Scraping/Jra/Parsing/RaceCardPageParser.cs", "tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardCancellationTests.cs"],
+  "review": {"usageAvailability": "unavailable", "totalTokens": null, "activeMinutes": null, "reason": "No attributed review telemetry"},
+  "overhead": {"availability": "unavailable", "preparationMinutes": null, "integrationMinutes": null, "auditMinutes": null, "reason": "No active effort telemetry"},
+  "elapsed": {"availability": "unavailable", "minutes": null, "reason": "No active effort telemetry"},
+  "startRevision": "67da0af2a07078277d26c6911ddc3602c685734b",
+  "endRevisionOrPatch": "RaceCardPageParser.cs and RaceCardCancellationTests.cs working patch; focused Release 39 passed",
+  "outcome": {"verificationPassed": true, "qualityPassed": true, "scopePassed": true, "independentChallenge": "Lead required 16 retained rows / 15 active for both labels, plus past11 and out-of-cell text counterexamples; focused suite 39 passed.", "retries": 1, "leadCorrections": 1, "reviewPasses": 2, "promoted": false, "escapedDefects": 0, "escalations": 0, "reviewMode": "detailed", "detailReviewReason": "AC1 coverage gap in first handoff: only2rows and no successful Excluded case", "decision": "accept"}
+}
