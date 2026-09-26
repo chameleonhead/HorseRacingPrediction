@@ -154,6 +154,13 @@ public sealed class RaceCardPublicationTests
         CollectionAssert.AreEqual(new[] { 1, 2 }, page.Entries.Select(x => x.HorseNumber).ToArray());
     }
 
+    [TestMethod]
+    public async Task Parse_HtmlHorseNumberWithBlinkerIcon_PreservesOfficialNumber()
+    {
+        var snapshot = await CaptureHtmlAsync(HtmlRow("2", "3<span class=\"horse_icon blinker\"><img alt=\"ブリンカー着用\"></span>", "装具表示馬", "000001"));
+        Assert.AreEqual(3, Parse(snapshot).Entries.Single().HorseNumber);
+    }
+
     private static JraRaceCardPage Parse(PageSnapshot snapshot)
         => (JraRaceCardPage)new RaceCardPageParser().Parse(snapshot);
 
