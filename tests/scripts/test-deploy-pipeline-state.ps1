@@ -1,8 +1,11 @@
 param([string]$Bash = 'C:\Program Files\Git\bin\bash.exe')
 $ErrorActionPreference = 'Stop'
 $workflow = Get-Content -Raw (Join-Path $PSScriptRoot '../../.github/workflows/app-deploy.yml')
-$step = [regex]::Match($workflow, '(?s)- name: Migrate legacy race collection jobs.*?        run: \|\r?\n(?<script>.*?)\r?\n  deploy-collector-lambda:')
-if (-not $step.Success) { throw 'Migration step not found' }
+if ($workflow.Contains('Migrate legacy race collection jobs') -or $workflow.Contains('/migrations/race-detail/')) {
+    throw 'Obsolete race collection migration remains in deployment'
+}
+$step = [regex]::Match($workflow, '(?s)- name: Restore collection pipeline state after deployment.*?        run: \|\r?\n(?<script>.*?)\r?\n  deploy-collector-lambda:')
+if (-not $step.Success) { throw 'Pipeline restoration step not found' }
 $script = ($step.Groups['script'].Value -split '\r?\n' | ForEach-Object { $_ -replace '^          ', '' }) -join "`n"
 $mocks = @'
 set -euo pipefail
@@ -23,8 +26,6 @@ curl() {
     */pipeline) if [ "$TEST_CASE" = get-failure ]; then return 22; fi; echo '{}' ;;
     */tasks\?*) echo '[]' ;;
     */failure-notifications\?*) if [ "$TEST_CASE" = new-failure ]; then echo '[{}]'; else echo '[]'; fi ;;
-    */apply) if [ "$TEST_CASE" = apply-failure ]; then printf '{}\n409'; else printf '{}\n200'; fi ;;
-    */preview) if [ "$TEST_CASE" = preview-failure ]; then return 22; fi; echo '{}' ;;
     *) return 90 ;;
   esac
 }
@@ -49,12 +50,11 @@ jq() {
   elif [[ "$filter" == *'Invalid task list'* ]]; then
     if [ "$TEST_CASE" = invalid-tasks ]; then return 5; fi
     if [ "$TEST_CASE" = not-drained ]; then echo 1; else echo 0; fi
-  elif [[ "$filter" == *sourceResources* ]] && [ "$TEST_CASE" = unconverged ]; then echo 1
   else echo 0
   fi
 }
 '@
-$cases = @('running', 'paused', 'get-failure', 'invalid-state', 'invalid-original', 'not-drained', 'apply-failure', 'preview-failure', 'unconverged', 'new-failure')
+$cases = @('running', 'paused', 'get-failure', 'invalid-state', 'invalid-original', 'not-drained', 'new-failure')
 foreach ($case in $cases) {
     $payload = "export TEST_CASE='$case'`n$mocks`n$script"
     $output = $payload | & $Bash --noprofile --norc -s 2>&1
