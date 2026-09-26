@@ -80,3 +80,29 @@ CodeGraph: `.codegraph/` にはgitignore stubのみでindexは未初期化。`co
 Final local gates: 修正後API全体310 passed / 1 skipped、isolated host smoke成功（14entries/14owners、crossProcessLock、durableHold、backupVerified、delayedOddsRejected、currentWorkerWriteすべてTrue）。exact format gate再実行成功。上記のfuture Result待機、format、API fixtureの失敗は元gate再成功により閉鎖。revision固定値もcurrent-only DBの別プロセスsmokeで閉鎖。ローカル検証の未解決失敗なし。Linux CI/CDと条件付き対象復旧・観測は未完了。
 
 AC-group review (Main): AC1 live HTML＋固定fixtureの独立証拠、AC2/3 API/event/projection/full-card16とML/API-only15・全取消skip、AC4旧event/未指定維持・旧receipt/下書き拒否・unknown拒否・既存回帰と別process境界を照合。T1のcoverage correction1回（加えてMainがdeprecated test属性を現行表記へ変更）、T2Dは追加修正なし。両workerのモデル実行・tokens/費用は独立telemetryがなく未確認。成功標本不足のため永続routing変更なし。単発のfixture/接続欠陥は既存gate内で修正し、新しいskill規則は追加しない。
+
+## GitHub delivery / targeted recovery
+
+- PR [#102](https://github.com/chameleonhead/HorseRacingPrediction/pull/102)、head b2e214d141ac94d34abd7bc8d1e8c5f2ea125ac1。Linux CI [36257452800](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36257452800)成功。merge 8efc1d612a31e3d110c2c0b39f37ca94eb6ce4dc。
+- Deployment [36257902413](https://github.com/chameleonhead/HorseRacingPrediction/actions/runs/36257902413)全job成功。API/collectorは同merge SHA、API health成功、既存pipeline pauseを維持。owner migrationはpreview-only。ローカルAWS/SSH配備なし。
+- merged branchはancestor/tree一致・cleanを確認してdetach後にlocal/remote両方を削除。以後同branchへのcommit/pushなし。完了記録は最新mainから別branch。
+- 02:20 JST事前GET: pipeline paused、runningなし、actionable failure group/Failed/DeadLetterとも0。対象にはrevision4のReady、attempt0の既存手動再取得taskが残る。
+- 対象の旧Ready task `ed456814-30ca-4cf3-a695-8a9a43837c6b` のみcancelし履歴保持。旧active taskのrevisionはRequestAsyncで更新されないため、旧版実行を避ける対象限定置換とした。データ・通知・他jobの削除なし。
+- revision5 Recovery(reason6) request `99bcdcd1-bdec-4377-ab3b-821882d152e3` → task `758b1f1a-9cc3-4c79-941b-a7dab2636222`。Ready/revision5と他失敗0を再確認し02:20:43 JSTにresume。
+- 02:22:59 JST時点: pipeline再停止なし、worker実行とCurrent 27→28等の進捗あり。対象はまだReadyであり、この時点ではAC5未完了。対象保存後のCard/read-backと後続batch完了または15分観測を継続する。
+
+## Production acceptance / final review
+
+- 対象attempt `5e987653-5849-429f-aa05-f6f3587e7857` は02:23:22–02:23:25 JST。CardはCurrent/applied5/required5、lastPersistedAt02:23:25、errorなし。ResultはAwaitingPublication、RaceNotStarted、nextDueAt10:05。取消を未確定馬番待機として誤扱いせず、正常な結果公開待ちへ進んだ。
+- 対象batch `2ed67a71-b129-4a19-a3a0-07ae063f42f7` は24番目の対象まで処理し02:23:25終了。将来のResultを保存済み/成功とは主張しない。
+- 本番race `race-e6b2821d-268d-54e3-a4ee-1a0f7050d914` のGET race/contextを独立照合: 両方16entries、Active15、Cancelled1。取消馬ニシノドリーマーはHorseId `horse-45b9747c-425d-5641-ad23-4c5cc11a0813`、馬番null、枠3、馬主「西山 茂行」、騎手「野中 悠太郎」、調教師「竹内 正洋」。行や属性を削除せず、馬番6/過去11を補完していない。本番で予想生成を手動実行した証拠ではなく、候補状態read-backとローカル予想15件testsを組み合わせた検証。
+- 対象後の独立batch `5d734b7b-8ca6-4fb9-a773-b7c6b3000d48` は02:24:09–02:24:43 JST、全4taskがSucceeded/result1、errorなし。02:25:12以降のGETでpipeline isPaused=false。観測条件は「15分または正常後続batch完了」の後者を達成（再開02:20:43→後続完了02:24:43）。
+- AC1–AC5/T0–T5をVerifiedへ更新。コード/ローカル/Linux CI/同版配備/対象復旧・進捗は完了。データ削除、過去予想の書換え、他失敗の一括retryなし。
+
+## Separate owner-identity follow-up (excluded from cancellation scope)
+
+02:25:12 JSTにgroup `BA97EBE92E4D55E1`、SubjectNotIdentified/OwnerNotRegisteredを6件観測。pipelineは稼働継続。代表resource `owner-dbe401ae-0c14-5102-beb3-ac5cad1f7ffb`、task `427a2fb7-0357-4738-88ab-941eb2db50f0` は修正配備前の00:49:11作成。参照raceは2026-09-26中山1R `race-f3f8044a-e19e-5dfa-8c81-b22f9032aff2`、今回の2026-09-27対象とは異なる。
+
+代表馬主「(株)ノルマンディーサラブレッドレーシング」: 要求owner IDのGETは404、同race出馬表には同名で `owner-74ff355a-d012-573c-8f22-f2bcfd342d09` が保存されている。handlerは要求IDの存在を確認しNotRegisteredを返す。該当JraSubjectCollectionHandlers.csは本PR未変更。これにより取消セル解析とは別の要求/保存ID不一致を確認したが、ID生成経路全体の原因特定や6件すべての同一原因は未確定。通知/データを消去せず、retryもしない。
+
+Owner Main、別設計の要否を利用者へ提示する非阻害follow-up。今回のACは対象取消対応と限定復旧であり、全対象の識別データ補正ではない。対象取消馬の馬主保存、正常後続batch、pipeline稼働を実証したためAC5を満たすが、「本番の全エラー解消」とは報告しない。
