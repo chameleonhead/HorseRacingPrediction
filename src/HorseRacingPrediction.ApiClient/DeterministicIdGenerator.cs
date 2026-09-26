@@ -26,9 +26,13 @@ public static class DeterministicIdGenerator
         return $"race-{guid:D}";
     }
 
-    /// <summary>レース ID と馬番から出走エントリー ID を生成する。</summary>
-    public static string BuildRaceEntryId(string raceId, int horseNumber) =>
-        $"{raceId}-entry-{horseNumber:D2}";
+    /// <summary>レース ID と馬 ID から、馬番に依存しない出走エントリー ID を生成する。</summary>
+    public static string BuildRaceEntryId(string raceId, string horseId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(raceId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(horseId);
+        return $"{raceId}-entry-{horseId}";
+    }
 
     public static string? TryBuildRaceIdFromResource(string resourceId)
     {

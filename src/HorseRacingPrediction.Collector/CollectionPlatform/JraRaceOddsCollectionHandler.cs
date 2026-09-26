@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Net;
+using System.Text.Json;
 using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Scraping.Jra;
@@ -19,6 +21,11 @@ public interface IRaceOddsSnapshotSink
     Task SaveAsync(string raceId, JraRaceOddsPage page, CancellationToken cancellationToken);
 }
 
+public sealed class RaceOddsSnapshotRejectedException(string errorCode) : Exception(errorCode)
+{
+    public string ErrorCode { get; } = errorCode;
+}
+
 public sealed class RaceOddsSnapshotApiClient(HttpClient client) : IRaceOddsSnapshotSink
 {
     public async Task SaveAsync(string raceId, JraRaceOddsPage page, CancellationToken cancellationToken)
@@ -29,8 +36,28 @@ public sealed class RaceOddsSnapshotApiClient(HttpClient client) : IRaceOddsSnap
                 page.Entries.Select(x => new RaceOddsObservationRequest("Win", x.HorseNumber.ToString(),
                     x.WinOdds, x.Popularity)).ToArray()),
             cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest)
+        {
+            try
+            {
+                var rejection = await response.Content.ReadFromJsonAsync<RaceOddsRejectionResponse>(
+                    cancellationToken).ConfigureAwait(false);
+                if (response.StatusCode == HttpStatusCode.Conflict
+                    && rejection?.ErrorCode == "RaceAssignmentNotConfirmed")
+                    throw new RaceOddsSnapshotRejectedException(rejection.ErrorCode);
+                if (response.StatusCode == HttpStatusCode.BadRequest
+                    && rejection?.ErrorCode == "UnknownHorseNumber")
+                    throw new RaceOddsSnapshotRejectedException(rejection.ErrorCode);
+            }
+            catch (JsonException)
+            {
+                // Unrecognized responses retain normal HTTP failure handling below.
+            }
+        }
         response.EnsureSuccessStatusCode();
     }
+
+    private sealed record RaceOddsRejectionResponse(string? ErrorCode);
 }
 
 public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IRaceOddsSnapshotSink sink,
@@ -68,8 +95,24 @@ public sealed class JraRaceOddsCollectionHandler(IJraSessionFactory sessions, IR
         page ??= await session.Navigate.ToRaceOddsAsync(race, token).ConfigureAwait(false) as JraRaceOddsPage
             ?? throw new JraCollectionException("単勝オッズページを取得できませんでした。");
         if (page.RaceId != race) throw new JraCollectionException("オッズのRaceIdが対象と一致しません。");
-        await sink.SaveAsync(task.Attributes.GetValueOrDefault("domainRaceId") ?? task.Resource.Id, page, token)
-            .ConfigureAwait(false);
+        try
+        {
+            await sink.SaveAsync(task.Attributes.GetValueOrDefault("domainRaceId") ?? task.Resource.Id, page, token)
+                .ConfigureAwait(false);
+        }
+        catch (RaceOddsSnapshotRejectedException ex) when (ex.ErrorCode == "RaceAssignmentNotConfirmed")
+        {
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, ex.ErrorCode, ex.Message,
+                RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
+                RetryAt: _time.GetUtcNow().AddMinutes(15), LocationOutcomes: locationOutcomes,
+                FailureImpact: CollectionFailureImpact.Isolated);
+        }
+        catch (RaceOddsSnapshotRejectedException ex) when (ex.ErrorCode == "UnknownHorseNumber")
+        {
+            return new(CollectionAttemptResult.ValidationFailure, ex.ErrorCode, ex.Message,
+                RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
+                LocationOutcomes: locationOutcomes, FailureImpact: CollectionFailureImpact.Isolated);
+        }
         var next = Next(task, page.ObservedAt);
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),
             PageIdentification: $"RaceOdds:JRA:{task.Resource.Id}", NextCollectionAt: next,

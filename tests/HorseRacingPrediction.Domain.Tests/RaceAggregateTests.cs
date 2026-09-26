@@ -311,6 +311,7 @@ public class RaceAggregateTests
         sut.Create(new DateOnly(2025, 6, 15), "TOKYO", 5, "皐月賞",
             gradeCode: "G1", surfaceCode: "TURF", distanceMeters: 2000);
         sut.PublishCard(18);
+        sut.RegisterEntry("entry-1", "horse-1", 1);
         sut.DeclareResult("ディープインパクト", DateTimeOffset.UtcNow);
 
         sut.DeclareEntryResult("entry-1", finishPosition: 1, officialTime: "2:00.5",

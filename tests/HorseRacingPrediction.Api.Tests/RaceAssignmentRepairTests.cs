@@ -347,8 +347,17 @@ public sealed class RaceAssignmentRepairTests
         await using var application = app;
         using var http = client;
         var raceId = await SeedAsync(app, http);
-        var odds = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/odds-snapshots", new
-        { observedAt = DateTimeOffset.UtcNow, entries = new[] { new { horseNumber = 1, winOdds = 2.5m, popularity = 1 } } });
+        using var fenceResponse = await http.GetAsync($"/api/admin/races/{raceId}/entry-repair/assignment-fence");
+        fenceResponse.EnsureSuccessStatusCode();
+        var fence = await fenceResponse.Content.ReadFromJsonAsync<JsonElement>();
+        using var oddsRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/races/{raceId}/odds-snapshots")
+        {
+            Content = JsonContent.Create(new
+            { observedAt = DateTimeOffset.UtcNow, entries = new[] { new { horseNumber = 1, winOdds = 2.5m, popularity = 1 } } }),
+        };
+        oddsRequest.Headers.Add("X-Race-Assignment-Fingerprint", fence.GetProperty("assignmentFingerprint").GetString());
+        oddsRequest.Headers.Add("X-Race-Hold-Generation", fence.GetProperty("generation").GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var odds = await http.SendAsync(oddsRequest);
         Assert.AreEqual(HttpStatusCode.Accepted, odds.StatusCode, await odds.Content.ReadAsStringAsync());
         var inspection = await http.GetFromJsonAsync<JsonElement>($"/api/admin/races/{raceId}/entry-repair");
         var response = await http.PostAsJsonAsync($"/api/admin/races/{raceId}/entry-repair/preview", Manifest(inspection.GetProperty("version").GetInt32()));

@@ -1,4 +1,5 @@
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Scraping.Jra;
 using HorseRacingPrediction.Scraping.Jra.Models;
 using HorseRacingPrediction.Scraping.Jra.Pages;
@@ -33,6 +34,45 @@ public sealed class JraRaceResultCollectionWorkflowTests
             raceId,
             "テストレース",
             entries);
+
+    [TestMethod]
+    [DataRow("InvalidHorseNumber", true)]
+    [DataRow("InvalidHorseSourceIdentity", true)]
+    [DataRow("MissingHorseName", true)]
+    [DataRow("RaceEntryIdentityMismatch", true)]
+    [DataRow("RaceBulkCommandFailed", false)]
+    [DataRow("RelatedSubjectUpsertFailed", false)]
+    public async Task CollectAsync_ClassifiesOnlyTypedEntryIdentityRejectionsAsIsolated(
+        string errorCode, bool expectedIsolated)
+    {
+        var page = CreateResultPage(TestRaceId,
+            new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
+        var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
+        await using var scope = session;
+        writer.BulkWriteResponse = new DeclareRaceResultBulkResponse("domain-race", ["rejected"],
+            [new("Entry", "HorseNumber=1", "Rejected", errorCode)], CorePersisted: false);
+
+        var result = await new JraRaceResultCollectionWorkflow(session, writer).CollectAsync(TestRaceId);
+
+        Assert.HasCount(1, result.Errors);
+        Assert.AreEqual(expectedIsolated, result.HasOnlyEntryIdentityValidationFailures);
+    }
+
+    [TestMethod]
+    public async Task CollectAsync_MixedIdentityAndProjectionErrorsRemainPipelineStopping()
+    {
+        var page = CreateResultPage(TestRaceId,
+            new RaceResultEntry(ResultStatus.Finished, 1, 1, "テスト馬", "騎手", TimeSpan.FromSeconds(90)));
+        var (session, _, writer) = CreateContext(new Dictionary<RaceId, IJraPage> { [TestRaceId] = page });
+        await using var scope = session;
+        writer.BulkWriteResponse = new DeclareRaceResultBulkResponse("domain-race", ["identity rejected"],
+            [new("Entry", "HorseNumber=1", "Rejected", "InvalidHorseNumber")],
+            CorePersisted: false, RelatedErrors: ["projection failed"]);
+
+        var result = await new JraRaceResultCollectionWorkflow(session, writer).CollectAsync(TestRaceId);
+
+        Assert.IsFalse(result.HasOnlyEntryIdentityValidationFailures);
+    }
 
     [TestMethod]
     public async Task CollectAsync_RepairHoldPropagatesWithoutBecomingDomainValidationFailure()

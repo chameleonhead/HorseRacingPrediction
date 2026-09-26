@@ -72,7 +72,7 @@ public sealed class DataCollectionWriteTools
     [Description("レースの出走エントリーを作成します。事前に UpsertRace でレースを作成してください。")]
     public async Task<string> UpsertRaceEntry(
         [Description("レース ID")] string raceId,
-        [Description("馬番")] int horseNumber,
+        [Description("馬番（未確定の場合はnull）")] int? horseNumber,
         [Description("馬名")] string horseName,
         [Description("騎手名")] string? jockeyName = null,
         [Description("調教師名")] string? trainerName = null,
@@ -106,7 +106,7 @@ public sealed class DataCollectionWriteTools
     [Description("出走馬1頭分の着順・タイムなどの成績を記録します。DeclareRaceResult の後に呼び出してください。")]
     public async Task<string> DeclareRaceEntryResult(
         [Description("レース ID")] string raceId,
-        [Description("馬番")] int horseNumber,
+        [Description("馬 ID（馬番ではない）")] string horseId,
         [Description("着順。取消・除外時は null")] int? finishPosition = null,
         [Description("タイム（例: 1:59.8）")] string? officialTime = null,
         [Description("着差テキスト（例: ハナ, 1/2, 1）")] string? marginText = null,
@@ -116,7 +116,7 @@ public sealed class DataCollectionWriteTools
         CancellationToken cancellationToken = default)
     {
         return await _service.DeclareRaceEntryResultAsync(
-            raceId, horseNumber, finishPosition, officialTime, marginText,
+            raceId, horseId, finishPosition, officialTime, marginText,
             lastThreeFurlongTime, abnormalResultCode, prizeMoney,
             cancellationToken);
     }

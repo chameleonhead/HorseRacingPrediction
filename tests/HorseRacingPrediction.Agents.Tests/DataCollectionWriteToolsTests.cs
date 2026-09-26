@@ -77,7 +77,7 @@ public class DataCollectionWriteToolsTests
         public record UpsertHorseCall(string RegisteredName, string? NormalizedName, string? SexCode, string? BirthDate);
         public List<UpsertHorseCall> UpsertHorseCalls { get; } = [];
 
-        public record UpsertRaceEntryCall(string RaceId, int HorseNumber, string HorseName, string? JockeyName, string? TrainerName);
+        public record UpsertRaceEntryCall(string RaceId, int? HorseNumber, string HorseName, string? JockeyName, string? TrainerName);
         public List<UpsertRaceEntryCall> UpsertRaceEntryCalls { get; } = [];
 
         public Task<string> UpsertRaceAsync(string raceDate, string racecourseCode, int raceNumber, string raceName,
@@ -100,7 +100,7 @@ public class DataCollectionWriteToolsTests
             CancellationToken cancellationToken = default)
             => Task.FromResult($"trainer-fake");
 
-        public Task<string> UpsertRaceEntryAsync(string raceId, int horseNumber, string horseName, string? jockeyName,
+        public Task<string> UpsertRaceEntryAsync(string raceId, int? horseNumber, string horseName, string? jockeyName,
             string? trainerName, int? gateNumber, decimal? assignedWeight, string? sexCode, int? age,
             decimal? declaredWeight, decimal? declaredWeightDiff, CancellationToken cancellationToken = default)
         {
@@ -112,10 +112,10 @@ public class DataCollectionWriteToolsTests
             string? winningHorseId, CancellationToken cancellationToken = default)
             => Task.FromResult($"レース {raceId} の確定結果を記録しました。");
 
-        public Task<string> DeclareRaceEntryResultAsync(string raceId, int horseNumber, int? finishPosition,
+        public Task<string> DeclareRaceEntryResultAsync(string raceId, string horseId, int? finishPosition,
             string? officialTime, string? marginText, string? lastThreeFurlongTime, string? abnormalResultCode,
             decimal? prizeMoney, CancellationToken cancellationToken = default)
-            => Task.FromResult($"レース {raceId} の馬番 {horseNumber} の成績を記録しました。");
+            => Task.FromResult($"レース {raceId} の馬 {horseId} の成績を記録しました。");
 
         public Task<string> DeclareRacePayoutsAsync(string raceId, string? winPayoutsJson, string? placePayoutsJson,
             string? quinellaPayoutsJson, string? exactaPayoutsJson, string? trifectaPayoutsJson,

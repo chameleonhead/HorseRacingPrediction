@@ -26,8 +26,8 @@ public partial class RaceAggregate : IEmit<RaceEntryAssignmentsRepaired>
             || source.AbsolutePath != "/JRADB/accessD.html" || observedAt == default || string.IsNullOrWhiteSpace(sourceEvidenceJson))
             throw new ArgumentException("An identified official card and repair operation are required.");
         if (entries.Count == 0 || entries.Count != _state.Entries.Count
-            || entries.Any(x => x.HorseNumber is < 1 or > 18
-                || x.EntryId != $"{Id.Value}-entry-{x.HorseNumber:D2}" || x.GateNumber is < 1 or > 8
+            || entries.Any(x => x.HorseNumber is null or < 1 or > 18
+                || x.EntryId != $"{Id.Value}-entry-{x.HorseId}" || x.GateNumber is < 1 or > 8
                 || x.GateNumber is null || string.IsNullOrWhiteSpace(x.OwnerName))
             || entries.Select(x => x.HorseNumber).Distinct().Count() != entries.Count
             || entries.Select(x => x.HorseId).Distinct().Count() != entries.Count

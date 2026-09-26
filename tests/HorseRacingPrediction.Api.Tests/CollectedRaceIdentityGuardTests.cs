@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using EventFlow.EntityFramework;
 using EventFlow.EntityFramework.EventStores;
 using HorseRacingPrediction.Application.Queries.ReadModels;
@@ -19,7 +20,7 @@ public sealed class CollectedRaceIdentityGuardTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task ExistingHorseNumberCannotBeReassigned_WhenOfficialIdentitiesAreSwapped(bool refresh)
+    public async Task ExistingHorseNumbersCanBeSwappedWithoutChangingHorseEntryIds(bool refresh)
     {
         var (app, client) = await CreateApplicationAsync();
         await using var application = app;
@@ -40,9 +41,8 @@ public sealed class CollectedRaceIdentityGuardTests
         Assert.AreEqual(HttpStatusCode.OK, initialResponse.StatusCode);
         Assert.IsTrue(initialBody.CorePersisted);
 
-        var beforeContext = await GetContextJsonAsync(http, initialBody.RaceId);
+        var beforeEntries = await GetEntriesAsync(http, initialBody.RaceId);
         var eventsBefore = CountStoredEvents(app);
-        var tasksBefore = await CountTasksAsync(app);
         var swapped = first with
         {
             TargetRaceId = refresh ? initialBody.RaceId : null,
@@ -54,21 +54,47 @@ public sealed class CollectedRaceIdentityGuardTests
             ],
         };
 
-        var rejectedResponse = await http.PostAsJsonAsync("/api/races/result-bulk", swapped, JsonOptions);
-        var rejected = await ReadBodyAsync(rejectedResponse);
-        Assert.AreEqual(HttpStatusCode.OK, rejectedResponse.StatusCode);
-        Assert.IsFalse(rejected.CorePersisted);
-        Assert.IsTrue(rejected.Outcomes!.Any(x => x.ErrorCode == "RaceEntryIdentityMismatch"));
-        Assert.AreEqual(eventsBefore, CountStoredEvents(app));
-        Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
-        Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.RaceId));
+        var swappedResponse = await http.PostAsJsonAsync("/api/races/result-bulk", swapped, JsonOptions);
+        var swappedBody = await ReadBodyAsync(swappedResponse);
+        Assert.AreEqual(HttpStatusCode.OK, swappedResponse.StatusCode);
+        Assert.IsTrue(swappedBody.CorePersisted,
+            await swappedResponse.Content.ReadAsStringAsync());
+        Assert.IsTrue(CountStoredEvents(app) > eventsBefore);
+        var afterEntries = await GetEntriesAsync(http, initialBody.RaceId);
+        Assert.AreEqual(beforeEntries.Count, afterEntries.Count);
+        foreach (var (horseId, before) in beforeEntries)
+            Assert.AreEqual(before.EntryId, afterEntries[horseId].EntryId);
+        Assert.AreEqual(2, afterEntries[HorseId("固定馬A", "100001")].HorseNumber);
+        Assert.AreEqual(1, afterEntries[HorseId("固定馬B", "100002")].HorseNumber);
+    }
 
-        var replayResponse = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
-        var replay = await ReadBodyAsync(replayResponse);
-        Assert.AreEqual(HttpStatusCode.OK, replayResponse.StatusCode);
-        Assert.IsTrue(replay.CorePersisted);
-        Assert.IsEmpty(replay.Errors, string.Join(" | ", replay.Errors));
-        Assert.AreEqual(eventsBefore, CountStoredEvents(app));
+    [TestMethod]
+    public async Task UnconfirmedCardNumbersCanBeAssignedLaterWithoutChangingEntryIds()
+    {
+        var (app, client) = await CreateApplicationAsync();
+        await using var application = app;
+        using var http = client;
+        var first = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 18), "東京", 6,
+            "未確定馬番", EntryCount: 2, IsRaceCard: true,
+            Entries: [Entry(null, "木曜馬A", SourceIdentity("130001")), Entry(null, "木曜馬B", SourceIdentity("130002"))]);
+        using var initial = await http.PostAsJsonAsync("/api/races/result-bulk", first, JsonOptions);
+        var initialBody = await ReadBodyAsync(initial);
+        Assert.IsTrue(initialBody.CorePersisted, string.Join(" | ", initialBody.Errors));
+        var before = await GetEntriesAsync(http, initialBody.RaceId);
+        Assert.IsTrue(before.Values.All(x => x.HorseNumber is null));
+
+        using var confirmed = await http.PostAsJsonAsync("/api/races/result-bulk", first with
+        {
+            Entries = [Entry(2, "木曜馬A", SourceIdentity("130001")), Entry(1, "木曜馬B", SourceIdentity("130002"))],
+        }, JsonOptions);
+        var confirmedBody = await ReadBodyAsync(confirmed);
+        Assert.IsTrue(confirmedBody.CorePersisted, string.Join(" | ", confirmedBody.Errors));
+        var after = await GetEntriesAsync(http, initialBody.RaceId);
+        Assert.AreEqual(before.Count, after.Count);
+        foreach (var (horseId, old) in before)
+            Assert.AreEqual(old.EntryId, after[horseId].EntryId);
+        Assert.AreEqual(2, after[HorseId("木曜馬A", "130001")].HorseNumber);
+        Assert.AreEqual(1, after[HorseId("木曜馬B", "130002")].HorseNumber);
     }
 
     [TestMethod]
@@ -97,7 +123,8 @@ public sealed class CollectedRaceIdentityGuardTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode == "RaceEntryIdentityMismatch"));
+        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+            string.Join(" | ", body.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
         Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.RaceId));
@@ -159,19 +186,59 @@ public sealed class CollectedRaceIdentityGuardTests
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.IsFalse(body.CorePersisted);
-        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode == "RaceEntryIdentityMismatch"));
+        Assert.IsTrue(body.Outcomes!.Any(x => x.ErrorCode is "RaceEntryIdentityMismatch" or "InvalidHorseNumber"),
+            string.Join(" | ", body.Errors));
         Assert.AreEqual(eventsBefore, CountStoredEvents(app));
         Assert.AreEqual(tasksBefore, await CountTasksAsync(app));
         Assert.AreEqual(beforeContext, await GetContextJsonAsync(http, initialBody.RaceId));
         Assert.AreEqual(HttpStatusCode.NotFound, newHorseResponse.StatusCode);
     }
 
-    private static RaceResultEntryBulkDto Entry(int number, string name, string sourceIdentity) =>
+    private static RaceResultEntryBulkDto Entry(int? number, string name, string sourceIdentity) =>
         new(number, null, null, null, null, null, null, HorseName: name,
-            JockeyName: $"騎手{number}", TrainerName: $"調教師{number}", HorseSourceIdentity: sourceIdentity);
+            JockeyName: $"騎手{name}", TrainerName: $"調教師{name}", HorseSourceIdentity: sourceIdentity);
+
+    [TestMethod]
+    public async Task HistoryOriginCannotOverrideConflictingOfficialHorseIdentity()
+    {
+        var (app, client) = await CreateApplicationAsync();
+        await using var application = app;
+        using var http = client;
+        var card = new DeclareRaceResultBulkRequest(new DateOnly(2036, 9, 18), "東京", 5,
+            "履歴識別", EntryCount: 1, IsRaceCard: true,
+            Entries: [Entry(1, "同名馬", SourceIdentity("140001"))]);
+        using var initial = await http.PostAsJsonAsync("/api/races/result-bulk", card, JsonOptions);
+        var body = await ReadBodyAsync(initial);
+        Assert.IsTrue(body.CorePersisted);
+        var eventsBefore = CountStoredEvents(app);
+        using var response = await http.PostAsJsonAsync("/api/races/result-bulk", card with
+        {
+            TargetRaceId = body.RaceId,
+            RefreshExistingData = true,
+            SourceHorseId = HorseId("同名馬", "140001"),
+            Entries = [Entry(1, "同名馬", SourceIdentity("140002"))],
+        }, JsonOptions);
+        Assert.AreEqual(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.AreEqual(eventsBefore, CountStoredEvents(app));
+    }
 
     private static string SourceIdentity(string suffix) =>
         $"https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002036{suffix}/00";
+
+    private static string HorseId(string name, string suffix) =>
+        HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(name, SourceIdentity(suffix));
+
+    private static async Task<Dictionary<string, (string EntryId, int? HorseNumber)>> GetEntriesAsync(HttpClient client, string raceId)
+    {
+        using var response = await client.GetAsync($"/api/races/{raceId}/context");
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.GetProperty("entries").EnumerateArray().ToDictionary(
+            x => x.GetProperty("horseId").GetString()!,
+            x => (x.GetProperty("entryId").GetString()!,
+                x.GetProperty("horseNumber").ValueKind == JsonValueKind.Null
+                    ? (int?)null : x.GetProperty("horseNumber").GetInt32()));
+    }
 
     private static async Task<(WebApplication App, HttpClient Client)> CreateApplicationAsync()
     {

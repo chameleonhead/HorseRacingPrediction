@@ -326,6 +326,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             {
                 return NumbersUnconfirmed(ex, locationOutcomes, stageOutcomes);
             }
+            catch (JraHorseSourceIdentityUnavailableException ex) when (ex.RaceId == raceId)
+            {
+                return HorseIdentityUnavailable(ex, locationOutcomes, stageOutcomes);
+            }
             catch (Exception ex) when (ex is not (OperationCanceledException or CollectionRepairHeldException))
             {
                 locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Card));
@@ -355,6 +359,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             catch (JraHorseNumbersUnconfirmedException ex) when (ex.RaceId == raceId)
             {
                 return NumbersUnconfirmed(ex, locationOutcomes, stageOutcomes);
+            }
+            catch (JraHorseSourceIdentityUnavailableException ex) when (ex.RaceId == raceId)
+            {
+                return HorseIdentityUnavailable(ex, locationOutcomes, stageOutcomes);
             }
             catch (JraNavigationException ex) when (raceId.Date < today
                 && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
@@ -489,6 +497,21 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             await dataWrites.MarkRaceRescheduledAsync(sourceDomainRaceId, result.RaceId, cancellationToken)
                 .ConfigureAwait(false);
         }
+        if (requiresCard && result is { Error: null, Entries: not null }
+            && result.Entries.Any(entry => entry.HorseNumber is null))
+        {
+            // The provisional card and its stable horse identities are persisted, but
+            // the Card facet must remain due so the next attempt can fetch official numbers.
+            stageOutcomes.Add(new("AwaitHorseNumbers", RaceArtifactKind.Card,
+                CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseNumbersUnconfirmed",
+                "公式馬番が未確定です。確定後に同じ出走を更新します。"));
+            return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseNumbersUnconfirmed",
+                "公式馬番が未確定です。確定後に同じ出走を更新します。",
+                RequestedUrl: successfulLocation ?? ToUri(result.SourceUrl), FinalUrl: ToUri(result.SourceUrl),
+                RetryAt: _time.GetUtcNow().AddMinutes(15), LocationOutcomes: locationOutcomes,
+                StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence,
+                FailureImpact: CollectionFailureImpact.Isolated);
+        }
         if (requiresCard && result?.Error is null && predictionSchedule is not null)
             await predictionSchedule.EnqueueAsync([result!.RaceId!], HorseRacingPrediction.Contracts.Time.JstTime.Now(), cancellationToken).ConfigureAwait(false);
         if (resultAlreadyCurrent)
@@ -616,7 +639,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                 string.Join("; ", raceResult.Errors), FinalUrl: ToUri(raceResult.SourceUrl)));
             return new(CollectionAttemptResult.ValidationFailure, "DomainWriteRejected",
                 string.Join("; ", raceResult.Errors), RequestedUrl: ToUri(raceResult.SourceUrl),
-                LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence);
+                LocationOutcomes: locationOutcomes, StageOutcomes: stageOutcomes, RaceEvidence: raceEvidence,
+                FailureImpact: raceResult.HasOnlyEntryIdentityValidationFailures
+                    ? CollectionFailureImpact.Isolated
+                    : CollectionFailureImpact.StopPipeline);
         }
         if (raceResult.IsOfficiallyCancelled)
         {
@@ -668,7 +694,20 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             exception.Message, FinalUrl: ToUri(exception.Url), Persisted: false));
         return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseNumbersUnconfirmed",
             exception.Message, RetryAt: _time.GetUtcNow().AddMinutes(15), FinalUrl: ToUri(exception.Url),
-            LocationOutcomes: locations, StageOutcomes: stages);
+            LocationOutcomes: locations, StageOutcomes: stages,
+            FailureImpact: CollectionFailureImpact.Isolated);
+    }
+
+    private CollectionAttemptCompletion HorseIdentityUnavailable(JraHorseSourceIdentityUnavailableException exception,
+        IReadOnlyList<ResourceLocationOutcome> locations, List<CollectionStageOutcome> stages)
+    {
+        stages.Add(new("ResolveCard", RaceArtifactKind.Card,
+            CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseSourceIdentityUnavailable",
+            exception.Message, FinalUrl: ToUri(exception.Url)));
+        return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseSourceIdentityUnavailable",
+            exception.Message, RetryAt: _time.GetUtcNow().AddMinutes(15), FinalUrl: ToUri(exception.Url),
+            LocationOutcomes: locations, StageOutcomes: stages,
+            FailureImpact: CollectionFailureImpact.Isolated);
     }
 
     private static bool IsCandidateForArtifact(ResourceLocationCandidate location, RaceArtifactKind artifact,

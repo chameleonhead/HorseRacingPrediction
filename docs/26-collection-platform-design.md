@@ -8,6 +8,10 @@
 
 ## Core concepts
 
+> 2026-09-26 新規・空データ環境向け: [馬を基準とする出走識別](changes/20260926_horse-based-race-entry/README.md)を採用する。公式馬IDのある暫定Cardを保存した場合も、PersistCardの後に番号確定待ちstageを記録し、Currentにせず15分後の再取得を維持する。番号未確定ではResult・予想へ進めない。既知の出走identity入力エラーだけをIsolatedに分類し、未知の永続化・投影障害のStopPipelineは維持する。新旧データ混在・既存移行・本番運用は対象外。
+>
+> race-odds leaseは補正履歴の有無に関係なくacquire時に割当fingerprintを取得する。保存時のX-Race-Hold-Generation（未保留は0）とX-Race-Assignment-FingerprintをRaceロック内で照合し、取得後の馬番・枠番変更があれば保存を拒否する。直接API利用者もassignment-fenceを取得して同じheadersを送る。
+
 > 2026-09-26 運用上の注意: pipeline pauseは配信/取得を止めるが、待機taskの作成やcancel時の高revision実体化をすべて止める機能ではない。Running=0だけでデータ補正可能とは判定しない。[対象Raceの永続保留](changes/20260919_race-entry-owner-enrichment/decisions/20260926-scoped-repair-hold.md)を実装しローカル検証中（配備状況は変更記録を参照）。保留は要求履歴を保持して生成/取得/旧leaseを遮断し、補正・新版への一意再要求へ接続する。保留解除はpipeline再開を含まない。
 
 `/api/admin/races/{raceId}/entry-repair/hold` のGETは状態参照、POSTは操作ID・期待世代・理由を持つ保留/排出確認。同じPOSTの再送で対象の期限切れleaseを整理する。`preview`/`apply`のmanifestには`holdOperationId`と`holdGeneration`が必要。保留中の収集受付は`DeferredByRepairHold=true`、新しいtaskがなければ`TaskId=null`を返し、batch結果は`Held`となる。正常な日単位discovery（`discovery:yyyyMMddHH`/`backfill:yyyyMMdd`/`recollection:yyyyMMdd`）は継続し、子Race要求だけを保留する。

@@ -259,7 +259,7 @@ public static class RaceEntryRepairEndpointExtensions
             entries.Add(old with
             {
                 HorseNumber = horse.HorseNumber,
-                EntryId = DeterministicIdGenerator.BuildRaceEntryId(race.RaceId, horse.HorseNumber),
+                EntryId = DeterministicIdGenerator.BuildRaceEntryId(race.RaceId, id),
                 GateNumber = horse.GateNumber,
                 OwnerName = horse.OwnerName
             });

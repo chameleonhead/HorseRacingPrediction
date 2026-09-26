@@ -106,6 +106,8 @@ public sealed class RacePredictor : IRacePredictor
         });
         var inputs = (await Task.WhenAll(inputTasks).ConfigureAwait(false)).ToList();
 
+        if (entries.Any(entry => entry.HorseNumber is null or <= 0))
+            throw new InvalidOperationException("Confirmed horse numbers are required for prediction.");
         List<(string EntryId, string HorseId, int HorseNumber, float Score)> scores;
 
         if (_model is not null)
@@ -114,7 +116,7 @@ public sealed class RacePredictor : IRacePredictor
             scores = inputs.Select(t =>
             {
                 var prediction = engine.Predict(t.Item2);
-                return (t.entry.EntryId, t.entry.HorseId, t.entry.HorseNumber, prediction.Score);
+                return (t.entry.EntryId, t.entry.HorseId, t.entry.HorseNumber!.Value, prediction.Score);
             }).ToList();
         }
         else
@@ -129,7 +131,7 @@ public sealed class RacePredictor : IRacePredictor
                     + (100f - f.DistanceSuitabilityScore) * 0.02f
                     + (100f - f.RacecourseSuitabilityScore) * 0.01f
                     + (1f - f.JockeyRecentWinRate) * 2f;
-                return (t.entry.EntryId, t.entry.HorseId, t.entry.HorseNumber, score);
+                return (t.entry.EntryId, t.entry.HorseId, t.entry.HorseNumber!.Value, score);
             }).ToList();
         }
 

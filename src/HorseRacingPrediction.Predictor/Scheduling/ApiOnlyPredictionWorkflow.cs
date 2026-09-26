@@ -29,7 +29,7 @@ public sealed class ApiOnlyPredictionWorkflow
             throw new InvalidOperationException($"Race context was not found via API. RaceId={raceId}");
         }
 
-        if (context.Entries.Count == 0 || context.Entries.Any(x => x.HorseNumber <= 0 || x.GateNumber is null))
+        if (context.Entries.Count == 0 || context.Entries.Any(x => x.HorseNumber is null or <= 0 || x.GateNumber is null))
         {
             throw new InvalidOperationException($"Race context has no entries. RaceId={raceId}");
         }

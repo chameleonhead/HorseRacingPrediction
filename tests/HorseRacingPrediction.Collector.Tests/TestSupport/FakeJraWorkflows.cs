@@ -39,13 +39,14 @@ internal sealed class FakeJraRaceCardCollectionWorkflow : IJraRaceCardCollection
     {
         RefreshRequests.Add((raceId, targetRaceId));
         if (ThrowOnCollect is not null) throw ThrowOnCollect;
-        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId ?? "created-race", "レース", "https://example.test/card", OutcomeError));
+        return Task.FromResult(new RaceCardRaceOutcome(raceId.Number, targetRaceId ?? "created-race", "レース", "https://example.test/card", OutcomeError, OutcomeEntries));
     }
 
     public Func<DateOnly, RaceCourse, RaceCardCollectionResult>? ResultFactory { get; set; }
 
     public Exception? ThrowOnCollect { get; set; }
     public string? OutcomeError { get; set; }
+    public IReadOnlyList<RaceEntry>? OutcomeEntries { get; set; }
 
     public List<(DateOnly Date, RaceCourse Course)> Requests { get; } = new();
 

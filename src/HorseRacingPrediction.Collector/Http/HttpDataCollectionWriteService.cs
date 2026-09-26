@@ -339,7 +339,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
     public async Task<string> UpsertRaceEntryAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -357,7 +357,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
     public async Task<string> UpsertRaceEntryAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -375,7 +375,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
     private async Task<string> UpsertRaceEntryCoreAsync(
         string raceId,
-        int horseNumber,
+        int? horseNumber,
         string horseName,
         string? jockeyName,
         string? trainerName,
@@ -391,9 +391,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     {
         ValidateRequiredText(raceId, nameof(raceId));
 
-        if (horseNumber <= 0)
+        if (horseNumber is <= 0)
         {
-            return $"レース {raceId} の出走登録をスキップしました（馬番未取得）。";
+            throw new ArgumentException("Known horse numbers must be positive.", nameof(horseNumber));
         }
 
         ValidateRequiredText(horseName, nameof(horseName));
@@ -403,42 +403,10 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             : JockeyNameNormalizer.Normalize(jockeyName);
 
         var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
-        var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseNumber == horseNumber);
+        var incomingHorseId = DeterministicIdGenerator.BuildHorseId(horseName, jraHorseSourceIdentity);
+        var existingEntry = race?.Entries.FirstOrDefault(e => e.HorseId == incomingHorseId);
         if (existingEntry is not null)
         {
-            var identityHorseId = JraSourceIdentity.TryNormalizeHorse(jraHorseSourceIdentity, out _)
-                ? DeterministicIdGenerator.BuildHorseId(horseName, jraHorseSourceIdentity)
-                : null;
-            if (identityHorseId is not null && !string.Equals(existingEntry.HorseId, identityHorseId, StringComparison.Ordinal))
-            {
-                await UpsertHorseProfileByIdentityAsync(horseName, null, sexCode, null, ownerName,
-                    null, null, null, null, null, jraHorseSourceIdentity, cancellationToken).ConfigureAwait(false);
-                var replaceRequest = new
-                {
-                    EntryId = existingEntry.EntryId,
-                    HorseId = identityHorseId,
-                    HorseNumber = horseNumber,
-                    JockeyId = existingEntry.JockeyId,
-                    TrainerId = existingEntry.TrainerId,
-                    HorseName = horseName,
-                    JockeyName = cleanedJockeyName,
-                    TrainerName = trainerName,
-                    OwnerName = ownerName ?? existingEntry.OwnerName,
-                    GateNumber = gateNumber ?? existingEntry.GateNumber,
-                    AssignedWeight = assignedWeight ?? existingEntry.AssignedWeight,
-                    SexCode = sexCode ?? existingEntry.SexCode,
-                    Age = age ?? existingEntry.Age,
-                    DeclaredWeight = declaredWeight ?? existingEntry.DeclaredWeight,
-                    DeclaredWeightDiff = declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
-                    RunningStyleCode = existingEntry.RunningStyleCode,
-                    HorseSourceIdentity = jraHorseSourceIdentity,
-                };
-                var replaceResponse = await _httpClient.PostAsJsonAsync(
-                    $"/api/races/{Uri.EscapeDataString(raceId)}/entries", replaceRequest, cancellationToken)
-                    .ConfigureAwait(false);
-                replaceResponse.EnsureSuccessStatusCode();
-                return $"レース {raceId} の馬番 {horseNumber} をJRA識別子に基づく競走馬へ付け替えました。";
-            }
             // 既存エントリの場合でも、関連エンティティ欠落や名称欠落を補完する。
             await EnsureHorseExistsByIdAsync(existingEntry.HorseId, horseName, sexCode, cancellationToken).ConfigureAwait(false);
 
@@ -454,13 +422,24 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
             var updateRequest = new
             {
-                DeclaredWeight = declaredWeight,
-                DeclaredWeightDiff = declaredWeightDiff,
-                OwnerName = ownerName
+                EntryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, existingEntry.HorseId),
+                HorseId = existingEntry.HorseId,
+                HorseNumber = horseNumber ?? existingEntry.HorseNumber,
+                GateNumber = gateNumber ?? existingEntry.GateNumber,
+                JockeyId = existingEntry.JockeyId,
+                TrainerId = existingEntry.TrainerId,
+                HorseName = horseName,
+                AssignedWeight = assignedWeight ?? existingEntry.AssignedWeight,
+                SexCode = sexCode ?? existingEntry.SexCode,
+                Age = age ?? existingEntry.Age,
+                DeclaredWeight = declaredWeight ?? existingEntry.DeclaredWeight,
+                DeclaredWeightDiff = declaredWeightDiff ?? existingEntry.DeclaredWeightDiff,
+                RunningStyleCode = existingEntry.RunningStyleCode,
+                OwnerName = ownerName ?? existingEntry.OwnerName
             };
             var updateResponse = await _httpClient
-                .PutAsJsonAsync(
-                    $"/api/races/{Uri.EscapeDataString(raceId)}/entries/{Uri.EscapeDataString(existingEntry.EntryId)}",
+                .PostAsJsonAsync(
+                    $"/api/races/{Uri.EscapeDataString(raceId)}/entries",
                     updateRequest,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -481,7 +460,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             ? null
             : await UpsertTrainerAsync(trainerName, null, null, cancellationToken).ConfigureAwait(false);
 
-        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseNumber);
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
         var registerRequest = new
         {
             EntryId = entryId,
@@ -506,18 +485,13 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/entries", registerRequest, cancellationToken)
             .ConfigureAwait(false);
 
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            return $"レース {raceId} の馬番 {horseNumber} は既に登録済みです。";
-        }
-
         response.EnsureSuccessStatusCode();
 
         return $"レース {raceId} に馬番 {horseNumber} の出走登録を行いました。";
     }
 
     public Task<string> UpsertRaceEntryWithHorseIdentityAsync(
-        string raceId, int horseNumber, string horseName, string? jockeyName, string? trainerName,
+        string raceId, int? horseNumber, string horseName, string? jockeyName, string? trainerName,
         int? gateNumber, decimal? assignedWeight, string? sexCode, int? age, decimal? declaredWeight,
         decimal? declaredWeightDiff, string? ownerName, string? jraHorseSourceIdentity,
         CancellationToken cancellationToken = default) =>
@@ -610,7 +584,7 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
 
     public async Task<string> DeclareRaceEntryResultAsync(
         string raceId,
-        int horseNumber,
+        string horseId,
         int? finishPosition,
         string? officialTime,
         string? marginText,
@@ -620,12 +594,11 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
         CancellationToken cancellationToken = default)
     {
         ValidateRequiredText(raceId, nameof(raceId));
-        if (horseNumber <= 0)
-        {
-            return $"レース {raceId} の成績登録をスキップしました（馬番未取得）。";
-        }
-
-        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, horseNumber);
+        ValidateRequiredText(horseId, nameof(horseId));
+        var race = await GetRacePredictionContextAsync(raceId, cancellationToken).ConfigureAwait(false);
+        var matchedEntry = race?.Entries.SingleOrDefault(entry => entry.HorseId == horseId)
+            ?? throw new InvalidOperationException("A registered horse identity is required before recording a result.");
+        var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceId, matchedEntry.HorseId);
         var request = new
         {
             FinishPosition = finishPosition,
@@ -640,14 +613,9 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
             .PostAsJsonAsync($"/api/races/{Uri.EscapeDataString(raceId)}/entries/{Uri.EscapeDataString(entryId)}/result", request, cancellationToken)
             .ConfigureAwait(false);
 
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            return $"レース {raceId} の馬番 {horseNumber} の成績は既に記録済みです。";
-        }
-
         response.EnsureSuccessStatusCode();
 
-        return $"レース {raceId} の馬番 {horseNumber} の成績を記録しました。";
+        return $"レース {raceId} の馬 {horseId} の成績を記録しました。";
     }
 
     public async Task<string> DeclareRacePayoutsAsync(

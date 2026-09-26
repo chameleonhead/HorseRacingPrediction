@@ -15,6 +15,35 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraDirectCollectionHandlerTests
 {
     [TestMethod]
+    [DataRow(true, CollectionFailureImpact.Isolated)]
+    [DataRow(false, CollectionFailureImpact.StopPipeline)]
+    public async Task RaceDetail_ResultWriteRejection_IsolatesOnlyTypedEntryIdentityFailure(
+        bool entryIdentityFailure, CollectionFailureImpact expectedImpact)
+    {
+        var date = new DateOnly(2026, 9, 12);
+        var results = new FakeJraRaceResultCollectionWorkflow
+        {
+            ResultFactory = id => new RaceResultCollectionResult(id, "domain-race", [], ["rejected"],
+                "https://example.test/result/11", IsOfficiallyConfirmed: false,
+                HasOnlyEntryIdentityValidationFailures: entryIdentityFailure),
+        };
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(),
+            _ => new FakeJraRaceCardCollectionWorkflow
+            {
+                ThrowOnCollect = new JraCollectionException("official card unavailable"),
+            }, _ => results,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 9, 12, 8, 0, 0, TimeSpan.Zero)));
+
+        var completion = await handler.CollectAsync(CreateTask(ResourceType.Race, "race-detail", date),
+            CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ValidationFailure, completion.Result);
+        Assert.AreEqual("DomainWriteRejected", completion.ErrorCode);
+        Assert.AreEqual(expectedImpact, completion.FailureImpact);
+        Assert.HasCount(1, results.Requests);
+    }
+
+    [TestMethod]
     public async Task RaceDetail_CachedCardWithUnconfirmedNumbers_WaitsWithoutFallbackOrSaving()
     {
         var date = new DateOnly(2026, 9, 26);
@@ -41,6 +70,79 @@ public sealed class JraDirectCollectionHandlerTests
         Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
         Assert.AreEqual("RaceHorseNumbersUnconfirmed", completion.ErrorCode);
         Assert.AreEqual(now.AddMinutes(15), completion.RetryAt);
+        Assert.IsEmpty(cards.RefreshRequests);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsTrue(completion.StageOutcomes!.All(x => !x.Persisted));
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_IdentifiedProvisionalCard_PersistsThenWaitsForNumbersWithoutResult()
+    {
+        var date = new DateOnly(2026, 9, 26);
+        var race = new RaceId(date, RaceCourse.Nakayama, 5);
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        var entries = new[]
+        {
+            new RaceEntry(null, "木曜馬A", null, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000101/00"),
+            new RaceEntry(2, "木曜馬B", 1, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000102/00"),
+        };
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => new JraRaceCardPage(url.AbsoluteUri, race, "木曜レース", new(15, 30), entries)
+            }
+        };
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
+            timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
+            new Dictionary<string, string>(),
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceHorseNumbersUnconfirmed", completion.ErrorCode);
+        Assert.AreEqual(now.AddMinutes(15), completion.RetryAt);
+        Assert.HasCount(1, cards.RefreshRequests);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "PersistCard" && x.Persisted));
+        Assert.IsTrue(completion.StageOutcomes!.Any(x => x.Stage == "AwaitHorseNumbers" && !x.Persisted));
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+    }
+
+    [TestMethod]
+    public async Task RaceDetail_ProvisionalCardMissingHorseIdentity_WaitsLocallyWithoutSaving()
+    {
+        var date = new DateOnly(2026, 9, 26);
+        var race = new RaceId(date, RaceCourse.Nakayama, 5);
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new JraHorseSourceIdentityUnavailableException(url.AbsoluteUri, race)
+            }
+        };
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
+            timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 5,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
+            new Dictionary<string, string>(),
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceHorseSourceIdentityUnavailable", completion.ErrorCode);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
         Assert.IsEmpty(cards.RefreshRequests);
         Assert.IsEmpty(results.Requests);
         Assert.IsTrue(completion.StageOutcomes!.All(x => !x.Persisted));

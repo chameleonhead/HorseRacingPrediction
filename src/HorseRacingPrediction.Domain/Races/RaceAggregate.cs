@@ -57,7 +57,25 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         Emit(new RaceCardPublished(entryCount));
     }
 
-    public void RegisterEntry(string entryId, string horseId, int horseNumber,
+    public void RegisterEntry(string entryId, string horseId, int? horseNumber,
+        string? jockeyId = null, string? trainerId = null,
+        int? gateNumber = null, decimal? assignedWeight = null,
+        string? sexCode = null, int? age = null,
+        decimal? declaredWeight = null, decimal? declaredWeightDiff = null,
+        string? runningStyleCode = null, string? ownerName = null)
+    {
+        var previous = _state.Entries.FirstOrDefault(entry => entry.EntryId == entryId);
+        horseNumber ??= previous?.HorseNumber;
+        gateNumber ??= previous?.GateNumber;
+        ValidateCollectedEntryAssignments([new EntryDetails(entryId, horseId, horseNumber,
+            jockeyId, trainerId, gateNumber, assignedWeight, sexCode, age,
+            declaredWeight, declaredWeightDiff, runningStyleCode, ownerName)]);
+        RegisterValidatedEntry(entryId, horseId, horseNumber, jockeyId, trainerId, gateNumber,
+            assignedWeight, sexCode, age, declaredWeight, declaredWeightDiff, runningStyleCode, ownerName);
+    }
+
+    // Bulk callers validate the final assignment set before emitting individual events.
+    private void RegisterValidatedEntry(string entryId, string horseId, int? horseNumber,
         string? jockeyId = null, string? trainerId = null,
         int? gateNumber = null, decimal? assignedWeight = null,
         string? sexCode = null, int? age = null,
@@ -71,6 +89,8 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
             throw new InvalidOperationException("Race card must be published before registering entries.");
 
         var previous = _state.Entries.LastOrDefault(x => x.EntryId == entryId);
+        if (previous is not null && previous.HorseId != horseId)
+            throw new InvalidOperationException("RaceEntryIdentityMismatch: an entry cannot change its Horse identity.");
         Emit(new EntryRegistered(entryId, horseId, horseNumber,
             jockeyId, trainerId, gateNumber, assignedWeight,
             sexCode, age, declaredWeight, declaredWeightDiff,
@@ -174,6 +194,12 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         if (_state.Status < RaceStatus.ResultDeclared)
             throw new InvalidOperationException("Entry result can only be declared after race result.");
 
+        var entry = _state.Entries.SingleOrDefault(item => item.EntryId == entryId)
+            ?? throw new InvalidOperationException("Entry result must reference a registered Horse entry.");
+        if (horseId is not null && horseId != entry.HorseId)
+            throw new InvalidOperationException("Entry result cannot change its Horse identity.");
+        horseId = entry.HorseId;
+        jockeyId ??= entry.JockeyId;
         Emit(new EntryResultDeclared(entryId, finishPosition, officialTime,
             marginText, lastThreeFurlongTime, abnormalResultCode, prizeMoney, cornerPositions,
             popularity, originalFinishPosition, isDeadHeat, average1F, horseId, jockeyId,
@@ -213,7 +239,15 @@ public partial class RaceAggregate : AggregateRoot<RaceAggregate, RaceId>,
         if (observations.Select(x => $"{x.Market.Trim().ToUpperInvariant()}\u001f{x.Selection.Trim().ToUpperInvariant()}")
             .Distinct(StringComparer.Ordinal).Count() != observations.Count)
             throw new ArgumentException("Market and selection must be unique in an odds snapshot.", nameof(observations));
-        Emit(new RaceOddsSnapshotRecorded(observedAt, entries, observations));
+        if (_state.Entries.Count == 0 || _state.Entries.Any(entry => entry.HorseNumber is null or <= 0))
+            throw new InvalidOperationException("Confirmed horse assignments are required for odds.");
+        var assignments = _state.Entries.Select(entry => new RaceOddsAssignment(entry.HorseNumber!.Value,
+            entry.HorseId, entry.EntryId, entry.GateNumber)).ToArray();
+        if (assignments.Select(entry => entry.HorseNumber).Distinct().Count() != assignments.Length
+            || entries.Any(entry => !assignments.Any(assignment => assignment.HorseNumber == entry.HorseNumber))
+            || observations.Any(observation => !RaceOddsSelection.CanResolve(observation, assignments)))
+            throw new ArgumentException("Odds must reference a unique confirmed horse assignment.");
+        Emit(new RaceOddsSnapshotRecorded(observedAt, entries, observations, assignments));
     }
 
     public void CloseRaceLifecycle()

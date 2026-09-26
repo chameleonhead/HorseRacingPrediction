@@ -57,6 +57,46 @@ public sealed class JraRaceCardCollectionWorkflowTests
             entries);
 
     [TestMethod]
+    public async Task RefreshPageAsync_ProvisionalNumbersRequireEveryOfficialHorseIdentityBeforeWrites()
+    {
+        var race = CreateRaceSummary(6);
+        var card = CreateRaceCard(race.Id, "木曜レース",
+            new RaceEntry(null, "木曜馬A", null, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000101/00"),
+            new RaceEntry(2, "木曜馬B", 1, null, null));
+        var (session, _, writer) = CreateContext(CreateRaceList(race),
+            new Dictionary<RaceId, IJraPage> { [race.Id] = card });
+        await using var scope = session;
+
+        await Assert.ThrowsExactlyAsync<JraHorseSourceIdentityUnavailableException>(() =>
+            new JraRaceCardCollectionWorkflow(session, writer).RefreshPageAsync(card, null));
+
+        Assert.IsEmpty(writer.DeclareRaceResultBulkCalls);
+        Assert.IsEmpty(writer.UpsertRaceCalls);
+    }
+
+    [TestMethod]
+    public async Task RefreshPageAsync_ForwardsMixedProvisionalNumbersWithoutInventingValues()
+    {
+        var race = CreateRaceSummary(6);
+        var card = CreateRaceCard(race.Id, "木曜レース",
+            new RaceEntry(null, "木曜馬A", null, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000101/00"),
+            new RaceEntry(2, "木曜馬B", 1, null, null,
+                HorseSourceIdentity: "https://www.jra.go.jp/JRADB/accessU.html?CNAME=pw01dud002026000102/00"));
+        var (session, _, writer) = CreateContext(CreateRaceList(race),
+            new Dictionary<RaceId, IJraPage> { [race.Id] = card });
+        await using var scope = session;
+
+        await new JraRaceCardCollectionWorkflow(session, writer).RefreshPageAsync(card, null);
+
+        var saved = writer.DeclareRaceResultBulkCalls.Single();
+        Assert.IsNull(saved.Entries![0].HorseNumber);
+        Assert.AreEqual(2, saved.Entries[1].HorseNumber);
+        Assert.IsNull(saved.Entries[0].GateNumber);
+    }
+
+    [TestMethod]
     public async Task RefreshAsync_OnlyRequestsTargetAndPreservesTargetIdentity()
     {
         var race = CreateRaceSummary(6);

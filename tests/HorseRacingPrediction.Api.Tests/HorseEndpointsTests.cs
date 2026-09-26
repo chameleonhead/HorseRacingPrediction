@@ -183,8 +183,8 @@ public class HorseEndpointsTests
     public async Task GetHorseRaceHistory_AfterRaceResultDeclared_ListsPastRace()
     {
         var raceId = $"race-{Guid.NewGuid()}";
-        var entryId = $"entry-{Guid.NewGuid()}";
         var horseId = $"horse-{Guid.NewGuid()}";
+        var entryId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildRaceEntryId(raceId, horseId);
 
         await _client.PostAsJsonAsync(
             "/api/races",

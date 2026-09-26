@@ -22,6 +22,7 @@ public sealed partial class JraRaceCardCollectionWorkflow
             throw new JraRaceIdentityMismatchException(JraPageKind.RaceCard, card.Url, raceId.ToString(), card.RaceId.ToString());
         if (string.IsNullOrWhiteSpace(card.RaceName) || card.Entries.Count == 0)
             throw new JraCollectionException("出馬表のレース名・出走情報を確認できませんでした。");
+        ValidateCardEntriesForPersistence(card);
         var entries = card.Entries.Select(x => new RaceResultEntryBulkDto(x.HorseNumber, null, null, null,
             null, null, null, HorseName: x.HorseName, JockeyName: x.JockeyName, TrainerName: x.TrainerName,
             GateNumber: x.FrameNumber, AssignedWeight: x.AssignedWeight, BodyWeight: x.BodyWeight,
@@ -50,5 +51,19 @@ public sealed partial class JraRaceCardCollectionWorkflow
         return new(raceId.Number, persistedRaceId, card.RaceName, card.Url,
             corePersisted ? null : string.Join("; ", saved.Errors), card.Entries, card.StartTime,
             saved.RelatedErrors);
+    }
+
+    private static void ValidateCardEntriesForPersistence(JraRaceCardPage card)
+    {
+        if (card.Entries.Any(entry => entry.HorseNumber is <= 0 or > 18))
+            throw new JraValueParseException(JraPageKind.RaceCard, card.Url, "HorseNumber",
+                "Official horse number is outside 1-18.");
+        if (card.Entries.Where(entry => entry.HorseNumber.HasValue)
+            .GroupBy(entry => entry.HorseNumber).Any(group => group.Count() > 1))
+            throw new JraResultConsistencyException(JraPageKind.RaceCard, card.Url,
+                "馬番が重複しています。", "HorseNumber");
+        if (card.Entries.Any(entry => entry.HorseNumber is null)
+            && card.Entries.Any(entry => !JraSourceIdentity.TryNormalizeHorse(entry.HorseSourceIdentity, out _)))
+            throw new JraHorseSourceIdentityUnavailableException(card.Url, card.RaceId);
     }
 }

@@ -24,4 +24,5 @@ public sealed record RaceResultCollectionResult(
     string? SourceUrl = null,
     bool IsOfficiallyConfirmed = true,
     bool IsOfficiallyCancelled = false,
-    IReadOnlyList<RaceEntry>? Entries = null);
+    IReadOnlyList<RaceEntry>? Entries = null,
+    bool HasOnlyEntryIdentityValidationFailures = false);

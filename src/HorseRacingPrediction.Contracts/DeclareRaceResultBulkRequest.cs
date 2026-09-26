@@ -41,7 +41,7 @@ public sealed record DeclareRaceResultBulkRequest(
 /// 「結果ページからのみ取得できた場合のフォールバック」として送信する。
 /// </summary>
 public sealed record RaceResultEntryBulkDto(
-    int HorseNumber,
+    int? HorseNumber,
     int? FinishPosition,
     string? OfficialTime,
     string? MarginText,

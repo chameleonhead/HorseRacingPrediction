@@ -4,7 +4,7 @@ public sealed record RaceEntryResultResponse(
     string EntryId,
     string HorseId,
     string? HorseName,
-    int HorseNumber,
+    int? HorseNumber,
     int? FinishPosition,
     string? OfficialTime,
     string? MarginText,

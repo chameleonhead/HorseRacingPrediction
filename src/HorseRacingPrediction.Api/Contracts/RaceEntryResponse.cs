@@ -4,7 +4,7 @@ public sealed record RaceEntryResponse(
     string EntryId,
     string HorseId,
     string? HorseName,
-    int HorseNumber,
+    int? HorseNumber,
     string? JockeyId,
     string? JockeyName,
     string? TrainerId,

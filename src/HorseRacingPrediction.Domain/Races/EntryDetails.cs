@@ -3,7 +3,7 @@ namespace HorseRacingPrediction.Domain.Races;
 public sealed record EntryDetails(
     string EntryId,
     string HorseId,
-    int HorseNumber,
+    int? HorseNumber,
     string? JockeyId,
     string? TrainerId,
     int? GateNumber,
