@@ -1,10 +1,17 @@
 # 中山5R再停止後の補正前確認・限定補正設計
 
-- Status: Proposed
+- Status: Approved
 - Owner: Main
 - Updated: 2026-09-26
 - Governing record: [馬主取得・出走割当](../README.md)
-- Scope: 利用者の「お願いします」は補正案・影響確認への着手承認。本番データ変更・再開の承認ではない。本書の実装も明示承認後とする。
+- Scope: 利用者の「お願いします。ローカルでの動作確認もお願いします。」によりAC201–204/C201–205の設計・実装・ローカル検証・配備を承認。本番データ補正・再開は本番preview提示後の別途承認を維持。
+
+## 実装開始時review
+
+- MainがAC201–204とC201–205を再照合。RP-T1/RP-T2はRunnable、RP-T3はRP-T2契約へDependent、RP-T4は統合検証へDependent、本番apply/resumeだけExternally blocked（承認待ち）。以後の旧Proposed行は設計時履歴。
+- Mainが保存契約・永続化・排他・統合を所有。`revision_reacquisition`（既存read-only explorer、requested gpt-6-sol、observed/usage unavailable）はRP-T1のhandler/lease/分類を調査、書込みなし。fixture taskは契約固定後に別のexact file scopeでdispatchする。
+- ローカル検証は本番DBを使用せず、一時SQLite＋実HTTP APIでpreview無変更、補正、再送、拒否、再起動/再投影を実行する。複数process排他試験、parser/collector/API/domain/application回帰、Release build、exact format gate、CodeGraph syncを含む。
+- 次操作: 未確定Cardと要求revisionの実経路を修正し、その検証と並行してpreview・補正eventの境界を実装。関連testは各sliceで実行し、最終統合をMainが受入れる。新たな外部仕様/破壊的処理は再承認、局所欠陥は自律修正。
 
 ## 現状と今回の結論
 
@@ -92,9 +99,9 @@ event storeとすべての関連projectionの双方を検査する。削除済�
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC201 (RP1) | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | 木曜型HTML→確定Card→保存の統合試験、並び/頭数変更・再起動・既存値保持反例 | Not started |
-| AC202 (RP2) | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 実14頭反例、oddsのみ/未反映event/削除ticket/memo/修復候補/集合違い/別Race、DB前後同一 | Not started |
-| AC203 (RP3) | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | 複数process/共有volume、projection障害・再起動、馬番循環入替、同一騎手、独立参照割込、旧版互換とbackup復元試験 | Not started |
+| AC201 (RP1) | 未確定Cardは仮entry/予想を作らず正常待機。確定後は正しい番号・owner・gradeを保存し、新revisionで旧Card再取得、再送で重複なし | RP-T1, RP-T4 | 木曜型HTML→確定Card→保存の統合試験、並び/頭数変更・再起動・既存値保持反例 | Connected |
+| AC202 (RP2) | previewが全頭source照合・旧新差分・参照分類・version・拒否理由を示し、無変更。未知/参照ありを補正可能と誤判定しない | RP-T2 | 実14頭反例、oddsのみ/未反映event/削除ticket/memo/修復候補/集合違い/別Race、DB前後同一 | Connected |
+| AC203 (RP3) | 参照なしと承認された対象だけをRace単位排他＋単一補正eventで更新。履歴の誤帰属なし、競合/旧lease/再送/中断/replayに耐え、不整合状態を利用しない | RP-T3 | 複数process/共有volume、projection障害・再起動、馬番循環入替、同一騎手、独立参照割込、旧版互換とbackup復元試験 | Connected |
 | AC204 (RP4) | 別途承認後の限定補正・次revision再取得・再開を経て、中山5Rと阪神11Rのraw番号/owner/grade/関連履歴整合、原障害対象の成功、他収集進行、10分以上再停止なし | RP-T4 | 本番preview承認記録、対象要求/終端、raw検証、観測時刻。owner14/14・16/16、説明できない参照差分0 | Not started |
 
 RP1は親IAC3/IAC6、RP2–3はIAC2/IAC4、RP4はIAC5/IAC9/IAC10へ接続する。親の未完了範囲を調査文書の完成で除外しない。
@@ -103,14 +110,14 @@ RP1は親IAC3/IAC6、RP2–3はIAC2/IAC4、RP4はIAC5/IAC9/IAC10へ接続する�
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RP-T1 | 未確定/後着保存/revision再取得 | Main（設計と保存契約）、契約固定後のfixtureはbounded coding worker | Lead＋cost-sensitive fixture worker | 設計承認 | Main: parser/collector/contractsと対応test、worker: 指定新fixture/testのみ | workerが最小/関連回帰、Mainが統合・実HTML反証 | 未着手 | Proposed |
-| RP-T2 | authoritative read-only preview/参照分類 | Main、read-only explorerが棚卸し支援 | Lead（永続化/安全判定）、balanced explorer | 設計承認 | Main: application/API previewと対応test。explorer: read-only | event/projection完全性・無変更・未知参照拒否 | 現在API証拠と棚卸しのみ、実装未着手 | Proposed |
-| RP-T3 | Race排他/単一event/派生更新/未整合gate | Main | Lead | RP-T2 contract | domain/application/infrastructure/API writerと対応test、共有変更は直列 | cross-process、失敗再開、全writer、replay、snapshot、独立反例 | 未着手 | Proposed |
-| RP-T4 | 統合review・配備・preview提示・承認後補正/再開 | Main、read-only independent reviewer | Lead＋review tier | RP-T1–3、適用は別途承認 | Mainのみproduction指定対象とdocs。reviewer書込なし | 全CI、対象本番終端/raw/10分観測 | 未着手。親RT3のblockerを引継ぐ | Proposed |
+| RP-T1 | 未確定/後着保存/revision再取得 | Main、RP-fixture worker | Lead＋cost-sensitive fixture worker | 設計承認 | Main: parser/collector/contractsと対応test、worker: RaceCardPublicationTests.csのみ | worker最小/関連回帰、Main統合・実HTML反証 | HTML11件、Scraping305件、revision3→4待機/確定、API予想client経路 | In progress |
+| RP-T2 | authoritative read-only preview/参照分類 | Main、read-only explorer | Lead | 設計承認 | application/API previewと対応test、explorer read-only | event/projection完全性・無変更・未知参照拒否 | HTTP preview/集合/別Race/撤回予想/削除memo/odds拒否 | In progress |
+| RP-T3 | Race排他/単一event/派生更新/未整合gate | Main | Lead | RP-T2 contract | domain/application/infrastructure/API writerと対応test | cross-process、失敗再開、全writer、replay、snapshot、独立反例 | 一時SQLite再起動/backup復元、14/16頭循環・同一騎手、実Kestrel＋別process排他 | In progress |
+| RP-T4 | 統合review・配備・preview提示・承認後補正/再開 | Main、read-only independent reviewer | Lead＋review tier | RP-T1–3、適用は別途承認 | production指定対象とdocs、reviewer read-only | 全CI、対象本番終端/raw/10分観測 | ローカル検証中。本番apply/resume未承認、親RT3未完了 | Dependent |
 
 Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ完全性、RP-T3の永続化/並行性/共有write、RP-T4の本番権限/最終受入。凍結後のHTML fixtureだけを低コストworker候補に分離し、exact file ownershipをdispatch前に固定。判断変更・未知永続化・範囲拡大はLeadへ戻す。全test結果はMainが独立に受入れ、worker自己申告だけで完了にしない。
 
-## Current investigation / review gates
+## Historical investigation / review gates (approval 前の記録)
 
 - Main: 本番GETと公式HTML照合、統合設計、文書の唯一write owner。コード・本番mutationなし。
 - Read-only explorer `entry_reference_inventory`: 既存agent再利用、requested `gpt-6-sol`、observed model/token/active effort unavailable。CodeGraph＋永続化/投影sourceの棚卸し。test変更/実行なし（設計調査であり実装成功の主張なし）。Mainが公式ID照合、admin odds GET、投影sourceで独立反証。初回再試行0、focus追加質問1、write0。coding audit JSONの新規作成対象ではない。
@@ -122,10 +129,35 @@ Lead保持理由はRP-T1の外部公開契約/保存結合、RP-T2のデータ�
 
 ## Documentation updates / verification
 
+### 2026-09-26 配備前checkpoint
+
+- Code=Connected、Verification=Connected、Deployment/operation=Not started。実装とローカル検証は以下の範囲で成功。本番データに対する適用可否、Linux CI、配備、AC204は未完了のため全体StatusはApprovedを維持する。
+- Release solution buildは警告0/エラー0。`dotnet test HorseRacingPrediction.sln --configuration Release --no-build --filter "TestCategory!=External" --verbosity quiet` は1,268成功/1skip。内訳Contracts43、Domain110、Application57、Infrastructure15、ML14、Agents106、Scraping305、Collector327、API291/1skip。
+- 補正・leaseのfocused 12件成功。追加したcached URL未確定Cardの反例を含むdirect handler33件成功（上記全体実行後の追加1件）。未知SQLite tableのpreview拒否、canonical resource属性なしの有効leaseと完了済みlease拒否を含む。
+- `test-entry-repair-local-host.ps1 -Configuration Release`成功。独立Kestrelの通常Program・新規SQLiteで14頭owner/番号/grade、read-only preview、別process排他、event1件、同一操作再送を確認。単なるin-memory handler試験ではない。Windows成功、Ubuntuはapp-ciとapp-deploy両verify jobへ同じscriptを登録して配備前必須gateにした。
+- EF `has-pending-model-changes`成功（model変更なし）。ローカルtool8.0.11/runtime10.0.11の警告は記録するが、モデル差分はない。空DB migrationは実Kestrel smokeで成功。旧formatter違反を修正後のexact verify成功、最終追加test後も再実行する。先行testの`Category!=External`はMSTestの正しい除外条件ではなかったため、その成功を非Externalの証拠には採用せず上記`TestCategory`で再実行した。
+- Main統合review: source manifestは構造照合＋operatorの公式HTML独立レビューを必須とし、自動真偽判定と混同しない。全頭source ID集合/旧属性継承、event/参照/投影比較、Race＋subject lock、永続barrierとDB復元差分、旧入力/旧lease、projection障害再送の証拠を確認。Linux排他をCIで閉じてから配備する。本番apply/resumeはこのcheckpointの権限に含めない。
+- `codegraph sync .`成功。直近graphでparser→typed exception→cached/discovery handler、repair endpoint→command handler/domain、Program/TestFactory登録の接続を再確認。worker成果はMain全体回帰で独立確認、モデル/費用推測なし。
+- 次操作: 最終format/Collector回帰結果を確認、validator/diff/status/秘密情報検査、checkpoint commit、同じ目的のbranchをPR/CIへ進める。配備後はpipeline pause維持を確認してauthoritative GET/previewと公式HTMLを照合し、具体的な補正対象とfingerprintについて別途承認を求める。元workspaceの利用者変更は対象外。
+- checkpoint確定: 最終exact formatter成功、追加後Collector328件成功（合計1,269成功/1skip相当）、DDD issues=0、agent audit valid、diff checkと秘密情報pattern検査成功。未完了はLinux CI/配備/本番previewおよび別途承認後のAC204。checkpoint commit後もCI/配備へ継続する。
+
+### 2026-09-26 実装checkpoint（上記調査時reviewを更新）
+
+- AC201: 仮採番を除去し、全未確定のみ15分後の正常待機、一部欠損/重複は拒否。revision4を共通定数へ反映。workerのsemantic7＋Playwright4件はMainのScraping305件回帰で反証。旧Result fixtureは実HTMLの見出しaltを表現していなかったため修正し、無関係なbody gradeを再採用しない。
+- AC202–203: EventFlow全event replayと保存projection比較、既存snapshot照合、全履歴差分、独立event/予想/odds/削除memo/identity修復候補/主体識別問題の拒否を接続。生成された未変更のJRA出典memoだけはrace-levelで馬番非依存と厳密分類して維持する。operator manifestにはHTML SHA-256・全馬source URL・取得日時を必須とし、fingerprint/eventへ保存する。APIの構造検証を公式値の自動認証とは称さず、本番の独立HTML照合・利用者承認を後段gateとする。
+- API HTTP試験7件成功: 14/16頭循環・同一騎手・同じHorse属性保持、preview無変更、集合/出典不一致拒否、preview後撤回予想拒否、削除memo/odds拒否、再送event1件、projection障害→再起動→再投影、SQLite backup復元時marker不足/新旧不一致の拒否。失敗中は別Raceの共有履歴/MLも拒否する。
+- 実Kestrel起動＋別PowerShell process試験: `test-entry-repair-local-host.ps1 -Configuration Debug`成功。localhost 14頭/owner14/gradeG3、read-only preview、他process保持lockでapply待機、単一event、再送安全を確認。通常Program登録・空DB migrationも通過。本番データ・APIキーは一切使用していない。同scriptをUbuntu CIにも接続して共有volume/file-lockのOS差を配備前gateとする。
+- real prediction clientのcontext→ML→作成→印/根拠→確定を検証し、未確定は無保存、補正後は元context fingerprintを引継ぐ。経路内で既存clientの`prediction-` IDをEventFlow契約`predictionticket-`へ修正し、信頼度をAPI契約0–1へ正規化。補正後に独立予想が増えた際、comparison票データをrace-only replayと混同して再びpendingにしない（assignment indexは独立比較を継続）。
+- 空DBの通常Program登録horse-profile4に対しbulk callerが3固定だったため、ローカル実HTTPでrelated InvalidRequestを再現。callerを登録済み現在版へ合わせ、batch fingerprintへ要求版を含めて再試験成功。未登録definitionは従来どおり構造化されたitem failureを返す。検証用に登録版を古くして回避しない。
+- Independent reviewer `entry_reference_inventory`（read-only、requested gpt-6-sol、observed/usage unavailable）の指摘のうち、command成否/repair event事後条件、共有履歴reader、sidecarとDB復元差分を採用し修正。認証なしという指摘はglobal middleware＋401試験で棄却、任意memo IDという指摘はEventFlow base Identity validationの実HTTP反例で棄却。prefixではなくaggregate typeによる分類は防御的に採用。自己申告だけで指摘を採用せず独立に反証した。
+- RP-fixtureのauditは親台帳と`RP-fixture-A1.json`へ集約。初回handoffのHTML不足にfocused correction1回、最終11件成功。model/token/active costは観測不能、料金/節約効果は推定しない。5件未満の比較標本でpersistent routing変更はしない。
+- 現在のCompletion summary: Code=Connected（最終整形/回帰/trace確認中）、Verification=Connected、Deployment/operation=Not started。本番は同13:49停止・Running0を維持（別監視14:52 GET）。本番apply/resume/restoreは未実行。
+- 次操作: exact format再検証→Release build/非External全回帰/DB model gate/CodeGraph sync→承認済み差分のcheckpoint commit→既存目的に集約したCI/配備→本番read-only previewと公式HTMLの独立照合を提示。本番補正・再開は別途承認のまま。未コミットはこの承認済み実装・対応tests・文書のみで意図的に保持、元workspaceの利用者変更は触れていない。
+
 - 親READMEへ現時点の追加提案と未完了状態を反映。旧revision案から本書へ具体化リンク。
 - `docs/27-jra-site-collection-contract.md`の未承認提案リンクを本書へ接続し、配備済みidentity拒否と未実装の限定補正を区別する。
-- 本turnはdocsのみ。build/test/CodeGraph syncは対象外。既存アプリが新設計を満たす証拠として以前のテスト結果を流用しない。
+- 設計調査時点はdocsのみでbuild/test/CodeGraph sync対象外だった。現在の実装証拠は上のcheckpointを正とし、調査時の成功を実装検証には流用しない。
 - `python .codex/skills/document-driven-development/scripts/validate_change_records.py docs/changes/20260919_race-entry-owner-enrichment/README.md`: issues=0。
 - `python scripts/audit_agent_execution.py docs/changes/20260919_race-entry-owner-enrichment`: valid。`git diff --check`: passed。
-- Main最終調査review: official source ID照合、admin odds、投影履歴の参照保持という独立証拠を照合。設計調査の成果を受入れ、実装RP1–4と親復旧は未完了のまま保持。実装承認待ちが次のgateであり、文書commitは復旧完了を意味しない。
+- Main最終調査review（承認前）: official source ID照合、admin odds、投影履歴の参照保持という独立証拠を照合。実装承認待ちだった時点の記録であり、現在の承認・実装進捗は冒頭および上のcheckpointを参照。文書commitは復旧完了を意味しない。
 - 補足文書単体のvalidatorは独自RP IDを認識せず2件の診断を返した。基準の意味を変えずAC201–204/C201–205の機械可読IDを併記し、親・本書の再検証はissues=0、audit valid。親validator成功だけで単体成功とは扱わない。

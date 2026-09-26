@@ -8,6 +8,13 @@ public class HorseWeightHistoryLocator : IReadModelLocator
 {
     public IEnumerable<string> GetReadModelIds(IDomainEvent domainEvent)
     {
+        if (domainEvent is IDomainEvent<RaceAggregate, RaceId, RaceEntryAssignmentsRepaired> repair)
+        {
+            foreach (var subject in repair.AggregateEvent.PreviousEntries.Concat(repair.AggregateEvent.Entries)
+                .Select(x => x.HorseId).Where(x => x is not null).Distinct())
+                yield return subject!;
+            yield break;
+        }
         if (domainEvent is IDomainEvent<RaceAggregate, RaceId, EntryRegistered> entryEvent)
         {
 

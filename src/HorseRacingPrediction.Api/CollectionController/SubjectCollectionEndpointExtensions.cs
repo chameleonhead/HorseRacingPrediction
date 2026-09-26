@@ -21,6 +21,7 @@ using Microsoft.EntityFrameworkCore;
 using HorseReadModel = HorseRacingPrediction.Application.Queries.ReadModels.HorseReadModel;
 using TrainerReadModel = HorseRacingPrediction.Application.Queries.ReadModels.TrainerReadModel;
 using JockeyReadModel = HorseRacingPrediction.Application.Queries.ReadModels.JockeyReadModel;
+using HorseRacingPrediction.Api.Security;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -28,7 +29,8 @@ public static class SubjectCollectionEndpointExtensions
 {
     public static IEndpointRouteBuilder MapSubjectCollectionEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/admin/subjects/{kind}/{subjectId}");
+        var group = endpoints.MapGroup("/api/admin/subjects/{kind}/{subjectId}")
+            .AddEndpointFilter<RaceWriteEndpointFilter>();
         group.MapGet("/profile", async (string kind, string subjectId, IQueryProcessor queries, CancellationToken token) =>
         {
             if (await ResolveAsync(kind, subjectId, queries, token) is null) return Results.NotFound();
@@ -89,7 +91,7 @@ public static class SubjectCollectionEndpointExtensions
                 catch (InvalidOperationException ex) when (ex.Message == "Race is already created.") { }
             }
             return Results.Ok(new { raceId = id });
-        });
+        }).AddEndpointFilter<RaceWriteEndpointFilter>();
         return endpoints;
     }
     private static string Normalize(string value) => Regex.Replace(value.Normalize(NormalizationForm.FormKC), @"\s+", "");

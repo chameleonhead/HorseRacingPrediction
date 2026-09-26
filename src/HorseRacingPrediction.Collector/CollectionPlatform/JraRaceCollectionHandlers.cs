@@ -321,6 +321,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
                     raceEvidence = new RaceSchedulingEvidence(ToJstInstant(raceId.Date, observedStart),
                         "JRA-RaceCard", _time.GetUtcNow());
             }
+            catch (JraHorseNumbersUnconfirmedException ex) when (ex.RaceId == raceId)
+            {
+                return NumbersUnconfirmed(ex, locationOutcomes, stageOutcomes);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 locationOutcomes.Add(ResourceLocationOutcomeClassifier.Failed(location, ex, RaceArtifactKind.Card));
@@ -346,6 +350,10 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
             try
             {
                 result = await workflow.RefreshAsync(raceId, domainRaceId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (JraHorseNumbersUnconfirmedException ex) when (ex.RaceId == raceId)
+            {
+                return NumbersUnconfirmed(ex, locationOutcomes, stageOutcomes);
             }
             catch (JraNavigationException ex) when (raceId.Date < today
                 && ex.Reason == JraNavigationFailureReason.OutOfDisplayedRange)
@@ -650,6 +658,17 @@ public sealed class JraRaceDetailCollectionHandler(IJraSessionFactory sessions,
     }
 
     private static Uri? ToUri(string? value) => CollectionHttpUrl.TryCreate(value, out var uri) ? uri : null;
+
+    private CollectionAttemptCompletion NumbersUnconfirmed(JraHorseNumbersUnconfirmedException exception,
+        IReadOnlyList<ResourceLocationOutcome> locations, List<CollectionStageOutcome> stages)
+    {
+        stages.Add(new("ResolveCard", RaceArtifactKind.Card,
+            CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseNumbersUnconfirmed",
+            exception.Message, FinalUrl: ToUri(exception.Url), Persisted: false));
+        return new(CollectionAttemptResult.ResourceNotYetAvailable, "RaceHorseNumbersUnconfirmed",
+            exception.Message, RetryAt: _time.GetUtcNow().AddMinutes(15), FinalUrl: ToUri(exception.Url),
+            LocationOutcomes: locations, StageOutcomes: stages);
+    }
 
     private static bool IsCandidateForArtifact(ResourceLocationCandidate location, RaceArtifactKind artifact,
         ResourceType resourceType, RaceId raceId)

@@ -30,6 +30,28 @@ public static class DeterministicIdGenerator
     public static string BuildRaceEntryId(string raceId, int horseNumber) =>
         $"{raceId}-entry-{horseNumber:D2}";
 
+    public static string? TryBuildRaceIdFromResource(string resourceId)
+    {
+        var parts = resourceId.Split(':');
+        if (parts.Length != 3 || !DateOnly.TryParseExact(parts[0], "yyyyMMdd", out var date)
+            || !int.TryParse(parts[2], out var number) || number is < 1 or > 12) return null;
+        var course = parts[1] switch
+        {
+            "Sapporo" => "札幌",
+            "Hakodate" => "函館",
+            "Fukushima" => "福島",
+            "Niigata" => "新潟",
+            "Tokyo" => "東京",
+            "Nakayama" => "中山",
+            "Chukyo" => "中京",
+            "Kyoto" => "京都",
+            "Hanshin" => "阪神",
+            "Kokura" => "小倉",
+            _ => null
+        };
+        return course is null ? null : BuildRaceId(date, course, number);
+    }
+
     /// <summary>エンティティ種別と正規化名から決定論的なエンティティ ID を生成する。</summary>
     public static string BuildEntityId(string prefix, string normalizedName)
     {

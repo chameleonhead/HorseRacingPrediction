@@ -8,4 +8,5 @@ public sealed record CreatePredictionTicketRequest(
     [property: Required, StringLength(64, MinimumLength = 1)] string PredictorId,
     [property: Range(0, 1)] decimal ConfidenceScore,
     [property: StringLength(300)] string? SummaryComment,
-    string? PredictionTicketId = null);
+    string? PredictionTicketId = null,
+    string? EntryAssignmentFingerprint = null);

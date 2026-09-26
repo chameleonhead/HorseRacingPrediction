@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
-public class RaceSummaryReadModel : IReadModel,
+public partial class RaceSummaryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCreated>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCardPublished>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,

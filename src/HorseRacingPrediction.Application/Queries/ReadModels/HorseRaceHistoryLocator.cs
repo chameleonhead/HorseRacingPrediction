@@ -11,6 +11,15 @@ public class HorseRaceHistoryLocator : IReadModelLocator
 
     public IEnumerable<string> GetReadModelIds(IDomainEvent domainEvent)
     {
+        if (domainEvent is IDomainEvent<RaceAggregate, RaceId, RaceEntryAssignmentsRepaired> repair)
+        {
+            foreach (var entry in repair.AggregateEvent.Entries)
+                if (entry.HorseId is { } subject) _entryToHorse[entry.EntryId] = subject;
+            foreach (var subject in repair.AggregateEvent.PreviousEntries.Concat(repair.AggregateEvent.Entries)
+                .Select(x => x.HorseId).Where(x => x is not null).Distinct())
+                yield return subject!;
+            yield break;
+        }
         if (domainEvent is IDomainEvent<RaceAggregate, RaceId, EntryRegistered> entryEvent)
         {
 

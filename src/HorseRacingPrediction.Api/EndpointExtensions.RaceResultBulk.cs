@@ -349,6 +349,13 @@ public static partial class EndpointExtensions
             }
         }
 
+        var revisions = new Dictionary<string, int>
+        { ["horse-profile"] = 3, ["jockey-profile"] = 3, ["trainer-profile"] = 3, ["owner-identity"] = 1 };
+        foreach (var definitionId in revisions.Keys.ToArray())
+        {
+            try { revisions[definitionId] = await store.GetCurrentRevisionAsync(new(definitionId), cancellationToken); }
+            catch (InvalidOperationException) { /* Missing definitions remain structured per-item failures below. */ }
+        }
         var items = ready.Select(subject =>
         {
             var definition = subject.Type switch
@@ -383,11 +390,11 @@ public static partial class EndpointExtensions
                 attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
             }
             return new CollectionRequestBatchItem($"{subject.Type}:{subject.Id}",
-                new(subject.Type, "JRA", subject.Id!), new(definition.Id), definition.Revision,
+                new(subject.Type, "JRA", subject.Id!), new(definition.Id), revisions[definition.Id],
                 CollectionReason.Discovery, lane, priority, explicitUrl, raceDate, attributes);
         }).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
-            items.Select(item => item.ItemKey))))).ToLowerInvariant()[..24];
+            items.Select(item => $"{item.ItemKey}:{item.RequestedRevision}"))))).ToLowerInvariant()[..24];
         var accepted = items.Length == 0 ? [] : await store.RequestManyAsync(
             $"race-subjects:{raceId}:{fingerprint}", items, Shared.Time.JstTime.Now(), cancellationToken)
             .ConfigureAwait(false);

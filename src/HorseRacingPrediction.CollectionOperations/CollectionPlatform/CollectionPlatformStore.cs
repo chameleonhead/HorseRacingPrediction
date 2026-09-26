@@ -1108,10 +1108,7 @@ public sealed partial class CollectionPlatformStore
                                join resource in db.Resources.AsNoTracking() on active.ResourcePk equals resource.ResourcePk
                                select new { resource.ResourceId, resource.AttributesJson }).ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        return resources.Any(x => string.Equals(x.ResourceId, raceId, StringComparison.Ordinal)
-            || (JsonSerializer.Deserialize<Dictionary<string, string>>(x.AttributesJson) is { } attributes
-                && attributes.TryGetValue("domainRaceId", out var domainRaceId)
-                && string.Equals(domainRaceId, raceId, StringComparison.Ordinal)));
+        return resources.Any(x => RaceResourceMatches(x.ResourceId, x.AttributesJson, raceId, conservative: true));
     }
 
     public async Task<bool> IsValidActiveRaceLeaseAsync(Guid taskId, string leaseToken, string raceId,
@@ -1128,10 +1125,16 @@ public sealed partial class CollectionPlatformStore
                          select new { resource.ResourceId, resource.AttributesJson, task.LeaseExpiresAt }).SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         if (row?.LeaseExpiresAt is null || row.LeaseExpiresAt <= HorseRacingPrediction.Contracts.Time.JstTime.Now()) return false;
-        var attributes = JsonSerializer.Deserialize<Dictionary<string, string>>(row.AttributesJson);
-        return string.Equals(row.ResourceId, raceId, StringComparison.Ordinal)
-            || (attributes?.TryGetValue("domainRaceId", out var domainRaceId) == true
-                && string.Equals(domainRaceId, raceId, StringComparison.Ordinal));
+        return RaceResourceMatches(row.ResourceId, row.AttributesJson, raceId);
+    }
+
+    private static bool RaceResourceMatches(string resourceId, string attributesJson, string raceId, bool conservative = false)
+    {
+        var normalized = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.TryBuildRaceIdFromResource(resourceId);
+        var explicitId = JsonSerializer.Deserialize<Dictionary<string, string>>(attributesJson)?.GetValueOrDefault("domainRaceId");
+        if (conservative) return normalized == raceId || explicitId == raceId || resourceId == raceId;
+        if (normalized is not null && explicitId is not null && normalized != explicitId) return false;
+        return (normalized ?? explicitId ?? resourceId) == raceId;
     }
 
     public async Task<IReadOnlyList<CollectionStateSnapshot>> GetDueStatesAsync(DateTimeOffset now, int limit = 500,

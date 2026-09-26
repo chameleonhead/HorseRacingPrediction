@@ -4,7 +4,7 @@ using HorseRacingPrediction.Domain.Races;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
-public class HorseWeightHistoryReadModel : IReadModel,
+public partial class HorseWeightHistoryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryCollectedDataUpdated>
 {

@@ -3,6 +3,8 @@ using EventFlow.Aggregates;
 namespace HorseRacingPrediction.Domain.Races;
 
 public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>,
+    IApply<RaceEntryAssignmentsRepaired>,
+    IApply<RaceOddsSnapshotRecorded>,
     IApply<RaceCreated>,
     IApply<RaceCardPublished>,
     IApply<EntryRegistered>,
@@ -50,6 +52,20 @@ public sealed class RaceState : AggregateState<RaceAggregate, RaceId, RaceState>
     public IReadOnlyList<EntryResultDetails> EntryResults => _entryResults.AsReadOnly();
     public PayoutResultDetails? PayoutResult { get; private set; }
     public string? ReplacementRaceId { get; private set; }
+    public string? EntryRepairOperationId { get; private set; }
+    public string? EntryRepairFingerprint { get; private set; }
+    public bool HasOddsSnapshots { get; private set; }
+
+    public void Apply(RaceOddsSnapshotRecorded e) => HasOddsSnapshots = true;
+
+    public void Apply(RaceEntryAssignmentsRepaired e)
+    {
+        _entries.Clear();
+        _entries.AddRange(e.Entries);
+        GradeCode = e.GradeCode;
+        EntryRepairOperationId = e.OperationId;
+        EntryRepairFingerprint = e.Fingerprint;
+    }
 
     public void Apply(RaceCreated e)
     {

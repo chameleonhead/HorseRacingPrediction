@@ -510,7 +510,8 @@ public sealed class RaceResultPageParserTests
             "付加賞（万円） 1着56.7 2着16.2 3着8.1 競走中の出来事等 " +
             "ダイチマイスター号は、枠内駐立不良。 ノアヴェルテ号の騎手は過怠金10,000円。 開催選択へ戻る",
             [], [], original.Tables,
-            ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "第71回京成杯オータムハンデキャップ"]);
+            // The live heading's grade image alt is included in semantic heading text.
+            ["JRA 日本中央競馬会", "2026年9月5日 中山 11R", "第71回京成杯オータムハンデキャップ GⅢ"]);
 
         var page = (JraRaceResultPage)new RaceResultPageParser().Parse(
             new TestPageSnapshot(Url, "レース結果 JRA", [section]));

@@ -29,7 +29,7 @@ public sealed class ApiOnlyPredictionWorkflow
             throw new InvalidOperationException($"Race context was not found via API. RaceId={raceId}");
         }
 
-        if (context.Entries.Count == 0)
+        if (context.Entries.Count == 0 || context.Entries.Any(x => x.HorseNumber <= 0 || x.GateNumber is null))
         {
             throw new InvalidOperationException($"Race context has no entries. RaceId={raceId}");
         }
@@ -42,14 +42,15 @@ public sealed class ApiOnlyPredictionWorkflow
         }
 
         var summary = BuildSummary(context, rankings, mlPrediction is not null);
-        var confidence = Math.Clamp(rankings.Average(x => x.Score), 0m, 100m);
+        var confidence = Math.Clamp(rankings.Average(x => x.Score) / 100m, 0m, 1m);
 
-        var predictionTicketId = await _predictionWriteService.CreatePredictionTicketAsync(
+        var predictionTicketId = await _predictionWriteService.CreateBoundPredictionTicketAsync(
             raceId,
             predictorType: "ApiOnlyPredictor",
             predictorId: "api-only-v1",
             confidenceScore: confidence,
             summaryComment: summary,
+            entryAssignmentFingerprint: context.EntryAssignmentFingerprint,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         foreach (var ranking in rankings)

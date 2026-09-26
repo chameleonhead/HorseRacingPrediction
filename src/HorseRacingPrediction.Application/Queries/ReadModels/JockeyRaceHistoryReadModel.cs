@@ -8,7 +8,7 @@ namespace HorseRacingPrediction.Application.Queries.ReadModels;
 /// 騎手ごとの出走履歴を蓄積し、予測パラメーター（Group C）を提供する ReadModel。
 /// JockeyId をキーに <see cref="JockeyRaceHistoryLocator"/> によって管理される。
 /// </summary>
-public class JockeyRaceHistoryReadModel : IReadModel,
+public partial class JockeyRaceHistoryReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryResultDeclared>
 {

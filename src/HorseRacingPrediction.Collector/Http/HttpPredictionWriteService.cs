@@ -23,8 +23,14 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
         decimal confidenceScore,
         string? summaryComment,
         CancellationToken cancellationToken = default)
+        => await CreateBoundPredictionTicketAsync(raceId, predictorType, predictorId, confidenceScore,
+            summaryComment, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<string> CreateBoundPredictionTicketAsync(string raceId, string predictorType,
+        string predictorId, decimal confidenceScore, string? summaryComment, string? entryAssignmentFingerprint,
+        CancellationToken cancellationToken = default)
     {
-        var predictionTicketId = $"prediction-{Guid.NewGuid():D}";
+        var predictionTicketId = $"predictionticket-{Guid.NewGuid():D}";
         var request = new
         {
             PredictionTicketId = predictionTicketId,
@@ -32,7 +38,8 @@ public sealed class HttpPredictionWriteService : IPredictionWriteService
             PredictorType = predictorType,
             PredictorId = predictorId,
             ConfidenceScore = confidenceScore,
-            SummaryComment = summaryComment
+            SummaryComment = summaryComment,
+            EntryAssignmentFingerprint = entryAssignmentFingerprint
         };
 
         var response = await _httpClient

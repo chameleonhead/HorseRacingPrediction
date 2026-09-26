@@ -112,6 +112,7 @@
 | RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | API283/Domain110/Collector326件成功、全7入口revision3 | Verified | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
 | RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 配備・限定要求済み、別Race馬番不一致で再停止。安全補正の別途承認が必要 | Externally blocked | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RP-fixture | AC201 未確定Card反例test | identity_guard_tests | Worker | frozen parser contract | tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs | 11件（HTML 4件）、関連71件＋skip1、Main全Scraping305件 | agent-audits/RP-fixture-A1.json | Verified | Worker — frozen local fixture | RP-fixture-A1 | unavailable; retries 1; corrections 0; reviews 2 |
 
 ## 2026-09-19 設計・実装履歴（本文）
 

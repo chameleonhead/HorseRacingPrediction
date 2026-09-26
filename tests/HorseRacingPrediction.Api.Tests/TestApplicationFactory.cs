@@ -52,6 +52,10 @@ internal static class TestApplicationFactory
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
         builder.Services.AddSingleton<CollectionMonitoringService>();
         builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
+        builder.Services.AddSingleton<RaceWriteCoordinator>();
+        builder.Services.AddSingleton<RaceWriteEndpointFilter>();
+        builder.Services.AddSingleton<RacePredictionReadEndpointFilter>();
+        builder.Services.AddTransient<RaceEntryRepairInspector>();
         builder.Services.AddAdminAuthentication();
         builder.Services.AddRazorComponents().AddInteractiveServerComponents();
         builder.Services.AddFluentUIComponents();
@@ -107,6 +111,7 @@ internal static class TestApplicationFactory
         app.MapAdminEndpoints();
         app.MapSubjectCollectionEndpoints();
         app.MapRaceOddsEndpoints();
+        app.MapRaceEntryRepairEndpoints();
         app.MapCollectionMonitoringEndpoints();
         app.MapCollectionPlatformEndpoints();
 
