@@ -98,23 +98,23 @@ Pre-implementation review: H1=Runnable、H2/H3=Dependent、H4=Externally blocked
 
 | ID | Evidence / impact | Disposition・代替・残存risk | AC/task | Agent position | User disposition | State |
 | --- | --- | --- | --- | --- | --- | --- |
-| C211 | Ready再生成により従来previewが拒否 | 永続holdで全生成/取得境界を覆う。cancel連打/Runningだけ除外は不採用。未知入口は拒否して配備gateで検出 | AC211/H1 | Agree | 承認待ち | Resolved in design |
-| C212 | pauseだけでは取得済worker/API writerを止めず、数値オッズの古い入力が解除後に来得る | Race lock＋DB原子判定＋世代/取得時fingerprint、Running排出後のみ補正。保留履歴対象の旧clientは拒否し対応版で再取得。旧batch/別process/遅延odds反例を必須化 | AC212/H1–2 | Agree | 承認待ち | Resolved in design |
-| C213 | holdとeventは別DB、失敗時に自動解除すると破損を露出 | hold先行、idempotency、整合不明は保留維持。未検証restore/旧binary rollback禁止。保留の手動管理負担は状態GETで可視化 | AC213/H2 | Agree | 承認待ち | Resolved in design |
-| C214 | 中山7R発見、他Race/公式Cardの可用性は未確認 | read-only候補棚卸し→個別適用承認。全件安全/即時全復旧を約束しない。独立参照/取得元不足は別設計または保留継続 | AC215/H3–4 | Agree | 承認待ち | Resolved in design |
-| C215 | 保留解除で旧revision/二重要求、先行resumeで再停止 | 新世代・最新revisionへ一意置換、failure維持、解除はresumeしない。新版成功後に通知解決 | AC214–215/H2–4 | Agree | 承認待ち | Resolved in design |
-| C216 | 既存quiet全suiteでScraping1件失敗の原因未採取 | ローカルTRX付き全suite/反復で特定・処置し元gateを閉じる。緑の再実行だけで未解明failureを削除しない | AC216/H3 | Agree | 承認待ち | Resolved in design |
+| C211 | Ready再生成により従来previewが拒否 | 永続holdで全生成/取得境界を覆う。cancel連打/Runningだけ除外は不採用。未知入口は拒否して配備gateで検出 | AC211/H1 | Agree | 実装・検証・配備承認、本番操作別承認 | Resolved in design |
+| C212 | pauseだけでは取得済worker/API writerを止めず、数値オッズの古い入力が解除後に来得る | Race lock＋DB原子判定＋世代/取得時fingerprint、Running排出後のみ補正。保留履歴対象の旧clientは拒否し対応版で再取得。旧batch/別process/遅延odds反例を必須化 | AC212/H1–2 | Agree | 実装・検証・配備承認、本番操作別承認 | Resolved in design |
+| C213 | holdとeventは別DB、失敗時に自動解除すると破損を露出 | hold先行、idempotency、整合不明は保留維持。未検証restore/旧binary rollback禁止。保留の手動管理負担は状態GETで可視化 | AC213/H2 | Agree | 実装・検証・配備承認、本番操作別承認 | Resolved in design |
+| C214 | 中山7R発見、他Race/公式Cardの可用性は未確認 | read-only候補棚卸し→個別適用承認。全件安全/即時全復旧を約束しない。独立参照/取得元不足は別設計または保留継続 | AC215/H3–4 | Agree | 実装・検証・配備承認、本番操作別承認 | Resolved in design |
+| C215 | 保留解除で旧revision/二重要求、先行resumeで再停止 | 新世代・最新revisionへ一意置換、failure維持、解除はresumeしない。新版成功後に通知解決 | AC214–215/H2–4 | Agree | 実装・検証・配備承認、本番操作別承認 | Resolved in design |
+| C216 | 既存quiet全suiteでScraping1件失敗の原因未採取、元stdout/stderrにも失敗名/stackなし | 原因確定は不能、記録を保持。現在のWindows全suite反復とLinux CI/実host成功を配備gateにする。再発時はTRX artifactで調査 | AC216/H3 | 原因解消とは主張しない。明示されたリスク許容を採用 | 2026-09-26「無視でよいです」— 未解明リスクを残す条件付き配備を許容 | Accepted risk |
 
 ## Acceptance criteria
 
 | ID | Observable criterion | Tasks | Verification | State |
 | --- | --- | --- | --- | --- |
-| AC211 | 対象hold中はReady/新要求を保持して実行せず、scheduler/後続revision/再送で復活しない。他Raceは進む | H1,H3 | 実SQLite・2 process、scheduler複数tick、bulk/cancel/terminal/alias/混在batch反例 | Not started |
-| AC212 | Running/旧lease/旧世代/未知alias/独立参照があれば補正不可。静止した同一holdのみ既存単一eventで補正可能。解除後の旧オッズ/古い入力も保存不可 | H1,H2,H3 | 実Kestrel＋別process、hold開始/取得/保存の競合、無保留Ready拒否、参照追加拒否、旧client/遅延odds/取得時fingerprint実転送 | Not started |
-| AC213 | 中断/再起動/二重操作/backup復元差分で誤解除や二重eventなし。backup検査失敗ならapplyなし | H2,H3 | event前後・投影途中・解除transaction前後のfault injection、隔離復元検証 | Not started |
-| AC214 | 解除は最新revision>=4を1回だけ要求し旧task履歴/failureを保持、古いmessageは副作用なし。pipelineは自動再開しない | H2,H3 | release再送/並行新要求/高revision/手動resume/旧envelope試験 | Not started |
+| AC211 | 対象hold中はReady/新要求を保持して実行せず、scheduler/後続revision/再送で復活しない。他Raceは進む | H1,H3 | 実SQLite・2 process、scheduler複数tick、bulk/cancel/terminal/alias/混在batch反例 | Connected |
+| AC212 | Running/旧lease/旧世代/未知alias/独立参照があれば補正不可。静止した同一holdのみ既存単一eventで補正可能。解除後の旧オッズ/古い入力も保存不可 | H1,H2,H3 | 実Kestrel＋別process、hold開始/取得/保存の競合、無保留Ready拒否、参照追加拒否、旧client/遅延odds/取得時fingerprint実転送 | Connected |
+| AC213 | 中断/再起動/二重操作/backup復元差分で誤解除や二重eventなし。backup検査失敗ならapplyなし | H2,H3 | event前後・投影途中・解除transaction前後のfault injection、隔離復元検証 | Connected |
+| AC214 | 解除は最新revision>=4を1回だけ要求し旧task履歴/failureを保持、古いmessageは副作用なし。pipelineは自動再開しない | H2,H3 | release再送/並行新要求/高revision/手動resume/旧envelope試験 | Connected |
 | AC215 | 別承認の個別対象で公式全頭/raw owner/番号/grade/関連履歴が一致し、対象と原障害が成功。他収集が進み10分再停止なし。未解決は明示 | H3,H4 | 本番一覧・preview・承認・要求/attempt・raw・観測時刻 | Not started |
-| AC216 | 実transport/DB/配信を通るローカルとLinux CIが成功、既存の未解明test失敗を処置。秘密情報/不要な本番mutationなし | H3,H3N | workflow同等format/build/TRX全suite、hold smoke、元failure gate、diff/status | Not started |
+| AC216 | 実transport/DB/配信を通るローカルとLinux CIが成功。過去の未解明test1件はC216の明示許容により配備阻害条件から除外し記録保持。秘密情報/不要な本番mutationなし | H3,H3N | workflow同等format/build/TRX全suite、hold smoke、現在runで失敗0、diff/status | Connected |
 
 ## Task plan / review gates
 
@@ -156,3 +156,4 @@ H3N Routing: Worker — frozen nullable receiptの局所caller修正、実装判
 - 次操作: 最終Release全suite(TRX)、2host smoke、EF model/空DB移行、CodeGraph/validator/diff/status→実装checkpoint commit→Linux CI。残件は過去failureの処置、CI/配備、最新read-only棚卸し、別承認の本番操作。前turnのskill1行はこの実装commitに混ぜず意図的に保持する。
 - 最終ローカルgate: Release全suite **1286成功/1既存skip/0失敗**、全9projectの`scoped-hold-final.trx`保存。2host smoke再成功（`hrp-repair-host-aae4957cb45145a5986595f981058f98`）。EF pending-modelなし、空SQLiteへの全migration成功（既存EF tool8/runtime10のversion警告のみ）。CodeGraph sync、DDD issues0、agent audit valid、diff check成功。CIもTRXを14日artifact保存するよう変更し、今後の失敗名/stack欠落を防ぐ。これらはC216の過去原因特定を代替しない。
 - 本番GET 17:29 JST: pipelineは15:55:27の同一identity mismatch停止、Running0、当日race-detail state24件。mutation0。raw/独立参照の全候補棚卸しは次チェックで継続する。
+- C216再合意: 原因不明のまま配備してよいか（本番補正/resume除外）の質問に利用者が「無視でよいです」と回答。過去1件をAccepted riskとし、現在CI成功を条件に配備する。原因特定や解消を偽って完了しない。承認された変更はAC216の過去failure条件のみで、他gate/対象操作権限は変更しない。
