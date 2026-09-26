@@ -65,20 +65,19 @@ public sealed class CollectionQueueCutoverContractTests
     }
 
     [TestMethod]
-    public void DeployWorkflow_MigratesLegacyRaceJobsAfterHealthCheck()
+    public void DeployWorkflow_RestoresPipelineAfterHealthCheckWithoutLegacyMigration()
     {
-        var migration = DeployWorkflow.IndexOf("- name: Migrate legacy race collection jobs", StringComparison.Ordinal);
-        var healthCheck = DeployWorkflow.LastIndexOf("- name: Verify deployment health", migration,
+        var restore = DeployWorkflow.IndexOf("- name: Restore collection pipeline state after deployment", StringComparison.Ordinal);
+        Assert.IsGreaterThanOrEqualTo(0, restore);
+        var healthCheck = DeployWorkflow.LastIndexOf("- name: Verify deployment health", restore,
             StringComparison.Ordinal);
 
         Assert.IsGreaterThanOrEqualTo(0, healthCheck);
-        Assert.IsGreaterThan(healthCheck, migration);
+        Assert.IsGreaterThan(healthCheck, restore);
         StringAssert.Contains(DeployWorkflow, "$base/pipeline/pause");
-        StringAssert.Contains(DeployWorkflow, "$base/migrations/race-detail/apply");
-        StringAssert.Contains(DeployWorkflow, "$base/migrations/race-detail/preview");
         StringAssert.Contains(DeployWorkflow, "$base/pipeline/resume");
-        StringAssert.Contains(DeployWorkflow, "jq '.sourceResources'");
-        StringAssert.Contains(DeployWorkflow, "jq '.errors | length'");
+        Assert.IsFalse(DeployWorkflow.Contains("Migrate legacy race collection jobs", StringComparison.Ordinal));
+        Assert.IsFalse(DeployWorkflow.Contains("/migrations/race-detail/", StringComparison.Ordinal));
     }
 
     [TestMethod]
