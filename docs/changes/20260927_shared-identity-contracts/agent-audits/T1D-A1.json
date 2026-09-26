@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_shared-identity-contracts",
+  "taskId": "T1D",
+  "attemptId": "T1D-A1",
+  "state": "completed",
+  "taskDifficulty": "bounded owner HTTP integration tests",
+  "acceptanceCriteria": [
+    "AC1",
+    "AC5"
+  ],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-5.6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "Role configured; observed telemetry unavailable"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "No runtime usage"
+  },
+  "scope": [
+    "tests/HorseRacingPrediction.Api.Tests/SharedOwnerIdentityTests.cs"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "No review telemetry"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "No effort telemetry"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "No reliable active elapsed telemetry"
+  },
+  "startRevision": "1d961df5a671af578dd45aadb5fd38281ad77e87",
+  "endRevisionOrPatch": "sha256:CBA53DCEEFD92D1D2757A27C755F8F4AD371B04BE4385BEC38C595C23105822B",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Main legacy-owner recovery HTTP positive/negative and worker existence verifier; API 36 regressions",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}

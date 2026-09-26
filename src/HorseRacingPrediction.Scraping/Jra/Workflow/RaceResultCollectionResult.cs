@@ -7,7 +7,7 @@ namespace HorseRacingPrediction.Scraping.Jra.Workflow;
 /// </summary>
 /// <param name="RaceId">収集対象の JRA レース識別子（日付・競馬場・レース番号）</param>
 /// <param name="DataCollectionRaceId">
-/// <see cref="ApiClient.DeterministicIdGenerator.BuildRaceId"/> で算出した書き込みサービス側のレース ID。
+/// 書き込みサービスの既存レース解決で取得したレース ID（未登録時のみ共通契約で生成）。
 /// </param>
 /// <param name="SavedHorseNumbers">着順の記録に成功した馬番一覧（着順ページ掲載順）</param>
 /// <param name="Errors">

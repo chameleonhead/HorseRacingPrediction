@@ -188,7 +188,8 @@ public sealed class RaceCardPublicationTests
               </table>
             </main>
             """);
-        return await new PlaywrightPageSnapshotter().CaptureAsync(page);
+        // Supply the production page origin when parsing relative horse links from local HTML.
+        return (await new PlaywrightPageSnapshotter().CaptureAsync(page)) with { Url = new Uri(Url) };
     }
 
     private static string HtmlRow(string frame, string horseNumber, string horseName,

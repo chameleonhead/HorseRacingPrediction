@@ -33,14 +33,22 @@ public static partial class EndpointExtensions
         if (request.RefreshExistingData)
             return await RefreshCollectedRaceAsync(request, commandBus, queryProcessor, dbContextProvider, cancellationToken);
 
-        var raceIdValue = DeterministicIdGenerator.BuildRaceId(
-            request.RaceDate, request.RacecourseCode, request.RaceNumber);
+        using var identityDb = dbContextProvider.CreateContext();
+        string raceIdValue;
+        Dictionary<Shared.RaceResultEntryBulkDto, string> horseIdentities;
+        try
+        {
+            raceIdValue = await CollectionIdentityResolver.RaceAsync(identityDb, request.RaceDate, request.RacecourseCode, request.RaceNumber, cancellationToken);
+        }
+        catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
+        try { horseIdentities = await ResolveCollectedHorseIdentitiesAsync(request, identityDb, cancellationToken); }
+        catch (InvalidOperationException ex) { return CollectedIdentityRejection(raceIdValue, ex.Message); }
         var raceId = new RaceId(raceIdValue);
         var existing = await queryProcessor.ProcessAsync(
             new ReadModelByIdQuery<RacePredictionContextReadModel>(raceIdValue), cancellationToken).ConfigureAwait(false);
         if (existing is not null && string.IsNullOrEmpty(existing.RaceId)) existing = null;
 
-        var identityFailure = ValidateCollectedEntryIdentities(request, existing, raceIdValue);
+        var identityFailure = ValidateCollectedEntryIdentities(request, existing, raceIdValue, horseIdentities);
         if (identityFailure is not null) return identityFailure;
 
         var errors = new List<string>();
@@ -76,8 +84,9 @@ public static partial class EndpointExtensions
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Jockey", item.JockeyName);
             var canonicalTrainerName = string.IsNullOrWhiteSpace(item.TrainerName) ? null
                 : Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Trainer", item.TrainerName);
-            var horseId = DeterministicIdGenerator.BuildHorseId(canonicalHorseName, item.HorseSourceIdentity);
-            var entryId = DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, horseId);
+            var horseId = horseIdentities[item];
+            var entryId = existing?.Entries.SingleOrDefault(x => x.HorseId == horseId)?.EntryId
+                ?? DeterministicIdGenerator.BuildRaceEntryId(raceIdValue, horseId);
             var jockeyId = string.IsNullOrWhiteSpace(canonicalJockeyName) ? null
                 : DeterministicIdGenerator.BuildEntityId("jockey",
                     DeterministicIdGenerator.NormalizeKey(canonicalJockeyName));
@@ -222,6 +231,9 @@ public static partial class EndpointExtensions
         var realtime = raceDate >= today && raceDate <= today.AddDays(7);
         var lane = realtime ? CollectionLane.Realtime : CollectionLane.Normal;
         var priority = realtime ? (int)CollectionPriority.High : (int)CollectionPriority.Low;
+        using var db = dbContextProvider.CreateContext();
+        var ownerAliases = await db.OwnerAliasMappings.AsNoTracking()
+            .ToDictionaryAsync(x => x.NormalizedAlias, x => x.OwnerId, cancellationToken).ConfigureAwait(false);
         var candidates = entries.SelectMany(item => new[]
             {
                 new SubjectJob(ResourceType.Horse, item.Entry.HorseId, item.HorseName,
@@ -231,9 +243,7 @@ public static partial class EndpointExtensions
                 new SubjectJob(ResourceType.Trainer, item.Entry.TrainerId, item.TrainerName,
                     item.Source.TrainerProfileUrl),
                 new SubjectJob(ResourceType.Owner,
-                    string.IsNullOrWhiteSpace(item.Source.OwnerName) ? null :
-                        DeterministicIdGenerator.BuildEntityId("owner",
-                            DeterministicIdGenerator.NormalizeKey(item.Source.OwnerName)),
+                    OwnerIdentityContract.ResolveId(item.Source.OwnerName, ownerAliases),
                     item.Source.OwnerName, null),
             })
             .Where(item => !string.IsNullOrWhiteSpace(item.Id) && !string.IsNullOrWhiteSpace(item.Name))
@@ -242,7 +252,6 @@ public static partial class EndpointExtensions
             .ToArray();
         if (candidates.Length == 0) return [];
 
-        using var db = dbContextProvider.CreateContext();
         var race = await db.Set<RacePredictionContextReadModel>().AsNoTracking()
             .SingleAsync(item => item.RaceId == raceId, cancellationToken).ConfigureAwait(false);
         var horseIds = candidates.Where(x => x.Type == ResourceType.Horse).Select(x => x.Id!).ToArray();
@@ -254,6 +263,10 @@ public static partial class EndpointExtensions
             .ToDictionaryAsync(x => x.JockeyId, cancellationToken).ConfigureAwait(false);
         var trainers = await db.Set<TrainerReadModel>().AsNoTracking().Where(x => trainerIds.Contains(x.TrainerId))
             .ToDictionaryAsync(x => x.TrainerId, cancellationToken).ConfigureAwait(false);
+        var resolvedHorseJobs = new Dictionary<string, string>(StringComparer.Ordinal);
+        var horseIdentities = await CollectionIdentityResolver.LoadHorsesAsync(db, cancellationToken);
+        foreach (var subject in candidates.Where(x => x.Type == ResourceType.Horse))
+            resolvedHorseJobs[subject.Id!] = CollectionIdentityResolver.ResolveHorse(horseIdentities, subject.Name!, subject.SourceIdentity, null);
         var rejected = new List<CollectionRequestBatchOutcome>();
         var repairIssues = new List<SubjectIdentificationRepairIssue>();
         var ready = candidates.Where(subject =>
@@ -278,7 +291,8 @@ public static partial class EndpointExtensions
                 && string.Equals(Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), projectedName),
                     Shared.JraSubjectNameNormalizer.NormalizeIdentityName(subject.Type.ToString(), subject.Name!),
                     StringComparison.Ordinal)
-                && string.Equals(subject.Id, ExpectedSubjectJobId(subject), StringComparison.Ordinal);
+                && string.Equals(subject.Id, subject.Type == ResourceType.Horse
+                    ? resolvedHorseJobs[subject.Id!] : ExpectedSubjectJobId(subject), StringComparison.Ordinal);
             if (valid || subject.Type == ResourceType.Owner) return true;
             rejected.Add(new($"{subject.Type}:{subject.Id}", "Rejected",
                 ErrorCode: "SubjectIdentityRepairRequired",
@@ -292,13 +306,7 @@ public static partial class EndpointExtensions
                 SubjectType = subject.Type.ToString(),
                 SubjectId = subject.Id!,
                 SubjectName = subject.Name!,
-                DefinitionId = subject.Type switch
-                {
-                    ResourceType.Horse => "horse-profile",
-                    ResourceType.Jockey => "jockey-profile",
-                    ResourceType.Trainer => "trainer-profile",
-                    _ => string.Empty,
-                },
+                DefinitionId = SubjectCollectionDefinitions.For(subject.Type).Definition.Value,
                 RequestedByRaceId = raceId,
                 SourceIdentity = subject.SourceIdentity,
                 SourceUrl = subject.Type is ResourceType.Jockey or ResourceType.Trainer ? subject.SourceIdentity : null,
@@ -348,8 +356,7 @@ public static partial class EndpointExtensions
             }
         }
 
-        var revisions = new Dictionary<string, int>
-        { ["horse-profile"] = 3, ["jockey-profile"] = 3, ["trainer-profile"] = 3, ["owner-identity"] = 1 };
+        var revisions = SubjectCollectionDefinitions.All.ToDictionary(x => x.Definition.Value, x => x.CurrentRevision);
         foreach (var definitionId in revisions.Keys.ToArray())
         {
             try { revisions[definitionId] = await store.GetCurrentRevisionAsync(new(definitionId), cancellationToken); }
@@ -357,14 +364,7 @@ public static partial class EndpointExtensions
         }
         var items = ready.Select(subject =>
         {
-            var definition = subject.Type switch
-            {
-                ResourceType.Horse => (Id: "horse-profile", Revision: 3),
-                ResourceType.Jockey => (Id: "jockey-profile", Revision: 3),
-                ResourceType.Trainer => (Id: "trainer-profile", Revision: 3),
-                ResourceType.Owner => (Id: "owner-identity", Revision: 1),
-                _ => throw new InvalidOperationException($"Unsupported subject type: {subject.Type}"),
-            };
+            var definition = SubjectCollectionDefinitions.For(subject.Type).Definition.Value;
             var attributes = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["name"] = subject.Name!,
@@ -389,7 +389,7 @@ public static partial class EndpointExtensions
                 attributes["sourceUrl"] = explicitUrl.AbsoluteUri;
             }
             return new CollectionRequestBatchItem($"{subject.Type}:{subject.Id}",
-                new(subject.Type, "JRA", subject.Id!), new(definition.Id), revisions[definition.Id],
+                new(subject.Type, "JRA", subject.Id!), new(definition), revisions[definition],
                 CollectionReason.Discovery, lane, priority, explicitUrl, raceDate, attributes);
         }).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n',
@@ -408,8 +408,6 @@ public static partial class EndpointExtensions
             subject.Type.ToString(), subject.Name!);
         return subject.Type switch
         {
-            ResourceType.Horse => DeterministicIdGenerator.BuildHorseId(canonical,
-                JraSourceIdentity.TryNormalizeHorse(subject.SourceIdentity, out _) ? subject.SourceIdentity : null),
             ResourceType.Jockey => DeterministicIdGenerator.BuildEntityId("jockey",
                 DeterministicIdGenerator.NormalizeKey(canonical)),
             ResourceType.Trainer => DeterministicIdGenerator.BuildEntityId("trainer",

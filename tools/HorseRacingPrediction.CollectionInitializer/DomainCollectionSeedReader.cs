@@ -44,20 +44,8 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
         }
     }
 
-    private static string CanonicalCourse(string value) => value switch
-    {
-        "札幌" => "Sapporo",
-        "函館" => "Hakodate",
-        "福島" => "Fukushima",
-        "新潟" => "Niigata",
-        "東京" => "Tokyo",
-        "中山" => "Nakayama",
-        "中京" => "Chukyo",
-        "京都" => "Kyoto",
-        "阪神" => "Hanshin",
-        "小倉" => "Kokura",
-        _ => value,
-    };
+    private static string CanonicalCourse(string value) =>
+        HorseRacingPrediction.Contracts.RaceCourseIdentity.ResourceCode(value) ?? value;
 
     private static async Task ReadProfilesAsync(SqliteConnection connection, List<CollectionInitializationSeed> seeds,
         CancellationToken cancellationToken)
@@ -83,14 +71,10 @@ public sealed class DomainCollectionSeedReader(string domainDatabasePath)
                 "Jockey" => ResourceType.Jockey,
                 _ => ResourceType.Trainer,
             };
-            var definition = type switch
-            {
-                ResourceType.Horse => "horse-profile",
-                ResourceType.Jockey => "jockey-profile",
-                _ => "trainer-profile",
-            };
+            var definition = SubjectCollectionDefinitions.For(type).Definition;
             var acquiredAt = DateTimeOffset.Parse(reader.GetString(2));
-            seeds.Add(new(new(type, "JRA", reader.GetString(0)), new(definition), 1,
+            // Imported historical profiles do not prove acquisition under a newer parser revision.
+            seeds.Add(new(new(type, "JRA", reader.GetString(0)), definition, 1,
                 acquiredAt, null, new Dictionary<string, string>(), sourceUrl));
         }
     }

@@ -20,11 +20,12 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
         await sut.UpsertJockeyAsync("テスト騎手", null, "JRA");
         await sut.UpsertTrainerAsync("テスト調教師", null, "JRA");
 
-        Assert.HasCount(3, handler.Requests);
-        Assert.IsTrue(handler.Requests.All(request => request.Method == HttpMethod.Put));
+        Assert.HasCount(4, handler.Requests);
+        Assert.AreEqual((HttpMethod.Post, "/api/identity/horse"), handler.Requests[0]);
+        Assert.IsTrue(handler.Requests.Skip(1).All(request => request.Method == HttpMethod.Put));
         CollectionAssert.AreEquivalent(
             new[] { "/api/horses/", "/api/jockeys/", "/api/trainers/" },
-            handler.Requests.Select(request => request.Path[..(request.Path.LastIndexOf('/') + 1)]).ToArray());
+            handler.Requests.Skip(1).Select(request => request.Path[..(request.Path.LastIndexOf('/') + 1)]).ToArray());
     }
 
     [TestMethod]
@@ -54,7 +55,11 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
             CancellationToken cancellationToken)
         {
             Requests.Add((request.Method, request.RequestUri!.AbsolutePath));
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = request.RequestUri.AbsolutePath == "/api/identity/horse"
+                    ? JsonContent.Create(new ResolvedIdentity("horse-legacy")) : null
+            });
         }
     }
 
@@ -98,6 +103,8 @@ public sealed class HttpDataCollectionWriteServiceUpsertTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/identity/horse")
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new ResolvedIdentity(horseId)) };
             if (request.Method != HttpMethod.Get)
             {
                 Writes.Add((path, await request.Content!.ReadAsStringAsync(cancellationToken)));

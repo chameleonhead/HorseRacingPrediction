@@ -53,7 +53,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             await db.SaveChangesAsync();
         }
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+        await SubjectCollectionDefinitions.RegisterAsync(store);
 
         var preview = await http.GetFromJsonAsync<SubjectIdentificationRepairPreviewResponse>(
             "/api/admin/repairs/subject-identification");
@@ -110,7 +110,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             await db.SaveChangesAsync();
         }
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+        await SubjectCollectionDefinitions.RegisterAsync(store);
 
         using var response = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest([new(validIssueId), new(invalidIssueId)]));
@@ -151,7 +151,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             await db.SaveChangesAsync();
         }
         var store = application.Services.GetRequiredService<CollectionPlatformStore>();
-        await store.RegisterDefinitionAsync(new("horse-profile"), "Horse profile", ResourceType.Horse, 3, "test", false);
+        await SubjectCollectionDefinitions.RegisterAsync(store);
         using var first = await http.PostAsJsonAsync("/api/admin/repairs/subject-identification/execute",
             new ExecuteSubjectIdentificationRepairRequest([new(issueId)]));
         Assert.AreEqual(HttpStatusCode.Accepted, first.StatusCode);

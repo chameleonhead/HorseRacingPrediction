@@ -12,18 +12,14 @@ using HorseRacingPrediction.Scraping.Jra.Parsing;
 namespace HorseRacingPrediction.Collector.CollectionPlatform;
 
 public sealed record JraSubjectCollectionDefinition(ResourceType ResourceType,
-    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile = true,
-    int CurrentRevision = 3);
+    CollectionDefinitionId Definition, string SubjectType, string IdPrefix, bool PersistProfile,
+    int CurrentRevision);
 
 public static class JraSubjectCollectionDefinitions
 {
     public static IReadOnlyList<JraSubjectCollectionDefinition> All { get; } =
-    [
-        new(ResourceType.Horse, new("horse-profile"), "Horse", "horse", CurrentRevision: 4),
-        new(ResourceType.Jockey, new("jockey-profile"), "Jockey", "jockey"),
-        new(ResourceType.Trainer, new("trainer-profile"), "Trainer", "trainer"),
-        new(ResourceType.Owner, new("owner-identity"), "Owner", "owner", false, 1),
-    ];
+        SubjectCollectionDefinitions.All.Select(x => new JraSubjectCollectionDefinition(x.ResourceType,
+            x.Definition, x.SubjectType, x.IdPrefix, x.PersistProfile, x.CurrentRevision)).ToArray();
 
     public static JraSubjectCollectionDefinition For(ResourceType type) =>
         All.SingleOrDefault(x => x.ResourceType == type)

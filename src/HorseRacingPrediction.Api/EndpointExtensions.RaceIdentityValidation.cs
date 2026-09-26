@@ -6,9 +6,15 @@ namespace HorseRacingPrediction.Api;
 
 public static partial class EndpointExtensions
 {
+    private static IResult CollectedIdentityRejection(string raceId, string code) =>
+        Results.Ok(new Shared.DeclareRaceResultBulkResponse(raceId, [code],
+            [new("Entry", "HorseIdentity", "Rejected", code, "Horse identity could not be resolved safely; no data was written.")],
+            CorePersisted: false));
+
     // Validate the entire envelope before creating any related subject. Collection cannot repair identity.
     private static IResult? ValidateCollectedEntryIdentities(Shared.DeclareRaceResultBulkRequest request,
-        RacePredictionContextReadModel? existing, string raceId)
+        RacePredictionContextReadModel? existing, string raceId,
+        IReadOnlyDictionary<Shared.RaceResultEntryBulkDto, string>? resolved = null)
     {
         var failures = new List<Shared.DeclareRaceResultBulkItemOutcome>();
         var seenNumbers = new HashSet<int>();
@@ -42,14 +48,14 @@ public static partial class EndpointExtensions
                 continue;
             }
             var name = Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName);
-            var horseId = DeterministicIdGenerator.BuildHorseId(name, item.HorseSourceIdentity);
+            var horseId = resolved?.GetValueOrDefault(item) ?? DeterministicIdGenerator.BuildHorseId(name, item.HorseSourceIdentity);
             if (!seenHorses.Add(horseId))
                 Reject("RaceEntryIdentityMismatch", "Collected Horse identity must be unique within the race; no data was written.");
         }
         var incoming = (request.Entries ?? []).Where(item => !string.IsNullOrWhiteSpace(item.HorseName))
             .Select(item => new
             {
-                HorseId = DeterministicIdGenerator.BuildHorseId(
+                HorseId = resolved?.GetValueOrDefault(item) ?? DeterministicIdGenerator.BuildHorseId(
                 Shared.JraSubjectNameNormalizer.CanonicalizeDisplayName("Horse", item.HorseName!), item.HorseSourceIdentity),
                 item.HorseNumber
             }).ToArray();
@@ -62,5 +68,17 @@ public static partial class EndpointExtensions
         return failures.Count == 0 ? null : Results.Ok(new Shared.DeclareRaceResultBulkResponse(
             raceId, failures.Select(item => $"{item.ErrorCode}: {item.Key} — {item.Message}").ToArray(),
             failures, CorePersisted: false));
+    }
+
+    private static async Task<Dictionary<Shared.RaceResultEntryBulkDto, string>> ResolveCollectedHorseIdentitiesAsync(
+        Shared.DeclareRaceResultBulkRequest request, HorseRacingPrediction.Infrastructure.Persistence.EventStoreDbContext db, CancellationToken token)
+    {
+        var resolved = new Dictionary<Shared.RaceResultEntryBulkDto, string>();
+        var horses = await CollectionIdentityResolver.LoadHorsesAsync(db, token);
+        foreach (var item in request.Entries ?? [])
+            if (!string.IsNullOrWhiteSpace(item.HorseName)
+                && (string.IsNullOrWhiteSpace(item.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(item.HorseSourceIdentity, out _)))
+                resolved[item] = CollectionIdentityResolver.ResolveHorse(horses, item.HorseName, item.HorseSourceIdentity, null);
+        return resolved;
     }
 }

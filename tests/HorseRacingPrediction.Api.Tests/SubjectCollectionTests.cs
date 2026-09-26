@@ -18,7 +18,8 @@ public sealed class SubjectCollectionTests
         var id = "horse-" + Guid.NewGuid();
         (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("エンジャムメント", "エンジャムメント", "F", new DateOnly(2024, 4, 11), id, "旧馬主"))).EnsureSuccessStatusCode();
         var path = $"/api/admin/subjects/Horse/{id}/profile";
-        var profile = new JraSubjectProfileDto("Horse", "エンジャムメント", "public-horse-id", "https://www.jra.go.jp/JRADB/accessU.html",
+        const string horseUrl = "https://www.jra.go.jp/JRADB/accessU.html?CNAME=public-horse-id";
+        var profile = new JraSubjectProfileDto("Horse", "エンジャムメント", horseUrl, horseUrl,
             new() { ["生年月日"] = "2024年4月11日", ["性別"] = "牝", ["馬主名"] = "新馬主", ["生産牧場"] = "新生産者", ["父"] = "父馬", ["母"] = "母馬(母の父：母父馬)", ["毛色"] = "栗毛" }, DateTimeOffset.UtcNow);
         (await client.PostAsJsonAsync(path, profile)).EnsureSuccessStatusCode();
         var next = profile with { Fields = new() { ["生年月日"] = "2024年4月11日", ["毛色"] = "鹿毛" } };
@@ -32,7 +33,7 @@ public sealed class SubjectCollectionTests
         Assert.AreEqual("母馬", horse.DamName);
         Assert.AreEqual("母父馬", horse.DamsireName);
         Assert.AreEqual("鹿毛", horse.CoatColor);
-        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { SourceIdentity = "different" })).StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { SourceIdentity = horseUrl + "different", SourceUrl = horseUrl + "different" })).StatusCode);
         Assert.AreEqual(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(path, profile with { Fields = new() { ["生年月日"] = "2023年4月11日" } })).StatusCode);
         Assert.AreEqual(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, profile with { Name = "別の馬" })).StatusCode);
     }
@@ -85,7 +86,7 @@ public sealed class SubjectCollectionTests
         var (app, http) = await TestApplicationFactory.CreateAsync();
         await using var application = app; using var client = http;
         client.DefaultRequestHeaders.Add("X-Api-Key", TestApplicationFactory.TestApiKey);
-        var horseId = "horse-" + Guid.NewGuid();
+        var horseId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId("履歴の馬");
         (await client.PostAsJsonAsync("/api/horses", new RegisterHorseRequest("履歴の馬", "履歴の馬", null, null, horseId))).EnsureSuccessStatusCode();
         var date = new DateOnly(2026, 9, 6);
         var prepare = await client.PostAsJsonAsync("/api/admin/collection/horse-history/race", new PrepareHorseHistoryRaceRequest(date, "中山", 6, "メイクデビュー中山"));
@@ -94,7 +95,9 @@ public sealed class SubjectCollectionTests
         var request = new DeclareRaceResultBulkRequest(date, "中山", 6, "メイクデビュー中山", EntryCount: 1,
             Entries: [new(8, 1, "1:53.9", null, "37.6", null, 7800000, HorseName: "履歴の馬")],
             TargetRaceId: raceId, RefreshExistingData: true, SourceHorseId: horseId);
-        (await client.PostAsJsonAsync("/api/races/result-bulk", request)).EnsureSuccessStatusCode();
+        var result = await client.PostAsJsonAsync("/api/races/result-bulk", request);
+        result.EnsureSuccessStatusCode();
+        Assert.IsTrue((await result.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>())!.CorePersisted);
         var race = (await client.GetFromJsonAsync<RaceResponse>($"/api/races/{raceId}"))!;
         Assert.AreEqual(horseId, race.Entries.Single().HorseId);
         Assert.AreEqual(1, race.EntryResults.Count);

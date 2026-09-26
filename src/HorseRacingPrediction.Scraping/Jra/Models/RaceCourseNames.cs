@@ -6,19 +6,10 @@ namespace HorseRacingPrediction.Scraping.Jra.Models;
 public static class RaceCourseNames
 {
     // 検索順は判定優先度と一致させる。
-    private static readonly (string Text, RaceCourse Course)[] Entries =
-    [
-        ("札幌", RaceCourse.Sapporo),
-        ("函館", RaceCourse.Hakodate),
-        ("福島", RaceCourse.Fukushima),
-        ("新潟", RaceCourse.Niigata),
-        ("東京", RaceCourse.Tokyo),
-        ("中山", RaceCourse.Nakayama),
-        ("中京", RaceCourse.Chukyo),
-        ("京都", RaceCourse.Kyoto),
-        ("阪神", RaceCourse.Hanshin),
-        ("小倉", RaceCourse.Kokura),
-    ];
+    private static readonly (string Text, RaceCourse Course)[] Entries = Enum.GetValues<RaceCourse>()
+        .Where(course => course != RaceCourse.Unknown)
+        .Select(course => (HorseRacingPrediction.Contracts.RaceCourseIdentity.Canonicalize(course.ToString())
+            ?? throw new InvalidOperationException($"Unmapped course: {course}"), course)).ToArray();
 
     /// <summary>
     /// <see cref="RaceCourse"/> から、JRAサイト上の日本語表記へ変換する。

@@ -23,9 +23,13 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
         var token = context.HttpContext.RequestAborted;
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            var keys = await ResolveKeysAsync(context, token);
+            HashSet<string> keys;
+            try { keys = await ResolveKeysAsync(context, token); }
+            catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
             await using var held = await coordinator.AcquireAsync(keys, token);
-            var checkedKeys = await ResolveKeysAsync(context, token);
+            HashSet<string> checkedKeys;
+            try { checkedKeys = await ResolveKeysAsync(context, token); }
+            catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
             if (!keys.SetEquals(checkedKeys)) continue;
             foreach (var raceId in keys.Where(x => x.StartsWith("race-", StringComparison.Ordinal)))
             {
@@ -112,13 +116,33 @@ public sealed class RaceWriteEndpointFilter(RaceWriteCoordinator coordinator,
                 }
             if (argument is HorseRacingPrediction.Contracts.PrepareHorseHistoryRaceRequest history)
             {
-                string[] english = ["Sapporo", "Hakodate", "Fukushima", "Niigata", "Tokyo", "Nakayama", "Chukyo", "Kyoto", "Hanshin", "Kokura"];
-                string[] japanese = ["札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"];
-                var index = Array.FindIndex(english, x => x.Equals(history.Course, StringComparison.OrdinalIgnoreCase));
-                keys.Add(DeterministicIdGenerator.BuildRaceId(history.RaceDate, index < 0 ? history.Course : japanese[index], history.RaceNumber));
+                keys.Add(DeterministicIdGenerator.BuildRaceId(history.RaceDate, history.Course, history.RaceNumber));
             }
         }
         using var db = provider.CreateContext();
+        // Canonical scope locks serialize alternate spellings before their persisted IDs are resolved.
+        keys.Add("identity-resolution");
+        var horseIdentities = context.Arguments.OfType<HorseRacingPrediction.Contracts.DeclareRaceResultBulkRequest>().Any()
+            ? await CollectionIdentityResolver.LoadHorsesAsync(db, token) : [];
+        foreach (var argument in context.Arguments.Where(x => x is not null))
+        {
+            var type = argument!.GetType();
+            if (type.GetProperty("RaceDate")?.GetValue(argument) is DateOnly date
+                && type.GetProperty("RacecourseCode")?.GetValue(argument) is string course
+                && type.GetProperty("RaceNumber")?.GetValue(argument) is int number
+                && string.IsNullOrWhiteSpace(type.GetProperty("RaceId")?.GetValue(argument)?.ToString())
+                && string.IsNullOrWhiteSpace(type.GetProperty("TargetRaceId")?.GetValue(argument)?.ToString()))
+                keys.Add(await CollectionIdentityResolver.RaceAsync(db, date, course, number, token));
+            if (argument is HorseRacingPrediction.Contracts.DeclareRaceResultBulkRequest bulk)
+                foreach (var entry in bulk.Entries ?? [])
+                    if (!string.IsNullOrWhiteSpace(entry.HorseName)
+                        && (string.IsNullOrWhiteSpace(entry.HorseSourceIdentity) || JraSourceIdentity.TryNormalizeHorse(entry.HorseSourceIdentity, out _)))
+                    {
+                        try { keys.Add(CollectionIdentityResolver.ResolveHorse(horseIdentities, entry.HorseName, entry.HorseSourceIdentity, null)); }
+                        // The endpoint returns a structured preflight rejection under the identity lock.
+                        catch (InvalidOperationException) { }
+                    }
+        }
         foreach (var repair in context.Arguments.OfType<ApplyHorseIdentityRepairRequest>())
             foreach (var candidate in await db.HorseIdentityRepairCandidates.AsNoTracking()
                 .Where(x => repair.CandidateIds.Contains(x.CandidateId)).ToListAsync(token))

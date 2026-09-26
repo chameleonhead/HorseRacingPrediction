@@ -11,6 +11,10 @@ namespace HorseRacingPrediction.ApiClient;
 /// </summary>
 public interface IDataCollectionWriteService
 {
+    /// <summary>Resolve an existing race before writing citations or returning a collection identity.</summary>
+    Task<string> ResolveRaceIdentityAsync(DateOnly date, string course, int number, CancellationToken cancellationToken = default)
+        => Task.FromResult(DeterministicIdGenerator.BuildRaceId(date, course, number));
+
     /// <summary>レース情報を作成または更新し、レース ID を返す。</summary>
     Task<string> UpsertRaceAsync(
         string raceDate,

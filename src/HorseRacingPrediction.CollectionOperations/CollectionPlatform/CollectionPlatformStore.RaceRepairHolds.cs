@@ -30,9 +30,18 @@ public sealed partial class CollectionPlatformStore
         ResourceType.Race or ResourceType.RaceCard or ResourceType.RaceResult or ResourceType.RaceOdds)
         && !System.Text.RegularExpressions.Regex.IsMatch(resource.ResourceId, "^((backfill|recollection):[0-9]{8}|discovery:[0-9]{10})$");
 
-    private static string? CanonicalRace(CollectionResourceEntity resource)
+    private string? CanonicalRace(CollectionResourceEntity resource)
     {
         if (!IsRaceResource(resource)) return null;
+        if (_raceIdentityResolver is not null)
+        {
+            try
+            {
+                return _raceIdentityResolver.Resolve(resource.ResourceId,
+                JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson) ?? []);
+            }
+            catch (JsonException) { return null; }
+        }
         var normalized = DeterministicIdGenerator.TryBuildRaceIdFromResource(resource.ResourceId);
         string? explicitId;
         try { explicitId = JsonSerializer.Deserialize<Dictionary<string, string>>(resource.AttributesJson)?.GetValueOrDefault("domainRaceId"); }
@@ -45,20 +54,20 @@ public sealed partial class CollectionPlatformStore
         return ids.Length == 1 ? ids[0] : null;
     }
 
-    private static bool MatchesHold(CollectionResourceEntity resource, IReadOnlyCollection<string> heldRaceIds)
+    private bool MatchesHold(CollectionResourceEntity resource, IReadOnlyCollection<string> heldRaceIds)
         => IsRaceResource(resource) && (CanonicalRace(resource) is not { } raceId
             ? heldRaceIds.Count > 0 : heldRaceIds.Contains(raceId));
 
     private static async Task<string[]> ActiveHoldIdsAsync(CollectionPlatformDbContext db, CancellationToken token)
         => await db.RaceRepairHolds.Where(x => x.ReleasedAt == null).Select(x => x.RaceId).ToArrayAsync(token);
 
-    private static async Task<bool> IsRepairHeldAsync(CollectionPlatformDbContext db, long resourcePk, CancellationToken token)
+    private async Task<bool> IsRepairHeldAsync(CollectionPlatformDbContext db, long resourcePk, CancellationToken token)
     {
         var resource = await db.Resources.SingleAsync(x => x.ResourcePk == resourcePk, token);
         return MatchesHold(resource, await ActiveHoldIdsAsync(db, token));
     }
 
-    private static async Task<HashSet<Guid>> HeldTaskIdsAsync(CollectionPlatformDbContext db, CancellationToken token, string? raceId = null)
+    private async Task<HashSet<Guid>> HeldTaskIdsAsync(CollectionPlatformDbContext db, CancellationToken token, string? raceId = null)
     {
         var holds = raceId is null ? await ActiveHoldIdsAsync(db, token) : new[] { raceId };
         if (holds.Length == 0) return [];
@@ -73,7 +82,7 @@ public sealed partial class CollectionPlatformStore
         return await HoldSnapshotAsync(db, raceId, token);
     }
 
-    private static async Task<RaceRepairHoldSnapshot?> HoldSnapshotAsync(CollectionPlatformDbContext db, string raceId, CancellationToken token,
+    private async Task<RaceRepairHoldSnapshot?> HoldSnapshotAsync(CollectionPlatformDbContext db, string raceId, CancellationToken token,
         DateTimeOffset? observedAt = null)
     {
         var hold = await db.RaceRepairHolds.Where(x => x.RaceId == raceId).OrderByDescending(x => x.Generation).FirstOrDefaultAsync(token);
@@ -180,7 +189,7 @@ public sealed partial class CollectionPlatformStore
         return new(request.RequestId, active?.TaskId, false, true);
     }
 
-    private static async Task<CollectionRequestReceipt> ExistingReceiptAsync(CollectionPlatformDbContext db,
+    private async Task<CollectionRequestReceipt> ExistingReceiptAsync(CollectionPlatformDbContext db,
         Guid requestId, Guid? taskId, CancellationToken token)
     {
         var request = await db.Requests.SingleAsync(x => x.RequestId == requestId, token);

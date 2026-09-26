@@ -72,14 +72,14 @@ public static partial class EndpointExtensions
                         var target = plan.Target;
                         var recoveryKey = $"subject-repair:{issue.IssueId:N}:{issue.Occurrence}";
                         var recoveryFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-                            string.Join('|', issue.SubjectType, issue.DefinitionId, 3, target.Id,
+                            string.Join('|', issue.SubjectType, issue.DefinitionId, CollectionDefinitionRevisions.Subject(issue.DefinitionId), target.Id,
                                 target.Url?.AbsoluteUri ?? string.Empty)))).ToLowerInvariant();
                         CollectionRequestReceipt receipt;
                         try
                         {
                             receipt = await collectionStore.RequestAsync(
                                 new(Enum.Parse<ResourceType>(issue.SubjectType), "JRA", target.Id),
-                                new(issue.DefinitionId), 3, CollectionReason.Recovery, JstTime.Now(),
+                                new(issue.DefinitionId), CollectionDefinitionRevisions.Subject(issue.DefinitionId), CollectionReason.Recovery, JstTime.Now(),
                                 CollectionLane.Normal, (int)CollectionPriority.High, target.Url, recoveryKey,
                                 attributes: new Dictionary<string, string>
                                 {
@@ -328,11 +328,13 @@ public static partial class EndpointExtensions
             var expectedName = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.NormalizeIdentityName(type.ToString(), issue.SubjectName);
             if (!string.Equals(normalized, expectedName, StringComparison.Ordinal)) continue;
             var canonical = HorseRacingPrediction.Contracts.JraSubjectNameNormalizer.CanonicalizeDisplayName(type.ToString(), name);
-            var expectedId = type == ResourceType.Horse
-                ? HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(canonical,
-                    HorseRacingPrediction.ApiClient.JraSourceIdentity.TryNormalizeHorse(issue.SourceIdentity, out _)
-                        ? issue.SourceIdentity : null)
-                : HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
+            string expectedId;
+            if (type == ResourceType.Horse)
+            {
+                try { expectedId = await CollectionIdentityResolver.HorseAsync(db, name, issue.SourceIdentity, null, token); }
+                catch (InvalidOperationException) { return null; }
+            }
+            else expectedId = HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildEntityId(
                     type == ResourceType.Jockey ? "jockey" : "trainer",
                     HorseRacingPrediction.ApiClient.DeterministicIdGenerator.NormalizeKey(canonical));
             if (id == expectedId) candidates.Add((id, name));

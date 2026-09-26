@@ -51,6 +51,7 @@ internal static class TestApplicationFactory
                 : Path.GetFullPath(source) + ".collection";
             options.DatabaseFileName = "collection-platform.db";
         });
+        builder.Services.AddSingleton<IRaceResourceIdentityResolver, DomainRaceResourceIdentityResolver>();
         builder.Services.AddSingleton<CollectionPlatformStore>();
         builder.Services.Configure<CollectionMonitoringOptions>(_ => { });
         builder.Services.AddSingleton<CollectionMonitoringService>();
