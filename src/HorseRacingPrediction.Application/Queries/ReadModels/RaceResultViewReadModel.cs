@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace HorseRacingPrediction.Application.Queries.ReadModels;
 
-public class RaceResultViewReadModel : IReadModel,
+public partial class RaceResultViewReadModel : IReadModel,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCreated>,
     IAmReadModelFor<RaceAggregate, RaceId, RaceCardPublished>,
     IAmReadModelFor<RaceAggregate, RaceId, EntryRegistered>,

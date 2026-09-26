@@ -11,9 +11,23 @@
 
 | Dimension | State | Evidence or remaining work |
 | --- | --- | --- |
-| Code | Incomplete | 承認済み第一段階の専用天候/馬場欄parserと通常/refresh/aggregateのidentity拒否を実装。revision3全入口を統合検証中。馬主補正・確定待ちの全体は後段に残る。 |
-| Verification | Incomplete | 原障害の公式URL、実HTML境界反例、API/domain拒否の副作用不変を検証済み。最新origin全体検証と本番照合は継続中。既存馬番不一致そのものは未修復。 |
-| Deployment/operation | Unverified | 第一段階の修正版配備・限定再取得・再開は承認済み。短時間API停止も明示許容。配備・復旧観測は未実施。 |
+| Code | Incomplete | 第二段階の確定待ち/revision4、authoritative preview、限定補正event/排他/復旧gateをPR97へ実装。最終CI検証中。 |
+| Verification | Incomplete | Release/ローカルKestrel/SQLite・別process排他成功。Linux CIで同一instantのUTC/JST表記比較の欠陥を検出し修正、元gate再検証中。本番復旧IAC10/AC204は未達。 |
+| Deployment/operation | Incomplete | PR96/SHA e2c39a06、配備run36218341631成功。原障害対象1件revision3要求・13:48再開後、13:49に別Raceで再停止。補正の承認境界により停止維持。 |
+
+## 2026-09-26 実装・ローカル確認（最新）
+
+利用者の「お願いします。ローカルでの動作確認もお願いします。」により、[追加設計](decisions/20260926-number-repair-impact.md)の実装・検証・配備はApprovedへ進んだ。RP-T1–3を実装しPR97へ集約。別processの実Kestrel/SQLiteで全頭補正・重複防止・競合排他を検証済み。本番apply/resume/restoreは未承認のまま、authoritative previewと公式HTML全頭照合を提示して別途承認を得る。以下の14:02時点の記述は設計調査履歴であり現在の実装状況ではない。
+
+## 2026-09-26 14:02 JST 補正前確認（設計調査履歴）
+
+[中山5Rの差分・参照影響・限定補正設計](decisions/20260926-number-repair-impact.md)を追加した時点の記録。この時点では新しいRP1–RP4/RP-T1–4の実装設計は`Proposed`だった。その後の実装承認は上の最新節と追加設計を正とする。本番補正・再開は別途承認という境界を維持する。
+
+- 中山5Rは公式Card/Resultのsource identityから生成したHorseIdが14/14一致、馬番12/14不一致。公式Card owner14/14、raw owner0/14。
+- 中山5Rと阪神11Rの結果・払戻・予想・admin保存オッズはAPI上0件。ただしevent版、全派生履歴、別修復・自由記述参照は未検証であり、即時applyの安全根拠にはしない。
+- 提案: 未確定の仮採番を防止し、全参照preview→Race単位の共通排他/再検証→独立参照がない対象のみ単一eventで補正→次revision再取得。実装/配備後の具体previewを提示し、実データ補正と再開には別途承認を得る。
+- 新規停止、直接DB修正、既存予想・結果・オッズの付替え、failure消去は対象外。既存停止は維持。RT3/IAC5/IAC6/IAC10は未完了。
+- 設計調査turnでは文書のみを変更した。元workspaceの利用者変更は触らず、既存worktreeを継続した。実装turnでは同じ目的のPR97へ集約し、進捗報告だけの別PRは作らない。
 
 > **2026-09-26 reopened:** [対象Raceの証拠・安全な補正設計](decisions/20260926-race-integrity.md)を本recordの追加提案とする。`race-fca5d100-9e2f-5074-a74c-bad8cdb4705f` のraw owner欠損16/16、公式馬番との不一致、G2/GIII不一致が判明した。従前の承認は、この同一性補正や隔離操作を承認したものではない。監視親のT2b/T3a・保存完全性findingへ接続し、親recordは変更しない。以下の9/19のVerifiedは当時の限定試験結果であり、追加基準IAC1–IAC5の完了を意味しない。
 
@@ -98,10 +112,11 @@
 
 | ID | Task | Owner | Model tier | Depends on | Write scope | Verification | Completion evidence | State | Routing | Audit | Result metrics |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| RT1 | IAC7–8 専用欄取得 | Main | Lead | approval | src/HorseRacingPrediction.Scraping; tests/HorseRacingPrediction.Scraping.Tests | HTML/snapshot/parser regression | 実行記録を追加設計へ追記 | In progress | Lead — public contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
-| RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | 実行記録を追加設計へ追記 | In progress | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT1 | IAC7–8 専用欄取得 | Main | Lead | approval | src/HorseRacingPrediction.Scraping; tests/HorseRacingPrediction.Scraping.Tests | HTML/snapshot/parser regression | 関連78件・Scraping294件・CI成功、独立review closure | Verified | Lead — public contract | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT2 | IAC8–9 保存前identity/revision | Main | Lead | approval | src/HorseRacingPrediction.Api; src/HorseRacingPrediction.Domain; tests/HorseRacingPrediction.Api.Tests/RaceEndpointsTests.cs; tests/HorseRacingPrediction.Domain.Tests/RaceAggregateBulkCollectionTests.cs | API/domain/collector regression | API283/Domain110/Collector326件成功、全7入口revision3 | Verified | Lead — persistence/integration | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
 | RT2-tests | IAC8–9 identity反例 | identity_guard_tests | Worker | RT2 contract | tests/HorseRacingPrediction.Api.Tests/CollectedRaceIdentityGuardTests.cs | 5 tests passed, related 33 passed; Main source/domain反証review | agent-audits/RT2-tests-A1.json | Verified | Worker — frozen test contract | RT2-tests-A1 | unavailable; retries 0; corrections 0; reviews 1 |
-| RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 未実施 | Dependent | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RT3 | IAC9–10 配備/復旧 | Main | Lead | RT1, RT2, RT2-tests | production approved targets | 限定再要求・終端成功・10分観測 | 配備・限定要求済み、別Race馬番不一致で再停止。安全補正の別途承認が必要 | Externally blocked | Lead — security/final acceptance | none | unavailable; retries unavailable; corrections unavailable; reviews unavailable |
+| RP-fixture | AC201 未確定Card反例test | identity_guard_tests | Worker | frozen parser contract | tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs | 11件（HTML 4件）、関連71件＋skip1、Main全Scraping305件 | agent-audits/RP-fixture-A1.json | Verified | Worker — frozen local fixture | RP-fixture-A1 | unavailable; retries 1; corrections 0; reviews 2 |
 
 ## 2026-09-19 設計・実装履歴（本文）
 

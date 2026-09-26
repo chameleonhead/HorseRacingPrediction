@@ -79,6 +79,10 @@ jobs:
       - name: Check vulnerable dependencies
         run: dotnet list HorseRacingPrediction.sln package --vulnerable --include-transitive
 
+      - name: Verify isolated API repair and cross-process locks
+        shell: pwsh
+        run: ./tests/scripts/test-entry-repair-local-host.ps1 -Configuration Release
+
       - uses: hashicorp/setup-terraform@v4
 
       - name: Validate collector Lambda Terraform

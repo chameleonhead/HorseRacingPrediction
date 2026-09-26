@@ -44,6 +44,10 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeysDirectory))
 
 builder.Services.AddSingleton<ApiKeyEndpointFilter>();
 builder.Services.AddSingleton<RaceActiveCollectionEndpointFilter>();
+builder.Services.AddSingleton<RaceWriteCoordinator>();
+builder.Services.AddSingleton<RaceWriteEndpointFilter>();
+builder.Services.AddSingleton<RacePredictionReadEndpointFilter>();
+builder.Services.AddTransient<RaceEntryRepairInspector>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JstDateTimeOffsetJsonConverter()));
@@ -280,6 +284,7 @@ app.MapAdminEndpoints();
 app.MapCollectionPlatformEndpoints();
 app.MapCollectionMonitoringEndpoints();
 app.MapRaceOddsEndpoints();
+app.MapRaceEntryRepairEndpoints();
 app.MapSubjectCollectionEndpoints();
 app.MapPredictionScheduleEndpoints();
 

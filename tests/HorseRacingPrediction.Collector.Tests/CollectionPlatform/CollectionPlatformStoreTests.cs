@@ -15,6 +15,45 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class CollectionPlatformStoreTests
 {
     [TestMethod]
+    public async Task RaceDetail_RevisionFour_UnconfirmedNumbersWaitWithoutSaving_ThenConfirmedCardUpgrades()
+    {
+        var store = CreateStore();
+        var definition = new CollectionDefinitionId("race-detail");
+        var resource = new ResourceKey(ResourceType.Race, "JRA", "20260926:Nakayama:5");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 3, "old", false);
+        var initial = await store.RequestAsync(resource, definition, 3, CollectionReason.Initial, now, effectiveDate: new DateOnly(2026, 9, 26));
+        var oldLease = await store.AcquireAsync(initial.TaskId, 1, now, TimeSpan.FromMinutes(5));
+        Assert.IsTrue(await store.CompleteAttemptAsync(initial.TaskId, oldLease!.LeaseToken, now.AddSeconds(1),
+            new(CollectionAttemptResult.Succeeded, StageOutcomes: [new("PersistCard", RaceArtifactKind.Card, CollectionAttemptResult.Succeeded, Persisted: true)])));
+        await store.RegisterDefinitionAsync(definition, "Race detail", ResourceType.Race, 4, "confirmed numbers", false);
+        var refresh = await store.RequestAsync(resource, definition, 4, CollectionReason.DefinitionChanged, now.AddSeconds(2));
+        var lease = await store.AcquireAsync(refresh.TaskId, 1, now.AddSeconds(2), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(lease);
+        var cards = new FakeJraRaceCardCollectionWorkflow
+        {
+            ThrowOnCollect = new JraHorseNumbersUnconfirmedException("https://www.jra.go.jp/JRADB/accessD.html", new(new(2026, 9, 26), RaceCourse.Nakayama, 5))
+        };
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(new FakeJraSessionFactory(), _ => cards, _ => results, timeProvider: new FixedTimeProvider(now));
+        var waiting = await handler.CollectAsync(lease, CancellationToken.None);
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, waiting.Result);
+        Assert.AreEqual("RaceHorseNumbersUnconfirmed", waiting.ErrorCode);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsTrue(waiting.StageOutcomes!.All(x => !x.Persisted));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, lease.LeaseToken, now.AddSeconds(3), waiting));
+        var card = (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Card);
+        Assert.AreEqual(3, card.AppliedRevision);
+        cards.ThrowOnCollect = null;
+        var confirmedLease = await store.AcquireAsync(refresh.TaskId, 2, now.AddMinutes(16), TimeSpan.FromMinutes(5));
+        Assert.IsNotNull(confirmedLease);
+        var confirmed = await handler.CollectAsync(confirmedLease, CancellationToken.None);
+        Assert.IsTrue(confirmed.StageOutcomes!.Any(x => x.Artifact == RaceArtifactKind.Card && x.Persisted));
+        Assert.IsTrue(await store.CompleteAttemptAsync(refresh.TaskId, confirmedLease.LeaseToken, now.AddMinutes(17), confirmed));
+        Assert.AreEqual(4, (await store.GetResourceDetailAsync(resource, definition))!.RaceArtifacts!.Single(x => x.Artifact == RaceArtifactKind.Card).AppliedRevision);
+    }
+
+    [TestMethod]
     public async Task ObsoleteSubjectProjectionCleanup_CancelsRaceDerivedRetryAndKeepsHistory()
     {
         var store = await CreateStoreAsync();

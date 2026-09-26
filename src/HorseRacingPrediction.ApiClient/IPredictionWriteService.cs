@@ -9,6 +9,13 @@ namespace HorseRacingPrediction.ApiClient;
 /// </summary>
 public interface IPredictionWriteService
 {
+    Task<string> CreateBoundPredictionTicketAsync(string raceId, string predictorType, string predictorId,
+        decimal confidenceScore, string? summaryComment, string? entryAssignmentFingerprint,
+        CancellationToken cancellationToken = default)
+        => entryAssignmentFingerprint is null
+            ? CreatePredictionTicketAsync(raceId, predictorType, predictorId, confidenceScore, summaryComment, cancellationToken)
+            : throw new NotSupportedException("This prediction client cannot bind a repaired assignment.");
+
     /// <summary>新しい予測票を作成し、発行された予測票 ID を返す。</summary>
     Task<string> CreatePredictionTicketAsync(
         string raceId,

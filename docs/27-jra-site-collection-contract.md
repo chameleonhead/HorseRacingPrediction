@@ -33,8 +33,10 @@ JRAサイトの実装詳細を推測して依存する文書ではない。利�
 
 ## 2. 最重要の取得元制約
 
-> 2026-09-26 未承認提案: 馬番未確定時の仮採番禁止、保存前の公式Horse identity照合、対象レース領域だけからの格付け取得、raw保存値による完全性検証を[馬主取得・出走割当の一括修正設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-full-repair-plan.md)で検討中。現行実装がこれらを満たすとの宣言ではない。承認後に本書へ確定契約を反映する。
-> 同提案は、馬番未確定を正常な公開段階として区別し、Card確定待ちと発走後のResult待ちを別に扱う。木曜日・金曜日の固定判定ではなく公式ページを確認し、確定前の取得だけでCardを完了にしない。
+> 2026-09-26: 第一段階の保存前identity不一致拒否は配備済み。[追加の差分・安全補正設計](changes/20260919_race-entry-owner-enrichment/decisions/20260926-number-repair-impact.md)は承認済みで実装・検証中。本番補正と再開は、配備後のpreviewに対する別途承認が必要。旧offline補正は採用しない。
+> 全馬の馬番・枠番が未公表のCardは正常な確定待ちとし、仮採番・推測枠・保存完了を禁止する。一部欠損や重複は待機で隠さず構造不整合として拒否する。木曜・金曜の固定判定はしない。格付けは選択レース見出し（画像altを含む）だけから取得し、他レース画像・過去成績の格付けを流用しない。取得revision4は旧版Current Cardの再取得を要求する。
+> 限定補正は、公式Card HTMLの保存/hashと全頭source URLを含むoperator manifestを独立照合し、旧新全頭差分・event/projection整合・独立参照なしをpreviewしてから承認する。APIは入力の構造と保存済みidentityを検証するもので、入力値をJRAから自動取得・真正性認証したとは扱わない。hash・全manifestはfingerprintと単一補正eventへ結び付ける。未知参照・成績・予想（撤回済みを含む）・オッズ・手動memo・別修復候補は拒否する。
+> 同一SQLite volumeのRace/主体ロックで全関連writerと予想用履歴readerを排他する。補正未整合gateはprocess再起動後も維持し、sidecarとDB event/projectionが食い違うbackup復元も利用不可にする。旧binaryへの単純rollbackは禁止。backupはDBとsidecarを同一時点で保存し、復元は独立環境で整合検査する。本番restoreは別途承認。
 > 運用方式は利用者の判断で[停止せず取得revisionを更新する方式](changes/20260919_race-entry-owner-enrichment/decisions/20260926-revision-recollection.md)へ変更した。旧revisionのCurrent Cardを新版で再取得することを設計条件とし、全体停止・offline補正は採用しない。
 
 ### 2.1 馬主

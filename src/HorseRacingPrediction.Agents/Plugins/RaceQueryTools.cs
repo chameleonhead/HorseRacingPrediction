@@ -370,6 +370,8 @@ public sealed class RaceQueryTools
         var sb = new StringBuilder();
         sb.AppendLine($"## レース予測コンテキスト: {model.RaceName ?? model.RaceId}");
         sb.AppendLine($"- レースID: {model.RaceId}");
+        if (model.EntryAssignmentFingerprint is not null)
+            sb.AppendLine($"- EntryAssignmentFingerprint（この入力での予測作成時に渡す）: {model.EntryAssignmentFingerprint}");
         sb.AppendLine($"- 開催日: {model.RaceDate?.ToString("yyyy-MM-dd") ?? "不明"}");
         sb.AppendLine($"- 競馬場コード: {model.RacecourseCode ?? "不明"}");
         sb.AppendLine($"- レース番号: {model.RaceNumber?.ToString() ?? "不明"}");

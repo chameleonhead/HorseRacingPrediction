@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260919_race-entry-owner-enrichment",
+  "taskId": "RP-fixture",
+  "attemptId": "RP-fixture-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC201"],
+  "route": {"tier":"worker","requestedModel":"gpt-5.6-luna","observedModel":null,"observationSource":null,"modelTelemetryReason":"runtime telemetry unavailable"},
+  "usage": {"availability":"unavailable","totalTokens":null,"reason":"runtime telemetry unavailable"},
+  "scope": ["tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs"],
+  "review": {"usageAvailability":"unavailable","totalTokens":null,"activeMinutes":null,"reason":"runtime did not expose review effort"},
+  "overhead": {"availability":"unavailable","preparationMinutes":null,"integrationMinutes":null,"auditMinutes":null,"reason":"active effort not captured"},
+  "elapsed": {"availability":"unavailable","minutes":null,"reason":"active effort not captured"},
+  "startRevision": "1fe69559",
+  "endRevisionOrPatch": "working-tree:tests/HorseRacingPrediction.Scraping.Tests/Parsing/RaceCardPublicationTests.cs",
+  "outcome": {"verificationPassed":true,"qualityPassed":true,"scopePassed":true,
+    "independentChallenge":"Lead ran non-External Scraping regression: 305 passed; HTTP repair/number-wait integration is separately lead-owned",
+    "retries":1,"leadCorrections":0,"reviewPasses":2,"promoted":false,"escapedDefects":0,"escalations":0,
+    "reviewMode":"detailed","detailReviewReason":"Initial handoff omitted required HTML/browser path; focused correction added it and grade contamination counterexample",
+    "decision":"accept"}
+}

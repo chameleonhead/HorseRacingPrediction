@@ -3,6 +3,7 @@ namespace HorseRacingPrediction.Contracts;
 public sealed class RacePredictionContextReadModel
 {
     public string RaceId { get; set; } = string.Empty;
+    public string? EntryAssignmentFingerprint { get; set; }
     public DateOnly? RaceDate { get; set; }
     public string? RacecourseCode { get; set; }
     public int? RaceNumber { get; set; }

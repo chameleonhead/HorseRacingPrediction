@@ -98,7 +98,7 @@ public sealed class RaceCardPageParser
             ParseStartTime(snapshot);
 
         var entries =
-            ParseEntries(table, snapshot.Url);
+            ParseEntries(table, snapshot.Url, raceId);
 
         return new JraRaceCardPage(
             snapshot.Url,
@@ -347,7 +347,8 @@ public sealed class RaceCardPageParser
 
     private static IReadOnlyList<RaceEntry> ParseEntries(
         JraTableView table,
-        string url)
+        string url,
+        RaceId raceId)
     {
         var horseNumberIndex = FindHorseNumberColumnIndex(table.Headers);
         var frameNumberIndex = FindFrameNumberColumnIndex(table.Headers);
@@ -356,7 +357,6 @@ public sealed class RaceCardPageParser
         var assignedWeightIndex = FindAssignedWeightColumnIndex(table.Headers);
 
         var entries = new List<RaceEntry>();
-        var sequentialNumber = 0;
 
         for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
@@ -387,24 +387,14 @@ public sealed class RaceCardPageParser
                 continue;
             }
 
-            // Task16実サイト確認で判明: 枠・馬番のセルは色付きアイコン画像で
-            // 描画されており、テキスト抽出結果が空になる（レース結果ページの
-            // 「枠6緑」のようなテキスト表現とは異なる）。空の場合は出現順の
-            // 連番を暫定的な馬番として使う。
-            sequentialNumber++;
-
-            var horseNumber = sequentialNumber;
-
-            if (horseNumberIndex >= 0 && horseNumberIndex < row.Count)
-            {
-                var numberMatch =
-                    LeadingNumberRegex.Match(row[horseNumberIndex]);
-
-                if (numberMatch.Success)
-                {
-                    horseNumber = int.Parse(numberMatch.Groups["num"].Value);
-                }
-            }
+            // A row position is never a horse number. Empty cells are classified only
+            // after the entire card has been inspected, before any entry can be saved.
+            var numberText = table.GetCell(rowIndex, horseNumberIndex)?.Text.Trim() ?? string.Empty;
+            var horseNumber = 0;
+            if (numberText.Length > 0 && (!Regex.IsMatch(numberText, @"^(?:馬番\s*)?[0-9]{1,2}$")
+                || !int.TryParse(Regex.Match(numberText, @"[0-9]+$").Value, out horseNumber)
+                || horseNumber is < 1 or > 18))
+                throw new JraValueParseException(JraPageKind.RaceCard, url, "HorseNumber", numberText);
 
             int? frameNumber = null;
 
@@ -461,6 +451,14 @@ public sealed class RaceCardPageParser
                 FindSubjectProfileUrl(table.GetCell(rowIndex, horseNameIndex), url, "/JRADB/accessC.html")));
         }
 
+        if (entries.Count == 0)
+            throw new JraPageStructureException(JraPageKind.RaceCard, url, "出走馬がありません。", "Entries");
+        if (entries.All(x => x.HorseNumber == 0 && x.FrameNumber is null))
+            throw new JraHorseNumbersUnconfirmedException(url, raceId);
+        if (entries.Any(x => x.HorseNumber == 0)
+            || entries.Select(x => x.HorseNumber).Distinct().Count() != entries.Count)
+            throw new JraResultConsistencyException(JraPageKind.RaceCard, url,
+                "馬番の一部欠損または重複があります。", "HorseNumber");
         return entries;
     }
 

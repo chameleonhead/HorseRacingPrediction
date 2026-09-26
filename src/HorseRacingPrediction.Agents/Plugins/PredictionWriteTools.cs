@@ -29,10 +29,11 @@ public sealed class PredictionWriteTools
         [Description("予測者 ID（エージェント名やユーザー ID）")] string predictorId,
         [Description("信頼度スコア（0.0〜1.0）")] decimal confidenceScore,
         [Description("予測のサマリーコメント（省略可）")] string? summaryComment = null,
+        [Description("予測に使ったコンテキストのEntryAssignmentFingerprint。補正済みレースでは必須。作成直前に別コンテキストから取り直さないこと。")] string? entryAssignmentFingerprint = null,
         CancellationToken cancellationToken = default)
     {
-        return await _service.CreatePredictionTicketAsync(
-            raceId, predictorType, predictorId, confidenceScore, summaryComment, cancellationToken);
+        return await _service.CreateBoundPredictionTicketAsync(
+            raceId, predictorType, predictorId, confidenceScore, summaryComment, entryAssignmentFingerprint, cancellationToken);
     }
 
     /// <summary>

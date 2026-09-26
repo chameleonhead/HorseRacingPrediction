@@ -5,6 +5,7 @@ using HorseRacingPrediction.Application.Commands.Races;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.Domain.Races;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Api.Security;
 
 namespace HorseRacingPrediction.Api.CollectionController;
 
@@ -24,7 +25,7 @@ public static class RaceOddsEndpointExtensions
                 observations?.Select(x => new RaceOddsObservation(x.Market, x.Selection, x.Value,
                     x.Popularity)).ToArray()), token);
             return Results.Accepted();
-        });
+        }).AddEndpointFilter<RaceWriteEndpointFilter>().AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
         endpoints.MapGet("/api/admin/races/{raceId}/odds-snapshots", async (string raceId,
             IQueryProcessor queries, CancellationToken token) =>
         {

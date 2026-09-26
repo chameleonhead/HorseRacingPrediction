@@ -43,6 +43,7 @@ public static partial class EndpointExtensions
 
         var writeGroup = app.MapGroup("/api")
             .AddEndpointFilter<ApiKeyEndpointFilter>()
+            .AddEndpointFilter<RaceWriteEndpointFilter>()
             .AddEndpointFilter<RaceActiveCollectionEndpointFilter>();
         MapHorseIdentityRepairEndpoints(writeGroup);
 
@@ -1228,16 +1229,21 @@ public static partial class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}/context",
             [SwaggerOperation(Summary = "Get race prediction context", Description = "Returns prediction context read model including entries, weather and track conditions")]
-        async (string raceId, IQueryProcessor queryProcessor, CancellationToken cancellationToken) =>
+        async (string raceId, IQueryProcessor queryProcessor, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
             {
+                var barrier = await coordinator.ReadBarrierAsync(raceId, cancellationToken);
+                if (barrier is { Verified: false }) return Results.Conflict(new { code = "RaceRepairPending" });
                 var query = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var readModel = await queryProcessor.ProcessAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (readModel is null || string.IsNullOrEmpty(readModel.RaceId))
                     return Results.NotFound();
 
-                return Results.Ok(ToAgentRacePredictionContext(readModel));
+                var result = ToAgentRacePredictionContext(readModel);
+                result.EntryAssignmentFingerprint = barrier?.Fingerprint;
+                return Results.Ok(result);
             })
+            .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetRacePredictionContext")
             .WithTags("Race API")
             .Produces<ApiContracts.RacePredictionContextReadModel>(StatusCodes.Status200OK)
@@ -1518,6 +1524,7 @@ public static partial class EndpointExtensions
 
                 return Results.Ok(ToAgentHorseRaceHistory(readModel));
             })
+            .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetHorseRaceHistory")
             .WithTags("Horse API")
             .Produces<ApiContracts.HorseRaceHistoryReadModel>(StatusCodes.Status200OK)
@@ -1542,6 +1549,7 @@ public static partial class EndpointExtensions
 
                 return Results.Ok(response);
             })
+            .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetHorseWeightHistory")
             .WithTags("Horse API")
             .Produces<HorseWeightHistoryResponse>(StatusCodes.Status200OK)
@@ -1571,6 +1579,7 @@ public static partial class EndpointExtensions
 
                 return Results.Ok(ToAgentJockeyRaceHistory(readModel));
             })
+            .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetJockeyRaceHistory")
             .WithTags("Jockey API")
             .Produces<ApiContracts.JockeyRaceHistoryReadModel>(StatusCodes.Status200OK)
@@ -2107,8 +2116,10 @@ public static partial class EndpointExtensions
 
         app.MapGet("/api/races/{raceId}/ml-prediction",
             [SwaggerOperation(Summary = "ML予測", Description = "ML.NETモデルを使って出走馬の予測着順を返します。訓練済みモデルがない場合は統計スコアで代替します。")]
-        async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, CancellationToken cancellationToken) =>
+        async (string raceId, IQueryProcessor queryProcessor, IRacePredictor predictor, RaceWriteCoordinator coordinator, CancellationToken cancellationToken) =>
             {
+                if (await coordinator.ReadBarrierAsync(raceId, cancellationToken) is { Verified: false })
+                    return Results.Conflict(new { code = "RaceRepairPending" });
                 var raceQuery = new ReadModelByIdQuery<AppReadModels.RacePredictionContextReadModel>(raceId);
                 var raceContext = await queryProcessor.ProcessAsync(raceQuery, cancellationToken).ConfigureAwait(false);
 
@@ -2130,6 +2141,7 @@ public static partial class EndpointExtensions
 
                 return Results.Ok(response);
             })
+            .AddEndpointFilter<RacePredictionReadEndpointFilter>()
             .WithName("GetMlPrediction")
             .WithTags("Race API")
             .Produces<ApiContracts.MlPredictionResponse>(StatusCodes.Status200OK)

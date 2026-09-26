@@ -15,6 +15,38 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraDirectCollectionHandlerTests
 {
     [TestMethod]
+    public async Task RaceDetail_CachedCardWithUnconfirmedNumbers_WaitsWithoutFallbackOrSaving()
+    {
+        var date = new DateOnly(2026, 9, 26);
+        var race = new RaceId(date, RaceCourse.Nakayama, 5);
+        var url = new Uri("https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0106202604080520260926/AC");
+        var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero);
+        var sessions = new FakeJraSessionFactory
+        {
+            ConfigureNavigator = () => new FakeJraNavigator
+            {
+                DirectUrlFactory = _ => throw new JraHorseNumbersUnconfirmedException(url.AbsoluteUri, race)
+            }
+        };
+        var cards = new FakeJraRaceCardCollectionWorkflow();
+        var results = new FakeJraRaceResultCollectionWorkflow();
+        var handler = new JraRaceDetailCollectionHandler(sessions, _ => cards, _ => results,
+            timeProvider: new FixedTimeProvider(now));
+        var completion = await handler.CollectAsync(new LeasedCollectionTask(Guid.NewGuid(), Guid.NewGuid(),
+            new(ResourceType.Race, "JRA", "20260926:Nakayama:5"), new("race-detail"), 4,
+            CollectionReason.DefinitionChanged, CollectionLane.Normal, 50, "lease", now.AddMinutes(5), date,
+            new Dictionary<string, string>(),
+            [new(1, url, ResourceLocationSource.Discovered, ResourceLocationStatus.Active, null)]), CancellationToken.None);
+
+        Assert.AreEqual(CollectionAttemptResult.ResourceNotYetAvailable, completion.Result);
+        Assert.AreEqual("RaceHorseNumbersUnconfirmed", completion.ErrorCode);
+        Assert.AreEqual(now.AddMinutes(15), completion.RetryAt);
+        Assert.IsEmpty(cards.RefreshRequests);
+        Assert.IsEmpty(results.Requests);
+        Assert.IsTrue(completion.StageOutcomes!.All(x => !x.Persisted));
+    }
+
+    [TestMethod]
     public void RaceDetail_LegacyTaskWithoutAttributes_ParsesCanonicalResourceId()
     {
         var date = new DateOnly(2026, 4, 19);
