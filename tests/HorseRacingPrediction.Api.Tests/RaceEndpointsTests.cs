@@ -256,7 +256,7 @@ public class RaceEndpointsTests
     }
 
     [TestMethod]
-    public async Task DeclareRaceResultBulk_PreflightMismatchCreatesRepairIssueWithoutProfileTask()
+    public async Task DeclareRaceResultBulk_PreflightMismatchRejectsBeforeAnyWrite()
     {
         var date = new DateOnly(2026, 9, 20);
         var course = $"PREFLIGHT-{Guid.NewGuid():N}";
@@ -273,33 +273,23 @@ public class RaceEndpointsTests
             Entries = [new(1, null, null, null, null, null, null, HorseName: name, HorseSourceIdentity: identity)],
         };
 
+        var eventsBefore = CountStoredEvents();
         var response = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         var body = await response.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.IsTrue(body!.Errors.Any(x => x.Contains("SubjectIdentityRepairRequired", StringComparison.Ordinal)));
-        Assert.IsTrue(body.CorePersisted);
-        Assert.IsTrue(body.RelatedErrors!.Any(x => x.Contains("SubjectIdentityRepairRequired", StringComparison.Ordinal)));
+        Assert.IsTrue(body!.Errors.Any(x => x.Contains("RaceEntryIdentityMismatch", StringComparison.Ordinal)));
+        Assert.IsFalse(body.CorePersisted);
+        Assert.AreEqual(eventsBefore, CountStoredEvents());
         using var db = _app.Services.GetRequiredService<IDbContextProvider<EventStoreDbContext>>().CreateContext();
-        var issue = await db.SubjectIdentificationRepairIssues.SingleAsync(x => x.RequestedByRaceId == body.RaceId);
-        Assert.AreEqual("Open", issue.Status);
-        issue.Status = "Resolved";
-        issue.ResolvedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
+        Assert.AreEqual(0, await db.SubjectIdentificationRepairIssues.CountAsync(x => x.RequestedByRaceId == body.RaceId));
 
         var repeated = await _client.PostAsJsonAsync("/api/races/result-bulk", second, JsonOptions);
         repeated.EnsureSuccessStatusCode();
-        var repeatedIssues = await db.SubjectIdentificationRepairIssues
-            .Where(x => x.RequestedByRaceId == body.RaceId).ToArrayAsync();
-        Assert.HasCount(1, repeatedIssues);
-        Assert.AreEqual(issue.IssueId, repeatedIssues[0].IssueId);
-        Assert.AreEqual("Open", repeatedIssues[0].Status);
-        Assert.AreEqual(2, repeatedIssues[0].Occurrence);
-        Assert.IsNull(repeatedIssues[0].ResolvedAt);
+        Assert.AreEqual(eventsBefore, CountStoredEvents());
     }
 
     [TestMethod]
-    public async Task RefreshRaceCard_SourceIdentityReplacesLegacyNameBasedHorseId()
+    public async Task RefreshRaceCard_SourceIdentityCannotReassignEntryWithExistingResult()
     {
         var date = new DateOnly(2030, 1, 2);
         const string course = "中山";
@@ -321,12 +311,15 @@ public class RaceEndpointsTests
             ],
             TargetRaceId: initialBody.RaceId, RefreshExistingData: true, IsRaceCard: true);
         var refreshResponse = await _client.PostAsJsonAsync("/api/races/result-bulk", refresh, JsonOptions);
+        var refreshBody = await refreshResponse.Content.ReadFromJsonAsync<DeclareRaceResultBulkResponse>(JsonOptions);
         var race = await _client.GetFromJsonAsync<RaceResponse>($"/api/races/{initialBody.RaceId}", JsonOptions);
 
         Assert.AreEqual(HttpStatusCode.OK, refreshResponse.StatusCode);
         Assert.IsNotNull(race);
-        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(
-            horseName, sourceIdentity), race.Entries.Single().HorseId);
+        Assert.IsFalse(refreshBody!.CorePersisted);
+        Assert.IsTrue(refreshBody.Errors.Any(error => error.Contains("RaceEntryIdentityMismatch")));
+        Assert.AreEqual(HorseRacingPrediction.ApiClient.DeterministicIdGenerator.BuildHorseId(horseName),
+            race.Entries.Single().HorseId);
     }
 
     [TestMethod]

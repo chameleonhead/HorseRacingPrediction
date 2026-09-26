@@ -114,6 +114,24 @@ public sealed class RaceAggregateBulkCollectionTests
         Assert.AreEqual("Owner One", aggregate.GetDetails().Entries.Single().OwnerName);
     }
 
+    [TestMethod]
+    public void CollectedIdentityMismatch_EmitsNoEventsInEitherPath()
+    {
+        var aggregate = new RaceAggregate(RaceId.New);
+        var original = CreateData(DateTimeOffset.UtcNow);
+        aggregate.ApplyBulkRaceResult(original);
+        var version = aggregate.Version;
+        var swapped = original.Entries[0] with { HorseId = "horse-other", OwnerName = "Wrong owner" };
+        Assert.ThrowsExactly<InvalidOperationException>(() => aggregate.ApplyBulkRaceResult(
+            original with { Entries = [swapped], RaceName = "Must not update" }));
+        Assert.AreEqual(version, aggregate.Version);
+        Assert.ThrowsExactly<InvalidOperationException>(() => aggregate.RefreshCollectedData(
+            new("Must not update", null, null, null, null, 1, [swapped], null)));
+        Assert.AreEqual(version, aggregate.Version);
+        Assert.AreEqual("horse-1", aggregate.GetDetails().Entries.Single().HorseId);
+        Assert.AreEqual(original.RaceName, aggregate.GetDetails().RaceName);
+    }
+
     private static BulkRaceResultData CreateData(DateTimeOffset observedAt) => new(
         new DateOnly(2026, 9, 15), "NAKAYAMA", 11, "Collected race", 1,
         "G1", "TURF", 2000, "RIGHT",
