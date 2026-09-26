@@ -1,0 +1,71 @@
+﻿@page "/races"
+
+<PageTitle>レース</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>レース</h1>
+        <p>レース情報を確認・管理します。</p>
+    </div>
+
+    <FluentButton Appearance="ButtonAppearance.Primary"
+                  IconStart="@(new Icons.Regular.Size20.Add())">
+        レースを追加
+    </FluentButton>
+</div>
+
+<FluentStack Orientation="Orientation.Horizontal">
+    <FluentTextInput Placeholder="レースを検索" />
+
+    <FluentSpacer />
+
+    <FluentButton Appearance="ButtonAppearance.Subtle"
+                  IconStart="@(new Icons.Regular.Size20.ArrowClockwise())">
+        更新
+    </FluentButton>
+</FluentStack>
+
+<FluentDataGrid Items="@races.AsQueryable()">
+
+    <TemplateColumn Title="開催日">
+        @context.Date.ToString("yyyy/MM/dd")
+    </TemplateColumn>
+
+    <PropertyColumn Property="@(race => race.Course)"
+                    Title="競馬場" />
+
+    <PropertyColumn Property="@(race => race.RaceNumber)"
+                    Title="R" />
+
+    <PropertyColumn Property="@(race => race.Name)"
+                    Title="レース名" />
+                    
+    <TemplateColumn Title="">
+        <FluentButton Appearance="ButtonAppearance.Subtle"
+                      IconStart="@(new Icons.Regular.Size20.Open())"
+                      Title="詳細"
+                      OnClick="@(() => OpenRace(context))" />
+    </TemplateColumn>
+
+</FluentDataGrid>
+
+@code
+{
+    private readonly List<RaceItem> races =
+    [
+        new(new DateOnly(2026, 9, 19), "中山", 11, "ながつきステークス"),
+        new(new DateOnly(2026, 9, 20), "中山", 11, "セントライト記念"),
+        new(new DateOnly(2026, 9, 21), "中山", 10, "内房ステークス"),
+        new(new DateOnly(2026, 9, 21), "阪神", 11, "神戸新聞杯")
+    ];
+
+    private sealed record RaceItem(
+        DateOnly Date,
+        string Course,
+        int RaceNumber,
+        string Name);
+
+    private void OpenRace(RaceItem race)
+    {
+    }
+}

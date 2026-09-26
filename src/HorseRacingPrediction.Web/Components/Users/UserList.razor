@@ -1,0 +1,31 @@
+﻿<FluentStack Orientation="Orientation.Vertical"
+             VerticalGap="8">
+
+    <FluentButton Appearance="ButtonAppearance.Primary">
+        追加
+    </FluentButton>
+
+    <FluentDataGrid Items="@users.AsQueryable()">
+
+        <PropertyColumn Property="@(x => x.Name)"
+                        Title="名前" />
+
+        <PropertyColumn Property="@(x => x.Email)"
+                        Title="メールアドレス" />
+
+    </FluentDataGrid>
+
+</FluentStack>
+
+@code {
+
+    private readonly List<UserItem> users =
+    [
+        new("山田 太郎", "taro@example.com"),
+        new("佐藤 花子", "hanako@example.com")
+    ];
+
+    private sealed record UserItem(
+        string Name,
+        string Email);
+}
