@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Text;
+using HorseRacingPrediction.Scraping.Browser.Snapshots;
 using HorseRacingPrediction.ApiClient;
 using SemanticPageSnapshot = HorseRacingPrediction.Scraping.Browser.Snapshots.PageSnapshot;
 using HorseRacingPrediction.Scraping.Jra.Models;
@@ -46,24 +47,12 @@ public sealed class RaceResultPageParser
     private static readonly Regex TimeSpanRegex =
         new(@"(?:(?<min>\d{1,2}):)?(?<sec>\d{1,2})\.(?<frac>\d{1})", RegexOptions.Compiled);
 
-    // 天候/馬場は実ページのHTML構造が未調査のため、見出し・本文中のテキストパターンから
-    // 緩やかに抽出する方式にしている。ラベル自体が存在しない場合は「天候・馬場欄なし」の
-    // 正常系（null）として扱うが、ラベルは存在するのに続く値がJRAの既知値集合に無い場合は
-    // 「未知の値」（依頼書10節・11節）としてJraUnexpectedValueExceptionにする。
-    private static readonly Regex WeatherLabelRegex =
-        new(@"天候\s*[:：]?\s*(?<value>\S+)", RegexOptions.Compiled);
-
+    // Validate exact values from the dedicated race overview, never from flattened page text.
     private static readonly string[] KnownWeatherValues = ["晴", "曇", "小雨", "雨", "小雪", "雪"];
 
     // 実サイト確認（2026-09-07）で判明: 実ページの馬場状態表記は「天候 雨 芝 稍重 ダート 重」
     // のように「馬場」「馬場状態」という語を伴わず、「芝」「ダート」の直後に状態値が
     // 続くのみ。旧正規表現は「馬場」の語を必須としていたため常にマッチしなかった。
-    private static readonly Regex TurfConditionLabelRegex =
-        new(@"芝\s*(?<value>\S+)", RegexOptions.Compiled);
-
-    private static readonly Regex DirtConditionLabelRegex =
-        new(@"ダート\s*(?<value>\S+)", RegexOptions.Compiled);
-
     private static readonly string[] KnownTrackConditionValues = ["良", "稍重", "重", "不良"];
 
     // コース表記（依頼書12節）。依頼書に例示された実際のJRA表記
@@ -154,16 +143,18 @@ public sealed class RaceResultPageParser
                 invalidPopularity.Popularity?.ToString());
         }
 
-        var weatherText =
-            ParseWeatherText(snapshot);
-
-        var trackConditionText =
-            ParseTrackConditionText(snapshot);
+        var (weatherText, trackConditionText) = officiallyCancelled
+            ? ((string?)null, (string?)null) : ParseWeatherAndTrackConditions(snapshot);
 
         var payouts = table is null ? null : ParsePayouts(snapshot, table);
 
         var courseSpec =
             ParseCourseSpec(snapshot, raceName);
+        if (!officiallyCancelled && courseSpec is not null
+            && courseSpec.Surfaces.Any(surface => !trackConditionText!.Contains(
+                surface == CourseSurface.Turf ? "芝:" : "ダート:", StringComparison.Ordinal)))
+            throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                "対象コースの馬場状態がありません。", "TrackCondition");
 
         var cornerPassages =
             ParseCornerPassages(snapshot);
@@ -610,83 +601,43 @@ public sealed class RaceResultPageParser
         return value.Length == 0 ? null : value;
     }
 
-    private static string? ParseWeatherText(
+    private static (string Weather, string TrackCondition) ParseWeatherAndTrackConditions(
         JraSnapshotView snapshot)
     {
-        var searchText =
-            $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
+        var lists = snapshot.Source.FindByKind(PageContentKind.List)
+            .Where(node => node.Source?.AncestorClassTokens?.Contains("race_header") == true
+                && node.Source.AncestorClassTokens.Contains("baba")).ToArray();
+        if (lists.Length != 1)
+            throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                "対象レースの馬場状態欄を一意に取得できません。", "TrackCondition");
 
-        var match =
-            WeatherLabelRegex.Match(searchText);
-
-        if (!match.Success)
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var item in lists[0].Children)
         {
-            // 「天候」ラベル自体が存在しない＝仕様上optionalな要素が存在しない正常系。
-            return null;
+            if (item.Kind != PageContentKind.ListItem)
+                throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                    "馬場状態欄の項目境界が不正です。", "TrackCondition");
+            var text = item.GetEffectiveText() ?? string.Empty;
+            var match = Regex.Match(text, @"^(?<label>天候|芝|ダート)\s*(?<value>.*?)\s*$");
+            if (!match.Success)
+                throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                    "馬場状態欄に未知の項目があります。", "TrackCondition");
+            var label = match.Groups["label"].Value;
+            var value = match.Groups["value"].Value.Trim();
+            if (!values.TryAdd(label, value))
+                throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                    "馬場状態欄の項目が重複しています。", "TrackCondition");
+            if (label == "天候" && !KnownWeatherValues.Contains(value, StringComparer.Ordinal))
+                throw new JraUnexpectedValueException(JraPageKind.RaceResult, snapshot.Url, "Weather", value);
+            if (label != "天候" && !KnownTrackConditionValues.Contains(value, StringComparer.Ordinal))
+                throw new JraUnexpectedValueException(JraPageKind.RaceResult, snapshot.Url,
+                    label == "芝" ? "TrackCondition(Turf)" : "TrackCondition(Dirt)", value);
         }
-
-        var value = match.Groups["value"].Value;
-
-        if (!KnownWeatherValues.Contains(value, StringComparer.Ordinal))
-        {
-            throw new JraUnexpectedValueException(
-                JraPageKind.RaceResult,
-                snapshot.Url,
-                "Weather",
-                value);
-        }
-
-        return value;
-    }
-
-    private static string? ParseTrackConditionText(
-        JraSnapshotView snapshot)
-    {
-        var searchText =
-            $"{string.Join(" ", snapshot.Headings)} {snapshot.MainText}";
-
-        var turfMatch = TurfConditionLabelRegex.Match(searchText);
-        var dirtMatch = DirtConditionLabelRegex.Match(searchText);
-
-        if (!turfMatch.Success && !dirtMatch.Success)
-        {
-            return null;
-        }
-
-        var parts = new List<string>();
-        if (turfMatch.Success)
-        {
-            var value = turfMatch.Groups["value"].Value;
-
-            if (!KnownTrackConditionValues.Contains(value, StringComparer.Ordinal))
-            {
-                throw new JraUnexpectedValueException(
-                    JraPageKind.RaceResult,
-                    snapshot.Url,
-                    "TrackCondition(Turf)",
-                    value);
-            }
-
-            parts.Add($"芝:{value}");
-        }
-
-        if (dirtMatch.Success)
-        {
-            var value = dirtMatch.Groups["value"].Value;
-
-            if (!KnownTrackConditionValues.Contains(value, StringComparer.Ordinal))
-            {
-                throw new JraUnexpectedValueException(
-                    JraPageKind.RaceResult,
-                    snapshot.Url,
-                    "TrackCondition(Dirt)",
-                    value);
-            }
-
-            parts.Add($"ダート:{value}");
-        }
-
-        return string.Join(" ", parts);
+        if (!values.ContainsKey("天候") || (!values.ContainsKey("芝") && !values.ContainsKey("ダート")))
+            throw new JraPageStructureException(JraPageKind.RaceResult, snapshot.Url,
+                "馬場状態の必須項目がありません。", "TrackCondition");
+        return (values["天候"], string.Join(" ", new[] { "芝", "ダート" }.Where(values.ContainsKey)
+            .Select(label => $"{label}:{values[label]}")));
     }
 
     // Phase8: 券種キーワード→格納先バケット名の対応。「三連複」「三連単」（旧字体）

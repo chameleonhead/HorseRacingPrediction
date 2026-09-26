@@ -79,6 +79,26 @@ internal sealed record TestPageSnapshot(string Url, string Title, List<TestPageS
             if (!string.IsNullOrWhiteSpace(section.MainText))
             {
                 content.Add(new PageContentNode { Kind = PageContentKind.Paragraph, Text = section.MainText });
+                // Legacy fixtures describe the overview inline. Materialize that fixture field as
+                // the real list boundary; production-shaped tests use HTML, not this adapter.
+                var overview = System.Text.RegularExpressions.Regex.Match(section.MainText,
+                    @"(?:^|\s)天候\s+(?<weather>\S+)(?<tracks>(?:\s+(?:芝|ダート)\s+\S+)+)");
+                if (overview.Success)
+                {
+                    var items = new List<PageContentNode>
+                    {
+                        new() { Kind = PageContentKind.ListItem, Text = $"天候 {overview.Groups["weather"].Value}" },
+                    };
+                    items.AddRange(System.Text.RegularExpressions.Regex.Matches(overview.Groups["tracks"].Value,
+                        @"(?<label>芝|ダート)\s+(?<value>\S+)").Select(match => new PageContentNode
+                        { Kind = PageContentKind.ListItem, Text = $"{match.Groups["label"].Value} {match.Groups["value"].Value}" }));
+                    content.Insert(0, new PageContentNode
+                    {
+                        Kind = PageContentKind.List,
+                        Children = items,
+                        Source = new("ul", null, "ul") { AncestorClassTokens = ["race_header", "baba"] },
+                    });
+                }
             }
             content.AddRange(section.Actions.Select(action => new PageContentNode
             {
