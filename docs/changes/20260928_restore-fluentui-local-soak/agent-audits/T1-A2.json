@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260928_restore-fluentui-local-soak",
+  "taskId": "T1",
+  "attemptId": "T1-A2",
+  "state": "active",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7"],
+  "route": {"tier":"lead","requestedModel":"gpt-6-astra","observedModel":null,"observationSource":null,"modelTelemetryReason":"observed runtime model unavailable"},
+  "usage": {"availability":"unavailable","totalTokens":null,"reason":"per-agent usage unavailable"},
+  "scope": ["src/HorseRacingPrediction.Api/HorseRacingPrediction.Api.csproj","src/HorseRacingPrediction.Web/HorseRacingPrediction.Web.csproj","docs/changes/20260928_restore-fluentui-local-soak/README.md","docs/changes/20260928_restore-fluentui-local-soak/agent-audits","localhost isolated runtime"],
+  "review": {},
+  "overhead": {},
+  "elapsed": {},
+  "startRevision": "f44b8006",
+  "endRevisionOrPatch": null,
+  "outcome": {}
+}
