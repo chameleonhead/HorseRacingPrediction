@@ -465,6 +465,10 @@ flowchart TD
 
 ## 7. API の再構成
 
+### 7.1 Collection Platform 管理API
+
+2026-09-28以降、管理画面のCollection Platform呼び出しは`/api/v2/admin/collection`を使用し、旧`/api/admin/collection`登録への依存を残さない。task作成は単一要求と明示item batchを分け、選択対象batchはプレビューで確定したresource一覧と一致する場合だけ実行する。期間再取得・revision再収集の応答はbatch resourceとして表示し、各itemの成否を失わない。詳細なpath、HTTP method、body、response契約は[Collection API REST resource redesign](changes/20260927_collection-rest-api/README.md)のroute ledgerを正とする。
+
 ### 7.1 既存 API で実現できること
 
 | 利用目的 | 既存 API | 判定 |

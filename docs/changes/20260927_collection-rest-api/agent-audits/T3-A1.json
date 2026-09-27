@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T3",
+  "attemptId": "T3-A1",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC3", "AC6", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose the observed model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "per-agent token telemetry was not exposed"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/Web/ApiBrowsing",
+    "src/HorseRacingPrediction.Api/Web/Components/Pages/JobDetail.razor",
+    "src/HorseRacingPrediction.Collector/CollectionPlatform",
+    "src/HorseRacingPrediction.Predictor/Scheduling/CollectionReadinessClient.cs",
+    "tests/HorseRacingPrediction.Collector.Tests",
+    "tests/scripts/test-entry-repair-local.ps1"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review token and active-time telemetry were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "reliable effort telemetry was not exposed"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "d1da55ca",
+  "endRevisionOrPatch": "3cf0c6a5 production integration; b29f5b32 consumer tests",
+  "outcome": {
+    "verificationPassed": false,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Collector suite passes 391/391 after updating stale route stubs; source scan has no retired route literal, and the local script parses. API component tests remain blocked by the clean-HEAD FluentUI/Razor baseline failure. The first full Collector run exposed seven stale transport stubs, corrected and rerun.",
+    "retries": 1,
+    "leadCorrections": 1,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 7,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

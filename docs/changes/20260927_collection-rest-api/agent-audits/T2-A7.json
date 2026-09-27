@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_collection-rest-api",
+  "taskId": "T2",
+  "attemptId": "T2-A7",
+  "state": "completed",
+  "taskDifficulty": "high",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5", "AC6", "AC7", "AC8"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime did not expose the observed model"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "per-agent token telemetry was not exposed"
+  },
+  "scope": [
+    "src/HorseRacingPrediction.Api/Endpoints/Collection",
+    "src/HorseRacingPrediction.Api/Endpoints/PredictionScheduling",
+    "src/HorseRacingPrediction.Api/Endpoints/Subjects",
+    "src/HorseRacingPrediction.Api/Endpoints/Races",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformContracts.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/CollectionPlatformEndpointSupport.cs",
+    "src/HorseRacingPrediction.Api/CollectionController/RaceEntryRepairOperations.cs",
+    "src/HorseRacingPrediction.Api/Extensions/EndpointExtensions.cs",
+    "src/HorseRacingPrediction.Api/Program.cs",
+    "src/HorseRacingPrediction.Api/Security/RaceWriteEndpointFilter.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionApiRequests.cs",
+    "src/HorseRacingPrediction.CollectionOperations/CollectionPlatform/CollectionPlatformStore.cs",
+    "src/HorseRacingPrediction.CollectionOperations/PredictionScheduling/PredictionScheduleHttp.cs",
+    "tests/HorseRacingPrediction.Api.Tests"
+  ],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review token and active-time telemetry were not exposed"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "reliable effort telemetry was not exposed"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "reliable worker elapsed effort was not exposed"
+  },
+  "startRevision": "d1da55ca",
+  "endRevisionOrPatch": "3cf0c6a5 production integration; b29f5b32 route/client tests",
+  "outcome": {
+    "verificationPassed": false,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Route ledger and operation-per-file review pass. API build and tests are blocked by 180 FluentUI/Razor errors that were reproduced on a pristine archived HEAD; API route contracts remain unexecuted.",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "revise"
+  }
+}

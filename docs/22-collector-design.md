@@ -120,6 +120,8 @@ API が収集バッチ処理の状況を確認・操作する Minimal API と管
 
 これらは旧ジョブ実行クライアントの `AgentDashboardEndpointExtensions` / `AgentCollectionStatusEndpointExtensions` / `AgentAcquisitionStatusEndpointExtensions` を API 側へ移管したものである。ただし `/agent/prediction-jobs/trigger`（予想ジョブ投入）は移管していない。予想ジョブ投入は Predictor 側の責務であり、Collector から操作しない。
 
+2026-09-28のREST cutoverではCollectorのcollection task acquire/heartbeat/complete transportを`/api/v2/internal/collection`へ移し、prediction candidate queue transportを`/api/v2/internal/prediction-candidates`へ移す。race/dateのfanout要求は最大500件の決定的item batchで送り、item単位の結果と冪等性を維持する。既存history batchingの意味は変更しない。旧method/path aliasは持たない。実装済みrouteとbody/responseの詳細は[Collection API REST resource redesign](changes/20260927_collection-rest-api/README.md)のroute ledgerを正とする。
+
 #### 管理画面
 
 Collector は Blazor Server 画面、Web Host、静的資産、通常運用向け HTTP endpoint を持たない。収集ジョブ、日別状況、データ取得状況、停止・再開、リラン、再取得は API 管理画面を正本とする。旧 `/collection-tasks` は API 管理画面側で `/jobs` へリダイレクトする。

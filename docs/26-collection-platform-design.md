@@ -40,6 +40,10 @@
 
 詳細なモデル、制約、状態遷移、公平 scheduling、location fallback、移行手順、受け入れ基準は change record に定義する。承認後、Phase 1 に先立って確定した型・table・API 契約を本書へ同期する。
 
+### 2026-09-28 Collection API v2 cutover
+
+管理用Collection Platform APIは `/api/v2/admin/collection`、Collector向けlease・completion APIは `/api/v2/internal/collection` を正規パスとする。予測schedule APIも `/api/v2/internal/prediction-candidates` 配下へ統一する。旧method/pathの登録とfirst-party呼び出しは残さず、互換aliasも設けない。58個のresource contractは59個のmethod/path operationとして登録する。ER-03とER-04は同じURIに対するPUTとPATCHである。要求のdiscriminatorは単一taskの`Resource` / `SourceUrl`、task batchの`PreviewSelection` / `ExplicitItems`、recollection batchの`Revision` / `RacePeriod`とし、モードごとに選択フィールドを限定する。正確な全method/path、応答・再送・guard契約は[Collection API REST resource redesign](changes/20260927_collection-rest-api/README.md)を参照する。
+
 > 2026-09-14 提案: `ResourceType.Race` の `race-card` と `race-result` を単一 `race-detail` definition へ統合する。JST の対象日が今日から 5 日前以降なら出馬表を先に domain write し、当日以前は同一 task/session で結果へ遷移する。それより古い場合だけ結果を直接取得する。直近レースは両方の保存成功まで Current にせず、結果未公開・未来日は次回時刻付きで待機する。Location schema は増やさず、JRA URL と取得ページ identity で入口を検証する。切替時は旧collection dataを捨てず、Resource/State/Location/Request/Task/FailureをIDと移行元provenanceを維持して `race-detail` へtransactionalにマージし、不足する直近レースへ補完requestを作ってから旧definitionを無効化する。切替と検証の正は [直近レースの出馬表・結果を一体収集する](changes/20260914_recent-race-detail-collection/README.md) とし、承認・実装までは既存 definition を維持する。
 
 > 2026-09-19 再提案: 上記統合のResource/Task一意性は維持するが、Task statusを複数artifactの完全性正本として使わない。同じcanonical Race配下にCard/Result facet state、更新可能な公式StartTime evidence、ArtifactKind付きLocationを持たせ、1件のactive `race-detail` taskをfacetを前進させるcontrollerとする。Attemptはstage outcomeをappend-onlyに保存し、Race全体状態はfacetから導出する。これにより同一Raceのjobを増やさず、Card failureとResult waitを分離できる。正本は[Raceリソース中心の取得状態機械](changes/20260919_race-detail-phase-recovery/README.md)とし、承認前は現行動作を変更しない。
