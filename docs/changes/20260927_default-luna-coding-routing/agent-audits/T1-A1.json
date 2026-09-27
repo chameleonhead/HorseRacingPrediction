@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 2,
+  "changeId": "20260927_default-luna-coding-routing",
+  "taskId": "T1",
+  "attemptId": "T1-A1",
+  "state": "completed",
+  "taskDifficulty": "low",
+  "acceptanceCriteria": ["AC1", "AC2", "AC3", "AC4", "AC5"],
+  "route": {
+    "tier": "worker",
+    "requestedModel": "gpt-6-luna",
+    "observedModel": null,
+    "observationSource": null,
+    "modelTelemetryReason": "runtime has not exposed independent worker model telemetry"
+  },
+  "usage": {
+    "availability": "unavailable",
+    "totalTokens": null,
+    "reason": "runtime does not expose per-worker usage at dispatch"
+  },
+  "scope": ["AGENTS.md"],
+  "review": {
+    "usageAvailability": "unavailable",
+    "totalTokens": null,
+    "activeMinutes": null,
+    "reason": "review has not started"
+  },
+  "overhead": {
+    "availability": "unavailable",
+    "preparationMinutes": null,
+    "integrationMinutes": null,
+    "auditMinutes": null,
+    "reason": "active effort telemetry is not captured"
+  },
+  "elapsed": {
+    "availability": "unavailable",
+    "minutes": null,
+    "reason": "runtime does not expose reliable worker elapsed effort"
+  },
+  "startRevision": "02c7cd667b838d082bd7dd3fff7c365dfebad22d",
+  "endRevisionOrPatch": "AGENTS.md routing-policy diff reviewed before commit",
+  "outcome": {
+    "verificationPassed": true,
+    "qualityPassed": true,
+    "scopePassed": true,
+    "independentChallenge": "Astra/Lead compared the AGENTS.md diff against AC1-AC5 and C1-C6, including safety, review independence, retry, fallback, and cost counterexamples",
+    "retries": 0,
+    "leadCorrections": 0,
+    "reviewPasses": 1,
+    "promoted": false,
+    "escapedDefects": 0,
+    "escalations": 0,
+    "reviewMode": "ac-group",
+    "detailReviewReason": null,
+    "decision": "accept"
+  }
+}
