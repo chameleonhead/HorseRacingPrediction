@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and summarize version 1 delegated-agent audit records."""
+"""Validate legacy and compact delegated-agent audit records."""
 
 from __future__ import annotations
 
@@ -45,6 +45,8 @@ def _find_forbidden(value: Any, path: str, issues: list[str]) -> None:
 
 
 def validate_record(record: Any) -> list[str]:
+    if isinstance(record, dict) and "changeId" in record:
+        return validate_compact_record(record)
     issues: list[str] = []
     root = _mapping(record, "$", issues)
     if root.get("schemaVersion") != 2:
@@ -210,6 +212,73 @@ def validate_record(record: Any) -> list[str]:
     return issues
 
 
+def validate_compact_record(root: dict[str, Any]) -> list[str]:
+    """Validate the compact dispatch/completion contract in execution-audit.md."""
+    issues: list[str] = []
+    _find_forbidden(root, "$", issues)
+    if root.get("schemaVersion") != 2:
+        issues.append("schemaVersion must equal 2")
+    for key in ("changeId", "taskId", "attemptId", "taskDifficulty", "startRevision"):
+        if not isinstance(root.get(key), str) or not root[key].strip():
+            issues.append(f"{key} must be a non-empty string")
+    for key in ("acceptanceCriteria", "scope"):
+        if not isinstance(root.get(key), list) or not root[key] or any(
+            not isinstance(x, str) or not x.strip() for x in root[key]
+        ):
+            issues.append(f"{key} must be a non-empty string array")
+    route = _mapping(root.get("route"), "route", issues)
+    for key in ("tier", "requestedModel"):
+        if not route.get(key):
+            issues.append(f"route.{key} is required")
+    if route.get("observedModel") is None:
+        if not route.get("modelTelemetryReason"):
+            issues.append("unobserved model requires modelTelemetryReason")
+    elif not route.get("observationSource"):
+        issues.append("observed model requires observationSource")
+    usage = _mapping(root.get("usage"), "usage", issues)
+    if usage.get("availability") not in VALID_AVAILABILITY:
+        issues.append("usage availability is invalid")
+    _number_or_none(usage.get("totalTokens"), "usage.totalTokens", issues)
+    if usage.get("availability") == "unavailable" and (
+        usage.get("totalTokens") is not None or not usage.get("reason")
+    ):
+        issues.append("unavailable usage requires null tokens and reason")
+    if usage.get("availability") == "complete" and usage.get("totalTokens") is None:
+        issues.append("complete usage requires tokens")
+    state = root.get("state")
+    if state == "active":
+        if root.get("outcome") is not None or root.get("endRevisionOrPatch") is not None:
+            issues.append("active attempt must not prefill completion evidence")
+    elif state == "completed":
+        if not root.get("endRevisionOrPatch"):
+            issues.append("completed attempt requires patch attribution")
+        outcome = _mapping(root.get("outcome"), "outcome", issues)
+        for key in ("verificationPassed", "qualityPassed", "scopePassed", "promoted"):
+            if not isinstance(outcome.get(key), bool):
+                issues.append(f"outcome.{key} must be boolean")
+        for key in ("retries", "leadCorrections", "reviewPasses", "escapedDefects", "escalations"):
+            if outcome.get(key) is None:
+                issues.append(f"outcome.{key} is required")
+            _number_or_none(outcome.get(key), key, issues)
+        if not outcome.get("independentChallenge"):
+            issues.append("independentChallenge is required")
+        if outcome.get("reviewMode") not in ("ac-group", "detailed"):
+            issues.append("reviewMode is invalid")
+        if outcome.get("reviewMode") == "detailed" and not outcome.get("detailReviewReason"):
+            issues.append("detailed review requires reason")
+        if outcome.get("decision") not in ("accept", "revise", "promote", "reject"):
+            issues.append("decision is invalid")
+        if outcome.get("decision") == "accept" and not all(
+            outcome.get(k) is True for k in ("verificationPassed", "qualityPassed", "scopePassed")
+        ):
+            issues.append("accept requires all quality gates")
+        for key in ("review", "overhead", "elapsed"):
+            _mapping(root.get(key), key, issues)
+    else:
+        issues.append("state must be active or completed")
+    return issues
+
+
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -296,7 +365,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     records: list[dict[str, Any]] = []
     failed = False
-    for path in args.paths:
+    expanded_paths = []
+    for supplied in args.paths:
+        if supplied.is_dir() or supplied.name == "README.md":
+            directory = supplied if supplied.is_dir() else supplied.parent
+            expanded_paths.extend(sorted((directory / "agent-audits").glob("*.json")))
+        else:
+            expanded_paths.append(supplied)
+    for path in expanded_paths:
         try:
             record = _load(path)
         except (OSError, json.JSONDecodeError) as error:
@@ -312,7 +388,11 @@ def main(argv: list[str] | None = None) -> int:
             records.append(record)
             print(f"{path}: valid")
     if args.summary and records:
-        print(json.dumps(summarize(records), ensure_ascii=False, indent=2, sort_keys=True))
+        legacy = [r for r in records if "identity" in r]
+        print(json.dumps({"legacy": summarize(legacy),
+                         "compactRecords": len(records) - len(legacy),
+                         "compactRecommendation": "No model/cost ranking without observed telemetry"},
+                        ensure_ascii=False, indent=2, sort_keys=True))
     return 1 if failed else 0
 
 
