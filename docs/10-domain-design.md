@@ -608,7 +608,7 @@ PredictionTicket
 - 読み取り API は用途別リードモデルを返す
 - API キーをヘッダーで受け取り、登録主体を監査情報へ反映する
 
-## .NET プロジェクト構成案
+## .NET プロジェクト構成
 
 ```text
 src/
@@ -627,9 +627,21 @@ src/
     ReadStore/
     Authentication/
   HorseRacingPrediction.Api/
-    Controllers/
-    Middlewares/
+    Endpoints/
+      Horses/
+        GetHorseEndpoint.cs
+        SearchHorsesEndpoint.cs
+      Races/
+        GetRaceEndpoint.cs
+        SearchRacesEndpoint.cs
+      Predictions/
+        GetPredictionEndpoint.cs
+    Extensions/
+      EndpointExtensions.cs
+    Security/
 ```
+
+API presentation は Controller-based MVC ではなく Minimal API とする。各 route handler は feature directory の operation 単位 `*Endpoint.cs` が所有し、`Extensions/EndpointExtensions.cs` は `/api` route group、共通 filter、および endpoint 登録の composition に限定する。公開 request/response contract は API presentation directory へ移さず、既存の Contracts / ApiClient project を正本とする。
 
 ## 次に定義すべきもの
 

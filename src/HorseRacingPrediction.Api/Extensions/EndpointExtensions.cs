@@ -1,0 +1,91 @@
+namespace HorseRacingPrediction.Api;
+
+public static class EndpointExtensions
+{
+    public static WebApplication MapApiEndpoints(this WebApplication app)
+    {
+        global::HorseRacingPrediction.Api.Endpoints.Health.GetHealthEndpoint.Map(app);
+        var readGroup = app.MapGroup("/api");
+        var writeGroup = app.MapGroup("/api")
+            .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.ApiKeyEndpointFilter>()
+            .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.RaceWriteEndpointFilter>()
+            .AddEndpointFilter<global::HorseRacingPrediction.Api.Security.RaceActiveCollectionEndpointFilter>();
+        global::HorseRacingPrediction.Api.Endpoints.Horses.RegisterHorseEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.UpdateHorseProfileEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.MergeHorseAliasEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.CorrectHorseDataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.RegisterJockeyEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.UpdateJockeyProfileEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.MergeJockeyAliasEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.CorrectJockeyDataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.RegisterTrainerEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.UpdateTrainerProfileEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.MergeTrainerAliasEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.CorrectTrainerDataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.CreateRaceEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.SearchRacesEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.PublishRaceCardEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.DeclareRaceResultEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.RegisterEntryEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.UpdateEntryCollectedDataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.RecordWeatherObservationEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.RecordTrackConditionEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.OpenPreRaceEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.StartRaceEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.DeclareEntryResultEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.DeclarePayoutResultEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.CloseRaceLifecycleEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.MarkRaceRescheduledEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.DeclareRaceResultBulkEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.CorrectRaceDataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.CreatePredictionTicketEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.AddPredictionMarkEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.AddBettingSuggestionEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.AddPredictionRationaleEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.FinalizePredictionTicketEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.WithdrawPredictionTicketEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.CorrectPredictionMetadataEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.EvaluatePredictionTicketEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.RecalculatePredictionEvaluationEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetRaceEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetRacePredictionContextEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Races.GetPredictionComparisonEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.GetPredictionTicketEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Predictions.SearchPredictionTicketsEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.GetHorseProfileEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.SearchHorsesEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.GetHorseRaceHistoryEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.GetHorseWeightHistoryEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Horses.GetHorseParticipationsEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.GetJockeyRaceHistoryEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.GetJockeyProfileEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.GetJockeyParticipationsEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Jockeys.SearchJockeysEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.GetTrainerProfileEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.GetTrainerParticipationsEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Trainers.SearchTrainersEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.SearchOwnersEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.GetOwnerEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.UpdateOwnerEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.MergeOwnerEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Memos.CreateMemoEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Memos.UpdateMemoEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Memos.DeleteMemoEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Memos.ChangeMemoSubjectsEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Memos.GetMemosBySubjectEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.MachineLearning.GetMlPredictionEndpoint.Map(readGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.GetSubjectIdentificationRepairEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.ExecuteSubjectIdentificationRepairEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.DismissSubjectIdentificationFailuresEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.GetSubjectNameNormalizationEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.ApplySubjectNameNormalizationEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.GetHorseIdentityRepairEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Repairs.ApplyHorseIdentityRepairEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.PreviewOwnerIdentityRecoveryEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Owners.ExecuteOwnerIdentityRecoveryEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveHorseIdentityEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.Identity.ResolveRaceIdentityEndpoint.Map(writeGroup);
+        global::HorseRacingPrediction.Api.Endpoints.MachineLearning.TrainMlModelEndpoint.Map(app);
+        return app;
+    }
+}

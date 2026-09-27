@@ -70,7 +70,7 @@ Api / Collector / Predictor の3サービス構成で、データ収集・予想
 
 - アーキテクチャ: CQRS + Event Sourcing（EventFlow 1.2.3）
 - JSON API: ASP.NET Core Minimal API（`/api` 配下、`X-Api-Key` ヘッダー認証。`HORSE_RACING_API_KEY` または `ApiKey:Key`）
-  - レース・出馬表・結果、予想票・印、馬・騎手・調教師・馬主（登録／編集／別名統合）、メモ、ML 予測（`/api/races/{raceId}/ml-prediction`）・ML 学習（`/api/ml/train`）など。全エンドポイントは `src/HorseRacingPrediction.Api/EndpointExtensions.cs` を参照
+  - レース・出馬表・結果、予想票・印、馬・騎手・調教師・馬主（登録／編集／別名統合）、メモ、ML 予測（`/api/races/{raceId}/ml-prediction`）・ML 学習（`/api/ml/train`）など。登録の正本は `MapApiEndpoints()` とし、endpoint は `src/HorseRacingPrediction.Api/Endpoints/<Feature>/` の operation 単位、共通登録は `src/HorseRacingPrediction.Api/Extensions/EndpointExtensions.cs` に配置する
 - 管理画面: Blazor Server（ルート直下、Cookie 認証。ログイン画面 `/login` はユーザー名 `user` 固定、パスワードは `ApiKey:Key` と同じ値）
   - 既存の JSON API を自己ループバック HTTP で呼び出すのみで、コマンド/クエリを直接実行しない
 - OpenAPI: Swagger UI + OpenAPI JSON を自動生成

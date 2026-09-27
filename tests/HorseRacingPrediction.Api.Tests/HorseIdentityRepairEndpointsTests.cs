@@ -5,6 +5,7 @@ using HorseRacingPrediction.ApiClient;
 using HorseRacingPrediction.Application.Queries.ReadModels;
 using HorseRacingPrediction.CollectionOperations.CollectionPlatform;
 using HorseRacingPrediction.Infrastructure.Persistence;
+using HorseRacingPrediction.Api.Endpoints.Repairs;
 using EventFlow.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -533,7 +534,7 @@ public sealed class HorseIdentityRepairEndpointsTests
             $"期待=Horse::アジアエクスプレス; 取得名={actualName}; 候補=fixture";
 
         Assert.AreEqual(expected,
-            EndpointExtensions.IsCorrectableHorseRegistrationMarkMismatch(message));
+            SubjectIdentificationRepairService.IsCorrectableHorseRegistrationMarkMismatch(message));
     }
 
     [TestMethod]
