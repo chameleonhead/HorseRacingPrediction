@@ -197,7 +197,21 @@ public sealed class JraSubjectProfileCollectionHandler(JraSubjectCollectionDefin
             }
         if (descriptor.ResourceType == ResourceType.Horse && requests is not null)
         {
-            await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await DiscoverHorseReferencesAsync(task, page.Profile, requests, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HorseRacingPrediction.Contracts.SubjectIdentityResolutionException ex)
+            {
+                return CollectionAttemptFailureClassifier.FromException(ex) with
+                {
+                    ErrorMessage = ex.Message + $"; ProfilePersisted={descriptor.PersistProfile}; ReferenceDiscovery=Incomplete; RaceHistory=NotStarted",
+                    RequestedUrl = new Uri(page.Url),
+                    FinalUrl = new Uri(page.Url),
+                    PageIdentification = $"{descriptor.SubjectType}Profile:JRA:{task.Resource.Id}",
+                    LocationOutcomes = locationOutcomes,
+                };
+            }
             await DiscoverHorseRaceHistoryAsync(task, page, session.Navigate, requests, cancellationToken).ConfigureAwait(false);
         }
         return new(CollectionAttemptResult.Succeeded, RequestedUrl: new Uri(page.Url), FinalUrl: new Uri(page.Url),

@@ -13,6 +13,34 @@ namespace HorseRacingPrediction.Collector.Tests.CollectionPlatform;
 public sealed class JraSubjectCollectionHandlerTests
 {
     [TestMethod]
+    public async Task ParentIdentityFailure_KeepsSavedProfileAndReportsUnfinishedDiscovery()
+    {
+        var sink = new RecordingProfileSink();
+        var requests = new RecordingRequestSink();
+        using var http = new HttpClient(new IdentityEvidenceResponse()) { BaseAddress = new("https://api.test") };
+        var handler = new JraSubjectProfileCollectionHandler(
+            JraSubjectCollectionDefinitions.For(ResourceType.Horse),
+            SubjectSessions("A", new Dictionary<string, string> { ["生年月日"] = "2020年1月1日", ["父"] = "B", ["母"] = "C" }),
+            sink, requests, entityWriter: new HorseRacingPrediction.Collector.Http.HttpDataCollectionWriteService(http, new()));
+        var completion = await handler.CollectAsync(SubjectTask("horse-a", "A", new Dictionary<string, string>()), CancellationToken.None);
+        Assert.HasCount(1, sink.Saves);
+        Assert.IsEmpty(requests.Requests);
+        Assert.AreEqual(CollectionAttemptResult.PermanentFailure, completion.Result);
+        Assert.AreEqual(CollectionFailureImpact.Isolated, completion.FailureImpact);
+        Assert.AreEqual("HorseIdentityEvidenceRequired", completion.ErrorCode);
+        StringAssert.Contains(completion.ErrorMessage!, "ProfilePersisted=True");
+        StringAssert.Contains(completion.ErrorMessage!, "ReferenceDiscovery=Incomplete; RaceHistory=NotStarted");
+        Assert.IsNotNull(completion.RequestedUrl);
+    }
+
+    private sealed class IdentityEvidenceResponse : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.UnprocessableEntity)
+            { Content = new StringContent("{\"code\":\"HorseIdentityEvidenceRequired\"}") });
+    }
+
+    [TestMethod]
     public async Task OwnerIdentityApiClient_DistinguishesRegisteredAndMissingOwners()
     {
         using var http = new HttpClient(new OwnerLookupHandler())
@@ -475,12 +503,15 @@ public sealed class JraSubjectCollectionHandlerTests
     }
 
     [TestMethod]
-    public async Task JockeyAbsentFromJraDirectoryCompletesAsNotApplicable()
+    [DataRow(JraSubjectIdentificationFailureKind.NoCandidate, CollectionAttemptResult.NotApplicable, "SubjectNotInProviderDirectory")]
+    [DataRow(JraSubjectIdentificationFailureKind.MultipleCandidates, CollectionAttemptResult.ResourceNotFound, "SubjectNotIdentified")]
+    public async Task JockeyUnresolvedInJraDirectory_DoesNotBecomeGenericConflict(
+        JraSubjectIdentificationFailureKind kind, CollectionAttemptResult result, string code)
     {
         var navigator = new FakeJraNavigator
         {
             SubjectFactory = identity => throw new JraSubjectIdentificationException(
-                JraSubjectIdentificationFailureKind.NoCandidate, identity.SubjectType, identity.Name),
+                kind, identity.SubjectType, identity.Name),
         };
         var handler = new JraSubjectProfileCollectionHandler(
             JraSubjectCollectionDefinitions.For(ResourceType.Jockey),
@@ -494,8 +525,8 @@ public sealed class JraSubjectCollectionHandlerTests
 
         var completion = await handler.CollectAsync(task, CancellationToken.None);
 
-        Assert.AreEqual(CollectionAttemptResult.NotApplicable, completion.Result);
-        Assert.AreEqual("SubjectNotInProviderDirectory", completion.ErrorCode);
+        Assert.AreEqual(result, completion.Result);
+        Assert.AreEqual(code, completion.ErrorCode);
     }
 
     [TestMethod]

@@ -96,6 +96,9 @@ public static class CollectionAttemptFailureClassifier
 {
     public static CollectionAttemptCompletion FromException(Exception exception)
     {
+        if (exception is HorseRacingPrediction.Contracts.SubjectIdentityResolutionException identity)
+            return new(CollectionAttemptResult.PermanentFailure, identity.Code, identity.Message,
+                HttpStatusCode: (int)identity.StatusCode, FailureImpact: CollectionFailureImpact.Isolated);
         if (exception is HorseRacingPrediction.Contracts.CollectionRepairHeldException)
             return new(CollectionAttemptResult.TransientFailure, "RaceRepairHeld", exception.Message,
                 FailureImpact: CollectionFailureImpact.Isolated);
