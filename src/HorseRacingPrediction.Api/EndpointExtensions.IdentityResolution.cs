@@ -1,5 +1,6 @@
 using EventFlow.EntityFramework;
 using HorseRacingPrediction.ApiClient;
+using HorseRacingPrediction.Contracts;
 using HorseRacingPrediction.Infrastructure.Persistence;
 
 namespace HorseRacingPrediction.Api;
@@ -12,6 +13,8 @@ public static partial class EndpointExtensions
         {
             using var db = provider.CreateContext();
             try { return Results.Ok(new ResolvedIdentity(await CollectionIdentityResolver.HorseAsync(db, request.Name, request.SourceIdentity, request.BirthDate, token))); }
+            catch (InvalidOperationException ex) when (SubjectIdentityResolutionException.IsKnownCode(ex.Message))
+            { return Results.UnprocessableEntity(new { code = ex.Message }); }
             catch (InvalidOperationException ex) { return Results.Conflict(new { code = ex.Message }); }
         });
         group.MapPost("/identity/race", async (ResolveRaceIdentityRequest request, IDbContextProvider<EventStoreDbContext> provider, CancellationToken token) =>

@@ -1,5 +1,7 @@
 # Resource 中心の競馬情報収集基盤
 
+> 2026-09-27 承認済み暫定対処（本番未配備）: 内部馬identity APIの既知の根拠不足/複数候補は422と構造化codeを返し、型付きでworkerへ伝える。当該taskを要確認に残して全体収集を継続する。旧APIの同じcodeの409も互換として認識するが、未知409・identity矛盾の安全停止は維持し、同定規則は緩めない。保存済みprofileは保持し、未完了の子探索を成功化しない。[停止境界と受け入れ条件](changes/20260927_isolate-identity-resolution-failures/README.md)を参照。
+
 > 2026-09-27 承認済み実装（本番未配備）: [DOM名取得と現行障害対応](changes/20260927_dom-jockey-and-collection-errors/README.md)は、公式発走後30分以内の限定的な結果Time空欄を5分間隔で再確認し、部分結果を保存せず期限後の整合性異常を維持する。公式Horse identityを検索fallbackで捨てず、主体を推測で置換しない。抽出revision増加とread-only補正previewを実装し、本番配備・補正・再開は対象差分確認後の追加承認を条件とする。既存の未知障害停止と失敗履歴は維持する。
 
 > 2026-09-27 実装済み（本番検証中）: 主体job生成とAPI存在確認は同じidentity resolverを使用し、API/Collector/発見・修復のdefinition/revision登録を共通記述元へ接続する。馬主の誤ID要求はpreviewで一意な対応先を証明した対象だけ監査付き復旧し、未知障害の一括retryやデータ削除は行わない。[識別ルール共通化](changes/20260927_shared-identity-contracts/README.md)に互換・配備・復旧条件を記録する。

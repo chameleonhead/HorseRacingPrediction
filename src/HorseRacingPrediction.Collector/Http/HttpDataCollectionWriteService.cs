@@ -28,6 +28,22 @@ public sealed class HttpDataCollectionWriteService : IDataCollectionWriteService
     private async Task<string> ResolveIdentityAsync<T>(string kind, T request, CancellationToken token)
     {
         using var response = await _httpClient.PostAsJsonAsync($"/api/identity/{kind}", request, token).ConfigureAwait(false);
+        if (kind == "horse" && request is ResolveHorseIdentityRequest horse
+            && response.StatusCode is HttpStatusCode.UnprocessableEntity or HttpStatusCode.Conflict)
+        {
+            string? code = null;
+            try
+            {
+                using var body = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false),
+                    cancellationToken: token).ConfigureAwait(false);
+                if (body.RootElement.ValueKind == JsonValueKind.Object
+                    && body.RootElement.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
+                    code = value.GetString();
+            }
+            catch (JsonException) { /* An unrecognized response retains the normal safety stop. */ }
+            if (SubjectIdentityResolutionException.IsKnownCode(code))
+                throw new SubjectIdentityResolutionException(code!, horse.Name, response.StatusCode);
+        }
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<ResolvedIdentity>(cancellationToken: token).ConfigureAwait(false))?.Id
             ?? throw new InvalidOperationException("Identity resolution returned no identity.");
